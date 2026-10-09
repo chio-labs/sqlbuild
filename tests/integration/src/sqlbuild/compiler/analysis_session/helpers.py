@@ -349,6 +349,60 @@ def generated_analysis_files(*, rng: random.Random, model_count: int) -> dict[st
     return files
 
 
+def shared_analysis_files(
+    *, regions: tuple[str, ...], inexact_regions: tuple[str, ...]
+) -> dict[str, str]:
+    """Equal regional models and rollups, missing-column readers and one unshared summary."""
+
+    regional: dict[str, str] = {
+        f"models/staging/orders_{region}.sql": (
+            f'MODEL (description "Orders in {region}");\n\n'
+            'SELECT order_id, customer_id, amount FROM __source("raw_orders")\n'
+        )
+        for region in regions
+    }
+    rollups: dict[str, str] = {
+        f"models/marts/totals_{region}.sql": (
+            f'MODEL (description "Customer totals in {region}");\n\n'
+            "SELECT customer_id, SUM(amount) AS total_amount\n"
+            f'FROM __ref("orders_{region}")\nGROUP BY customer_id\n'
+        )
+        for region in regions
+    }
+    inexact: dict[str, str] = {
+        f"models/marts/missing_{region}.sql": (
+            f'MODEL (description "Orders in {region} with an unknown column");\n\n'
+            f'SELECT customer_id, missing_column FROM __ref("orders_{region}")\n'
+        )
+        for region in inexact_regions
+    }
+    return {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "sources/raw.yml": _SOURCES,
+        **regional,
+        **rollups,
+        **inexact,
+        "models/marts/orders_summary.sql": (
+            'MODEL (description "Order count");\n\n'
+            f'SELECT COUNT(*) AS order_count FROM __ref("orders_{regions[0]}")\n'
+        ),
+    }
+
+
+def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """Record every native session started; return the list they are appended to."""
+
+    started: list[Any] = []
+    original: Callable[..., Any] = native_module.start_model_analysis_session
+
+    def start(catalog: object, request: tuple[object, ...]) -> Any:
+        started.append(original(catalog, request))
+        return started[-1]
+
+    monkeypatch.setattr(native_module, "start_model_analysis_session", start)
+    return started
+
+
 def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjectInputs:
     """Write a project and attach its compile inputs with the DuckDB compile context."""
 

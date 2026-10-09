@@ -49,3 +49,17 @@ class StandalonePivotProofTestCase:
     analysed_models: frozenset[str]
     expected_native_proofs: int
     expected_proven_by_model: dict[str, bool | None]
+
+
+@dataclass(frozen=True)
+class SharedAnalysisTestCase:
+    """Models whose equal queries share one analysis, some inexact and so re-analysed alone."""
+
+    description: str
+    regions: tuple[str, ...]
+    inexact_regions: tuple[str, ...]
+    dialects: tuple[str | None, ...]
+    expected_analysed: int
+    expected_shared: int
+    expected_reanalysed: int
+    expected_unshared: int

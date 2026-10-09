@@ -134,6 +134,8 @@ impl SessionCatalog {
             mut results,
             inexact,
         } = self.run_batch(batch, cleaned, &shared)?;
+        self.shared_members += shared.iter().flatten().count();
+        self.reanalysed_members += inexact.len();
         if !inexact.is_empty() {
             let subset = Batch {
                 members: inexact

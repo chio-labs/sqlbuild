@@ -27,6 +27,7 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
     AnalysisFallbackTestCase,
     GeneratedAnalysisParityTestCase,
     SessionFailureTestCase,
+    SharedAnalysisTestCase,
     StandalonePivotProofTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
@@ -40,6 +41,8 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     generated_analysis_files,
     native_pivot_proofs,
     pivot_project_files,
+    shared_analysis_files,
+    started_sessions,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -103,6 +106,59 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
         <= test_case.expected_maximum_enrichment_deferrals
     )
     assert parity.native_enrichments >= test_case.expected_minimum_native_enrichments
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedAnalysisTestCase(
+            description="equal regional queries, missing-column readers and a unique summary",
+            regions=("east", "west", "north", "south"),
+            inexact_regions=("east", "west", "north"),
+            dialects=("duckdb", "snowflake"),
+            expected_analysed=24,
+            expected_shared=22,
+            expected_reanalysed=6,
+            expected_unshared=2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_equal_model_queries_when_analysing_natively_then_shares_and_matches_python(
+    test_case: SharedAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    inputs: CompileProjectInputs = compile_inputs(
+        project_dir=tmp_path / "project",
+        files=shared_analysis_files(
+            regions=test_case.regions, inexact_regions=test_case.inexact_regions
+        ),
+    )
+    sessions: list[object] = started_sessions(monkeypatch=monkeypatch)
+    parity: AnalysisParity = AnalysisParity()
+
+    _ = [
+        compare_analyses(inputs=inputs, dialect=dialect, parity=parity, monkeypatch=monkeypatch)
+        for dialect in test_case.dialects
+    ]
+
+    shared: int = sum(getattr(session, "sharing")[0] for session in sessions)
+
+    assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
+    assert (
+        parity.analysed_models,
+        shared,
+        sum(getattr(session, "sharing")[1] for session in sessions),
+        parity.analysed_models - shared,
+        deferral_kinds(record_dir),
+    ) == (
+        test_case.expected_analysed,
+        test_case.expected_shared,
+        test_case.expected_reanalysed,
+        test_case.expected_unshared,
+        Counter(),
+    )
 
 
 @pytest.mark.parametrize(

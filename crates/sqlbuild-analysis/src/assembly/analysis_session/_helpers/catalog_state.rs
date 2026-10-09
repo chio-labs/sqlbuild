@@ -19,6 +19,8 @@ pub(crate) struct SessionCatalog {
     recorded_analysis: HashSet<String>,
     /// The `(types, nullability)` this session gave each relation's analysis.
     analysis_shapes: HashMap<String, (Pairs, Pairs)>,
+    pub(crate) shared_members: usize,
+    pub(crate) reanalysed_members: usize,
 }
 
 impl SessionCatalog {
@@ -31,6 +33,8 @@ impl SessionCatalog {
             analysis_names: Vec::new(),
             recorded_analysis: HashSet::new(),
             analysis_shapes: HashMap::new(),
+            shared_members: 0,
+            reanalysed_members: 0,
         }
     }
 
@@ -98,6 +102,11 @@ impl SessionCatalog {
         if !updates.is_empty() {
             self.native.update_analysis(updates);
         }
+    }
+
+    /// `(shared members, shared members re-analysed alone)` so far.
+    pub(crate) fn sharing(&self) -> (usize, usize) {
+        (self.shared_members, self.reanalysed_members)
     }
 
     /// The analysis shape this session set for `name`; inherited shapes are not known here.
