@@ -72,6 +72,9 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
+from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
+    build_native_declaration_contexts,
+)
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
 from sqlbuild.compiler.planner._helpers.resolve.refs import resolve_ref_references
@@ -84,6 +87,7 @@ from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     ResourceRecord,
     ScopeIndex,
+    ScopeLookup,
     VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
@@ -197,10 +201,12 @@ def build_scoped_macro_resolver(
         ),
         declarations=tuple(records),
     )
+    lookup: ScopeLookup = build_scope_lookup(index=index)
     return loaded, DeclarationScopeResolver(
         project_dir=tmp_path,
-        lookup=build_scope_lookup(index=index),
+        lookup=lookup,
         projection=DeclarationRuntimeProjection(MappingProxyType(projection)),
+        native_contexts=build_native_declaration_contexts(lookup=lookup, declarations=projection),
     )
 
 

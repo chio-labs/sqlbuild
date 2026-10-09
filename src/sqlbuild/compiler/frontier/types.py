@@ -51,7 +51,6 @@ class NativeFallbackSite(StrEnum):
     """A place where a shipped native stage still hands its work to the Python implementation."""
 
     SCOPE_REBIND_LOOKUP = "declaration_scopes.rebind_lookup"
-    DECLARATION_CONTEXT = "model_loop.declaration_context"
     LINT_EXPANSION = "model_loop.lint_expansion"
     MACRO_CALL_SCAN = "macro_calls.scan"
     MACRO_CALL_RESOLUTION = "macro_calls.resolution"

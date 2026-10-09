@@ -313,12 +313,10 @@ class DeclarationScopeResolver:
     project_dir: Path | None
     lookup: ScopeLookup
     projection: DeclarationRuntimeProjection
+    native_contexts: _native.NativeDeclarationContexts = field(compare=False, repr=False)
     resource_specific: frozenset[ResourceIdentity] | None = None
     contexts_by_directory: dict[tuple[str, str], DeclarationResolutionContext] = field(
         default_factory=dict, compare=False, repr=False
-    )
-    native_contexts: _native.NativeDeclarationContexts | None = field(
-        default=None, compare=False, repr=False
     )
 
     def cache_context(self, *, key: tuple[str, str], context: DeclarationResolutionContext) -> None:

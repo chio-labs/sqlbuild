@@ -34,22 +34,42 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
+    DiscoveredProjectInputs,
+    EnumDeclaration,
+)
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
+from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
+from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
 from sqlbuild.compiler.scopes.main._native_expected_model_names import (
     native_expected_model_names,
 )
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
+from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
+    resolve_scope_declaration_visibility,
+)
+from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
+    resolve_scope_path_visibility,
+)
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    DeclarationVisibility,
     ResourceIdentity,
     ScopeIndex,
     ScopeLookup,
     VisibilityRecord,
 )
-from sqlbuild.compiler.scopes.types import VisibilityReason
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    ResourceKind,
+    ScopeKind,
+    VisibilityReason,
+)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -603,11 +623,7 @@ def declaration_context_parity(
         for file_path, resource in targets
     ]
     python: list[DeclarationResolutionContext] = [
-        resolve_declaration_context(
-            resolver=replace(resolver, contexts_by_directory={}, native_contexts=None),
-            file_path=file_path,
-            resource=resource,
-        )
+        _python_declaration_context(resolver=resolver, file_path=file_path, resource=resource)
         for file_path, resource in targets
     ]
     indexed: list[bool] = [
@@ -667,3 +683,139 @@ def _context_shape(context: DeclarationResolutionContext) -> tuple[object, ...]:
         *(tuple(getattr(context, name).items()) for name in _CONTEXT_DICT_FIELDS),
         context.consumer,
     )
+
+
+def _python_declaration_context(
+    *, resolver: DeclarationScopeResolver, file_path: Path, resource: ResourceIdentity | None
+) -> DeclarationResolutionContext:
+    """The context the deleted Python projection built from the scope library's resolution."""
+
+    return _project_declaration_context(
+        resolver=resolver,
+        resolution=resolve_scope_declaration_visibility(
+            lookup=resolver.lookup, target=resource or file_path
+        ),
+        target_path=file_path,
+        resource=resource,
+    )
+
+
+def _project_declaration_context(
+    *,
+    resolver: DeclarationScopeResolver,
+    resolution: DeclarationVisibility,
+    target_path: Path,
+    resource: ResourceIdentity | None,
+) -> DeclarationResolutionContext:
+    enums: dict[str, EnumDeclaration] = {}
+    constants: dict[str, ConstantDeclaration] = {}
+    inaccessible_enums: dict[str, DeclarationRecord] = {}
+    inaccessible_constants: dict[str, DeclarationRecord] = {}
+    macros: dict[str, LoadedMacro] = {}
+    macro_records: dict[str, DeclarationRecord] = {}
+    inaccessible_macros: dict[str, DeclarationRecord] = {}
+    visibility_by_declaration: dict[DeclarationIdentity, list[VisibilityRecord]] = {}
+    if resolution.target.unknown:
+        visible_records, inaccessible_records, path_visibility = _declaration_path_visibility(
+            resolver=resolver, target_path=target_path
+        )
+        visibility_by_declaration.update(path_visibility)
+    else:
+        visible_records: tuple[DeclarationRecord, ...] = tuple(
+            resolver.lookup.declarations[item.declaration][0] for item in resolution.visible
+        )
+        inaccessible_records: tuple[DeclarationRecord, ...] = tuple(
+            resolver.lookup.declarations[identity][0] for identity in resolution.inaccessible
+        )
+        for visible_record in resolution.visible:
+            visibility_by_declaration.setdefault(visible_record.declaration, []).append(
+                visible_record
+            )
+    for visible in visible_records:
+        value: EnumDeclaration | ConstantDeclaration | LoadedMacro | None = (
+            resolver.projection.declarations.get(visible.identity)
+        )
+        if isinstance(value, EnumDeclaration):
+            enums[visible.identity.name] = value
+        elif isinstance(value, ConstantDeclaration):
+            constants[visible.identity.name] = value
+        elif isinstance(value, LoadedMacro):
+            macros[visible.identity.name] = value
+            macro_records[visible.identity.name] = visible
+    for record in inaccessible_records:
+        if record.identity.kind is DeclarationKind.ENUM:
+            inaccessible_enums[record.identity.name] = record
+        elif record.identity.kind is DeclarationKind.CONSTANT:
+            inaccessible_constants[record.identity.name] = record
+        elif record.identity.kind is DeclarationKind.MACRO:
+            inaccessible_macros[record.identity.name] = record
+    enum_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    constant_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    macro_visibility: dict[str, tuple[VisibilityRecord, ...]] = {}
+    for record in visible_records:
+        records: tuple[VisibilityRecord, ...] = tuple(
+            visibility_by_declaration.get(record.identity, ())
+        )
+        if record.identity.kind is DeclarationKind.ENUM:
+            enum_visibility[record.identity.name] = records
+        elif record.identity.kind is DeclarationKind.CONSTANT:
+            constant_visibility[record.identity.name] = records
+        elif record.identity.kind is DeclarationKind.MACRO:
+            macro_visibility[record.identity.name] = records
+    return DeclarationResolutionContext(
+        enums=enums,
+        constants=constants,
+        inaccessible_enums=inaccessible_enums,
+        inaccessible_constants=inaccessible_constants,
+        enum_visibility=enum_visibility,
+        constant_visibility=constant_visibility,
+        macros=macros,
+        macro_records=macro_records,
+        macro_visibility=macro_visibility,
+        inaccessible_macros=inaccessible_macros,
+        consumer=(
+            resource
+            or (resolution.target.matches[0].identity if resolution.target.matches else None)
+        ),
+    )
+
+
+def _declaration_path_visibility(
+    *, resolver: DeclarationScopeResolver, target_path: Path
+) -> tuple[
+    tuple[DeclarationRecord, ...],
+    tuple[DeclarationRecord, ...],
+    dict[DeclarationIdentity, list[VisibilityRecord]],
+]:
+    """Resolve visibility for a path that is not an indexed resource, such as a declaration file."""
+
+    lexical_target_path: Path = target_path
+    definition_record: DeclarationRecord | None = next(
+        (
+            record
+            for record in resolver.lookup.index.declarations
+            if record.path == target_path.as_posix() and record.scope is not ScopeKind.PRIVATE
+        ),
+        None,
+    )
+    if definition_record is not None:
+        lexical_target_path = Path(declaration_lexical_path(record=definition_record))
+    visible_records: tuple[DeclarationRecord, ...]
+    inaccessible_records: tuple[DeclarationRecord, ...]
+    visible_records, inaccessible_records = resolve_scope_path_visibility(
+        lookup=resolver.lookup, path=lexical_target_path
+    )
+    path_resource: ResourceIdentity = ResourceIdentity(
+        ResourceKind.MODEL, f"<path:{lexical_target_path.as_posix()}>"
+    )
+    visibility: dict[DeclarationIdentity, list[VisibilityRecord]] = {}
+    path_visible: DeclarationRecord
+    for path_visible in visible_records:
+        reason: VisibilityReason | None = declaration_visibility(
+            declaration=path_visible, consumer=lexical_target_path
+        )
+        if reason is not None:
+            visibility[path_visible.identity] = [
+                VisibilityRecord(path_resource, path_visible.identity, reason)
+            ]
+    return visible_records, inaccessible_records, visibility
