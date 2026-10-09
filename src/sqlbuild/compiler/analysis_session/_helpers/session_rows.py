@@ -5,6 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.adapter.contract.types import FunctionNullabilityRule
+from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
+    conditional_result_nullability,
+)
+from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
+from sqlbuild.compiler.analysis_session.constants import (
+    NULLABILITY_RULE_CONDITIONAL_RESULT,
+    NULLABILITY_RULE_FIRST_ARG,
+)
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.analysis_session.types import (
     ColumnRow,
@@ -29,6 +38,11 @@ from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.sql_analysis.constants import CASE_SENSITIVE_BINDING_DIALECTS
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
+
+_NULLABILITY_RULE_IDS: dict[FunctionNullabilityRule, str] = {
+    first_arg_nullability: NULLABILITY_RULE_FIRST_ARG,
+    conditional_result_nullability: NULLABILITY_RULE_CONDITIONAL_RESULT,
+}
 
 
 def shape_rows(shapes: Mapping[str, Mapping[str, object]]) -> ShapeRows | None:
@@ -66,11 +80,24 @@ def session_request(
         profile.sql_analysis_dialect or "generic",
         case_sensitive_shapes(profile=profile, dialect=profile.sql_analysis_dialect),
         list(profile.function_return_types.items()),
+        nullability_rule_rows(profile),
         request.rich_type_inference,
         *shapes,
         family_rows(request.dynamic_families_by_table),
         python.model_rows(),
     )
+
+
+def nullability_rule_rows(profile: ExpressionInferenceProfile) -> list[tuple[str, str]] | None:
+    """Adapter nullability rules as `(name, rule id)`, or None for a rule SQLBuild lacks."""
+
+    rows: list[tuple[str, str]] = []
+    for name, rule in profile.function_nullability_rules.items():
+        rule_id: str | None = _NULLABILITY_RULE_IDS.get(rule)
+        if rule_id is None:
+            return None
+        rows.append((name, rule_id))
+    return rows
 
 
 def contract_proof(row: ProofRow | None) -> DynamicColumnContractProof | None:

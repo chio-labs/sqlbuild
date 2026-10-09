@@ -89,6 +89,8 @@ pub struct SessionRequest {
     /// Whether published shapes keep authored quoting, Python's `inferred_binding_shape` test.
     pub case_sensitive_shapes: bool,
     pub function_return_types: Pairs,
+    /// Adapter nullability rules as `(function name, rule id)`; None where one is not Python's.
+    pub nullability_rules: Option<Pairs>,
     pub rich_type_inference: bool,
     pub column_types: Shapes,
     pub column_nullability: Shapes,

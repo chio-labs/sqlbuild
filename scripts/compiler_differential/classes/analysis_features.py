@@ -331,6 +331,28 @@ class AnalysisFeatureWriter:
     def _analysis_modes(self) -> None:
         self._features.add("analysis_modes")
         base: ModelPlan = self._base()
+        self._model(
+            name=f"cte_facts_{base.name}",
+            description=f"Contracted CTE reads of {base.name}",
+            header=(
+                "  contract enforced,\n  columns (\n"
+                + "".join(
+                    f'    {column} (description "Recovered {column}"),\n'
+                    for column in ("id", "amount", "kind", "status")
+                )
+                + "  ),\n"
+            ),
+            body=(
+                "WITH base AS (\n"
+                "  SELECT id, CAST(amount AS DECIMAL(12, 2)) AS amount, 'event' AS kind,\n"
+                "    COALESCE(status, 'unknown') AS status\n"
+                f'  FROM __ref("{base.name}")\n'
+                "  WHERE id IS NOT NULL\n"
+                ")\n"
+                "SELECT id + 0 AS id, amount, UPPER(kind) AS kind, UPPER(status) AS status\n"
+                "FROM base\n"
+            ),
+        )
         self.commands = tuple(
             _selected_command(label=label, arguments=arguments, model=base.name)
             for label, arguments in GENERATOR_ANALYSIS_MODE_COMMANDS

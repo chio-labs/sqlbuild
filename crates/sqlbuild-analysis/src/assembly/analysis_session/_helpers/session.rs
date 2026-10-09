@@ -352,6 +352,7 @@ impl AnalysisSession {
                 input_schemas,
                 dialect: &self.request.dialect,
                 function_return_types: &self.request.function_return_types,
+                nullability_rules: self.request.nullability_rules.as_ref(),
             })
             .collect();
         let pool = self.catalog.native.analysis_pool()?;

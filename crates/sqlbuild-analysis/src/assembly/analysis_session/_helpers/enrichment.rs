@@ -6,11 +6,14 @@ use polyglot_sql::{AnalyzeQueryOptions, analyze_query};
 use serde_json::{Map, Value, json};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
+use crate::assembly::analysis_session::_helpers::cte_facts::{
+    Recovery, RecoveryInput, RecoveryProfile, recovery,
+};
 use crate::assembly::analysis_session::_helpers::dict_walk::truthy;
 use crate::assembly::analysis_session::constants::{
     CAST_TRANSFORM, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_UNKNOWN, FILTER_CONTEXT,
-    MAX_FUNCTION_CALL_DEPTH, NULL_KEYWORD, RESOLVED_SOURCE_CONFIDENCE, SELECT_SHAPE,
-    SET_OPERATION_SHAPE, TRANSFORM_AGGREGATION, TRANSFORM_CAST, TRANSFORM_CONSTANT,
+    MAX_FUNCTION_CALL_DEPTH, NON_NULL_NULLABILITY, NULL_KEYWORD, RESOLVED_SOURCE_CONFIDENCE,
+    SELECT_SHAPE, SET_OPERATION_SHAPE, TRANSFORM_AGGREGATION, TRANSFORM_CAST, TRANSFORM_CONSTANT,
     TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
     WILDCARD,
 };
@@ -25,6 +28,8 @@ pub(crate) struct EnrichmentInput<'a> {
     pub(crate) input_schemas: &'a Shapes,
     pub(crate) dialect: &'a str,
     pub(crate) function_return_types: &'a Pairs,
+    /// Adapter nullability rules by function name; None where one is not a rule Python ships.
+    pub(crate) nullability_rules: Option<&'a Pairs>,
 }
 
 /// Python's successful re-analysis: columns, plain lineage facts and the star flag.
@@ -75,7 +80,7 @@ fn analysed(input: &EnrichmentInput<'_>) -> Result<Option<Enrichment>, String> {
         Err(_) => return Ok(None),
     };
     let analysis: Value = serde_json::to_value(analysis).map_err(|error| error.to_string())?;
-    Ok(projected(input, &analysis))
+    Ok(projected(input, &analysis, &cleaned))
 }
 
 /// Python's `_compact_analysis_schema` over the input shapes, nullability unknown.
@@ -109,15 +114,26 @@ fn analysis_schema(input: &EnrichmentInput<'_>) -> Option<Value> {
 }
 
 /// Python's projection of `analyze_query` facts into columns and lineage.
-fn projected(input: &EnrichmentInput<'_>, analysis: &Value) -> Option<Enrichment> {
+fn projected(input: &EnrichmentInput<'_>, analysis: &Value, cleaned: &str) -> Option<Enrichment> {
     let projections: &Vec<Value> = analysis.get("projections")?.as_array()?;
     let shape: Option<&str> = analysis.get("shape").and_then(Value::as_str);
     if !matches!(shape, Some(SELECT_SHAPE | SET_OPERATION_SHAPE)) || !eligible(projections) {
         return None;
     }
-    if has_null_filter(analysis) || recovers_cte_facts(input, analysis) {
-        return None;
-    }
+    let recovery: Recovery = match recovery(&RecoveryInput {
+        cleaned_sql: cleaned,
+        input_schemas: input.input_schemas,
+        recover: recovers_cte_facts(input, analysis),
+        null_filter: has_null_filter(analysis),
+        profile: RecoveryProfile {
+            dialect: input.dialect,
+            function_return_types: input.function_return_types,
+            rules: input.nullability_rules,
+        },
+    }) {
+        Ok(recovery) => recovery,
+        Err(_deferred) => return None,
+    };
     let resources: HashMap<&str, (&str, &str)> = input
         .model
         .lineage_references
@@ -136,10 +152,24 @@ fn projected(input: &EnrichmentInput<'_>, analysis: &Value) -> Option<Enrichment
         if name.is_empty() || name == WILDCARD {
             continue;
         }
+        let direct: bool = recovery.direct_outputs.contains(name);
+        let data_type: Option<String> = if direct {
+            recovered(&recovery.types, name).cloned()
+        } else {
+            projection_type(projection, input.function_return_types)?
+        };
+        let nullability: &str = if recovery.non_null_outputs.contains(name) {
+            NON_NULL_NULLABILITY
+        } else {
+            recovered(&recovery.nullability, name)
+                .filter(|_| direct)
+                .copied()
+                .unwrap_or_else(|| projection_nullability(projection, infer_nullability))
+        };
         columns.push(ColumnFact {
             name: name.to_owned(),
-            data_type: projection_type(projection, input.function_return_types)?,
-            nullability: projection_nullability(projection, infer_nullability).to_owned(),
+            data_type,
+            nullability: nullability.to_owned(),
         });
         let (sources, confidence) = upstream(projection, &resources);
         let transform: u8 = transform_code(projection, !sources.is_empty());
@@ -176,7 +206,15 @@ fn projected(input: &EnrichmentInput<'_>, analysis: &Value) -> Option<Enrichment
     })
 }
 
-/// Whether Python's CTE pass-through recovery reads the parsed query, which stays Python's.
+/// A recovered fact by exact output name, as Python's dict `get` reads it.
+fn recovered<'a, V>(facts: &'a [(String, V)], name: &str) -> Option<&'a V> {
+    facts
+        .iter()
+        .find(|(output, _)| output == name)
+        .map(|(_, value)| value)
+}
+
+/// Whether Python's CTE pass-through recovery runs past its early return.
 fn recovers_cte_facts(input: &EnrichmentInput<'_>, analysis: &Value) -> bool {
     input.model.recover_cte_facts
         && truthy(analysis.get("cteFacts"))

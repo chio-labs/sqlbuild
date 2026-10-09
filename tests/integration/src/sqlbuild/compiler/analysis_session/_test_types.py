@@ -15,6 +15,7 @@ class GeneratedAnalysisParityTestCase:
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
     expected_minimum_pivot_proofs: int
+    expected_minimum_cte_recoveries: int
     expected_minimum_proven_pivots: int
     expected_maximum_enrichment_deferrals: int
     expected_minimum_native_enrichments: int
