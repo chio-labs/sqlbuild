@@ -24,7 +24,6 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
     resolve_audit_run_scope,
     resolve_audit_severity,
 )
-from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_test_inputs,
     validate_test_ctes,
@@ -56,8 +55,6 @@ from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
-    DiscoveredPythonFunctionFile,
-    DiscoveredSqlFunctionFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
@@ -69,18 +66,12 @@ from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import 
     resolve_effective_collection_rendering,
 )
 from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
     LocalConfig,
     ProjectConfig,
-    SettingsConfig,
-    TargetConfig,
 )
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import CollectionRendering
-from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
-    FunctionHeaderParityTestCase,
-)
 from tests.integration.src.sqlbuild.compiler.model_loop.helpers import (
     DECLARATIONS,
     generated_reference_sql,
@@ -915,127 +906,8 @@ def target_validation_outcome(
     return None
 
 
-_TYPES: tuple[object, ...] = (
-    "STRING",
-    " INTEGER ",
-    "  ",
-    "${coalesce(ENV:SQB_ATTACHMENTS_UNSET, 'DOUBLE')}",
-    "${missing}",
-    "DECIMAL(${if(precision)})",
-    "${'open}",
-    "${eq(a, b, c)}",
-    "${upper(x)}",
-    "${coalesce()}",
-    "${CTX:model.name}",
-    2,
-)
 _NAMES: tuple[object, ...] = ("raw_status", " amount ", "", "  ", 1)
 _TEXTS: tuple[object, ...] = ("orders", " Orders. ", "", "  ", 3, None)
-_SCHEMAS: tuple[object, ...] = (
-    "udfs",
-    "${coalesce(ENV:SQB_ATTACHMENTS_UNSET, 'udfs')}",
-    "${ENV:SQB_ATTACHMENTS_UNSET}",
-    "${VAR:udfs}",
-    "udfs_${x y}",
-    1,
-    None,
-)
-
-
-def _random_map(rng: random.Random, keys: tuple[object, ...]) -> dict[object, object]:
-    return {rng.choice(keys): rng.choice(_TYPES) for _ in range(rng.randint(0, 3))}
-
-
-def generated_function_header(*, rng: random.Random, python: bool) -> dict[str, object]:
-    """Return SQL or Python function header values Python may accept or reject."""
-
-    returns: tuple[object, ...] = (
-        "STRING",
-        " STRING ",
-        "",
-        {"table": _random_map(rng, _NAMES)},
-        {"table": {"id": "INTEGER"}, "extra": 1},
-        ["STRING"],
-    )
-    candidates: dict[str, object] = {
-        "arguments": rng.choice((_random_map(rng, _NAMES), ["x"], None)),
-        "returns": rng.choice((*returns, *returns[:2] * 3)),
-        "tags": rng.choice((["orders", " sales "], ("orders",), [""], "orders", [1], None)),
-        "description": rng.choice(_TEXTS),
-        "database": rng.choice(_SCHEMAS),
-        "schema": rng.choice(_SCHEMAS),
-        "runtime_version": rng.choice(("3.12", " 3.12 ", "", None, 3)),
-        "entry_point": rng.choice(("label", "", None)),
-        "packages": rng.choice((["numpy"], ("numpy",), [""], "numpy", None)),
-    }
-    present: list[str] = rng.sample(sorted(candidates), k=rng.randint(4, len(candidates)))
-    header: dict[str, object] = {key: candidates[key] for key in present}
-    required: dict[bool, dict[str, object]] = {
-        False: {"returns": "STRING"},
-        True: {"returns": "STRING", "runtime_version": "3.12", "entry_point": "label"},
-    }
-    return {**required[python], **header}
-
-
-def function_outcome(
-    *,
-    header_values: dict[str, object],
-    python: bool,
-    test_case: FunctionHeaderParityTestCase,
-    engine: CompilerEngine,
-    monkeypatch: pytest.MonkeyPatch,
-) -> str:
-    """Attach one function under `engine`: its input or its error."""
-
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    sql_file: DiscoveredSqlFunctionFile = DiscoveredSqlFunctionFile(
-        file_path=Path("/project/functions/sql/order_label.sql"),
-        relative_path=Path("functions/sql/order_label.sql"),
-        contents="",
-        header_values=header_values,
-        body_sql="UPPER(raw_status)",
-    )
-    python_file: DiscoveredPythonFunctionFile = DiscoveredPythonFunctionFile(
-        file_path=Path("/project/functions/python/order_label.py"),
-        relative_path=Path("functions/python/order_label.py"),
-        contents="",
-        header_values=header_values,
-        entry_point="label",
-        body_python="def label(value):\n    return value\n",
-    )
-    sql_files: tuple[DiscoveredSqlFunctionFile, ...] = (sql_file,)[python:]
-    python_files: tuple[DiscoveredPythonFunctionFile, ...] = (python_file,)[not python :]
-    adapter: DuckDbAdapter = DuckDbAdapter()
-    try:
-        return repr(
-            build_sql_function_inputs(
-                discovered_inputs=DiscoveredProjectInputs(
-                    project_config=ProjectConfig(
-                        name="orders",
-                        adapter="duckdb",
-                        defaults=DefaultsConfig(database="analytics", schema="shared"),
-                    ),
-                    local_config=LocalConfig(),
-                    sql_function_files=sql_files,
-                    python_function_files=python_files,
-                ),
-                effective_vars={},
-                effective_settings=SettingsConfig(),
-                target_config=TargetConfig(database="warehouse", schema=test_case.target_schema),
-                macro_context=_MACRO_CONTEXT,
-                loaded_macros={},
-                declaration_expansion=DeclarationExpansionContext(
-                    declarations=DeclarationResolutionContext(),
-                    value_renderer=adapter,
-                    collection_rendering=CollectionRendering.VALUE_LIST,
-                ),
-                sql_lexical_syntax=adapter.sql_lexical_syntax,
-                no_sql_validation=True,
-                python_functions_inherit_default_namespace=test_case.inherit_default_namespace,
-            )
-        )
-    except CompileInputError as error:
-        return f"error: {error}"
 
 
 _MACRO_PIECES: tuple[str, ...] = (
