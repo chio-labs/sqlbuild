@@ -10,6 +10,7 @@ from scripts.compiler_differential._helpers.goldens.goldens import (
     golden_differences,
     golden_path,
     golden_payload,
+    write_golden_seed_range,
 )
 from scripts.compiler_differential.models import CorpusProject, Difference, ExpectedOutcome
 from tests.unit.scripts.compiler_differential._helpers.goldens._test_types import (
@@ -60,7 +61,7 @@ def test_given_corpus_project_when_locating_its_golden_then_only_golden_corpora_
         GoldenPayloadTestCase(
             description="paths_ids_timings_and_repeated_sql_masked",
             run=engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),
-            masked_paths=(PROJECT_PATH,),
+            masked_paths=((PROJECT_PATH, "<project>"),),
             expected_payload={
                 "commands": [
                     {
@@ -142,11 +143,18 @@ def test_given_engine_run_when_building_golden_then_run_specific_noise_is_masked
             expected_differences=(("golden unknown-ref.json", ("golden", "hint")),),
         ),
         GoldenCheckTestCase(
-            description="missing_seed_golden_is_skipped",
+            description="missing_seed_golden_outside_the_recorded_range_is_skipped",
             project="seed/40",
             recorded=(),
             checked=(engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),),
             expected_differences=(),
+        ),
+        GoldenCheckTestCase(
+            description="missing_seed_golden_inside_the_recorded_range_fails",
+            project="seed/3-postgres",
+            recorded=(),
+            checked=(engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),),
+            expected_differences=(("golden 3-postgres.json", ("golden", "hint")),),
         ),
     ],
     ids=lambda case: case.description,
@@ -157,13 +165,14 @@ def test_given_recorded_golden_when_checking_runs_then_each_differing_engine_is_
     project: CorpusProject = CorpusProject(
         name=test_case.project, commands=(), expected=ExpectedOutcome()
     )
+    write_golden_seed_range(golden_dir=tmp_path, seed_start=0, seeds=12)
     for recorded in test_case.recorded:
         _ = golden_differences(
             project=project,
             runs=(recorded,),
             golden_dir=tmp_path,
             mode="update",
-            masked_paths=(PROJECT_PATH,),
+            masked_paths=((PROJECT_PATH, "<project>"),),
         )
 
     differences: list[Difference] = golden_differences(
@@ -171,7 +180,7 @@ def test_given_recorded_golden_when_checking_runs_then_each_differing_engine_is_
         runs=test_case.checked,
         golden_dir=tmp_path,
         mode="check",
-        masked_paths=(PROJECT_PATH,),
+        masked_paths=((PROJECT_PATH, "<project>"),),
     )
 
     assert [(difference.artifact, difference.labels) for difference in differences] == list(

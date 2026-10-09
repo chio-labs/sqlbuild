@@ -7,6 +7,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile._helpers.attachment.target import build_compile_target_context
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.main._claim_first_compile import claim_first_compile
@@ -45,6 +46,7 @@ def target_context_with_macro_call_store(
             project_dir=project_dir,
             model_paths=_model_paths(discovered_inputs=discovered_inputs, project_dir=project_dir),
         )
+        report_native_answer(stage=NativeStage.MACRO_CALL_STORE, kind="store_attachments")
     return target_context
 
 

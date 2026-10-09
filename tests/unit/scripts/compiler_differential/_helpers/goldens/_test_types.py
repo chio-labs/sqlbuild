@@ -23,7 +23,7 @@ class GoldenPayloadTestCase:
 
     description: str
     run: EngineRun
-    masked_paths: tuple[str, ...]
+    masked_paths: tuple[tuple[str, str], ...]
     expected_payload: dict[str, object]
 
 

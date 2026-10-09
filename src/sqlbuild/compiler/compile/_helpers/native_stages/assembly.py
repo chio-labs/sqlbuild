@@ -25,7 +25,9 @@ from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
     assemble_native_project_resources,
 )
@@ -44,7 +46,7 @@ def project_resources_by_engine(
 
     if not native_stage_enabled(NativeStage.PROJECT_ASSEMBLY):
         return None
-    return assemble_native_project_resources(
+    resources: NativeProjectResources | None = assemble_native_project_resources(
         inputs=inputs,
         dialect=dialect,
         syntax_checks=model_syntax_checks(
@@ -53,6 +55,11 @@ def project_resources_by_engine(
             analysis_succeeded=analysis_succeeded,
         ),
     )
+    if resources is not None:
+        report_native_answer(stage=NativeStage.PROJECT_ASSEMBLY, kind="project_assemblies")
+    else:
+        report_native_fallback(site=NativeFallbackSite.PROJECT_ASSEMBLY)
+    return resources
 
 
 def expression_source_shapes_by_engine(
@@ -65,6 +72,9 @@ def expression_source_shapes_by_engine(
             infer_native_expression_source_shapes(expressions=expressions, profile=profile)
         )
         if native_shapes is not None:
+            report_native_answer(
+                stage=NativeStage.MODEL_ANALYSIS, kind="expression_shapes", units=len(native_shapes)
+            )
             return native_shapes
     return get_expression_source_shapes(expressions=expressions, profile=profile)
 
@@ -83,6 +93,9 @@ def analyze_model_sql_by_engine(
             )
         )
         if native_analyses is not None:
+            report_native_answer(
+                stage=NativeStage.MODEL_ANALYSIS, kind="model_analyses", units=len(native_analyses)
+            )
             return native_analyses
     return python_analysis()
 
@@ -105,5 +118,6 @@ def dynamic_column_contract_by_engine(
             **python_proof.keywords
         )
         if native is not None:
+            report_native_answer(stage=NativeStage.MODEL_ANALYSIS, kind="dynamic_contract_proofs")
             return native
     return python_proof()

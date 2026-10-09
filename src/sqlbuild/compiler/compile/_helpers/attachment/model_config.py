@@ -65,8 +65,9 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
     native_config_contains_macro_call,
 )
@@ -939,6 +940,7 @@ def build_native_model_config(
     if built is None:
         report_native_fallback(site=NativeFallbackSite.CONFIG_BUILD)
         return None
+    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds")
     if isinstance(built, _native.NativeConfigError):
         raise native_config_error(error=built, bridge_independent=True)
     values, header_keys, namespace, overrides, reads = built
@@ -1025,6 +1027,7 @@ def validate_model_config(
         if isinstance(outcome, _native.NativeConfigError):
             raise native_validation_error(error=outcome, values=request.config.values)
         if outcome:
+            report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="validations")
             return
         report_native_fallback(site=NativeFallbackSite.CONFIG_VALIDATORS)
     run_python_model_validators(context=context, request=request)

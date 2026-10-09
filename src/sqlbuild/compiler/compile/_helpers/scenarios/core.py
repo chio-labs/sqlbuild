@@ -29,8 +29,9 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
@@ -51,6 +52,7 @@ def extract_sql_scenario_ctes(
         else None
     )
     if native_ctes is not None:
+        report_native_answer(stage=NativeStage.ATTACHMENTS, kind="scenario_ctes")
         return native_ctes
     if native_stage_enabled(NativeStage.ATTACHMENTS):
         report_native_fallback(site=NativeFallbackSite.SCENARIO_CTES)

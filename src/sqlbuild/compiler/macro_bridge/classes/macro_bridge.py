@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.macro_bridge._helpers.splicing import splice_text
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
@@ -262,6 +262,7 @@ class MacroBridge:
                 ),
             )
         except UnicodeEncodeError:
+            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_MEMO, kind="unencodable")
             return
 
     def splice(

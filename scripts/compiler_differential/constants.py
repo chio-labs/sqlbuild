@@ -15,6 +15,12 @@ NATIVE_FALLBACK_LIST: str = "scripts/compiler_differential/native_fallbacks.toml
 NATIVE_FALLBACK_MODE_UPDATE: str = "update"
 NATIVE_FALLBACK_MODES: tuple[str, ...] = ("check", NATIVE_FALLBACK_MODE_UPDATE)
 NATIVE_FALLBACK_SITE_SEPARATOR: str = "."
+NATIVE_FALLBACK_ANSWER_SUFFIX: str = ".native"
+BASELINES_HINT: str = (
+    "Intended? Run `make compiler-baselines` and commit the changes to "
+    "scripts/compiler_differential/native_fallbacks.toml and tests/goldens/compiler, with a "
+    "reason in the PR body for every added entry, higher fallback count or changed golden."
+)
 NATIVE_FALLBACK_MAX_COUNTS_FIELD: str = "max_counts"
 NATIVE_FALLBACK_COUNTS_FIELD: str = "counts"
 NATIVE_FALLBACK_PROJECT_CORPUS: str = "project"
@@ -41,14 +47,17 @@ GOLDEN_MODES: tuple[str, ...] = (GOLDEN_MODE_CHECK, GOLDEN_MODE_UPDATE)
 GOLDEN_CORPUS_PREFIXES: frozenset[str] = frozenset(
     {"fixture", "example", "seed", "failure", "project"}
 )
-GOLDEN_OPTIONAL_CORPORA: frozenset[str] = frozenset({"seed"})
+GOLDEN_SEED_CORPUS: str = "seed"
+GOLDEN_SEED_RANGE_FILE: str = "seed_range.toml"
 GOLDEN_SUFFIX: str = ".json"
+GOLDEN_LABEL: str = "golden"
 GOLDEN_MANIFEST_DROPPED_KEYS: frozenset[str] = frozenset({"metadata", "child_map"})
 GOLDEN_MANIFEST_RESOURCE_SECTIONS: tuple[str, ...] = ("nodes", "sources", "macros")
 GOLDEN_RESOURCE_DROPPED_FIELDS: frozenset[str] = frozenset(
     {"raw_code", "compiled_code", "checksum", "created_at"}
 )
 GOLDEN_PATH_MASK: str = "<project>"
+GOLDEN_WORK_MASK: str = "<work>"
 GOLDEN_VERSION_MASK: str = "<sqlbuild-version>"
 GOLDEN_MISSING_HINT: str = "no golden; record it with `make compiler-baselines`"
 ENGINE_NAMES: tuple[str, ...] = ("python", "native", "native-preview")

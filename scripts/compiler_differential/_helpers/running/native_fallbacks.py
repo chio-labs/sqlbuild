@@ -8,6 +8,7 @@ from pathlib import Path
 
 from scripts.compiler_differential.constants import (
     CORPUS_SEEDS,
+    NATIVE_FALLBACK_ANSWER_SUFFIX,
     NATIVE_FALLBACK_COUNTS_FIELD,
     NATIVE_FALLBACK_DEFERRAL_STAGES,
     NATIVE_FALLBACK_DEFERRAL_UNKNOWN_STAGE,
@@ -123,6 +124,7 @@ def fallback_problems(
         for corpus in sorted({*actual, *(exact or {}), *(bound or {})} & corpora):
             problem: str | None = _corpus_problem(
                 label=_label(key=key, corpus=corpus),
+                answer=key[2].endswith(NATIVE_FALLBACK_ANSWER_SUFFIX),
                 actual=actual.get(corpus, 0),
                 exact=None if exact is None else exact.get(corpus, 0),
                 bound=None if bound is None else bound.get(corpus, 0),
@@ -180,7 +182,16 @@ def write_allow_list(
     _ = path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _corpus_problem(*, label: str, actual: int, exact: int | None, bound: int | None) -> str | None:
+def _corpus_problem(
+    *, label: str, answer: bool, actual: int, exact: int | None, bound: int | None
+) -> str | None:
+    if answer and exact is None and bound is None:
+        return f"{label}: native answered {actual}, not on the allow-list; record it"
+    if answer and actual == 0:
+        return (
+            f"{label}: native no longer answers here, so this work now runs in Python; "
+            "restore the native path, or record the change with a reason"
+        )
     if exact is None and bound is None:
         return f"{label}: {actual} not on the allow-list; port it or list it with a reason"
     if actual == 0:

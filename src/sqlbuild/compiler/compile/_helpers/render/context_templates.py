@@ -15,8 +15,8 @@ from sqlbuild.compiler.compile.constants import (
     PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.types import CompileContextKey
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (

@@ -12,6 +12,7 @@ from pathlib import Path
 from scripts.compiler_differential._helpers.coverage.analysis import required_analysis_kinds
 from scripts.compiler_differential._helpers.coverage.discovery import required_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import required_render_kinds
+from scripts.compiler_differential._helpers.goldens.goldens import write_golden_seed_range
 from scripts.compiler_differential._helpers.running.native_fallbacks import native_fallback_gate
 from scripts.compiler_differential._helpers.running.options import parse_expected_outcome
 from scripts.compiler_differential._helpers.running.records import write_wheel_site_report
@@ -36,6 +37,7 @@ from scripts.compiler_differential.constants import (
     ENGINE_NAMES,
     EXPECT_SUCCESS,
     GOLDEN_DIRECTORY,
+    GOLDEN_MODE_UPDATE,
     GOLDEN_MODES,
     NATIVE_FALLBACK_LIST,
     NATIVE_FALLBACK_MODES,
@@ -64,6 +66,10 @@ def run_compiler_differential(argv: list[str] | None = None) -> int:
     if args.wheel_site_report is not None:
         write_wheel_site_report(
             path=args.wheel_site_report, comparisons=comparisons, engines=options.engines
+        )
+    if args.goldens == GOLDEN_MODE_UPDATE and CORPUS_SEEDS in args.corpus:
+        write_golden_seed_range(
+            golden_dir=args.golden_dir, seed_start=args.seed_start, seeds=args.seeds
         )
     fallback_failures: tuple[str, ...] = native_fallback_gate(
         request=fallback_gate_request(args=args, engines=options.engines),

@@ -12,6 +12,7 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
     first_diagnostic_message,
 )
 from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
+from scripts.compiler_differential._helpers.goldens.goldens import golden_path_masks, masked_text
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import (
     ANALYSIS_CODE_SCAN_ROOTS,
@@ -20,9 +21,7 @@ from scripts.compiler_differential.constants import (
     DIAGNOSTIC_CODE_PATTERN,
     ERROR_SEVERITY,
     EXPECT_SUCCESS,
-    GOLDEN_PATH_MASK,
     LEFT_SIDE,
-    PROJECT_DIRECTORY,
     RENDER_CODE_SCAN_EXCLUDED,
     RENDER_RAISED_CODES,
     WARNING_SEVERITY,
@@ -201,7 +200,6 @@ def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> E
         options=options,
     )
     first: dict[str, object] = first_diagnostic(outcome=run.outcomes[0], severity=ERROR_SEVERITY)
-    project_dir: str = str(case_dir / PROJECT_DIRECTORY)
     message: str | None = first_diagnostic_message(outcome=run.outcomes[0], severity=ERROR_SEVERITY)
     notes: object = first.get("notes")
     line: object = first.get("line")
@@ -210,7 +208,12 @@ def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> E
         errors=diagnostic_codes(outcome=run.outcomes[0], severity=ERROR_SEVERITY),
         warnings=diagnostic_codes(outcome=run.outcomes[0], severity=WARNING_SEVERITY),
         first_error_message=(
-            None if message is None else message.replace(project_dir, GOLDEN_PATH_MASK)
+            None
+            if message is None
+            else masked_text(
+                text=message,
+                masks=golden_path_masks(case_dir=case_dir, work_dir=options.work_dir),
+            )
         ),
         first_error_help=None if first.get("help") is None else str(first.get("help")),
         first_error_notes=tuple(str(note) for note in notes) if isinstance(notes, list) else (),

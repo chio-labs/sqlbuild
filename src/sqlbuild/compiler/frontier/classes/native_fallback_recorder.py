@@ -1,4 +1,4 @@
-"""Debug-only count of the native-to-Python fallbacks one process took, written at exit."""
+"""Debug-only count of the native fallbacks and native answers of one process, written at exit."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 
 
 class NativeFallbackRecorder:
-    """Count fallbacks by `(site, kind)` and write them once, when the process exits."""
+    """Count fallbacks and answers by `(site, kind)` and write them once, at process exit."""
 
     def __init__(self, *, directory: Path) -> None:
         self._directory: Path = directory
@@ -29,11 +29,11 @@ class NativeFallbackRecorder:
         directory: str | None = os.environ.get(ANALYSIS_RECORD_DIR_ENV_VAR)
         return cls(directory=Path(directory)) if directory else None
 
-    def record(self, *, site: str, kind: str) -> None:
-        """Count one fallback at `site` for the reason `kind`."""
+    def record(self, *, site: str, kind: str, units: int = 1) -> None:
+        """Count `units` fallbacks or answers at `site` of the sort `kind`."""
 
         with self._lock:
-            self._counts[(site, kind)] += 1
+            self._counts[(site, kind)] += units
 
     def write(self) -> None:
         """Write the counts so far as `{"fallbacks": [[site, kind, count], ...]}`; none, no file."""

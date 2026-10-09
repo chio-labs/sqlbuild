@@ -26,6 +26,16 @@ from tests.unit.scripts.compiler_differential._helpers.running._test_types impor
 )
 
 _VARIABLES: FallbackKey = ("native", "model_loop", "model_loop.sql_variables", "deferred")
+_ANSWER: FallbackKey = (
+    "native",
+    "reference_extraction",
+    "reference_extraction.native",
+    "reference_scans",
+)
+_ANSWER_ENTRY: str = (
+    '\n[[entry]]\nengine = "native"\nstage = "reference_extraction"\n'
+    'site = "reference_extraction.native"\nkind = "reference_scans"\n'
+)
 _SESSION: FallbackKey = ("native-preview", "model_analysis", "analysis_session", "session")
 _SHIPPED_RUN: RecordedRun = RecordedRun(
     engines=("python", "native"), corpora=("seeds", "failures"), seed_start=0, seeds=12
@@ -134,6 +144,27 @@ def test_given_engine_records_when_observing_then_entries_are_summed_per_corpus(
             observed={_VARIABLES: {"seed": 195}},
             run=_SHIPPED_RUN,
             expected_problems=[],
+        ),
+        FallbackGateTestCase(
+            description="vanished_native_answer_means_the_stage_runs_in_python",
+            allow_list=_LIST_HEAD + _ANSWER_ENTRY + "counts = { seed = 40 }\n",
+            observed={},
+            run=_SHIPPED_RUN,
+            expected_problems=[
+                "native reference_extraction reference_extraction.native reference_scans (seed): "
+                "native no longer answers here, so this work now runs in Python; restore the "
+                "native path, or record the change with a reason"
+            ],
+        ),
+        FallbackGateTestCase(
+            description="unlisted_native_answer_must_be_recorded",
+            allow_list=_LIST_HEAD,
+            observed={_ANSWER: {"seed": 40}},
+            run=_SHIPPED_RUN,
+            expected_problems=[
+                "native reference_extraction reference_extraction.native reference_scans (seed): "
+                "native answered 40, not on the allow-list; record it"
+            ],
         ),
         FallbackGateTestCase(
             description="other_seed_range_is_refused",

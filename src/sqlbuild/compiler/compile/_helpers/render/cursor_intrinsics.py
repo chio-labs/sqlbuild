@@ -11,8 +11,9 @@ from sqlbuild.compiler.compile.constants import (
     SQL_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
@@ -67,6 +68,8 @@ def reject_cursor_intrinsics(*, sql: str, context: str) -> None:
         free, error = _native.sql_free_of_cursor_intrinsics(
             sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL], context
         )
+        if free or error is not None:
+            report_native_answer(stage=NativeStage.ATTACHMENTS, kind="cursor_intrinsic_rejections")
         if free:
             return
         if error is not None:

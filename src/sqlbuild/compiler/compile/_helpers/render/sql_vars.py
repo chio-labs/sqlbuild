@@ -37,8 +37,8 @@ from sqlbuild.compiler.compile.models import (
     MacroExpansionResult,
 )
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
