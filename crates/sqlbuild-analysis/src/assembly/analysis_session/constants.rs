@@ -95,6 +95,8 @@ pub(crate) const RENDERED_TYPE_NAMES: [(&str, &str); 12] = [
 ];
 /// The stack a standalone dynamic pivot proof parses on, as the analysis workers have.
 pub(crate) const PIVOT_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+/// Stack for one standalone CTE fact recovery, whose AST walks recurse with query depth.
+pub(crate) const CTE_FACT_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 /// The wheel's node kinds Python's CTE fact recovery reads.
 pub(crate) const ANNOTATED_AST_KIND: &str = "annotated";
 pub(crate) const LITERAL_AST_KIND: &str = "literal";

@@ -452,6 +452,18 @@ def prove_dynamic_column_contract(
 def infer_expression_source_shapes(
     catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
 ) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...
+def _oracle_cte_fact_recovery(
+    request: tuple[
+        str,
+        str,
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, str]],
+        list[tuple[str, str]] | None,
+        bool,
+        bool,
+    ],
+    /,
+) -> tuple[str | None, list[tuple[str, str]], list[tuple[str, str]], list[str], list[str]]: ...
 
 # Native analysis: semantic completion.
 class SemanticTypeRecovery:

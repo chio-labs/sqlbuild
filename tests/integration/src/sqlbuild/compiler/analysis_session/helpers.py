@@ -406,7 +406,7 @@ class AnalysisParity:
     analysed_models: int = 0
     expression_shapes: int = 0
     pivot_proofs: int = 0
-    cte_recoveries: int = 0
+    python_cte_recoveries: int = 0
     standalone_proofs: int = 0
     proven_pivots: int = 0
     native_enrichments: int = 0
@@ -557,7 +557,7 @@ def deferral_kinds(record_dir: Path) -> Counter[str]:
 
 def _counted_cte_recovery(*, parity: AnalysisParity, **arguments: Any) -> Any:
     recovered: Any = _PYTHON_CTE_RECOVERY(**arguments)
-    parity.cte_recoveries += bool(recovered[2])
+    parity.python_cte_recoveries += bool(recovered[2])
     return recovered
 
 
