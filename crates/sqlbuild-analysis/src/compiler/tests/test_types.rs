@@ -166,3 +166,23 @@ pub(crate) struct AuthoredCtesTestCase {
     pub(crate) sql: &'static str,
     pub(crate) expected_response: serde_json::Value,
 }
+
+pub(crate) struct GluePlanParityTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: Option<&'static str>,
+    pub(crate) render_sql: bool,
+    pub(crate) expected_plan_count: usize,
+    pub(crate) expected_missing_mock_severity: &'static str,
+}
+
+pub(crate) struct GluePlannerErrorTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) payload_field: &'static str,
+    pub(crate) expected_error_prefix: &'static str,
+}
+
+pub(crate) struct GlueErrorProjectionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) warnings: &'static [(&'static str, &'static str)],
+    pub(crate) expected_messages: &'static [&'static str],
+}

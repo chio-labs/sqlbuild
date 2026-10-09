@@ -7,7 +7,7 @@ use std::time::Instant;
 use polyglot_sql::{Dialect, Expression};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
 use crate::compiler::_helpers::sql_tests::cte_slices::{SliceDialect, strip_statement_terminators};
@@ -29,8 +29,12 @@ use crate::compiler::_helpers::sql_tests::reader_references::{
 };
 use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::_helpers::sql_tests::rendering::{
-    AssertionStep, ChainStep, RenderRequest, render_comparison_sql, render_dialect,
-    rendered_chain_steps,
+    RenderRequest, render_comparison_sql, render_dialect, rendered_chain_steps,
+};
+use crate::compiler::models::{
+    SqlTestAssertionStep, SqlTestChainBatch, SqlTestChainStep, SqlTestCte, SqlTestPlan,
+    SqlTestPlanBatch, SqlTestPlanBatchOutcome, SqlTestPlanFunction, SqlTestPlanPayload,
+    SqlTestPlanTest, SqlTestPlanWarning,
 };
 use crate::constants::{
     SQL_TEST_ACTUAL_CTE, SQL_TEST_ACTUAL_CTE_PREFIX, SQL_TEST_EXPECTED_CTE,
@@ -38,7 +42,6 @@ use crate::constants::{
 };
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-const DEFAULT_WORKERS: usize = 4;
 const MAX_WORKERS: usize = 4;
 const WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const REF_PREFIX: &str = "__ref__";
@@ -62,160 +65,22 @@ pub(crate) const DBT_REF_FUNCTION: &str = "__dbt_ref";
 const UDF_FUNCTION: &str = "__udf";
 const TABLE_FUNCTION: &str = "__table_fn";
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PlanBatchRequest {
-    models: Vec<ModelInput>,
-    #[serde(default)]
-    functions: Vec<FunctionInput>,
-    tests: Vec<TestInput>,
-    #[serde(default = "default_true")]
-    sql_analysis_enabled: bool,
-    #[serde(default)]
-    sql_analysis_dialect: Option<String>,
-    #[serde(default = "default_set_difference")]
-    set_difference_operator: String,
-    #[serde(default)]
-    requires_derived_table_aliases: bool,
-    #[serde(default = "default_workers")]
-    workers: usize,
-    #[serde(default = "default_true")]
-    render_sql: bool,
-    #[serde(default = "default_true")]
-    include_plan: bool,
-    lexical_syntax: LexicalSyntax,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ChainBatchRequest {
-    models: Vec<ChainModelInput>,
-    tests: Vec<TestInput>,
-    lexical_syntax: LexicalSyntax,
-}
-
-/// Chain ordering reads only declared dependencies, so chain requests omit model SQL.
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ChainModelInput {
-    name: String,
-    #[serde(default)]
-    model_dependencies: Vec<String>,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChainBatchResponse {
     chains: Vec<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ModelInput {
-    name: String,
-    query_sql: String,
-    #[serde(default)]
-    model_dependencies: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct FunctionInput {
-    name: String,
-    #[serde(default)]
-    udf_prefix: Option<String>,
-    #[serde(default)]
-    udf_suffix: Option<String>,
-    #[serde(default)]
-    table_function_prefix: Option<String>,
-    #[serde(default)]
-    table_function_suffix: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TestInput {
-    name: String,
-    file_label: String,
-    payload: TestPayload,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
-enum TestPayload {
-    Model {
-        #[serde(default)]
-        authored_ctes: Vec<CteInput>,
-        #[serde(default)]
-        model_query_overrides: BTreeMap<String, String>,
-        #[serde(default)]
-        expected_ctes: Vec<CteInput>,
-        #[serde(default)]
-        expected_model_names: Vec<String>,
-        #[serde(default)]
-        assertion_ctes: Vec<CteInput>,
-        #[serde(default)]
-        read_helper_names: Option<Vec<String>>,
-        #[serde(default)]
-        reference_target_model_names: Option<Vec<String>>,
-    },
-    Direct {
-        mode: String,
-        actual_cte: CteInput,
-        expected_cte: CteInput,
-        #[serde(default)]
-        helper_ctes: Vec<CteInput>,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CteInput {
-    pub(crate) name: String,
-    pub(crate) sql_body: String,
-}
-
-/// One planned SQL test: the executable chain and assertion steps plus optional rendered SQL.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PlanResponse {
-    sql: Option<String>,
-    chain: Vec<ChainStep>,
-    assertions: Vec<AssertionStep>,
-    model_names: Vec<String>,
-    warnings: Vec<PlanWarning>,
-}
-
 struct PlannedResponse {
     request: RenderRequest,
     model_names: Vec<String>,
-    warnings: Vec<PlanWarning>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PlanBatchResponse {
-    artifacts: Vec<PlanResponse>,
-    planning_ns: u64,
-    rendering_ns: u64,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PlanWarning {
-    model_name: Option<String>,
-    severity: &'static str,
-    message: String,
+    warnings: Vec<SqlTestPlanWarning>,
 }
 
 #[derive(Clone)]
 struct ProjectContext {
     models: HashMap<String, ModelInputOwned>,
-    functions: HashMap<String, FunctionInput>,
+    functions: HashMap<String, SqlTestPlanFunction>,
     sql_analysis_enabled: bool,
     dialect: String,
     set_difference_operator: String,
@@ -286,7 +151,7 @@ pub(crate) struct TestFixtures {
     pub(crate) mock_seeds: BTreeMap<String, String>,
     pub(crate) mock_dbt_refs: BTreeMap<String, String>,
     pub(crate) mock_table_functions: BTreeMap<String, String>,
-    pub(crate) helpers: Vec<CteInput>,
+    pub(crate) helpers: Vec<SqlTestCte>,
     pub(crate) scope: ScopeGraph,
     pub(crate) expected: BTreeMap<String, String>,
     pub(crate) assertions: Vec<(String, String)>,
@@ -295,19 +160,19 @@ pub(crate) struct TestFixtures {
 struct DirectTestPlan {
     name: String,
     mode: String,
-    actual_cte: CteInput,
-    expected_cte: CteInput,
-    helpers: Vec<CteInput>,
+    actual_cte: SqlTestCte,
+    expected_cte: SqlTestCte,
+    helpers: Vec<SqlTestCte>,
 }
 
 struct ModelTestPlan {
     test_name: String,
     file_label: String,
-    authored_ctes: Vec<CteInput>,
+    authored_ctes: Vec<SqlTestCte>,
     model_query_overrides: BTreeMap<String, String>,
-    expected_ctes: Vec<CteInput>,
+    expected_ctes: Vec<SqlTestCte>,
     expected_model_names: Vec<String>,
-    assertion_ctes: Vec<CteInput>,
+    assertion_ctes: Vec<SqlTestCte>,
     reads: CompilerReads,
 }
 
@@ -441,7 +306,7 @@ struct AssertionResolutionRequest<'a> {
     assertion_sql: &'a str,
     fixtures: &'a TestFixtures,
     chain: &'a TextualChain,
-    functions: &'a HashMap<String, FunctionInput>,
+    functions: &'a HashMap<String, SqlTestPlanFunction>,
     requires_flat_ctes: bool,
     patterns: &'a SqlTestPatterns,
 }
@@ -451,7 +316,7 @@ struct AnalysisResolutionRequest<'a> {
     fixture_ctes: &'a [(String, String)],
     fixtures: &'a TestFixtures,
     resolved_chain: &'a HashMap<String, AnalysisResolvedSql>,
-    functions: &'a HashMap<String, FunctionInput>,
+    functions: &'a HashMap<String, SqlTestPlanFunction>,
     file_label: &'a str,
     dialect_name: &'a str,
     templates: &'a AnalysisTemplateCache,
@@ -463,7 +328,7 @@ struct TextualResolutionRequest<'a> {
     fixtures: &'a TestFixtures,
     resolved_chain: &'a HashMap<String, String>,
     chain_references: Option<&'a mut Vec<String>>,
-    functions: &'a HashMap<String, FunctionInput>,
+    functions: &'a HashMap<String, SqlTestPlanFunction>,
     patterns: &'a SqlTestPatterns,
 }
 
@@ -562,8 +427,14 @@ impl GeneratedCteState {
 
 /// Return each test's topologically ordered unmocked model chain without planning SQL.
 pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> {
-    let request: ChainBatchRequest =
+    let request: SqlTestChainBatch =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    let chains: Vec<Vec<String>> = resolve_chains(request)?;
+    serde_json::to_string(&ChainBatchResponse { chains }).map_err(|error| error.to_string())
+}
+
+/// Each test's topologically ordered unmocked model chain, in request order.
+pub(crate) fn resolve_chains(request: SqlTestChainBatch) -> Result<Vec<Vec<String>>, String> {
     let patterns = SqlTestPatterns::new(request.lexical_syntax)?;
     let models: HashMap<String, ModelInputOwned> = request
         .models
@@ -582,8 +453,8 @@ pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> 
         .tests
         .into_iter()
         .map(|test| match test.payload {
-            TestPayload::Direct { .. } => Ok(Vec::new()),
-            TestPayload::Model {
+            SqlTestPlanPayload::Direct { .. } => Ok(Vec::new()),
+            SqlTestPlanPayload::Model {
                 authored_ctes,
                 model_query_overrides,
                 expected_ctes,
@@ -610,7 +481,7 @@ pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> 
             }
         })
         .collect::<Result<_, String>>()?;
-    serde_json::to_string(&ChainBatchResponse { chains }).map_err(|error| error.to_string())
+    Ok(chains)
 }
 
 /// Models the test runs: expected models, assertion targets and the compiler's reference targets.
@@ -626,8 +497,13 @@ fn chain_root_names(
 }
 
 pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String> {
-    let request: PlanBatchRequest =
+    let request: SqlTestPlanBatch =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    serde_json::to_string(&plan_batch(request)?).map_err(|error| error.to_string())
+}
+
+/// Plan every test of `request` on a bounded pool, keeping request order.
+pub(crate) fn plan_batch(request: SqlTestPlanBatch) -> Result<SqlTestPlanBatchOutcome, String> {
     let render_sql = request.render_sql;
     let include_plan = request.include_plan;
     let render_dialect = Arc::new(render_dialect(request.sql_analysis_dialect.as_deref()));
@@ -670,7 +546,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
         .build()
         .map_err(|error| error.to_string())?;
     let batch_start = Instant::now();
-    let responses: Vec<Result<(PlanResponse, u128, u128), String>> = pool.install(|| {
+    let responses: Vec<Result<(SqlTestPlan, u128, u128), String>> = pool.install(|| {
         request
             .tests
             .into_par_iter()
@@ -685,7 +561,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
                 let sql = match rendered {
                     Some(Ok(sql)) => render_sql.then_some(sql),
                     Some(Err(message)) => {
-                        planned.warnings.push(PlanWarning {
+                        planned.warnings.push(SqlTestPlanWarning {
                             model_name: None,
                             severity: "error",
                             message: format!("test '{test_name}' cannot be rendered: {message}"),
@@ -698,7 +574,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
                     planned.request.chain.clear();
                     planned.request.assertions.clear();
                 }
-                let response = PlanResponse {
+                let response = SqlTestPlan {
                     sql,
                     chain: planned.request.chain,
                     assertions: planned.request.assertions,
@@ -709,7 +585,7 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
             })
             .collect()
     });
-    let responses: Vec<(PlanResponse, u128, u128)> =
+    let responses: Vec<(SqlTestPlan, u128, u128)> =
         responses.into_iter().collect::<Result<_, _>>()?;
     let batch_ns = batch_start.elapsed().as_nanos();
     let planning_cpu_ns: u128 = responses.iter().map(|(_, value, _)| *value).sum();
@@ -720,21 +596,20 @@ pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String>
         .checked_div(measured_cpu_ns)
         .unwrap_or(batch_ns);
     let rendering_ns = batch_ns.saturating_sub(planning_ns);
-    let artifacts: Vec<PlanResponse> = responses
+    let artifacts: Vec<SqlTestPlan> = responses
         .into_iter()
         .map(|(response, _, _)| response)
         .collect();
-    serde_json::to_string(&PlanBatchResponse {
-        artifacts,
+    Ok(SqlTestPlanBatchOutcome {
+        plans: artifacts,
         planning_ns: planning_ns.min(u128::from(u64::MAX)) as u64,
         rendering_ns: rendering_ns.min(u128::from(u64::MAX)) as u64,
     })
-    .map_err(|error| error.to_string())
 }
 
-fn plan_test(test: TestInput, context: &ProjectContext) -> Result<PlannedResponse, String> {
+fn plan_test(test: SqlTestPlanTest, context: &ProjectContext) -> Result<PlannedResponse, String> {
     match test.payload {
-        TestPayload::Direct {
+        SqlTestPlanPayload::Direct {
             mode,
             actual_cte,
             expected_cte,
@@ -749,7 +624,7 @@ fn plan_test(test: TestInput, context: &ProjectContext) -> Result<PlannedRespons
             },
             context,
         ),
-        TestPayload::Model {
+        SqlTestPlanPayload::Model {
             authored_ctes,
             model_query_overrides,
             expected_ctes,
@@ -794,7 +669,7 @@ fn plan_direct_test(
     }
     let model_name = format!("{} {}", plan.mode, plan.name);
     let request = RenderRequest {
-        chain: vec![ChainStep {
+        chain: vec![SqlTestChainStep {
             model_name: model_name.clone(),
             resolved_sql: with_helper_ctes(&actual_sql, &plan.helpers),
             expected_cte_sql: Some(with_helper_ctes(&plan.expected_cte.sql_body, &plan.helpers)),
@@ -867,16 +742,16 @@ fn plan_model_test(
         mock_refs: &fixtures.mock_refs,
         patterns: &context.patterns,
     });
-    let mut warnings: Vec<PlanWarning> = Vec::new();
+    let mut warnings: Vec<SqlTestPlanWarning> = Vec::new();
     let mut reported_missing_mocks: HashSet<(&'static str, String)> = HashSet::new();
     let mut reachable_mocks: HashSet<String> = HashSet::new();
     let mut analysis_resolved: HashMap<String, AnalysisResolvedSql> = HashMap::new();
     let mut textual_chain: TextualChain = TextualChain::default();
-    let mut chain: Vec<ChainStep> = Vec::new();
+    let mut chain: Vec<SqlTestChainStep> = Vec::new();
 
     for (model_index, model_name) in ordered_names.iter().enumerate() {
         let Some(model) = context.models.get(model_name) else {
-            warnings.push(PlanWarning {
+            warnings.push(SqlTestPlanWarning {
                 model_name: None,
                 severity: "error",
                 message: format!(
@@ -953,7 +828,7 @@ fn plan_model_test(
             }
             None => Vec::new(),
         };
-        chain.push(ChainStep {
+        chain.push(SqlTestChainStep {
             model_name: model_name.clone(),
             resolved_sql,
             expected_columns: authored_expected
@@ -983,7 +858,7 @@ fn plan_model_test(
         reachable_mocks: &mut reachable_mocks,
     })?;
 
-    let mut assertions: Vec<AssertionStep> = Vec::new();
+    let mut assertions: Vec<SqlTestAssertionStep> = Vec::new();
     for (assertion_name, assertion_sql) in &fixtures.assertions {
         let placed_sql = fixtures.scope.reader_sql(assertion_sql, &context.patterns);
         let resolved = readers.resolve(
@@ -1013,7 +888,7 @@ fn plan_model_test(
                 comparison_body_sql.as_deref().unwrap_or(&resolved_sql),
             );
         }
-        assertions.push(AssertionStep {
+        assertions.push(SqlTestAssertionStep {
             name: assertion_name.clone(),
             resolved_sql,
             lifted_ctes,
@@ -1047,7 +922,7 @@ struct HelperResolution<'r, 'a> {
     readers: &'r mut ReaderContext<'a>,
     fixtures: &'r mut TestFixtures,
     read_helper_names: &'r [String],
-    chain: &'r mut [ChainStep],
+    chain: &'r mut [SqlTestChainStep],
     reachable_mocks: &'r mut HashSet<String>,
 }
 
@@ -1237,7 +1112,10 @@ impl ReaderContext<'_> {
 }
 
 /// Drop SQL from chain steps the renderer never emits, keeping plan output linear in chain length.
-fn omit_unrendered_step_sql(chain: Vec<ChainStep>, assertions: &[AssertionStep]) -> Vec<ChainStep> {
+fn omit_unrendered_step_sql(
+    chain: Vec<SqlTestChainStep>,
+    assertions: &[SqlTestAssertionStep],
+) -> Vec<SqlTestChainStep> {
     let rendered_steps = rendered_chain_steps(&chain, assertions);
     chain
         .into_iter()
@@ -1246,7 +1124,7 @@ fn omit_unrendered_step_sql(chain: Vec<ChainStep>, assertions: &[AssertionStep])
             if rendered {
                 step
             } else {
-                ChainStep {
+                SqlTestChainStep {
                     model_name: step.model_name,
                     resolved_sql: String::new(),
                     expected_cte_sql: step.expected_cte_sql,
@@ -1350,9 +1228,9 @@ fn resolve_assertion_textual_sql(
 }
 
 fn classify_fixtures(
-    authored: Vec<CteInput>,
-    expected: Vec<CteInput>,
-    assertions: Vec<CteInput>,
+    authored: Vec<SqlTestCte>,
+    expected: Vec<SqlTestCte>,
+    assertions: Vec<SqlTestCte>,
 ) -> TestFixtures {
     let mut fixtures = TestFixtures {
         mock_refs: BTreeMap::new(),
@@ -1760,7 +1638,7 @@ fn resolve_table_function_fixtures(
 
 fn resolve_function_calls(
     sql: &str,
-    functions: &HashMap<String, FunctionInput>,
+    functions: &HashMap<String, SqlTestPlanFunction>,
     table_function: bool,
     patterns: &SqlTestPatterns,
 ) -> Result<String, String> {
@@ -1836,7 +1714,9 @@ struct UnresolvedReferenceRequest<'a> {
 }
 
 /// Report each unmocked reference once per test, attributed to the first step reaching it.
-fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec<PlanWarning> {
+fn unresolved_reference_warnings(
+    request: UnresolvedReferenceRequest<'_>,
+) -> Vec<SqlTestPlanWarning> {
     let UnresolvedReferenceRequest {
         sql,
         test_name,
@@ -1847,10 +1727,10 @@ fn unresolved_reference_warnings(request: UnresolvedReferenceRequest<'_>) -> Vec
     if !patterns.test_reference.is_match(sql) {
         return Vec::new();
     }
-    let mut warnings: Vec<PlanWarning> = Vec::new();
+    let mut warnings: Vec<SqlTestPlanWarning> = Vec::new();
     let mut warn = |kind: &'static str, name: String, message: String| {
         if reported.insert((kind, name)) {
-            warnings.push(PlanWarning {
+            warnings.push(SqlTestPlanWarning {
                 model_name: Some(model_name.to_string()),
                 severity: "error",
                 message,
@@ -1901,7 +1781,7 @@ fn unreachable_mock_warnings(
     test_name: &str,
     reachable: &HashSet<String>,
     fixtures: &TestFixtures,
-) -> Vec<PlanWarning> {
+) -> Vec<SqlTestPlanWarning> {
     let groups = [
         (
             &fixtures.mock_refs,
@@ -1917,10 +1797,10 @@ fn unreachable_mock_warnings(
             " is unreachable",
         ),
     ];
-    let mut warnings: Vec<PlanWarning> = Vec::new();
+    let mut warnings: Vec<SqlTestPlanWarning> = Vec::new();
     for (mocks, prefix, suffix) in groups {
         for name in mocks.keys().filter(|name| !reachable.contains(*name)) {
-            warnings.push(PlanWarning {
+            warnings.push(SqlTestPlanWarning {
                 model_name: None,
                 severity: "warning",
                 message: format!("test '{test_name}' mock {prefix}{name}{suffix}"),
@@ -1941,7 +1821,7 @@ fn has_unresolved_test_reference(sql: &str, patterns: &SqlTestPatterns) -> bool 
         || patterns.table_function.is_match(sql)
 }
 
-fn helper_with_clause(helpers: &[CteInput]) -> String {
+fn helper_with_clause(helpers: &[SqlTestCte]) -> String {
     if helpers.is_empty() {
         return String::new();
     }
@@ -1956,7 +1836,7 @@ fn helper_with_clause(helpers: &[CteInput]) -> String {
 }
 
 /// Prefix every helper CTE to a direct test's actual and expected queries.
-fn with_helper_ctes(sql: &str, helpers: &[CteInput]) -> String {
+fn with_helper_ctes(sql: &str, helpers: &[SqlTestCte]) -> String {
     if helpers.is_empty() {
         sql.to_string()
     } else {
@@ -1973,18 +1853,6 @@ fn dedupe(mut values: Vec<String>) -> Vec<String> {
 fn compile_pattern(pattern: &str) -> Result<Regex, String> {
     Regex::new(pattern)
         .map_err(|error| planner_error(&format!("invalid SQL-test pattern: {error}")))
-}
-
-fn default_workers() -> usize {
-    DEFAULT_WORKERS
-}
-
-fn default_true() -> bool {
-    true
-}
-
-fn default_set_difference() -> String {
-    "EXCEPT".to_string()
 }
 
 pub(crate) fn compile_error(message: &str) -> String {
