@@ -151,10 +151,32 @@ def test_given_engine_run_when_building_golden_then_run_specific_noise_is_masked
         ),
         GoldenCheckTestCase(
             description="missing_seed_golden_inside_the_recorded_range_fails",
+            project="seed/3",
+            recorded=(),
+            checked=(engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),),
+            expected_differences=(("golden 3.json", ("golden", "hint")),),
+        ),
+        GoldenCheckTestCase(
+            description="missing_dialect_variant_of_the_recorded_first_seed_fails",
+            project="seed/0-postgres",
+            recorded=(),
+            checked=(engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),),
+            expected_differences=(("golden 0-postgres.json", ("golden", "hint")),),
+        ),
+        GoldenCheckTestCase(
+            description="dialect_variant_of_an_ad_hoc_first_seed_is_skipped",
             project="seed/3-postgres",
             recorded=(),
             checked=(engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),),
-            expected_differences=(("golden 3-postgres.json", ("golden", "hint")),),
+            expected_differences=(),
+        ),
+        GoldenCheckTestCase(
+            description="missing_seed_range_fails_closed_even_with_the_seed_golden",
+            project="seed/3",
+            recorded=(engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),),
+            checked=(engine_run(engine="python", message=_MESSAGE, compiled_sql=_SQL),),
+            expected_differences=(("golden seed_range.toml", ("golden", "hint")),),
+            seed_range_dir="elsewhere",
         ),
     ],
     ids=lambda case: case.description,
@@ -165,7 +187,7 @@ def test_given_recorded_golden_when_checking_runs_then_each_differing_engine_is_
     project: CorpusProject = CorpusProject(
         name=test_case.project, commands=(), expected=ExpectedOutcome()
     )
-    write_golden_seed_range(golden_dir=tmp_path, seed_start=0, seeds=12)
+    write_golden_seed_range(golden_dir=tmp_path / test_case.seed_range_dir, seed_start=0, seeds=12)
     for recorded in test_case.recorded:
         _ = golden_differences(
             project=project,

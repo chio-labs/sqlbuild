@@ -31,6 +31,9 @@ _WAFFLE_SHOP_NATIVE_STAGES: tuple[str, ...] = (
     "semantic_checks",
 )
 _ANSWER_VANISHED: str = "native no longer answers here, so this work now runs in Python"
+_FALLBACK_WITHOUT_ANSWERS: str = (
+    "fallback disappeared but native answers did not appear; the stage may be switched off"
+)
 _VANISHED_ENTRY: str = (
     '\n[[entry]]\nengine = "native-preview"\nstage = "reference_extraction"\n'
     'site = "reference_extraction.scan"\nkind = "deferred"\ncounts = { project = 1 }\n'
@@ -48,14 +51,13 @@ _VANISHED_ENTRY: str = (
             expected_lines=("Compiler differential passed: 1 projects identical",),
         ),
         NativeFallbackGateTestCase(
-            description="entry_that_no_longer_occurs_fails",
+            description="entry_that_no_longer_occurs_without_new_native_answers_fails",
             perturbation="",
             appended_entries=_VANISHED_ENTRY,
             expected_exit_code=1,
             expected_lines=(
                 "Native fallback allow-list: native-preview reference_extraction "
-                "reference_extraction.scan deferred (project): listed but no longer occurs; "
-                "remove it from the allow-list",
+                f"reference_extraction.scan deferred (project): {_FALLBACK_WITHOUT_ANSWERS}",
             ),
         ),
         NativeFallbackGateTestCase(
@@ -138,6 +140,51 @@ def test_given_recorded_allow_list_when_native_defers_more_or_less_then_the_gate
 
     output: str = capsys.readouterr().out
     assert recorded == 0
+    assert exit_code == test_case.expected_exit_code, output
+    assert all(line in output for line in test_case.expected_lines), output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeFallbackGateTestCase(
+            description="sql_test_glue_switched_off_is_not_a_finished_port",
+            perturbation=stage_disable_sabotage(("sql_test_glue",)),
+            appended_entries="",
+            expected_exit_code=1,
+            expected_lines=(
+                "Native fallback allow-list: native-preview sql_test_glue sql_test_glue.assembly "
+                f"deferred (fixture): {_FALLBACK_WITHOUT_ANSWERS}",
+                "Native fallback allow-list: native-preview sql_test_glue sql_test_glue.planning "
+                f"deferred (fixture): {_FALLBACK_WITHOUT_ANSWERS}",
+                "Native fallback allow-list: 2 problems",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_committed_allow_list_when_fallback_only_stage_is_switched_off_then_gate_refuses(
+    test_case: NativeFallbackGateTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sabotage: Path = write_native_perturbation(tmp_path / "sabotage", source=test_case.perturbation)
+    _ = capsys.readouterr()
+
+    exit_code: int = run_compiler_differential(
+        [
+            "--corpus",
+            "fixtures",
+            "--jobs",
+            "2",
+            "--work-dir",
+            str(tmp_path / "check"),
+            "--native-fallbacks",
+            "check",
+            "--engine-env",
+            f"native-preview:PYTHONPATH={sabotage}",
+        ]
+    )
+
+    output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code, output
     assert all(line in output for line in test_case.expected_lines), output
 

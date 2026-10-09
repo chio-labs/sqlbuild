@@ -39,9 +39,23 @@ sets. `--native-fallbacks check` runs in both make targets and fails CI in both 
 - an entry, engine or corpus count that is not on the list fails;
 - a listed entry whose count changed or that no longer occurs also fails, and the message says to
   update or remove it, so the fallback list only shrinks;
-- a vanished native answer fails as work that now runs in Python.
+- a vanished native answer fails as work that now runs in Python;
+- a listed fallback that vanished is refused outright, with "fallback disappeared but native
+  answers did not appear; the stage may be switched off", unless the same engine, stage and
+  corpus report more `<stage>.native` answers than the list records. A stage with only fallback
+  entries (`sql_test_glue`, `project_assembly`) would otherwise look like a finished port when it
+  is switched off.
 
 The counts hold for the make targets' corpus (`--seeds 12`); other seed ranges are refused.
+
+Two stages the list cannot watch:
+- `type_system`: the compile corpus never reaches type normalization. Its callers are the planner
+  and executor and the preview stages' Python fallbacks. `tests/integration/.../type_system/
+  test_native_type_parity.py` proves instead that the public `normalize_type` asks native first
+  under `native-preview`.
+- `discovery.native model_file_listings`: it is reported unconditionally inside the native model
+  file discovery, which has no fallback to Python, so this count cannot detect anything. It stays
+  only as a record that native discovery ran.
 
 **How a PR updates the list and the goldens**
 
@@ -71,6 +85,9 @@ in the same PR as the change that caused it.
     in the PR body. Never add one just to make CI pass.
   - A removed or lower `<stage>.native` answer count means less native work. It needs a reason
     in the PR body.
+  - A removed fallback entry needs new or higher `<stage>.native` answers for the same stage in the
+    same diff: the port must report the work it now answers. A fallback that vanished with no new
+    answers is a stage switched off, not a port; the gate refuses it.
 - Code: every new path that hands work to Python calls `report_native_fallback`, and every new
   native path calls `report_native_answer` where its result is used.
 - Goldens:
@@ -101,7 +118,11 @@ review. Cache facts are covered by the incremental-versus-no-cache tests instead
   changes on purpose, and review the diff like code.
 - `tests/goldens/compiler/seed_range.toml` records the seed range the goldens were written for.
   Every seed in that range, and every fixture, example and failure case, must have a golden.
-  Seeds outside the range (ad hoc runs with more seeds) are skipped.
+  Seeds outside the range (ad hoc runs with more seeds) are skipped. A missing `seed_range.toml`
+  fails the check for every seed project rather than skipping them.
+- Dialect variants (`<seed>-postgres`, `<seed>-snowflake`) are generated for the first seed of a
+  run only, so a golden is required only for the variants of the recorded `seed_start`. An ad hoc
+  `--seed-start N` run checks its base seeds in the range and skips its variants.
 - Once the Python stages are deleted, goldens are rewritten from `native`.
 
 ### All-engine user-facing errors

@@ -62,9 +62,21 @@ def golden_differences(
         path.parent.mkdir(parents=True, exist_ok=True)
         _ = path.write_text(golden_text(payloads[0]), encoding="utf-8")
         return []
+    seed_range: Path = golden_dir / GOLDEN_SEED_RANGE_FILE
+    if path.parent.name == GOLDEN_SEED_CORPUS and not seed_range.is_file():
+        return [
+            Difference(
+                project=project.name,
+                artifact=f"golden {seed_range.name}",
+                location="file",
+                left="<missing>",
+                right=GOLDEN_MISSING_HINT,
+                labels=(GOLDEN_LABEL, "hint"),
+            )
+        ]
     if not path.is_file():
         if path.parent.name == GOLDEN_SEED_CORPUS and not _seed_in_recorded_range(
-            golden_dir=golden_dir, name=path.stem
+            seed_range=seed_range, name=path.stem
         ):
             return []
         return [
@@ -194,13 +206,15 @@ def write_golden_seed_range(*, golden_dir: Path, seed_start: int, seeds: int) ->
     )
 
 
-def _seed_in_recorded_range(*, golden_dir: Path, name: str) -> bool:
-    path: Path = golden_dir / GOLDEN_SEED_RANGE_FILE
-    if not path.is_file():
-        return False
-    recorded: dict[str, object] = tomllib.loads(path.read_text(encoding="utf-8"))
+def _seed_in_recorded_range(*, seed_range: Path, name: str) -> bool:
+    """Seeds in the recorded range need goldens; dialect variants only for its first seed."""
+
+    recorded: dict[str, object] = tomllib.loads(seed_range.read_text(encoding="utf-8"))
     start: int = int(str(recorded.get("seed_start", 0)))
-    index: int = int(name.split("-", 1)[0])
+    seed, _, dialect = name.partition("-")
+    index: int = int(seed)
+    if dialect:
+        return index == start
     return start <= index < start + int(str(recorded.get("seeds", 0)))
 
 
