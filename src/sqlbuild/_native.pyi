@@ -181,9 +181,10 @@ def expand_config_templates(
     value: object,
     sources: tuple[dict[str, object], object, dict[str, str | None]],
     flags: tuple[bool, bool, bool, str],
-) -> (
-    tuple[object, list[tuple[str, str]]] | tuple[NativeConfigError, list[tuple[str, str]]] | str
-): ...
+) -> tuple[object, list[tuple[str, str]]]: ...
+def expand_effective_vars(
+    raw_values: dict[str, object], environment: object
+) -> tuple[object, list[tuple[str, str]]]: ...
 
 class NativeModelConfigBuilder:
     def __init__(

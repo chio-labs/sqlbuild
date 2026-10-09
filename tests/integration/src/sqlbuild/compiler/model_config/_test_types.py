@@ -35,18 +35,3 @@ class ModelConfigTierTestCase:
     description: str
     engine: str
     expected_native_calls: dict[str, int]
-
-
-@dataclass(frozen=True)
-class ConfigTemplateParityTestCase:
-    """Seeded config values whose templates expand natively and in Python."""
-
-    description: str
-    seed: int
-    count: int
-    allow_context: bool
-    preserve_context_tokens: bool
-    preserve_unknown_context: bool
-    expected_minimum_expanded: int
-    expected_minimum_rejected: int
-    expected_minimum_unsupported: int

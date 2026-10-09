@@ -31,7 +31,6 @@ _NATIVE_ONLY_ENTRIES: frozenset[str] = (
         {
             "pair_seed_files",
             "render_attached_generic_audit",
-            "expand_config_templates",
             "scan_test_parameter_references",
             "omitted_ceremonial_select",
             "extract_sql_scenario_json",

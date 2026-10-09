@@ -75,11 +75,6 @@ class CompileContextKey(StrEnum):
     DESTINATION_QUALIFIED = "destination.qualified"
 
 
-class TemplateNamespace(StrEnum):
-    ENV = "ENV"
-    CTX = "CTX"
-
-
 class CompiledResourceType(StrEnum):
     MODEL = "model"
     SOURCE = "source"
