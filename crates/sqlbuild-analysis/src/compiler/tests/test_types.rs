@@ -162,6 +162,7 @@ pub(crate) struct ExtractionRuleTestCase {
 
 pub(crate) struct AuthoredCtesTestCase {
     pub(crate) description: &'static str,
+    pub(crate) scenario: bool,
     pub(crate) sql: &'static str,
     pub(crate) expected_response: serde_json::Value,
 }

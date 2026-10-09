@@ -191,10 +191,11 @@ def _scenario_file_from_payload(
     error: Exception | None = native_payload_error(payload=payload, file_path=file_path)
     if error is not None:
         raise error
-    _tag, contents, values, sql_body = payload
+    _tag, contents, values, sql_body, sql_body_span = payload
     return build_sql_scenario_file(
         header_values=project_native_header_values(cast(dict[str, object], values)),
         sql_body=str(sql_body),
+        sql_body_span=cast(tuple[int, int], sql_body_span),
         contents=str(contents),
         file_path=file_path,
         relative_path=relative_path,

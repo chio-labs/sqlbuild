@@ -862,21 +862,13 @@ _SCENARIO_ERROR_CTES: tuple[str, ...] = (
 )
 _SCENARIO_ERROR_WEIGHTS: tuple[int, int] = (3, 1)
 _DEFERRED_ANSWER: str = '{"deferred": true}'
-_NATIVE_SCENARIO_ANSWERS: dict[tuple[frozenset[str], bool], str] = {
-    (frozenset({"deferred"}), False): "deferred",
-    (frozenset({"deferred"}), True): "deferred",
-    (frozenset({"scanError"}), False): "error",
-    (frozenset({"scanError"}), True): "polyglot",
-    (frozenset({"independence", "scenario"}), False): "independence",
-    (frozenset({"independence", "scenario"}), True): "independence",
-    (frozenset({"independence", "error"}), False): "independence",
-    (frozenset({"independence", "error"}), True): "independence",
-    (frozenset({"error"}), False): "error",
-    (frozenset({"error"}), True): "error",
-    (frozenset({"scenario"}), False): "extracted",
-    (frozenset({"scenario"}), True): "extracted",
+_NATIVE_SCENARIO_ANSWERS: dict[frozenset[str], str] = {
+    frozenset({"deferred"}): "deferred",
+    frozenset({"independence", "scenario"}): "independence",
+    frozenset({"independence", "error"}): "independence",
+    frozenset({"error"}): "error",
+    frozenset({"scenario"}): "extracted",
 }
-_CEREMONIAL_SELECT_TAIL: re.Pattern[str] = re.compile(r"\bSELECT\s+1\s*;?\s*$", re.IGNORECASE)
 _SCENARIO_TAILS: tuple[str, ...] = ("\nSELECT 1\n", "", ";", "\nSELECT 2", " -- end", ";\n")
 _SCENARIO_KEYWORDS: tuple[str, ...] = (
     "WITH\n",
@@ -923,9 +915,7 @@ def native_scenario_answer(*, sql: str, syntax: SqlLexicalSyntax) -> str:
         sql, "tests/scenarios/orders.sql", syntax.native_mapping
     )
     outcome: dict[str, object] = orjson.loads(response or _DEFERRED_ANSWER)
-    return _NATIVE_SCENARIO_ANSWERS[
-        (frozenset(outcome), _CEREMONIAL_SELECT_TAIL.search(sql) is not None)
-    ]
+    return _NATIVE_SCENARIO_ANSWERS[frozenset(outcome)]
 
 
 _TARGET_NAMES: tuple[str, ...] = ("orders", "customers", "channel_codes", "returns", "order_rows")

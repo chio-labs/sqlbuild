@@ -426,6 +426,7 @@ fn scenario_object(py: Python<'_>, file: DiscoveredScenarioFile) -> PyResult<PyO
             object(py, file.contents)?,
             map_to_python(py, file.header_values)?,
             object(py, file.sql_body)?,
+            object(py, file.body_span)?,
         ],
     )
 }

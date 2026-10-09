@@ -147,21 +147,6 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
             expected_expected_model_names=("dim_countries",),
             expected_assertion_names=(),
         ),
-        ExtractSqlScenarioCtesTestCase(
-            description="extracts scenario ctes with sql_analysis fallback syntax",
-            sql="""
-        WITH
-        "__source__raw__orders" AS MATERIALIZED (SELECT 1 AS order_id),
-        "__expected__daily_revenue" AS (SELECT order_id FROM "__source__raw__orders")
-        SELECT 1
-        """.strip(),
-            expected_authored_cte_names=("__source__raw__orders",),
-            expected_source_fixture_names=("raw__orders",),
-            expected_ref_fixture_names=(),
-            expected_seed_fixture_names=(),
-            expected_expected_model_names=("daily_revenue",),
-            expected_assertion_names=(),
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -226,6 +211,29 @@ def test_given_sql_scenario_cte_variants_when_extracting_then_it_returns_expecte
             expected_error_fragment=(
                 "'__expected__orders' must not depend on "
                 "'__assert__positive_order_id' through 'assertion_helper'"
+            ),
+        ),
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when a scenario cte name is quoted",
+            sql="""
+        WITH
+        "__source__raw__orders" AS (SELECT 1 AS order_id),
+        __expected__daily_revenue AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment="expected a CTE name",
+        ),
+        ExtractSqlScenarioCtesErrorTestCase(
+            description="raises when a scenario cte uses a materialization hint",
+            sql="""
+        WITH
+        __source__raw__orders AS MATERIALIZED (SELECT 1 AS order_id),
+        __expected__daily_revenue AS (SELECT 1 AS order_id)
+        SELECT 1
+        """.strip(),
+            expected_error_fragment=(
+                "CTE '__source__raw__orders' must not use AS MATERIALIZED; materialization "
+                "hints are not supported in SQL scenario CTEs"
             ),
         ),
         ExtractSqlScenarioCtesErrorTestCase(

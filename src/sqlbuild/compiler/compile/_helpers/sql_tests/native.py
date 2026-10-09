@@ -168,15 +168,21 @@ def authored_sql_test_ctes(
 
 
 def authored_sql_test_cte_batch(
-    *, tests: tuple[tuple[str, str], ...], syntax: SqlLexicalSyntax
+    *, tests: tuple[tuple[str, str], ...], syntax: SqlLexicalSyntax, scenarios: bool = False
 ) -> tuple[tuple[tuple[str, int, str], ...], ...]:
-    """Read many authored blocks at once; a CTE-name error names its block by `test_index`."""
+    """Read many authored blocks or scenarios at once; a CTE error names one by `test_index`."""
 
     if not tests:
         return ()
     results: list[object] = _native_batch(
         tests=[
-            {"sql": sql, "fileLabel": file_label, "mode": "model", "authored": True}
+            {
+                "sql": sql,
+                "fileLabel": file_label,
+                "mode": "model",
+                "authored": True,
+                "scenario": scenarios,
+            }
             for sql, file_label in tests
         ],
         syntax=syntax,

@@ -1991,8 +1991,8 @@ pub(crate) fn rejected_outcome(
 }
 
 /// The authored-block reading of `sql`: its CTEs with body offsets, or its first error.
-pub(crate) fn authored_ctes_response(sql: &str) -> Value {
+pub(crate) fn authored_ctes_response(sql: &str, scenario: bool) -> Value {
     batch_response(
-        &json!({"tests": [{"sql": sql, "fileLabel": "tests/t.sql", "mode": "model", "authored": true}]}),
+        &json!({"tests": [{"sql": sql, "fileLabel": "tests/t.sql", "mode": "model", "authored": true, "scenario": scenario}]}),
     )
 }
