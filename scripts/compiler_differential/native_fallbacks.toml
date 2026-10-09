@@ -114,13 +114,6 @@ counts = { example = 56, failure = 400, fixture = 64, seed = 1100 }
 [[entry]]
 engine = "native"
 stage = "model_loop"
-site = "model_loop.declaration_context"
-kind = "no_resource"
-counts = { example = 24, failure = 9, fixture = 20, seed = 245 }
-
-[[entry]]
-engine = "native"
-stage = "model_loop"
 site = "model_loop.native"
 kind = "declaration_expansions"
 counts = { example = 56, failure = 427, fixture = 64, seed = 1103 }
@@ -299,13 +292,6 @@ stage = "model_config"
 site = "model_config.native"
 kind = "validations"
 counts = { example = 56, failure = 400, fixture = 64, seed = 1100 }
-
-[[entry]]
-engine = "native-preview"
-stage = "model_loop"
-site = "model_loop.declaration_context"
-kind = "no_resource"
-counts = { example = 24, failure = 9, fixture = 20, seed = 245 }
 
 [[entry]]
 engine = "native-preview"
