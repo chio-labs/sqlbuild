@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::contracts::_helpers::dynamic::dynamic_column_diagnostics;
-use crate::contracts::_helpers::type_comparison::{TypeComparison, types_equal};
+use crate::contracts::_helpers::type_comparison::{TypeComparer, TypeComparison};
 use crate::contracts::constants::{
     CONTRACT_ENFORCED, CONTRACT_NONE, DYNAMIC_OUTPUT_NOT_PROVEN_CODE, EXTRA_COLUMN_CODE,
     EXTRA_COLUMN_HELP, EXTRA_COLUMN_NAMED_SCHEMA_HELP, MISSING_COLUMN_CODE,
@@ -45,7 +45,7 @@ pub(crate) fn declared_shape_validation_is_active(model: &ContractModel, implici
 pub(crate) fn model_contract_diagnostics(
     model: &ContractModel,
     validate_declared_shape: bool,
-    dialect: &str,
+    types: &TypeComparer<'_>,
 ) -> Result<Vec<ContractDiagnostic>, ContractDeferral> {
     let contract_enforced: bool = model.contract.as_deref() == Some(CONTRACT_ENFORCED);
     let Some(schema) = model
@@ -59,7 +59,7 @@ pub(crate) fn model_contract_diagnostics(
             Vec::new()
         });
     };
-    let mut diagnostics: Vec<ContractDiagnostic> = dynamic_column_diagnostics(model, dialect)?;
+    let mut diagnostics: Vec<ContractDiagnostic> = dynamic_column_diagnostics(model, types)?;
     let dynamic_output_unproven: bool = diagnostics
         .iter()
         .any(|diagnostic| diagnostic.code == DYNAMIC_OUTPUT_NOT_PROVEN_CODE);
@@ -107,7 +107,7 @@ pub(crate) fn model_contract_diagnostics(
             type_enforcement: schema.type_enforcement,
             contract_enforced,
             unchecked: &unchecked,
-            dialect,
+            types,
         };
         diagnostics.extend(column_type(&checked, &check)?);
     }
@@ -118,7 +118,7 @@ struct TypeCheck<'a> {
     type_enforcement: bool,
     contract_enforced: bool,
     unchecked: &'a HashSet<&'a str>,
-    dialect: &'a str,
+    types: &'a TypeComparer<'a>,
 }
 
 struct TypedColumn<'a> {
@@ -271,7 +271,7 @@ fn column_type(
             help: UNKNOWN_TYPE_HELP.to_owned(),
         }));
     };
-    if types_equal(declared_type, inferred_type, check.dialect)? == TypeComparison::Equal {
+    if check.types.types_equal(declared_type, inferred_type)? == TypeComparison::Equal {
         return Ok(None);
     }
     Ok(Some(ContractDiagnostic {

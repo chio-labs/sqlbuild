@@ -23,3 +23,12 @@ class PerSideCompilePerformanceRatioTestCase:
     expected_fragments: tuple[str, ...]
     expected_base_projects: tuple[str, ...]
     expected_head_projects: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EnginePhaseRatioTestCase:
+    description: str
+    max_ratio: str
+    phase_noise_floor_ms: str
+    expected_return_code: int
+    expected_fragments: tuple[str, ...]

@@ -66,6 +66,7 @@ def test_given_waffle_shop_when_running_compile_json_then_it_reports_offline_que
         "graph_ms",
         "lineage_ms",
         "contracts_ms",
+        "contracts_cpu_ms",
         "write_ms",
         "attachment_ms",
         "built_in_rules_ms",

@@ -227,8 +227,11 @@ fn python_str(value: &Value) -> Option<String> {
     }
 }
 
-/// Whether the wheel hands Python this value as an expression object rather than data.
+/// Whether the wheel hands Python an expression object; every variant holds data, so not a scalar.
 fn is_python_expression(value: &Value) -> bool {
+    if !matches!(value, Value::Object(_) | Value::Array(_)) {
+        return false;
+    }
     if let Ok(_expression) = expression_from_value(value.clone()) {
         return true;
     }

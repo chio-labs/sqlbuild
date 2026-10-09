@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from scripts.compile_performance_ratio.models import CompileComparison
+from scripts.compile_performance_ratio.models import CompileComparison, CompileRun
 
 
 @dataclass(frozen=True)
@@ -37,3 +37,10 @@ class OneModelEditErrorTestCase:
     description: str
     model_files: dict[str, str]
     expected_message: str
+
+
+@dataclass(frozen=True)
+class MedianPhasesTestCase:
+    description: str
+    runs: tuple[CompileRun, ...]
+    expected_phases: dict[str, float]

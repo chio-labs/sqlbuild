@@ -170,6 +170,7 @@ def _analyze_compile_project(
         status=status, message=f"Analyzed column lineage. ({lineage_ms / 1000:.2f}s)"
     )
     contracts_start: float = time.monotonic()
+    contracts_cpu_start: float = time.thread_time()
     contract_result: ContractValidationResult
     if profile_flags.skip_contracts:
         contract_result = ContractValidationResult(diagnostics=())
@@ -180,6 +181,7 @@ def _analyze_compile_project(
             dialect=adapter.sql_analysis_dialect(),
         )
     contract_ms: int = elapsed_ms(contracts_start)
+    contract_cpu_ms: int = int((time.thread_time() - contracts_cpu_start) * 1000)
     if not profile_flags.skip_contracts:
         _ = complete_compile_phase(
             status=status, message=f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
@@ -255,6 +257,7 @@ def _analyze_compile_project(
         graph_ms=graph_ms,
         lineage_ms=lineage_ms,
         contract_ms=contract_ms,
+        contract_cpu_ms=contract_cpu_ms,
         built_in_rules_ms=rules_result.built_in_ms,
         custom_rules_ms=rules_result.custom_ms,
         early_lint_wait_ms=early_lint_wait_ms,

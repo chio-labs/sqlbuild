@@ -166,6 +166,7 @@ def _run_compile_with_status(
         "graph_ms": analysis.graph_ms,
         "lineage_ms": analysis.lineage_ms,
         "contracts_ms": analysis.contract_ms,
+        "contracts_cpu_ms": analysis.contract_cpu_ms,
         "built_in_rules_ms": analysis.built_in_rules_ms,
         "custom_rules_ms": analysis.custom_rules_ms,
         "early_lint_wait_ms": analysis.early_lint_wait_ms,

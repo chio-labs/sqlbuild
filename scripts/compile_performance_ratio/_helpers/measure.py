@@ -20,6 +20,7 @@ from scripts.compile_performance_ratio.constants import (
     BASE_LABEL,
     COLD_MODE,
     COMPILE_ENTRY,
+    COMPILER_ENGINE_KEY,
     DENSE_KIND,
     EDIT_MODE,
     ERROR_TAIL_CHARACTERS,
@@ -116,34 +117,42 @@ def compare_builds(
     head_python: Path,
     runs: int,
     modes: tuple[str, ...],
+    engines: tuple[str | None, str | None] = (None, None),
 ) -> tuple[CompileComparison, ...]:
     """Alternate base and head compiles per mode; warm and edit reuse the cold project."""
 
-    builds: tuple[tuple[str, Path, Path], ...] = (
-        (BASE_LABEL, base_python, base_project_dir),
-        (HEAD_LABEL, head_python, head_project_dir),
+    base_engine, head_engine = engines
+    builds: tuple[tuple[str, Path, Path, str | None], ...] = (
+        (BASE_LABEL, base_python, base_project_dir, base_engine),
+        (HEAD_LABEL, head_python, head_project_dir, head_engine),
     )
     comparisons: list[CompileComparison] = []
     cache_primed: bool = False
     for mode in modes:
         print(f"Comparing {MODE_TITLES[mode]} over {runs} alternating runs", file=sys.stderr)
         if mode == COLD_MODE:
-            for label, python, project_dir in builds:
-                _ = _compile_once(label=label, python=python, project_dir=project_dir, mode=mode)
+            for label, python, project_dir, engine in builds:
+                _ = _compile_once(
+                    label=label, python=python, project_dir=project_dir, mode=mode, engine=engine
+                )
             cache_primed = False
         elif not cache_primed:
-            for label, python, project_dir in builds:
+            for label, python, project_dir, engine in builds:
                 _ = _compile_once(
-                    label=label, python=python, project_dir=project_dir, mode=WARM_MODE
+                    label=label,
+                    python=python,
+                    project_dir=project_dir,
+                    mode=WARM_MODE,
+                    engine=engine,
                 )
             cache_primed = True
         results: dict[str, list[CompileRun]] = {BASE_LABEL: [], HEAD_LABEL: []}
         for revision in range(runs):
-            for label, python, project_dir in builds:
+            for label, python, project_dir, engine in builds:
                 if mode == EDIT_MODE:
                     _ = apply_one_model_edit(project_dir=project_dir, revision=revision)
                 run: CompileRun = _compile_once(
-                    label=label, python=python, project_dir=project_dir, mode=mode
+                    label=label, python=python, project_dir=project_dir, mode=mode, engine=engine
                 )
                 _check_cache_use(run=run, mode=mode)
                 results[label].append(run)
@@ -170,8 +179,8 @@ def _comparison(
         head_wall_seconds=statistics.median(run.wall_seconds for run in head),
         base_cpu_seconds=statistics.median(run.cpu_seconds for run in base),
         head_cpu_seconds=statistics.median(run.cpu_seconds for run in head),
-        base_timings_ms=_median_phases(runs=base),
-        head_timings_ms=_median_phases(runs=head),
+        base_timings_ms=median_phases(runs=base),
+        head_timings_ms=median_phases(runs=head),
     )
 
 
@@ -191,12 +200,16 @@ def _check_cache_use(*, run: CompileRun, mode: str) -> None:
         )
 
 
-def _compile_once(*, label: str, python: Path, project_dir: Path, mode: str) -> CompileRun:
+def _compile_once(
+    *, label: str, python: Path, project_dir: Path, mode: str, engine: str | None
+) -> CompileRun:
     cache_args: tuple[str, ...] = ()
     if mode == COLD_MODE:
         shutil.rmtree(project_dir / "target", ignore_errors=True)
         cache_args = ("--no-cache",)
     environment: dict[str, str] = _compile_environment()
+    if engine is not None:
+        environment[COMPILER_ENGINE_KEY] = engine
     before: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     started: float = time.perf_counter()
     completed: subprocess.CompletedProcess[str] = subprocess.run(
@@ -247,9 +260,12 @@ def _compile_environment() -> dict[str, str]:
     }
 
 
-def _median_phases(*, runs: list[CompileRun]) -> dict[str, float]:
+def median_phases(*, runs: list[CompileRun]) -> dict[str, float]:
+    """Return each phase's median over runs, omitting phases any run did not report."""
+
     medians: dict[str, float] = {}
     for phase in REPORTED_PHASES:
-        values: list[int] = [run.timings_ms.get(phase, 0) for run in runs]
-        medians[phase] = statistics.median(values)
+        values: list[int] = [run.timings_ms[phase] for run in runs if phase in run.timings_ms]
+        if values and len(values) == len(runs):
+            medians[phase] = statistics.median(values)
     return medians
