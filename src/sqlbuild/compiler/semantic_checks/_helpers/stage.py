@@ -9,11 +9,10 @@ from sqlbuild.compiler.compile.classes.semantic_completion_inputs import Semanti
 from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.semantic_checks._helpers.completion import complete_native_diagnostics
 from sqlbuild.compiler.semantic_checks._helpers.deferrals import record_semantic_deferral
+from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_diagnostics
 from sqlbuild.compiler.semantic_checks._helpers.type_recovery import recover_native_output_types
 from sqlbuild.compiler.semantic_checks.constants import (
     COMPLETION_DEFERRAL_SITE,
-    METADATA_DEFERRAL_SITE,
-    NATIVE_SEMANTIC_METADATA_CHECKS,
     NATIVE_SEMANTIC_NO_CATALOG,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
@@ -37,11 +36,16 @@ def completed_semantic_project(
     )
     if recovered is None:
         return None
-    if recovered.settings.sql_analysis:
-        record_semantic_deferral(kind=NATIVE_SEMANTIC_METADATA_CHECKS, site=METADATA_DEFERRAL_SITE)
-    metadata: tuple[CompilerDiagnostic, ...] = SemanticCompletionInputs.metadata_diagnostics(
-        project=recovered, profile=profile, resource_sql_analysis=resource_sql_analysis
+    metadata: tuple[CompilerDiagnostic, ...] | None = native_metadata_diagnostics(
+        project=recovered,
+        profile=profile,
+        resource_sql_analysis=resource_sql_analysis,
+        catalog=catalog,
     )
+    if metadata is None:
+        metadata = SemanticCompletionInputs.metadata_diagnostics(
+            project=recovered, profile=profile, resource_sql_analysis=resource_sql_analysis
+        )
     return complete_native_diagnostics(
         project=replace(recovered, diagnostics=(*recovered.diagnostics, *metadata)),
         catalog=catalog,

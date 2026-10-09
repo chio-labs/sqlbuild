@@ -7,6 +7,9 @@ from dataclasses import replace
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.compact import get_complete_schema_binding_request
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
+    _audit_errors,
+    _names,
+    _sql_test_columns,
     get_semantic_metadata_diagnostics,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
@@ -14,6 +17,7 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_function_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
+from sqlbuild.compiler.compile._helpers.diagnostics.resource_sql import get_resource_sql_diagnostics
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.models import SqlSchemaValidationRequest
@@ -64,3 +68,51 @@ class SemanticCompletionInputs:
         return get_semantic_metadata_diagnostics(
             project=project, profile=profile, resource_sql_analysis=resource_sql_analysis
         )
+
+    @staticmethod
+    def metadata_shapes(
+        *, project: CompiledProject, profile: ExpressionInferenceProfile
+    ) -> dict[str, dict[str, str]]:
+        """Closed relation shapes, as the metadata checks read them under `profile`."""
+
+        return semantic_shapes(project=project, profile=profile)
+
+    @staticmethod
+    def column_names(value: object) -> tuple[str, ...]:
+        """The column names a metadata config value lists."""
+
+        return _names(value)
+
+    @staticmethod
+    def audit_diagnostics(
+        *,
+        model: CompiledModel,
+        project: CompiledProject,
+        shape: dict[str, str],
+        shapes: dict[str, dict[str, str]],
+        profile: ExpressionInferenceProfile,
+    ) -> tuple[CompilerDiagnostic, ...]:
+        """The schema audit checks of one model with a closed shape."""
+
+        return _audit_errors(
+            model=model, project=project, shape=shape, shapes=shapes, profile=profile
+        )
+
+    @staticmethod
+    def sql_test_columns(
+        *, project: CompiledProject, profile: ExpressionInferenceProfile
+    ) -> dict[str, tuple[str, ...]]:
+        """The inferred output columns of every model SQL test CTE body."""
+
+        return _sql_test_columns(project=project, profile=profile)
+
+    @staticmethod
+    def resource_sql_diagnostics(
+        *,
+        project: CompiledProject,
+        shapes: dict[str, dict[str, str]],
+        profile: ExpressionInferenceProfile,
+    ) -> tuple[CompilerDiagnostic, ...]:
+        """The compile-time SQL checks of audits, SQL tests and SQL hooks."""
+
+        return tuple(get_resource_sql_diagnostics(project=project, shapes=shapes, profile=profile))

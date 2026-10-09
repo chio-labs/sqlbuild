@@ -5,19 +5,21 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use crate::semantic_checks::_helpers::bindings::{BindingOwner, binding_positions};
-use crate::semantic_checks::_helpers::columns::closest_column;
-use crate::semantic_checks::_helpers::explain::{
+use crate::semantic_checks::_helpers::explanation::columns::closest_column;
+use crate::semantic_checks::_helpers::explanation::explain::{
     Binary, ExplainContext, ModelEvidence, Shapes, binary_index, explain_model, is_explained_code,
     is_type_code,
 };
-use crate::semantic_checks::_helpers::messages::{
+use crate::semantic_checks::_helpers::explanation::messages::{
     compiled, missing_column, pattern, semantic_help, sentence_message,
 };
-use crate::semantic_checks::_helpers::opt_outs::opt_out_diagnostic;
-use crate::semantic_checks::_helpers::parsed_sql::{ParsedModelFacts, parsed_model_facts};
-use crate::semantic_checks::_helpers::poison::Poison;
-use crate::semantic_checks::_helpers::text::{LineIndex, ascii, plain_text};
+use crate::semantic_checks::_helpers::explanation::opt_outs::opt_out_diagnostic;
+use crate::semantic_checks::_helpers::recovery::bindings::{BindingOwner, binding_positions};
+use crate::semantic_checks::_helpers::recovery::poison::Poison;
+use crate::semantic_checks::_helpers::sql_text::parsed_sql::{
+    ParsedModelFacts, parsed_model_facts,
+};
+use crate::semantic_checks::_helpers::sql_text::text::{LineIndex, ascii, plain_text};
 use crate::semantic_checks::constants::{
     MODEL_RESOURCE_TYPE, SEMANTIC_CODE_PREFIX, SQL_TEST_COLUMN_CODE, SQL_TEST_COLUMN_PATTERN,
     UNKNOWN_COLUMN_CODE,

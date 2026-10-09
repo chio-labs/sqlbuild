@@ -443,7 +443,6 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
                 "Polyglot wheel calls (native-preview):",
                 "Analysis deferrals (python): none recorded",
                 "Analysis deferrals (native-preview):",
-                " metadata_checks metadata_validation.py (project ",
                 " input_enrichment analysis_session (project ",
                 "Compiler differential passed: 1 projects identical",
             ),
@@ -453,9 +452,7 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
                     "_validate_sql_syntax_with_message parse_one",
                 }
             ),
-            expected_deferrals=frozenset(
-                {"metadata_checks metadata_validation.py", "input_enrichment analysis_session"}
-            ),
+            expected_deferrals=frozenset({"input_enrichment analysis_session"}),
         ),
         WheelSiteReportTestCase(
             description="preview_deferrals_are_counted_per_kind_and_site",
@@ -469,7 +466,6 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
             expected_deferrals=frozenset(
                 {
                     "legacy_fallback orders.sql",
-                    "metadata_checks metadata_validation.py",
                     "input_enrichment analysis_session",
                 }
             ),
