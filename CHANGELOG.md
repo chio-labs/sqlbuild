@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.150.0](https://github.com/chio-labs/sqlbuild/compare/v0.149.0...v0.150.0) (2026-10-09)
+
+
+### Features
+
+* **native:** enrich analysis inputs natively behind the preview engine ([#1055](https://github.com/chio-labs/sqlbuild/issues/1055)) ([762eac9](https://github.com/chio-labs/sqlbuild/commit/762eac9e424d436a43b6d2238cbfe0115d9739c1))
+* **native:** run metadata checks natively behind the preview engine ([#1058](https://github.com/chio-labs/sqlbuild/issues/1058)) ([9a8e410](https://github.com/chio-labs/sqlbuild/commit/9a8e4109599d9a4a42ab02aba1d412bb3e8db5dc))
+* **native:** validate contracts natively behind the preview engine ([#1054](https://github.com/chio-labs/sqlbuild/issues/1054)) ([b930183](https://github.com/chio-labs/sqlbuild/commit/b93018345c9acc4d13000fd86ae5d1963d46bd4c))
+
 ## [0.149.0](https://github.com/chio-labs/sqlbuild/compare/v0.148.0...v0.149.0) (2026-10-09)
 
 
