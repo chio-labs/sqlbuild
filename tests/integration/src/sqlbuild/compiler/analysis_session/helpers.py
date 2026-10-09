@@ -405,8 +405,8 @@ def nullability_analysis_files() -> dict[str, str]:
     readers: dict[str, str] = {
         f"models/m_{name}.sql": (
             'MODEL (description "Orders read with null handling");\n\n'
-            "SELECT customer_id, amount, COALESCE(amount, 0) AS filled, amount IS NULL AS missing,\n"
-            f'  amount + 1 AS bumped\nFROM __source("{name}")\n'
+            "SELECT customer_id, amount, COALESCE(amount, 0) AS filled,\n"
+            f'  amount IS NULL AS missing, amount + 1 AS bumped\nFROM __source("{name}")\n'
         )
         for name in ("s1", "s2", "s3")
     }
