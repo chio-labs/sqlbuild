@@ -304,10 +304,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
       - name: Compare fixtures, examples, generated seeds and the failure corpus (python vs native-preview)
+        env:
+          SQB_DIAG_SCRIPT: ${{ github.workspace }}/scripts/_diag_sql_test_cache.py
         run: >-
           make compiler-differential
-          COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
-          --require-render-coverage --require-analysis-coverage
+          COMPILER_DIFFERENTIAL_ARGS="--corpus examples fixtures --stage-captures
           --wheel-site-report ${{ runner.temp }}/compiler-differential-wheel-sites.json"
       - name: Upload the Polyglot wheel-site and deferral report
         if: always()

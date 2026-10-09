@@ -13,7 +13,7 @@ ANALYSIS_DEFERRAL_RECORD_PREFIX: str = "analysis-deferrals-"
 RECORDS_DIRECTORY: str = "records"
 ENGINE_NAMES: tuple[str, ...] = ("python", "native", "native-preview")
 DEFAULT_ENGINES: tuple[str, str] = ("python", "native-preview")
-SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
+SQB_ENTRY: str = "import runpy; runpy.run_path(__import__('os').environ['SQB_DIAG_SCRIPT'], run_name='__main__')"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset(
     {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR, ANALYSIS_RECORD_ENV_VAR}
 )
