@@ -102,6 +102,8 @@ def _bridged_call_output(  # noqa: PLR0913
     call_class: MacroCallClass,
 ) -> str:
     facts: MacroExpansionFacts = state.facts
+    if state.macro_overrides.keys() & set(site.tree_names):
+        return _mocked_call_output(sql=sql, consumer_path=consumer_path, state=state, site=site)
     call_text: str = sql[site.start : site.end]
     prior_relations: tuple[SqlResourceRef, ...] | None = (
         tuple(facts.relations) if site.typed_reference_text else None
@@ -159,6 +161,35 @@ def _bridged_call_output(  # noqa: PLR0913
             events=events,
         )
     return facts.render_relation_placeholders(macro_result)
+
+
+def _mocked_call_output(
+    *, sql: str, consumer_path: Path, state: MacroExpansionState, site: MacroCallSite
+) -> str:
+    """Run a call whose tree a test mocks; its output differs from the shared memo's, so skip it."""
+
+    macro_result: object
+    next_index: int
+    macro_result, next_index = _evaluate_macro_call(
+        sql=sql,
+        call_start_index=site.start,
+        file_path=consumer_path,
+        state=state,
+        declarations=_expansion_declarations(state=state, consumer_path=consumer_path),
+        stack=(),
+        top_level=True,
+    )
+    if not isinstance(macro_result, str):
+        raise CompileInputError(
+            f"Macro '@{site.name}' in '{consumer_path}' must return a SQL string when used "
+            "directly in SQL"
+        )
+    if next_index != site.end:
+        raise NativeStageMismatchError(
+            f"Native macro call scan of '{consumer_path}' ended at {site.end}, Python at "
+            f"{next_index}"
+        )
+    return state.facts.render_relation_placeholders(macro_result)
 
 
 def _replay_macro_call_event(

@@ -33,6 +33,7 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_loop.constants import (
@@ -168,7 +169,9 @@ def build_declaration_scope_resolver(
     if loaded_macros is not None:
         for macro in loaded_macros.values():
             declarations[DeclarationIdentity(DeclarationKind.MACRO, macro.name)] = macro
-    if lookup is None and native_stage_enabled(NativeStage.DECLARATION_SCOPES):
+    if lookup is not None:
+        report_native_answer(stage=NativeStage.DECLARATION_SCOPES, kind="resolver_lookups")
+    elif native_stage_enabled(NativeStage.DECLARATION_SCOPES):
         report_native_fallback(site=NativeFallbackSite.SCOPE_REBIND_LOOKUP)
     scope_lookup: ScopeLookup = build_scope_lookup(index=scope_index) if lookup is None else lookup
     return DeclarationScopeResolver(
