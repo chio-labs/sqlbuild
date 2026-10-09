@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, fields, replace
-from itertools import chain, compress
+from itertools import chain
 from pathlib import Path
 
 import pytest
@@ -475,7 +475,6 @@ class ExpectedNameScanParity:
 
     mismatches: list[tuple[object, object, object]]
     scanned: int
-    deferred: int
     python_errors: int
     native_errors: int
 
@@ -511,15 +510,9 @@ def expected_name_scan_parity(
         *(_python_scenario_names(sql=sql, syntax=syntax) for sql in sqls),
         *(_python_test_ctes(sql=sql, syntax=syntax) for sql in sqls),
     ]
-    answered: list[bool] = [outcome is not None for outcome in native]
     return ExpectedNameScanParity(
-        mismatches=mismatches(
-            inputs=list(compress([*sqls, *sqls, *sqls], answered)),
-            expected=list(compress(python, answered)),
-            actual=list(compress(native, answered)),
-        ),
+        mismatches=mismatches(inputs=[*sqls, *sqls, *sqls], expected=python, actual=native),
         scanned=sum(isinstance(outcome, tuple) for outcome in native),
-        deferred=answered.count(False),
         python_errors=sum(isinstance(outcome, str) for outcome in python),
         native_errors=sum(isinstance(outcome, str) for outcome in native),
     )

@@ -53,7 +53,6 @@ class ExpectedNameScanTestCase:
     seed: int
     count: int
     expected_minimum_scanned: int
-    expected_minimum_deferred: int
     expected_minimum_python_errors: int
     expected_minimum_native_errors: int
 

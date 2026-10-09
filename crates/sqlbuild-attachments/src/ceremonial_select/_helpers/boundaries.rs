@@ -1,4 +1,4 @@
-//! Python's code boundary pattern and `WITH` keyword check.
+//! The code boundary pattern and `WITH` keyword check.
 
 /// Python's boundary pattern: parentheses, `/*`, quotes, `$` and the line comment prefixes.
 pub(crate) fn next_boundary(bytes: &[u8], start: usize, prefixes: &[String]) -> Option<usize> {
@@ -17,19 +17,12 @@ fn is_boundary(rest: &[u8], prefixes: &[String]) -> bool {
     false
 }
 
-/// Whether `WITH` (any case) starts at `first` as a whole word; None for non-ASCII text.
-pub(crate) fn starts_with_keyword(sql: &str, first: usize) -> Option<bool> {
+/// Whether `sql[first:first + 4].upper() == "WITH"` and no identifier character follows.
+pub(crate) fn starts_with_keyword(sql: &str, first: usize) -> bool {
     let mut characters = sql[first..].chars();
     let keyword: String = characters.by_ref().take(4).collect();
-    if !keyword.is_ascii() {
-        return None;
-    }
-    if !keyword.eq_ignore_ascii_case("WITH") {
-        return Some(false);
-    }
-    match characters.next() {
-        None => Some(true),
-        Some(next) if !next.is_ascii() => None,
-        Some(next) => Some(!(next.is_ascii_alphanumeric() || next == '_')),
-    }
+    keyword.to_uppercase() == "WITH"
+        && !characters
+            .next()
+            .is_some_and(|next| next.is_alphanumeric() || next == '_')
 }

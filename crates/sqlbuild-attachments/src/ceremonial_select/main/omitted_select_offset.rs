@@ -14,12 +14,6 @@ use crate::ceremonial_select::models::OmittedSelect;
 pub fn omitted_select_offset(sql: &str, syntax: &LexicalSyntax) -> OmittedSelect {
     let bytes: &[u8] = sql.as_bytes();
     let prefixes: &[String] = &syntax.line_comment_prefixes;
-    if prefixes
-        .iter()
-        .any(|prefix| prefix.is_empty() || !prefix.is_ascii())
-    {
-        return OmittedSelect::Deferred;
-    }
     let tail: &[u8] = &bytes[..trimmed_end(bytes, 0, bytes.len())];
     if !tail.ends_with(b")") && !may_end_with_comment(tail, prefixes) {
         return OmittedSelect::Absent;
@@ -55,9 +49,9 @@ pub fn omitted_select_offset(sql: &str, syntax: &LexicalSyntax) -> OmittedSelect
     if Some(last) != last_close {
         return OmittedSelect::Absent;
     }
-    match starts_with_keyword(sql, first) {
-        Some(true) => OmittedSelect::At(sql[..=last].chars().count()),
-        Some(false) => OmittedSelect::Absent,
-        None => OmittedSelect::Deferred,
+    if starts_with_keyword(sql, first) {
+        OmittedSelect::At(sql[..=last].chars().count())
+    } else {
+        OmittedSelect::Absent
     }
 }

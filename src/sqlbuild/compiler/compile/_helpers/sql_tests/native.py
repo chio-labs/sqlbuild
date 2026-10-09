@@ -134,21 +134,15 @@ def _stored_file_tests(
 
 def native_sql_test_ctes(
     *, texts: Sequence[tuple[str, str]], syntax: SqlLexicalSyntax
-) -> list[tuple[tuple[str, str], ...] | str | None]:
-    """Return each `(sql, file label)` test body's CTEs, Python's scanner error, or None."""
+) -> list[tuple[tuple[str, str], ...] | str]:
+    """Return each `(sql, file label)` test body's CTEs or the scanner's error."""
 
     if not texts:
         return []
-    try:
-        outcomes: list[tuple[str | None, list[tuple[str, str]]] | None] = _native.scope_test_ctes(
-            list(texts), syntax.native_mapping
-        )
-    except (TypeError, UnicodeError):
-        return [None] * len(texts)
-    return [
-        None if outcome is None else outcome[0] if outcome[0] is not None else tuple(outcome[1])
-        for outcome in outcomes
-    ]
+    outcomes: list[tuple[str | None, list[tuple[str, str]]]] = _native.scope_test_ctes(
+        list(texts), syntax.native_mapping
+    )
+    return [outcome[0] if outcome[0] is not None else tuple(outcome[1]) for outcome in outcomes]
 
 
 def extract_unexpanded_sql_test(

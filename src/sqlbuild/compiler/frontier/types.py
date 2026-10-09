@@ -51,7 +51,6 @@ class NativeFallbackSite(StrEnum):
     """A place where a shipped native stage still hands its work to the Python implementation."""
 
     SCOPE_REBIND_LOOKUP = "declaration_scopes.rebind_lookup"
-    SCOPE_RELATIONSHIP_CTES = "declaration_scopes.relationship_ctes"
     DECLARATION_CONTEXT = "model_loop.declaration_context"
     LINT_EXPANSION = "model_loop.lint_expansion"
     MACRO_CALL_SCAN = "macro_calls.scan"
@@ -60,9 +59,6 @@ class NativeFallbackSite(StrEnum):
     MACRO_BRIDGE_UNAVAILABLE = "macro_calls.bridge_unavailable"
     MACRO_CALL_MOCKED = "macro_calls.mocked_evaluation"
     FUNCTION_HEADER = "attachments.function_header"
-    SCENARIO_CTES = "attachments.scenario_ctes"
-    SCENARIO_INDEPENDENCE = "attachments.scenario_independence"
-    OMITTED_SELECT = "attachments.omitted_select"
     PROJECT_ASSEMBLY = "project_assembly.assembly"
     TYPE_NORMALIZATION = "type_system.normalization"
     SQL_TEST_ASSEMBLY = "sql_test_glue.assembly"

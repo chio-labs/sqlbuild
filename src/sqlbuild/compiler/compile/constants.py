@@ -136,7 +136,6 @@ UDF_EXPECTED_TEST_CTE_NAME: str = "__udf_expected__"
 TABLE_FN_ACTUAL_TEST_CTE_NAME: str = "__table_fn_actual__"
 TABLE_FN_EXPECTED_TEST_CTE_NAME: str = "__table_fn_expected__"
 DEFAULT_SQL_TEST_MODE: SqlTestMode = SqlTestMode.MODEL
-ASSERT_SCENARIO_CTE_PREFIX: str = ASSERT_TEST_CTE_PREFIX
 RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
     {
         "__actual",

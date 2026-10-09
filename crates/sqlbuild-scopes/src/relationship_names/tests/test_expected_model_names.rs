@@ -1,4 +1,4 @@
-use crate::relationship_names::models::{ExpectedNames, TopLevelCtes};
+use crate::relationship_names::models::TopLevelCtes;
 use crate::relationship_names::tests::helpers::{
     ctes, dialect_syntax, failed, generic_syntax, names, scanned, scanned_ctes, scenario_names,
 };
@@ -42,19 +42,19 @@ fn given_sql_test_when_scanning_expected_models_then_names_and_errors_match_pyth
             expected_outcome: scanned(&["a"]),
         },
         ExpectedNamesTestCase {
-            description: "non-ASCII at a code position defers",
+            description: "non-ASCII letters continue a CTE name",
             sql: "WITH __expected__caf\u{e9} AS (SELECT 1) SELECT 1",
-            expected_outcome: ExpectedNames::Deferred,
+            expected_outcome: scanned(&["caf\u{e9}"]),
         },
         ExpectedNamesTestCase {
-            description: "non-ASCII whitespace defers",
+            description: "non-ASCII whitespace is skipped",
             sql: "WITH\u{a0}__expected__a AS (SELECT 1) SELECT 1",
-            expected_outcome: ExpectedNames::Deferred,
+            expected_outcome: scanned(&["a"]),
         },
         ExpectedNamesTestCase {
-            description: "a non-ASCII character Python upper-cases into a keyword defers",
+            description: "a non-ASCII character that upper-cases into a keyword reads as it",
             sql: "w\u{131}th __expected__a AS (SELECT 1) SELECT 1",
-            expected_outcome: ExpectedNames::Deferred,
+            expected_outcome: scanned(&["a"]),
         },
         ExpectedNamesTestCase {
             description: "Python separators count as whitespace",
@@ -123,9 +123,14 @@ fn given_sql_test_when_scanning_expected_models_then_names_and_errors_match_pyth
             expected_outcome: failed("SQL test contains an unclosed quoted string"),
         },
         ExpectedNamesTestCase {
-            description: "a non-ASCII CTE name start after a valid CTE defers",
+            description: "a non-ASCII letter starts a CTE name",
             sql: "WITH __expected__a AS (SELECT 1), \u{e9}x AS (SELECT 2) SELECT 1",
-            expected_outcome: ExpectedNames::Deferred,
+            expected_outcome: scanned(&["a"]),
+        },
+        ExpectedNamesTestCase {
+            description: "a non-ASCII symbol is not a CTE name",
+            sql: "WITH __expected__a AS (SELECT 1), \u{b7}x AS (SELECT 2) SELECT 1",
+            expected_outcome: failed("SQL test 'tests/unit/test_orders.sql' expected a CTE name"),
         },
         ExpectedNamesTestCase {
             description: "a dollar sign after the CTEs raises Python's trailing statement error",
@@ -172,14 +177,6 @@ fn given_dialect_rules_when_scanning_expected_models_then_comments_and_quotes_fo
             line_comment_prefixes: &["--"],
             sql: "WITH __expected__a AS (SELECT 'it\\')' AS x) SELECT 1",
             expected_outcome: scanned(&["a"]),
-        },
-        SyntaxTestCase {
-            description: "a line comment prefix Python's matcher never looks for defers",
-            backslash_escape_quotes: &[],
-            nested_block_comments: false,
-            line_comment_prefixes: &["--", ";;"],
-            sql: "WITH __expected__a AS (SELECT 1) SELECT 1",
-            expected_outcome: ExpectedNames::Deferred,
         },
     ];
 

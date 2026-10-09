@@ -9,18 +9,14 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
-/// `(True, offset or None)` with Python's answer, or `(False, None)` where Python must decide.
+/// The code-point offset to insert `SELECT 1` at, or `None`.
 #[pyfunction]
-fn omitted_ceremonial_select(
-    sql: &str,
-    syntax: LexicalSyntaxInput,
-) -> PyResult<(bool, Option<usize>)> {
+fn omitted_ceremonial_select(sql: &str, syntax: LexicalSyntaxInput) -> PyResult<Option<usize>> {
     let syntax: LexicalSyntax = syntax.into();
     compiler_guard(|| {
         Ok(match omitted_select_offset(sql, &syntax) {
-            OmittedSelect::At(offset) => (true, Some(offset)),
-            OmittedSelect::Absent => (true, None),
-            OmittedSelect::Deferred => (false, None),
+            OmittedSelect::At(offset) => Some(offset),
+            OmittedSelect::Absent => None,
         })
     })
 }

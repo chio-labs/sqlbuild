@@ -52,14 +52,14 @@ fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String
     .map_err(value_error)
 }
 
-/// Python's scenario extraction outcome as JSON, or `None` where Python must extract it.
+/// The scenario extraction outcome as JSON.
 #[pyfunction]
 fn extract_sql_scenario_json(
     py: Python<'_>,
     sql: &str,
     file_label: &str,
     syntax: LexicalSyntaxInput,
-) -> PyResult<Option<String>> {
+) -> PyResult<String> {
     let syntax: LexicalSyntax = syntax.into();
     py.compiler_detach(|| {
         sqlbuild_analysis::compiler::main::sql_scenario_extraction::extract_scenario_json(

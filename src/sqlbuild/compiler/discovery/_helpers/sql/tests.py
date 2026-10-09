@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.compile.constants import (
     DEFAULT_SQL_TEST_MODE,
     MACRO_ACTUAL_TEST_CTE_NAME,
-    SQL_WITH_KEYWORD,
     TABLE_FN_ACTUAL_TEST_CTE_NAME,
     UDF_ACTUAL_TEST_CTE_NAME,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.constants import (
     SQL_ANALYSIS_CONFIG_KEY,
@@ -26,12 +23,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestCase,
     SqlTestParameterDeclaration,
 )
-from sqlbuild.compiler.sql_analysis.constants import SQL_TEXT_START_CHARACTERS
-from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
-    is_identifier_character,
-)
-from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.sql_values.exceptions import SqlValueValidationError
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from sqlbuild.sql_values.models import SqlValue
@@ -55,13 +46,8 @@ _TOP_LEVEL_ACTUAL_CTE_TOKEN_PATTERN: re.Pattern[str] = re.compile(
     + "|".join(re.escape(name) for name in _MODE_BY_ACTUAL_CTE_NAME)
     + r")(?![\w$])(?=\s*(?:\([^()]*\)\s*)?(?i:AS)(?![\w$]))"
 )
-_SQL_TEST_CONTEXT: str = "SQL test"
 _OPEN_PAREN: str = "("
 _CLOSE_PAREN: str = ")"
-_TRAILING_TERMINATOR_CHARACTERS: str = " \t\r\n\f\v;"
-_LINE_FEED: str = "\n"
-_BLOCK_COMMENT_OPEN: str = "/*"
-_BLOCK_COMMENT_CLOSE: str = "*/"
 _TEST_NAME_HEADER_KEY: str = "name"
 _TEST_MODE_HEADER_KEY: str = "mode"
 _TEST_PARAMETERS_HEADER_KEY: str = "parameters"
@@ -76,83 +62,6 @@ _PARAMETER_TYPES: tuple[SqlValueKind, ...] = (
     SqlValueKind.DECIMAL,
 )
 _IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
-def omitted_ceremonial_select_offset_impl(*, sql: str, syntax: SqlLexicalSyntax) -> int | None:
-    """Return the offset after a body's last top-level `)` when only a terminator follows it."""
-
-    tail: str = sql.rstrip(_TRAILING_TERMINATOR_CHARACTERS)
-    if not tail.endswith(_CLOSE_PAREN) and not _may_end_with_comment(tail=tail, syntax=syntax):
-        return None
-    first_code: int | None = None
-    last_code: int | None = None
-    last_close_paren: int | None = None
-    depth: int = 0
-    segment_start: int = 0
-    index: int = 0
-    pattern: re.Pattern[str] = _code_boundary_pattern(syntax)
-    try:
-        while (match := pattern.search(sql, index)) is not None:
-            boundary: int = match.start()
-            non_code_end: int | None = dialect_non_code_end(
-                sql=sql, start=boundary, syntax=syntax, context=_SQL_TEST_CONTEXT
-            )
-            if non_code_end is None:
-                if sql[boundary] == _OPEN_PAREN:
-                    depth += 1
-                elif sql[boundary] == _CLOSE_PAREN:
-                    depth -= 1
-                    last_close_paren = boundary if depth == 0 else None
-                index = boundary + 1
-                continue
-            first_code, last_code = _code_segment_bounds(
-                sql=sql, start=segment_start, end=boundary, first=first_code, last=last_code
-            )
-            segment_start = index = non_code_end
-    except CompileInputError:
-        return None
-    first_code, last_code = _code_segment_bounds(
-        sql=sql, start=segment_start, end=len(sql), first=first_code, last=last_code
-    )
-    if first_code is None or last_code is None or last_code != last_close_paren:
-        return None
-    keyword_end: int = first_code + len(SQL_WITH_KEYWORD)
-    if sql[first_code:keyword_end].upper() != SQL_WITH_KEYWORD or (
-        keyword_end < len(sql) and is_identifier_character(sql[keyword_end])
-    ):
-        return None
-    return last_code + 1
-
-
-def _may_end_with_comment(*, tail: str, syntax: SqlLexicalSyntax) -> bool:
-    last_line: str = tail.rsplit(_LINE_FEED, 1)[-1]
-    return tail.endswith(_BLOCK_COMMENT_CLOSE) or any(
-        prefix in last_line for prefix in syntax.line_comment_prefixes
-    )
-
-
-@lru_cache(maxsize=16)
-def _code_boundary_pattern(syntax: SqlLexicalSyntax) -> re.Pattern[str]:
-    starts: tuple[str, ...] = (
-        _OPEN_PAREN,
-        _CLOSE_PAREN,
-        _BLOCK_COMMENT_OPEN,
-        *SQL_TEXT_START_CHARACTERS,
-        *syntax.line_comment_prefixes,
-    )
-    ordered: list[str] = sorted(starts, key=lambda start: len(start), reverse=True)
-    return re.compile("|".join(re.escape(start) for start in ordered))
-
-
-def _code_segment_bounds(
-    *, sql: str, start: int, end: int, first: int | None, last: int | None
-) -> tuple[int | None, int | None]:
-    segment: str = sql[start:end]
-    stripped: str = segment.rstrip(_TRAILING_TERMINATOR_CHARACTERS)
-    if not stripped.strip(_TRAILING_TERMINATOR_CHARACTERS):
-        return first, last
-    leading: int = len(segment) - len(segment.lstrip(_TRAILING_TERMINATOR_CHARACTERS))
-    return (start + leading if first is None else first), start + len(stripped) - 1
 
 
 def _infer_sql_test_mode(*, sql_body: str, file_path: Path) -> SqlTestMode:
