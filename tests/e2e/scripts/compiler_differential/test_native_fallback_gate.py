@@ -23,8 +23,6 @@ _WAFFLE_SHOP_NATIVE_STAGES: tuple[str, ...] = (
     "macro_call_store",
     "macro_calls",
     "model_analysis",
-    "model_config",
-    "reference_extraction",
     "semantic_checks",
 )
 _ANSWER_VANISHED: str = "native no longer answers here, so this work now runs in Python"
@@ -81,14 +79,14 @@ _VANISHED_ENTRY: str = (
         ),
         NativeFallbackGateTestCase(
             description="shipped_stages_switched_to_python_fail",
-            perturbation=stage_disable_sabotage(("reference_extraction", "model_config")),
+            perturbation=stage_disable_sabotage(("attachments", "macro_calls")),
             appended_entries="",
             expected_exit_code=1,
             expected_lines=(
-                "Native fallback allow-list: native-preview reference_extraction "
-                f"reference_extraction.native reference_scans (project): {_ANSWER_VANISHED}",
-                "Native fallback allow-list: native-preview model_config "
-                f"model_config.native config_builds (project): {_ANSWER_VANISHED}",
+                "Native fallback allow-list: native-preview attachments "
+                f"attachments.native seed_pairs (project): {_ANSWER_VANISHED}",
+                "Native fallback allow-list: native-preview macro_calls "
+                f"macro_calls.native bridged_calls (project): {_ANSWER_VANISHED}",
                 "Intended? Run `make compiler-baselines`",
             ),
         ),
