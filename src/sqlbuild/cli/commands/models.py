@@ -1106,7 +1106,7 @@ class LayerMoveSuggestion:
 
     new_name: str
     folder: str | None
-    layer_folder: str
+    layer_folder: str | None
     command: str
 
 

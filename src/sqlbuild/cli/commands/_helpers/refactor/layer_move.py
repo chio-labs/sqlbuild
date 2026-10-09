@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import os
 import shlex
+import subprocess
 from pathlib import Path, PurePosixPath
 
 from sqlbuild.cli.commands.constants import (
-    CURRENT_LAYER_FOLDERS,
+    CONTIGUOUS_LAYER_FOLDERS,
     FOLDER_PLACEHOLDER,
     LAYER_FOLDER_RULE_CODES,
     LAYER_FOLDERS,
     MODEL_NAME_LAYER_INDEX,
     MODEL_NAME_LAYER_SEPARATOR,
+    MODEL_NAME_PART_COUNTS,
     PROJECT_DIR_OPTION,
     SQL_FILE_SUFFIX,
+    WINDOWS_OS_NAME,
 )
 from sqlbuild.cli.commands.models import LayerMoveSuggestion
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
@@ -26,6 +30,7 @@ def layer_move_suggestion(
     plan: RefactorPlan,
     diagnostics: tuple[CompilerDiagnostic, ...],
     project_dir: Path | None,
+    os_name: str = os.name,
 ) -> LayerMoveSuggestion | None:
     """Return the `sqb mv` that renames and moves in one step, or None for any other failure."""
 
@@ -43,19 +48,23 @@ def layer_move_suggestion(
     ):
         return None
     new_name: str = plan.request.new_name
-    name_parts: list[str] = new_name.split(MODEL_NAME_LAYER_SEPARATOR)
+    new_layer: str | None = _name_layer(new_name)
     layer_folder: tuple[str, ...] | None = (
-        LAYER_FOLDERS.get(name_parts[MODEL_NAME_LAYER_INDEX])
-        if len(name_parts) > MODEL_NAME_LAYER_INDEX
+        LAYER_FOLDERS.get(new_layer) if new_layer is not None else None
+    )
+    mirrored: tuple[tuple[str, ...], tuple[str, ...]] | None = (
+        _mirrored_folder(
+            original_path=renamed.original_path,
+            current_layer=_name_layer(plan.request.model_name),
+            layer_folder=layer_folder,
+        )
+        if layer_folder is not None
         else None
     )
-    if layer_folder is None:
-        return None
-    mirrored: tuple[tuple[str, ...], tuple[str, ...]] | None = _mirrored_folder(
-        original_path=renamed.original_path, layer_folder=layer_folder
-    )
     folders: tuple[str, ...] = (
-        (*mirrored[0], *mirrored[1]) if mirrored is not None else (FOLDER_PLACEHOLDER,)
+        (*mirrored[0], *mirrored[1])
+        if mirrored is not None
+        else (PurePosixPath(renamed.original_path).parts[0], FOLDER_PLACEHOLDER)
     )
     arguments: list[str] = [
         "sqb",
@@ -68,26 +77,42 @@ def layer_move_suggestion(
     return LayerMoveSuggestion(
         new_name=new_name,
         folder="/".join(mirrored[0]) if mirrored is not None else None,
-        layer_folder="/".join(layer_folder),
-        command=shlex.join(arguments),
+        layer_folder="/".join(layer_folder) if layer_folder is not None else None,
+        command=command_line(arguments=arguments, os_name=os_name),
     )
 
 
-def _mirrored_folder(
-    *, original_path: str, layer_folder: tuple[str, ...]
-) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
-    """Return the new layer folder in place of the current one, and the sub-path kept below it."""
+def command_line(*, arguments: list[str], os_name: str) -> str:
+    """Quote a command for the shell of the platform it is printed on."""
 
-    parent: tuple[str, ...] = PurePosixPath(original_path).parent.parts
-    for start in range(1, len(parent)):
-        current: tuple[str, ...] | None = next(
-            (
-                candidate
-                for candidate in CURRENT_LAYER_FOLDERS
-                if parent[start : start + len(candidate)] == candidate
-            ),
-            None,
+    if os_name == WINDOWS_OS_NAME:
+        return subprocess.list2cmdline(arguments)
+    return shlex.join(arguments)
+
+
+def _name_layer(name: str) -> str | None:
+    """Return the layer segment of a name in the rule grammar, as the layer-folder rules read it."""
+
+    parts: list[str] = name.split(MODEL_NAME_LAYER_SEPARATOR)
+    return parts[MODEL_NAME_LAYER_INDEX] if len(parts) in MODEL_NAME_PART_COUNTS else None
+
+
+def _mirrored_folder(
+    *, original_path: str, current_layer: str | None, layer_folder: tuple[str, ...]
+) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    """Swap the current layer's own folder for the new one, keeping the folders around it."""
+
+    candidates: tuple[tuple[str, ...], ...] = tuple(
+        folder
+        for folder in (
+            LAYER_FOLDERS.get(current_layer or ""),
+            CONTIGUOUS_LAYER_FOLDERS.get(current_layer or ""),
         )
-        if current is not None:
-            return (*parent[:start], *layer_folder), parent[start + len(current) :]
+        if folder is not None
+    )
+    parent: tuple[str, ...] = PurePosixPath(original_path).parent.parts
+    for current in candidates:
+        for start in range(1, len(parent)):
+            if parent[start : start + len(current)] == current:
+                return (*parent[:start], *layer_folder), parent[start + len(current) :]
     return None

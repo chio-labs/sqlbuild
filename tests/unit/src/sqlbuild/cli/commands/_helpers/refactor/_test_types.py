@@ -44,3 +44,17 @@ class LayerMoveSuggestionTestCase:
     codes: tuple[str, ...]
     expected_command: str | None
     expected_folder: str | None
+
+
+@dataclass(frozen=True)
+class CommandLineQuotingTestCase:
+    description: str
+    os_name: str
+    project_dir: str
+    expected_command: str
+
+
+@dataclass(frozen=True)
+class LayerFolderMappingTestCase:
+    description: str
+    expected_layers: frozenset[str]

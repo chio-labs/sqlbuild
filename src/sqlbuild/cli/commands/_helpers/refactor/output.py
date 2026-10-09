@@ -207,6 +207,8 @@ def _layer_move_lines(*, style: CliStyle, layer_move: LayerMoveSuggestion) -> li
         f"under {layer_move.folder}/"
         if layer_move.folder is not None
         else f"under a layer folder named {layer_move.layer_folder}/"
+        if layer_move.layer_folder is not None
+        else "under another layer's folder"
     )
     note: str = (
         "(change the folder if you want it somewhere else)"

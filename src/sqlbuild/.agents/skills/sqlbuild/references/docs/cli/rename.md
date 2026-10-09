@@ -112,7 +112,7 @@ orders__int_enriched__order_lines__web belongs under models/orders/intermediate/
   (change the folder if you want it somewhere else)
 ```
 
-When the current path has no layer folder to mirror, the command uses a `<folder>/` placeholder for you to fill in.
+When the current path has no folder for the model's current layer to swap, or the new layer has no canonical folder, the destination is `models/<folder>/<new_name>.sql`, with a `<folder>` placeholder for you to fill in.
 
 Each location is listed with its file, line, and column, with the fix. Edit those locations, or pass the model or column to the macro as an argument, and run the command again. The command never applies part of a rename.
 

@@ -147,7 +147,7 @@ def test_given_rename_into_another_layer_when_refused_then_printed_mv_renames_an
             expected_hint=(
                 f"{_ENRICHED_NAME} belongs under a layer folder named intermediate/enriched/",
                 "  Rename and move in one step:",
-                f"    sqb mv order_lines_web '<folder>/{_ENRICHED_NAME}.sql' "
+                f"    sqb mv order_lines_web 'models/<folder>/{_ENRICHED_NAME}.sql' "
                 "--project-dir {project_dir}",
                 "  (replace <folder>/ with the folder the model should live in)",
             ),
