@@ -887,7 +887,6 @@ def _expand_function_header_value(
             allow_context=False,
             preserve_context_tokens=True,
             preserve_unknown_context=False,
-            native=native_stage_enabled(NativeStage.ATTACHMENTS),
         )
     )
 
@@ -986,6 +985,5 @@ def _expand_function_environment_value(
             allow_context=False,
             preserve_context_tokens=True,
             preserve_unknown_context=False,
-            native=native_stage_enabled(NativeStage.ATTACHMENTS),
         )
     )

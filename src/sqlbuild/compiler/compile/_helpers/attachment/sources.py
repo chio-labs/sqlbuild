@@ -26,8 +26,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSourceFile,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.models import ResourceIdentity, UsageRecord, VisibilityRecord
 from sqlbuild.compiler.scopes.types import ResourceKind, ScopeKind
 from sqlbuild.spec.contracts.models import (
@@ -328,5 +326,4 @@ def _expand_source_template_object(
         allow_context=False,
         preserve_context_tokens=False,
         preserve_unknown_context=False,
-        native=native_stage_enabled(NativeStage.ATTACHMENTS),
     )

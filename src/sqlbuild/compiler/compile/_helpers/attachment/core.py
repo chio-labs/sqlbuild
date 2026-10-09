@@ -1267,8 +1267,6 @@ def build_effective_connection(
             connection.update(local_config.connections.get(connection_name, {}))
         connection.update(target_config.connection)
     connection.update(local_config.connection)
-    if native_stage_enabled(NativeStage.MODEL_CONFIG):
-        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="connection")
     return cast(
         dict[str, object],
         expand_template_data(
@@ -1311,8 +1309,6 @@ def build_effective_vars(
         values.update(target_config.vars)
     values.update(local_config.vars)
     values.update(cli_vars)
-    if native_stage_enabled(NativeStage.MODEL_CONFIG):
-        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="effective_vars")
     return expand_effective_vars(values)
 
 
@@ -1332,7 +1328,6 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
         request.materialization_defaults
     )
     scan_cache: ModelConfigScanCache | None = request.scan_cache
-    native: bool = scan_cache is not None and scan_cache.native
 
     _validate_model_header_tags(model_header_values=model_header_values, model_name=model_name)
     layered_values: dict[str, object] = build_layered_model_values(
@@ -1358,14 +1353,12 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
             effective_vars=effective_vars,
             effective_target_name=effective_target_name,
             run_id=run_id,
-            native=native,
         )
         model_resolved_values: dict[str, object] = resolve_chained_model_context_templates(
             values=early_resolved_values,
             model_name=model_name,
             effective_target_name=effective_target_name,
             run_id=run_id,
-            native=native,
         )
     else:
         model_resolved_values = layered_values
@@ -1396,7 +1389,6 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
             run_id=run_id,
             include_target_values=False,
         ),
-        native=native,
     )
     target_resolved_values: dict[str, object] = (
         resolve_target_context_templates(
@@ -1404,7 +1396,6 @@ def build_model_config(*, request: ModelConfigBuildRequest) -> CompileModelConfi
             model_name=model_name,
             effective_target_name=effective_target_name,
             run_id=run_id,
-            native=native,
         )
         if has_authored_templates
         or contains_template_data(model_resolved_values.get("database"))

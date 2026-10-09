@@ -10,7 +10,6 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
-from sqlbuild.compiler.compile._helpers.render.context_templates import record_template_reads
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     expand_declaration_references_result,
     expand_declaration_references_with_spans,
@@ -20,6 +19,7 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_result,
     expand_sql_macros_with_spans,
 )
+from sqlbuild.compiler.compile._helpers.render.templating import record_template_reads
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -219,7 +219,7 @@ def applied_interpolation(interpolation: SqlInterpolation) -> str:
 
     record_template_reads(interpolation.reads)
     if interpolation.error is not None:
-        raise CompileInputError(interpolation.error)
+        raise CompileInputError(interpolation.error, bridge_independent=True)
     return interpolation.sql
 
 

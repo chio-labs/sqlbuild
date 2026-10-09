@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import random
 from collections.abc import Callable
 from dataclasses import dataclass, fields
@@ -15,12 +14,10 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
-from sqlbuild.compiler.compile._helpers.render.context_templates import expand_config_templates
 from sqlbuild.compiler.compile._helpers.render.templating import (
     contains_template_data,
-    expand_template_data,
 )
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, MACRO_CALL_PATTERN
+from sqlbuild.compiler.compile.constants import MACRO_CALL_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
@@ -28,7 +25,6 @@ from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.model_config.constants import UNSUPPORTED_OUTCOME
 from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
     native_config_contains_macro_call,
 )
@@ -140,25 +136,6 @@ class HeaderMetadataParity:
 
 
 @dataclass(frozen=True)
-class ConfigTemplateParity:
-    """How native template expansion compared with Python's over one corpus."""
-
-    mismatches: list[tuple[object, object, object]]
-    expanded: int
-    rejected: int
-    unsupported: int
-
-
-@dataclass(frozen=True)
-class TemplateFlags:
-    """The resolver flags one expansion runs with."""
-
-    allow_context: bool
-    preserve_context_tokens: bool
-    preserve_unknown_context: bool
-
-
-@dataclass(frozen=True)
 class ConfigPresenceParity:
     """How the native presence scans compared with Python's over one corpus."""
 
@@ -237,125 +214,6 @@ def _counted(*, calls: dict[str, int], name: str) -> Callable[..., object]:
         return entry(*args)
 
     return counted
-
-
-def generated_template_values(*, rng: random.Random, count: int) -> list[object]:
-    """Return seeded config values holding valid, invalid and unusual `${...}` templates."""
-
-    return [_template_value(rng=rng, depth=0) for _ in range(count)]
-
-
-def config_template_parity(*, values: list[object], flags: TemplateFlags) -> ConfigTemplateParity:
-    """Compare native expansion, its reads and its rejections with Python's expansion."""
-
-    answered: list[object] = list(
-        compress(
-            values,
-            [
-                _native_classification(value=value, flags=flags) != UNSUPPORTED_OUTCOME
-                for value in values
-            ],
-        )
-    )
-    outcomes: list[tuple[object, object, object]] = [
-        (value, _python_expansion(value=value, flags=flags), _native_expansion(value, flags))
-        for value in answered
-    ]
-    return ConfigTemplateParity(
-        mismatches=mismatches(
-            inputs=[value for value, _, _ in outcomes],
-            expected=[expected for _, expected, _ in outcomes],
-            actual=[actual for _, _, actual in outcomes],
-        ),
-        expanded=sum(not _is_error(actual) for _, _, actual in outcomes),
-        rejected=sum(_is_error(actual) for _, _, actual in outcomes),
-        unsupported=len(values) - len(outcomes),
-    )
-
-
-def _python_expansion(*, value: object, flags: TemplateFlags) -> object:
-    with COMPILE_INPUT_READS.recording() as reads:
-        try:
-            result: object = expand_template_data(
-                value=value,
-                variables=TEMPLATE_VARIABLES,
-                context_values=TEMPLATE_CONTEXT,
-                context_label="model config",
-                allow_context=flags.allow_context,
-                preserve_context_tokens=flags.preserve_context_tokens,
-                preserve_unknown_context=flags.preserve_unknown_context,
-            )
-        except CompileInputError as error:
-            return _python_error_shape(error)
-    return (_expansion_shape(result), reads.environment_names, reads.read_run_id)
-
-
-def _python_error_shape(error: Exception) -> tuple[object, ...]:
-    return (*error_shape(error)[:4], True)
-
-
-def _is_error(outcome: object) -> bool:
-    return isinstance(outcome, tuple) and len(outcome) == len(error_shape(ValueError()))
-
-
-def _native_classification(*, value: object, flags: TemplateFlags) -> object:
-    return _native.expand_config_templates(
-        value,
-        (TEMPLATE_VARIABLES, os.environ, TEMPLATE_CONTEXT),
-        (
-            flags.allow_context,
-            flags.preserve_context_tokens,
-            flags.preserve_unknown_context,
-            "model config",
-        ),
-    )
-
-
-def _native_expansion(value: object, flags: TemplateFlags) -> object:
-    with COMPILE_INPUT_READS.recording() as reads:
-        try:
-            result: object = expand_config_templates(
-                value=value,
-                variables=TEMPLATE_VARIABLES,
-                context_values=TEMPLATE_CONTEXT,
-                context_label="model config",
-                allow_context=flags.allow_context,
-                preserve_context_tokens=flags.preserve_context_tokens,
-                preserve_unknown_context=flags.preserve_unknown_context,
-                native=True,
-            )
-        except CompileInputError as error:
-            return error_shape(error)
-    return (_expansion_shape(result), reads.environment_names, reads.read_run_id)
-
-
-def _expansion_shape(value: object) -> object:
-    return (repr(value), _type_tree(value))
-
-
-def _type_tree(value: object) -> object:
-    children: tuple[object, ...] = _CHILDREN.get(type(value), _no_children)(value)
-    return (type(value).__name__, tuple(_type_tree(item) for item in children))
-
-
-def _no_children(value: object) -> tuple[object, ...]:
-    del value
-    return ()
-
-
-def _mapping_children(value: object) -> tuple[object, ...]:
-    return tuple(cast(dict[object, object], value).values())
-
-
-def _sequence_children(value: object) -> tuple[object, ...]:
-    return tuple(cast(tuple[object, ...], value))
-
-
-_CHILDREN: dict[type, Callable[[object], tuple[object, ...]]] = {
-    dict: _mapping_children,
-    list: _sequence_children,
-    tuple: _sequence_children,
-}
 
 
 def header_metadata_parity(*, headers: list[tuple[object, object]]) -> HeaderMetadataParity:
@@ -623,121 +481,6 @@ def _audit(*, rng: random.Random) -> object:
         ),
         weights=(35, 10, 5, 50),
     )[0]
-
-
-def _template_value(*, rng: random.Random, depth: int) -> object:
-    factories: tuple[Callable[[], object], ...] = (
-        lambda: _template_text(rng=rng),
-        lambda: rng.choice(_TEXTS),
-        lambda: [_template_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 3))],
-        lambda: tuple(_template_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 2))),
-        lambda: {
-            rng.choice(("schema", "database", "${key}", 1)): _template_value(
-                rng=rng, depth=depth + 1
-            )
-            for _ in range(rng.randint(0, 3))
-        },
-    )
-    return rng.choices(factories, weights=(60 + 1000 * (depth > 1), 10, 10, 5, 15))[0]()
-
-
-def _template_text(*, rng: random.Random) -> str:
-    parts: list[str] = [
-        rng.choices(
-            (f"${{{_template_expression(rng=rng, depth=0)}}}", rng.choice(_TEMPLATE_NOISE)),
-            weights=(4, 1),
-        )[0]
-        for _ in range(rng.randint(1, 3))
-    ]
-    text: str = "".join(parts)
-    noise: str = rng.choices((rng.choice(_TEMPLATE_NOISE), ""), weights=(15, 85))[0]
-    position: int = rng.randrange(len(text) + 1)
-    return text[:position] + noise + text[position:]
-
-
-def _template_expression(*, rng: random.Random, depth: int) -> str:
-    factories: tuple[Callable[[], str], ...] = (
-        lambda: rng.choice(_TEMPLATE_REFERENCES),
-        lambda: rng.choice(_TEMPLATE_LITERALS),
-        lambda: "{}({})".format(
-            rng.choice(_TEMPLATE_FUNCTIONS),
-            rng.choice((",", ", ", " ,\t", "\x1f,")).join(
-                _template_expression(rng=rng, depth=depth + 1)
-                for _ in range(rng.choice((0, 1, 2, 2, 3, 3, 4)))
-            ),
-        ),
-    )
-    return rng.choices(factories, weights=(5, 3, 4 - 3 * (depth > 2)))[0]()
-
-
-TEMPLATE_VARIABLES: dict[str, object] = {
-    "flag": True,
-    "zero": 0,
-    "count": 12,
-    "big": 2**70,
-    "env": "prod",
-    "spaced": " FALSE ",
-    "ratio": 1.5,
-    "items": [1, "a"],
-    "mapping": {"a": 1},
-    "none": None,
-    "unicode": "caf\u00e9",
-}
-TEMPLATE_CONTEXT: dict[str, str | None] = {
-    "run.id": "20261007T000000Z_abc",
-    "run.target": "prod",
-    "model.name": "orders",
-    "model.schema": None,
-}
-TEMPLATE_ENVIRONMENT: dict[str, str] = {
-    "SQB_TEMPLATE_SCHEMA": "analytics",
-    "SQB_TEMPLATE_EMPTY": "",
-    "SQB_TEMPLATE_ZERO": "0",
-}
-_TEMPLATE_REFERENCES: tuple[str, ...] = (
-    *TEMPLATE_VARIABLES,
-    "missing",
-    "ENV:SQB_TEMPLATE_SCHEMA",
-    "ENV:SQB_TEMPLATE_EMPTY",
-    "ENV:SQB_TEMPLATE_ZERO",
-    "ENV:SQB_TEMPLATE_MISSING",
-    "CTX:run.id",
-    "CTX:run.target",
-    "CTX:model.name",
-    "CTX:model.schema",
-    "CTX:model.alias",
-    "OTHER:name",
-    "true",
-    "false",
-    "null",
-)
-_TEMPLATE_LITERALS: tuple[str, ...] = (
-    "'prod'",
-    '"0"',
-    "''",
-    "' False '",
-    "'a\\'b'",
-    "'caf\u00e9'",
-    "'unterminated",
-    "'trailing\\",
-)
-_TEMPLATE_FUNCTIONS: tuple[str, ...] = ("if", "eq", "ne", "coalesce", "upper")
-_TEMPLATE_NOISE: tuple[str, ...] = (
-    "orders_",
-    "${",
-    "}",
-    "{",
-    "$",
-    "${}",
-    "(",
-    ")",
-    ",",
-    "\u00a0",
-    "\u2003",
-    "\x1c",
-    " ",
-    "caf\u00e9",
-)
 
 
 def _config_value(*, rng: random.Random, depth: int) -> object:

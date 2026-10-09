@@ -91,7 +91,6 @@ SQL_SINGLE_QUOTE_TOKEN: str = "'"
 SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
 SQL_QUALIFIER_SEPARATOR_TOKEN: str = "."
 SQL_REFERENCE_NAME_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"'})
-SQL_IDENTIFIER_EXTRA_TOKEN: str = "_"
 SQL_WITH_KEYWORD: str = "WITH"
 SQL_CEREMONIAL_SELECT_VALUE: str = "1"
 OMITTED_CEREMONIAL_SELECT_SQL: str = f"\nSELECT {SQL_CEREMONIAL_SELECT_VALUE}"
@@ -113,34 +112,13 @@ DECLARATION_REFERENCE_NAMES: frozenset[str] = frozenset({"enum", "const"})
 MACRO_CONTEXT_PARAMETER_NAME: str = "ctx"
 PYTHON_LITERAL_NAMES: frozenset[str] = frozenset({"True", "False", "None"})
 SQL_INTERPOLATION_TOKEN: str = "@@"
-SQL_CONTEXT_NAME_EXTRA_TOKENS: frozenset[str] = frozenset({"_", "."})
 
-TEMPLATE_TRUE_LITERAL: str = "true"
-TEMPLATE_FALSE_LITERAL: str = "false"
-TEMPLATE_NULL_LITERAL: str = "null"
-TEMPLATE_NAMESPACE_SEPARATOR: str = ":"
-TEMPLATE_IF_FUNCTION_NAME: str = "if"
-TEMPLATE_EQ_FUNCTION_NAME: str = "eq"
-TEMPLATE_NE_FUNCTION_NAME: str = "ne"
-TEMPLATE_COALESCE_FUNCTION_NAME: str = "coalesce"
-TEMPLATE_ESCAPE_TOKEN: str = "\\"
 TEMPLATE_OPEN_TOKEN: str = "${"
-TEMPLATE_FALSE_VALUES: frozenset[str] = frozenset({"", "0", "false"})
 POLYGLOT_LITERAL_KIND: str = "literal"
 POLYGLOT_ARRAY_KIND: str = "array_func"
 POLYGLOT_STRUCTURED_KINDS: frozenset[str] = frozenset({"parse_json", "struct"})
 POLYGLOT_FUNCTION_KIND: str = "function"
-MISSING_TEMPLATE_VALUE_MESSAGE_PARTS: frozenset[str] = frozenset(
-    {
-        "references missing ENV variable",
-        "references unknown variable",
-        "references unknown CTX key",
-    }
-)
-MISSING_TEMPLATE_CONTEXT_MESSAGE_PART: str = "references CTX key"
-MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART: str = "no value is available"
 
-TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^{}]+)\}")
 MACRO_CALL_PATTERN: re.Pattern[str] = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(")
 SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
     r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"

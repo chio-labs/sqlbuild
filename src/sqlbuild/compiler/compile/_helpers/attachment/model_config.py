@@ -32,9 +32,9 @@ from sqlbuild.compiler.compile._helpers.config.model_validation import (
 )
 from sqlbuild.compiler.compile._helpers.config.retention import resolve_time_travel_retention
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_table_type
-from sqlbuild.compiler.compile._helpers.render.context_templates import record_template_reads
 from sqlbuild.compiler.compile._helpers.render.templating import (
     contains_template_data,
+    record_template_reads,
 )
 from sqlbuild.compiler.compile.constants import (
     MACRO_CALL_PATTERN,
