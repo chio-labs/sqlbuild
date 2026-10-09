@@ -1,4 +1,4 @@
-"""Parse a SQL or Python function header natively for the preview compiler engine."""
+"""Parse a SQL or Python function header natively."""
 
 from __future__ import annotations
 
@@ -10,27 +10,20 @@ from sqlbuild.compiler.attachments.models import NativeFunctionHeader, NativeNam
 
 def parse_native_function_header(
     *, header_values: dict[str, object], python: bool, relative_path: Path
-) -> NativeFunctionHeader | None:
-    """Return the parsed header with Python's first error, or None where Python must parse it."""
+) -> NativeFunctionHeader:
+    """Return the parsed header with its first error."""
 
-    if not isinstance(header_values, dict):
-        return None
-    row: (
-        tuple[
-            list[tuple[str, str, str]],
-            str | None,
-            list[tuple[str, str, str]] | None,
-            list[str],
-            str | None,
-            str | None,
-            str | None,
-            list[str],
-            tuple[str, str] | None,
-        ]
-        | None
-    ) = _native.parse_function_header_values(header_values, python, str(relative_path))
-    if row is None:
-        return None
+    row: tuple[
+        list[tuple[str, str, str]],
+        str | None,
+        list[tuple[str, str, str]] | None,
+        list[str],
+        str | None,
+        str | None,
+        str | None,
+        list[str],
+        tuple[str, str] | None,
+    ] = _native.parse_function_header_values(header_values, python, str(relative_path))
     (
         arguments,
         returns,

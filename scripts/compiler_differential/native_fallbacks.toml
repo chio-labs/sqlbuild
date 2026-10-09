@@ -10,13 +10,6 @@ seeds = 12
 engine = "native"
 stage = "attachments"
 site = "attachments.native"
-kind = "function_headers"
-counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
-
-[[entry]]
-engine = "native"
-stage = "attachments"
-site = "attachments.native"
 kind = "seed_pairs"
 counts = { example = 8, fixture = 4, seed = 26 }
 
@@ -145,13 +138,6 @@ stage = "reference_extraction"
 site = "reference_extraction.native"
 kind = "reference_scans"
 counts = { example = 250, failure = 465, fixture = 249, seed = 1523 }
-
-[[entry]]
-engine = "native-preview"
-stage = "attachments"
-site = "attachments.native"
-kind = "function_headers"
-counts = { example = 8, failure = 7, fixture = 12, seed = 102 }
 
 [[entry]]
 engine = "native-preview"

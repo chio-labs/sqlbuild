@@ -2,7 +2,8 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{
-    PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple, PyTupleMethods,
+    PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods, PyTuple,
+    PyTupleMethods,
 };
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_attachments::functions::main::parse_function_header::parse_function_header;
@@ -44,34 +45,34 @@ struct NamespaceInput {
     inherit_default_namespace: bool,
 }
 
-/// Parse one function file's header with Python's first error, or `None` for unreadable text.
+/// Parse one function file's header with its first error; non-string keys are never read.
 #[pyfunction]
 fn parse_function_header_values(
     header_values: Bound<'_, PyDict>,
     python: bool,
     relative_path: &str,
-) -> PyResult<Option<HeaderRow>> {
+) -> PyResult<HeaderRow> {
     compiler_guard(|| {
         let mut header: Vec<(String, HeaderValue)> = Vec::with_capacity(header_values.len());
         for (key, value) in header_values.iter() {
+            let Some(name) = text_value(&key) else {
+                continue;
+            };
             if value.is_none() {
                 continue;
             }
-            let (Some(name), Some(value)) = (text_value(&key), header_value(&value)?) else {
-                return Ok(None);
-            };
-            header.push((name, value));
+            header.push((name, header_value(&value)));
         }
         let language: FunctionLanguage = if python {
             FunctionLanguage::Python
         } else {
             FunctionLanguage::Sql
         };
-        Ok(Some(header_row(parse_function_header(
+        Ok(header_row(parse_function_header(
             &header,
             language,
             relative_path,
-        ))))
+        )))
     })
 }
 
@@ -106,47 +107,35 @@ fn resolve_function_namespace_values(inputs: NamespaceInput) -> PyResult<Namespa
     })
 }
 
-/// One header value; `None` when a string inside it is text Rust cannot hold.
-fn header_value(value: &Bound<'_, PyAny>) -> PyResult<Option<HeaderValue>> {
-    if value.is_instance_of::<PyString>() {
-        return Ok(text_value(value).map(HeaderValue::Text));
+/// One header value.
+fn header_value(value: &Bound<'_, PyAny>) -> HeaderValue {
+    if let Some(text) = text_value(value) {
+        return HeaderValue::Text(text);
     }
     if let Ok(mapping) = value.downcast::<PyDict>() {
-        let mut entries: Vec<(HeaderValue, HeaderValue)> = Vec::with_capacity(mapping.len());
-        for (key, item) in mapping.iter() {
-            let (Some(key), Some(item)) = (header_value(&key)?, header_value(&item)?) else {
-                return Ok(None);
-            };
-            entries.push((key, item));
-        }
-        return Ok(Some(HeaderValue::Map(entries)));
+        return HeaderValue::Map(
+            mapping
+                .iter()
+                .map(|(key, item)| (header_value(&key), header_value(&item)))
+                .collect(),
+        );
     }
-    let items: Vec<Bound<'_, PyAny>> = if let Ok(list) = value.downcast::<PyList>() {
-        list.iter().collect()
-    } else if let Ok(tuple) = value.downcast::<PyTuple>() {
-        tuple.iter().collect()
-    } else {
-        return Ok(Some(HeaderValue::Other));
-    };
-    let mut sequence: Vec<HeaderValue> = Vec::with_capacity(items.len());
-    for item in &items {
-        let Some(item) = header_value(item)? else {
-            return Ok(None);
-        };
-        sequence.push(item);
+    if let Ok(list) = value.downcast::<PyList>() {
+        return HeaderValue::Sequence(list.iter().map(|item| header_value(&item)).collect());
     }
-    Ok(Some(HeaderValue::Sequence(sequence)))
+    if let Ok(tuple) = value.downcast::<PyTuple>() {
+        return HeaderValue::Sequence(tuple.iter().map(|item| header_value(&item)).collect());
+    }
+    HeaderValue::Other
 }
 
-/// A `str` (or subclass) as text; text Rust cannot hold, such as lone surrogates, is `None`.
+/// A `str` (or subclass) as text; lone surrogates, rejected where text enters a compile, read as
+/// U+FFFD.
 fn text_value(value: &Bound<'_, PyAny>) -> Option<String> {
-    if !value.is_instance_of::<PyString>() {
-        return None;
-    }
-    if let Ok(text) = value.extract::<String>() {
-        return Some(text);
-    }
-    None
+    value
+        .downcast::<PyString>()
+        .ok()
+        .map(|text| text.to_string_lossy().into_owned())
 }
 
 fn header_row(header: FunctionHeader) -> HeaderRow {

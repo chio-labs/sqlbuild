@@ -286,20 +286,17 @@ def replace_cursor_intrinsics(
 ) -> tuple[str, bool, str | None]: ...
 def parse_function_header_values(
     header_values: dict[str, object], python: bool, relative_path: str
-) -> (
-    tuple[
-        list[tuple[str, str, str]],
-        str | None,
-        list[tuple[str, str, str]] | None,
-        list[str],
-        str | None,
-        str | None,
-        str | None,
-        list[str],
-        tuple[str, str] | None,
-    ]
-    | None
-): ...
+) -> tuple[
+    list[tuple[str, str, str]],
+    str | None,
+    list[tuple[str, str, str]] | None,
+    list[str],
+    str | None,
+    str | None,
+    str | None,
+    list[str],
+    tuple[str, str] | None,
+]: ...
 def resolve_function_namespace_values(inputs: dict[str, object]) -> list[str | None]: ...
 def pair_seed_files(
     declarations: list[str], stems: list[str]

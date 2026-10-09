@@ -49,7 +49,6 @@ from sqlbuild.compiler.compile._helpers.render.declarations import resolve_decla
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
 from sqlbuild.compiler.compile.constants import (
     PRESERVE_TARGET_VALUE,
-    TABLE_FUNCTION_RETURN_KEYS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -72,10 +71,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
@@ -119,7 +114,6 @@ def build_sql_function_inputs(
     """Attach and validate SQL function metadata."""
 
     adapter_name: str = macro_context.adapter_name
-    native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
     known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
     known_source_names: set[str] = build_known_source_names(discovered_inputs)
@@ -142,12 +136,12 @@ def build_sql_function_inputs(
             raise CompileInputError(f"Duplicate SQL function name '{function_name}'")
         known_names.add(function_name)
         header_values: dict[str, object] = function_file.header_values
-        native_header: NativeFunctionHeader | None
+        native_header: NativeFunctionHeader
         arguments: tuple[FunctionArgument, ...]
         returns: str
         return_columns: tuple[FunctionReturnColumn, ...]
         native_header, arguments, returns, return_columns = _sql_function_header(
-            function_file=function_file, effective_vars=effective_vars, native=native
+            function_file=function_file, effective_vars=effective_vars
         )
         raw_database: object | None = header_values.get("database")
         raw_schema: object | None = header_values.get("schema")
@@ -178,10 +172,8 @@ def build_sql_function_inputs(
         function_database, function_schema = _sql_function_namespace(
             header_database=function_logical_database if isinstance(raw_database, str) else None,
             header_schema=function_logical_schema if isinstance(raw_schema, str) else None,
-            logical_namespace=(function_logical_database, function_logical_schema),
             defaults=(logical_database, logical_schema),
             targets=(target_database, target_schema),
-            native=native,
         )
         scoped_declarations: DeclarationExpansionContext = resolve_declaration_expansion(
             context=declaration_expansion,
@@ -263,8 +255,7 @@ def build_sql_function_inputs(
             known_function_names=known_function_names,
             known_table_function_names=known_table_function_names,
         )
-        if native_header is not None:
-            _raise_header_failure(header=native_header, stage=HEADER_METADATA_STAGE)
+        _raise_header_failure(header=native_header, stage=HEADER_METADATA_STAGE)
         function_inputs.append(
             CompileSqlFunctionInput(
                 function_file=function_file,
@@ -282,20 +273,8 @@ def build_sql_function_inputs(
                 fingerprint_schema=function_schema,
                 fingerprint_logical_database=function_logical_database,
                 fingerprint_logical_schema=function_logical_schema,
-                tags=native_header.tags
-                if native_header is not None
-                else _parse_function_tags(
-                    header_values=header_values,
-                    relative_path=function_file.relative_path,
-                    language="SQL",
-                ),
-                description=native_header.description
-                if native_header is not None
-                else _parse_function_description(
-                    header_values=header_values,
-                    relative_path=function_file.relative_path,
-                    language="SQL",
-                ),
+                tags=native_header.tags,
+                description=native_header.description,
                 declaration_usages=expansion.usages,
             )
         )
@@ -327,70 +306,38 @@ def build_sql_function_inputs(
 
 
 def _sql_function_header(
-    *, function_file: DiscoveredSqlFunctionFile, effective_vars: dict[str, object], native: bool
+    *, function_file: DiscoveredSqlFunctionFile, effective_vars: dict[str, object]
 ) -> tuple[
-    NativeFunctionHeader | None, tuple[FunctionArgument, ...], str, tuple[FunctionReturnColumn, ...]
+    NativeFunctionHeader, tuple[FunctionArgument, ...], str, tuple[FunctionReturnColumn, ...]
 ]:
-    header_values: dict[str, object] = function_file.header_values
-    native_header: NativeFunctionHeader | None = (
-        parse_native_function_header(
-            header_values=header_values, python=False, relative_path=function_file.relative_path
-        )
-        if native
-        else None
+    native_header: NativeFunctionHeader = parse_native_function_header(
+        header_values=function_file.header_values,
+        python=False,
+        relative_path=function_file.relative_path,
     )
-    if native and native_header is None:
-        report_native_fallback(site=NativeFallbackSite.FUNCTION_HEADER, kind="sql")
-    if native_header is not None:
-        report_native_answer(stage=NativeStage.ATTACHMENTS, kind="function_headers")
-        _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
-        arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
-            header=native_header,
-            label=f"SQL function {function_file.relative_path}",
-            effective_vars=effective_vars,
-        )
-        _raise_header_failure(header=native_header, stage=HEADER_ARGUMENTS_STAGE)
-        native_returns: tuple[str, tuple[FunctionReturnColumn, ...]] = _expanded_native_sql_returns(
-            header=native_header,
-            relative_path=function_file.relative_path,
-            effective_vars=effective_vars,
-        )
-        _raise_header_failure(header=native_header, stage=HEADER_RETURNS_STAGE)
-        return (native_header, arguments, *native_returns)
-    raw_returns: object | None = header_values.get("returns")
-    if raw_returns is None:
-        raise CompileInputError(
-            f"SQL function file {function_file.relative_path} must declare returns"
-        )
-    arguments = _parse_function_arguments(
-        function_file=function_file,
+    _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
+    arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
+        header=native_header,
+        label=f"SQL function {function_file.relative_path}",
         effective_vars=effective_vars,
     )
-    return (
-        None,
-        arguments,
-        *_parse_sql_function_returns(
-            raw_returns=raw_returns,
-            function_file=function_file,
-            effective_vars=effective_vars,
-        ),
+    _raise_header_failure(header=native_header, stage=HEADER_ARGUMENTS_STAGE)
+    native_returns: tuple[str, tuple[FunctionReturnColumn, ...]] = _expanded_native_sql_returns(
+        header=native_header,
+        relative_path=function_file.relative_path,
+        effective_vars=effective_vars,
     )
+    _raise_header_failure(header=native_header, stage=HEADER_RETURNS_STAGE)
+    return (native_header, arguments, *native_returns)
 
 
 def _sql_function_namespace(
     *,
     header_database: str | None,
     header_schema: str | None,
-    logical_namespace: tuple[str | None, str | None],
     defaults: tuple[str | None, str | None],
     targets: tuple[str | None, str | None],
-    native: bool,
 ) -> tuple[str | None, str | None]:
-    if not native:
-        return (
-            logical_namespace[0] if targets[0] is None else targets[0],
-            logical_namespace[1] if targets[1] is None else targets[1],
-        )
     namespace: NativeFunctionNamespace = resolve_native_function_namespace(
         NativeFunctionNamespaceInputs(
             header_database=header_database,
@@ -480,46 +427,27 @@ def _build_python_function_input(
     effective_vars: dict[str, object] = context.effective_vars
     function_name: str = python_function_file.file_path.stem
     header_values: dict[str, object] = python_function_file.header_values
-    native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
-    native_header: NativeFunctionHeader | None = (
-        parse_native_function_header(
-            header_values=header_values,
-            python=True,
-            relative_path=python_function_file.relative_path,
-        )
-        if native
-        else None
+    native_header: NativeFunctionHeader = parse_native_function_header(
+        header_values=header_values,
+        python=True,
+        relative_path=python_function_file.relative_path,
     )
-    if native and native_header is None:
-        report_native_fallback(site=NativeFallbackSite.FUNCTION_HEADER, kind="python")
-    if native_header is not None:
-        report_native_answer(stage=NativeStage.ATTACHMENTS, kind="function_headers")
-    arguments: tuple[FunctionArgument, ...]
-    returns: str
-    runtime_version: str
-    entry_point: str
-    packages: tuple[str, ...]
-    if native_header is not None:
-        _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
-        arguments = _expanded_native_arguments(
-            header=native_header,
-            label=f"Python function {python_function_file.relative_path}",
-            effective_vars=effective_vars,
-        )
-        _raise_header_failure(header=native_header, stage=HEADER_ARGUMENTS_STAGE)
-        returns = _expand_function_header_value(
-            raw_value=cast(str, native_header.returns),
-            effective_vars=effective_vars,
-            context_label=f"Python function {python_function_file.relative_path} returns",
-        )
-        _raise_header_failure(header=native_header, stage=HEADER_PYTHON_VALUES_STAGE)
-        runtime_version = cast(str, native_header.runtime_version)
-        entry_point = cast(str, native_header.entry_point)
-        packages = native_header.packages
-    else:
-        arguments, returns, runtime_version, entry_point, packages = _python_function_header(
-            python_function_file=python_function_file, effective_vars=effective_vars
-        )
+    _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
+    arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
+        header=native_header,
+        label=f"Python function {python_function_file.relative_path}",
+        effective_vars=effective_vars,
+    )
+    _raise_header_failure(header=native_header, stage=HEADER_ARGUMENTS_STAGE)
+    returns: str = _expand_function_header_value(
+        raw_value=cast(str, native_header.returns),
+        effective_vars=effective_vars,
+        context_label=f"Python function {python_function_file.relative_path} returns",
+    )
+    _raise_header_failure(header=native_header, stage=HEADER_PYTHON_VALUES_STAGE)
+    runtime_version: str = cast(str, native_header.runtime_version)
+    entry_point: str = cast(str, native_header.entry_point)
+    packages: tuple[str, ...] = native_header.packages
     raw_database: object | None = header_values.get("database")
     raw_schema: object | None = header_values.get("schema")
     inherit: bool = context.python_functions_inherit_default_namespace
@@ -541,28 +469,16 @@ def _build_python_function_input(
         )
     else:
         function_logical_schema = context.logical_schema if inherit else None
-    namespace: NativeFunctionNamespace = (
-        resolve_native_function_namespace(
-            NativeFunctionNamespaceInputs(
-                header_database=function_logical_database
-                if isinstance(raw_database, str)
-                else None,
-                header_schema=function_logical_schema if isinstance(raw_schema, str) else None,
-                default_database=context.logical_database,
-                default_schema=context.logical_schema,
-                target_database=context.target_database,
-                target_schema=context.target_schema,
-                python=True,
-                inherit_default_namespace=inherit,
-            )
-        )
-        if native
-        else _python_function_namespace(
-            raw_database=raw_database,
-            raw_schema=raw_schema,
-            logical_database=function_logical_database,
-            logical_schema=function_logical_schema,
-            context=context,
+    namespace: NativeFunctionNamespace = resolve_native_function_namespace(
+        NativeFunctionNamespaceInputs(
+            header_database=function_logical_database if isinstance(raw_database, str) else None,
+            header_schema=function_logical_schema if isinstance(raw_schema, str) else None,
+            default_database=context.logical_database,
+            default_schema=context.logical_schema,
+            target_database=context.target_database,
+            target_schema=context.target_schema,
+            python=True,
+            inherit_default_namespace=inherit,
         )
     )
     validate_preserved_logical_namespace(
@@ -587,8 +503,7 @@ def _build_python_function_input(
             adapter_name=context.adapter_name,
             context=f"Python function {python_function_file.relative_path} return type",
         )
-    if native_header is not None:
-        _raise_header_failure(header=native_header, stage=HEADER_METADATA_STAGE)
+    _raise_header_failure(header=native_header, stage=HEADER_METADATA_STAGE)
     return CompileSqlFunctionInput(
         function_file=python_function_file,
         name=function_name,
@@ -607,272 +522,9 @@ def _build_python_function_input(
         runtime_version=runtime_version,
         entry_point=entry_point,
         packages=packages,
-        tags=native_header.tags
-        if native_header is not None
-        else _parse_function_tags(
-            header_values=header_values,
-            relative_path=python_function_file.relative_path,
-            language="Python",
-        ),
-        description=native_header.description
-        if native_header is not None
-        else _parse_function_description(
-            header_values=header_values,
-            relative_path=python_function_file.relative_path,
-            language="Python",
-        ),
+        tags=native_header.tags,
+        description=native_header.description,
     )
-
-
-def _python_function_header(
-    *, python_function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, object]
-) -> tuple[tuple[FunctionArgument, ...], str, str, str, tuple[str, ...]]:
-    header_values: dict[str, object] = python_function_file.header_values
-    raw_returns: object | None = header_values.get("returns")
-    if not isinstance(raw_returns, str) or not raw_returns.strip():
-        raise CompileInputError(
-            f"Python function file {python_function_file.relative_path} must declare returns"
-        )
-    arguments: tuple[FunctionArgument, ...] = _parse_python_function_arguments(
-        function_file=python_function_file, effective_vars=effective_vars
-    )
-    returns: str = _expand_function_header_value(
-        raw_value=raw_returns.strip(),
-        effective_vars=effective_vars,
-        context_label=f"Python function {python_function_file.relative_path} returns",
-    )
-    runtime_version: str = _parse_required_string_header(
-        header_values=header_values,
-        key="runtime_version",
-        relative_path=python_function_file.relative_path,
-        language="Python",
-    )
-    entry_point: str = _parse_required_string_header(
-        header_values=header_values,
-        key="entry_point",
-        relative_path=python_function_file.relative_path,
-        language="Python",
-    )
-    packages: tuple[str, ...] = _parse_python_packages(
-        raw_packages=header_values.get("packages"),
-        relative_path=python_function_file.relative_path,
-    )
-    return arguments, returns, runtime_version, entry_point, packages
-
-
-def _python_function_namespace(
-    *,
-    raw_database: object | None,
-    raw_schema: object | None,
-    logical_database: str | None,
-    logical_schema: str | None,
-    context: _PythonFunctionBuildContext,
-) -> NativeFunctionNamespace:
-    inherit: bool = context.python_functions_inherit_default_namespace
-    fingerprint_logical_database: str | None = (
-        logical_database if isinstance(raw_database, str) else context.logical_database
-    )
-    fingerprint_logical_schema: str | None = (
-        logical_schema if isinstance(raw_schema, str) else context.logical_schema
-    )
-    return NativeFunctionNamespace(
-        database=logical_database
-        if context.target_database is None
-        else context.target_database
-        if isinstance(raw_database, str) or inherit
-        else None,
-        schema=logical_schema
-        if context.target_schema is None
-        else context.target_schema
-        if isinstance(raw_schema, str) or inherit
-        else None,
-        logical_database=logical_database,
-        logical_schema=logical_schema,
-        fingerprint_database=fingerprint_logical_database
-        if context.target_database is None
-        else context.target_database,
-        fingerprint_schema=fingerprint_logical_schema
-        if context.target_schema is None
-        else context.target_schema,
-        fingerprint_logical_database=fingerprint_logical_database,
-        fingerprint_logical_schema=fingerprint_logical_schema,
-    )
-
-
-def _parse_function_arguments(
-    *,
-    function_file: DiscoveredSqlFunctionFile,
-    effective_vars: dict[str, object],
-) -> tuple[FunctionArgument, ...]:
-    raw_arguments: object | None = function_file.header_values.get("arguments")
-    if raw_arguments is None:
-        return ()
-    if not isinstance(raw_arguments, dict):
-        raise CompileInputError(
-            f"SQL function file {function_file.relative_path} arguments must be a map"
-        )
-    arguments: list[FunctionArgument] = []
-    argument_name: object
-    argument_type: object
-    for argument_name, argument_type in raw_arguments.items():
-        if not isinstance(argument_name, str) or not argument_name.strip():
-            raise CompileInputError(
-                f"SQL function file {function_file.relative_path} has an invalid argument name"
-            )
-        if not isinstance(argument_type, str) or not argument_type.strip():
-            raise CompileInputError(
-                f"SQL function file {function_file.relative_path} argument '{argument_name}' "
-                "must declare a type"
-            )
-        expanded_type: str = _expand_function_header_value(
-            raw_value=argument_type.strip(),
-            effective_vars=effective_vars,
-            context_label=(
-                f"SQL function {function_file.relative_path} argument '{argument_name}' type"
-            ),
-        )
-        arguments.append(FunctionArgument(name=argument_name.strip(), type=expanded_type))
-    return tuple(arguments)
-
-
-def _parse_python_function_arguments(
-    *, function_file: DiscoveredPythonFunctionFile, effective_vars: dict[str, object]
-) -> tuple[FunctionArgument, ...]:
-    raw_arguments: object | None = function_file.header_values.get("arguments")
-    if raw_arguments is None:
-        return ()
-    if not isinstance(raw_arguments, dict):
-        raise CompileInputError(
-            f"Python function file {function_file.relative_path} arguments must be a map"
-        )
-    arguments: list[FunctionArgument] = []
-    argument_name: object
-    argument_type: object
-    for argument_name, argument_type in raw_arguments.items():
-        if not isinstance(argument_name, str) or not argument_name.strip():
-            raise CompileInputError(
-                f"Python function file {function_file.relative_path} has an invalid argument name"
-            )
-        if not isinstance(argument_type, str) or not argument_type.strip():
-            raise CompileInputError(
-                f"Python function file {function_file.relative_path} argument '{argument_name}' "
-                "must declare a type"
-            )
-        expanded_type: str = _expand_function_header_value(
-            raw_value=argument_type.strip(),
-            effective_vars=effective_vars,
-            context_label=(
-                f"Python function {function_file.relative_path} argument '{argument_name}' type"
-            ),
-        )
-        arguments.append(FunctionArgument(name=argument_name.strip(), type=expanded_type))
-    return tuple(arguments)
-
-
-def _parse_sql_function_returns(
-    *,
-    raw_returns: object,
-    function_file: DiscoveredSqlFunctionFile,
-    effective_vars: dict[str, object],
-) -> tuple[str, tuple[FunctionReturnColumn, ...]]:
-    if isinstance(raw_returns, str) and raw_returns.strip():
-        returns: str = _expand_function_header_value(
-            raw_value=raw_returns.strip(),
-            effective_vars=effective_vars,
-            context_label=f"SQL function {function_file.relative_path} returns",
-        )
-        return returns, ()
-    if isinstance(raw_returns, dict) and set(raw_returns) == TABLE_FUNCTION_RETURN_KEYS:
-        table_returns: dict[str, object] = cast(dict[str, object], raw_returns)
-        raw_columns: object = table_returns["table"]
-        if not isinstance(raw_columns, dict) or not raw_columns:
-            raise CompileInputError(
-                f"SQL function file {function_file.relative_path} returns table must declare "
-                "at least one column"
-            )
-        columns: list[FunctionReturnColumn] = []
-        column_name: object
-        column_type: object
-        for column_name, column_type in raw_columns.items():
-            if not isinstance(column_name, str) or not column_name.strip():
-                raise CompileInputError(
-                    f"SQL function file {function_file.relative_path} has an invalid return "
-                    "column name"
-                )
-            if not isinstance(column_type, str) or not column_type.strip():
-                raise CompileInputError(
-                    f"SQL function file {function_file.relative_path} return column "
-                    f"'{column_name}' must declare a type"
-                )
-            expanded_type: str = _expand_function_header_value(
-                raw_value=column_type.strip(),
-                effective_vars=effective_vars,
-                context_label=(
-                    f"SQL function {function_file.relative_path} return column '{column_name}' type"
-                ),
-            )
-            columns.append(FunctionReturnColumn(name=column_name.strip(), type=expanded_type))
-        return "TABLE", tuple(columns)
-    raise CompileInputError(
-        f"SQL function file {function_file.relative_path} returns must be a type string or "
-        "table column declaration"
-    )
-
-
-def _parse_required_string_header(
-    *, header_values: dict[str, object], key: str, relative_path: Path, language: str
-) -> str:
-    raw_value: object | None = header_values.get(key)
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        raise CompileInputError(f"{language} function file {relative_path} must declare {key}")
-    return raw_value.strip()
-
-
-def _parse_python_packages(*, raw_packages: object | None, relative_path: Path) -> tuple[str, ...]:
-    if raw_packages is None:
-        return ()
-    if not isinstance(raw_packages, list | tuple):
-        raise CompileInputError(f"Python function file {relative_path} packages must be a list")
-    packages: list[str] = []
-    package: object
-    for package in raw_packages:
-        if not isinstance(package, str) or not package.strip():
-            raise CompileInputError(
-                f"Python function file {relative_path} packages entries must be non-empty strings"
-            )
-        packages.append(package.strip())
-    return tuple(packages)
-
-
-def _parse_function_description(
-    *, header_values: dict[str, object], relative_path: Path, language: str
-) -> str | None:
-    raw_description: object | None = header_values.get("description")
-    if raw_description is None:
-        return None
-    if not isinstance(raw_description, str):
-        raise CompileInputError(
-            f"{language} function file {relative_path} description must be a string"
-        )
-    return raw_description.strip()
-
-
-def _parse_function_tags(
-    *, header_values: dict[str, object], relative_path: Path, language: str
-) -> tuple[str, ...]:
-    raw_tags: object | None = header_values.get("tags")
-    if raw_tags is None:
-        return ()
-    if not isinstance(raw_tags, list | tuple):
-        raise CompileInputError(f"{language} function file {relative_path} tags must be a list")
-    tags: list[str] = []
-    for tag in raw_tags:
-        if not isinstance(tag, str) or not tag.strip():
-            raise CompileInputError(
-                f"{language} function file {relative_path} tags entries must be non-empty strings"
-            )
-        tags.append(tag.strip())
-    return tuple(tags)
 
 
 def _expand_function_header_value(
