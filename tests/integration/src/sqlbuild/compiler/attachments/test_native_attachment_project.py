@@ -102,7 +102,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + '__expected__orders AS (SELECT id, 1.5 AS amount, label FROM __source("order_events")),\n'
                 + "__assert__no_rows AS (SELECT 1 FROM __source(order_events))\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql CTE "
             "'__expected__orders' must not reference project source",
         ),
@@ -114,7 +114,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "__seed__channel_codes AS (SELECT 1 AS id, 'web' AS label),\n"
                 + "__expected__orders AS (SELECT 1 AS id FROM __source(order_events))\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql "
             "references unknown source 'missing_events'",
         ),
@@ -126,7 +126,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "__seed__channel_codes AS (SELECT 1 AS id FROM __source(order_events)),\n"
                 + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario file tests/scenarios/orders_scenario.sql "
             "references unknown source 'missing_events'",
         ),
@@ -137,7 +137,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "WITH\n__seed__ AS (SELECT 1 AS id, 'web' AS label),\n"
                 + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="error: SQL scenario 'tests/scenarios/orders_scenario.sql' "
             "must use __seed__<seed> to identify a target",
         ),
@@ -149,7 +149,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "__macro__tidy AS (SELECT 'x'),\n"
                 + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="does not support macro mock CTE '__macro__tidy'",
         ),
         AttachmentProjectTestCase(
@@ -161,7 +161,7 @@ _HELPER_TEST_EXPECTED: str = "__expected__orders AS (SELECT 1 AS id, 1.5 AS amou
                 + "__expected__orders AS (SELECT 1 AS id, 1.5 AS amount, 'web' AS label "
                 + "FROM __assert__no_rows)\n"
             },
-            expected_preview_entries=frozenset({"SqlTestTargetCatalog"}),
+            expected_native_entries=frozenset({"SqlTestTargetCatalog"}),
             expected_outcome_fragment="check CTE '__expected__orders' must not depend on "
             "'__assert__no_rows'",
         ),
