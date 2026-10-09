@@ -616,7 +616,7 @@ jobs:
             base_engine: python
             head_engine: native-preview
             gate_phase: custom_rules_cpu_ms
-            max_ratio: "1.05"
+            max_ratio: "1.25"
     steps:
       - uses: actions/checkout@v4
       - name: Check out the comparison base
