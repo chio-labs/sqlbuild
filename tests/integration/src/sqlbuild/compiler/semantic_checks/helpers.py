@@ -13,6 +13,7 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.assembly.project as assembly_project
+import sqlbuild.compiler.semantic_checks._helpers.stage as semantic_stage
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
@@ -26,10 +27,14 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_diagnostics
+from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_models
 from sqlbuild.compiler.semantic_checks.main._complete_native_semantic_diagnostics import (
     complete_native_semantic_diagnostics,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
+    generated_analysis_files,
+)
 
 _RELATIONS: dict[str, tuple[str, ...]] = {
     '__source("raw_orders")': (
@@ -81,6 +86,7 @@ class SemanticInputs:
     profile: ExpressionInferenceProfile
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]]
     resource_sql_analysis: bool
+    native_session: Any | None = None
 
 
 def _typo(rng: random.Random, column: str) -> str:
@@ -173,9 +179,13 @@ def generated_semantic_files(
 
 
 def captured_semantic_inputs(
-    *, project_dir: Path, files: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    *,
+    project_dir: Path,
+    files: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    engine: str = "python",
 ) -> SemanticInputs:
-    """Compile with the Python engine and keep the semantic completion stage's inputs."""
+    """Compile with `engine` and keep the semantic completion stage's inputs."""
 
     for relative_path, contents in files.items():
         path: Path = project_dir / relative_path
@@ -188,7 +198,7 @@ def captured_semantic_inputs(
         return complete_semantic_diagnostics(**arguments)
 
     with monkeypatch.context() as patch:
-        patch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
+        patch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
         patch.setattr(assembly_project, "complete_semantic_diagnostics", capture)
         _ = build_project_graph(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),
@@ -248,7 +258,49 @@ def native_completion(inputs: SemanticInputs) -> CompiledProject | None:
         profile=inputs.profile,
         binding_results=inputs.binding_results,
         resource_sql_analysis=inputs.resource_sql_analysis,
+        session=inputs.native_session,
     )
+
+
+def session_corpus_files(*, corpus: str, rng: random.Random, model_count: int) -> dict[str, str]:
+    """One generated project from the failing-semantics or the analysis-session corpus."""
+
+    generators: dict[str, Callable[[], dict[str, str]]] = {
+        "semantic": lambda: generated_semantic_files(
+            rng=rng, model_count=model_count, require_analysis=False
+        ),
+        "analysis": lambda: generated_analysis_files(rng=rng, model_count=model_count),
+    }
+    return generators[corpus]()
+
+
+def proven_output_count(project: CompiledProject) -> int:
+    """How many models a dynamic pivot proof gave their output names."""
+
+    return sum(
+        model.dynamic_column_contract is not None and model.dynamic_column_contract.output_proven
+        for model in project.models
+    )
+
+
+def without_session(inputs: SemanticInputs) -> SemanticInputs:
+    """The same stage inputs with every model's output names and lineage in the payload."""
+
+    return replace(inputs, native_session=None)
+
+
+def record_session_models(*, monkeypatch: pytest.MonkeyPatch) -> list[frozenset[str]]:
+    """Keep each completion's models whose output names and lineage the session supplies."""
+
+    selections: list[frozenset[str]] = []
+
+    def recorded(**arguments: Any) -> frozenset[str]:
+        selected: frozenset[str] = session_fact_models(**arguments)
+        selections.append(selected)
+        return selected
+
+    monkeypatch.setattr(semantic_stage, "session_fact_models", recorded)
+    return selections
 
 
 def completion_view(project: CompiledProject) -> tuple[object, ...]:

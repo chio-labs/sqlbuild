@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::main::expression_shapes::expression_shapes;
 use sqlbuild_analysis::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
+use sqlbuild_analysis::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
@@ -124,6 +125,11 @@ pub(crate) struct NativeModelAnalysisSession {
 }
 
 impl NativeModelAnalysisSession {
+    /// The finished session later compile stages read, once `finish` has succeeded.
+    pub(crate) fn finished_session(&self) -> Option<&FinishedSession> {
+        self.finished.as_ref()
+    }
+
     /// Keep `result`'s value, or end the session and keep its failure for Python's debug log.
     fn kept<T>(&mut self, result: Result<T, String>) -> Option<T> {
         match result {
@@ -139,6 +145,15 @@ impl NativeModelAnalysisSession {
 
 #[pymethods]
 impl NativeModelAnalysisSession {
+    /// Models whose output names and lineage the finished session keeps for later stages.
+    #[getter]
+    fn fact_models(&self) -> Vec<String> {
+        self.finished
+            .as_ref()
+            .map(finished_fact_models)
+            .unwrap_or_default()
+    }
+
     /// Advance; None means Python must analyse every model, no deferrals means done.
     fn run(&mut self, py: Python<'_>) -> Option<StepRow> {
         let mut session: AnalysisSession = self.inner.take()?;

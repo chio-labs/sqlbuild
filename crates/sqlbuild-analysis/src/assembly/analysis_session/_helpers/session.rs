@@ -24,8 +24,8 @@ use crate::assembly::analysis_session::constants::{
 };
 use crate::assembly::analysis_session::models::{
     AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, FinishedSession,
-    LineageFacts, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables,
-    SessionOutcome, SessionRequest, SessionStep,
+    LineageFacts, LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome,
+    PivotTables, SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -164,6 +164,12 @@ impl AnalysisSession {
             .ok_or("the session left a model unanalysed")?;
         let (schema_additions, analysis_names) = self.catalog.into_changes();
         let request: SessionRequest = self.request;
+        let mut model_facts: HashMap<String, SessionModelFacts> = HashMap::new();
+        for (model, outcome) in request.models.iter().zip(&models) {
+            if let Some(facts) = session_model_facts(&outcome.analysis) {
+                model_facts.insert(model.name.clone(), facts);
+            }
+        }
         let finished = FinishedSession {
             tables: PivotTables {
                 dialect: request.dialect,
@@ -173,6 +179,7 @@ impl AnalysisSession {
                 families_by_table: request.dynamic_families_by_table,
             },
             pool,
+            models: model_facts,
         };
         let outcome = SessionOutcome {
             models,
@@ -610,4 +617,29 @@ fn native_answer(model: usize, columns: Vec<ColumnFact>, has_star: bool) -> Defe
         binding_diagnostics: Vec::new(),
         binding_validated: false,
     }
+}
+
+/// A compiled model's output names and lineage from a successful analysis with native lineage.
+fn session_model_facts(analysis: &ModelAnalysis) -> Option<SessionModelFacts> {
+    let rows: &Vec<LineageRow> = match &analysis.lineage {
+        LineageFacts::Native(rows) | LineageFacts::NativeEnrichment(rows) => rows,
+        LineageFacts::PythonAnalysis | LineageFacts::PythonEnrichment => return None,
+    };
+    analysis.analysis_succeeded.then(|| SessionModelFacts {
+        columns: analysis.columns.as_deref().map(column_names),
+        lineage: rows.iter().map(output_sources).collect(),
+    })
+}
+
+fn column_names(columns: &[ColumnFact]) -> Vec<String> {
+    columns.iter().map(|column| column.name.clone()).collect()
+}
+
+/// One lineage row as `(output column, [(resource name, column name)])`.
+fn output_sources(row: &LineageRow) -> (String, Vec<(String, String)>) {
+    let mut sources: Vec<(String, String)> = Vec::with_capacity(row.sources.len());
+    for (_, name, column) in &row.sources {
+        sources.push((name.clone(), column.clone()));
+    }
+    (row.output_column.clone(), sources)
 }

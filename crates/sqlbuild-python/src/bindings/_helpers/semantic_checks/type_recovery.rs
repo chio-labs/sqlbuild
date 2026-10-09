@@ -10,7 +10,9 @@ use sqlbuild_analysis::semantic_checks::models::{
 };
 use sqlbuild_analysis::semantic_checks::types::RevisedBinding;
 
+use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::semantic_checks::session_facts::session_model_facts;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
@@ -22,7 +24,7 @@ type ModelInput = (
     String,
     Option<Vec<String>>,
     Vec<String>,
-    Vec<LineageInput>,
+    Option<Vec<LineageInput>>,
     Vec<(usize, String, String, bool)>,
     Vec<(usize, String, String, Option<i64>, Option<i64>)>,
 );
@@ -84,14 +86,16 @@ impl SemanticTypeRecovery {
     }
 }
 
-/// Plan type recovery on `catalog`'s analysis pool.
+/// Plan type recovery, reading names and lineage from `session` for models with no lineage.
 #[pyfunction]
+#[pyo3(signature = (catalog, request, session=None))]
 fn plan_semantic_type_recovery(
     py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
     request: RequestInput,
+    session: Option<PyRef<'_, NativeModelAnalysisSession>>,
 ) -> PyResult<SemanticTypeRecovery> {
-    let request = recovery_request(request);
+    let request = recovery_request(request, session.as_deref()).map_err(compiler_error)?;
     let catalog = &catalog.inner;
     let step = py
         .compiler_detach(|| plan_type_recovery(&request, catalog))
@@ -109,10 +113,16 @@ pub(crate) fn lineage_outputs(lineage: Vec<LineageInput>) -> Vec<LineageOutput> 
         .collect()
 }
 
-fn recovery_request((dialect, models, diagnostics): RequestInput) -> TypeRecoveryRequest {
-    TypeRecoveryRequest {
+fn recovery_request(
+    (dialect, models, diagnostics): RequestInput,
+    session: Option<&NativeModelAnalysisSession>,
+) -> Result<TypeRecoveryRequest, String> {
+    Ok(TypeRecoveryRequest {
         dialect,
-        models: models.into_iter().map(recovery_model).collect(),
+        models: models
+            .into_iter()
+            .map(|model| recovery_model(model, session))
+            .collect::<Result<_, _>>()?,
         diagnostics: diagnostics
             .into_iter()
             .map(|(id, code, is_model, resource_name)| DiagnosticOwner {
@@ -122,13 +132,21 @@ fn recovery_request((dialect, models, diagnostics): RequestInput) -> TypeRecover
                 resource_name,
             })
             .collect(),
-    }
+    })
 }
 
 fn recovery_model(
     (name, query_sql, inferred_columns, references, lineage, bindings, raw_bindings): ModelInput,
-) -> RecoveryModel {
-    RecoveryModel {
+    session: Option<&NativeModelAnalysisSession>,
+) -> Result<RecoveryModel, String> {
+    let (inferred_columns, lineage) = match lineage {
+        Some(lineage) => (inferred_columns, lineage),
+        None => {
+            let facts = session_model_facts(session, &name)?;
+            (facts.columns.clone(), facts.lineage.clone())
+        }
+    };
+    Ok(RecoveryModel {
         name,
         query_sql,
         inferred_columns,
@@ -153,7 +171,7 @@ fn recovery_model(
                 end,
             })
             .collect(),
-    }
+    })
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

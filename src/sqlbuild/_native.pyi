@@ -363,6 +363,8 @@ type _PivotContractRow = tuple[
 ]
 
 class NativeModelAnalysisSession:
+    @property
+    def fact_models(self) -> list[str]: ...
     def run(
         self,
     ) -> (
@@ -481,13 +483,14 @@ def plan_semantic_type_recovery(
                 str,
                 list[str] | None,
                 list[str],
-                list[tuple[str, list[tuple[str, str]]]],
+                list[tuple[str, list[tuple[str, str]]]] | None,
                 list[tuple[int, str, str, bool]],
                 list[tuple[int, str, str, int | None, int | None]],
             ]
         ],
         list[tuple[int, str, bool, str | None]],
     ],
+    session: NativeModelAnalysisSession | None = None,
     /,
 ) -> SemanticTypeRecovery: ...
 def check_semantic_metadata_rows(
@@ -544,14 +547,15 @@ def complete_semantic_checks(
                 str,
                 str,
                 str,
-                list[str],
-                list[tuple[str, list[tuple[str, str]]]],
+                list[str] | None,
+                list[tuple[str, list[tuple[str, str]]]] | None,
                 list[str],
                 str | None,
             ]
         ],
         list[tuple[str, list[tuple[str, str]]]],
     ],
+    session: NativeModelAnalysisSession | None = None,
     /,
 ) -> tuple[
     str | None,

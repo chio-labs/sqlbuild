@@ -40,3 +40,18 @@ class GeneratedMetadataParityTestCase:
     dialects: tuple[str, ...]
     expected_minimum_native: int
     expected_minimum_families: dict[str, int]
+
+
+@dataclass(frozen=True)
+class SessionCompletionTestCase:
+    """Seeded preview compiles whose completion reads analysed models from the native session."""
+
+    description: str
+    corpus: str
+    seed: int
+    count: int
+    model_count: int
+    expected_session_models: int
+    expected_payload_models: int
+    expected_proven_outputs: int
+    expected_minimum_codes: dict[str, int]

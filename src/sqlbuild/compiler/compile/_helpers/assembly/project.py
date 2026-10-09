@@ -503,6 +503,7 @@ def assemble_compiled_project(
         project=project,
         profile=profile,
         resource_sql_analysis=sql_analysis_enabled and not inputs.no_sql_validation,
+        native_session=native_session,
         binding_results={
             name: analysis.polyglot_analysis.binding_diagnostics
             for name, analysis in model_sql_analysis_by_name.items()

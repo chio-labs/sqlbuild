@@ -14,6 +14,7 @@ from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.semantic_checks._test_types import (
     DeferredSemanticTestCase,
     GeneratedSemanticParityTestCase,
+    SessionCompletionTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
     SemanticInputs,
@@ -24,9 +25,13 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
     generated_semantic_files,
     native_completion,
     note_kinds,
+    proven_output_count,
     python_completion,
     record_native_statuses,
+    record_session_models,
+    session_corpus_files,
     with_dialect,
+    without_session,
 )
 
 _NOTE_KINDS: tuple[str, ...] = ("downstream output uses", "downstream uses of", " has: ")
@@ -152,6 +157,84 @@ def test_given_deferred_projects_when_completing_then_python_completes_and_recor
 
     assert native is None
     assert deferral_records(record_dir) == test_case.expected_kinds
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SessionCompletionTestCase(
+            description="failing semantics corpus",
+            corpus="semantic",
+            seed=20261010,
+            count=6,
+            model_count=12,
+            expected_session_models=44,
+            expected_payload_models=28,
+            expected_proven_outputs=0,
+            expected_minimum_codes={"B002": 1, "downstream output uses": 1},
+        ),
+        SessionCompletionTestCase(
+            description="analysis session corpus with pivots, stars and set operations",
+            corpus="analysis",
+            seed=20261011,
+            count=4,
+            model_count=16,
+            expected_session_models=67,
+            expected_payload_models=29,
+            expected_proven_outputs=11,
+            expected_minimum_codes={"B002": 1},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_preview_compiles_when_completing_from_the_session_then_matches_payload_and_python(
+    test_case: SessionCompletionTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rng: random.Random = random.Random(test_case.seed)
+    captured: list[SemanticInputs] = [
+        captured_semantic_inputs(
+            project_dir=tmp_path / f"project_{index}",
+            files=session_corpus_files(
+                corpus=test_case.corpus, rng=rng, model_count=test_case.model_count
+            ),
+            monkeypatch=monkeypatch,
+            engine="native-preview",
+        )
+        for index in range(test_case.count)
+    ]
+    selections: list[frozenset[str]] = record_session_models(monkeypatch=monkeypatch)
+    codes: Counter[str] = Counter()
+    python_views: list[tuple[object, ...]] = []
+    payload_views: list[tuple[object, ...]] = []
+    session_views: list[tuple[object, ...]] = []
+    for inputs in captured:
+        python: CompiledProject = python_completion(inputs=inputs, monkeypatch=monkeypatch)
+        codes.update(item.code for item in python.diagnostics)
+        codes.update(note_kinds(python, _NOTE_KINDS))
+        python_views.append(completion_view(python))
+        payload_views.append(completion_view(completed_natively(without_session(inputs))))
+        session_views.append(completion_view(completed_natively(inputs)))
+    session_models: int = sum(len(selected) for selected in selections)
+    model_count: int = sum(len(inputs.project.models) for inputs in captured)
+
+    assert all(inputs.native_session is not None for inputs in captured)
+    assert session_views == python_views
+    assert payload_views == python_views
+    assert (
+        session_models,
+        model_count - session_models,
+        sum(proven_output_count(inputs.project) for inputs in captured),
+    ) == (
+        test_case.expected_session_models,
+        test_case.expected_payload_models,
+        test_case.expected_proven_outputs,
+    )
+    assert {
+        code: min(codes[code], minimum)
+        for code, minimum in test_case.expected_minimum_codes.items()
+    } == test_case.expected_minimum_codes
 
 
 if __name__ == "__main__":

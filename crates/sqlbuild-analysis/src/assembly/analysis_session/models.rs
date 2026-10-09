@@ -7,7 +7,7 @@ use rayon::ThreadPool;
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
-use crate::assembly::analysis_session::types::{Pairs, Shapes};
+use crate::assembly::analysis_session::types::{OutputSources, Pairs, Shapes};
 use crate::semantic_validation::types::DiagnosticRow;
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
@@ -88,11 +88,19 @@ pub struct PivotBatchRequest {
     pub models: Vec<PivotModel>,
 }
 
-/// A finished session's pivot tables and analysis pool, kept to prove models outside it.
+/// A finished session's pivot tables, analysis pool and model facts, kept for later stages.
 #[derive(Debug)]
 pub struct FinishedSession {
     pub(crate) tables: PivotTables,
     pub(crate) pool: Result<Arc<ThreadPool>, String>,
+    pub(crate) models: HashMap<String, SessionModelFacts>,
+}
+
+/// A compiled model's output names and lineage from an analysis the session completed natively.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionModelFacts {
+    pub columns: Option<Vec<String>>,
+    pub lineage: OutputSources,
 }
 
 /// A model's dynamic pivot proof: none declared, left to Python, or proven natively.
