@@ -66,3 +66,10 @@ pub(crate) struct CompletionTestCase {
     pub(crate) expected_diagnostics: Vec<DescribedDiagnostic>,
     pub(crate) expected_bindings: Option<Vec<Vec<usize>>>,
 }
+
+pub(crate) struct OperandTypeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) joined: &'static str,
+    pub(crate) shapes: &'static [(&'static str, &'static [(&'static str, &'static str)])],
+    pub(crate) expected_diagnostics: Vec<DescribedDiagnostic>,
+}

@@ -285,7 +285,10 @@ fn operand_type(
         }
     }
     Ok(if candidates.len() == 1 {
-        candidates.into_iter().next()
+        candidates
+            .into_iter()
+            .next()
+            .filter(|value| !value.is_empty())
     } else {
         None
     })

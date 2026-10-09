@@ -6,6 +6,8 @@ mod completion;
 mod helpers;
 #[path = "tests/test_messages.rs"]
 mod messages;
+#[path = "tests/test_operand_types.rs"]
+mod operand_types;
 #[path = "tests/test_parsed_sql.rs"]
 mod parsed_sql;
 #[path = "tests/test_types.rs"]

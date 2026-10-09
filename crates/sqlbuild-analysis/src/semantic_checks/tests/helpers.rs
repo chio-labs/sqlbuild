@@ -13,7 +13,7 @@ use crate::semantic_checks::models::{
     SemanticLocation, TypeRecoveryPlan, TypeRecoveryRequest,
 };
 use crate::semantic_checks::tests::test_types::{
-    CompletionTestCase, DescribedDiagnostic, TypeRecoveryTestCase,
+    CompletionTestCase, DescribedDiagnostic, OperandTypeTestCase, TypeRecoveryTestCase,
 };
 use crate::semantic_validation::models::ProjectCatalog;
 
@@ -449,4 +449,51 @@ fn described_completed(
             )
         }),
     )
+}
+
+/// Explain a B212 and a B217 on unqualified operands of a mart reading `stg`.
+pub(crate) fn operand_type_summary(test_case: &OperandTypeTestCase) -> CompletionSummary {
+    let query_sql = format!(
+        "SELECT order_id, ordered_at + 1 AS shifted\nFROM __ref(\"stg\"){}\nWHERE ordered_at > 5",
+        test_case.joined
+    );
+    let request = CompletionRequest {
+        dialect: Some("duckdb".to_owned()),
+        diagnostics: vec![
+            model_diagnostic(
+                0,
+                "B212",
+                "Arithmetic operation expects NUMERIC-compatible operands, found TIMESTAMP and INTEGER",
+                "mart",
+                Some((5, 18)),
+            ),
+            model_diagnostic(
+                1,
+                "B217",
+                "Incompatible comparison between TIMESTAMP and INTEGER",
+                "mart",
+                Some((7, 7)),
+            ),
+        ],
+        models: vec![completion_model(
+            "mart",
+            &query_sql,
+            &["order_id", "shifted"],
+            Vec::new(),
+            &["B212", "B217"],
+        )],
+        shapes: test_case
+            .shapes
+            .iter()
+            .map(|(name, columns)| ((*name).to_owned(), shape(columns)))
+            .collect(),
+    };
+    let outcome = complete_semantic_diagnostics(&request, &catalog()).expect("the pool runs");
+    let (deferral, parts) = outcome.into_parts();
+    let (diagnostics, model_bindings, order) = parts.unwrap_or_default();
+    let described_order: Vec<DescribedDiagnostic> = order
+        .into_iter()
+        .map(|entry| described_entry(&request, &diagnostics, entry))
+        .collect();
+    (deferral, described_order, model_bindings)
 }
