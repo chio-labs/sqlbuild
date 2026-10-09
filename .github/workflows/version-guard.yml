@@ -1,7 +1,8 @@
 name: Version Guard
 run-name: >-
   ${{ inputs.request_id && format('{0} [{1}]', github.workflow, inputs.request_id)
-  || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
+  || github.event.pull_request.title || github.event.head_commit.message
+  || github.event.merge_group.head_commit.message || github.workflow }}
 
 on:
   pull_request:
@@ -10,6 +11,8 @@ on:
   push:
     branches:
       - main
+  # Checks out the merge group's head, so the version that would land on main is the one checked.
+  merge_group:
   workflow_dispatch:
     inputs:
       request_id:
