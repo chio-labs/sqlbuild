@@ -1,4 +1,4 @@
-"""Every engine reports SQL test, scenario and relationship errors identically, without re-runs."""
+"""Every engine reports SQL test, scenario and relationship errors identically."""
 
 from __future__ import annotations
 
