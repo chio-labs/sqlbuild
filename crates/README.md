@@ -64,12 +64,12 @@ stages run natively:
 
 The shipped tier covers discovery and rendering: declaration files and scopes, model config,
 reference extraction, the model loop, macro calls and the macro-call store, and attachments. SQL
-analysis, contracts, lineage, SQL-test glue and project assembly are still `preview`. When a
-native render stage fails, the compile runs the Python stage again so the error is exactly
-Python's; native error messages replace that re-run later. Because the macro-call store is
-shipped, the [macro determinism contract](../website/src/content/docs/docs/concepts/macros.mdx)
-applies to every default compile; `SQLBUILD_COMPILER_ENGINE=python` runs every macro call each
-time.
+analysis, contracts, lineage, SQL-test glue and project assembly are still `preview`. A failing
+render raises its first error directly, as the Python stage would, and runs each macro call at
+most once; a divergence the bridge detects is reported as a native stage mismatch. Because the
+macro-call store is shipped, the
+[macro determinism contract](../website/src/content/docs/docs/concepts/macros.mdx) applies to
+every default compile; `SQLBUILD_COMPILER_ENGINE=python` runs every macro call each time.
 
 Each native stage declares its tier once, in `NATIVE_STAGE_TIERS` in
 `src/sqlbuild/compiler/frontier/constants.py`. A stage moves from `preview` to `shipped` by

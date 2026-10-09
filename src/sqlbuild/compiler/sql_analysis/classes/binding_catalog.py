@@ -80,7 +80,7 @@ class BindingCatalog:
                 break
         if SQL_QUOTED_IDENTIFIER_DELIMITER not in sql and not has_exact_input:
             return columns
-        return self.native.inferred_schema(sql=sql, columns=columns, inputs=inputs)
+        return dict(self.native.inferred_schema(sql=sql, columns=columns, inputs=inputs))
 
     def prepare(self, requests: Sequence[SqlSchemaValidationRequest]) -> list[NativeBindingRequest]:
         additions: dict[str, Mapping[str, str]] = {}

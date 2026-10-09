@@ -196,3 +196,12 @@ def environment_of(root: Path) -> str:
         project_dir=root,
         fingerprint=project_fingerprint(project_dir=root, model_paths=EXCLUDED_MODEL_PATHS),
     )
+
+
+def deeply_nested_list(*, depth: int) -> list[object]:
+    """Return a list nested `depth` levels deep."""
+
+    nested: list[object] = []
+    for _ in range(depth):
+        nested = [nested]
+    return nested

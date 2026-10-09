@@ -4,19 +4,17 @@ from collections.abc import Callable
 
 import pytest
 
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge import run_with_macro_bridge
 from tests.unit.src.sqlbuild.compiler.macro_bridge.main._test_types import (
-    MacroBridgeErrorContextTestCase,
     MacroBridgeFailureTestCase,
     MacroBridgeSuccessTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.macro_bridge.main.helpers import (
-    declaration_failed_after_scan,
     failed,
     failed_after_scan,
+    mismatched_after_scan,
+    recording_failure,
     recording_stage,
     rendered,
 )
@@ -38,9 +36,7 @@ def test_given_succeeding_stage_when_running_with_macro_bridge_then_runs_once_br
 ) -> None:
     runs: list[bool] = []
 
-    result: str = run_with_macro_bridge(
-        stage=recording_stage(runs=runs, stages={True: rendered, False: failed})
-    )
+    result: str = run_with_macro_bridge(stage=recording_stage(runs=runs, stages={True: rendered}))
 
     assert result == test_case.expected_result
     assert runs == test_case.expected_bridged_runs
@@ -51,70 +47,45 @@ def test_given_succeeding_stage_when_running_with_macro_bridge_then_runs_once_br
     "test_case",
     [
         MacroBridgeFailureTestCase(
-            description="failure after a scan re-runs Python and raises its error",
+            description="failure after a scan raises the stage error without a re-run",
             stage_with_bridge=failed_after_scan,
-            stage_without_bridge=failed,
-            expected_error=CompileInputError,
-            expected_bridged_runs=[True, False],
-        ),
-        MacroBridgeFailureTestCase(
-            description="native-only failure after a scan is reported as a divergence",
-            stage_with_bridge=failed_after_scan,
-            stage_without_bridge=rendered,
-            expected_error=NativeStageMismatchError,
-            expected_bridged_runs=[True, False],
-        ),
-        MacroBridgeFailureTestCase(
-            description="failure before the bridge scans anything is raised without a re-run",
-            stage_with_bridge=failed,
-            stage_without_bridge=rendered,
-            expected_error=CompileInputError,
+            expected_error_message="render failed",
             expected_bridged_runs=[True],
         ),
         MacroBridgeFailureTestCase(
-            description="declaration reference failure after a scan is raised without a re-run",
-            stage_with_bridge=declaration_failed_after_scan,
-            stage_without_bridge=rendered,
-            expected_error=CompileInputError,
+            description="failure before the bridge scans anything raises without a re-run",
+            stage_with_bridge=failed,
+            expected_error_message="render failed",
+            expected_bridged_runs=[True],
+        ),
+        MacroBridgeFailureTestCase(
+            description="a bridge mismatch after a scan stays an explicit mismatch",
+            stage_with_bridge=mismatched_after_scan,
+            expected_error_message="native scan ended early",
             expected_bridged_runs=[True],
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_failing_stage_when_running_with_macro_bridge_then_only_bridge_failures_rerun(
+def test_given_failing_stage_when_running_with_macro_bridge_then_raises_its_error_once(
     test_case: MacroBridgeFailureTestCase,
 ) -> None:
     runs: list[bool] = []
+    raised_errors: list[Exception] = []
     stage: Callable[[], str] = recording_stage(
         runs=runs,
-        stages={True: test_case.stage_with_bridge, False: test_case.stage_without_bridge},
+        stages={True: recording_failure(stage=test_case.stage_with_bridge, errors=raised_errors)},
     )
 
-    with pytest.raises(test_case.expected_error):
+    with pytest.raises(Exception) as raised:
         _ = run_with_macro_bridge(stage=stage)
 
-    assert runs == test_case.expected_bridged_runs
-    assert active_macro_bridge() is None
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MacroBridgeErrorContextTestCase(
-            description="python error after a bridge failure",
-            stage=recording_stage(runs=[], stages={True: failed_after_scan, False: failed}),
-            expected_context=None,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_python_error_when_rerun_after_bridge_failure_then_error_has_no_bridge_context(
-    test_case: MacroBridgeErrorContextTestCase,
-) -> None:
-    with pytest.raises(CompileInputError) as raised:
-        _ = run_with_macro_bridge(stage=test_case.stage)
-
-    assert raised.value.__context__ is test_case.expected_context
+    assert (str(raised.value), [raised.value], runs, active_macro_bridge()) == (
+        test_case.expected_error_message,
+        raised_errors,
+        test_case.expected_bridged_runs,
+        None,
+    )
 
 
 if __name__ == "__main__":
