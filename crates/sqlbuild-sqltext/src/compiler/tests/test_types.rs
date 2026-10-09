@@ -44,3 +44,10 @@ pub(crate) struct HeaderNestingLocationTestCase {
     pub(crate) header_line: usize,
     pub(crate) expected_failure: Option<NestingFailure>,
 }
+
+pub(crate) struct InterpolationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) context: bool,
+    pub(crate) expected: Result<&'static str, &'static str>,
+}

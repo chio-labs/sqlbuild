@@ -81,9 +81,9 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_result,
 )
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
+    applied_interpolation,
     expand_authored_sql_result,
-    prepare_static_project_vars_batch,
-    substitute_sql_vars,
+    interpolate_sql_batch,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import (
     contains_template_data,
@@ -121,6 +121,7 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigInputs,
     NativeModelConfigSession,
     SqlAnalysisOptOutRequest,
+    SqlInterpolation,
     SqlReferenceOrigin,
     SqlReferenceScan,
     SqlReferenceSourceMap,
@@ -537,11 +538,13 @@ def _build_model_inputs(
         discovered_inputs.sql_hook_files
     )
     render_files: tuple[DiscoveredSqlModelFile, ...] = discovered_inputs.model_files
-    prepared_var_substituted_sqls: dict[Path, str | None] = dict(
+    interpolations: dict[Path, SqlInterpolation] = dict(
         zip(
             (model_file.file_path for model_file in render_files),
-            prepare_static_project_vars_batch(
-                sqls=tuple(model_file.query_sql for model_file in render_files),
+            interpolate_sql_batch(
+                sqls=tuple(
+                    (model_file.query_sql, model_file.file_path) for model_file in render_files
+                ),
                 effective_vars=effective_vars,
             ),
             strict=True,
@@ -551,7 +554,7 @@ def _build_model_inputs(
         tuple(
             model_file
             for model_file in render_files
-            if prepared_var_substituted_sqls[model_file.file_path] is not None
+            if interpolations[model_file.file_path].error is None
         )
         if native_stage_enabled(NativeStage.MODEL_LOOP)
         else ()
@@ -581,8 +584,7 @@ def _build_model_inputs(
                 (model_file.file_path for model_file in prepared_files),
                 scan_native_declaration_references(
                     sqls=tuple(
-                        cast(str, prepared_var_substituted_sqls[model_file.file_path])
-                        for model_file in prepared_files
+                        interpolations[model_file.file_path].sql for model_file in prepared_files
                     )
                 ),
                 strict=True,
@@ -596,9 +598,7 @@ def _build_model_inputs(
             _build_model_input(
                 loop=loop,
                 model_file=model_file,
-                prepared_var_substituted_sql=prepared_var_substituted_sqls.get(
-                    model_file.file_path
-                ),
+                interpolation=interpolations[model_file.file_path],
             )
         )
 
@@ -613,7 +613,7 @@ def _build_model_input(
     *,
     loop: _ModelInputLoop,
     model_file: DiscoveredSqlModelFile,
-    prepared_var_substituted_sql: str | None,
+    interpolation: SqlInterpolation,
 ) -> CompileModelInput:
     discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
     context: ModelInputBuildContext = loop.context
@@ -717,15 +717,7 @@ def _build_model_input(
             consumer_path=model_file.relative_path,
         ),
     )
-    var_substituted_sql: str = (
-        prepared_var_substituted_sql
-        if prepared_var_substituted_sql is not None
-        else substitute_sql_vars(
-            sql=model_file.query_sql,
-            file_path=model_file.file_path,
-            effective_vars=effective_vars,
-        )
-    )
+    var_substituted_sql: str = applied_interpolation(interpolation)
     declaration_context: DeclarationResolutionContext = DeclarationResolutionContext(
         enums=declarations.enums,
         constants=declarations.constants,
@@ -747,17 +739,14 @@ def _build_model_input(
             value_renderer=context.value_renderer,
             collection_rendering=context.collection_rendering,
         )
-        if prepared_var_substituted_sql is not None
+        if native_stage_enabled(NativeStage.MODEL_LOOP)
         else None
     )
     if declaration_expansion is not None and native_stage_enabled(NativeStage.MODEL_LOOP):
         report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_expansions")
     if declaration_expansion is None:
         if native_stage_enabled(NativeStage.MODEL_LOOP):
-            report_native_fallback(
-                site=NativeFallbackSite.DECLARATION_REFERENCES,
-                kind="scan" if prepared_var_substituted_sql is not None else "after_variables",
-            )
+            report_native_fallback(site=NativeFallbackSite.DECLARATION_REFERENCES, kind="scan")
         declaration_expansion = expand_declaration_references_result(
             sql=var_substituted_sql,
             file_path=model_file.file_path,

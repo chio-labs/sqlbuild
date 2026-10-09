@@ -1,8 +1,17 @@
-//! Public compiler entry point for conservative scalar SQL interpolation.
+//! Public compiler entry point for `@@` SQL interpolation.
 
-pub fn substitute_batch(
-    sqls: &[String],
-    variables: &[(String, String)],
-) -> Vec<(u8, Option<String>)> {
-    crate::compiler::_helpers::sql_interpolation::substitution::substitute_batch(sqls, variables)
+use crate::compiler::models::{InterpolatedSql, InterpolationFailure};
+use crate::compiler::types::InterpolationHost;
+use sqlbuild_core::text::models::PythonText;
+
+/// Interpolate `@@` tokens in `sql`, reading variables, environment and context from `host`.
+pub fn interpolate_sql<H: InterpolationHost>(
+    python: PythonText,
+    host: &H,
+    sql: &str,
+    file_path: &str,
+) -> Result<InterpolatedSql, InterpolationFailure> {
+    crate::compiler::_helpers::sql_interpolation::substitution::interpolate(
+        python, host, sql, file_path,
+    )
 }

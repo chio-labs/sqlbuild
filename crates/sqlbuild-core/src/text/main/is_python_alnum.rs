@@ -7,12 +7,14 @@ pub fn is_python_alnum(python: PythonText, character: char) -> bool {
     if character.is_ascii() {
         return character.is_ascii_alphanumeric();
     }
+    in_ranges(python.alnum_ranges, character)
+}
+
+/// Whether one character falls inside the inclusive, ordered code point `ranges`.
+pub(crate) fn in_ranges(ranges: &[(u32, u32)], character: char) -> bool {
     let code_point: u32 = u32::from(character);
-    let index: usize = python
-        .alnum_ranges
-        .partition_point(|(_, end)| *end < code_point);
-    python
-        .alnum_ranges
+    let index: usize = ranges.partition_point(|(_, end)| *end < code_point);
+    ranges
         .get(index)
         .is_some_and(|(start, _)| *start <= code_point)
 }

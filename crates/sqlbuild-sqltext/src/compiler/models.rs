@@ -69,3 +69,25 @@ pub struct NestingFailure {
     pub message: String,
     pub help: String,
 }
+
+/// One environment or context read made by SQL interpolation, in order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InterpolationRead {
+    Environment(String),
+    Context(String),
+}
+
+/// Interpolated SQL (`None` when unchanged), its code-point substitution spans and its reads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterpolatedSql {
+    pub sql: Option<String>,
+    pub spans: Vec<crate::compiler::types::CharSpan>,
+    pub reads: Vec<InterpolationRead>,
+}
+
+/// The error interpolation stopped at, with the reads made before it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InterpolationFailure {
+    pub message: String,
+    pub reads: Vec<InterpolationRead>,
+}

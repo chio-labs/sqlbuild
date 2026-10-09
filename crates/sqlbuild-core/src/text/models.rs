@@ -105,6 +105,8 @@ impl<'text> LineIndex<'text> {
 pub struct PythonText {
     /// Inclusive code point ranges where `str.isalnum()` is true, in order.
     pub(crate) alnum_ranges: &'static [(u32, u32)],
+    /// Inclusive code point ranges where `str.isalpha()` is true, in order.
+    pub(crate) alpha_ranges: &'static [(u32, u32)],
     pub(crate) cleandoc_margin: CleandocMargin,
 }
 

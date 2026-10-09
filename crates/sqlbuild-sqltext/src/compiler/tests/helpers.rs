@@ -1,94 +1,19 @@
 use crate::compiler::_helpers::model_headers::tokenization::{
     MAX_TOKENIZER_WORKERS, TOKENIZER_WORKER_STACK_BYTES, build_tokenizer_pool, parse_batch,
 };
-use crate::compiler::_helpers::sql_interpolation::substitution::{
-    FALLBACK, SUBSTITUTED, UNCHANGED, UNCLOSED_BLOCK_COMMENT, UNCLOSED_QUOTE, UNKNOWN_VARIABLE,
-    substitute_batch,
-};
 use crate::compiler::_helpers::sql_references::extraction::extract;
 use crate::compiler::main::declaration_references::scan_declaration_references;
 use crate::compiler::main::model_header_single_parsing::parse_one;
+use crate::compiler::main::sql_interpolation::interpolate_sql;
 use crate::compiler::models::{
     AuthoredValue, DeclarationReferenceKind, DeclarationReferenceScan, DeclarationReferenceStop,
+    InterpolationRead,
 };
 use crate::compiler::tests::test_types::HeaderNestingTestCase;
+use crate::compiler::types::{CharSpan, InterpolationHost};
+use sqlbuild_core::text::main::python_text::python_text;
+use std::collections::BTreeMap;
 use std::thread;
-
-pub(crate) fn scalar_variables_preserve_lexical_boundaries() -> bool {
-    let sqls = vec![
-        "SELECT @@revision, '@@status', @@@window_start".to_owned(),
-        "-- @@revision\nSELECT /* @@status */ 1".to_owned(),
-        "SELECT '@@revision''s'".to_owned(),
-    ];
-    substitute_batch(
-        &sqls,
-        &[
-            ("revision".to_owned(), "7".to_owned()),
-            ("status".to_owned(), "ready".to_owned()),
-        ],
-    ) == vec![
-        (
-            SUBSTITUTED,
-            Some("SELECT 7, 'ready', @@@window_start".to_owned()),
-        ),
-        (UNCHANGED, None),
-        (SUBSTITUTED, Some("SELECT '7''s'".to_owned())),
-    ]
-}
-
-pub(crate) fn dynamic_or_malformed_sql_requests_fallback() -> bool {
-    let sqls = vec![
-        "SELECT @@ENV:USER, @@missing".to_owned(),
-        "SELECT @@missing, @@ENV:USER".to_owned(),
-        "SELECT '@@missing'".to_owned(),
-        "SELECT @@revision, 'unterminated".to_owned(),
-        "SELECT @@revision /* unterminated".to_owned(),
-        "SELECT @@révision".to_owned(),
-    ];
-    substitute_batch(&sqls, &[("revision".to_owned(), "7".to_owned())])
-        == vec![
-            (FALLBACK, None),
-            (UNKNOWN_VARIABLE, Some("missing".to_owned())),
-            (UNKNOWN_VARIABLE, Some("missing".to_owned())),
-            (UNCLOSED_QUOTE, None),
-            (UNCLOSED_BLOCK_COMMENT, None),
-            (FALLBACK, None),
-        ]
-}
-
-pub(crate) fn dollar_quoted_text_is_quoted_for_substitution() -> bool {
-    let sqls = vec![
-        "SELECT $$--@@region$$ AS x".to_owned(),
-        "SELECT $$ /* $$ AS a, '@@region' AS b -- */".to_owned(),
-        "SELECT $tag$ it's $$ -- @@region $tag$, @@region".to_owned(),
-        "SELECT price$1$ -- @@region\n, $1 /* @@region */".to_owned(),
-        "SELECT a$$b$$ -- @@region".to_owned(),
-    ];
-    substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
-        == vec![
-            (SUBSTITUTED, Some("SELECT $$--north$$ AS x".to_owned())),
-            (
-                SUBSTITUTED,
-                Some("SELECT $$ /* $$ AS a, 'north' AS b -- */".to_owned()),
-            ),
-            (
-                SUBSTITUTED,
-                Some("SELECT $tag$ it's $$ -- north $tag$, north".to_owned()),
-            ),
-            (UNCHANGED, None),
-            (UNCHANGED, None),
-        ]
-}
-
-pub(crate) fn unclosed_dollar_quote_stops_as_unclosed_quote() -> bool {
-    let sqls = vec![
-        "SELECT $tag$ @@region".to_owned(),
-        "SELECT @@region, $$ open".to_owned(),
-        "-- @@region\nSELECT $t$ closes with another tag $u$".to_owned(),
-    ];
-    substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
-        == vec![(UNCLOSED_QUOTE, None); sqls.len()]
-}
 
 pub(crate) fn simple_references_preserve_authored_order() -> bool {
     extract(
@@ -337,19 +262,87 @@ pub(crate) fn nesting_error_at(position: usize) -> String {
     format!("values nest deeper than 256 levels at position {position}")
 }
 
-pub(crate) fn doubled_backticks_close_one_segment_and_open_the_next() -> bool {
-    let sqls = vec![
-        "SELECT `@@zz``".to_owned(),
-        "SELECT `@@region``@@region`, '@@region''s'".to_owned(),
-        "SELECT `a``b` -- @@region".to_owned(),
-    ];
-    substitute_batch(&sqls, &[("region".to_owned(), "north".to_owned())])
-        == vec![
-            (UNKNOWN_VARIABLE, Some("zz".to_owned())),
-            (
-                SUBSTITUTED,
-                Some("SELECT `north``north`, 'north''s'".to_owned()),
-            ),
-            (UNCHANGED, None),
-        ]
+/// Variables, environment and context for interpolation tests.
+pub(crate) struct MapHost {
+    pub(crate) variables: BTreeMap<&'static str, Result<&'static str, &'static str>>,
+    pub(crate) environment: BTreeMap<&'static str, &'static str>,
+    pub(crate) context: Option<BTreeMap<&'static str, Option<&'static str>>>,
+}
+
+impl InterpolationHost for MapHost {
+    fn variable(&self, name: &str) -> Option<Result<String, String>> {
+        self.variables
+            .get(name)
+            .map(|value| value.map(str::to_owned).map_err(str::to_owned))
+    }
+
+    fn variable_names(&self) -> Vec<String> {
+        self.variables
+            .keys()
+            .map(|name| (*name).to_owned())
+            .collect()
+    }
+
+    fn environment(&self, name: &str) -> Result<Option<String>, String> {
+        Ok(self.environment.get(name).map(|value| (*value).to_owned()))
+    }
+
+    fn context_allowed(&self) -> bool {
+        self.context.is_some()
+    }
+
+    fn context(&self, name: &str) -> Option<Option<String>> {
+        self.context
+            .as_ref()?
+            .get(name)
+            .map(|value| value.map(str::to_owned))
+    }
+
+    fn context_names(&self) -> Vec<String> {
+        self.context
+            .iter()
+            .flat_map(BTreeMap::keys)
+            .map(|name| (*name).to_owned())
+            .collect()
+    }
+}
+
+/// A host with `region = north`, `revision = 7`, `REGION=eu` and context `this`, `this.schema`.
+pub(crate) fn interpolation_host(context: bool) -> MapHost {
+    MapHost {
+        variables: BTreeMap::from([
+            ("region", Ok("north")),
+            ("revision", Ok("7")),
+            ("größe", Ok("large")),
+            ("layout", Err("SQL variable '@@layout' is an object")),
+        ]),
+        environment: BTreeMap::from([("REGION", "eu"), ("ÜBER", "yes")]),
+        context: context.then(|| {
+            BTreeMap::from([
+                ("this", Some("orders")),
+                ("this.schema", Some("sales")),
+                ("run_id", None),
+            ])
+        }),
+    }
+}
+
+/// Interpolate `sql` as `models/orders.sql`: the rendered SQL or the error message.
+pub(crate) fn interpolated(host: &MapHost, sql: &str) -> Result<String, String> {
+    let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
+    interpolate_sql(python, host, sql, "models/orders.sql")
+        .map(|result| result.sql.unwrap_or_else(|| sql.to_owned()))
+        .map_err(|failure| failure.message)
+}
+
+/// The spans and reads of interpolating `sql`.
+pub(crate) fn interpolation_facts(
+    host: &MapHost,
+    sql: &str,
+) -> (Vec<CharSpan>, Vec<InterpolationRead>) {
+    let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
+    match interpolate_sql(python, host, sql, "models/orders.sql") {
+        Ok(result) => (result.spans, result.reads),
+        Err(failure) => (Vec::new(), failure.reads),
+    }
 }

@@ -13,12 +13,12 @@ pub enum Expression {
     },
 }
 
-/// A value whose text Python's `str()` produces without calling user code.
+/// A value as the Python resolver compares and tests it: `None`, a `bool` or its `str()`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Scalar {
     Null,
     Bool(bool),
-    /// An exact `str` or the decimal digits of an exact `int`.
+    /// The value's `str()`.
     Text(String),
 }
 
@@ -38,8 +38,8 @@ pub enum TemplateFailure {
     Missing(TemplateError),
     /// Another error Python raises for this template.
     Invalid(TemplateError),
-    /// Python expands this template with rules the native expansion does not reproduce.
-    Unsupported,
+    /// The host raised an error of its own, which it holds and reports.
+    Host,
 }
 
 /// How evaluation treats `CTX:` references, mirroring the Python resolver's flags.

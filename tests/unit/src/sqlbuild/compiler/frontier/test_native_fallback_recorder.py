@@ -20,15 +20,15 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeFallback
         NativeFallbackRecorderTestCase(
             description="counts_per_site_and_kind_sorted",
             recorded=(
-                (NativeFallbackSite.SQL_VARIABLES, "deferred"),
+                (NativeFallbackSite.CONFIG_BUILD, "deferred"),
                 (NativeFallbackSite.REFERENCE_SCAN, "deferred"),
-                (NativeFallbackSite.SQL_VARIABLES, "deferred"),
-                (NativeFallbackSite.SQL_VARIABLES, "error"),
+                (NativeFallbackSite.CONFIG_BUILD, "deferred"),
+                (NativeFallbackSite.CONFIG_BUILD, "error"),
             ),
             expected_files=[
                 [
-                    ["model_loop.sql_variables", "deferred", 2],
-                    ["model_loop.sql_variables", "error", 1],
+                    ["model_config.build", "deferred", 2],
+                    ["model_config.build", "error", 1],
                     ["reference_extraction.scan", "deferred", 1],
                 ]
             ],

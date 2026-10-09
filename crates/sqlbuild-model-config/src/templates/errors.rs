@@ -32,4 +32,6 @@ pub enum TemplateError {
         quote: &'static str,
         position: usize,
     },
+    /// An error the host worded, such as a value that cannot be interpolated as text.
+    Message(String),
 }
