@@ -99,6 +99,16 @@ pub(crate) fn top_level_ctes(
         index = try_consume_keyword(sql, index, b"AS")?
             .ok_or_else(|| failed(text, "expected keyword AS".to_owned()))?;
         index = skip_ignorable(sql, index, text, syntax)?;
+        if let Some(hint) = materialization_hint(sql, index, text, syntax)? {
+            return Err(failed(
+                text,
+                format!(
+                    "CTE '{name}' must not use AS {hint}; materialization hints are not supported \
+                     in {} CTEs",
+                    context_label(text.source)
+                ),
+            ));
+        }
         if sql.get(index) != Some(&b'(') {
             return Err(failed(text, format!("CTE '{name}' must use AS (...)")));
         }
@@ -124,6 +134,23 @@ pub(crate) fn top_level_ctes(
                 .to_owned(),
         ));
     }
+}
+
+/// The `MATERIALIZED` or `NOT MATERIALIZED` hint after a CTE's `AS`, if any.
+fn materialization_hint(
+    sql: &[u8],
+    start: usize,
+    text: &ScanText<'_>,
+    syntax: &LexicalSyntax,
+) -> Scan<Option<&'static str>> {
+    if try_consume_keyword(sql, start, b"MATERIALIZED")?.is_some() {
+        return Ok(Some("MATERIALIZED"));
+    }
+    let Some(not_end) = try_consume_keyword(sql, start, b"NOT")? else {
+        return Ok(None);
+    };
+    let index = skip_ignorable(sql, not_end, text, syntax)?;
+    Ok(try_consume_keyword(sql, index, b"MATERIALIZED")?.map(|_| "NOT MATERIALIZED"))
 }
 
 fn context_label(source: RelationshipSource) -> &'static str {

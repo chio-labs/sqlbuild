@@ -110,6 +110,14 @@ fn given_sql_test_when_scanning_expected_models_then_names_and_errors_match_pyth
             ),
         },
         ExpectedNamesTestCase {
+            description: "a materialization hint raises Python's error",
+            sql: "WITH __expected__a AS not  MATERIALIZED (SELECT 1) SELECT 1",
+            expected_outcome: failed(
+                "SQL test 'tests/unit/test_orders.sql' CTE '__expected__a' must not use AS NOT \
+                 MATERIALIZED; materialization hints are not supported in SQL test CTEs",
+            ),
+        },
+        ExpectedNamesTestCase {
             description: "an unclosed quote inside a body raises Python's error",
             sql: "WITH __expected__a AS (SELECT 'open) SELECT 1",
             expected_outcome: failed("SQL test contains an unclosed quoted string"),

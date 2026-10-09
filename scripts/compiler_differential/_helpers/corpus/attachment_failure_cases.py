@@ -204,4 +204,54 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
                 f"{_EXPECTED_STAGING}\nSELECT 1\n"
             },
         ),
+        failure_case(
+            name="scenario-quoted-cte-name",
+            expected_code="P001",
+            expected_message=(
+                f"SQL scenario '{_SCENARIO_PATH}' CTE name \"__source__raw_orders\" must be an "
+                "unquoted identifier of ASCII letters, digits and underscores"
+            ),
+            expected_help=(
+                "rename the CTE, for example __source__raw_orders; quoted CTE names and names "
+                "with $ or non-ASCII characters are not supported"
+            ),
+            files={
+                _SCENARIO_PATH: _scenario(
+                    '"__source__raw_orders" AS (\n  SELECT 1 AS order_id\n)', _EXPECTED_STAGING
+                )
+            },
+        ),
+        failure_case(
+            name="scenario-materialized-cte",
+            expected_code="P001",
+            expected_message=(
+                f"SQL scenario '{_SCENARIO_PATH}' CTE '__source__raw_orders' must not use AS "
+                "MATERIALIZED; materialization hints are not supported in SQL scenario CTEs"
+            ),
+            expected_help="remove MATERIALIZED and write __source__raw_orders AS (...)",
+            files={
+                _SCENARIO_PATH: _scenario(
+                    "__source__raw_orders AS MATERIALIZED (\n  SELECT 1 AS order_id\n)",
+                    _EXPECTED_STAGING,
+                )
+            },
+        ),
+        failure_case(
+            name="macro-test-quoted-cte-name",
+            expected_code="P001",
+            expected_message=(
+                f"SQL test '{_TEST_PATH}' CTE name \"__macro_actual__\" must be an unquoted "
+                "identifier of ASCII letters, digits and underscores"
+            ),
+            expected_help=(
+                "rename the CTE, for example __macro_actual__; quoted CTE names and names with "
+                "$ or non-ASCII characters are not supported"
+            ),
+            files={
+                "macros/amounts.py": "def doubled(value):\n    return f'{value} * 2'\n",
+                _TEST_PATH: 'TEST (mode macro, name "doubled");\n\nWITH\n'
+                "\"__macro_actual__\" AS (\n  SELECT @doubled('1') AS amount\n),\n"
+                "__macro_expected__ AS (\n  SELECT 2 AS amount\n)\nSELECT 1\n",
+            },
+        ),
     )

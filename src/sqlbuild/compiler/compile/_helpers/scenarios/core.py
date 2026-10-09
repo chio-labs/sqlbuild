@@ -7,9 +7,6 @@ from typing import Any
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.analysis.ctes import (
-    extract_top_level_ctes_with_sql_analysis,
-)
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     _require_prefixed_name,
     _skip_ignorable,
@@ -54,36 +51,15 @@ def extract_sql_scenario_ctes(
     )
     if native_ctes is not None:
         return native_ctes
-    try:
-        ctes: tuple[CompileSqlScenarioCte, ...] = extract_top_level_ctes_with_scanner(
-            sql=sql,
-            file_label=file_label,
-            context_label=_CONTEXT,
-            with_requirement=_WITH_REQUIREMENT,
-            cte_type=CompileSqlScenarioCte,
-            syntax=syntax,
-        )
-    except CompileInputError as scanner_error:
-        polyglot_ctes: tuple[CompileSqlScenarioCte, ...] | None = _polyglot_scenario_ctes(
-            sql=sql, file_label=file_label
-        )
-        if polyglot_ctes is None:
-            raise scanner_error from None
-        ctes = polyglot_ctes
-    return _classify_sql_scenario_ctes(ctes=ctes, file_label=file_label, syntax=syntax)
-
-
-def _polyglot_scenario_ctes(
-    *, sql: str, file_label: str
-) -> tuple[CompileSqlScenarioCte, ...] | None:
-    cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sql_analysis(
+    ctes: tuple[CompileSqlScenarioCte, ...] = extract_top_level_ctes_with_scanner(
         sql=sql,
         file_label=file_label,
         context_label=_CONTEXT,
+        with_requirement=_WITH_REQUIREMENT,
+        cte_type=CompileSqlScenarioCte,
+        syntax=syntax,
     )
-    if cte_values is None:
-        return None
-    return tuple(CompileSqlScenarioCte(name=name, sql_body=body) for name, body in cte_values)
+    return _classify_sql_scenario_ctes(ctes=ctes, file_label=file_label, syntax=syntax)
 
 
 def _native_scenario_ctes(
@@ -101,7 +77,7 @@ def _native_scenario_ctes(
         return None
     try:
         return _scenario_from_native_outcome(
-            outcome=orjson.loads(response), sql=sql, file_label=file_label, syntax=syntax
+            outcome=orjson.loads(response), file_label=file_label, syntax=syntax
         )
     except CompileInputError as error:
         error.bridge_independent = True
@@ -109,18 +85,10 @@ def _native_scenario_ctes(
 
 
 def _scenario_from_native_outcome(
-    *, outcome: dict[str, Any], sql: str, file_label: str, syntax: SqlLexicalSyntax
+    *, outcome: dict[str, Any], file_label: str, syntax: SqlLexicalSyntax
 ) -> CompileSqlScenarioCtes:
-    """Build the native outcome, running only Python's Polyglot steps the native scan leaves."""
+    """Build the native outcome, running Python's independence check only where it parses."""
 
-    scan_error: str | None = outcome.get("scanError")
-    if scan_error is not None:
-        polyglot_ctes: tuple[CompileSqlScenarioCte, ...] | None = _polyglot_scenario_ctes(
-            sql=sql, file_label=file_label
-        )
-        if polyglot_ctes is None:
-            raise CompileInputError(scan_error)
-        return _classify_sql_scenario_ctes(ctes=polyglot_ctes, file_label=file_label, syntax=syntax)
     independence: list[list[str]] | None = outcome.get("independence")
     if independence is not None:
         validate_independent_expected_and_assertion_ctes(

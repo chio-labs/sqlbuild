@@ -21,6 +21,7 @@ def build_sql_scenario_file(
     contents: str,
     file_path: Path,
     relative_path: Path,
+    sql_body_span: tuple[int, int] | None = None,
 ) -> DiscoveredSqlScenarioFile:
     """Validate a header-parsed SCENARIO file with only supported keys and build its record."""
 
@@ -43,6 +44,7 @@ def build_sql_scenario_file(
         contents=contents,
         header_values=header_values,
         sql_body=sql_body,
+        sql_body_span=sql_body_span,
         name=file_path.stem,
         ownership_root=Path(SQL_SCENARIOS_OWNERSHIP_ROOT),
     )
