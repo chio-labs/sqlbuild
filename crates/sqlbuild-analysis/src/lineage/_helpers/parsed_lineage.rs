@@ -26,25 +26,6 @@ pub(crate) fn proxy_parse_options() -> Result<ParseOptions, serde_json::Error> {
     })
 }
 
-/// Python's `parse_one(dialect=dialect or "generic")` dialect, if this parser build carries it.
-pub(crate) fn lineage_dialect(name: Option<&str>) -> Option<DialectType> {
-    let name = name.filter(|name| !name.is_empty()).unwrap_or("generic");
-    let Ok(dialect) = name.parse::<DialectType>() else {
-        return None;
-    };
-    matches!(
-        dialect,
-        DialectType::Generic
-            | DialectType::PostgreSQL
-            | DialectType::BigQuery
-            | DialectType::Snowflake
-            | DialectType::DuckDB
-            | DialectType::TSQL
-            | DialectType::Databricks
-    )
-    .then_some(dialect)
-}
-
 pub(crate) struct ParsedModel<'a> {
     pub(crate) query_sql: &'a str,
     pub(crate) inferred_names: &'a [String],

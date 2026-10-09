@@ -144,6 +144,20 @@ def validate_hook_sql_syntax(
             )
 
 
+def hook_sql_statements(value: object) -> tuple[str, ...]:
+    """Return the hook SQL strings `validate_hook_sql_syntax` validates, in its order."""
+
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, SqlHookEntry):
+        return hook_sql_statements(value.statement)
+    statements: list[str] = []
+    if isinstance(value, list | tuple):
+        for item in value:
+            statements.extend(hook_sql_statements(item))
+    return tuple(statements)
+
+
 def validate_source_expression_syntax(
     *,
     expression: str,

@@ -12,6 +12,7 @@ from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
+from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
 )
@@ -32,7 +33,7 @@ _ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
         NativeAnalysisSeamTestCase(
             description="models_contracts_lineage_and_sql_tests",
             expected_preview_returns={
-                "assemble_native_project": [None],
+                "assemble_native_project_resources": [ANY],
                 "infer_native_expression_source_shapes": [ANY],
                 "analyze_native_model_sql": [ANY],
                 "assemble_native_sql_tests": [None],
@@ -79,6 +80,7 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
         test_case.expected_preview_returns,
     )
     assert isinstance(preview_seams["build_native_column_lineage"][0], ProjectColumnLineage)
+    assert isinstance(preview_seams["assemble_native_project_resources"][0], NativeProjectResources)
     assert isinstance(preview_seams["analyze_native_model_sql"][0], dict)
     assert isinstance(preview_seams["infer_native_expression_source_shapes"][0], tuple)
     planned_artifacts: object = preview_seams["plan_native_sql_test_artifacts"][0]

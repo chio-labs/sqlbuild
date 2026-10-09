@@ -703,6 +703,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlbuild-core",
+ "sqlbuild-model-config",
  "sqlbuild-scopes",
  "sqlbuild-sqltext",
 ]
