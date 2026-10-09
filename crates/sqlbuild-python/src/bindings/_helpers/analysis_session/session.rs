@@ -4,14 +4,16 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::main::expression_shapes::expression_shapes;
 use sqlbuild_analysis::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
-use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contract::prove_dynamic_contract;
+use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
+use sqlbuild_analysis::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use sqlbuild_analysis::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, Deferral, DeferredAnalysis, DynamicFamily, ExpressionShape,
-    ExpressionShapeRequest, LineageFacts, LineageRow, ModelOutcome, ModelReference, ModelRequest,
-    PivotOutcome, PivotRequest, SessionOutcome, SessionRequest, SessionStep,
+    ExpressionShapeRequest, FinishedSession, LineageFacts, LineageRow, ModelOutcome,
+    ModelReference, ModelRequest, PivotBatchRequest, PivotModel, PivotOutcome, PivotTables,
+    SessionOutcome, SessionRequest, SessionStep,
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::semantic_validation::types::DiagnosticRow;
@@ -97,15 +99,16 @@ type ProofRow = (
     Option<String>,
     bool,
 );
-/// The dialect, relation facts, families by table, SQL and families of one pivot proof.
+/// One model's pivot SQL and declared families.
+type PivotModelRow = (String, Vec<FamilyRow>);
+/// The dialect, relation facts and families by table every proof reads, and the models.
 type PivotRequestRow = (
     String,
     Shapes,
     Shapes,
     Shapes,
     Vec<(String, Vec<FamilyRow>)>,
-    String,
-    Vec<FamilyRow>,
+    Vec<PivotModelRow>,
 );
 /// `("absent" | "deferred" | "proof", proof)`.
 type ContractRow = (&'static str, Option<ProofRow>);
@@ -116,6 +119,7 @@ type FinishRow = (Vec<OutcomeRow>, Shapes, Vec<String>, Vec<ContractRow>);
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct NativeModelAnalysisSession {
     inner: Option<AnalysisSession>,
+    finished: Option<FinishedSession>,
     failure: Option<String>,
 }
 
@@ -162,9 +166,24 @@ impl NativeModelAnalysisSession {
     /// Every model's outcome once the session is done, or None to analyse in Python.
     fn finish(&mut self) -> Option<FinishRow> {
         let session: AnalysisSession = self.inner.take()?;
-        let outcome: Result<FinishRow, String> =
-            catch_compiler_panic(|| finish_analysis_session(session).map(finish_row));
-        self.kept(outcome)
+        let outcome = catch_compiler_panic(|| finish_analysis_session(session));
+        let (outcome, finished) = self.kept(outcome)?;
+        self.finished = Some(finished);
+        Some(finish_row(outcome))
+    }
+
+    /// Each model's dynamic pivot proof from the finished session's tables, or None for Python.
+    fn prove_dynamic_contracts(
+        &self,
+        py: Python<'_>,
+        models: Vec<PivotModelRow>,
+    ) -> Option<Vec<ContractRow>> {
+        let session: &FinishedSession = self.finished.as_ref()?;
+        let models: Vec<PivotModel> = models.into_iter().map(pivot_model).collect();
+        match py.compiler_detach(|| prove_finished_dynamic_contracts(session, &models)) {
+            Ok(outcomes) => Some(outcomes.into_iter().map(contract_row).collect()),
+            Err(_) => None,
+        }
     }
 
     /// Why the session handed the analysis back to Python, when it did.
@@ -188,6 +207,7 @@ fn start_model_analysis_session(
         .map_err(compiler_error)?;
     Ok(session.map(|session| NativeModelAnalysisSession {
         inner: Some(session),
+        finished: None,
         failure: None,
     }))
 }
@@ -425,28 +445,42 @@ fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
     )
 }
 
-/// One model's dynamic pivot proof, or `("deferred", None)` for Python's proof.
+/// Each model's dynamic pivot proof outside any session, or None for Python's proofs.
 #[pyfunction]
-fn prove_dynamic_column_contract(py: Python<'_>, request: PivotRequestRow) -> ContractRow {
-    let (dialect, column_types, authoritative_types, column_nullability, by_table, sql, families) =
+fn prove_dynamic_column_contracts(
+    py: Python<'_>,
+    request: PivotRequestRow,
+) -> Option<Vec<ContractRow>> {
+    let (dialect, column_types, authoritative_types, column_nullability, by_table, models) =
         request;
-    let request = PivotRequest {
-        dialect,
-        column_types,
-        authoritative_types,
-        column_nullability,
-        families_by_table: families_by_table(by_table),
+    let request = PivotBatchRequest {
+        tables: PivotTables {
+            dialect,
+            column_types,
+            authoritative_types,
+            column_nullability,
+            families_by_table: families_by_table(by_table),
+        },
+        models: models.into_iter().map(pivot_model).collect(),
+    };
+    match py.compiler_detach(|| prove_dynamic_contracts(&request)) {
+        Ok(outcomes) => Some(outcomes.into_iter().map(contract_row).collect()),
+        Err(_) => None,
+    }
+}
+
+fn pivot_model(row: PivotModelRow) -> PivotModel {
+    let (sql, families) = row;
+    PivotModel {
         sql,
         families: families.into_iter().map(dynamic_family).collect(),
-    };
-    py.compiler_detach(|| prove_dynamic_contract(&request))
-        .map_or(("deferred", None), contract_row)
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelAnalysisSession>()?;
     module.add_function(wrap_pyfunction!(start_model_analysis_session, module)?)?;
     module.add_function(wrap_pyfunction!(infer_expression_source_shapes, module)?)?;
-    module.add_function(wrap_pyfunction!(prove_dynamic_column_contract, module)?)?;
+    module.add_function(wrap_pyfunction!(prove_dynamic_column_contracts, module)?)?;
     Ok(())
 }

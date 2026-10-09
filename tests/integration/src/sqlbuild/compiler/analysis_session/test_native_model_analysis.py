@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pickle
 import random
 from collections import Counter
 from dataclasses import replace
@@ -18,20 +19,23 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompileProjectInputs,
-    DynamicColumnContractProof,
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
+from sqlbuild.rule_engine._helpers.engine.custom_rules import host_project
+from sqlbuild.rule_engine._helpers.host.custom_host_pool import host_payload_project
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AnalysisFallbackTestCase,
     GeneratedAnalysisParityTestCase,
+    HostPayloadTestCase,
     SessionFailureTestCase,
     StandalonePivotProofTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     AnalysisParity,
     FailingProvideSession,
+    NativePivotProofs,
     analysis_request,
     compare_analyses,
     compile_inputs,
@@ -97,6 +101,7 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     assert parity.expression_shapes >= test_case.expected_minimum_expression_shapes
     assert parity.pivot_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.standalone_proofs >= test_case.expected_minimum_pivot_proofs
+    assert parity.session_proofs >= test_case.expected_minimum_pivot_proofs
     assert parity.proven_pivots >= test_case.expected_minimum_proven_pivots
     assert (
         kinds["analysis_session:input_enrichment"]
@@ -199,12 +204,24 @@ def test_given_session_failure_after_deferrals_when_analysing_then_records_only_
             description="a selection that leaves the pivots out of model analysis",
             analysed_models=frozenset({"orders_list"}),
             expected_native_proofs=2,
+            expected_session_answers=[True, True],
             expected_proven_by_model={
                 "orders_list": None,
                 "status_amounts": True,
                 "status_passthrough": True,
             },
-        )
+        ),
+        StandalonePivotProofTestCase(
+            description="no model analysis, so the proofs run without a session",
+            analysed_models=frozenset(),
+            expected_native_proofs=2,
+            expected_session_answers=[False, False],
+            expected_proven_by_model={
+                "orders_list": None,
+                "status_amounts": True,
+                "status_passthrough": True,
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -215,7 +232,7 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
         project_dir=tmp_path / "project", files=pivot_project_files()
     )
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
-    proofs: list[DynamicColumnContractProof | None] = native_pivot_proofs(monkeypatch=monkeypatch)
+    recorded: NativePivotProofs = native_pivot_proofs(monkeypatch=monkeypatch)
 
     project: CompiledProject = assemble_compiled_project(
         inputs=inputs,
@@ -224,13 +241,51 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     )
 
     assert (
-        all(proof is not None for proof in proofs),
-        len(proofs),
+        all(proof is not None for proof in recorded.proofs),
+        len(recorded.proofs),
+        recorded.session_answers,
         {
             model.name: getattr(model.dynamic_column_contract, "output_proven", None)
             for model in project.models
         },
-    ) == (True, test_case.expected_native_proofs, test_case.expected_proven_by_model)
+    ) == (
+        True,
+        test_case.expected_native_proofs,
+        test_case.expected_session_answers,
+        test_case.expected_proven_by_model,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HostPayloadTestCase(
+            description="a pivot project analysed in one native session",
+            expected_models=("orders_list", "status_amounts", "status_passthrough"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_session_when_publishing_rule_host_payload_then_session_is_dropped(
+    test_case: HostPayloadTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inputs: CompileProjectInputs = compile_inputs(
+        project_dir=tmp_path / "project", files=pivot_project_files()
+    )
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
+    project: CompiledProject = assemble_compiled_project(
+        inputs=inputs, inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb")
+    )
+
+    payload: CompiledProject = pickle.loads(
+        pickle.dumps(host_payload_project(host_project(project)))
+    )
+
+    assert project.native_session is not None
+    assert (payload.native_session, tuple(sorted(model.name for model in payload.models))) == (
+        None,
+        test_case.expected_models,
+    )
 
 
 if __name__ == "__main__":

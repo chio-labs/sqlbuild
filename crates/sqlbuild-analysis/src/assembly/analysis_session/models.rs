@@ -1,6 +1,9 @@
 //! Plain-data request, deferrals and outcomes of the native model analysis session.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+
+use rayon::ThreadPool;
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
@@ -61,16 +64,35 @@ pub struct ContractProof {
     pub bare_dynamic_pivot: bool,
 }
 
-/// One model's dynamic pivot proof inputs, for a model the session does not analyse.
+/// The relation facts every dynamic pivot proof reads: Python's tables before analysis.
 #[derive(Debug, Clone, Default)]
-pub struct PivotRequest {
+pub struct PivotTables {
     pub dialect: String,
     pub column_types: Shapes,
     pub authoritative_types: Shapes,
     pub column_nullability: Shapes,
     pub families_by_table: Vec<(String, Vec<DynamicFamily>)>,
+}
+
+/// One model's pivot SQL and declared families.
+#[derive(Debug, Clone, Default)]
+pub struct PivotModel {
     pub sql: String,
     pub families: Vec<DynamicFamily>,
+}
+
+/// Dynamic pivot proofs for models no session analysed.
+#[derive(Debug, Clone, Default)]
+pub struct PivotBatchRequest {
+    pub tables: PivotTables,
+    pub models: Vec<PivotModel>,
+}
+
+/// A finished session's pivot tables and analysis pool, kept to prove models outside it.
+#[derive(Debug)]
+pub struct FinishedSession {
+    pub(crate) tables: PivotTables,
+    pub(crate) pool: Result<Arc<ThreadPool>, String>,
 }
 
 /// A model's dynamic pivot proof: none declared, left to Python, or proven natively.

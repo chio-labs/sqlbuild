@@ -48,4 +48,13 @@ class StandalonePivotProofTestCase:
     description: str
     analysed_models: frozenset[str]
     expected_native_proofs: int
+    expected_session_answers: list[bool]
     expected_proven_by_model: dict[str, bool | None]
+
+
+@dataclass(frozen=True)
+class HostPayloadTestCase:
+    """A natively analysed project that custom-rule hosts receive without its native session."""
+
+    description: str
+    expected_models: tuple[str, ...]

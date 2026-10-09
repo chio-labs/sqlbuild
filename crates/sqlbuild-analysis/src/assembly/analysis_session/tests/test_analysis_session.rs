@@ -1,8 +1,10 @@
-use crate::assembly::analysis_session::main::prove_dynamic_contract::prove_dynamic_contract;
+use crate::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
+use crate::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
-    catalog, failed, model_requests, orders_request, pivot_request, proven, session_lines,
+    catalog, failed, finished_session, model_requests, orders_request, pivot_request, proven,
+    session_lines,
 };
 use crate::assembly::analysis_session::tests::test_types::{
     PivotTestCase, SessionTestCase, UnscheduledTestCase,
@@ -281,11 +283,21 @@ fn given_dynamic_pivots_when_proving_then_matches_python_or_defers() {
     ];
     for test_case in test_cases {
         let request = pivot_request(test_case.dialect, test_case.sql, test_case.family);
+        let session = finished_session(request.tables.clone());
 
-        let outcome = prove_dynamic_contract(&request).expect("the proof runs");
+        let standalone = prove_dynamic_contracts(&request).expect("the proofs run");
+        let in_session =
+            prove_finished_dynamic_contracts(&session, &request.models).expect("the proofs run");
 
         assert_eq!(
-            outcome, test_case.expected_outcome,
+            standalone,
+            vec![test_case.expected_outcome.clone(), PivotOutcome::Absent],
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            in_session,
+            vec![test_case.expected_outcome, PivotOutcome::Absent],
             "{}",
             test_case.description
         );

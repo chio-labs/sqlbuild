@@ -1,7 +1,9 @@
 //! The session's phases: Python's uncached model analysis, wave by wave.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use rayon::ThreadPool;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
@@ -21,8 +23,9 @@ use crate::assembly::analysis_session::constants::{
     DEFERRAL_ANALYSIS, DEFERRAL_ENRICHMENT, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, LineageFacts, ModelAnalysis,
-    ModelOutcome, ModelRequest, Phase, PivotOutcome, SessionOutcome, SessionRequest, SessionStep,
+    AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, FinishedSession,
+    LineageFacts, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables,
+    SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -148,23 +151,36 @@ impl AnalysisSession {
     }
 
     /// Every model's outcome and the binding catalog changes Python records.
-    pub(crate) fn finish(self) -> Result<SessionOutcome, String> {
+    pub(crate) fn finish(self) -> Result<(SessionOutcome, FinishedSession), String> {
         if !matches!(self.phase, Phase::Done) {
             return Err("the session has not finished".to_owned());
         }
         let dynamic_contracts: Vec<PivotOutcome> = self.dynamic_contracts()?;
+        let pool: Result<Arc<ThreadPool>, String> = self.catalog.native.analysis_pool();
         let models: Vec<ModelOutcome> = self
             .outcomes
             .into_iter()
             .collect::<Option<_>>()
             .ok_or("the session left a model unanalysed")?;
         let (schema_additions, analysis_names) = self.catalog.into_changes();
-        Ok(SessionOutcome {
+        let request: SessionRequest = self.request;
+        let finished = FinishedSession {
+            tables: PivotTables {
+                dialect: request.dialect,
+                column_types: request.column_types,
+                authoritative_types: request.complete_schemas,
+                column_nullability: request.column_nullability,
+                families_by_table: request.dynamic_families_by_table,
+            },
+            pool,
+        };
+        let outcome = SessionOutcome {
             models,
             schema_additions,
             analysis_names,
             dynamic_contracts,
-        })
+        };
+        Ok((outcome, finished))
     }
 
     /// Python's dynamic pivot proof of each model over the relation facts before analysis.

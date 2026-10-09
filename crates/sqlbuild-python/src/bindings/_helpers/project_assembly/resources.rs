@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 use sqlbuild_analysis::assembly::project::main::assemble_project_resources::assemble_project_resources;
+use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
 use sqlbuild_analysis::assembly::project::models::{
     AuditFacts, InputRead, ModelFacts, Namespace, ProjectRequest, ProjectResources, Reference,
     SeedDefaults, SeedFacts, SourceFacts, SyntaxCheck, TargetNamespace, Variable,
@@ -80,6 +81,23 @@ fn assemble_project_resource_facts(
     let request: ProjectRequest = project_request(request);
     match py.compiler_detach(|| assemble_project_resources(&request)) {
         Ok(resources) => (Some(resources_row(resources)), None),
+        Err(reason) => (None, Some(reason)),
+    }
+}
+
+/// Whether every `(sql, placeholders)` parses, or None with the reason Python must check it.
+#[pyfunction]
+fn check_native_sql_syntax(
+    py: Python<'_>,
+    request: (String, Vec<(String, Pairs)>),
+) -> (Option<bool>, Option<String>) {
+    let (dialect, rows) = request;
+    let checks: Vec<SyntaxCheck> = rows
+        .into_iter()
+        .map(|(sql, placeholders)| SyntaxCheck { sql, placeholders })
+        .collect();
+    match py.compiler_detach(|| check_sql_syntax(&dialect, &checks)) {
+        Ok(valid) => (Some(valid), None),
         Err(reason) => (None, Some(reason)),
     }
 }
@@ -203,5 +221,6 @@ fn namespace_row(namespace: Namespace) -> NamespaceRow {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(assemble_project_resource_facts, module)?)?;
+    module.add_function(wrap_pyfunction!(check_native_sql_syntax, module)?)?;
     Ok(())
 }

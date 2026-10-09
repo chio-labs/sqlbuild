@@ -1,7 +1,10 @@
 use crate::assembly::project::models::InputRead;
-use crate::assembly::project::tests::helpers::{deps, namespace, seed, seed_reads, source, valid};
+use crate::assembly::project::tests::helpers::{
+    all_valid, deps, namespace, seed, seed_reads, source, valid,
+};
 use crate::assembly::project::tests::test_types::{
-    DepsTestCase, EnvironmentTestCase, SeedTestCase, SourceTestCase, SyntaxTestCase, keys,
+    DepsTestCase, EnvironmentTestCase, SeedTestCase, SourceTestCase, SyntaxBatchTestCase,
+    SyntaxTestCase, keys,
 };
 
 #[test]
@@ -285,5 +288,36 @@ fn given_environment_templates_when_resolving_seeds_then_matches_python_values_a
             test_case.description
         );
         assert_eq!(reads, test_case.expected_reads, "{}", test_case.description);
+    }
+}
+
+#[test]
+fn given_sql_batches_when_checking_syntax_then_stops_at_python_first_rejection_or_defers() {
+    let test_cases = [
+        SyntaxBatchTestCase {
+            description: "every statement parses",
+            sqls: &["SELECT @@@x AS a", "SELECT 2"],
+            expected_valid: Some(true),
+        },
+        SyntaxBatchTestCase {
+            description: "a later statement Python rejects",
+            sqls: &["SELECT 1", "SELECT FROM WHERE ("],
+            expected_valid: Some(false),
+        },
+        SyntaxBatchTestCase {
+            description: "Python stops at the rejection before a statement native defers",
+            sqls: &["SELECT FROM WHERE (", "SELECT @@@x\u{e9}"],
+            expected_valid: Some(false),
+        },
+        SyntaxBatchTestCase {
+            description: "a statement native defers before any rejection",
+            sqls: &["SELECT @@@x\u{e9}", "SELECT FROM WHERE ("],
+            expected_valid: None,
+        },
+    ];
+    for test_case in test_cases {
+        let valid = all_valid(test_case.sqls);
+
+        assert_eq!(valid, test_case.expected_valid, "{}", test_case.description);
     }
 }

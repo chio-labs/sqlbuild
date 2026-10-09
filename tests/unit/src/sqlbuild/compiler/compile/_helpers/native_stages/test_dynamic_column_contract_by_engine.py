@@ -44,6 +44,7 @@ _ANALYSIS: PolyglotAnalysisResult = PolyglotAnalysisResult(analysis_succeeded=Tr
     (
         DynamicColumnContractDispatchTestCase(
             description="native analysis proof replaces the python proof",
+            native_proof=None,
             sql_analysis=ModelSqlAnalysis(
                 polyglot_analysis=_ANALYSIS,
                 placeholders=None,
@@ -55,6 +56,7 @@ _ANALYSIS: PolyglotAnalysisResult = PolyglotAnalysisResult(analysis_succeeded=Tr
         ),
         DynamicColumnContractDispatchTestCase(
             description="analysis without a proof falls back to the python proof",
+            native_proof=None,
             sql_analysis=ModelSqlAnalysis(polyglot_analysis=_ANALYSIS, placeholders=None),
             dialect="bigquery",
             families=(_FAMILY,),
@@ -62,13 +64,23 @@ _ANALYSIS: PolyglotAnalysisResult = PolyglotAnalysisResult(analysis_succeeded=Tr
         ),
         DynamicColumnContractDispatchTestCase(
             description="unanalyzed model falls back to the python proof",
+            native_proof=None,
             sql_analysis=None,
             dialect="bigquery",
             families=(_FAMILY,),
             expected_proof=_PYTHON_UNSUPPORTED_PROOF,
         ),
         DynamicColumnContractDispatchTestCase(
+            description="a batched native proof answers an unanalyzed model",
+            native_proof=_NATIVE_PROOF,
+            sql_analysis=None,
+            dialect="bigquery",
+            families=(_FAMILY,),
+            expected_proof=_NATIVE_PROOF,
+        ),
+        DynamicColumnContractDispatchTestCase(
             description="model without dynamic families has no proof",
+            native_proof=None,
             sql_analysis=ModelSqlAnalysis(polyglot_analysis=_ANALYSIS, placeholders=None),
             dialect="snowflake",
             families=(),
@@ -82,6 +94,7 @@ def test_given_model_analysis_when_proving_dynamic_contract_then_native_proof_ta
 ) -> None:
     proof: DynamicColumnContractProof | None = dynamic_column_contract_by_engine(
         sql_analysis=test_case.sql_analysis,
+        native_proof=test_case.native_proof,
         python_proof=partial(
             analyze_dynamic_column_contract,
             query_sql="SELECT * FROM order_amounts",
