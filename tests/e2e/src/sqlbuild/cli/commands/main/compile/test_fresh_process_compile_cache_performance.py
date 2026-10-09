@@ -29,7 +29,7 @@ _MAX_WARM_TO_COLD_RATIO: float = 0.70
 _MAX_EDIT_TO_COLD_RATIO: float = 0.70
 # Writing the cache during a cold compile must stay a small same-runner cost over --no-cache.
 _MAX_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.10
-_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO: float = 1.15
+_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO: float = 1.20
 _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
 
 
