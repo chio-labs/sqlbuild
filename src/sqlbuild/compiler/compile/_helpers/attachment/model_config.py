@@ -1001,7 +1001,7 @@ def native_model_validation(
 def native_validation_error(
     *, error: _native.NativeConfigError, values: dict[str, object]
 ) -> Exception:
-    """Return a native validator error; validators read expanded SQL, so the bridge decides."""
+    """Return a native validator error, unmarked because validators read macro-expanded SQL."""
 
     return native_config_error(error=error, bridge_independent=False, values=values)
 

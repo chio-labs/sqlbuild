@@ -104,11 +104,11 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}: SQL reference contains an unclosed parenthesis"
             ),
-            expected_macro_calls=(1, 2, 2),
+            expected_macro_calls=(1, 1, 1),
             expected_error_types=("CompileInputError",) * 3,
         ),
         ReferenceScanErrorTestCase(
-            description="authored_fault_after_a_macro_is_located_without_a_python_rerun",
+            description="authored_fault_after_a_macro_is_located_natively",
             project_files={
                 "macros/emit.py": _EMIT_MACRO,
                 FAILURE_MART_PATH: _MART_HEADER + "SELECT customer_id, @emit('1') AS total_amount\n"

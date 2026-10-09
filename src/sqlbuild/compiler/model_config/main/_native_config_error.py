@@ -23,7 +23,7 @@ def native_config_error(
     bridge_independent: bool,
     values: Mapping[str, object] | None = None,
 ) -> Exception:
-    """Return Python's exception for `error`; mark it bridge-independent only if SQL is unread."""
+    """Return Python's exception for `error`, marked `bridge_independent` when SQL is unread."""
 
     if error.class_name == CONFIG_VALUE_TYPE_ERROR and error.key is not None and values is not None:
         return ConfigValueTypeError(
