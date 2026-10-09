@@ -112,6 +112,11 @@ from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
     report_mocks_reading_referencing_helpers,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.identity import build_sql_test_case_fingerprint
+from sqlbuild.compiler.compile._helpers.sql_tests.scope_deps import (
+    function_sql_test_scope_deps,
+    macro_sql_test_scope_deps,
+    udf_sql_test_scope_deps,
+)
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
@@ -178,7 +183,6 @@ from sqlbuild.compiler.project_assembly.models import (
     NativeProjectFacts,
     NativeProjectResources,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -1731,17 +1735,17 @@ def _assemble_compiled_sql_test(
     target_model_names: tuple[str, ...] = ()
     if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload):
         if test_input.payload.mode == SqlTestMode.MACRO:
-            scope_deps = _macro_sql_test_scope_deps(
+            scope_deps = macro_sql_test_scope_deps(
                 tested_macro_names=test_input.payload.tested_resource_names,
                 model_inputs=model_inputs,
             )
         elif test_input.payload.mode == SqlTestMode.UDF:
-            scope_deps = _udf_sql_test_scope_deps(
+            scope_deps = udf_sql_test_scope_deps(
                 tested_udf_names=test_input.payload.tested_resource_names,
                 model_inputs=model_inputs,
             )
         else:
-            scope_deps = _function_sql_test_scope_deps(
+            scope_deps = function_sql_test_scope_deps(
                 tested_function_names=test_input.payload.tested_resource_names,
             )
         compiled_payload = CompiledDirectLogicSqlTestPayload(
@@ -1859,59 +1863,6 @@ def _assemble_compiled_sql_test(
         ),
         target_model_names=target_model_names,
         tested_resources=tested_resources,
-    )
-
-
-def _macro_sql_test_scope_deps(
-    *, tested_macro_names: tuple[str, ...], model_inputs: tuple[CompileModelInput, ...]
-) -> tuple[CompiledObjectKey, ...]:
-    tested_names: frozenset[str] = frozenset(tested_macro_names)
-    scope_deps: list[CompiledObjectKey] = []
-    model_input: CompileModelInput
-    for model_input in model_inputs:
-        model_macro_deps: frozenset[str] = frozenset(
-            model_input.macro_deps or find_macro_call_names(model_input.macro_source_sql)
-        )
-        if not tested_names.intersection(model_macro_deps):
-            continue
-        scope_deps.append(
-            CompiledObjectKey(
-                resource_type=CompiledResourceType.MODEL,
-                name=model_input.model_file.file_path.stem,
-            )
-        )
-    return tuple(scope_deps)
-
-
-def _udf_sql_test_scope_deps(
-    *, tested_udf_names: tuple[str, ...], model_inputs: tuple[CompileModelInput, ...]
-) -> tuple[CompiledObjectKey, ...]:
-    tested_names: frozenset[str] = frozenset(tested_udf_names)
-    scope_deps: list[CompiledObjectKey] = []
-    model_input: CompileModelInput
-    for model_input in model_inputs:
-        model_udf_deps: frozenset[str] = frozenset(
-            reference.ref_name
-            for reference in model_input.references
-            if reference.ref_kind == SqlReferenceKind.UDF
-        )
-        if not tested_names.intersection(model_udf_deps):
-            continue
-        scope_deps.append(
-            CompiledObjectKey(
-                resource_type=CompiledResourceType.MODEL,
-                name=model_input.model_file.file_path.stem,
-            )
-        )
-    return tuple(scope_deps)
-
-
-def _function_sql_test_scope_deps(
-    *, tested_function_names: tuple[str, ...]
-) -> tuple[CompiledObjectKey, ...]:
-    return tuple(
-        CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name=function_name)
-        for function_name in tested_function_names
     )
 
 
