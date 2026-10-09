@@ -26,13 +26,13 @@ const ANALYSIS_WORKERS: usize = 4;
 const ANALYSIS_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 
 impl ProjectCatalog {
-    /// Map inferred column types onto the binding names the query projects.
+    /// Map inferred column types onto the binding names the query projects, in column order.
     pub fn inferred_schema(
         &self,
         sql: &str,
         columns: Columns,
         inputs: Relations,
-    ) -> Result<HashMap<String, Option<String>>, String> {
+    ) -> Result<Vec<(String, Option<String>)>, String> {
         use polyglot_sql::{Expression, ExpressionWalk};
         let parsed = Dialect::get(self.dialect)
             .parse(sql)
@@ -70,14 +70,21 @@ impl ProjectCatalog {
                 }
             }
         }
-        let mut result: HashMap<String, Option<String>> = HashMap::new();
+        let mut result: Vec<(String, Option<String>)> = Vec::with_capacity(columns.0.len());
+        let mut positions: HashMap<String, usize> = HashMap::new();
         for (name, column_type) in columns.0 {
             let binding_name = identifiers
                 .get(&name)
                 .or_else(|| exact_inputs.get(&name))
                 .cloned()
                 .unwrap_or(name);
-            result.insert(binding_name, column_type);
+            match positions.get(&binding_name) {
+                Some(position) => result[*position].1 = column_type,
+                None => {
+                    positions.insert(binding_name.clone(), result.len());
+                    result.push((binding_name, column_type));
+                }
+            }
         }
         Ok(result)
     }
