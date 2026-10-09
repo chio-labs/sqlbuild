@@ -1,41 +1,61 @@
 //! Macro call arguments parsed natively into a value plan Python builds objects from.
 
+use pyo3::PyErr;
+use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::{
     Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyList, PyListMethods, PyTuple};
+use pyo3::types::{PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_render::macro_arguments::main::parse_macro_arguments::parse_macro_arguments as parse;
 use sqlbuild_render::macro_arguments::models::{ArgumentValue, MacroArguments};
 use sqlbuild_render::macro_arguments::types::ArgumentHost;
+use std::cell::RefCell;
 
 /// `unicodedata` answers character names and identifier normalization as CPython does.
 struct UnicodeHost<'py> {
     unicodedata: Bound<'py, PyModule>,
+    /// An unexpected Python error, raised once parsing returns.
+    raised: RefCell<Option<PyErr>>,
+}
+
+impl UnicodeHost<'_> {
+    fn held<T>(&self, result: PyResult<T>) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(error) => {
+                self.raised.borrow_mut().get_or_insert(error);
+                None
+            }
+        }
+    }
 }
 
 impl ArgumentHost for UnicodeHost<'_> {
     fn character_named(&self, name: &str) -> Option<char> {
-        self.unicodedata
-            .call_method1("lookup", (name,))
-            .and_then(|found| found.extract::<char>())
-            .ok()
+        let py: Python<'_> = self.unicodedata.py();
+        match self.unicodedata.call_method1("lookup", (name,)) {
+            Ok(found) => self.held(found.extract::<char>()),
+            Err(error) if error.is_instance_of::<PyKeyError>(py) => None,
+            Err(error) => self.held(Err(error)),
+        }
     }
 
     fn identifier(&self, text: &str) -> Option<String> {
-        let py: Python<'_> = self.unicodedata.py();
-        let candidate = text.into_pyobject(py).ok()?;
-        let valid: bool = candidate
-            .call_method0("isidentifier")
-            .and_then(|valid| valid.extract())
-            .ok()?;
+        let candidate = PyString::new(self.unicodedata.py(), text);
+        let valid: bool = self.held(
+            candidate
+                .call_method0("isidentifier")
+                .and_then(|valid| valid.extract()),
+        )?;
         if !valid {
             return None;
         }
-        self.unicodedata
-            .call_method1("normalize", ("NFKC", candidate))
-            .and_then(|normalized| normalized.extract())
-            .ok()
+        self.held(
+            self.unicodedata
+                .call_method1("normalize", ("NFKC", candidate))
+                .and_then(|normalized| normalized.extract()),
+        )
     }
 }
 
@@ -48,8 +68,13 @@ fn parse_macro_arguments(
 ) -> PyResult<Py<PyAny>> {
     let host = UnicodeHost {
         unicodedata: py.import("unicodedata")?,
+        raised: RefCell::new(None),
     };
-    match parse(&host, text, &nested) {
+    let parsed = parse(&host, text, &nested);
+    if let Some(error) = host.raised.into_inner() {
+        return Err(error);
+    }
+    match parsed {
         Ok(arguments) => arguments_row(py, &arguments),
         Err(error) => Ok(
             ("error", error.detail, error.help, error.line, error.column)

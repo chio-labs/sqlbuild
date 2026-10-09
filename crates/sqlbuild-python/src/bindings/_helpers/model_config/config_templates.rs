@@ -11,9 +11,8 @@ use pyo3::types::{
 use pyo3::{FromPyObject, IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::templates::errors::TemplateError;
-use sqlbuild_model_config::templates::main::expand_template_string::{
-    expand_template_string, expand_template_text,
-};
+use sqlbuild_model_config::templates::main::expand_template_string::expand_template_string;
+use sqlbuild_model_config::templates::main::expand_template_text::expand_template_text;
 use sqlbuild_model_config::templates::main::template_error_message::template_error_message;
 use sqlbuild_model_config::templates::models::{
     ContextValue, Scalar, StringExpansion, TemplateFailure, TemplateOptions,
@@ -331,8 +330,7 @@ fn outcome<'py>(
         .unbind())
 }
 
-/// Expand every template in `value` and the containers inside it, as Python's
-/// `expand_template_data` does.
+/// Expand every template in `value` and the containers inside it.
 pub(crate) fn expanded<'py>(
     host: &PythonHost<'py>,
     value: &Bound<'py, PyAny>,

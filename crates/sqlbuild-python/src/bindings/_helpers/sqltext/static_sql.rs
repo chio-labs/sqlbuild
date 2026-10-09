@@ -24,8 +24,7 @@ type InterpolationRow = (
     Option<String>,
 );
 
-/// The project variables, `os.environ`, the context values (or `None`) and the Python that
-/// renders a non-string variable as text, raising `ValueError` when it cannot be text.
+/// Project variables, the environment, context values (or `None`) and the variable renderer.
 #[derive(FromPyObject)]
 struct InterpolationSources<'py>(
     Bound<'py, PyDict>,
@@ -68,7 +67,14 @@ impl InterpolationHost for PythonInterpolationHost<'_> {
         }
         let label = format!("SQL variable '@@{name}'");
         let py = value.py();
-        Some(match self.sources.3.call1((value, label)) {
+        let arguments = PyDict::new(py);
+        if let Err(error) = arguments
+            .set_item("value", value)
+            .and_then(|()| arguments.set_item("label", label))
+        {
+            return Some(Err(self.hold(error)));
+        }
+        Some(match self.sources.3.call((), Some(&arguments)) {
             Ok(rendered) => self.text(&rendered),
             Err(error) if error.is_instance_of::<PyValueError>(py) => {
                 Err(error.value(py).to_string())
@@ -83,7 +89,7 @@ impl InterpolationHost for PythonInterpolationHost<'_> {
             .0
             .keys()
             .iter()
-            .map(|key| key.str().map(|text| text.to_string()).unwrap_or_default())
+            .map(|key| key_text(&key))
             .collect();
         names.sort();
         names
@@ -108,11 +114,20 @@ impl InterpolationHost for PythonInterpolationHost<'_> {
     }
 
     fn context(&self, name: &str) -> Option<Option<String>> {
-        let value = self.sources.2.as_ref()?.get_item(name).ok()??;
+        let value = match self.sources.2.as_ref()?.get_item(name) {
+            Ok(value) => value?,
+            Err(error) => {
+                let _ = self.hold(error);
+                return None;
+            }
+        };
         if value.is_none() {
             return Some(None);
         }
-        Some(self.text(&value).ok())
+        match self.text(&value) {
+            Ok(text) => Some(Some(text)),
+            Err(_held) => Some(None),
+        }
     }
 
     fn context_names(&self) -> Vec<String> {
@@ -120,9 +135,14 @@ impl InterpolationHost for PythonInterpolationHost<'_> {
             .2
             .iter()
             .flat_map(|context| context.keys())
-            .map(|key| key.str().map(|text| text.to_string()).unwrap_or_default())
+            .map(|key| key_text(&key))
             .collect()
     }
+}
+
+/// A variable or context key's text, or empty text when Python cannot render it.
+fn key_text(key: &Bound<'_, PyAny>) -> String {
+    key.str().map(|text| text.to_string()).unwrap_or_default()
 }
 
 /// Interpolate each `(sql, file path)`; an error is returned in its row, not raised.

@@ -1,9 +1,8 @@
 //! The Python template evaluator: references, `if`, `eq`, `ne` and `coalesce`.
 
+use crate::templates::_helpers::missing_values::is_missing_value_message;
 use crate::templates::errors::TemplateError;
-use crate::templates::main::template_error_message::{
-    is_missing_value_message, template_error_message,
-};
+use crate::templates::main::template_error_message::template_error_message;
 use crate::templates::models::{
     ContextValue, Expression, Scalar, TemplateFailure, TemplateOptions,
 };

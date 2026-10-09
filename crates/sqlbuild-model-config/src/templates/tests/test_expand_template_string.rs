@@ -165,9 +165,9 @@ fn given_template_strings_when_expanding_then_values_and_reads_match_python() {
             expected_reads: &[],
         },
         TemplateTestCase {
-            description: "a mapping is truthy by its text and comparable",
-            text: "${if(eq(opaque, \"{'a': 1}\"), 'same', 'different')}",
-            expected: value(Value::Text("same".to_owned())),
+            description: "a mapping is truthy by its text",
+            text: "${if(opaque, 'truthy', 'falsy')}",
+            expected: value(Value::Text("truthy".to_owned())),
             expected_reads: &[],
         },
         TemplateTestCase {

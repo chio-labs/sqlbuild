@@ -2,6 +2,7 @@
 
 use crate::macro_arguments::_helpers::failures::{Failure, surrogate, syntax};
 use crate::macro_arguments::_helpers::lexer::{NumberToken, StringPiece, is_name_start};
+use crate::macro_arguments::constants::{BINARY_RADIX, DECIMAL_RADIX, HEX_RADIX, OCTAL_RADIX};
 use crate::macro_arguments::types::ArgumentHost;
 
 /// The string starting at the quote `start` under `prefix`, and the index after it.
@@ -42,7 +43,9 @@ pub(crate) fn string_body(
             index += 2;
             continue;
         }
-        index = escape(host, text, index, &mut value)?;
+        let (decoded, end) = escape(host, text, index)?;
+        value.push_str(&decoded);
+        index = end;
     }
     Ok((
         StringPiece {
@@ -58,13 +61,12 @@ fn closes_triple(text: &[char], index: usize, quote: char) -> bool {
     text.get(index + 1) == Some(&quote) && text.get(index + 2) == Some(&quote)
 }
 
-/// Decode the escape at the backslash `index` into `value`; return the index after it.
+/// The text the escape at the backslash `index` decodes to, and the index after it.
 fn escape(
     host: &dyn ArgumentHost,
     text: &[char],
     index: usize,
-    value: &mut String,
-) -> Result<usize, Failure> {
+) -> Result<(String, usize), Failure> {
     let escaped: char = text[index + 1];
     let simple: Option<char> = match escaped {
         '\\' => Some('\\'),
@@ -80,43 +82,37 @@ fn escape(
         _ => None,
     };
     if let Some(character) = simple {
-        value.push(character);
-        return Ok(index + 2);
+        return Ok((character.to_string(), index + 2));
     }
+    let line_end: usize = if text.get(index + 2) == Some(&'\n') {
+        index + 3
+    } else {
+        index + 2
+    };
     match escaped {
-        '\n' => Ok(index + 2),
-        '\r' => Ok(if text.get(index + 2) == Some(&'\n') {
-            index + 3
-        } else {
-            index + 2
-        }),
+        '\n' => Ok((String::new(), index + 2)),
+        '\r' => Ok((String::new(), line_end)),
         '0'..='7' => {
             let digits: usize = text[index + 1..]
                 .iter()
                 .take(3)
                 .take_while(|character| matches!(character, '0'..='7'))
                 .count();
-            let code: u32 = radix_value(&text[index + 1..index + 1 + digits], 8);
-            value.push(char::from_u32(code).unwrap_or_default());
-            Ok(index + 1 + digits)
+            let code: u32 = radix_value(&text[index + 1..index + 1 + digits], OCTAL_RADIX);
+            Ok((
+                char::from_u32(code).unwrap_or_default().to_string(),
+                index + 1 + digits,
+            ))
         }
-        'x' => hex_escape(text, index, 2, value),
-        'u' => hex_escape(text, index, 4, value),
-        'U' => hex_escape(text, index, 8, value),
-        'N' => named_escape(host, text, index, value),
-        _ => {
-            value.push('\\');
-            Ok(index + 1)
-        }
+        'x' => hex_escape(text, index, 2),
+        'u' => hex_escape(text, index, 4),
+        'U' => hex_escape(text, index, 8),
+        'N' => named_escape(host, text, index),
+        _ => Ok(("\\".to_owned(), index + 1)),
     }
 }
 
-fn hex_escape(
-    text: &[char],
-    index: usize,
-    width: usize,
-    value: &mut String,
-) -> Result<usize, Failure> {
+fn hex_escape(text: &[char], index: usize, width: usize) -> Result<(String, usize), Failure> {
     let digits: &[char] = &text[index + 2..text.len().min(index + 2 + width)];
     if digits.len() < width || !digits.iter().all(char::is_ascii_hexdigit) {
         let escape: String = text[index..index + 2].iter().collect();
@@ -125,7 +121,7 @@ fn hex_escape(
             index,
         ));
     }
-    let code: u32 = radix_value(digits, 16);
+    let code: u32 = radix_value(digits, HEX_RADIX);
     let end: usize = index + 2 + width;
     if (0xD800..=0xDFFF).contains(&code) {
         let escape: String = text[index..end].iter().collect();
@@ -135,16 +131,14 @@ fn hex_escape(
         let escape: String = text[index..end].iter().collect();
         syntax(&format!("{escape} is not a Unicode code point"), index)
     })?;
-    value.push(character);
-    Ok(end)
+    Ok((character.to_string(), end))
 }
 
 fn named_escape(
     host: &dyn ArgumentHost,
     text: &[char],
     index: usize,
-    value: &mut String,
-) -> Result<usize, Failure> {
+) -> Result<(String, usize), Failure> {
     let close: Option<usize> = (text.get(index + 2) == Some(&'{'))
         .then(|| {
             text[index + 3..]
@@ -159,8 +153,7 @@ fn named_escape(
     let character: char = host
         .character_named(&name)
         .ok_or_else(|| syntax(&format!("\\N{{{name}}} names no Unicode character"), index))?;
-    value.push(character);
-    Ok(index + 4 + close)
+    Ok((character.to_string(), index + 4 + close))
 }
 
 fn radix_value(digits: &[char], radix: u32) -> u32 {
@@ -173,9 +166,9 @@ fn radix_value(digits: &[char], radix: u32) -> u32 {
 pub(crate) fn number(text: &[char], start: usize) -> Result<(NumberToken, usize), Failure> {
     let prefixed: Option<u32> = (text[start] == '0')
         .then(|| match text.get(start + 1) {
-            Some('x' | 'X') => Some(16),
-            Some('o' | 'O') => Some(8),
-            Some('b' | 'B') => Some(2),
+            Some('x' | 'X') => Some(HEX_RADIX),
+            Some('o' | 'O') => Some(OCTAL_RADIX),
+            Some('b' | 'B') => Some(BINARY_RADIX),
             _ => None,
         })
         .flatten();
@@ -194,13 +187,13 @@ pub(crate) fn number(text: &[char], start: usize) -> Result<(NumberToken, usize)
         let end: usize = reject_trailing_name(text, end, start)?;
         return Ok((NumberToken::Int { radix, digits }, end));
     }
-    let (whole, mut index) = digit_part(text, start, 10, start)?;
+    let (whole, mut index) = digit_part(text, start, DECIMAL_RADIX, start)?;
     let mut float: bool = false;
     let mut literal: String = whole.clone();
     if text.get(index) == Some(&'.') {
         float = true;
         literal.push('.');
-        let (fraction, end) = digit_part(text, index + 1, 10, start)?;
+        let (fraction, end) = digit_part(text, index + 1, DECIMAL_RADIX, start)?;
         literal.push_str(&fraction);
         index = end;
     }
@@ -211,7 +204,7 @@ pub(crate) fn number(text: &[char], start: usize) -> Result<(NumberToken, usize)
             exponent.push(*sign);
             exponent_start += 1;
         }
-        let (digits, end) = digit_part(text, exponent_start, 10, start)?;
+        let (digits, end) = digit_part(text, exponent_start, DECIMAL_RADIX, start)?;
         if digits.is_empty() {
             return Err(syntax("a number's exponent has no digits", start));
         }
@@ -236,7 +229,7 @@ pub(crate) fn number(text: &[char], start: usize) -> Result<(NumberToken, usize)
     }
     Ok((
         NumberToken::Int {
-            radix: 10,
+            radix: DECIMAL_RADIX,
             digits: whole,
         },
         end,
@@ -261,7 +254,7 @@ fn digit_part(
             && text.get(index + 1).is_some_and(|next| next.is_digit(radix))
         {
             index += 1;
-        } else if character == '_' || (character.is_ascii_digit() && radix < 10) {
+        } else if character == '_' || (character.is_ascii_digit() && radix < DECIMAL_RADIX) {
             return Err(syntax(
                 "a number has a misplaced '_' or digit",
                 number_start,

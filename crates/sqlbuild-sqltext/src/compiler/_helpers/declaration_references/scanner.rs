@@ -1,7 +1,7 @@
 //! Python's `_find_next_reference_start` walk over quoted text and comments.
 
 use crate::compiler::_helpers::declaration_references::reference_syntax::{
-    ReferenceSyntax, match_reference,
+    MatchedReference, ReferenceSyntax, match_reference,
 };
 use crate::compiler::models::{
     DeclarationReference, DeclarationReferenceScan, DeclarationReferenceStop,
@@ -11,8 +11,8 @@ use sqlbuild_core::text::models::PythonText;
 const SPECIAL_BYTES: &[u8] = b"'\"`$@/-";
 
 /// Where the walk for the next reference start ended.
-enum NextStart {
-    Reference(usize),
+enum NextStart<'sql> {
+    Reference(usize, MatchedReference<'sql>),
     End,
     Stop(DeclarationReferenceStop),
 }
@@ -24,21 +24,13 @@ pub(crate) fn scan_references(python: PythonText, sql: &str) -> DeclarationRefer
     let mut cursor: usize = 0;
     let mut stop: Option<DeclarationReferenceStop> = None;
     while cursor < sql.len() {
-        let start: usize = match next_reference_start(python, sql, cursor) {
-            NextStart::Reference(start) => start,
+        let (start, matched) = match next_reference_start(python, sql, cursor) {
+            NextStart::Reference(start, matched) => (start, matched),
             NextStart::End => break,
             NextStart::Stop(found) => {
                 stop = Some(found);
                 break;
             }
-        };
-        let matched = match match_reference(python, sql, start) {
-            ReferenceSyntax::Matched(matched) => matched,
-            ReferenceSyntax::Malformed(kind) => {
-                stop = Some(DeclarationReferenceStop::Malformed(kind));
-                break;
-            }
-            ReferenceSyntax::NotReference => unreachable!("the walk stops only at a reference"),
         };
         let start_char: usize = offsets.advance(sql, start);
         let end_char: usize = offsets.advance(sql, matched.end);
@@ -55,7 +47,7 @@ pub(crate) fn scan_references(python: PythonText, sql: &str) -> DeclarationRefer
 }
 
 /// The next reference start at or after `start`, as Python's walk finds it.
-fn next_reference_start(python: PythonText, sql: &str, start: usize) -> NextStart {
+fn next_reference_start(python: PythonText, sql: &str, start: usize) -> NextStart<'_> {
     let rest: &str = &sql[start..];
     if !rest.contains("@enum") && !rest.contains("@const") {
         return NextStart::End;
@@ -83,8 +75,9 @@ fn next_reference_start(python: PythonText, sql: &str, start: usize) -> NextStar
             },
             b'@' => match match_reference(python, sql, index) {
                 ReferenceSyntax::NotReference => Some(index + 1),
-                ReferenceSyntax::Matched(_) | ReferenceSyntax::Malformed(_) => {
-                    return NextStart::Reference(index);
+                ReferenceSyntax::Matched(matched) => return NextStart::Reference(index, matched),
+                ReferenceSyntax::Malformed(kind) => {
+                    return NextStart::Stop(DeclarationReferenceStop::Malformed(kind));
                 }
             },
             _ => Some(index + 1),
