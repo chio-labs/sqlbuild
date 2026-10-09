@@ -97,10 +97,7 @@ struct SharedQuery {
 
 impl SharedQuery {
     fn stub<'a>(&'a self, name: &'a str) -> &'a str {
-        self.stubs
-            .iter()
-            .find(|(reference, _)| reference == name)
-            .map_or(name, |(_, stub)| stub.as_str())
+        stub_name(&self.stubs, name)
     }
 }
 
@@ -190,12 +187,7 @@ impl SessionCatalog {
         let prekeys: Vec<Option<String>> = batch
             .members
             .iter()
-            .map(|member| {
-                member
-                    .binding_schema
-                    .map(|_| share_prekey(member))
-                    .transpose()
-            })
+            .map(member_prekey)
             .collect::<Result<_, _>>()?;
         let mut prekey_counts: HashMap<&str, usize> = HashMap::new();
         for prekey in prekeys.iter().flatten() {
@@ -241,11 +233,10 @@ impl SessionCatalog {
                 continue;
             };
             let key: String = self.shared_key(
-                batch,
+                batch.dialect,
                 &sql,
                 &stubs,
-                schema,
-                batch.members[index].recover_cte_facts,
+                (schema, batch.members[index].recover_cte_facts),
             );
             shared[index] = Some(SharedQuery { sql, stubs, key });
         }
@@ -255,11 +246,7 @@ impl SessionCatalog {
         }
         Ok(shared
             .into_iter()
-            .map(|query| {
-                query.filter(|query| {
-                    key_counts.get(&query.key).copied().unwrap_or(0) >= MIN_SHARED_MEMBERS
-                })
-            })
+            .map(|query| with_partner(query, &key_counts))
             .collect())
     }
 
@@ -277,10 +264,7 @@ impl SessionCatalog {
             .collect();
         let folded: HashSet<String> = names.iter().map(|name| name.to_lowercase()).collect();
         let plain_text: bool = cleaned_sql.is_ascii() && names.iter().all(|name| name.is_ascii());
-        let quoted: bool = cleaned_sql.contains('"')
-            || schema.iter().any(|(relation, columns)| {
-                relation.contains('"') || columns.iter().any(|(column, _)| column.contains('"'))
-            });
+        let quoted: bool = cleaned_sql.contains('"') || schema_quoted(schema);
         let collides: bool = names
             .iter()
             .any(|name| name.starts_with(RELATION_STUB_PREFIX))
@@ -303,11 +287,10 @@ impl SessionCatalog {
     /// Python's `SharedBindingQuery.key`, with the CTE fact flag its query key adds.
     fn shared_key(
         &self,
-        batch: &Batch<'_>,
+        dialect: &str,
         sql: &str,
         stubs: &[(String, String)],
-        schema: &Shapes,
-        recover_cte_facts: bool,
+        (schema, recover_cte_facts): (&Shapes, bool),
     ) -> String {
         let analysis_shapes: Vec<Value> = stubs
             .iter()
@@ -322,10 +305,7 @@ impl SessionCatalog {
         let mut binding_shapes: Vec<String> = schema
             .iter()
             .map(|(relation, columns)| {
-                let alias: &str = stubs
-                    .iter()
-                    .find(|(name, _)| name == relation)
-                    .map_or(relation.as_str(), |(_, stub)| stub.as_str());
+                let alias: &str = stub_name(stubs, relation);
                 json!([
                     alias,
                     !columns.is_empty(),
@@ -337,7 +317,7 @@ impl SessionCatalog {
         binding_shapes.sort_unstable();
         json!([
             sql,
-            batch.dialect,
+            dialect,
             analysis_shapes,
             binding_shapes,
             recover_cte_facts
@@ -679,12 +659,7 @@ fn inexact_shared_members(response: &Value, payload: &BatchPayload) -> Vec<usize
         .enumerate()
         .filter(|(_, (query, analysis))| {
             payload.shared_queries.contains(query) && {
-                let template: Option<&Value> = analysis
-                    .as_array()
-                    .and_then(|entry| entry.first())
-                    .and_then(Value::as_u64)
-                    .and_then(|index| usize::try_from(index).ok())
-                    .and_then(|index| templates.get(index));
+                let template: Option<&Value> = analysis_template(analysis, templates);
                 let validation: Option<&Value> =
                     validations.and_then(|validations| validations.get(**query));
                 !shared_result_is_exact(template, validation)
@@ -692,6 +667,57 @@ fn inexact_shared_members(response: &Value, payload: &BatchPayload) -> Vec<usize
         })
         .map(|(member, _)| member)
         .collect()
+}
+
+/// The template an analysis names, None where Python reads the analysis as a failure.
+fn analysis_template<'a>(analysis: &Value, templates: &'a [Value]) -> Option<&'a Value> {
+    let index: u64 = analysis.as_array()?.first()?.as_u64()?;
+    match usize::try_from(index) {
+        Ok(index) => templates.get(index),
+        Err(_) => None,
+    }
+}
+
+/// `stubs`' stub for `name`, or `name` itself when it has none.
+fn stub_name<'a>(stubs: &'a [(String, String)], name: &'a str) -> &'a str {
+    for (reference, stub) in stubs {
+        if reference == name {
+            return stub;
+        }
+    }
+    name
+}
+
+/// A bound member's prekey; members without a binding schema never share.
+fn member_prekey(member: &BatchMember<'_>) -> Result<Option<String>, String> {
+    match member.binding_schema {
+        Some(_) => share_prekey(member).map(Some),
+        None => Ok(None),
+    }
+}
+
+/// `query` when another member shares its key.
+fn with_partner(
+    query: Option<SharedQuery>,
+    counts: &HashMap<String, usize>,
+) -> Option<SharedQuery> {
+    let query: SharedQuery = query?;
+    (counts.get(&query.key).copied().unwrap_or(0) >= MIN_SHARED_MEMBERS).then_some(query)
+}
+
+/// Whether a binding relation or column name carries a double quote.
+fn schema_quoted(schema: &Shapes) -> bool {
+    for (relation, columns) in schema {
+        if relation.contains('"') {
+            return true;
+        }
+        for (column, _) in columns {
+            if column.contains('"') {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Python's `shared_result_is_exact`: an analysed template without any binding diagnostic.

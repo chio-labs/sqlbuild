@@ -6,6 +6,7 @@ import random
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -135,7 +136,7 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
             regions=test_case.regions, inexact_regions=test_case.inexact_regions
         ),
     )
-    sessions: list[object] = started_sessions(monkeypatch=monkeypatch)
+    sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
     parity: AnalysisParity = AnalysisParity()
 
     _ = [
@@ -143,13 +144,13 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
         for dialect in test_case.dialects
     ]
 
-    shared: int = sum(getattr(session, "sharing")[0] for session in sessions)
+    shared: int = sum(session.sharing[0] for session in sessions)
 
     assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
     assert (
         parity.analysed_models,
         shared,
-        sum(getattr(session, "sharing")[1] for session in sessions),
+        sum(session.sharing[1] for session in sessions),
         parity.analysed_models - shared,
         deferral_kinds(record_dir),
     ) == (
