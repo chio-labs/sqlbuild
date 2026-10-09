@@ -8,7 +8,7 @@ SHELL := /bin/bash
 	test-e2e-cold-compile-performance test-e2e-cache-compile-performance \
 	test-e2e-dense-compile-performance test-e2e-varied-cache-performance \
 	compiler-differential compiler-differential-shipped compiler-differential-dense \
-	compiler-goldens
+	compiler-baselines
 
 format:
 	uv run ruff format .
@@ -295,8 +295,7 @@ COMPILER_DIFFERENTIAL_SHIPPED_SEEDS ?= 12
 COMPILER_DIFFERENTIAL_DENSE_MODELS ?= 3000
 COMPILER_DIFFERENTIAL_ARGS ?=
 # Native-to-Python fallbacks and analysis deferrals must match the allow-list exactly, and every
-# output its golden. Pass `--native-fallbacks update` in COMPILER_DIFFERENTIAL_ARGS to rewrite
-# the list (see scripts/compiler_differential/README.md).
+# output its golden. `make compiler-baselines` rewrites both (see scripts/compiler_differential/README.md).
 COMPILER_DIFFERENTIAL_GATES := --native-fallbacks check --goldens check
 
 compiler-differential:
@@ -312,13 +311,15 @@ compiler-differential-shipped:
 		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SHIPPED_SEEDS) \
 		$(COMPILER_DIFFERENTIAL_GATES) $(COMPILER_DIFFERENTIAL_ARGS)
 
-# Rewrite tests/goldens/compiler from the python oracle (from native once Python is deleted);
-# review the diff like code. See scripts/compiler_differential/README.md.
-compiler-goldens:
-	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
-		--engines python native --corpus fixtures examples seeds failures \
-		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SEEDS) \
-		--goldens update $(COMPILER_DIFFERENTIAL_ARGS)
+# Rewrite the goldens (from the python oracle) and the fallback allow-list from both CI runs.
+# Review the diff like code; see scripts/compiler_differential/README.md.
+COMPILER_DIFFERENTIAL_CI_ARGS := --stage-captures --require-discovery-coverage --require-render-coverage
+compiler-baselines:
+	rm -rf tests/goldens/compiler
+	$(MAKE) compiler-differential COMPILER_DIFFERENTIAL_ARGS="$(COMPILER_DIFFERENTIAL_CI_ARGS) \
+		--require-analysis-coverage --native-fallbacks update --goldens update"
+	$(MAKE) compiler-differential-shipped COMPILER_DIFFERENTIAL_ARGS="$(COMPILER_DIFFERENTIAL_CI_ARGS) \
+		--native-fallbacks update --goldens update"
 
 compiler-differential-dense:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
