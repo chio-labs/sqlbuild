@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.149.0](https://github.com/chio-labs/sqlbuild/compare/v0.148.0...v0.149.0) (2026-10-09)
+
+
+### Features
+
+* **native:** run semantic checks natively behind the preview engine ([#1050](https://github.com/chio-labs/sqlbuild/issues/1050)) ([62cc5b8](https://github.com/chio-labs/sqlbuild/commit/62cc5b870b023d77aa9d7e07d712df7983329e37))
+
 ## [0.148.0](https://github.com/chio-labs/sqlbuild/compare/v0.147.0...v0.148.0) (2026-10-09)
 
 
