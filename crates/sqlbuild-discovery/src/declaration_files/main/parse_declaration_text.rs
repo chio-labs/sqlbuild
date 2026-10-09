@@ -31,13 +31,13 @@ fn parse_text(
 ) -> Option<FileOutcome<ParsedDeclarationText>> {
     let parsed: Result<ParsedDeclarationText, ParseStop> = match kind {
         CollectionKind::Enums => {
-            parse_enum_file(file_path, contents).map(ParsedDeclarationText::Enum)
+            parse_enum_file(file_path, contents, options.python).map(ParsedDeclarationText::Enum)
         }
         CollectionKind::Constants => {
-            parse_constant_file(file_path, contents).map(ParsedDeclarationText::Constant)
+            parse_constant_file(file_path, contents, options.python).map(ParsedDeclarationText::Constant)
         }
         CollectionKind::ModelSchemas => {
-            parse_schema_file(file_path, contents).map(ParsedDeclarationText::ModelSchema)
+            parse_schema_file(file_path, contents, options.python).map(ParsedDeclarationText::ModelSchema)
         }
         CollectionKind::SqlFunctions => parse_function_file(file_path, contents, options)
             .map(ParsedDeclarationText::SqlFunction),
@@ -51,6 +51,5 @@ fn parse_text(
     Some(match parsed {
         Ok(parsed) => FileOutcome::Parsed(parsed),
         Err(ParseStop::Failed(failure)) => FileOutcome::Failed(failure),
-        Err(ParseStop::Deferred) => FileOutcome::Deferred,
     })
 }

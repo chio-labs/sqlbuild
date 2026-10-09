@@ -6,4 +6,4 @@ TABLE_ROOT: Path = Path(__file__).resolve().parents[2] / "crates" / "sqlbuild-co
 TABLE_FILE_PREFIX: str = "unicode_"
 TABLE_FILE_SUFFIX: str = ".in"
 MAX_CODE_POINT: int = 0x10FFFF
-TABLE_METHODS: tuple[str, ...] = ("isalnum", "isalpha")
+TABLE_METHODS: tuple[str, ...] = ("isalnum", "isalpha", "isdecimal")

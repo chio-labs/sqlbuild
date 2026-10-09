@@ -72,7 +72,6 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
-    expand_declaration_references_result,
     expand_scanned_declaration_references,
     resolve_declaration_context,
     resolve_enum_contract_columns,
@@ -286,7 +285,7 @@ class _ModelInputLoop:
     reusable_config_cache: _ReusableModelConfigCache
     declaration_cache: _VisibleModelDeclarationCache
     native_header_metadata: dict[Path, NativeHeaderMetadata]
-    native_declaration_references: dict[Path, NativeDeclarationScan | None]
+    native_declaration_references: dict[Path, NativeDeclarationScan]
 
 
 @dataclass(frozen=True)
@@ -550,14 +549,10 @@ def _build_model_inputs(
             strict=True,
         )
     )
-    prepared_files: tuple[DiscoveredSqlModelFile, ...] = (
-        tuple(
-            model_file
-            for model_file in render_files
-            if interpolations[model_file.file_path].error is None
-        )
-        if native_stage_enabled(NativeStage.MODEL_LOOP)
-        else ()
+    prepared_files: tuple[DiscoveredSqlModelFile, ...] = tuple(
+        model_file
+        for model_file in render_files
+        if interpolations[model_file.file_path].error is None
     )
     report_native_answer(
         stage=NativeStage.MODEL_LOOP, kind="variable_substitutions", units=len(prepared_files)
@@ -730,30 +725,15 @@ def _build_model_input(
         inaccessible_macros=declarations.inaccessible_macros,
         consumer=model_identity,
     )
-    declaration_expansion: DeclarationExpansionResult | None = (
-        expand_scanned_declaration_references(
-            sql=var_substituted_sql,
-            references=loop.native_declaration_references.get(model_file.file_path),
-            file_path=model_file.file_path,
-            declarations=declaration_context,
-            value_renderer=context.value_renderer,
-            collection_rendering=context.collection_rendering,
-        )
-        if native_stage_enabled(NativeStage.MODEL_LOOP)
-        else None
+    declaration_expansion: DeclarationExpansionResult = expand_scanned_declaration_references(
+        sql=var_substituted_sql,
+        references=loop.native_declaration_references[model_file.file_path],
+        file_path=model_file.file_path,
+        declarations=declaration_context,
+        value_renderer=context.value_renderer,
+        collection_rendering=context.collection_rendering,
     )
-    if declaration_expansion is not None and native_stage_enabled(NativeStage.MODEL_LOOP):
-        report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_expansions")
-    if declaration_expansion is None:
-        if native_stage_enabled(NativeStage.MODEL_LOOP):
-            report_native_fallback(site=NativeFallbackSite.DECLARATION_REFERENCES, kind="scan")
-        declaration_expansion = expand_declaration_references_result(
-            sql=var_substituted_sql,
-            file_path=model_file.file_path,
-            declarations=declaration_context,
-            value_renderer=context.value_renderer,
-            collection_rendering=context.collection_rendering,
-        )
+    report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_expansions")
     declaration_expanded_sql: str = declaration_expansion.sql
     macro_expansion: MacroExpansionResult = expand_sql_macros_result(
         sql=declaration_expanded_sql,

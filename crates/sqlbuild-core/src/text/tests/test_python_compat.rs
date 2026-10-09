@@ -1,6 +1,7 @@
 use crate::text::main::close_matches::close_matches;
 use crate::text::main::is_python_alnum::is_python_alnum;
 use crate::text::main::is_python_alpha::is_python_alpha;
+use crate::text::main::is_python_decimal::is_python_decimal;
 use crate::text::main::is_python_space::is_python_space;
 use crate::text::main::is_python_word::is_python_word;
 use crate::text::main::python_cleandoc::python_cleandoc;
@@ -94,6 +95,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "ASCII letter",
             character: 'a',
+            expected_decimal: false,
             expected_alpha: true,
             expected_alnum: true,
             expected_word: true,
@@ -102,6 +104,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "underscore is a word character only",
             character: '_',
+            expected_decimal: false,
             expected_alpha: false,
             expected_alnum: false,
             expected_word: true,
@@ -110,6 +113,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "Arabic-Indic digit",
             character: '\u{663}',
+            expected_decimal: true,
             expected_alpha: false,
             expected_alnum: true,
             expected_word: true,
@@ -118,6 +122,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "letter number",
             character: '\u{2167}',
+            expected_decimal: false,
             expected_alpha: false,
             expected_alnum: true,
             expected_word: true,
@@ -126,6 +131,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "combining mark that Rust calls alphabetic",
             character: '\u{345}',
+            expected_decimal: false,
             expected_alpha: false,
             expected_alnum: false,
             expected_word: false,
@@ -134,6 +140,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "circled letter symbol",
             character: '\u{24b6}',
+            expected_decimal: false,
             expected_alpha: false,
             expected_alnum: false,
             expected_word: false,
@@ -142,6 +149,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "information separator is whitespace",
             character: '\u{1c}',
+            expected_decimal: false,
             expected_alpha: false,
             expected_alnum: false,
             expected_word: false,
@@ -150,6 +158,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "Latin letter with an accent is alphabetic",
             character: '\u{e9}',
+            expected_decimal: false,
             expected_alpha: true,
             expected_alnum: true,
             expected_word: true,
@@ -158,6 +167,7 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
         CharacterClassTestCase {
             description: "ideographic space",
             character: '\u{3000}',
+            expected_decimal: false,
             expected_alpha: false,
             expected_alnum: false,
             expected_word: false,
@@ -168,12 +178,14 @@ fn given_characters_when_classifying_then_python_str_methods_agree() {
     for test_case in test_cases {
         assert_eq!(
             (
+                is_python_decimal(python, test_case.character),
                 is_python_alpha(python, test_case.character),
                 is_python_alnum(python, test_case.character),
                 is_python_word(python, test_case.character),
                 is_python_space(test_case.character)
             ),
             (
+                test_case.expected_decimal,
                 test_case.expected_alpha,
                 test_case.expected_alnum,
                 test_case.expected_word,

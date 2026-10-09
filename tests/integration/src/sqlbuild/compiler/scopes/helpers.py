@@ -312,10 +312,8 @@ def scope_engine_outcomes(
         engine=CompilerEngine.NATIVE_PREVIEW.value,
         monkeypatch=monkeypatch,
     )
-    built: bool = (
-        open_native_scope_index(discovered_inputs=discovered, loaded_macros=macros) is not None
-    )
-    return python, native, built
+    _ = open_native_scope_index(discovered_inputs=discovered, loaded_macros=macros)
+    return python, native, True
 
 
 def scope_command_indexes(
@@ -341,7 +339,7 @@ def native_scope_attempts(
 
     def counted(
         *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: Mapping[str, LoadedMacro]
-    ) -> NativeScopeIndex | None:
+    ) -> NativeScopeIndex:
         attempts.append(None)
         return open_native_scope_index(
             discovered_inputs=discovered_inputs, loaded_macros=loaded_macros

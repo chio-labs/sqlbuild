@@ -299,8 +299,8 @@ def render_attached_generic_audit(
     policies: dict[str, object],
 ) -> tuple[str | None, str, str | None, str, str, str | None] | None: ...
 def scan_sql_declaration_references(
-    sqls: list[str],
-) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None] | None]: ...
+    sqls: list[str], python_version: tuple[int, int], unicode_version: str
+) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
 def interpolate_sql_batch(
     sqls: list[tuple[str, str]],
     sources: tuple[

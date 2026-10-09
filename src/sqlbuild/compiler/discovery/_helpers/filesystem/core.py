@@ -6,12 +6,12 @@ import ast
 import importlib.util
 import inspect
 import sys
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, cast, get_type_hints
+from typing import TYPE_CHECKING, get_type_hints
 
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
@@ -19,7 +19,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
     named_declaration_roots,
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import (
-    is_in_scoped_declaration_tree,
     project_relative_path,
 )
 from sqlbuild.compiler.discovery._helpers.native.declaration_files import (
@@ -32,21 +31,11 @@ from sqlbuild.compiler.discovery._helpers.native.declaration_files import (
     native_sql_function_files,
     native_sql_hook_files,
 )
-from sqlbuild.compiler.discovery._helpers.native.declarations import native_declaration_file_facts
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
-from sqlbuild.compiler.discovery._helpers.sql.audits import parse_sql_audit_file
-from sqlbuild.compiler.discovery._helpers.sql.declarations import (
-    parse_constant_declaration_file,
-    parse_enum_declaration_file,
-    parse_model_schema_declaration_file,
-)
-from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
-from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,
-    SEED_FILE_SUFFIX,
 )
 from sqlbuild.compiler.discovery.exceptions import (
     EventExporterDiscoveryError,
@@ -80,13 +69,10 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     NamedDeclarationRoot,
 )
-from sqlbuild.compiler.discovery.types import NativeFileScope, ScopedDeclarationFile
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
 from sqlbuild.python_nodes.main.read_audit_factory_definition import (
@@ -120,7 +106,6 @@ if TYPE_CHECKING:
     from sqlbuild.provider.classes.provider import Provider
 
 _PROJECT_PYTHON_PACKAGE_MARKER: str = "__sqlbuild_project_python__"
-_FACTS_MEMO_KEY: str = "declaration_file_facts"
 
 
 @dataclass
@@ -147,45 +132,6 @@ class _PythonNodeDiscoveryBucket:
         self.audit_factories.append(item)
 
 
-@dataclass(frozen=True)
-class _DeclarationFileFacts:
-    file_path: Path
-    relative_path: Path
-    declaration_kind: DeclarationKind
-    scope_kind: ScopeKind
-    ownership_root: Path
-    owning_path: Path | None
-    declaration_root: Path
-
-
-def _discover_declaration_file_facts(
-    *, project_dir: Path, declaration_kind: DeclarationKind | None = None
-) -> tuple[_DeclarationFileFacts, ...]:
-    tree: DirectorySnapshot = DirectorySnapshot.current(project_dir=project_dir)
-    memo_key: tuple[str, DeclarationKind | None] = (_FACTS_MEMO_KEY, declaration_kind)
-    cached: object = tree.memo.get(memo_key)
-    if cached is not None:
-        return cast(tuple[_DeclarationFileFacts, ...], cached)
-    facts: tuple[_DeclarationFileFacts, ...] = tuple(
-        _DeclarationFileFacts(
-            file_path=project_dir / relative_path,
-            relative_path=Path(relative_path),
-            declaration_kind=DeclarationKind(kind),
-            scope_kind=ScopeKind(scope_kind),
-            ownership_root=Path(ownership_root),
-            owning_path=None if owning_path is None else Path(owning_path),
-            declaration_root=Path(declaration_root),
-        )
-        for relative_path, kind, scope_kind, ownership_root, owning_path, declaration_root in (
-            native_declaration_file_facts(
-                project_dir=project_dir, declaration_kind=declaration_kind
-            )
-        )
-    )
-    tree.memo[memo_key] = facts
-    return facts
-
-
 def discover_enum_files(
     *,
     project_dir: Path,
@@ -194,14 +140,10 @@ def discover_enum_files(
 ) -> tuple[DiscoveredEnumFile, ...]:
     """Discover global and scoped enum declaration files."""
 
-    return _discover_declaration_kind_files(
+    return native_enum_files(
         project_dir=project_dir,
-        declaration_kind=DeclarationKind.ENUM,
         isolate_declaration_kind=isolate_declaration_kind,
-        parse_declarations=parse_enum_declaration_file,
-        discovered_file_type=DiscoveredEnumFile,
         on_fault=on_fault,
-        native_files=native_enum_files,
     )
 
 
@@ -213,158 +155,11 @@ def discover_constant_files(
 ) -> tuple[DiscoveredConstantFile, ...]:
     """Discover global and scoped constant declaration files."""
 
-    return _discover_declaration_kind_files(
+    return native_constant_files(
         project_dir=project_dir,
-        declaration_kind=DeclarationKind.CONSTANT,
         isolate_declaration_kind=isolate_declaration_kind,
-        parse_declarations=parse_constant_declaration_file,
-        discovered_file_type=DiscoveredConstantFile,
-        on_fault=on_fault,
-        native_files=native_constant_files,
-    )
-
-
-def _discover_declaration_kind_files[DeclarationT, DiscoveredT](
-    *,
-    project_dir: Path,
-    declaration_kind: DeclarationKind,
-    isolate_declaration_kind: bool,
-    parse_declarations: Callable[..., tuple[DeclarationT, ...]],
-    discovered_file_type: Callable[..., DiscoveredT],
-    on_fault: Callable[[DiscoveryFileFault], None] | None,
-    native_files: Callable[..., tuple[DiscoveredT, ...]],
-) -> tuple[DiscoveredT, ...]:
-    def parse(facts: _DeclarationFileFacts) -> DiscoveredT:
-        contents: str = facts.file_path.read_text(encoding="utf-8")
-        declarations: tuple[DeclarationT, ...] = parse_declarations(
-            contents=contents,
-            file_path=facts.file_path,
-            relative_path=facts.relative_path,
-        )
-        return discovered_file_type(
-            file_path=facts.file_path,
-            relative_path=facts.relative_path,
-            contents=contents,
-            declarations=declarations,
-            scope_kind=facts.scope_kind,
-            ownership_root=facts.ownership_root,
-            owning_path=facts.owning_path,
-            declaration_root=facts.declaration_root,
-        )
-
-    if native_stage_enabled(NativeStage.DECLARATION_FILES):
-        return native_files(
-            project_dir=project_dir,
-            isolate_declaration_kind=isolate_declaration_kind,
-            on_fault=on_fault,
-            parse_with_python=_scoped_parser(project_dir=project_dir, parse=parse),
-        )
-    return _parse_discovered_files(
-        project_dir=project_dir,
-        items=(
-            facts
-            for facts in _discover_declaration_file_facts(
-                project_dir=project_dir,
-                declaration_kind=declaration_kind if isolate_declaration_kind else None,
-            )
-            if facts.declaration_kind is declaration_kind
-        ),
-        item_path=lambda facts: facts.file_path,
-        parse=parse,
         on_fault=on_fault,
     )
-
-
-def _scoped_parser[DiscoveredT](
-    *, project_dir: Path, parse: Callable[[_DeclarationFileFacts], DiscoveredT]
-) -> Callable[..., DiscoveredT]:
-    """Parse a macro, enum or constant file native discovery listed as the Python path does."""
-
-    def parse_listed(*, relative_path: Path, scope: NativeFileScope | None) -> DiscoveredT:
-        kind, scope_kind, ownership_root, owning_path, declaration_root = cast(
-            NativeFileScope, scope
-        )
-        return parse(
-            _DeclarationFileFacts(
-                file_path=project_dir / relative_path,
-                relative_path=relative_path,
-                declaration_kind=DeclarationKind(kind),
-                scope_kind=ScopeKind(scope_kind),
-                ownership_root=Path(cast(str, ownership_root)),
-                owning_path=None if owning_path is None else Path(owning_path),
-                declaration_root=Path(cast(str, declaration_root)),
-            )
-        )
-
-    return parse_listed
-
-
-def _named_parser[DiscoveredT: ScopedDeclarationFile](
-    *, project_dir: Path, parse: Callable[[tuple[NamedDeclarationRoot, Path]], DiscoveredT]
-) -> Callable[..., DiscoveredT]:
-    """Parse a named declaration file native discovery listed as its Python role places it."""
-
-    def parse_listed(*, relative_path: Path, scope: NativeFileScope | None) -> DiscoveredT:
-        kind, scope_kind, ownership_root, owning_path, declaration_root = cast(
-            NativeFileScope, scope
-        )
-        relative_directory: Path = Path(cast(str, declaration_root))
-        root: NamedDeclarationRoot = NamedDeclarationRoot(
-            directory=project_dir / relative_directory,
-            relative_directory=relative_directory,
-            kind=DeclarationKind(kind),
-            scope_kind=ScopeKind(scope_kind),
-            ownership_root=None if ownership_root is None else Path(ownership_root),
-            owning_path=None if owning_path is None else Path(owning_path),
-        )
-        return root.place(parse((root, project_dir / relative_path)))
-
-    return parse_listed
-
-
-def _parse_discovered_files[ItemT, DiscoveredT](
-    *,
-    project_dir: Path,
-    items: Iterable[ItemT],
-    item_path: Callable[[ItemT], Path],
-    parse: Callable[[ItemT], DiscoveredT],
-    on_fault: Callable[[DiscoveryFileFault], None] | None,
-) -> tuple[DiscoveredT, ...]:
-    """Parse each discovered file, isolating per-file read and parse faults when requested."""
-
-    discovered: list[DiscoveredT] = []
-    item: ItemT
-    for item in items:
-        try:
-            discovered.append(parse(item))
-        except (OSError, UnicodeError, ValueError, SyntaxError) as error:
-            if on_fault is None:
-                raise
-            on_fault(_discovery_fault(project_dir=project_dir, path=item_path(item), error=error))
-    return tuple(discovered)
-
-
-def _parse_discovered_paths[DiscoveredT](
-    *,
-    project_dir: Path,
-    file_paths: Iterable[Path],
-    parse: Callable[[Path], DiscoveredT],
-    on_fault: Callable[[DiscoveryFileFault], None] | None,
-) -> tuple[DiscoveredT, ...]:
-    return _parse_discovered_files(
-        project_dir=project_dir,
-        items=file_paths,
-        item_path=lambda file_path: file_path,
-        parse=parse,
-        on_fault=on_fault,
-    )
-
-
-def _unscoped_files(*, root: Path, pattern: str, project_dir: Path) -> Iterator[Path]:
-    file_path: Path
-    for file_path in _sorted_glob(project_dir=project_dir, root=root, pattern=pattern):
-        if not is_in_scoped_declaration_tree(file_path=file_path, project_dir=project_dir):
-            yield file_path
 
 
 def discover_model_schema_files(
@@ -372,58 +167,7 @@ def discover_model_schema_files(
 ) -> tuple[DiscoveredModelSchemaFile, ...]:
     """Discover project-wide and scoped reusable model schemas."""
 
-    def parse(item: tuple[NamedDeclarationRoot, Path]) -> DiscoveredModelSchemaFile:
-        file_path: Path = item[1]
-        contents: str = file_path.read_text(encoding="utf-8")
-        relative_path: Path = project_relative_path(path=file_path, project_dir=project_dir)
-        return DiscoveredModelSchemaFile(
-            file_path=file_path,
-            relative_path=relative_path,
-            contents=contents,
-            declarations=parse_model_schema_declaration_file(
-                contents=contents, file_path=file_path, relative_path=relative_path
-            ),
-        )
-
-    if native_stage_enabled(NativeStage.DECLARATION_FILES):
-        return native_model_schema_files(
-            project_dir=project_dir,
-            on_fault=on_fault,
-            parse_with_python=_named_parser(project_dir=project_dir, parse=parse),
-        )
-    return _parse_named_declaration_files(
-        project_dir=project_dir,
-        kinds=frozenset({DeclarationKind.SCHEMA}),
-        parse=parse,
-        on_fault=on_fault,
-    )
-
-
-def _parse_named_declaration_files[DiscoveredT: ScopedDeclarationFile](
-    *,
-    project_dir: Path,
-    kinds: frozenset[DeclarationKind],
-    parse: Callable[[tuple[NamedDeclarationRoot, Path]], DiscoveredT],
-    on_fault: Callable[[DiscoveryFileFault], None] | None,
-    skip_underscored: bool = False,
-) -> tuple[DiscoveredT, ...]:
-    """Parse each SQL file in the requested named declaration roles with its role's scope facts."""
-
-    return _parse_discovered_files(
-        project_dir=project_dir,
-        items=(
-            item
-            for item in named_declaration_files(
-                project_dir=project_dir,
-                roots=named_declaration_roots(project_dir=project_dir, kinds=kinds),
-                pattern="*.sql",
-            )
-            if not (skip_underscored and item[1].name.startswith("_"))
-        ),
-        item_path=lambda item: item[1],
-        parse=lambda item: item[0].place(parse(item)),
-        on_fault=on_fault,
-    )
+    return native_model_schema_files(project_dir=project_dir, on_fault=on_fault)
 
 
 def discover_sql_function_files(
@@ -431,38 +175,7 @@ def discover_sql_function_files(
 ) -> tuple[DiscoveredSqlFunctionFile, ...]:
     """Discover SQL function files under functions/sql/."""
 
-    def parse(file_path: Path) -> DiscoveredSqlFunctionFile:
-        contents: str = file_path.read_text(encoding="utf-8")
-        header_values: dict[str, object]
-        body_sql: str
-        header_values, body_sql = parse_function_sql(contents=contents, file_path=file_path)
-        return DiscoveredSqlFunctionFile(
-            file_path=file_path,
-            relative_path=project_relative_path(path=file_path, project_dir=project_dir),
-            contents=contents,
-            header_values=header_values,
-            body_sql=body_sql,
-        )
-
-    def parse_listed(
-        *, relative_path: Path, scope: NativeFileScope | None
-    ) -> DiscoveredSqlFunctionFile:
-        _ = scope
-        return parse(project_dir / relative_path)
-
-    if native_stage_enabled(NativeStage.DECLARATION_FILES):
-        return native_sql_function_files(
-            project_dir=project_dir, on_fault=on_fault, parse_with_python=parse_listed
-        )
-    function_root: Path = project_dir / "functions" / "sql"
-    if not function_root.is_dir():
-        return ()
-    return _parse_discovered_paths(
-        project_dir=project_dir,
-        file_paths=_unscoped_files(root=function_root, pattern="*.sql", project_dir=project_dir),
-        parse=parse,
-        on_fault=on_fault,
-    )
+    return native_sql_function_files(project_dir=project_dir, on_fault=on_fault)
 
 
 def discover_python_function_files(
@@ -500,20 +213,7 @@ def discover_python_function_files(
 def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
     """Discover seed CSV files under seeds/."""
 
-    if native_stage_enabled(NativeStage.DECLARATION_FILES):
-        return native_seed_files(project_dir=project_dir)
-    seeds_root: Path = project_dir / "seeds"
-    if not seeds_root.is_dir():
-        return ()
-
-    return tuple(
-        DiscoveredSeedFile(
-            file_path=file_path,
-            relative_path=project_relative_path(path=file_path, project_dir=project_dir),
-        )
-        for file_path in _sorted_glob(project_dir=project_dir, root=seeds_root, pattern="*")
-        if file_path.is_file() and file_path.suffix == SEED_FILE_SUFFIX
-    )
+    return native_seed_files(project_dir=project_dir)
 
 
 def discover_audit_files(
@@ -521,29 +221,7 @@ def discover_audit_files(
 ) -> tuple[DiscoveredAuditFile, ...]:
     """Discover generic and singular audit SQL files in their project-wide and scoped roles."""
 
-    def parse(item: tuple[NamedDeclarationRoot, Path]) -> DiscoveredAuditFile:
-        root, file_path = item
-        contents: str = file_path.read_text(encoding="utf-8")
-        return DiscoveredAuditFile(
-            file_path=file_path,
-            relative_path=project_relative_path(path=file_path, project_dir=project_dir),
-            contents=contents,
-            blocks=parse_sql_audit_file(contents=contents, file_path=file_path),
-            declaration_kind=root.kind,
-        )
-
-    if native_stage_enabled(NativeStage.DECLARATION_FILES):
-        return native_audit_files(
-            project_dir=project_dir,
-            on_fault=on_fault,
-            parse_with_python=_named_parser(project_dir=project_dir, parse=parse),
-        )
-    return _parse_named_declaration_files(
-        project_dir=project_dir,
-        kinds=frozenset({DeclarationKind.AUDIT, DeclarationKind.SINGULAR_AUDIT}),
-        parse=parse,
-        on_fault=on_fault,
-    )
+    return native_audit_files(project_dir=project_dir, on_fault=on_fault)
 
 
 def discover_macro_files(
@@ -551,40 +229,9 @@ def discover_macro_files(
 ) -> tuple[DiscoveredMacroFile, ...]:
     """Discover global and scoped project macro Python files."""
 
-    def read(facts: _DeclarationFileFacts) -> DiscoveredMacroFile:
-        return DiscoveredMacroFile(
-            file_path=facts.file_path,
-            relative_path=facts.relative_path,
-            contents=facts.file_path.read_text(encoding="utf-8"),
-            scope_kind=facts.scope_kind,
-            ownership_root=facts.ownership_root,
-            owning_path=facts.owning_path,
-            declaration_root=facts.declaration_root,
-        )
-
-    if native_stage_enabled(NativeStage.DECLARATION_FILES):
-        return native_macro_files(
-            project_dir=project_dir,
-            isolate_declaration_kind=isolate_declaration_kind,
-            read_with_python=_scoped_parser(project_dir=project_dir, parse=read),
-        )
-    return tuple(
-        read(facts)
-        for facts in _discover_declaration_file_facts(
-            project_dir=project_dir,
-            declaration_kind=DeclarationKind.MACRO if isolate_declaration_kind else None,
-        )
-        if facts.declaration_kind is DeclarationKind.MACRO
+    return native_macro_files(
+        project_dir=project_dir, isolate_declaration_kind=isolate_declaration_kind
     )
-
-
-def _discovery_fault(*, project_dir: Path, path: Path, error: Exception) -> DiscoveryFileFault:
-    try:
-        relative_path: Path | None = project_relative_path(path=path, project_dir=project_dir)
-    except ValueError:
-        relative_path = None
-    message: str = str(error).replace(str(project_dir), ".")
-    return DiscoveryFileFault(path=relative_path, message=message)
 
 
 def discover_materialization_files(
@@ -702,27 +349,7 @@ def discover_sql_hook_files(
 ) -> tuple[DiscoveredSqlHookFile, ...]:
     """Discover named SQL lifecycle hooks in their project-wide and scoped roles."""
 
-    def parse(item: tuple[NamedDeclarationRoot, Path]) -> DiscoveredSqlHookFile:
-        file_path: Path = item[1]
-        return parse_sql_hook_file(
-            contents=file_path.read_text(encoding="utf-8"),
-            file_path=file_path,
-            relative_path=project_relative_path(path=file_path, project_dir=project_dir),
-        )
-
-    if native_stage_enabled(NativeStage.DECLARATION_FILES):
-        return native_sql_hook_files(
-            project_dir=project_dir,
-            on_fault=on_fault,
-            parse_with_python=_named_parser(project_dir=project_dir, parse=parse),
-        )
-    return _parse_named_declaration_files(
-        project_dir=project_dir,
-        kinds=frozenset({DeclarationKind.SQL_HOOK}),
-        parse=parse,
-        on_fault=on_fault,
-        skip_underscored=True,
-    )
+    return native_sql_hook_files(project_dir=project_dir, on_fault=on_fault)
 
 
 def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider, ...]:

@@ -1,6 +1,6 @@
 //! The files of each collection in Python's discovery order, read and parsed in parallel.
 
-use crate::_helpers::reading::read_authored_text;
+use crate::_helpers::reading::{read_authored_text, undecodable_path_failure};
 use crate::_helpers::scoped_paths::is_in_scoped_declaration_tree;
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::listing::collection_reads::CollectionSource;
@@ -258,14 +258,13 @@ fn read_one<T>(
     relative_path: &str,
     parse: &impl Fn(&str, &str, String) -> Result<T, ParseStop>,
 ) -> FileOutcome<T> {
-    if tree.is_undecodable(relative_path) {
-        return FileOutcome::Deferred;
+    if let Some(failure) = undecodable_path_failure(root, tree, relative_path) {
+        return FileOutcome::Failed(failure);
     }
     match read_authored_text(&tree.absolute(relative_path)) {
         Ok(contents) => match parse(&root.display_path(relative_path), relative_path, contents) {
             Ok(parsed) => FileOutcome::Parsed(parsed),
             Err(ParseStop::Failed(failure)) => FileOutcome::Failed(failure),
-            Err(ParseStop::Deferred) => FileOutcome::Deferred,
         },
         Err(failure) => FileOutcome::Unreadable(failure),
     }

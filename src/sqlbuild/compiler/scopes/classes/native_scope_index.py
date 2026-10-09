@@ -8,6 +8,7 @@ from types import MappingProxyType
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.classes.native_scope_rows import NativeScopeRows
+from sqlbuild.compiler.scopes.exceptions import UnindexableScopeError
 from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     DeclarationVisibilityIndex,
@@ -132,8 +133,8 @@ class NativeScopeIndex:
             completeness=_STATIC_COMPLETENESS,
         )
 
-    def grant(self, facts: Sequence[RelationshipFact]) -> bool:
-        """Attach the relationship grants of `facts`; False when Python must resolve them."""
+    def grant(self, facts: Sequence[RelationshipFact]) -> None:
+        """Attach the relationship grants of `facts`."""
 
         rows: _GrantRows | None = self._native.grant(
             [
@@ -148,7 +149,7 @@ class NativeScopeIndex:
             ]
         )
         if rows is None:
-            return False
+            raise UnindexableScopeError
         identities: dict[tuple[str, str], ResourceIdentity] = {}
         self._grants = [
             GrantRecord(
@@ -165,7 +166,6 @@ class NativeScopeIndex:
             )
             for kind, name, declaration, through, grant_kind in rows
         ]
-        return True
 
     def index_with_relationships(self) -> ScopeIndex:
         """Return the index with its grants attached and relationships complete."""
@@ -176,12 +176,12 @@ class NativeScopeIndex:
             completeness=replace(self.index.completeness, relationships=True),
         )
 
-    def lookup(self, *, index: ScopeIndex) -> ScopeLookup | None:
-        """Return Python's `build_lookup(index)` for `index_with_relationships()`, or None."""
+    def lookup(self, *, index: ScopeIndex) -> ScopeLookup:
+        """Return Python's `build_lookup(index)` for `index_with_relationships()`."""
 
         rows: _LookupRows | None = self._native.lookup()
         if rows is None:
-            return None
+            raise UnindexableScopeError
         resource_positions, declaration_positions, usage_positions, grant_positions = rows[:4]
         groups: tuple[_Groups, _Groups, _Groups, _Groups, _Groups, _Groups] = rows[4]
         global_positions, private_positions, local_positions, inherited_positions = rows[5]
