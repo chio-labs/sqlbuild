@@ -21,6 +21,8 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner._helpers.sql_tests.cursor_window import (
     declared_window_cursor_models,
     declares_cursor_window,
@@ -38,6 +40,16 @@ from sqlbuild.compiler.planner.types import WarningSeverity
 from sqlbuild.compiler.profiling.classes.context import CompileTimingContext
 from sqlbuild.compiler.profiling.models import CompileTimingCollector
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild.compiler.sql_test_glue.constants import CURSOR_INTRINSIC_NAMES
+from sqlbuild.compiler.sql_test_glue.models import (
+    NativeSqlTestChainRequest,
+    NativeSqlTestPlanningRequest,
+)
+from sqlbuild.compiler.sql_test_glue.types import (
+    NativeAssertionStepRow,
+    NativeChainStepRow,
+    NativeSqlTestPlanRow,
+)
 from sqlbuild.executor.testing.types import NativeSqlTestRenderingModule
 
 _UNRESOLVED_REFERENCE_PREFIX: str = "sql_test_reference:"
@@ -56,7 +68,7 @@ def plan_and_render_sql_test_artifacts(
     """Plan and render SQL tests in one deterministic native project call."""
 
     artifacts: list[NativeSqlTestArtifact] = []
-    for plan in plan_sql_tests_natively(
+    for plan in _plan_sql_tests_from_json(
         project=project,
         tests=tests,
         adapter=adapter,
@@ -71,6 +83,34 @@ def plan_and_render_sql_test_artifacts(
                 sql=plan.sql,
                 model_names=plan.model_names,
                 error_messages=sql_test_plan_error_messages(warnings=plan.warnings),
+            )
+        )
+    return tuple(artifacts)
+
+
+def plan_compiled_sql_test_artifacts(
+    *,
+    project: CompiledProject,
+    tests: tuple[CompiledSqlTest, ...],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+) -> tuple[NativeSqlTestArtifact, ...]:
+    """Plan and render SQL tests from the compiled objects, with natively projected errors."""
+
+    artifacts: list[NativeSqlTestArtifact] = []
+    for plan, error_messages in _plan_compiled_sql_tests(
+        project=project,
+        tests=tests,
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+        render_sql=True,
+        include_plan=False,
+    ):
+        if plan.sql is None:
+            raise NativeSqlTestPlanningError("native SQL-test planning omitted rendered SQL")
+        artifacts.append(
+            NativeSqlTestArtifact(
+                sql=plan.sql, model_names=plan.model_names, error_messages=error_messages
             )
         )
     return tuple(artifacts)
@@ -97,6 +137,188 @@ def plan_sql_tests_natively(
 ) -> tuple[NativeSqlTestPlan, ...]:
     """Plan SQL-test chains and assertions in one native batch, optionally rendering SQL."""
 
+    if native_stage_enabled(NativeStage.SQL_TEST_GLUE):
+        return tuple(
+            plan
+            for plan, _error_messages in _plan_compiled_sql_tests(
+                project=project,
+                tests=tests,
+                adapter=adapter,
+                sql_analysis_enabled=sql_analysis_enabled,
+                render_sql=render_sql,
+                include_plan=include_plan,
+            )
+        )
+    return _plan_sql_tests_from_json(
+        project=project,
+        tests=tests,
+        adapter=adapter,
+        sql_analysis_enabled=sql_analysis_enabled,
+        render_sql=render_sql,
+        include_plan=include_plan,
+    )
+
+
+def _plan_compiled_sql_tests(
+    *,
+    project: CompiledProject,
+    tests: tuple[CompiledSqlTest, ...],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+    render_sql: bool,
+    include_plan: bool,
+) -> tuple[tuple[NativeSqlTestPlan, tuple[str, ...]], ...]:
+    """Plan from the compiled objects natively; Python supplies only the adapter's renderings."""
+
+    if not tests:
+        return ()
+    start_ns: int = time.perf_counter_ns()
+    rendered_model_sql: dict[int, str] = {
+        index: render_test_cursor_intrinsics(
+            sql=model.query_sql, model=model, adapter=adapter, test=None
+        )
+        for index, model in enumerate(project.models)
+        if _mentions_cursor_intrinsic(model.query_sql)
+    }
+    functions: tuple[tuple[str, str, str, str, str], ...] = _function_templates(
+        project=project, adapter=adapter
+    )
+    rendered_test_overrides: dict[int, dict[str, str]] = _rendered_test_overrides(
+        project=project, tests=tests, adapter=adapter
+    )
+    request: NativeSqlTestPlanningRequest = NativeSqlTestPlanningRequest(
+        models=project.models,
+        rendered_model_sql=rendered_model_sql,
+        functions=functions,
+        tests=tests,
+        rendered_test_overrides=rendered_test_overrides,
+        sql_analysis_enabled=sql_analysis_enabled,
+        sql_analysis_dialect=adapter.sql_analysis_dialect(),
+        set_difference_operator=adapter.render_set_difference_operator(),
+        requires_derived_table_aliases=adapter.requires_derived_table_aliases(),
+        lexical_syntax=project.sql_lexical_syntax.native_mapping,
+        render_sql=render_sql,
+        include_plan=include_plan,
+    )
+    try:
+        rows, planning_ns, rendering_ns = _native.plan_compiled_sql_tests(request)
+    except ValueError as error:
+        raise _planning_error(error=error, tests=tests) from None
+    _record_planning_timing(start_ns=start_ns, planning_ns=planning_ns, rendering_ns=rendering_ns)
+    return tuple(_plan_from_row(row=row) for row in rows)
+
+
+def _plan_from_row(*, row: NativeSqlTestPlanRow) -> tuple[NativeSqlTestPlan, tuple[str, ...]]:
+    sql, chain, assertions, model_names, warnings, error_messages = row
+    plan: NativeSqlTestPlan = NativeSqlTestPlan(
+        chain=tuple(_chain_step_from_row(row=step) for step in chain),
+        assertions=tuple(_assertion_step_from_row(row=step) for step in assertions),
+        model_names=tuple(model_names),
+        warnings=tuple(
+            PlanWarning(model_name=model_name, severity=WarningSeverity(severity), message=message)
+            for model_name, severity, message in warnings
+        ),
+        sql=sql,
+    )
+    return plan, tuple(error_messages)
+
+
+def _assertion_step_from_row(*, row: NativeAssertionStepRow) -> SqlTestAssertionStep:
+    name, resolved_sql, lifted_ctes, comparison_body_sql = row
+    return SqlTestAssertionStep(
+        name=name,
+        resolved_sql=resolved_sql,
+        lifted_ctes=tuple(lifted_ctes),
+        comparison_body_sql=comparison_body_sql,
+    )
+
+
+def _chain_step_from_row(*, row: NativeChainStepRow) -> ChainStep:
+    (
+        model_name,
+        resolved_sql,
+        expected_cte_sql,
+        lifted_ctes,
+        comparison_body_sql,
+        expected_columns,
+        expected_lifted_ctes,
+    ) = row
+    return ChainStep(
+        model_name=model_name,
+        resolved_sql=resolved_sql,
+        expected_cte_sql=expected_cte_sql,
+        lifted_ctes=tuple(lifted_ctes),
+        comparison_body_sql=comparison_body_sql,
+        expected_columns=None if expected_columns is None else tuple(expected_columns),
+        expected_lifted_ctes=tuple(expected_lifted_ctes),
+    )
+
+
+def _mentions_cursor_intrinsic(sql: str) -> bool:
+    """Whether SQL names a cursor intrinsic; SQL that does not is never rendered differently."""
+
+    return any(name in sql for name in CURSOR_INTRINSIC_NAMES)
+
+
+def _rendered_test_overrides(
+    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...], adapter: BaseAdapter
+) -> dict[int, dict[str, str]]:
+    """Cursor-rendered model overrides for the tests whose overrides cursor windows change."""
+
+    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    windowed_indexes: tuple[int, ...] = tuple(
+        index
+        for index, test in enumerate(tests)
+        if isinstance(test.payload, CompiledModelSqlTestPayload)
+        and declares_cursor_window(test=test)
+    )
+    chains: tuple[tuple[str, ...], ...] = (
+        resolve_sql_test_model_chains(
+            project=project, tests=tuple(tests[index] for index in windowed_indexes)
+        )
+        if windowed_indexes
+        else ()
+    )
+    chains_by_index: dict[int, tuple[str, ...]] = dict(zip(windowed_indexes, chains, strict=True))
+    rendered: dict[int, dict[str, str]] = {}
+    for index, test in enumerate(tests):
+        payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload = test.payload
+        if not isinstance(payload, CompiledModelSqlTestPayload):
+            continue
+        chain: tuple[str, ...] | None = chains_by_index.get(index)
+        if chain is None and not any(
+            _mentions_cursor_intrinsic(sql) for sql in payload.model_query_overrides.values()
+        ):
+            continue
+        overrides: dict[str, str] | None = _windowed_model_query_overrides(
+            test=test, models_by_name=models_by_name, adapter=adapter, chain=chain
+        )
+        if overrides is not None:
+            rendered[index] = overrides
+    return rendered
+
+
+def _record_planning_timing(*, start_ns: int, planning_ns: int, rendering_ns: int) -> None:
+    elapsed_ns: int = time.perf_counter_ns() - start_ns
+    boundary_overhead_ns: int = max(0, elapsed_ns - planning_ns - rendering_ns)
+    collector: CompileTimingCollector | None = CompileTimingContext.active.get()
+    if collector is not None:
+        collector.add(
+            phase="test_planning_ms",
+            elapsed_ns=planning_ns + boundary_overhead_ns,
+        )
+        collector.add(phase="comparison_render_ms", elapsed_ns=rendering_ns)
+
+
+def _plan_sql_tests_from_json(
+    *,
+    project: CompiledProject,
+    tests: tuple[CompiledSqlTest, ...],
+    adapter: BaseAdapter,
+    sql_analysis_enabled: bool,
+    render_sql: bool,
+    include_plan: bool,
+) -> tuple[NativeSqlTestPlan, ...]:
     if not tests:
         return ()
     start_ns: int = time.perf_counter_ns()
@@ -143,15 +365,7 @@ def plan_sql_tests_natively(
     plans: tuple[NativeSqlTestPlan, ...] = tuple(
         _plan_from_payload(value=value) for value in response
     )
-    elapsed_ns: int = time.perf_counter_ns() - start_ns
-    boundary_overhead_ns: int = max(0, elapsed_ns - planning_ns - rendering_ns)
-    collector: CompileTimingCollector | None = CompileTimingContext.active.get()
-    if collector is not None:
-        collector.add(
-            phase="test_planning_ms",
-            elapsed_ns=planning_ns + boundary_overhead_ns,
-        )
-        collector.add(phase="comparison_render_ms", elapsed_ns=rendering_ns)
+    _record_planning_timing(start_ns=start_ns, planning_ns=planning_ns, rendering_ns=rendering_ns)
     return plans
 
 
@@ -162,6 +376,18 @@ def resolve_sql_test_model_chains(
 
     if not tests:
         return ()
+    if native_stage_enabled(NativeStage.SQL_TEST_GLUE):
+        try:
+            native_chains: list[list[str]] = _native.resolve_compiled_sql_test_chains(
+                NativeSqlTestChainRequest(
+                    models=project.models,
+                    tests=tests,
+                    lexical_syntax=project.sql_lexical_syntax.native_mapping,
+                )
+            )
+        except ValueError as error:
+            raise _planning_error(error=error, tests=tests) from None
+        return tuple(tuple(chain) for chain in native_chains)
     request: dict[str, object] = {
         "models": _chain_model_requests(project=project),
         "tests": [_test_request(test=test) for test in tests],
@@ -330,7 +556,30 @@ def _string_tuple(*, value: object, context: str) -> tuple[str, ...]:
 def _function_requests(
     *, project: CompiledProject, adapter: BaseAdapter
 ) -> list[dict[str, object]]:
-    functions: list[dict[str, object]] = []
+    return [
+        {
+            "name": name,
+            "udfPrefix": udf_prefix,
+            "udfSuffix": udf_suffix,
+            "tableFunctionPrefix": table_function_prefix,
+            "tableFunctionSuffix": table_function_suffix,
+        }
+        for (
+            name,
+            udf_prefix,
+            udf_suffix,
+            table_function_prefix,
+            table_function_suffix,
+        ) in _function_templates(project=project, adapter=adapter)
+    ]
+
+
+def _function_templates(
+    *, project: CompiledProject, adapter: BaseAdapter
+) -> tuple[tuple[str, str, str, str, str], ...]:
+    """Each function's name and the adapter's UDF and table-function call templates."""
+
+    functions: list[tuple[str, str, str, str, str]] = []
     for function in project.functions:
         target: str | None = function.destination.qualified_name
         if target is None:
@@ -348,15 +597,9 @@ def _function_requests(
             )
         )
         functions.append(
-            {
-                "name": function.name,
-                "udfPrefix": udf_prefix,
-                "udfSuffix": udf_suffix,
-                "tableFunctionPrefix": table_function_prefix,
-                "tableFunctionSuffix": table_function_suffix,
-            }
+            (function.name, udf_prefix, udf_suffix, table_function_prefix, table_function_suffix)
         )
-    return functions
+    return tuple(functions)
 
 
 def _planning_test_requests(

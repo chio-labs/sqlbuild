@@ -2,6 +2,8 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-pub(crate) fn register(_module: &Bound<'_, PyModule>) -> PyResult<()> {
-    Ok(())
+use crate::bindings::_helpers::sql_test_glue::planning;
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    planning::register(module)
 }

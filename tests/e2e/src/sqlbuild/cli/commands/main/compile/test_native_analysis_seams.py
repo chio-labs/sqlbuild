@@ -8,6 +8,7 @@ from unittest.mock import ANY
 import pytest
 
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
 )
@@ -35,7 +36,7 @@ _ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
                 "complete_native_semantic_diagnostics": [None],
                 "evaluate_native_model_contracts": [None],
                 "build_native_column_lineage": [ANY],
-                "plan_native_sql_test_artifacts": [None],
+                "plan_native_sql_test_artifacts": [ANY],
             },
         )
     ],
@@ -72,6 +73,10 @@ def test_given_project_when_compiling_with_each_engine_then_seams_defer_and_outp
         test_case.expected_preview_returns,
     )
     assert isinstance(preview_seams["build_native_column_lineage"][0], ProjectColumnLineage)
+    planned_artifacts: object = preview_seams["plan_native_sql_test_artifacts"][0]
+    assert isinstance(planned_artifacts, tuple)
+    assert planned_artifacts
+    assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
     assert (native_run.returncode, preview_run.returncode) == (0, 0)
     assert report_without_engine(native_run) == report_without_engine(python_run)
     assert report_without_engine(preview_run) == report_without_engine(python_run)

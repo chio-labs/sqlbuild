@@ -13,6 +13,7 @@ use crate::compiler::_helpers::sql_tests::cte_slices::{
 use crate::compiler::_helpers::sql_tests::cte_sql::{cte_definition_sql, leading_with_prefix_end};
 use crate::compiler::_helpers::sql_tests::helper_names::HELPER_PREFIX;
 use crate::compiler::_helpers::sql_tests::planning::REF_PREFIX;
+use crate::compiler::models::{SqlTestAssertionStep, SqlTestChainStep};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +33,7 @@ struct RenderBatchRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DifferenceSampleRequest {
-    step: ChainStep,
+    step: SqlTestChainStep,
     #[serde(default = "default_true")]
     sql_analysis_enabled: bool,
     #[serde(default = "default_set_difference")]
@@ -56,9 +57,9 @@ enum DifferenceDirection {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RenderRequest {
     #[serde(default)]
-    pub(crate) chain: Vec<ChainStep>,
+    pub(crate) chain: Vec<SqlTestChainStep>,
     #[serde(default)]
-    pub(crate) assertions: Vec<AssertionStep>,
+    pub(crate) assertions: Vec<SqlTestAssertionStep>,
     #[serde(default = "default_true")]
     pub(crate) sql_analysis_enabled: bool,
     #[serde(default = "default_set_difference")]
@@ -67,34 +68,6 @@ pub(crate) struct RenderRequest {
     pub(crate) sql_analysis_dialect: Option<String>,
     #[serde(default)]
     pub(crate) probe_step_index: Option<usize>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChainStep {
-    pub(crate) model_name: String,
-    pub(crate) resolved_sql: String,
-    #[serde(default)]
-    pub(crate) expected_cte_sql: Option<String>,
-    #[serde(default)]
-    pub(crate) expected_lifted_ctes: Vec<(String, String)>,
-    #[serde(default)]
-    pub(crate) lifted_ctes: Vec<(String, String)>,
-    #[serde(default)]
-    pub(crate) comparison_body_sql: Option<String>,
-    #[serde(default)]
-    pub(crate) expected_columns: Option<Vec<String>>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct AssertionStep {
-    pub(crate) name: String,
-    pub(crate) resolved_sql: String,
-    #[serde(default)]
-    pub(crate) lifted_ctes: Vec<(String, String)>,
-    #[serde(default)]
-    pub(crate) comparison_body_sql: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -202,7 +175,7 @@ impl RenderCteState {
     /// Define a step's inputs and its model once at top level, the model as a nested `__ref__` CTE.
     fn actual_step_sql(
         &mut self,
-        step: &ChainStep,
+        step: &SqlTestChainStep,
         suffix: &str,
         enabled: bool,
     ) -> Result<String, String> {
@@ -225,7 +198,7 @@ impl RenderCteState {
     /// Place an expected step's helper CTEs at top level and return its comparison body.
     fn expected_step_sql(
         &mut self,
-        step: &ChainStep,
+        step: &SqlTestChainStep,
         expected_sql: &str,
         enabled: bool,
     ) -> Result<String, String> {
@@ -237,7 +210,7 @@ impl RenderCteState {
     /// Place an assertion's helper CTEs at top level and return its comparison body.
     fn assertion_sql(
         &mut self,
-        assertion: &AssertionStep,
+        assertion: &SqlTestAssertionStep,
         enabled: bool,
     ) -> Result<String, String> {
         let origin = format!("assertion '{}'", assertion.name);
@@ -575,7 +548,10 @@ impl CteSuffixCounter {
 }
 
 /// Mark the chain steps whose actual SQL the comparison renderer emits.
-pub(crate) fn rendered_chain_steps(chain: &[ChainStep], assertions: &[AssertionStep]) -> Vec<bool> {
+pub(crate) fn rendered_chain_steps(
+    chain: &[SqlTestChainStep],
+    assertions: &[SqlTestAssertionStep],
+) -> Vec<bool> {
     let mut suffixes = CteSuffixCounter::default();
     chain
         .iter()
@@ -666,7 +642,7 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest) -> Result<Str
 }
 
 /// Columns compared for an expected-output step: the listed expected columns, else every column.
-fn compared_projection(step: &ChainStep) -> String {
+fn compared_projection(step: &SqlTestChainStep) -> String {
     step.expected_columns
         .as_ref()
         .map_or_else(|| "*".to_string(), |columns| columns.join(", "))
@@ -789,7 +765,7 @@ fn sanitize_cte_suffix(model_name: &str) -> String {
     }
 }
 
-fn assertions_use_actual(assertions: &[AssertionStep], actual_cte: &str) -> bool {
+fn assertions_use_actual(assertions: &[SqlTestAssertionStep], actual_cte: &str) -> bool {
     let needle = actual_cte.to_ascii_lowercase();
     assertions.iter().any(|assertion| {
         assertion
