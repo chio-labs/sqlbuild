@@ -1149,7 +1149,6 @@ def _native_seed_inputs(
         raise CompileInputError(
             f"Seed declaration '{seed_entry.name}' in {seed_schema_file.relative_path} "
             "has no matching CSV file under seeds/",
-            bridge_independent=True,
         )
     report_native_answer(stage=NativeStage.ATTACHMENTS, kind="seed_pairs", units=len(pairs))
     return tuple(

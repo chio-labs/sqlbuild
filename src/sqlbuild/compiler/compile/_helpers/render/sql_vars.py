@@ -197,7 +197,7 @@ def applied_interpolation(interpolation: SqlInterpolation) -> str:
 
     record_template_reads(interpolation.reads)
     if interpolation.error is not None:
-        raise CompileInputError(interpolation.error, bridge_independent=True)
+        raise CompileInputError(interpolation.error)
     return interpolation.sql
 
 

@@ -86,7 +86,7 @@ def _located_scan_error(
     contents: str = origin.contents
     line: int = contents.count("\n", 0, authored_offset) + 1
     column: int = authored_offset - (contents.rfind("\n", 0, authored_offset) + 1) + 1
-    return CompileInputError(f"{path}:{line}:{column}: {message}", bridge_independent=True)
+    return CompileInputError(f"{path}:{line}:{column}: {message}")
 
 
 def _authored_fault_offset(

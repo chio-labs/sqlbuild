@@ -242,7 +242,6 @@ def build_test_inputs(
                             f"SQL test '{test_block.name or test_file.file_path.stem}' declares "
                             f"unused parameters: {', '.join(unused_parameters)} in case "
                             f"'{test_case.name}'",
-                            bridge_independent=True,
                         )
                 expanded_test_block: DiscoveredSqlTestBlock = (
                     test_block
@@ -545,7 +544,6 @@ def _infer_tested_direct_logic_resource_names(
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode '{raw_test_ctes.mode.value}' must "
             "define exactly one actual CTE and exactly one expected CTE",
-            bridge_independent=True,
         )
     if raw_test_ctes.mode == SqlTestMode.UDF:
         return _infer_tested_udf_names(
@@ -571,7 +569,6 @@ def _infer_tested_direct_logic_resource_names(
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'macro' must call at least one "
             "macro in __macro_actual__",
-            bridge_independent=True,
         )
     tested_macro_name: str
     for tested_macro_name in tested_macro_names:
@@ -579,7 +576,6 @@ def _infer_tested_direct_logic_resource_names(
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references unknown macro "
                 f"'@{tested_macro_name}'",
-                bridge_independent=True,
             )
     return tested_macro_names
 
@@ -596,7 +592,6 @@ def _infer_tested_udf_names(
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'udf' must define exactly one "
             "__udf_actual__ CTE and exactly one __udf_expected__ CTE",
-            bridge_independent=True,
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
         sql=raw_test_ctes.payload.actual_cte.sql_body,
@@ -614,7 +609,6 @@ def _infer_tested_udf_names(
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'udf' must call at least one "
             "scalar UDF in __udf_actual__",
-            bridge_independent=True,
         )
     tested_udf_name: str
     for tested_udf_name in tested_udf_names:
@@ -622,14 +616,12 @@ def _infer_tested_udf_names(
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references unknown SQL function "
                 f"'{tested_udf_name}'",
-                bridge_independent=True,
             )
         if tested_udf_name in known_table_function_names:
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references table function "
                 f"'{tested_udf_name}' with {SqlReferenceKind.UDF.placeholder_call()}; use "
                 f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} for table functions",
-                bridge_independent=True,
             )
     return tested_udf_names
 
@@ -647,7 +639,6 @@ def _infer_tested_table_function_names(
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'table_fn' must define exactly one "
             "__table_fn_actual__ CTE and exactly one __table_fn_expected__ CTE",
-            bridge_independent=True,
         )
     references: tuple[CompileSqlReference, ...] = extract_sql_references(
         sql=raw_test_ctes.payload.actual_cte.sql_body,
@@ -670,7 +661,6 @@ def _infer_tested_table_function_names(
         raise CompileInputError(
             f"SQL test file {test_file.relative_path} mode 'table_fn' must call at least one "
             "table function in __table_fn_actual__",
-            bridge_independent=True,
         )
     tested_table_function_name: str
     for tested_table_function_name in tested_table_function_names:
@@ -678,7 +668,6 @@ def _infer_tested_table_function_names(
             raise CompileInputError(
                 f"SQL test file {test_file.relative_path} references unknown SQL function "
                 f"'{tested_table_function_name}'",
-                bridge_independent=True,
             )
         if tested_table_function_name not in known_table_function_names:
             raise CompileInputError(
@@ -813,7 +802,7 @@ def _validate_scenario_source_references(
             target_catalog or native_test_target_catalog(sources=known_source_names)
         ).scenario_source_error(str(scenario_file.relative_path), cte_sources)
         if error is not None:
-            raise CompileInputError(error, bridge_independent=True)
+            raise CompileInputError(error)
         if extraction_error is not None:
             raise extraction_error
         return
@@ -921,7 +910,7 @@ def validate_test_ctes(
             ),
         )
         if error is not None:
-            raise CompileInputError(error, bridge_independent=True)
+            raise CompileInputError(error)
         return
 
     mock_model_name: str

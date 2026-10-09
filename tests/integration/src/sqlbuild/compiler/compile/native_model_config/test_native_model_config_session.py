@@ -40,7 +40,6 @@ _INCREMENTAL: dict[str, object] = {
                     purpose="keep cursor_start within years 1-9999 in UTC",
                     entry="cursor_start '0001-01-01T00:00:00+00:00'",
                 ),
-                False,
             ),
         ),
         NativeErrorTestCase(
@@ -59,7 +58,6 @@ _INCREMENTAL: dict[str, object] = {
                     purpose="keep cursor_end within years 1-9999 in UTC",
                     entry="cursor_end '9999-12-31T23:59:30.500000+00:00'",
                 ),
-                False,
             ),
         ),
         NativeErrorTestCase(
@@ -73,7 +71,6 @@ _INCREMENTAL: dict[str, object] = {
                 header_help(
                     purpose="use a valid replay_on_change", entry="replay_on_change bounded-14d"
                 ),
-                False,
             ),
         ),
         NativeErrorTestCase(
@@ -82,7 +79,6 @@ _INCREMENTAL: dict[str, object] = {
             expected_outcome=(
                 "ConfigValueTypeError",
                 "config key 'materialized' expected a string, got int",
-                None,
                 None,
                 None,
             ),
@@ -96,7 +92,6 @@ _INCREMENTAL: dict[str, object] = {
                 "false; got 'soon'",
                 "P001",
                 "write for example old_name_view 7d, or old_name_view false",
-                False,
             ),
         ),
     ],

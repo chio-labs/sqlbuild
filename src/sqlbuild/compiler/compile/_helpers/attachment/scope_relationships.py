@@ -287,9 +287,7 @@ def _scanned_expected_names(
         syntax=syntax,
     )
     return {
-        position: CompileInputError(names, bridge_independent=True)
-        if isinstance(names, str)
-        else names
+        position: CompileInputError(names) if isinstance(names, str) else names
         for position, names in zip(pending, scanned, strict=True)
     }
 
@@ -301,7 +299,7 @@ def _natively_tested_macro_names(
     """Macros a macro test's actual CTE calls, scanned natively."""
 
     if isinstance(native_ctes, str):
-        raise CompileInputError(native_ctes, bridge_independent=True)
+        raise CompileInputError(native_ctes)
     actual_sql: str | None = next(
         (body for name, body in native_ctes if name == MACRO_ACTUAL_TEST_CTE_NAME), None
     )

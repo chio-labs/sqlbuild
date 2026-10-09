@@ -18,13 +18,11 @@ class CompileInputError(ValueError):
         *,
         code: str | None = None,
         help: str | None = None,
-        bridge_independent: bool = False,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.code = code if code is not None else self.code
         self.help = help
-        self.bridge_independent: bool = bridge_independent
 
 
 class MacroArgumentError(CompileInputError):

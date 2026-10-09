@@ -52,7 +52,7 @@ def test_given_generated_function_headers_when_attaching_with_preview_then_pytho
         for python in rng.choices((False, True), k=test_case.count)
     ]
 
-    python: list[tuple[str, bool]] = [
+    python: list[str] = [
         function_outcome(
             header_values=header,
             python=python_function,
@@ -62,7 +62,7 @@ def test_given_generated_function_headers_when_attaching_with_preview_then_pytho
         )
         for header, python_function in headers
     ]
-    preview: list[tuple[str, bool]] = [
+    preview: list[str] = [
         function_outcome(
             header_values=header,
             python=python_function,
@@ -76,14 +76,15 @@ def test_given_generated_function_headers_when_attaching_with_preview_then_pytho
     assert (
         mismatches(
             inputs=[*headers],
-            expected=[text for text, _ in python],
-            actual=[text for text, _ in preview],
+            expected=[*python],
+            actual=[*preview],
         ),
-        sum(not text.startswith("error: ") for text, _ in python)
+        sum(not text.startswith("error: ") for text in python)
         >= test_case.expected_minimum_attached,
-        sum(text.startswith("error: ") for text, _ in python)
+        sum(text.startswith("error: ") for text in python)
         >= test_case.expected_minimum_python_errors,
-        sum(exact for _, exact in preview) >= test_case.expected_minimum_exact_errors,
+        sum(text.startswith("error: ") for text in preview)
+        >= test_case.expected_minimum_exact_errors,
     ) == ([], True, True, True), test_case.description
 
 

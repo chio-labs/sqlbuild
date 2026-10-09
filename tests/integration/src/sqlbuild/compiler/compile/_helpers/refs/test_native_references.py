@@ -261,7 +261,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
             contents='MODEL (description "Orders");\n\nSELECT *\nFROM __ref("orders"',
             source_map=source_map_at(body_start=31),
             expected_message="models/orders.sql:4:6: SQL reference contains an unclosed parenthesis",
-            expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
             description="empty_table_function_argument_after_a_rejected_call",
@@ -269,7 +268,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
             contents='SELECT * FROM __ref(orders)\nJOIN __table_fn("orders_for")(1,,2)',
             source_map=source_map_at(body_start=0),
             expected_message="models/orders.sql:2:6: SQL reference contains an empty argument",
-            expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
             description="unclosed_quote_points_at_the_quote_in_code_points",
@@ -277,7 +275,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
             contents="-- é\nSELECT 'é', __ref(\"orders\") WHERE note = 'open",
             source_map=source_map_at(body_start=5),
             expected_message="models/orders.sql:2:42: SQL reference contains an unclosed quoted string",
-            expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
             description="fault_after_neutral_expansions_in_two_passes_maps_through_both",
@@ -295,7 +292,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
                 ),
             ),
             expected_message="models/orders.sql:2:6: SQL reference contains an unclosed parenthesis",
-            expected_bridge_independent=True,
         ),
         NativeReferenceErrorTestCase(
             description="fault_inside_macro_output_is_unlocated",
@@ -312,7 +308,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
                 ),
             ),
             expected_message="models/orders.sql: SQL reference contains an unclosed block comment",
-            expected_bridge_independent=False,
         ),
         NativeReferenceErrorTestCase(
             description="authored_fault_shaped_by_an_unclosed_macro_quote_is_unlocated",
@@ -325,7 +320,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
                 ),
             ),
             expected_message="models/orders.sql: SQL reference contains an unclosed quoted string",
-            expected_bridge_independent=False,
         ),
         NativeReferenceErrorTestCase(
             description="without_a_source_map_the_file_alone_is_named",
@@ -333,7 +327,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
             contents='SELECT *\nFROM __ref("orders"',
             source_map=None,
             expected_message="models/orders.sql: SQL reference contains an unclosed parenthesis",
-            expected_bridge_independent=False,
         ),
     ],
     ids=lambda case: case.description,
@@ -360,13 +353,11 @@ def test_given_native_reference_error_when_extracting_then_raised_located(
         str(raised.value),
         raised.value.code,
         raised.value.help,
-        raised.value.bridge_independent,
     ) == (
         CompileInputError,
         test_case.expected_message,
         "P001",
         None,
-        test_case.expected_bridge_independent,
     )
 
 

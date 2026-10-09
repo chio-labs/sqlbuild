@@ -37,7 +37,6 @@ class NativeReferenceErrorTestCase:
     contents: str
     source_map: SqlReferenceSourceMap | None
     expected_message: str
-    expected_bridge_independent: bool
 
 
 @dataclass(frozen=True)

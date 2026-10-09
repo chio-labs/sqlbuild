@@ -33,7 +33,7 @@ def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     record_template_reads(tuple(outcome[1]))
     report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="effective_vars")
     if isinstance(outcome[0], _native.NativeConfigError):
-        raise native_config_error(error=outcome[0], bridge_independent=True)
+        raise native_config_error(error=outcome[0])
     return cast(dict[str, object], outcome[0])
 
 
@@ -98,7 +98,7 @@ def expand_template_data(
     record_template_reads(outcome.reads)
     report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="template_expansions")
     if isinstance(outcome, NativeTemplateRejection):
-        raise native_config_error(error=outcome.error, bridge_independent=True)
+        raise native_config_error(error=outcome.error)
     return outcome.value
 
 

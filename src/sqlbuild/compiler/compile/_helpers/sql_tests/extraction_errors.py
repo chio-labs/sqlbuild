@@ -126,16 +126,13 @@ def _located_error(
     *, error: SqlTestExtractionError, contents: str, relative_path: Path, offset: int | None
 ) -> CompileInputError:
     if offset is None:
-        return CompileInputError(
-            error.message, code=error.code, help=error.help, bridge_independent=True
-        )
+        return CompileInputError(error.message, code=error.code, help=error.help)
     line: int = contents.count(_LINE_BREAK, 0, offset) + 1
     column: int = offset - (contents.rfind(_LINE_BREAK, 0, offset) + 1) + 1
     return CompileInputError(
         f"{error.message}\n  --> {relative_path.as_posix()}:{line}:{column}",
         code=error.code,
         help=error.help,
-        bridge_independent=True,
     )
 
 

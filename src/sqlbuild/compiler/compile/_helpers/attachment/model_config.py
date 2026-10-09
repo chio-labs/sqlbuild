@@ -239,7 +239,7 @@ def build_model_header_schema_entry(
         file_path=file_path,
     )
     if native.columns_error is not None:
-        raise native_config_error(error=native.columns_error, bridge_independent=True)
+        raise native_config_error(error=native.columns_error)
     local_columns: tuple[SchemaColumn, ...] = native.columns
     columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
         model_name=model_name,
@@ -253,7 +253,7 @@ def build_model_header_schema_entry(
         file_path=file_path,
     )
     if native.audits_error is not None:
-        raise native_config_error(error=native.audits_error, bridge_independent=True)
+        raise native_config_error(error=native.audits_error)
     audits: tuple[SchemaAuditInstance, ...] = native.audits
     generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
         raw_audit_factories=raw_audit_factories,
@@ -689,7 +689,7 @@ def native_path_default(
         str(model_file.relative_path)
     )
     if isinstance(selected, _native.NativeConfigError):
-        raise native_config_error(error=selected, bridge_independent=True)
+        raise native_config_error(error=selected)
     return selected
 
 
@@ -706,7 +706,7 @@ def build_native_model_config(
     )
     report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds")
     if isinstance(built, _native.NativeConfigError):
-        raise native_config_error(error=built, bridge_independent=True)
+        raise native_config_error(error=built)
     values, header_keys, namespace, overrides, reads = built
     logical_schema, layer_schema_configured, logical_database = namespace
     retention_override, table_type_override = overrides
@@ -779,7 +779,7 @@ def native_validation_error(
 ) -> Exception:
     """Return a native validator error, unmarked because validators read macro-expanded SQL."""
 
-    return native_config_error(error=error, bridge_independent=False, values=values)
+    return native_config_error(error=error, values=values)
 
 
 def validate_model_config(

@@ -355,7 +355,7 @@ def _sql_function_namespace(
 
 def _raise_header_failure(*, header: NativeFunctionHeader, stage: str) -> None:
     if header.failure is not None and header.failure[0] == stage:
-        raise CompileInputError(header.failure[1], bridge_independent=True)
+        raise CompileInputError(header.failure[1])
 
 
 def _expanded_native_arguments(

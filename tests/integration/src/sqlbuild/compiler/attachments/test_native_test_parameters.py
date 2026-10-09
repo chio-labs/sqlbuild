@@ -11,7 +11,6 @@ from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
     ParameterParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
-    ExactErrorText,
     generated_parameter_sql,
     parameter_outcome,
 )
@@ -51,8 +50,7 @@ def test_given_generated_test_bodies_when_expanding_parameters_then_python_outpu
         mismatches(inputs=[*sqls], expected=python, actual=preview),
         sum(isinstance(item, tuple) for item in python) >= test_case.expected_minimum_expanded,
         sum(isinstance(item, str) for item in python) >= test_case.expected_minimum_python_errors,
-        sum(isinstance(item, ExactErrorText) for item in preview)
-        >= test_case.expected_minimum_exact_errors,
+        sum(isinstance(item, str) for item in preview) >= test_case.expected_minimum_exact_errors,
     ) == ([], True, True, True), test_case.description
 
 

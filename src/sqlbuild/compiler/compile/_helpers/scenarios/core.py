@@ -40,7 +40,7 @@ def extract_sql_scenario_ctes(
     )
     error: str | None = outcome.get("error")
     if error is not None:
-        raise CompileInputError(error, bridge_independent=True)
+        raise CompileInputError(error)
     payload: dict[str, list[Any]] = outcome["scenario"]
     return CompileSqlScenarioCtes(
         authored_ctes=_scenario_ctes(payload["authored"]),

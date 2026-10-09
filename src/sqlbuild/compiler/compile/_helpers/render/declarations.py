@@ -563,9 +563,7 @@ def expand_scanned_declaration_references(  # noqa: PLR0913
         output_length += len(replacement)
         cursor = end
     if stop is not None:
-        raise CompileInputError(
-            _stop_message(stop=stop, file_path=file_path), bridge_independent=True
-        )
+        raise CompileInputError(_stop_message(stop=stop, file_path=file_path))
     parts.append(sql[cursor:])
     return DeclarationExpansionResult(
         sql="".join(parts), spans=tuple(spans), usages=tuple(dict.fromkeys(usages))
@@ -663,13 +661,11 @@ def _enum_member_text(
                 _inaccessible_declaration_message(
                     kind="enum", name=name, record=inaccessible, consumer=file_path
                 ),
-                bridge_independent=True,
             )
         scope_help: str = " in this model" if name.startswith("_") else ""
         visible: str = ", ".join(sorted(enums)) or "none"
         raise CompileInputError(
             f"Unknown enum '{name}'{scope_help} in '{file_path}'. Visible enums: {visible}",
-            bridge_independent=True,
         )
     member: EnumMember | None = next(
         (candidate for candidate in declaration.members if candidate.name == member_name),
@@ -680,7 +676,6 @@ def _enum_member_text(
         raise CompileInputError(
             f"Unknown member '{member_name}' for enum '{name}' in '{file_path}'. "
             f"Available members: {available}",
-            bridge_independent=True,
         )
     return render_enum_member_value(value=member.value)
 
@@ -702,20 +697,17 @@ def _constant_text(
                 _inaccessible_declaration_message(
                     kind="constant", name=name, record=inaccessible, consumer=file_path
                 ),
-                bridge_independent=True,
             )
         scope_help: str = " in this model" if name.startswith("_") else ""
         visible: str = ", ".join(sorted(constants)) or "none"
         raise CompileInputError(
             f"Unknown constant '{name}'{scope_help} in '{file_path}'. Visible constants: {visible}",
-            bridge_independent=True,
         )
     return render_constant_declaration(
         declaration=declaration,
         value_renderer=value_renderer,
         collection_rendering=collection_rendering,
         file_path=file_path,
-        bridge_independent=True,
     )
 
 
@@ -725,7 +717,6 @@ def render_constant_declaration(
     value_renderer: TypedSqlValueRenderer,
     collection_rendering: CollectionRendering,
     file_path: Path | None = None,
-    bridge_independent: bool = False,
 ) -> str:
     """Render one validated constant with the active adapter's typed-value contract."""
 
@@ -758,7 +749,6 @@ def render_constant_declaration(
             f"in '{file_path or declaration.relative_path}' by adapter "
             f"'{value_renderer.adapter_name}' as "
             f"{selected_rendering.value}: {error}",
-            bridge_independent=bridge_independent,
         ) from error
     return rendered
 
@@ -788,16 +778,6 @@ def render_enum_member_value(*, value: str | int) -> str:
 
 
 def _find_next_reference_start(*, sql: str, start: int) -> int | None:
-    """Python's scan for the next reference; its unclosed quote and comment errors are exact."""
-
-    try:
-        return _scan_next_reference_start(sql=sql, start=start)
-    except CompileInputError as error:
-        error.bridge_independent = True
-        raise
-
-
-def _scan_next_reference_start(*, sql: str, start: int) -> int | None:
     if sql.find("@enum", start) < 0 and sql.find("@const", start) < 0:
         return None
     index: int = start

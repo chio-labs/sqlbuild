@@ -652,7 +652,7 @@ def build_attached_audit_input(
         policies=_native_audit_policies(audit_instance=audit_instance, context=context),
     )
     if native_rendering.render_error is not None:
-        raise CompileInputError(native_rendering.render_error, bridge_independent=True)
+        raise CompileInputError(native_rendering.render_error)
     rendered_sql_body: str = native_rendering.sql_body
     rendered_evidence_sql: str | None = native_rendering.evidence_sql
     scoped_declarations: DeclarationExpansionContext = _scoped_audit_declarations(
@@ -782,7 +782,7 @@ def _native_audit_policy_values(
         else None
     )
     if rendering.policy_error is not None:
-        raise CompileInputError(rendering.policy_error, bridge_independent=True)
+        raise CompileInputError(rendering.policy_error)
     return AuditSeverity(rendering.severity), (
         AuditRunScope.DELTA_AND_FINAL if run_scope is None else run_scope
     )

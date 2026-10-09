@@ -164,19 +164,6 @@ def generated_dollar_authored_sql(*, rng: random.Random) -> str:
     return "".join(parts)
 
 
-class ExactErrorText(str):
-    """The text of an error marked bridge-independent, equal to Python's text."""
-
-    __slots__ = ()
-
-
-def error_text(error: CompileInputError) -> str:
-    """The error's text, marked when the error is bridge-independent."""
-
-    marker: type[str] = {True: ExactErrorText, False: str}[error.bridge_independent]
-    return marker(error)
-
-
 def authored_outcome(
     *, sql: str, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> AuthoredSqlExpansionResult | str:
@@ -196,7 +183,7 @@ def authored_outcome(
             declarations=DECLARATIONS,
         )
     except CompileInputError as error:
-        return error_text(error)
+        return str(error)
 
 
 _SQL_PIECES: tuple[str, ...] = (
@@ -601,7 +588,7 @@ def parameter_outcome(
             case_name="north",
         )
     except CompileInputError as error:
-        return error_text(error)
+        return str(error)
 
 
 _BODY_PIECES: tuple[str, ...] = (
@@ -995,8 +982,8 @@ def function_outcome(
     test_case: FunctionHeaderParityTestCase,
     engine: CompilerEngine,
     monkeypatch: pytest.MonkeyPatch,
-) -> tuple[str, bool]:
-    """Attach one function under `engine`: its input or error, and whether that is bridge-free."""
+) -> str:
+    """Attach one function under `engine`: its input or its error."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
     sql_file: DiscoveredSqlFunctionFile = DiscoveredSqlFunctionFile(
@@ -1044,9 +1031,9 @@ def function_outcome(
                 no_sql_validation=True,
                 python_functions_inherit_default_namespace=test_case.inherit_default_namespace,
             )
-        ), False
+        )
     except CompileInputError as error:
-        return f"error: {error}", error.bridge_independent
+        return f"error: {error}"
 
 
 _MACRO_PIECES: tuple[str, ...] = (

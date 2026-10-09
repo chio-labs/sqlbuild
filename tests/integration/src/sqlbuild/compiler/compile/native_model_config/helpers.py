@@ -87,12 +87,11 @@ def header_help(*, purpose: str, entry: str) -> str:
 
 
 def raised_error_shape(error: Exception) -> tuple[object, ...]:
-    """Return the type, message, code and help of an error, and whether it skips the bridge."""
+    """Return the type, message, code and help of an error."""
 
     return (
         type(error).__name__,
         str(error),
         getattr(error, "code", None),
         getattr(error, "help", None),
-        getattr(error, "bridge_independent", None),
     )
