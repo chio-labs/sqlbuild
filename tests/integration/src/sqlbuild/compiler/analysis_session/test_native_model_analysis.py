@@ -40,6 +40,7 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     deferral_kinds,
     failing_provide_sessions,
     generated_analysis_files,
+    nullability_analysis_files,
     native_pivot_proofs,
     pivot_project_files,
     shared_analysis_files,
@@ -114,14 +115,25 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     [
         SharedAnalysisTestCase(
             description="equal regional queries, missing-column readers and a unique summary",
-            regions=("east", "west", "north", "south"),
-            inexact_regions=("east", "west", "north"),
+            files=shared_analysis_files(
+                regions=("east", "west", "north", "south"),
+                inexact_regions=("east", "west", "north"),
+            ),
             dialects=("duckdb", "snowflake"),
             expected_analysed=24,
             expected_shared=22,
             expected_reanalysed=6,
             expected_unshared=2,
-        )
+        ),
+        SharedAnalysisTestCase(
+            description="equal queries over inputs differing only in nullability",
+            files=nullability_analysis_files(),
+            dialects=("duckdb",),
+            expected_analysed=7,
+            expected_shared=4,
+            expected_reanalysed=0,
+            expected_unshared=3,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -131,10 +143,7 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     inputs: CompileProjectInputs = compile_inputs(
-        project_dir=tmp_path / "project",
-        files=shared_analysis_files(
-            regions=test_case.regions, inexact_regions=test_case.inexact_regions
-        ),
+        project_dir=tmp_path / "project", files=test_case.files
     )
     sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
     parity: AnalysisParity = AnalysisParity()

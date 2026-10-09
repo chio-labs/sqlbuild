@@ -389,6 +389,52 @@ def shared_analysis_files(
     }
 
 
+def nullability_analysis_files() -> dict[str, str]:
+    """Equal queries over inputs whose types match but whose nullability may differ."""
+
+    sources: str = "sources:\n" + "".join(
+        f"  - name: {name}\n    description: Orders.\n    columns:\n"
+        "      - name: customer_id\n        type: INTEGER\n"
+        f"      - name: amount\n        type: DOUBLE{nullable}\n"
+        for name, nullable in (
+            ("s1", ""),
+            ("s2", "\n        nullable: false"),
+            ("s3", "\n        nullable: true"),
+        )
+    )
+    readers: dict[str, str] = {
+        f"models/m_{name}.sql": (
+            'MODEL (description "Orders read with null handling");\n\n'
+            "SELECT customer_id, amount, COALESCE(amount, 0) AS filled, amount IS NULL AS missing,\n"
+            f'  amount + 1 AS bumped\nFROM __source("{name}")\n'
+        )
+        for name in ("s1", "s2", "s3")
+    }
+    contracts: dict[str, str] = {
+        f"models/base_{name}.sql": (
+            f'MODEL (\n  description "Contracted orders {name}",\n  contract enforced,\n'
+            f"  columns (customer_id (type INTEGER), amount (type DOUBLE{nullable})),\n);\n\n"
+            'SELECT customer_id, amount FROM __source("s1")\n'
+        )
+        for name, nullable in (("p", ""), ("q", ", nullable false"))
+    }
+    dependants: dict[str, str] = {
+        f"models/d_{name}.sql": (
+            'MODEL (description "Contracted orders with null handling");\n\n'
+            "SELECT customer_id, amount, COALESCE(amount, 0) AS filled, amount + 1 AS bumped\n"
+            f'FROM __ref("base_{name}")\n'
+        )
+        for name in ("p", "q")
+    }
+    return {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "sources/raw.yml": sources,
+        **readers,
+        **contracts,
+        **dependants,
+    }
+
+
 def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     """Record every native session started; return the list they are appended to."""
 

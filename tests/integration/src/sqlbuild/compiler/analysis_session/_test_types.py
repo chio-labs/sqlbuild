@@ -56,8 +56,7 @@ class SharedAnalysisTestCase:
     """Models whose equal queries share one analysis, some inexact and so re-analysed alone."""
 
     description: str
-    regions: tuple[str, ...]
-    inexact_regions: tuple[str, ...]
+    files: dict[str, str]
     dialects: tuple[str | None, ...]
     expected_analysed: int
     expected_shared: int
