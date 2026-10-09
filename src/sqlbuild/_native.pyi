@@ -411,6 +411,87 @@ def infer_expression_source_shapes(
 ) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...
 
 # Native analysis: semantic completion.
+class SemanticTypeRecovery:
+    @property
+    def status(self) -> str: ...
+    @property
+    def deferral(self) -> str | None: ...
+    @property
+    def poisoned(self) -> list[tuple[str, str]]: ...
+    @property
+    def revalidated(self) -> list[int]: ...
+    def finish(
+        self, revised: list[list[tuple[str, int | None, int | None]]], /
+    ) -> tuple[list[tuple[int, str | None]], list[list[int]]] | None: ...
+
+def plan_semantic_type_recovery(
+    catalog: object,
+    request: tuple[
+        str | None,
+        list[
+            tuple[
+                str,
+                str,
+                list[str] | None,
+                list[str],
+                list[tuple[str, list[tuple[str, str]]]],
+                list[tuple[int, str, str, bool]],
+                list[tuple[int, str, str, int | None, int | None]],
+            ]
+        ],
+        list[tuple[int, str, bool, str | None]],
+    ],
+    /,
+) -> SemanticTypeRecovery: ...
+def complete_semantic_checks(
+    catalog: object,
+    request: tuple[
+        str | None,
+        list[
+            tuple[
+                int,
+                str,
+                str,
+                str | None,
+                str | None,
+                int | None,
+                int | None,
+                tuple[int, int, int | None, int | None] | None,
+                str | None,
+                list[str],
+            ]
+        ],
+        list[
+            tuple[
+                str,
+                str,
+                str,
+                list[str],
+                list[tuple[str, list[tuple[str, str]]]],
+                list[str],
+                str | None,
+            ]
+        ],
+        list[tuple[str, list[tuple[str, str]]]],
+    ],
+    /,
+) -> tuple[
+    str | None,
+    list[
+        tuple[
+            int,
+            str,
+            str | None,
+            list[str],
+            tuple[int, int, int | None, int | None] | None,
+            int | None,
+            int | None,
+            bool,
+        ]
+    ],
+    list[list[int]] | None,
+    list[tuple[int | None, tuple[int, str, str, str] | None]],
+]: ...
 
 # Native analysis: contracts.
 def evaluate_native_model_contracts(

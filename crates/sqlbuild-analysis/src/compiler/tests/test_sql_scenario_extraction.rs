@@ -64,16 +64,23 @@ fn given_scenarios_when_extracting_natively_then_python_outcomes_or_deferrals_ar
             ),
         },
         ScenarioExtractionTestCase {
-            description: "a quoted CTE name is a scanner error Python may still accept with Polyglot",
+            description: "a quoted CTE name is Python's scanner error",
             sql: "WITH \"__source__raw\" AS (SELECT 1), __expected__orders AS (SELECT 1 AS id)",
             expected_json: Some(
-                r#"{"scanError":"SQL scenario 'tests/scenarios/orders.sql' expected a CTE name"}"#,
+                r#"{"error":"SQL scenario 'tests/scenarios/orders.sql' expected a CTE name"}"#,
             ),
         },
         ScenarioExtractionTestCase {
-            description: "an unclosed body is a scanner error naming the scenario context",
+            description: "an unclosed body is Python's scanner error naming the scenario context",
             sql: "WITH __source__raw AS (SELECT 1",
-            expected_json: Some(r#"{"scanError":"SQL scenario contains an unclosed parenthesis"}"#),
+            expected_json: Some(r#"{"error":"SQL scenario contains an unclosed parenthesis"}"#),
+        },
+        ScenarioExtractionTestCase {
+            description: "a materialization hint is Python's scanner error",
+            sql: "WITH __source__raw AS NOT MATERIALIZED (SELECT 1), __expected__orders AS (SELECT 1)",
+            expected_json: Some(
+                r#"{"error":"SQL scenario 'tests/scenarios/orders.sql' CTE '__source__raw' must not use AS NOT MATERIALIZED; materialization hints are not supported in SQL scenario CTEs"}"#,
+            ),
         },
         ScenarioExtractionTestCase {
             description: "a keyword Python would match by case mapping defers",

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.148.0](https://github.com/chio-labs/sqlbuild/compare/v0.147.0...v0.148.0) (2026-10-09)
+
+
+### Features
+
+* **native:** analyse models natively behind the preview engine ([#1045](https://github.com/chio-labs/sqlbuild/issues/1045)) ([4d07a41](https://github.com/chio-labs/sqlbuild/commit/4d07a416da943401f3ef6cfcf6ddb4ecc067c5c3))
+* **native:** report macro errors natively without re-running Python ([#1051](https://github.com/chio-labs/sqlbuild/issues/1051)) ([0ce6787](https://github.com/chio-labs/sqlbuild/commit/0ce6787a9eb2a601c0a164cdaf7b4534100ec1ba))
+* **scenarios:** reject quoted and materialized scenario CTE names like SQL tests ([#1052](https://github.com/chio-labs/sqlbuild/issues/1052)) ([33fd340](https://github.com/chio-labs/sqlbuild/commit/33fd340bdc416ce459e81e7de036d5aa5154c20f))
+
+
+### Bug Fixes
+
+* **rename:** suggest the one-step sqb mv command when a rename crosses layers ([#1048](https://github.com/chio-labs/sqlbuild/issues/1048)) ([4f5e8c6](https://github.com/chio-labs/sqlbuild/commit/4f5e8c6a32fd8e74308c3c7114a585dd8b5a88a9))
+
 ## [0.147.0](https://github.com/chio-labs/sqlbuild/compare/v0.146.0...v0.147.0) (2026-10-09)
 
 

@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import base64
 import json
+import re
+import shlex
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    REPO_ROOT,
     execute_duckdb,
     prepare_inline_project,
     query_duckdb,
@@ -17,6 +20,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 )
 
 DATABASE_FILE: str = "orders.duckdb"
+_LAYER_MOVE_HINT: re.Pattern[str] = re.compile(
+    r"^.*\n  Rename and move in one step:\n.*\n.*$", re.MULTILINE
+)
 SCHEMA: str = "analytics"
 
 
@@ -402,4 +408,22 @@ def order_ids(*, project_dir: Path, name: str) -> tuple[int, ...]:
             db_path=project_dir / DATABASE_FILE,
             sql=f"SELECT order_id FROM {SCHEMA}.{name} ORDER BY order_id",
         )
+    )
+
+
+def layer_move_hint(stdout: str) -> tuple[str, ...]:
+    """Return the layer-folder hint lines around the one-step command; empty when absent."""
+
+    return tuple("\n".join(_LAYER_MOVE_HINT.findall(stdout)).splitlines())
+
+
+def run_printed_command(command: str) -> subprocess.CompletedProcess[str]:
+    """Run a command line exactly as the CLI printed it."""
+
+    return subprocess.run(
+        ["uv", "run", *shlex.split(command)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
     )

@@ -16,6 +16,7 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_declaration_scope_resolver,
 )
 from sqlbuild.compiler.compile._helpers.sql_tests.extraction_errors import (
+    validate_authored_scenario_cte_names,
     validate_authored_test_cte_names,
 )
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
@@ -51,6 +52,9 @@ def build_declaration_scope(
 
     validate_authored_test_cte_names(
         test_files=discovered_inputs.test_files, syntax=sql_lexical_syntax
+    )
+    validate_authored_scenario_cte_names(
+        scenario_files=discovered_inputs.scenario_files, syntax=sql_lexical_syntax
     )
     if native_stage_enabled(NativeStage.DECLARATION_SCOPES):
         native_scope: DeclarationScopeBuild | None = _build_native_declaration_scope(

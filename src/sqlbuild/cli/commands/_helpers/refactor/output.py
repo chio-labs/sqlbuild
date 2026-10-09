@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild.cli.commands.constants import FOLDER_PLACEHOLDER
+from sqlbuild.cli.commands.models import LayerMoveSuggestion
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.refactoring.constants import OPERATION_TITLES
 from sqlbuild.compiler.refactoring.models import (
@@ -31,6 +33,7 @@ def render_refactor_text(
     status: RefactorStatus,
     diagnostics: tuple[CompilerDiagnostic, ...],
     use_color: bool,
+    layer_move: LayerMoveSuggestion | None = None,
 ) -> str:
     """Render the edit tree, manual locations, and one terminal status line."""
 
@@ -50,6 +53,8 @@ def render_refactor_text(
     if diagnostics:
         lines.append(style.error_strong("Compile errors in the edited project"))
         lines.extend(_diagnostic_lines(style=style, diagnostics=diagnostics))
+    if layer_move is not None:
+        lines.extend(_layer_move_lines(style=style, layer_move=layer_move))
     lines.append(_status_line(style=style, plan=plan, status=status))
     return "\n".join(lines) + "\n"
 
@@ -194,6 +199,27 @@ def _diagnostic_lines(*, style: CliStyle, diagnostics: tuple[CompilerDiagnostic,
         )
         + diagnostic.message.splitlines()[0]
         for index, diagnostic in enumerate(diagnostics)
+    ]
+
+
+def _layer_move_lines(*, style: CliStyle, layer_move: LayerMoveSuggestion) -> list[str]:
+    folder: str = (
+        f"under {layer_move.folder}/"
+        if layer_move.folder is not None
+        else f"under a layer folder named {layer_move.layer_folder}/"
+        if layer_move.layer_folder is not None
+        else "under another layer's folder"
+    )
+    note: str = (
+        "(change the folder if you want it somewhere else)"
+        if layer_move.folder is not None
+        else f"(replace {FOLDER_PLACEHOLDER}/ with the folder the model should live in)"
+    )
+    return [
+        f"{style.object_name(layer_move.new_name)} belongs {folder}",
+        "  Rename and move in one step:",
+        f"    {style.command(layer_move.command)}",
+        f"  {style.muted(note)}",
     ]
 
 

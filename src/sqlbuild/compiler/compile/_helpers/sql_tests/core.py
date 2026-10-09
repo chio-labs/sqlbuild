@@ -7,9 +7,6 @@ from functools import lru_cache
 from typing import Any
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.analysis.ctes import (
-    extract_top_level_ctes_with_sql_analysis,
-)
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.constants import (
     DEFAULT_SQL_TEST_MODE,
@@ -47,6 +44,8 @@ from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 _CONTEXT: str = "SQL test"
 _SQL_TEST_WITH_REQUIREMENT: str = "mock CTEs and one __expected__<model> CTE"
 _DIRECT_DEPENDENCY_PATH_LENGTH: int = 2
+_MATERIALIZED_KEYWORD: str = "MATERIALIZED"
+_NOT_KEYWORD: str = "NOT"
 _SQL_IDENTIFIER_QUOTE_TOKENS: frozenset[str] = frozenset({'"', "`"})
 
 
@@ -55,25 +54,14 @@ def extract_unclassified_sql_test_ctes(
 ) -> tuple[CompileSqlTestCte, ...]:
     """Extract raw top-level CTEs before mode-specific classification."""
 
-    try:
-        ctes: tuple[CompileSqlTestCte, ...] = extract_top_level_ctes_with_scanner(
-            sql=sql,
-            file_label=file_label,
-            context_label=_CONTEXT,
-            with_requirement=_SQL_TEST_WITH_REQUIREMENT,
-            cte_type=CompileSqlTestCte,
-            syntax=syntax,
-        )
-    except CompileInputError as scanner_error:
-        cte_values: tuple[tuple[str, str], ...] | None = extract_top_level_ctes_with_sql_analysis(
-            sql=sql,
-            file_label=file_label,
-            context_label="SQL test",
-        )
-        if cte_values is None:
-            raise scanner_error from None
-        ctes = tuple(CompileSqlTestCte(name=name, sql_body=body) for name, body in cte_values)
-    return ctes
+    return extract_top_level_ctes_with_scanner(
+        sql=sql,
+        file_label=file_label,
+        context_label=_CONTEXT,
+        with_requirement=_SQL_TEST_WITH_REQUIREMENT,
+        cte_type=CompileSqlTestCte,
+        syntax=syntax,
+    )
 
 
 def extract_sql_test_expected_model_names(
@@ -236,6 +224,14 @@ def _scan_top_level_ctes(
             context_label=context_label,
         )
         index = _skip_ignorable(sql=sql, start=index, context_label=context_label, syntax=syntax)
+        hint: str | None = _materialization_hint(
+            sql=sql, start=index, context_label=context_label, syntax=syntax
+        )
+        if hint is not None:
+            raise CompileInputError(
+                f"{context_label} '{file_label}' CTE '{cte_name}' must not use AS {hint}; "
+                f"materialization hints are not supported in {context_label} CTEs"
+            )
         if index >= len(sql) or sql[index] != SQL_OPEN_PAREN_TOKEN:
             raise CompileInputError(
                 f"{context_label} '{file_label}' CTE '{cte_name}' must use AS (...)"
@@ -254,6 +250,20 @@ def _scan_top_level_ctes(
             )
             continue
         return tuple(ctes), index
+
+
+def _materialization_hint(
+    *, sql: str, start: int, context_label: str, syntax: SqlLexicalSyntax
+) -> str | None:
+    if _try_consume_keyword(sql=sql, start=start, keyword=_MATERIALIZED_KEYWORD) is not None:
+        return _MATERIALIZED_KEYWORD
+    not_end: int | None = _try_consume_keyword(sql=sql, start=start, keyword=_NOT_KEYWORD)
+    if not_end is None:
+        return None
+    index: int = _skip_ignorable(sql=sql, start=not_end, context_label=context_label, syntax=syntax)
+    if _try_consume_keyword(sql=sql, start=index, keyword=_MATERIALIZED_KEYWORD) is None:
+        return None
+    return f"{_NOT_KEYWORD} {_MATERIALIZED_KEYWORD}"
 
 
 def _require_prefixed_name(

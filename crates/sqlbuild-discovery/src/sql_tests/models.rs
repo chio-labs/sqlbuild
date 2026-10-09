@@ -36,4 +36,6 @@ pub struct DiscoveredScenarioFile {
     pub contents: String,
     pub header_values: Vec<(String, AuthoredValue)>,
     pub sql_body: String,
+    /// Code-point span of the authored SQL after the header, which `sql_body` cleans.
+    pub body_span: (usize, usize),
 }

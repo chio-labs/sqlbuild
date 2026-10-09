@@ -385,6 +385,7 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
 fn given_authored_blocks_when_reading_ctes_then_offsets_and_name_errors_are_exact() {
     let test_cases = [
         AuthoredCtesTestCase {
+            scenario: false,
             description: "body offsets count code points and skip leading whitespace",
             sql: "-- café\nWITH h AS (  SELECT 'é' AS a), __ref__orders AS (\n SELECT 1)",
             expected_response: json!({"tests": [{"kind": "authored", "ctes": [
@@ -393,6 +394,7 @@ fn given_authored_blocks_when_reading_ctes_then_offsets_and_name_errors_are_exac
             ]}]}),
         },
         AuthoredCtesTestCase {
+            scenario: false,
             description: "a CTE name error keeps its code-point offset",
             sql: "-- é\nWITH h AS (SELECT 1), café AS (SELECT 2)",
             expected_response: json!({"error": {
@@ -404,6 +406,55 @@ fn given_authored_blocks_when_reading_ctes_then_offsets_and_name_errors_are_exac
             }}),
         },
         AuthoredCtesTestCase {
+            scenario: false,
+            description: "a materialization hint is located at the hint with help",
+            sql: "WITH h AS (SELECT 1),\n__ref__orders AS not\nmaterialized (SELECT 2)",
+            expected_response: json!({"error": {
+                "index": 0,
+                "message": "SQL test 'tests/t.sql' CTE '__ref__orders' must not use AS NOT MATERIALIZED; materialization hints are not supported in SQL test CTEs",
+                "help": "remove NOT MATERIALIZED and write __ref__orders AS (...)",
+                "token": "not\nmaterialized",
+                "tokenOffset": 39,
+            }}),
+        },
+        AuthoredCtesTestCase {
+            scenario: true,
+            description: "a scenario's quoted CTE name names the scenario",
+            sql: "WITH \"__source__raw_orders\" AS (SELECT 1), __expected__orders AS (SELECT 1)",
+            expected_response: json!({"error": {
+                "index": 0,
+                "message": "SQL scenario 'tests/t.sql' CTE name \"__source__raw_orders\" must be an unquoted identifier of ASCII letters, digits and underscores",
+                "help": "rename the CTE, for example __source__raw_orders; quoted CTE names and names with $ or non-ASCII characters are not supported",
+                "token": "\"__source__raw_orders\"",
+                "tokenOffset": 5,
+            }}),
+        },
+        AuthoredCtesTestCase {
+            scenario: true,
+            description: "a scenario's materialization hint names the scenario",
+            sql: "WITH __source__raw_orders AS MATERIALIZED (SELECT 1)",
+            expected_response: json!({"error": {
+                "index": 0,
+                "message": "SQL scenario 'tests/t.sql' CTE '__source__raw_orders' must not use AS MATERIALIZED; materialization hints are not supported in SQL scenario CTEs",
+                "help": "remove MATERIALIZED and write __source__raw_orders AS (...)",
+                "token": "MATERIALIZED",
+                "tokenOffset": 29,
+            }}),
+        },
+        AuthoredCtesTestCase {
+            scenario: false,
+            description: "a CTE name starting with a digit is located with help",
+            sql: "WITH 2024_orders AS (SELECT 1)",
+            expected_response: json!({"error": {
+                "index": 0,
+                "message": "SQL test 'tests/t.sql' CTE name '2024_orders' must be an unquoted identifier of ASCII letters, digits and underscores",
+                "help": "rename the CTE, for example cte_2024_orders; quoted CTE names and names with $ or non-ASCII characters are not supported",
+                "token": "2024_orders",
+                "tokenOffset": 5,
+            }}),
+        },
+        AuthoredCtesTestCase {
+            scenario: false,
             description: "other errors are left to extraction and read as no CTEs",
             sql: "WITH h AS (SELECT 1) SELECT * FROM h",
             expected_response: json!({"tests": [{"kind": "authored", "ctes": []}]}),
@@ -412,7 +463,7 @@ fn given_authored_blocks_when_reading_ctes_then_offsets_and_name_errors_are_exac
 
     for test_case in test_cases {
         assert_eq!(
-            authored_ctes_response(test_case.sql),
+            authored_ctes_response(test_case.sql, test_case.scenario),
             test_case.expected_response,
             "{}",
             test_case.description

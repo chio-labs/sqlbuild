@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.refs.references import (
@@ -19,7 +20,11 @@ from sqlbuild.compiler.compile.constants import REFERENCE_CALL_SYNTAX_CODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestExtractionError
 from sqlbuild.compiler.compile.models import CompilerDiagnostic, SqlReferenceScan
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
-from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestBlock,
+    DiscoveredSqlTestFile,
+)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceLocation
 
@@ -62,6 +67,37 @@ def validate_authored_test_cte_names(
         ) from None
 
 
+def validate_authored_scenario_cte_names(
+    *, scenario_files: tuple[DiscoveredSqlScenarioFile, ...], syntax: SqlLexicalSyntax
+) -> None:
+    """Raise the located CTE-name or materialization error of the first scenario that has one."""
+
+    try:
+        _ = authored_sql_test_cte_batch(
+            tests=tuple(
+                (scenario_file.sql_body, str(scenario_file.relative_path))
+                for scenario_file in scenario_files
+            ),
+            syntax=syntax,
+            scenarios=True,
+        )
+    except SqlTestExtractionError as error:
+        failed: DiscoveredSqlScenarioFile = scenario_files[error.test_index]
+        offset: int | None = (
+            _authored_offset(
+                contents=failed.contents,
+                authored=failed.sql_body,
+                span=failed.sql_body_span,
+                body_offset=error.token_offset,
+            )
+            if error.token_offset is not None
+            else None
+        )
+        raise _located_error(
+            error=error, contents=failed.contents, relative_path=failed.relative_path, offset=offset
+        ) from None
+
+
 def located_extraction_error(
     *,
     error: SqlTestExtractionError,
@@ -78,15 +114,25 @@ def located_extraction_error(
         if error.token_offset is not None and sql == test_block.sql_body
         else None
     )
+    return _located_error(
+        error=error,
+        contents=test_file.contents,
+        relative_path=test_file.relative_path,
+        offset=offset,
+    )
+
+
+def _located_error(
+    *, error: SqlTestExtractionError, contents: str, relative_path: Path, offset: int | None
+) -> CompileInputError:
     if offset is None:
         return CompileInputError(
             error.message, code=error.code, help=error.help, bridge_independent=True
         )
-    contents: str = test_file.contents
     line: int = contents.count(_LINE_BREAK, 0, offset) + 1
     column: int = offset - (contents.rfind(_LINE_BREAK, 0, offset) + 1) + 1
     return CompileInputError(
-        f"{error.message}\n  --> {test_file.relative_path.as_posix()}:{line}:{column}",
+        f"{error.message}\n  --> {relative_path.as_posix()}:{line}:{column}",
         code=error.code,
         help=error.help,
         bridge_independent=True,
@@ -149,15 +195,25 @@ def authored_file_offset(
 ) -> int | None:
     """Map an offset in a block's cleaned SQL back to the file, or None if it cannot be exact."""
 
-    span: tuple[int, int] | None = test_block.sql_body_span
+    return _authored_offset(
+        contents=test_file.contents,
+        authored=test_block.sql_body,
+        span=test_block.sql_body_span,
+        body_offset=body_offset,
+    )
+
+
+def _authored_offset(
+    *, contents: str, authored: str, span: tuple[int, int] | None, body_offset: int
+) -> int | None:
     if span is None:
         return None
     lines: tuple[_CleanedLine, ...] | None = _cleaned_lines(
-        authored=test_block.sql_body, span=span, contents=test_file.contents
+        authored=authored, span=span, contents=contents
     )
     if lines is None:
         return None
-    body: str = test_block.sql_body
+    body: str = authored
     line_index: int = body.count(_LINE_BREAK, 0, body_offset)
     column: int = body_offset - (body.rfind(_LINE_BREAK, 0, body_offset) + 1)
     cleaned: _CleanedLine = lines[line_index]

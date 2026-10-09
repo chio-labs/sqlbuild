@@ -1,7 +1,9 @@
 use crate::sql_tests::tests::helpers::{
-    FILE_PATH, expected_rows, scenario_rows, statement_failures, test_file_rows,
+    FILE_PATH, expected_rows, scenario_body_span, scenario_rows, statement_failures, test_file_rows,
 };
-use crate::sql_tests::tests::test_types::{DeepStatementHeaderTestCase, StatementFileTestCase};
+use crate::sql_tests::tests::test_types::{
+    DeepStatementHeaderTestCase, ScenarioSpanTestCase, StatementFileTestCase,
+};
 
 #[test]
 fn given_sql_test_files_when_splitting_then_blocks_and_failures_match_python() {
@@ -102,6 +104,35 @@ fn given_deeply_nested_test_and_scenario_headers_when_parsing_then_each_reports_
         assert_eq!(
             statement_failures(&contents),
             test_case.expected_failures,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_scenario_file_when_parsing_then_body_span_counts_code_points_after_the_header() {
+    let test_cases = [
+        ScenarioSpanTestCase {
+            description: "CRLF line breaks and non-ASCII header text before the body",
+            contents: "SCENARIO (description \"Commandes \u{e9}t\u{e9}\");\r\n\r\nWITH a AS (SELECT '\u{e9}')\r\n",
+            expected_body_span: Some((43, 67)),
+        },
+        ScenarioSpanTestCase {
+            description: "an LF body directly after the header",
+            contents: "SCENARIO ();\nWITH a AS (SELECT 1)",
+            expected_body_span: Some((13, 33)),
+        },
+        ScenarioSpanTestCase {
+            description: "a file without a header has no span",
+            contents: "WITH a AS (SELECT 1)",
+            expected_body_span: None,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            scenario_body_span(test_case.contents),
+            test_case.expected_body_span,
             "{}",
             test_case.description
         );

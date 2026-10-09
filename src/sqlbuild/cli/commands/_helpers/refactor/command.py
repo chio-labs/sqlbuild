@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands._helpers.refactor.compile_facts import compile_for_refactor
+from sqlbuild.cli.commands._helpers.refactor.layer_move import layer_move_suggestion
 from sqlbuild.cli.commands._helpers.refactor.output import (
     render_refactor_json,
     render_refactor_text,
@@ -157,7 +158,13 @@ def _finish(
         render_refactor_json(plan=plan, status=status, diagnostics=diagnostics)
         if request.json_output
         else render_refactor_text(
-            plan=plan, status=status, diagnostics=diagnostics, use_color=use_color
+            plan=plan,
+            status=status,
+            diagnostics=diagnostics,
+            use_color=use_color,
+            layer_move=layer_move_suggestion(
+                plan=plan, diagnostics=diagnostics, project_dir=request.project_dir
+            ),
         )
     )
     _ = sys.stdout.write(output)

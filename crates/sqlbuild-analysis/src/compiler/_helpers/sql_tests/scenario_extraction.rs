@@ -31,12 +31,10 @@ struct ClassifiedScenario {
     assertion_names: Vec<String>,
 }
 
-/// One scenario's scanner error, or its classification after any Polyglot independence check.
+/// One scenario's error, or its classification after any Polyglot independence check.
 #[derive(Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ScenarioOutcome {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    scan_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     independence: Option<Vec<Cte>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -54,7 +52,7 @@ pub(crate) fn extract_scenario_json(
         match scan_top_level_ctes(sql, file, RelationshipSource::Scenario, syntax) {
             TopLevelCtes::Deferred => return Ok(None),
             TopLevelCtes::Failed(message) => ScenarioOutcome {
-                scan_error: Some(message),
+                error: Some(message),
                 ..ScenarioOutcome::default()
             },
             TopLevelCtes::Scanned(ctes) => {

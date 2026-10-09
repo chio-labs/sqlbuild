@@ -677,7 +677,10 @@ def test_given_direct_logic_sql_test_cte_variants_when_extracting_then_it_return
         __expected__orders AS (SELECT order_id FROM __source__raw_orders)
         SELECT 1
         """.strip(),
-            expected_error_fragment="CTE '__source__raw_orders' must use AS \\(\\.\\.\\.\\)",
+            expected_error_fragment=(
+                "CTE '__source__raw_orders' must not use AS MATERIALIZED; materialization hints "
+                "are not supported in SQL test CTEs"
+            ),
         ),
         ExtractSqlTestCtesErrorTestCase(
             description="raises when expected cte omits target name",
@@ -894,7 +897,10 @@ def test_given_invalid_sql_test_cte_variants_when_extracting_then_it_raises_clea
         CteScannerMessageTestCase(
             description="sql test with an invalid cte name keeps sql test wording",
             sql="WITH 1orders AS (SELECT 1) SELECT 1",
-            expected_message="SQL test 'tests/unit/orders.sql' expected a CTE name",
+            expected_message=(
+                "SQL test 'tests/unit/orders.sql' CTE name '1orders' must be an unquoted "
+                "identifier of ASCII letters, digits and underscores"
+            ),
         ),
         CteScannerMessageTestCase(
             description="sql test without a ceremonial select keeps sql test wording",

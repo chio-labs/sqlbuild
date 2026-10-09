@@ -8,9 +8,6 @@ from typing import cast
 
 import orjson
 
-from sqlbuild.compiler.compile._helpers.analysis.ctes import (
-    extract_top_level_ctes_with_sql_analysis,
-)
 from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
     find_nested_macro_call_names,
@@ -62,8 +59,6 @@ from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 type _SharedDeclarations = dict[tuple[str, str], tuple[DeclarationRecord, ...]]
 type _BlockNames = tuple[str, ...] | Exception
-
-_SQL_TEST_CONTEXT: str = "SQL test"
 
 
 def build_scope_relationship_grants(
@@ -324,14 +319,7 @@ def _natively_tested_macro_names(
     if native_ctes is None:
         return _tested_macro_names(sql=sql, file_label=file_label, syntax=syntax)
     if isinstance(native_ctes, str):
-        polyglot_ctes: tuple[tuple[str, str], ...] | None = (
-            extract_top_level_ctes_with_sql_analysis(
-                sql=sql, file_label=file_label, context_label=_SQL_TEST_CONTEXT
-            )
-        )
-        if polyglot_ctes is None:
-            raise CompileInputError(native_ctes, bridge_independent=True)
-        native_ctes = polyglot_ctes
+        raise CompileInputError(native_ctes, bridge_independent=True)
     actual_sql: str | None = next(
         (body for name, body in native_ctes if name == MACRO_ACTUAL_TEST_CTE_NAME), None
     )

@@ -2,6 +2,9 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-pub(crate) fn register(_module: &Bound<'_, PyModule>) -> PyResult<()> {
-    Ok(())
+use crate::bindings::_helpers::semantic_checks::{completion, type_recovery};
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    type_recovery::register(module)?;
+    completion::register(module)
 }
