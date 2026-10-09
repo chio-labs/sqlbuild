@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
     analyze_native_model_sql,
 )
@@ -31,6 +33,7 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
     StandalonePivotProofTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
+    ADAPTER_RULE_MODELS,
     AnalysisParity,
     FailingProvideSession,
     analysis_request,
@@ -45,6 +48,14 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
+_DIALECT_PROFILES: tuple[ExpressionInferenceProfile, ...] = tuple(
+    ExpressionInferenceProfile(sql_analysis_dialect=dialect)
+    for dialect in ("duckdb", "postgres", "snowflake", "bigquery")
+)
+_ADAPTER_PROFILES: tuple[ExpressionInferenceProfile, ...] = (
+    SnowflakeAdapter().expression_inference_profile(),
+    DuckDbAdapter().expression_inference_profile(),
+)
 _ORDERS_PROJECT: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders_cycle"\nadapter = "duckdb"\n',
     "models/orders.sql": 'MODEL (description "Orders");\n\nSELECT order_id FROM __ref("returns")\n',
@@ -60,13 +71,15 @@ _ORDERS_PROJECT: dict[str, str] = {
             seed=20261008,
             count=6,
             model_count=24,
-            dialects=("duckdb", "postgres", "snowflake", "bigquery"),
+            inference_profiles=_DIALECT_PROFILES,
+            extra_files={},
             lineage_mode=ColumnLineageMode.FAST,
             expected_minimum_native=500,
             expected_minimum_expression_shapes=40,
             expected_minimum_pivot_proofs=80,
             expected_minimum_python_cte_recoveries=35,
             expected_minimum_legacy_analyses=80,
+            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=12,
             expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=90,
@@ -76,16 +89,54 @@ _ORDERS_PROJECT: dict[str, str] = {
             seed=20261008,
             count=6,
             model_count=24,
-            dialects=("duckdb", "postgres", "snowflake", "bigquery"),
+            inference_profiles=_DIALECT_PROFILES,
+            extra_files={},
             lineage_mode=ColumnLineageMode.RICH,
             expected_minimum_native=500,
             expected_minimum_expression_shapes=40,
             expected_minimum_pivot_proofs=80,
             expected_minimum_python_cte_recoveries=15,
             expected_minimum_legacy_analyses=30,
+            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=12,
             expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=90,
+        ),
+        GeneratedAnalysisParityTestCase(
+            description="snowflake and duckdb adapter rules, fast lineage",
+            seed=20261010,
+            count=3,
+            model_count=24,
+            inference_profiles=_ADAPTER_PROFILES,
+            extra_files=ADAPTER_RULE_MODELS,
+            lineage_mode=ColumnLineageMode.FAST,
+            expected_minimum_native=200,
+            expected_minimum_expression_shapes=15,
+            expected_minimum_pivot_proofs=30,
+            expected_minimum_python_cte_recoveries=3,
+            expected_minimum_legacy_analyses=40,
+            expected_legacy_analysis_deferrals=6,
+            expected_minimum_proven_pivots=10,
+            expected_maximum_enrichment_deferrals=0,
+            expected_minimum_native_enrichments=30,
+        ),
+        GeneratedAnalysisParityTestCase(
+            description="snowflake and duckdb adapter rules, rich lineage",
+            seed=20261010,
+            count=3,
+            model_count=24,
+            inference_profiles=_ADAPTER_PROFILES,
+            extra_files=ADAPTER_RULE_MODELS,
+            lineage_mode=ColumnLineageMode.RICH,
+            expected_minimum_native=190,
+            expected_minimum_expression_shapes=15,
+            expected_minimum_pivot_proofs=30,
+            expected_minimum_python_cte_recoveries=3,
+            expected_minimum_legacy_analyses=50,
+            expected_legacy_analysis_deferrals=18,
+            expected_minimum_proven_pivots=10,
+            expected_maximum_enrichment_deferrals=0,
+            expected_minimum_native_enrichments=20,
         ),
     ],
     ids=lambda case: case.description,
@@ -102,12 +153,15 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     for index in range(test_case.count):
         inputs: CompileProjectInputs = compile_inputs(
             project_dir=tmp_path / f"project_{index}",
-            files=generated_analysis_files(rng=rng, model_count=test_case.model_count),
+            files={
+                **generated_analysis_files(rng=rng, model_count=test_case.model_count),
+                **test_case.extra_files,
+            },
         )
-        for dialect in test_case.dialects:
+        for profile in test_case.inference_profiles:
             compare_analyses(
                 inputs=inputs,
-                dialect=dialect,
+                inference_profile=profile,
                 lineage_mode=test_case.lineage_mode,
                 parity=parity,
                 monkeypatch=monkeypatch,
@@ -116,7 +170,8 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
 
     assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
     assert kinds["analysis_session:session"] == kinds["analysis_session:expression_shapes"] == 0
-    assert kinds["analysis_session:dynamic_pivot"] == kinds["analysis_session:legacy_analysis"] == 0
+    assert kinds["analysis_session:dynamic_pivot"] == 0
+    assert kinds["analysis_session:legacy_analysis"] == test_case.expected_legacy_analysis_deferrals
     assert parity.legacy_analyses >= test_case.expected_minimum_legacy_analyses
     assert parity.python_cte_recoveries >= test_case.expected_minimum_python_cte_recoveries
     assert (
