@@ -544,19 +544,20 @@ def _partition_cached_static_tests(
             )
             cached_record: SqlTestArtifactCacheRecord | None = cached_records.get(record_key)
             if cached_record is not None:
-                cached_path: Path | None = artifact_matches_cache_record(
+                reusable_record: SqlTestArtifactCacheRecord | None = artifact_matches_cache_record(
                     tests_root=tests_root,
                     record=cached_record,
                     identity=artifact_identity,
                 )
-                if cached_path is not None:
+                if reusable_record is not None:
+                    cached_path: Path = tests_root / reusable_record.relative_path
                     COMPILE_ARTIFACT_WRITES.kept(
                         path=cached_path,
-                        size=cached_record.size,
-                        mtime_ns=cached_record.mtime_ns,
+                        size=reusable_record.size,
+                        mtime_ns=reusable_record.mtime_ns,
                     )
                     managed_paths.add(cached_path)
-                    current_records[record_key] = cached_record
+                    current_records[record_key] = reusable_record
                     continue
         pending.append(
             PendingStaticSqlTest(

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import platform
+from dataclasses import replace
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import cast
@@ -26,7 +27,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
 )
 
-_CACHE_VERSION: int = 3
+_CACHE_VERSION: int = 4
 _ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v4-orjson-identity"
 _CACHE_FILE_NAME: str = "sql-test-artifacts.json"
 _MAX_CACHE_BYTES: int = 10_000_000
@@ -142,6 +143,7 @@ def write_sql_test_artifact_cache(
                 "relative_path": record.relative_path.as_posix(),
                 "size": record.size,
                 "mtime_ns": record.mtime_ns,
+                "content_sha256": record.content_sha256,
             }
             for key, record in records.items()
         },
@@ -161,23 +163,23 @@ def write_sql_test_artifact_cache(
 
 def artifact_matches_cache_record(
     *, tests_root: Path, record: SqlTestArtifactCacheRecord, identity: str
-) -> Path | None:
-    """Return the safe existing artifact path when identity and stat metadata match."""
+) -> SqlTestArtifactCacheRecord | None:
+    """Return the reusable artifact's record, verifying content when only its mtime moved."""
 
     if record.identity != identity or not _is_safe_relative_sql_path(record.relative_path):
         return None
     artifact_path: Path = tests_root / record.relative_path
     try:
         stat: os.stat_result = artifact_path.stat()
+        if not artifact_path.is_file() or stat.st_size != record.size:
+            return None
+        if stat.st_mtime_ns == record.mtime_ns:
+            return record
+        if _file_sha256(artifact_path) != record.content_sha256:
+            return None
     except OSError:
         return None
-    if (
-        not artifact_path.is_file()
-        or stat.st_size != record.size
-        or stat.st_mtime_ns != record.mtime_ns
-    ):
-        return None
-    return artifact_path
+    return replace(record, mtime_ns=stat.st_mtime_ns)
 
 
 def build_sql_test_artifact_cache_record(
@@ -188,6 +190,7 @@ def build_sql_test_artifact_cache_record(
     try:
         relative_path: Path = artifact_path.relative_to(tests_root)
         stat: os.stat_result = artifact_path.stat()
+        content_sha256: str = _file_sha256(artifact_path)
     except (OSError, ValueError):
         return None
     if not _is_safe_relative_sql_path(relative_path):
@@ -197,6 +200,7 @@ def build_sql_test_artifact_cache_record(
         relative_path=relative_path,
         size=stat.st_size,
         mtime_ns=stat.st_mtime_ns,
+        content_sha256=content_sha256,
     )
 
 
@@ -252,6 +256,7 @@ def _record_from_payload(payload: object) -> SqlTestArtifactCacheRecord | None:
     relative_path: object = values.get("relative_path")
     size: object = values.get("size")
     mtime_ns: object = values.get("mtime_ns")
+    content_sha256: object = values.get("content_sha256")
     if (
         not isinstance(identity, str)
         or not isinstance(relative_path, str)
@@ -261,6 +266,7 @@ def _record_from_payload(payload: object) -> SqlTestArtifactCacheRecord | None:
         or not isinstance(mtime_ns, int)
         or isinstance(mtime_ns, bool)
         or mtime_ns < 0
+        or not isinstance(content_sha256, str)
     ):
         return None
     path: Path = Path(relative_path)
@@ -271,6 +277,7 @@ def _record_from_payload(payload: object) -> SqlTestArtifactCacheRecord | None:
         relative_path=path,
         size=size,
         mtime_ns=mtime_ns,
+        content_sha256=content_sha256,
     )
 
 
@@ -280,6 +287,10 @@ def _is_safe_relative_sql_path(path: Path) -> bool:
         and _PARENT_PATH_COMPONENT not in path.parts
         and path.suffix == _SQL_FILE_SUFFIX
     )
+
+
+def _file_sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _payload_digest(payload: object) -> str:

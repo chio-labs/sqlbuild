@@ -344,6 +344,48 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
 @pytest.mark.parametrize(
     "test_case",
     (
+        TargetWriterCacheTestCase(
+            description="identical bytes with a moved mtime", expected_builder_calls=0
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_artifact_with_moved_mtime_and_same_bytes_when_writing_then_reuses_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: TargetWriterCacheTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
+    moved_mtime_ns: int = artifact_path.stat().st_mtime_ns + 1_000_000_000
+    os.utime(artifact_path, ns=(moved_mtime_ns, moved_mtime_ns))
+    planner_spy: Mock = Mock(wraps=target_writer_module.plan_and_render_sql_test_artifacts)
+    monkeypatch.setattr(target_writer_module, "plan_and_render_sql_test_artifacts", planner_spy)
+
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+    _ = write_static_compile_target(
+        target_dir=target_dir,
+        adapter=DuckDbAdapter(),
+        project=project,
+    )
+
+    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert artifact_path.stat().st_mtime_ns == moved_mtime_ns
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
         TargetWriterPlanningErrorTestCase(
             description="missing mock is reported on every write",
             expected_builder_calls=1,
