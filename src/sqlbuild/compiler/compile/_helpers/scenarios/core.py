@@ -22,6 +22,8 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
 )
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 _CONTEXT: str = "SQL scenario"
@@ -38,6 +40,7 @@ def extract_sql_scenario_ctes(
     outcome: dict[str, Any] = orjson.loads(
         _native.extract_sql_scenario_json(sql, file_label, syntax.native_mapping)
     )
+    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="scenario_ctes")
     error: str | None = outcome.get("error")
     if error is not None:
         raise CompileInputError(error)

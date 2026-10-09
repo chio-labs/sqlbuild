@@ -33,6 +33,7 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_loop.constants import (
@@ -228,6 +229,7 @@ def resolve_declaration_context(
     context: DeclarationResolutionContext = resolver.native_contexts.context(
         list(matches), consumer
     )
+    report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_contexts")
     if cache_key is not None:
         resolver.cache_context(key=cache_key, context=context)
     return context

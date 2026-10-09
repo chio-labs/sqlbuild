@@ -7,6 +7,8 @@ import unicodedata
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner.constants import (
     MICROBATCH_END_SENTINEL,
     MICROBATCH_START_SENTINEL,
@@ -33,6 +35,7 @@ def get_validated_model_cursor_intrinsics(
         (model_name, config_values.get("materialized"), config_values.get("cursor")),
         _PYTHON,
     )
+    report_native_answer(stage=NativeStage.MODEL_LOOP, kind="cursor_intrinsic_validations")
     if error is not None:
         raise CompileInputError(error)
     return str(canonical_sql)
@@ -44,6 +47,7 @@ def reject_cursor_intrinsics(*, sql: str, context: str) -> None:
     error: str | None = _native.cursor_intrinsics_rejection(
         sql, _RESERVED_MARKERS, context, _PYTHON
     )
+    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="cursor_intrinsic_rejections")
     if error is not None:
         raise CompileInputError(error)
 

@@ -33,6 +33,8 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.main._native_expected_model_names import (
     native_expected_model_names,
 )
@@ -148,6 +150,11 @@ def extract_scope_relationship_facts(
         ],
         scenario=True,
         syntax=sql_lexical_syntax,
+    )
+    report_native_answer(
+        stage=NativeStage.DECLARATION_SCOPES,
+        kind="relationship_scans",
+        units=len(scenario_names) + len(macro_blocks),
     )
     for scenario, scanned in zip(discovered_inputs.scenario_files, scenario_names, strict=True):
         if isinstance(scanned, str):
@@ -282,6 +289,9 @@ def _scanned_expected_names(
         ],
         scenario=False,
         syntax=syntax,
+    )
+    report_native_answer(
+        stage=NativeStage.DECLARATION_SCOPES, kind="relationship_scans", units=len(scanned)
     )
     return {
         position: CompileInputError(names) if isinstance(names, str) else names
