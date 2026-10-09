@@ -4,10 +4,11 @@ from collections.abc import Sequence
 from typing import Any, TypedDict
 
 from sqlbuild.compiler.sql_test_glue.models import (
+    NativeSqlTestAssemblyRequest,
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
+from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 
 BUILD_IDENTITY: str
 
@@ -620,6 +621,9 @@ def plan_compiled_sql_tests(
     request: NativeSqlTestPlanningRequest, /
 ) -> tuple[list[NativeSqlTestPlanRow], int, int]: ...
 def resolve_compiled_sql_test_chains(request: NativeSqlTestChainRequest, /) -> list[list[str]]: ...
+def assemble_compiled_sql_tests(
+    request: NativeSqlTestAssemblyRequest, /
+) -> list[NativeSqlTestAssemblyRow]: ...
 
 # Native analysis: compiled project assembly.
 def assemble_project_resource_facts(

@@ -1,10 +1,16 @@
-"""Requests the native SQL-test planning glue reads from compiled objects."""
+"""Requests and results of the native SQL-test glue, read from compiled objects."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledSqlTest
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompiledSqlTest,
+    CompileModelInput,
+    CompilerDiagnostic,
+    CompileSqlTestInput,
+)
 
 
 @dataclass(frozen=True)
@@ -32,3 +38,20 @@ class NativeSqlTestChainRequest:
     models: tuple[CompiledModel, ...]
     tests: tuple[CompiledSqlTest, ...]
     lexical_syntax: dict[str, object]
+
+
+@dataclass(frozen=True)
+class NativeSqlTestAssemblyRequest:
+    """The project's model inputs and the SQL test inputs whose compiled facts to assemble."""
+
+    model_inputs: tuple[CompileModelInput, ...]
+    test_inputs: tuple[CompileSqlTestInput, ...]
+    lexical_syntax: dict[str, object]
+
+
+@dataclass(frozen=True)
+class NativeSqlTestAssembly:
+    """One natively assembled test and the keyed diagnostics to report before it."""
+
+    test: CompiledSqlTest
+    diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]

@@ -1,4 +1,6 @@
+pub mod assembly;
 pub mod authored_macro_calls;
+pub mod case_identity;
 pub mod cte_rename;
 pub mod cte_slices;
 pub mod cte_sql;
@@ -7,7 +9,9 @@ pub mod extraction;
 pub mod glue;
 pub mod helper_names;
 pub mod helper_scope;
+pub mod macro_call_names;
 pub mod markers;
+pub mod mock_reads;
 pub mod planning;
 pub mod reader_references;
 pub mod reference_calls;

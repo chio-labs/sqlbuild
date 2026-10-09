@@ -1,4 +1,4 @@
-"""SQL tests planned natively from compiled objects equal the JSON-request plans, test by test."""
+"""SQL tests assembled and planned natively equal Python's assembly and the JSON-request plans."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapt
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 from tests.integration.src.sqlbuild.compiler.sql_test_glue._test_types import (
+    GeneratedSqlTestAssemblyParityTestCase,
     GeneratedSqlTestPlanningParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.sql_test_glue.helpers import (
@@ -26,15 +27,19 @@ from tests.integration.src.sqlbuild.compiler.sql_test_glue.helpers import (
     PlanningCallOutcome,
     SqlTestCorpusShape,
     artifact_outcome,
+    assembly_outcome,
     chain_outcome,
     compiled_project,
+    generated_sql_test_assembly_files,
     generated_sql_test_files,
     native_raised_kinds,
     outcome_kind,
     planning_outcome,
     record_native_answers,
+    record_native_assemblies,
     use_sql_test_glue,
     with_unmocked_assertion,
+    write_project,
 )
 
 _ADAPTERS: dict[str, BaseAdapter] = {
@@ -171,3 +176,64 @@ def test_given_generated_sql_tests_when_planning_natively_then_plans_match_the_j
         outcomes["batch_answered"] >= test_case.expected_minimum_answered_batches,
         outcomes["raised"] >= test_case.expected_minimum_raised_outcomes,
     ) == ([], True, True, True, True, True, True, True), (native_answers, outcomes)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GeneratedSqlTestAssemblyParityTestCase(
+            description="model, direct, parameterized and mock-reads-helper tests",
+            seed=20261010,
+            count=4,
+            test_count=12,
+            shape=SqlTestCorpusShape(
+                windows=(NO_WINDOW, VALID_WINDOW, INVERTED_WINDOW),
+                stray_window_share=0.1,
+                helper_redefinition_share=0.15,
+                assertion_share=0.2,
+                unflattenable_assertion_share=0.1,
+            ),
+            expected_minimum_native_assembled=140,
+            expected_minimum_native_with_diagnostics=18,
+            expected_minimum_native_case_fingerprints=65,
+            expected_minimum_deferred_macro_mocks=4,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_generated_sql_tests_when_assembling_natively_then_compiled_tests_match_python(
+    test_case: GeneratedSqlTestAssemblyParityTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rng: random.Random = random.Random(test_case.seed)
+    native_assemblies: Counter[str] = record_native_assemblies(monkeypatch=monkeypatch)
+    differences: list[tuple[object, object, object]] = []
+    outcomes: Counter[str] = Counter()
+    for index in range(test_case.count):
+        project_dir: Path = tmp_path / f"project_{index}"
+        write_project(
+            project_dir=project_dir,
+            files=generated_sql_test_assembly_files(
+                rng=rng, test_count=test_case.test_count, shape=test_case.shape
+            ),
+        )
+        expected: PlanningCallOutcome = assembly_outcome(
+            project_dir=project_dir, monkeypatch=monkeypatch, native=False
+        )
+        actual: PlanningCallOutcome = assembly_outcome(
+            project_dir=project_dir, monkeypatch=monkeypatch, native=True
+        )
+        differences.extend(mismatches(inputs=[index], expected=[expected], actual=[actual]))
+        outcomes[outcome_kind(actual)] += 1
+
+    assert (
+        differences,
+        native_assemblies["native_assembled"] >= test_case.expected_minimum_native_assembled,
+        native_assemblies["native_with_diagnostics"]
+        >= test_case.expected_minimum_native_with_diagnostics,
+        native_assemblies["native_case_fingerprints"]
+        >= test_case.expected_minimum_native_case_fingerprints,
+        native_assemblies["deferred_macro_mocks"]
+        >= test_case.expected_minimum_deferred_macro_mocks,
+    ) == ([], True, True, True, True), (native_assemblies, outcomes)
