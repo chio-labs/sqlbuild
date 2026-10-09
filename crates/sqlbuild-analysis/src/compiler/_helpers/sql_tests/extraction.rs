@@ -69,15 +69,6 @@ struct TestRequest {
     authored: bool,
 }
 
-/// How strictly top-level CTE names are read.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum NameRule {
-    /// Unquoted ASCII identifiers only; anything else is an error naming the CTE.
-    Plain,
-    /// Quoted and Unicode identifiers are read, and the caller decides what to do with them.
-    Lenient,
-}
-
 /// One extraction error, with help and the offending text where the author can act on it.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Failure {
@@ -198,8 +189,7 @@ fn extract_test(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified
     if test.authored {
         return authored_ctes(test, syntax);
     }
-    let (ctes, _) =
-        extract_ctes_with_quoting(&test.sql, &test.file_label, syntax, NameRule::Plain)?;
+    let ctes: Vec<Cte> = scan_ctes(&test.sql, &test.file_label, syntax)?.ctes;
     let scope = TestScope {
         file: &test.file_label,
         syntax,
@@ -214,7 +204,7 @@ fn extract_test(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified
 
 /// The authored block's CTEs, or the located error of a CTE name; other errors read as no CTEs.
 fn authored_ctes(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified, Failure> {
-    match scan_ctes(&test.sql, &test.file_label, syntax, NameRule::Plain) {
+    match scan_ctes(&test.sql, &test.file_label, syntax) {
         Ok(scanned) => Ok(Classified::Authored {
             ctes: scanned
                 .ctes
@@ -228,31 +218,14 @@ fn authored_ctes(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classifie
     }
 }
 
-/// The top-level CTEs and whether any CTE name was a quoted identifier.
-pub(crate) fn extract_ctes_with_quoting(
-    sql: &str,
-    file: &str,
-    syntax: &LexicalSyntax,
-    rule: NameRule,
-) -> Result<(Vec<Cte>, bool), Failure> {
-    scan_ctes(sql, file, syntax, rule).map(|scanned| (scanned.ctes, scanned.quoted))
-}
-
 /// The top-level CTEs of one test, with the code-point offset of each stripped body.
 struct ScannedCtes {
     ctes: Vec<Cte>,
-    quoted: bool,
     body_starts: Vec<usize>,
 }
 
-fn scan_ctes(
-    sql: &str,
-    file: &str,
-    syntax: &LexicalSyntax,
-    rule: NameRule,
-) -> Result<ScannedCtes, Failure> {
+fn scan_ctes(sql: &str, file: &str, syntax: &LexicalSyntax) -> Result<ScannedCtes, Failure> {
     let mut body_starts: Vec<usize> = Vec::new();
-    let mut quoted = false;
     let mut index = skip_ignorable(sql, 0, syntax)?;
     index = consume_keyword(sql, index, "WITH").ok_or_else(|| {
         format!("SQL test '{file}' must declare mock CTEs and one __expected__<model> CTE in a top-level WITH clause")
@@ -264,12 +237,7 @@ fn scan_ctes(
     let mut ctes: Vec<Cte> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     loop {
-        quoted |= matches!(byte_at(sql, index), Some(b'"' | b'`'));
-        let (name, end) = match rule {
-            NameRule::Plain => read_cte_name(sql, index, file, syntax)?,
-            NameRule::Lenient => read_identifier(sql, index, syntax)
-                .ok_or_else(|| format!("SQL test '{file}' expected a CTE name"))?,
-        };
+        let (name, end) = read_cte_name(sql, index, file, syntax)?;
         if !seen.insert(name.clone()) {
             return Err(format!("SQL test '{file}' defines duplicate CTE '{name}'").into());
         }
@@ -304,11 +272,7 @@ fn scan_ctes(
             "SQL test '{file}' must end after its CTEs; only an optional ceremonial top-level `SELECT 1` may follow them"
         ).into());
     }
-    Ok(ScannedCtes {
-        ctes,
-        quoted,
-        body_starts,
-    })
+    Ok(ScannedCtes { ctes, body_starts })
 }
 
 /// Read a top-level CTE name, which must be an unquoted ASCII identifier.

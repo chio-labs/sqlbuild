@@ -13,9 +13,14 @@ from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_SHARED_MARKER
 
 
 def first_json_difference(
-    *, left: object, right: object, pointer: str = "", resolve: NodeResolvers | None = None
+    *,
+    left: object,
+    right: object,
+    pointer: str = "",
+    resolve: NodeResolvers | None = None,
+    ignored: frozenset[str] = frozenset(),
 ) -> Divergence | None:
-    """Return the first JSON pointer whose value, type, or key order differs, via `resolve`."""
+    """Return the first JSON pointer outside `ignored` whose value, type or key order differs."""
 
     if resolve is not None:
         left_digest: str | None = shared_digest(left)
@@ -28,12 +33,16 @@ def first_json_difference(
     right_object: dict[str, object] | None = as_json_object(right)
     if left_object is not None and right_object is not None:
         return _first_object_difference(
-            left=left_object, right=right_object, pointer=pointer, resolve=resolve
+            left=left_object, right=right_object, pointer=pointer, resolve=resolve, ignored=ignored
         )
     if isinstance(left, list) and isinstance(right, list):
         for index, (left_item, right_item) in enumerate(zip(left, right, strict=False)):
             found: Divergence | None = first_json_difference(
-                left=left_item, right=right_item, pointer=f"{pointer}/{index}", resolve=resolve
+                left=left_item,
+                right=right_item,
+                pointer=f"{pointer}/{index}",
+                resolve=resolve,
+                ignored=ignored,
             )
             if found is not None:
                 return found
@@ -99,9 +108,12 @@ def _first_object_difference(
     right: dict[str, object],
     pointer: str,
     resolve: NodeResolvers | None,
+    ignored: frozenset[str],
 ) -> Divergence | None:
     for key in (*left, *(key for key in right if key not in left)):
         location: str = f"{pointer}/{json_pointer_token(key)}"
+        if location in ignored:
+            continue
         if key not in left or key not in right:
             return _divergence(
                 location=location,
@@ -109,7 +121,7 @@ def _first_object_difference(
                 right=_shown(value=right.get(key, MISSING_VALUE), resolve=resolve, side=1),
             )
         found: Divergence | None = first_json_difference(
-            left=left[key], right=right[key], pointer=location, resolve=resolve
+            left=left[key], right=right[key], pointer=location, resolve=resolve, ignored=ignored
         )
         if found is not None:
             return found

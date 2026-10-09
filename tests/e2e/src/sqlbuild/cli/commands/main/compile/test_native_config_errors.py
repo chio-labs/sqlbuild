@@ -73,7 +73,7 @@ _PROJECT_FILES: dict[str, str] = {
                 + _STAGING_BODY
             },
             expected_report_text="unknown incremental_strategy 'upsert'",
-            expected_macro_calls=[1, 2],
+            expected_macro_calls=[1, 1],
             expected_python_fallbacks=[],
         ),
         NativeConfigErrorTestCase(
@@ -85,7 +85,7 @@ _PROJECT_FILES: dict[str, str] = {
                 + _STAGING_BODY
             },
             expected_report_text="cursor_start must be before exclusive cursor_end",
-            expected_macro_calls=[1, 2],
+            expected_macro_calls=[1, 1],
             expected_python_fallbacks=[],
         ),
         NativeConfigErrorTestCase(
@@ -127,7 +127,7 @@ _PROJECT_FILES: dict[str, str] = {
     ],
     ids=lambda case: case.description,
 )
-def test_given_config_error_when_compiling_with_preview_then_error_matches_python_once(
+def test_given_config_error_when_compiling_with_preview_then_error_matches_python(
     test_case: NativeConfigErrorTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -195,12 +195,12 @@ def test_given_config_error_when_compiling_with_preview_then_error_matches_pytho
             },
             engines=("python", "native-preview", "native"),
             expected_report_text="references unknown model 'ghost'",
-            expected_macro_calls=[1, 2, 1],
+            expected_macro_calls=[1, 1, 1],
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_validator_error_from_macro_sql_when_compiling_then_preview_bridge_reruns_it(
+def test_given_validator_error_from_macro_sql_when_compiling_then_every_engine_runs_macros_once(
     test_case: MacroExpandedValidatorErrorTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = tmp_path / "orders"

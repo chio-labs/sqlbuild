@@ -124,3 +124,12 @@ class NativeStageTierTestCase:
     engine: CompilerEngine
     stage: NativeStage
     expected_enabled: bool
+
+
+@dataclass(frozen=True)
+class DefaultEngineStageTestCase:
+    """With no engine selected, the native stages the default compile runs and those it skips."""
+
+    description: str
+    expected_enabled: frozenset[NativeStage]
+    expected_disabled: frozenset[NativeStage]

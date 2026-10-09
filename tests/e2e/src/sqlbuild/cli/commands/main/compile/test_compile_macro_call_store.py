@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
 import pytest
 
+from scripts.compiler_differential.constants import FAILURE_BASE_FILES
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     BrokenMacroCallStoreKeyTestCase,
     EngineMacroCallGateTestCase,
@@ -16,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     SecondCompileStoreTestCase,
     StaleMacroModuleStoreTestCase,
     StaleStoreArrangement,
+    UnkeyableMacroCallTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     MACRO_CALL_STORE_ENGINE,
@@ -45,6 +48,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     pretend_fresh_process,
     recompile_in_process_after_edit,
     replace_project_text,
+    report_without_engine,
     rezip_flavor_between_processes,
     run_reuse_compile,
     store_files,
@@ -181,6 +185,18 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
 )
 
 
+_TAGGED_STAGING: dict[str, str] = {
+    "models/staging/_sqlbuild/_macros/tags.py": (
+        'def tagged(ctx, expr: str) -> str:\n    """Tag."""\n    return expr\n'
+    ),
+    "models/staging/stg_orders.sql": (
+        'MODEL (\n  description "Staged orders",\n);\n\n'
+        "SELECT order_id, customer_id, @tagged('amount') AS amount, status\n"
+        'FROM __source("raw_orders")\n'
+    ),
+}
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -270,8 +286,8 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
         EngineMacroCallGateTestCase(
             description="default_engine",
             engine="",
-            expected_logged_calls=(3, 3),
-            expected_store_files=(),
+            expected_logged_calls=(1, 0),
+            expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         ),
         EngineMacroCallGateTestCase(
             description="python",
@@ -282,8 +298,8 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
         EngineMacroCallGateTestCase(
             description="native",
             engine="native",
-            expected_logged_calls=(3, 3),
-            expected_store_files=(),
+            expected_logged_calls=(1, 0),
+            expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         ),
         EngineMacroCallGateTestCase(
             description="native_preview",
@@ -294,7 +310,7 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_compiling_repeatedly_then_only_preview_batches_and_stores_macro_calls(
+def test_given_engine_when_compiling_repeatedly_then_only_native_engines_batch_and_store_macro_calls(
     tmp_path: Path, test_case: EngineMacroCallGateTestCase
 ) -> None:
     project_dir: Path = tmp_path / "project"
@@ -323,8 +339,8 @@ def test_given_engine_when_compiling_repeatedly_then_only_preview_batches_and_st
             expected_logged_calls=(2, 2),
         ),
         MacroReferenceCallStoreTestCase(
-            description="native_preview_memo_then_store",
-            engine="native-preview",
+            description="native_memo_then_store",
+            engine="native",
             expected_logged_calls=(1, 0),
         ),
     ],
@@ -466,10 +482,10 @@ def test_given_second_compile_in_one_process_when_compiling_then_the_store_is_no
     "test_case",
     [
         EngineMacroCallGateTestCase(
-            description="native_preview_without_proc",
-            engine="native-preview",
+            description="native_without_proc",
+            engine="native",
             expected_logged_calls=(1, 0),
-            expected_store_files=("target/cache/compiler-native-preview-v1/macro-calls.bin",),
+            expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         )
     ],
     ids=lambda case: case.description,
@@ -493,3 +509,41 @@ def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still
     assert runs.returncodes == (0, 0)
     assert runs.logged_calls == test_case.expected_logged_calls
     assert runs.store_files == test_case.expected_store_files
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnkeyableMacroCallTestCase(
+            description="context macro with a lone surrogate var",
+            project_files=_TAGGED_STAGING,
+            compile_args=("--vars", '{"regions": ["\\udcff"]}'),
+            expected_returncodes=(0, 0, 0),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_var_no_store_key_can_hold_when_compiling_then_every_engine_matches_python(
+    test_case: UnkeyableMacroCallTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "orders"
+    runs: list[CompileReuseRun] = []
+    for engine in ("python", "native", "native-preview"):
+        shutil.rmtree(project_dir, ignore_errors=True)
+        for relative_path, contents in {**FAILURE_BASE_FILES, **test_case.project_files}.items():
+            write_project_file(project_dir, relative_path, contents)
+        runs.append(
+            run_reuse_compile(
+                project_dir=project_dir,
+                args=test_case.compile_args,
+                global_args=("--compiler-engine", engine),
+            )
+        )
+
+    assert (
+        tuple(run.returncode for run in runs),
+        {report_without_engine(run) for run in runs} == {report_without_engine(runs[0])},
+        [run.compiled for run in runs] == [runs[0].compiled] * len(runs),
+    ) == (test_case.expected_returncodes, True, True), tuple(
+        run.report + run.stderr for run in runs
+    )

@@ -19,6 +19,8 @@ from scripts.compiler_differential._helpers.comparing.normalize import (
     strip_report_fields,
 )
 from scripts.compiler_differential.constants import (
+    ANALYSIS_CACHE_STATE_POINTERS,
+    COLD_CAPTURE_COMMAND,
     MISSING_VALUE,
     MODEL_RESOURCE_TYPE,
     PLAN_LABEL,
@@ -266,7 +268,11 @@ def _capture_differences(
             differences.append(
                 (
                     artifact,
-                    first_capture_difference(left=left_files[name], right=right_files[name]),
+                    first_capture_difference(
+                        left=left_files[name],
+                        right=right_files[name],
+                        ignored=_cache_state_pointers(command),
+                    ),
                 )
             )
     return differences
@@ -278,3 +284,9 @@ def _presence_divergence(*, left_present: bool, right_present: bool) -> Divergen
         left="present" if left_present else MISSING_VALUE,
         right="present" if right_present else MISSING_VALUE,
     )
+
+
+def _cache_state_pointers(command: str) -> frozenset[str]:
+    """Catalog state Python's warm analysis cache skips; compared only on the cold compile."""
+
+    return frozenset() if command == COLD_CAPTURE_COMMAND else ANALYSIS_CACHE_STATE_POINTERS

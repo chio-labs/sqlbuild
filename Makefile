@@ -300,7 +300,7 @@ compiler-differential:
 		$(COMPILER_DIFFERENTIAL_ARGS)
 
 # python vs native-preview above covers every native stage; this keeps the shipped `native` default
-# covered on a bounded corpus.
+# (native discovery and rendering) covered on a bounded corpus.
 compiler-differential-shipped:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
 		--engines python native --corpus seeds failures \

@@ -7,6 +7,7 @@ import os
 import sys
 import types
 import zipfile
+import zipimport
 from dataclasses import replace
 from importlib.machinery import ModuleSpec
 from importlib.util import module_from_spec, spec_from_file_location
@@ -110,6 +111,28 @@ def zip_member_module(root: Path) -> object:
     return _located_module("zipped_flavor", str(archive / "zipped_flavor.py"))
 
 
+def launcher_main_module(root: Path) -> object:
+    """The entry point of a console-script launcher that runs `__main__` from its own zip."""
+
+    archive: Path = root / "sqb.exe"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("__main__.py", "import sys\n")
+    spec: ModuleSpec | None = zipimport.zipimporter(str(archive)).find_spec("__main__")
+    assert spec is not None
+    return module_from_spec(spec)
+
+
+def zipped_module(root: Path) -> object:
+    """A module other than `__main__` imported from a zip archive on the import path."""
+
+    archive: Path = root / "flavors.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("zipped_flavor.py", "VALUE = 1\n")
+    spec: ModuleSpec | None = zipimport.zipimporter(str(archive)).find_spec("zipped_flavor")
+    assert spec is not None
+    return module_from_spec(spec)
+
+
 def _located_module(name: str, origin: str) -> object:
     spec: ModuleSpec = ModuleSpec(name, None, origin=origin)
     spec.has_location = True
@@ -173,3 +196,12 @@ def environment_of(root: Path) -> str:
         project_dir=root,
         fingerprint=project_fingerprint(project_dir=root, model_paths=EXCLUDED_MODEL_PATHS),
     )
+
+
+def deeply_nested_list(*, depth: int) -> list[object]:
+    """Return a list nested `depth` levels deep."""
+
+    nested: list[object] = []
+    for _ in range(depth):
+        nested = [nested]
+    return nested

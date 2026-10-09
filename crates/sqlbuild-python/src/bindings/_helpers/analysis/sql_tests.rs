@@ -2,8 +2,10 @@
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
 
 #[pyfunction]
@@ -50,16 +52,18 @@ fn extract_sql_tests_json(py: Python<'_>, request_json: &str) -> PyResult<String
     .map_err(value_error)
 }
 
-/// Python's extracted scenario CTEs as JSON, or `None` where Python must extract the scenario.
+/// Python's scenario extraction outcome as JSON, or `None` where Python must extract it.
 #[pyfunction]
 fn extract_sql_scenario_json(
     py: Python<'_>,
     sql: &str,
     file_label: &str,
+    syntax: LexicalSyntaxInput,
 ) -> PyResult<Option<String>> {
+    let syntax: LexicalSyntax = syntax.into();
     py.compiler_detach(|| {
         sqlbuild_analysis::compiler::main::sql_scenario_extraction::extract_scenario_json(
-            sql, file_label,
+            sql, file_label, &syntax,
         )
     })
     .map_err(value_error)

@@ -21,6 +21,7 @@ from tests.unit.src.sqlbuild.compiler.macro_bridge._helpers._test_types import (
 from tests.unit.src.sqlbuild.compiler.macro_bridge._helpers.helpers import (
     BASE_CONTEXT,
     constant_declarations,
+    deeply_nested_list,
     loaded_macro,
     with_vars,
 )
@@ -113,6 +114,16 @@ def test_given_two_contexts_when_naming_their_store_class_then_only_equal_values
             context=with_vars(region={"key": [object()]}),
             expected_stored=False,
         ),
+        ContextValueTestCase(
+            description="lone surrogate var",
+            context=with_vars(region="\udcff"),
+            expected_stored=False,
+        ),
+        ContextValueTestCase(
+            description="var nested beyond the recursion limit",
+            context=with_vars(region=deeply_nested_list(depth=100_000)),
+            expected_stored=False,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -151,14 +162,14 @@ def test_given_context_value_when_naming_store_class_then_only_stable_values_are
 def test_given_loaded_macro_change_when_naming_it_then_only_the_same_file_and_source_match(
     test_case: MacroStoreTokenTestCase,
 ) -> None:
-    original: str = macro_store_token(
+    original: str | None = macro_store_token(
         loaded=loaded_macro(
             relative_path=Path("macros/common.py"), raw_source="def cents(column): ...\n"
         ),
         identity=None,
     )
 
-    changed: str = macro_store_token(
+    changed: str | None = macro_store_token(
         loaded=loaded_macro(relative_path=test_case.relative_path, raw_source=test_case.raw_source),
         identity=None,
     )
@@ -196,11 +207,11 @@ def test_given_loaded_macro_change_when_naming_it_then_only_the_same_file_and_so
 def test_given_call_class_inputs_when_naming_it_then_only_identical_inputs_match(
     test_case: CallClassStoreTextTestCase,
 ) -> None:
-    plain: str = call_class_store_text(
+    plain: str | None = call_class_store_text(
         macro_tokens=("cents",), context_token=None, prior_relations=None
     )
 
-    text: str = call_class_store_text(
+    text: str | None = call_class_store_text(
         macro_tokens=("cents",),
         context_token=test_case.context_token,
         prior_relations=test_case.prior_relations,

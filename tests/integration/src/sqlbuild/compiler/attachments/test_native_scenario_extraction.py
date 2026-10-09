@@ -1,8 +1,9 @@
-"""Scenario CTEs extract and classify identically under the preview engine."""
+"""Scenario CTEs and errors extract identically under the preview engine, mostly natively."""
 
 from __future__ import annotations
 
 import random
+from collections import Counter
 
 import pytest
 
@@ -14,7 +15,7 @@ from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
 )
 from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
     generated_scenario,
-    native_scenario_answered,
+    native_scenario_answer,
     scenario_outcome,
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
@@ -28,18 +29,20 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
             seed=20261008,
             count=3000,
             syntax=SqlLexicalSyntax(),
-            expected_minimum_extracted=200,
-            expected_minimum_native=140,
+            expected_minimum_extracted=150,
+            expected_minimum_native=80,
             expected_minimum_python_errors=2000,
+            expected_minimum_native_errors=1200,
         ),
         ScenarioParityTestCase(
-            description="hash comments, which keep the Python scanner",
+            description="hash comments under the adapter's rules",
             seed=20261009,
             count=1000,
             syntax=SqlLexicalSyntax(line_comment_prefixes=frozenset({"--", "#"})),
-            expected_minimum_extracted=60,
-            expected_minimum_native=30,
+            expected_minimum_extracted=50,
+            expected_minimum_native=25,
             expected_minimum_python_errors=600,
+            expected_minimum_native_errors=400,
         ),
     ],
     ids=lambda case: case.description,
@@ -56,6 +59,7 @@ def test_given_generated_scenarios_when_extracting_with_preview_then_python_outp
         )
         for sql in sqls
     ]
+    answers: list[str] = [native_scenario_answer(sql=sql, syntax=test_case.syntax) for sql in sqls]
     preview: list[object] = [
         scenario_outcome(
             sql=sql,
@@ -70,9 +74,10 @@ def test_given_generated_scenarios_when_extracting_with_preview_then_python_outp
         mismatches(inputs=[*sqls], expected=python, actual=preview),
         sum(isinstance(item, CompileSqlScenarioCtes) for item in python)
         >= test_case.expected_minimum_extracted,
-        sum(map(native_scenario_answered, sqls)) >= test_case.expected_minimum_native,
+        answers.count("extracted") >= test_case.expected_minimum_native,
         sum(isinstance(item, str) for item in python) >= test_case.expected_minimum_python_errors,
-    ) == ([], True, True, True), test_case.description
+        answers.count("error") >= test_case.expected_minimum_native_errors,
+    ) == ([], True, True, True, True), (test_case.description, Counter(answers))
 
 
 if __name__ == "__main__":

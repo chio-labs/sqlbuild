@@ -43,6 +43,9 @@ from sqlbuild.cli.compile_reuse.models import (
 )
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome, FileStamp
 from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
+from sqlbuild.compiler.macro_bridge.main.macro_store_module_paths import (
+    macro_store_module_paths,
+)
 
 _LOGGER: logging.Logger = logging.getLogger(REUSE_LOGGER_NAME)
 
@@ -146,7 +149,8 @@ def _write_compile_entry(
             modules=loaded_module_stamps(
                 covered_paths=frozenset(
                     os.path.join(project_dir, relative_path) for relative_path in attempt.snapshot
-                )
+                ),
+                extra_paths=macro_store_module_paths(),
             ),
             project_files=stored_project_files(
                 snapshot=attempt.snapshot, digests=digests, snapshot_ns=attempt.snapshot_ns

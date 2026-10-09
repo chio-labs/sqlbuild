@@ -1,4 +1,4 @@
-"""The native expected-model scan returns Python's names exactly or defers to Python."""
+"""The native relationship scans return Python's names, CTEs and errors exactly, or defer."""
 
 from __future__ import annotations
 
@@ -26,12 +26,13 @@ from tests.integration.src.sqlbuild.compiler.scopes.helpers import (
             expected_minimum_scanned=300,
             expected_minimum_deferred=300,
             expected_minimum_python_errors=300,
+            expected_minimum_native_errors=3000,
         )
         for offset, syntax in enumerate(LEXICAL_SYNTAXES)
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_sql_tests_when_scanning_expected_models_then_native_matches_or_defers(
+def test_given_generated_sql_when_scanning_relationships_then_native_matches_python_or_defers(
     test_case: ExpectedNameScanTestCase,
 ) -> None:
     sqls: list[str] = generated_expected_model_sqls(
@@ -47,7 +48,13 @@ def test_given_generated_sql_tests_when_scanning_expected_models_then_native_mat
         parity.scanned >= test_case.expected_minimum_scanned,
         parity.deferred >= test_case.expected_minimum_deferred,
         parity.python_errors >= test_case.expected_minimum_python_errors,
-    ) == ([], True, True, True), (parity.scanned, parity.deferred, parity.python_errors)
+        parity.native_errors >= test_case.expected_minimum_native_errors,
+    ) == ([], True, True, True, True), (
+        parity.scanned,
+        parity.deferred,
+        parity.python_errors,
+        parity.native_errors,
+    )
 
 
 if __name__ == "__main__":

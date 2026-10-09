@@ -37,7 +37,7 @@ class ScopeCommandParityTestCase:
 
 @dataclass(frozen=True)
 class ScopeEngineTierTestCase:
-    """One compiler engine and whether it runs the preview-tier native declaration scopes."""
+    """One compiler engine and whether it runs the native declaration scopes."""
 
     description: str
     engine: str
@@ -55,6 +55,7 @@ class ExpectedNameScanTestCase:
     expected_minimum_scanned: int
     expected_minimum_deferred: int
     expected_minimum_python_errors: int
+    expected_minimum_native_errors: int
 
 
 @dataclass(frozen=True)

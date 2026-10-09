@@ -17,8 +17,10 @@ from scripts.compiler_differential.constants import MISSING_VALUE
 from scripts.compiler_differential.models import Divergence
 
 
-def first_capture_difference(*, left: Path, right: Path) -> Divergence | None:
-    """Return the first logical JSON pointer, or line for invalid JSON, where captures differ."""
+def first_capture_difference(
+    *, left: Path, right: Path, ignored: frozenset[str] = frozenset()
+) -> Divergence | None:
+    """Return the first JSON pointer outside `ignored`, or line for invalid JSON, that differs."""
 
     try:
         left_capture: CaptureFile = CaptureFile(left)
@@ -27,6 +29,7 @@ def first_capture_difference(*, left: Path, right: Path) -> Divergence | None:
             left=left_capture.root,
             right=right_capture.root,
             resolve=(left_capture.resolve, right_capture.resolve),
+            ignored=ignored,
         )
     except (json.JSONDecodeError, UnicodeDecodeError):
         return _first_line_difference(left=left, right=right)

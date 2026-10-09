@@ -39,7 +39,7 @@ class AttachmentProjectTestCase:
 
     description: str
     overrides: dict[str, str]
-    expected_preview_entries: frozenset[str]
+    expected_native_entries: frozenset[str]
     expected_outcome_fragment: str
 
 
@@ -100,6 +100,7 @@ class ScenarioParityTestCase:
     expected_minimum_extracted: int
     expected_minimum_native: int
     expected_minimum_python_errors: int
+    expected_minimum_native_errors: int
 
 
 @dataclass(frozen=True)
