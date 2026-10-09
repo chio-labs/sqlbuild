@@ -18,6 +18,8 @@ def comparison_markdown(
     per_side_projects: bool,
     failures: tuple[str, ...],
     mode_max_ratios: Mapping[str, float] | None = None,
+    engines: tuple[str | None, str | None] = (None, None),
+    gate_phases: tuple[str, ...] = (),
 ) -> str:
     """Summarize medians, ratios and per-phase timings of every mode as Markdown tables."""
 
@@ -27,6 +29,16 @@ def comparison_markdown(
         else "One project generated with head's generator and compiled by both builds."
     )
     lines: list[str] = []
+    base_engine, head_engine = engines
+    if base_engine is not None or head_engine is not None:
+        lines.extend(
+            (
+                f"Engines: base `{base_engine or 'default'}`, head `{head_engine or 'default'}`.",
+                "",
+            )
+        )
+    if gate_phases:
+        lines.extend((f"Gated phases: {', '.join(gate_phases)}.", ""))
     for comparison in comparisons:
         lines.extend(
             (
