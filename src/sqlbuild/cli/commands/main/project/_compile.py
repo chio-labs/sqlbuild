@@ -169,6 +169,7 @@ def _run_compile_with_status(
         "contracts_cpu_ms": analysis.contract_cpu_ms,
         "built_in_rules_ms": analysis.built_in_rules_ms,
         "custom_rules_ms": analysis.custom_rules_ms,
+        "custom_rules_cpu_ms": analysis.custom_rules_cpu_ms,
         "early_lint_wait_ms": analysis.early_lint_wait_ms,
         "rule_cache_hits": analysis.rule_cache_hits,
         "rule_cache_misses": analysis.rule_cache_misses,

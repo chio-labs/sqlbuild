@@ -107,6 +107,7 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
         <= test_case.expected_maximum_enrichment_deferrals
     )
     assert parity.native_enrichments >= test_case.expected_minimum_native_enrichments
+    assert parity.native_column_objects == parity.native_column_values > 0
 
 
 @pytest.mark.parametrize(
@@ -121,6 +122,7 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
             expected_shared=22,
             expected_reanalysed=6,
             expected_unshared=2,
+            expected_column_values=12,
         )
     ],
     ids=lambda case: case.description,
@@ -153,12 +155,16 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
         sum(session.sharing[1] for session in sessions),
         parity.analysed_models - shared,
         deferral_kinds(record_dir),
+        parity.native_column_objects,
+        parity.native_column_values,
     ) == (
         test_case.expected_analysed,
         test_case.expected_shared,
         test_case.expected_reanalysed,
         test_case.expected_unshared,
         Counter(),
+        test_case.expected_column_values,
+        test_case.expected_column_values,
     )
 
 

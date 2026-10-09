@@ -45,6 +45,7 @@ class CompileAnalysis:
     contract_cpu_ms: int
     built_in_rules_ms: int = 0
     custom_rules_ms: int = 0
+    custom_rules_cpu_ms: int = 0
     early_lint_wait_ms: int = 0
     rule_cache_hits: int = 0
     rule_cache_misses: int = 0

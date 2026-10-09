@@ -80,6 +80,7 @@ def evaluate_custom_rules_cached(
     """Reuse results whose recorded fact reads are unchanged and evaluate only the rest."""
 
     started: float = time.monotonic()
+    started_cpu: float = _cpu_seconds()
     custom: tuple[Rule, ...] = tuple(sorted(rules, key=lambda rule: rule.code))
     if not custom:
         return CustomRulesOutcome(findings=(), cache_hits=0, cache_misses=0, custom_ms=0)
@@ -105,6 +106,7 @@ def evaluate_custom_rules_cached(
             cache_hits=0,
             cache_misses=len(custom),
             custom_ms=_elapsed_ms(started),
+            custom_cpu_ms=_cpu_ms(started_cpu),
         )
     digests: FactDigests = FactDigests(
         views=_views_factory(project=facts_project, project_dir=project_dir, dialect=dialect)
@@ -185,6 +187,7 @@ def evaluate_custom_rules_cached(
         cache_hits=hits,
         cache_misses=misses,
         custom_ms=_elapsed_ms(started),
+        custom_cpu_ms=_cpu_ms(started_cpu),
     )
 
 
@@ -474,6 +477,17 @@ def _decode_entry(value: Any) -> _CachedEntry:
 
 def _digest(value: object) -> str:
     return hashlib.sha256(orjson.dumps(value, default=str)).hexdigest()
+
+
+def _cpu_seconds() -> float:
+    """This thread's CPU plus that of finished child processes, which run the rule hosts."""
+
+    times: os.times_result = os.times()
+    return time.thread_time() + times.children_user + times.children_system
+
+
+def _cpu_ms(started: float) -> int:
+    return int((_cpu_seconds() - started) * 1000)
 
 
 def _elapsed_ms(started: float) -> int:

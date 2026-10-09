@@ -14,8 +14,8 @@ from sqlbuild.compiler.analysis_session._helpers.session_rows import (
     compact_lineage,
     contract_proof,
     deferred_row,
-    inferred_columns,
     lineage_facts,
+    shared_inferred_columns,
 )
 from sqlbuild.compiler.analysis_session.constants import (
     CONTRACT_DEFERRED,
@@ -31,6 +31,7 @@ from sqlbuild.compiler.analysis_session.constants import (
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.analysis_session.types import (
+    ColumnRow,
     DeferralRow,
     DeferredRow,
     FinishRow,
@@ -42,6 +43,7 @@ from sqlbuild.compiler.analysis_session.types import (
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
+    InferredColumn,
     ModelSqlAnalysis,
     ModelSqlAnalysisRequest,
     PolyglotAnalysisResult,
@@ -69,6 +71,7 @@ class NativeModelAnalysis:
             request.column_nullability_by_table
         )
         self._kept: dict[tuple[int, str], PolyglotAnalysisResult] = {}
+        self._columns: dict[ColumnRow, InferredColumn] = {}
         self._deferrals: Counter[str] = Counter()
 
     def analyses(
@@ -205,7 +208,7 @@ class NativeModelAnalysis:
         return ModelSqlAnalysis(
             polyglot_analysis=PolyglotAnalysisResult(
                 analysis_succeeded=succeeded,
-                columns=inferred_columns(columns),
+                columns=shared_inferred_columns(rows=columns, shared=self._columns),
                 lineage_columns=lineage,
                 has_star=has_star,
                 star_resolved=star_resolved,

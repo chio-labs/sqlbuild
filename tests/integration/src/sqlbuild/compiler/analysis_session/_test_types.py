@@ -63,3 +63,4 @@ class SharedAnalysisTestCase:
     expected_shared: int
     expected_reanalysed: int
     expected_unshared: int
+    expected_column_values: int

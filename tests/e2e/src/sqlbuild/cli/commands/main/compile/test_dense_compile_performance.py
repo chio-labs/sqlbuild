@@ -125,6 +125,7 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
     assert timings["rule_cache_misses"] == 2 * test_case.model_count + 1
     assert timings["built_in_rules_ms"] > 0
     assert timings["custom_rules_ms"] > 0
+    assert timings["custom_rules_cpu_ms"] > 0
     assert result.semantic_fingerprint == test_case.expected_fingerprint
     assert result.elapsed_seconds < test_case.expected_max_wall_seconds
     assert result.peak_rss_bytes < test_case.expected_max_rss_bytes

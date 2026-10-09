@@ -40,6 +40,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompileProjectInputs,
     DynamicColumnContractProof,
+    InferredColumn,
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -430,6 +431,8 @@ class AnalysisParity:
     standalone_proofs: int = 0
     proven_pivots: int = 0
     native_enrichments: int = 0
+    native_column_objects: int = 0
+    native_column_values: int = 0
 
 
 def compare_analyses(
@@ -459,6 +462,11 @@ def compare_analyses(
             )
         )
         python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
+        columns: list[InferredColumn] = list(
+            chain.from_iterable(map(_native_columns, (native or {}).values()))
+        )
+        parity.native_column_objects += len(set(map(id, columns)))
+        parity.native_column_values += len(set(columns))
         parity.analysed_models += len(python)
         _append(parity, "model analyses", _analysis_views(python), _analysis_views(native))
         _append(
@@ -567,6 +575,10 @@ def deferral_kinds(record_dir: Path) -> Counter[str]:
     )
     records: list[dict[str, str]] = [json.loads(line) for line in lines]
     return Counter(f"{record['site']}:{record['kind']}" for record in records)
+
+
+def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:
+    return analysis.polyglot_analysis.columns or ()
 
 
 def _append(parity: AnalysisParity, name: str, python: object, native: object) -> None:

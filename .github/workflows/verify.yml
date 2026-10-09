@@ -611,6 +611,12 @@ jobs:
             gate_phase: model_analysis_cpu_ms
             compile_args: --compile-arg=--select=*
             max_ratio: "1.50"
+          - kind: dense
+            label: native-preview custom rules vs python
+            base_engine: python
+            head_engine: native-preview
+            gate_phase: custom_rules_cpu_ms
+            max_ratio: "1.05"
     steps:
       - uses: actions/checkout@v4
       - name: Check out the comparison base

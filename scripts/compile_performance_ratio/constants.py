@@ -53,6 +53,7 @@ REPORTED_PHASES: tuple[str, ...] = (
     "contracts_cpu_ms",
     "built_in_rules_ms",
     "custom_rules_ms",
+    "custom_rules_cpu_ms",
     "test_planning_ms",
     "write_ms",
 )

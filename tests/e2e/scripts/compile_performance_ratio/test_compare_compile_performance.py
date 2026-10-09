@@ -206,6 +206,18 @@ def test_given_base_root_when_comparing_compile_performance_then_each_side_uses_
             gate_phase="model_analysis_cpu_ms",
             compile_args=("--compile-arg=--select=*",),
         ),
+        EnginePhaseRatioTestCase(
+            description="custom rule CPU over its allowance fails on it alone",
+            max_ratio="0",
+            phase_noise_floor_ms="-1",
+            expected_return_code=1,
+            expected_fragments=(
+                "Gated phases: custom_rules_cpu_ms.",
+                "| custom_rules_cpu_ms |",
+                "Compile performance regression: dense 20 cold custom_rules_cpu_ms:",
+            ),
+            gate_phase="custom_rules_cpu_ms",
+        ),
     ),
     ids=lambda case: case.description,
 )
