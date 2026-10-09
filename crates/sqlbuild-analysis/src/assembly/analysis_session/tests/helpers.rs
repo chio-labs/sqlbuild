@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
 use crate::assembly::analysis_session::_helpers::cte_facts::{
-    Recovery, RecoveryInput, RecoveryProfile, recovery,
+    LegacyAnalysis, LegacyInput, Recovery, RecoveryInput, RecoveryProfile, legacy_analysis,
+    recovery,
 };
-use crate::assembly::analysis_session::_helpers::mappings::catalog_relations;
+use crate::assembly::analysis_session::_helpers::mappings::{ShapeTable, catalog_relations};
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
 use crate::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
 use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
@@ -11,12 +12,22 @@ use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis, DynamicFamily,
-    FinishedSession, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest, PivotModel,
-    PivotOutcome, PivotTables, SessionModelFacts, SessionRequest, SessionStep,
+    FinishedSession, LineageRow, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest,
+    PivotModel, PivotOutcome, PivotTables, SessionModelFacts, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::tests::test_types::{ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::{CatalogInput, ProjectCatalog};
+
+const TRANSFORM_NAMES: [&str; 6] = [
+    "direct",
+    "cast",
+    "expression",
+    "aggregation",
+    "star",
+    "constant",
+];
+const CONFIDENCE_NAMES: [&str; 3] = ["unknown", "high", "medium"];
 
 pub(crate) fn pairs(values: &[(&str, &str)]) -> Pairs {
     values
@@ -145,19 +156,7 @@ pub(crate) fn completed(
 /// `name type nullability` per column, or `failed` when analysis did not succeed.
 pub(crate) fn described(outcome: &ModelOutcome) -> Vec<String> {
     let analysis = &outcome.analysis;
-    let mut lines: Vec<String> = analysis
-        .columns
-        .iter()
-        .flatten()
-        .map(|column| {
-            format!(
-                "{} {} {}",
-                column.name,
-                column.data_type.as_deref().unwrap_or("-"),
-                column.nullability
-            )
-        })
-        .collect();
+    let mut lines: Vec<String> = analysis.columns.iter().flatten().map(column_line).collect();
     lines.push(format!(
         "succeeded={} star={}/{} diagnostics={:?}",
         analysis.analysis_succeeded,
@@ -394,4 +393,88 @@ pub(crate) fn expected_facts(
             non_null.iter().map(|name| (*name).to_owned()).collect(),
         )
     })
+}
+
+/// Python's legacy analysis of `sql` over typed `orders` and `customers`, as outcome lines.
+pub(crate) fn legacy_lines(sql: &str) -> Option<Vec<String>> {
+    let types: ShapeTable = ShapeTable::from_shapes(&shapes(&[
+        (
+            "orders",
+            &[
+                ("order_id", "INTEGER"),
+                ("amount", "DOUBLE"),
+                ("status", "VARCHAR"),
+            ],
+        ),
+        ("customers", &[("customer_id", "INTEGER")]),
+    ]));
+    let nullability: ShapeTable = ShapeTable::from_shapes(&shapes(&[
+        (
+            "orders",
+            &[
+                ("order_id", "non_null"),
+                ("amount", "unknown"),
+                ("status", "unknown"),
+            ],
+        ),
+        ("customers", &[("customer_id", "unknown")]),
+    ]));
+    let references: Vec<(String, String, String)> = [
+        ("orders", "model", "orders"),
+        ("customers", "source", "customers"),
+    ]
+    .iter()
+    .map(|(name, kind, resource)| {
+        (
+            (*name).to_owned(),
+            (*kind).to_owned(),
+            (*resource).to_owned(),
+        )
+    })
+    .collect();
+    let rules: Pairs = pairs(&[("UPPER", "first_arg")]);
+    let analysis: LegacyAnalysis = legacy_analysis(&LegacyInput {
+        cleaned_sql: sql,
+        lineage_references: &references,
+        recover: true,
+        types: &types,
+        nullability: &nullability,
+        profile: RecoveryProfile {
+            dialect: "duckdb",
+            function_return_types: &Vec::new(),
+            rules: Some(&rules),
+        },
+    })
+    .ok()?;
+    let mut lines: Vec<String> = vec![format!(
+        "succeeded={} star={}",
+        analysis.succeeded, analysis.has_star
+    )];
+    lines.extend(analysis.columns.iter().flatten().map(column_line));
+    lines.extend(analysis.lineage.iter().map(legacy_lineage_line));
+    Some(lines)
+}
+
+fn legacy_lineage_line(row: &LineageRow) -> String {
+    let sources: Vec<String> = row
+        .sources
+        .iter()
+        .map(|(kind, name, column)| format!("{kind}:{name}:{column}"))
+        .collect();
+    format!(
+        "{} {} {} [{}]",
+        row.output_column,
+        TRANSFORM_NAMES[usize::from(row.transform_code)],
+        CONFIDENCE_NAMES[usize::from(row.confidence_code)],
+        sources.join(", ")
+    )
+}
+
+fn column_line(column: &ColumnFact) -> String {
+    format!(
+        "{} {} {}",
+        column.name,
+        column.data_type.as_deref().unwrap_or("-"),
+        column.nullability
+    )
 }

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
+
 
 @dataclass(frozen=True)
 class GeneratedAnalysisParityTestCase:
@@ -12,10 +14,12 @@ class GeneratedAnalysisParityTestCase:
     count: int
     model_count: int
     dialects: tuple[str | None, ...]
+    lineage_mode: ColumnLineageMode
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
     expected_minimum_pivot_proofs: int
     expected_minimum_python_cte_recoveries: int
+    expected_minimum_legacy_analyses: int
     expected_minimum_proven_pivots: int
     expected_maximum_enrichment_deferrals: int
     expected_minimum_native_enrichments: int

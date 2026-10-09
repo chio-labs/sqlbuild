@@ -49,6 +49,7 @@ from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -101,6 +102,9 @@ _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     collection_rendering=CollectionRendering.VALUE_LIST,
     python_functions_inherit_default_namespace=True,
     sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
+)
+_DUCKDB_PROFILE: ExpressionInferenceProfile = ExpressionInferenceProfile(
+    sql_analysis_dialect="duckdb"
 )
 _PIVOT_HEADER: str = """MODEL (
   description "Order amounts pivoted by status",
@@ -178,6 +182,9 @@ def _pivot_models(rng: random.Random) -> dict[str, str]:
 
 
 _PYTHON_CTE_RECOVERY: Callable[..., Any] = compact_analysis._polyglot_cte_passthrough_facts
+_PYTHON_LEGACY_ANALYSIS: Callable[..., Any] = (
+    compact_analysis._analyze_columns_and_lineage_from_polyglot_ast
+)
 
 type _Relation = tuple[str, tuple[str, ...]]
 type _Template = Callable[[random.Random, list[_Relation]], tuple[str, str, tuple[str, ...]]]
@@ -303,6 +310,13 @@ def _unknown_column(
     return "", sql, (columns[0], "missing_column")
 
 
+def _cast_constant(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tuple[str, ...]]:
+    relation, columns = inputs[0]
+    column: str = rng.choice(columns)
+    sql: str = f"SELECT {column}, CAST(NULL AS INT) AS missing_id\nFROM {relation}"
+    return "", sql, (column, "missing_id")
+
+
 def _subquery(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tuple[str, ...]]:
     relation, columns = inputs[0]
     column: str = rng.choice(columns)
@@ -322,6 +336,7 @@ _TEMPLATES: tuple[_Template, ...] = (
     _cte_contract,
     _unknown_column,
     _subquery,
+    _cast_constant,
 )
 
 
@@ -475,6 +490,7 @@ class AnalysisParity:
     expression_shapes: int = 0
     pivot_proofs: int = 0
     python_cte_recoveries: int = 0
+    legacy_analyses: int = 0
     standalone_proofs: int = 0
     session_proofs: int = 0
     proven_pivots: int = 0
@@ -487,6 +503,7 @@ def compare_analyses(
     *,
     inputs: CompileProjectInputs,
     dialect: str | None,
+    lineage_mode: ColumnLineageMode,
     parity: AnalysisParity,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -518,6 +535,11 @@ def compare_analyses(
                 compact_analysis,
                 "_polyglot_cte_passthrough_facts",
                 partial(_counted_cte_recovery, parity=parity),
+            )
+            patch.setattr(
+                compact_analysis,
+                "_analyze_columns_and_lineage_from_polyglot_ast",
+                partial(_counted_legacy_analysis, parity=parity),
             )
             python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
         columns: list[InferredColumn] = list(
@@ -598,11 +620,21 @@ def compare_analyses(
             _ = project_assembly.assemble_compiled_project(
                 inputs=inputs,
                 inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
+                column_lineage_mode=lineage_mode,
             )
 
 
+def custom_nullability_rule(arguments: tuple[InferredNullability, ...]) -> InferredNullability:
+    """An adapter rule SQLBuild does not ship, so native analysis leaves it to Python."""
+
+    return InferredNullability.NULLABLE
+
+
 def analysis_request(
-    *, inputs: CompileProjectInputs, monkeypatch: pytest.MonkeyPatch
+    *,
+    inputs: CompileProjectInputs,
+    monkeypatch: pytest.MonkeyPatch,
+    inference_profile: ExpressionInferenceProfile = _DUCKDB_PROFILE,
 ) -> NativeModelAnalysisRequest:
     """The native request the model analysis seam builds while assembling `inputs`."""
 
@@ -624,7 +656,7 @@ def analysis_request(
         patch.setattr(project_assembly, "analyze_model_sql_by_engine", captured)
         _ = project_assembly.assemble_compiled_project(
             inputs=inputs,
-            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+            inference_profile=inference_profile,
         )
     return requests[0]
 
@@ -644,6 +676,11 @@ def deferral_kinds(record_dir: Path) -> Counter[str]:
 
 def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:
     return analysis.polyglot_analysis.columns or ()
+
+
+def _counted_legacy_analysis(*, parity: AnalysisParity, **arguments: Any) -> Any:
+    parity.legacy_analyses += 1
+    return _PYTHON_LEGACY_ANALYSIS(**arguments)
 
 
 def _counted_cte_recovery(*, parity: AnalysisParity, **arguments: Any) -> Any:

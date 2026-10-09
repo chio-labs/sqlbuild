@@ -456,7 +456,7 @@ fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
         LineageFacts::Native(rows) => ("native", lineage_items(rows)),
         LineageFacts::PythonAnalysis => ("analysis", Vec::new()),
         LineageFacts::PythonEnrichment => ("enrichment", Vec::new()),
-        LineageFacts::NativeEnrichment(rows) => ("facts", lineage_items(rows)),
+        LineageFacts::NativeFacts(rows) => ("facts", lineage_items(rows)),
     };
     (
         analysis.analysis_succeeded,

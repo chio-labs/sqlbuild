@@ -7,9 +7,11 @@ use serde_json::{Map, Value, json};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::cte_facts::{
-    Recovery, RecoveryInput, RecoveryProfile, recovery,
+    LegacyAnalysis, LegacyInput, Recovery, RecoveryInput, RecoveryProfile, legacy_analysis,
+    recovery,
 };
 use crate::assembly::analysis_session::_helpers::dict_walk::truthy;
+use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::constants::{
     CAST_TRANSFORM, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_UNKNOWN, FILTER_CONTEXT,
     MAX_FUNCTION_CALL_DEPTH, NON_NULL_NULLABILITY, NULL_KEYWORD, RESOLVED_SOURCE_CONFIDENCE,
@@ -32,12 +34,20 @@ pub(crate) struct EnrichmentInput<'a> {
     pub(crate) nullability_rules: Option<&'a Pairs>,
 }
 
-/// Python's successful re-analysis: columns, plain lineage facts and the star flag.
+/// Python's re-analysis: its outcome, columns, plain lineage facts and the star flag.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Enrichment {
-    pub(crate) columns: Vec<ColumnFact>,
+    pub(crate) analysis_succeeded: bool,
+    pub(crate) columns: Option<Vec<ColumnFact>>,
     pub(crate) lineage: Vec<LineageRow>,
     pub(crate) has_star: bool,
+}
+
+/// Python's compact re-analysis: answered, declined to the legacy analysis, or deferred.
+enum Projected {
+    Native(Enrichment),
+    Declined,
+    Deferred,
 }
 
 /// One projection's upstream sources and confidence code.
@@ -77,10 +87,53 @@ fn analysed(input: &EnrichmentInput<'_>) -> Result<Option<Enrichment>, String> {
         serde_json::from_value(Value::Object(options)).map_err(|error| error.to_string())?;
     let analysis = match analyze_query(&cleaned, options) {
         Ok(analysis) => analysis,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(legacy(input, &cleaned)),
     };
     let analysis: Value = serde_json::to_value(analysis).map_err(|error| error.to_string())?;
-    Ok(projected(input, &analysis, &cleaned))
+    Ok(match projected(input, &analysis, &cleaned) {
+        Projected::Native(enrichment) => Some(enrichment),
+        Projected::Declined => legacy(input, &cleaned),
+        Projected::Deferred => None,
+    })
+}
+
+/// Python's legacy analysis once compact analysis declines, over the input shapes.
+fn legacy(input: &EnrichmentInput<'_>, cleaned: &str) -> Option<Enrichment> {
+    let types: ShapeTable = ShapeTable::from_shapes(input.input_schemas);
+    let unknown: Shapes = input
+        .input_schemas
+        .iter()
+        .map(|(name, shape)| (name.clone(), unknown_shape(shape)))
+        .collect();
+    let nullability: ShapeTable = ShapeTable::from_shapes(&unknown);
+    let analysis: LegacyAnalysis = match legacy_analysis(&LegacyInput {
+        cleaned_sql: cleaned,
+        lineage_references: &input.model.lineage_references,
+        recover: input.model.recover_cte_facts,
+        types: &types,
+        nullability: &nullability,
+        profile: RecoveryProfile {
+            dialect: input.dialect,
+            function_return_types: input.function_return_types,
+            rules: input.nullability_rules,
+        },
+    }) {
+        Ok(analysis) => analysis,
+        Err(_deferred) => return None,
+    };
+    Some(Enrichment {
+        analysis_succeeded: analysis.succeeded,
+        columns: analysis.columns,
+        lineage: analysis.lineage,
+        has_star: analysis.has_star,
+    })
+}
+
+fn unknown_shape(shape: &Pairs) -> Pairs {
+    shape
+        .iter()
+        .map(|(column, _)| (column.clone(), UNKNOWN_NULLABILITY.to_owned()))
+        .collect()
 }
 
 /// Python's `_compact_analysis_schema` over the input shapes, nullability unknown.
@@ -114,12 +167,28 @@ fn analysis_schema(input: &EnrichmentInput<'_>) -> Option<Value> {
 }
 
 /// Python's projection of `analyze_query` facts into columns and lineage.
-fn projected(input: &EnrichmentInput<'_>, analysis: &Value, cleaned: &str) -> Option<Enrichment> {
-    let projections: &Vec<Value> = analysis.get("projections")?.as_array()?;
+fn projected(input: &EnrichmentInput<'_>, analysis: &Value, cleaned: &str) -> Projected {
+    let Some(projections) = analysis.get("projections").and_then(Value::as_array) else {
+        return Projected::Declined;
+    };
     let shape: Option<&str> = analysis.get("shape").and_then(Value::as_str);
     if !matches!(shape, Some(SELECT_SHAPE | SET_OPERATION_SHAPE)) || !eligible(projections) {
-        return None;
+        return Projected::Declined;
     }
+    match native_projection(input, analysis, cleaned, projections) {
+        Some(enrichment) => Projected::Native(enrichment),
+        None => Projected::Deferred,
+    }
+}
+
+/// The compact facts as Python's columns and lineage, None where native defers.
+fn native_projection(
+    input: &EnrichmentInput<'_>,
+    analysis: &Value,
+    cleaned: &str,
+    projections: &[Value],
+) -> Option<Enrichment> {
+    let shape: Option<&str> = analysis.get("shape").and_then(Value::as_str);
     let recovery: Recovery = match recovery(&RecoveryInput {
         cleaned_sql: cleaned,
         input_schemas: input.input_schemas,
@@ -200,7 +269,8 @@ fn projected(input: &EnrichmentInput<'_>, analysis: &Value, cleaned: &str) -> Op
         });
     }
     Some(Enrichment {
-        columns,
+        analysis_succeeded: true,
+        columns: Some(columns),
         lineage,
         has_star,
     })

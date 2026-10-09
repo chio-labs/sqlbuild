@@ -158,8 +158,8 @@ pub enum LineageFacts {
     PythonAnalysis,
     /// The lineage of the analysis Python returned for this model's enrichment deferral.
     PythonEnrichment,
-    /// Plain lineage facts of the native re-analysis with known inputs.
-    NativeEnrichment(Vec<LineageRow>),
+    /// Plain lineage facts of a native re-analysis or legacy analysis.
+    NativeFacts(Vec<LineageRow>),
 }
 
 /// Python's `PolyglotAnalysisResult` for one model.
