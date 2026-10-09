@@ -19,6 +19,10 @@ pub trait TemplateHost {
     fn boolean(&self, flag: bool) -> Result<Self::Value, TemplateFailure>;
     /// Return the null value.
     fn null(&self) -> Self::Value;
-    /// Return the scalar `value` is, or `None` when only Python can render or compare it.
-    fn scalar(&self, value: &Self::Value) -> Option<Scalar>;
+    /// Return `value` as the resolver compares it: `None`, a `bool` or its `str()`.
+    fn scalar(&self, value: &Self::Value) -> Result<Scalar, TemplateFailure>;
+    /// Render `value` inside a larger string as `render_project_var_text` does for `label`.
+    fn render(&self, value: &Self::Value, label: &str) -> Result<String, TemplateFailure>;
+    /// The context label error messages start with.
+    fn label(&self) -> &str;
 }

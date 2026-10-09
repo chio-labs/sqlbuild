@@ -1,6 +1,6 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypedDict
 
 from sqlbuild.compiler.sql_test_glue.models import (
@@ -300,9 +300,19 @@ def render_attached_generic_audit(
 def scan_sql_declaration_references(
     sqls: list[str],
 ) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None] | None]: ...
-def substitute_static_project_vars(
-    sqls: list[str], variables: list[tuple[str, str]]
-) -> list[tuple[int, str | None]]: ...
+def interpolate_sql_batch(
+    sqls: list[tuple[str, str]],
+    sources: tuple[
+        Mapping[str, object],
+        Mapping[str, str],
+        Mapping[str, str | None] | None,
+        Callable[[object, str], str],
+    ],
+    python_version: tuple[int, int],
+    unicode_version: str,
+) -> list[
+    tuple[str | None, list[tuple[int, int, int, int]], list[tuple[str, str]], str | None]
+]: ...
 def extract_static_sql_references(
     sql: str,
 ) -> list[tuple[str, str, str | None, int | None]] | None: ...

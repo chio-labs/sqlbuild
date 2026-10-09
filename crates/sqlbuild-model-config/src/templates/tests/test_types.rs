@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use crate::templates::errors::TemplateError;
 use crate::templates::models::{ContextValue, Scalar, StringExpansion, TemplateFailure};
 use crate::templates::types::TemplateHost;
 
@@ -9,7 +10,7 @@ pub(super) enum Value {
     Null,
     Bool(bool),
     Text(String),
-    /// A value only Python can render, such as a float or a mapping.
+    /// A mapping, which compares by its `str()` but cannot be interpolated.
     Opaque,
 }
 
@@ -62,13 +63,28 @@ impl TemplateHost for TestHost {
         Value::Null
     }
 
-    fn scalar(&self, value: &Value) -> Option<Scalar> {
-        match value {
-            Value::Null => Some(Scalar::Null),
-            Value::Bool(flag) => Some(Scalar::Bool(*flag)),
-            Value::Text(text) => Some(Scalar::Text(text.clone())),
-            Value::Opaque => None,
+    fn scalar(&self, value: &Value) -> Result<Scalar, TemplateFailure> {
+        Ok(match value {
+            Value::Null => Scalar::Null,
+            Value::Bool(flag) => Scalar::Bool(*flag),
+            Value::Text(text) => Scalar::Text(text.clone()),
+            Value::Opaque => Scalar::Text("{'a': 1}".to_owned()),
+        })
+    }
+
+    fn render(&self, value: &Value, label: &str) -> Result<String, TemplateFailure> {
+        match self.scalar(value)? {
+            Scalar::Null => Ok(String::new()),
+            Scalar::Bool(flag) => Ok(flag.to_string()),
+            Scalar::Text(_) if *value == Value::Opaque => Err(TemplateFailure::Invalid(
+                TemplateError::Message(format!("{label} is an object")),
+            )),
+            Scalar::Text(text) => Ok(text),
         }
+    }
+
+    fn label(&self) -> &str {
+        "model config"
     }
 }
 

@@ -755,6 +755,9 @@ dependencies = [
 [[package]]
 name = "sqlbuild-model-config"
 version = "0.150.0"
+dependencies = [
+ "sqlbuild-core",
+]
 
 [[package]]
 name = "sqlbuild-python"

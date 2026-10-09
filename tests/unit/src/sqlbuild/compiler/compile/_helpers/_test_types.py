@@ -66,21 +66,12 @@ class SqlReferenceExtractionErrorTestCase:
 
 @dataclass(frozen=True)
 class StaticProjectVarBatchTestCase:
+    """Model SQL texts and the `(sql, error)` each interpolates to."""
+
     description: str
     sqls: tuple[str, ...]
     effective_vars: dict[str, object]
-    expected_sqls: tuple[str | None, ...]
-
-
-@dataclass(frozen=True)
-class StaticProjectVarDifferentialTestCase:
-    description: str
-    seed: int
-    sql_count: int
-    effective_vars: dict[str, object]
-    fragments: tuple[str, ...]
-    expected_minimum_dollar_quote_substitutions: int
-    expected_minimum_doubled_backtick_substitutions: int
+    expected_results: tuple[tuple[str, str | None], ...]
 
 
 @dataclass(frozen=True)

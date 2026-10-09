@@ -382,7 +382,7 @@ NATIVE_ATTACHMENT_ENTRIES: tuple[str, ...] = (
     "pair_seed_files",
     "render_attached_generic_audit",
     "expand_config_templates",
-    "substitute_static_project_vars",
+    "interpolate_sql_batch",
     "scan_sql_declaration_references",
 )
 _MISSING_ENV: str = "SQB_ATTACHMENTS_UNSET"

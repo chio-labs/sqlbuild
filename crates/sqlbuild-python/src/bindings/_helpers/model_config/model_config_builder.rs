@@ -364,6 +364,7 @@ impl<'py> Expansion<'_, 'py> {
         let host = PythonHost::new(
             self.py,
             TemplateSources(variables.clone(), environment, context),
+            label,
         );
         let options = TemplateOptions {
             allow_context: true,
@@ -373,9 +374,7 @@ impl<'py> Expansion<'_, 'py> {
         let result = expanded(&host, value, options);
         self.reads.extend(host.into_reads());
         result.map_err(|stop| match stop {
-            Stop::Failure(failure) => {
-                template_error(&failure, label).map_or(Halt::Defer, Halt::Config)
-            }
+            Stop::Failure(error) => Halt::Config(template_error(&error, label)),
             Stop::Python(error) => Halt::Error(error),
         })
     }

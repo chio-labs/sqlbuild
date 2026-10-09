@@ -1314,6 +1314,16 @@ class ExpansionSpan:
 
 
 @dataclass(frozen=True)
+class SqlInterpolation:
+    """One SQL text after `@@` interpolation, or the error that stopped it, with its reads."""
+
+    sql: str
+    spans: tuple[ExpansionSpan, ...]
+    reads: tuple[tuple[str, str], ...]
+    error: str | None
+
+
+@dataclass(frozen=True)
 class CompiledSqlExpansion:
     """Process-local authored-to-expanded SQL evidence shared with compiler checks."""
 
