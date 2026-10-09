@@ -498,7 +498,6 @@ def assemble_compiled_project(
         ),
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
         scope_index=scope_index,
-        native_session=native_session,
     )
     return complete_semantic_diagnostics(
         project=project,

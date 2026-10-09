@@ -277,7 +277,6 @@ def host_project(project: CompiledProject) -> CompiledProject:
     return replace(
         project,
         binding_catalog=None,
-        native_session=None,
         sql_expansions={},
         loaded_macros={},
         loader_functions=(),

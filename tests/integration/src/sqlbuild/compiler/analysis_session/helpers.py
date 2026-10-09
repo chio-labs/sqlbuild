@@ -307,10 +307,10 @@ def pivot_project_files() -> dict[str, str]:
 
 @dataclass
 class NativePivotProofs:
-    """Every standalone native pivot proof assembly took, and whether a session answered it."""
+    """Every native pivot proof assembly took, and how many a finished session proved."""
 
     proofs: list[DynamicColumnContractProof | None] = field(default_factory=list)
-    session_answers: list[bool] = field(default_factory=list)
+    session_proofs: int = 0
 
 
 def native_pivot_proofs(*, monkeypatch: pytest.MonkeyPatch) -> NativePivotProofs:
@@ -324,7 +324,8 @@ def native_pivot_proofs(*, monkeypatch: pytest.MonkeyPatch) -> NativePivotProofs
     def recorded(**keywords: Any) -> tuple[DynamicColumnContractProof | None, ...]:
         proofs: tuple[DynamicColumnContractProof | None, ...] = native_proofs(**keywords)
         recorded_proofs.proofs.extend(proofs)
-        recorded_proofs.session_answers.extend([keywords["session"] is not None] * len(proofs))
+        proven: int = sum(proof is not None for proof in proofs)
+        recorded_proofs.session_proofs += proven * (keywords["session"] is not None)
         return proofs
 
     python_proof: Callable[..., DynamicColumnContractProof | None] = (

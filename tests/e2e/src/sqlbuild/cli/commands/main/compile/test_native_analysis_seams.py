@@ -93,7 +93,6 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
         len(planned_artifacts)
     ]
     assert isinstance(preview_seams["complete_native_semantic_diagnostics"][0], CompiledProject)
-    assert preview_seams["complete_native_semantic_diagnostics"][0].native_session is not None
     assert isinstance(preview_seams["evaluate_native_model_contracts"][0], ContractValidationResult)
     assert (native_run.returncode, preview_run.returncode) == (0, 0)
     assert report_without_engine(native_run) == report_without_engine(python_run)

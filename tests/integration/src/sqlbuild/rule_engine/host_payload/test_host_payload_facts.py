@@ -100,7 +100,7 @@ from tests.integration.src.sqlbuild.rule_engine.host_payload.helpers import (
                     "SELECT 1\n"
                 ),
             },
-            expected_unpopulated_trimmed_fields=frozenset({"native_session"}),
+            expected_unpopulated_trimmed_fields=frozenset(),
         ),
     ),
     ids=lambda case: case.description,
