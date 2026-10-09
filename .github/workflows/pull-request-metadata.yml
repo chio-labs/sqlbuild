@@ -1,11 +1,13 @@
 name: Pull Request Metadata
 run-name: >-
   ${{ inputs.request_id && format('{0} [{1}]', github.workflow, inputs.request_id)
-  || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
+  || github.event.pull_request.title || github.event.head_commit.message
+  || github.event.merge_group.head_commit.message || github.workflow }}
 
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  merge_group:
   workflow_dispatch:
     inputs:
       pr_number:
@@ -26,8 +28,16 @@ jobs:
     name: Pull Request Metadata
     runs-on: ubuntu-24.04
     steps:
+      # The queue only admits pull requests whose metadata check already passed, so a merge group
+      # reports success instead of skipping: a required check must report for the queue to merge.
+      - name: Accept metadata validated on the pull request
+        if: github.event_name == 'merge_group'
+        run: echo "Pull request metadata was validated on the pull request before it was queued."
+
       - uses: actions/checkout@v4
+        if: github.event_name != 'merge_group'
       - name: Resolve pull request metadata
+        if: github.event_name != 'merge_group'
         env:
           EVENT_NAME: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
@@ -41,6 +51,7 @@ jobs:
           fi
 
       - name: Validate branch, title, and description
+        if: github.event_name != 'merge_group'
         env:
           PR_METADATA_PATH: ${{ runner.temp }}/pull-request.json
         run: python -m scripts.validate_pr_metadata --metadata-file "${PR_METADATA_PATH}"

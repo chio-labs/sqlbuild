@@ -2,14 +2,17 @@ name: Verify
 
 on:
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Each merge group has its own gh-readonly-queue ref, so queued groups never cancel each other; the
+# queue itself discards a group's run when it rebuilds the group.
 concurrency:
-  group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: verify-${{ github.workflow }}-${{ github.event.merge_group.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'merge_group' }}
 
 jobs:
   changes:
@@ -32,8 +35,8 @@ jobs:
         id: scope
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: |
           write_scope() {
             {
@@ -48,7 +51,19 @@ jobs:
             } >> "${GITHUB_OUTPUT}"
           }
 
-          if [[ "${EVENT_NAME}" != "pull_request" ]]; then
+          if [[ "${EVENT_NAME}" != "pull_request" && "${EVENT_NAME}" != "merge_group" ]]; then
+            write_scope true true true true true true true true
+            exit 0
+          fi
+
+          # A merge group's head is its base plus every queued pull request ahead of and including
+          # this one, so the base..head diff covers the whole group. Anything that prevents an exact
+          # diff runs everything rather than risk skipping a suite. Three dots compare with the merge
+          # base, so changes that landed on main after a branch started are not counted as its own.
+          changed_paths="${RUNNER_TEMP}/changed-paths"
+          if [[ -z "${BASE_SHA}" || -z "${HEAD_SHA}" ]] || \
+             ! git diff --name-only -z "${BASE_SHA}...${HEAD_SHA}" > "${changed_paths}"; then
+            echo "Could not diff ${BASE_SHA:-<none>}...${HEAD_SHA:-<none>}; running every suite" >&2
             write_scope true true true true true true true true
             exit 0
           fi
@@ -135,9 +150,7 @@ jobs:
                 broad=true
                 ;;
             esac
-          # Three dots: compare with the merge base, so changes that landed on main after the branch
-          # started are not counted as this pull request's changes.
-          done < <(git diff --name-only -z "${BASE_SHA}...${HEAD_SHA}")
+          done < "${changed_paths}"
 
           if [[ "${changed}" != "true" ]]; then
             write_scope true true true true true true true true
@@ -590,7 +603,7 @@ jobs:
       - name: Check out the comparison base
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha || 'main' }}
+          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || 'main' }}
           path: base
       - uses: astral-sh/setup-uv@v5
         with:
