@@ -595,7 +595,7 @@ jobs:
         run: make test-e2e-diagnostic-compile-performance
 
   compile_performance_ratio:
-    name: Same-runner compile ratio (${{ matrix.kind }} 3000 models)
+    name: Same-runner compile ratio (${{ matrix.label || matrix.kind }} 3000 models)
     needs: [changes, lockfile]
     if: needs.changes.outputs.performance == 'true'
     runs-on: ubuntu-24.04
@@ -608,6 +608,25 @@ jobs:
             max_ratio: "1.10"
           - kind: fresh
             max_ratio: "1.10"
+          - kind: dense
+            label: native-preview contracts vs python
+            base_engine: python
+            head_engine: native-preview
+            gate_phase: contracts_cpu_ms
+            max_ratio: "1.00"
+          - kind: dense
+            label: native-preview model analysis vs python
+            base_engine: python
+            head_engine: native-preview
+            gate_phase: model_analysis_cpu_ms
+            compile_args: --compile-arg=--select=*
+            max_ratio: "1.50"
+          - kind: dense
+            label: native-preview custom rules vs python
+            base_engine: python
+            head_engine: native-preview
+            gate_phase: custom_rules_cpu_ms
+            max_ratio: "1.25"
     steps:
       - uses: actions/checkout@v4
       - name: Check out the comparison base
@@ -634,7 +653,29 @@ jobs:
       - name: Install base dependencies
         working-directory: base
         run: uv sync --locked --all-groups --all-extras
+      - name: Compare python and native-preview phase CPU on head
+        if: matrix.gate_phase
+        env:
+          KIND: ${{ matrix.kind }}
+          MAX_RATIO: ${{ matrix.max_ratio }}
+          BASE_ENGINE: ${{ matrix.base_engine }}
+          HEAD_ENGINE: ${{ matrix.head_engine }}
+          GATE_PHASE: ${{ matrix.gate_phase }}
+          COMPILE_ARGS: ${{ matrix.compile_args }}
+        run: |
+          uv run python -m scripts.compare_compile_performance \
+            --kind "${KIND}" \
+            --modes cold \
+            --max-ratio "${MAX_RATIO}" \
+            --models 3000 \
+            --base-python .venv/bin/python \
+            --head-python .venv/bin/python \
+            --base-engine "${BASE_ENGINE}" \
+            --head-engine "${HEAD_ENGINE}" \
+            --gate-phase "${GATE_PHASE}" \
+            ${COMPILE_ARGS:+"${COMPILE_ARGS}"}
       - name: Compare base and head cold, warm and one-model edit compiles
+        if: ${{ !matrix.gate_phase }}
         env:
           KIND: ${{ matrix.kind }}
           MAX_RATIO: ${{ matrix.max_ratio }}

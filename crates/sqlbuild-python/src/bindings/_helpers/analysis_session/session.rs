@@ -7,6 +7,7 @@ use sqlbuild_analysis::assembly::analysis_session::main::finish_analysis_session
 use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contract::prove_dynamic_contract;
 use sqlbuild_analysis::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use sqlbuild_analysis::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
+use sqlbuild_analysis::assembly::analysis_session::main::session_sharing::session_sharing;
 use sqlbuild_analysis::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, Deferral, DeferredAnalysis, DynamicFamily, ExpressionShape,
@@ -117,6 +118,7 @@ type FinishRow = (Vec<OutcomeRow>, Shapes, Vec<String>, Vec<ContractRow>);
 pub(crate) struct NativeModelAnalysisSession {
     inner: Option<AnalysisSession>,
     failure: Option<String>,
+    sharing: (usize, usize),
 }
 
 impl NativeModelAnalysisSession {
@@ -143,6 +145,7 @@ impl NativeModelAnalysisSession {
                 run_analysis_session(&mut session).map(|step| (session, step))
             });
         let (session, step) = self.kept(result)?;
+        self.sharing = session_sharing(&session);
         self.inner = Some(session);
         Some(step_row(step))
     }
@@ -172,6 +175,12 @@ impl NativeModelAnalysisSession {
     fn failure(&self) -> Option<String> {
         self.failure.clone()
     }
+
+    /// `(shared members, shared members re-analysed alone)` as of the last step.
+    #[getter]
+    fn sharing(&self) -> (usize, usize) {
+        self.sharing
+    }
 }
 
 /// Start a session on `catalog`, or None where Python must analyse.
@@ -189,6 +198,7 @@ fn start_model_analysis_session(
     Ok(session.map(|session| NativeModelAnalysisSession {
         inner: Some(session),
         failure: None,
+        sharing: (0, 0),
     }))
 }
 

@@ -14,7 +14,6 @@ from sqlbuild.compiler.analysis_session._helpers.session_rows import (
     compact_lineage,
     contract_proof,
     deferred_row,
-    inferred_columns,
     lineage_facts,
 )
 from sqlbuild.compiler.analysis_session.constants import (
@@ -31,6 +30,7 @@ from sqlbuild.compiler.analysis_session.constants import (
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.analysis_session.types import (
+    ColumnRow,
     DeferralRow,
     DeferredRow,
     FinishRow,
@@ -42,6 +42,7 @@ from sqlbuild.compiler.analysis_session.types import (
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
+    InferredColumn,
     ModelSqlAnalysis,
     ModelSqlAnalysisRequest,
     PolyglotAnalysisResult,
@@ -69,6 +70,7 @@ class NativeModelAnalysis:
             request.column_nullability_by_table
         )
         self._kept: dict[tuple[int, str], PolyglotAnalysisResult] = {}
+        self._columns: dict[ColumnRow, InferredColumn] = {}
         self._deferrals: Counter[str] = Counter()
 
     def analyses(
@@ -176,6 +178,23 @@ class NativeModelAnalysis:
             },
         )
 
+    def _inferred_columns(self, rows: list[ColumnRow] | None) -> tuple[InferredColumn, ...] | None:
+        """Columns as Python's analysis shares them: one object per distinct column value."""
+
+        if rows is None:
+            return None
+        return tuple(map(self._inferred_column, rows))
+
+    def _inferred_column(self, row: ColumnRow) -> InferredColumn:
+        column: InferredColumn | None = self._columns.get(row)
+        if column is None:
+            name, data_type, nullability = row
+            column = InferredColumn(
+                name=name, type=data_type, nullability=InferredNullability(nullability)
+            )
+            self._columns[row] = column
+        return column
+
     def _model_analysis(
         self,
         *,
@@ -205,7 +224,7 @@ class NativeModelAnalysis:
         return ModelSqlAnalysis(
             polyglot_analysis=PolyglotAnalysisResult(
                 analysis_succeeded=succeeded,
-                columns=inferred_columns(columns),
+                columns=self._inferred_columns(columns),
                 lineage_columns=lineage,
                 has_star=has_star,
                 star_resolved=star_resolved,

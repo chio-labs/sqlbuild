@@ -14,14 +14,16 @@ from scripts.compile_performance_ratio._helpers.measure import (
     write_benchmark_project,
 )
 from scripts.compile_performance_ratio._helpers.report import append_summary, comparison_markdown
-from scripts.compile_performance_ratio._helpers.verdict import ratio_failures
+from scripts.compile_performance_ratio._helpers.verdict import phase_failures, ratio_failures
 from scripts.compile_performance_ratio.constants import (
     COMPILE_MODES,
     DEFAULT_MAX_RATIO,
     DEFAULT_RUNS,
     EDIT_MODE,
     NOISE_FLOOR_SECONDS,
+    PHASE_NOISE_FLOOR_MS,
     PROJECT_KINDS,
+    REPORTED_PHASES,
 )
 from scripts.compile_performance_ratio.models import CompileComparison
 
@@ -59,16 +61,29 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             head_python=args.head_python,
             runs=args.runs,
             modes=modes,
+            engines=(args.base_engine, args.head_engine),
+            compile_args=tuple(args.compile_args),
         )
     mode_max_ratios: dict[str, float] = (
         {} if args.edit_max_ratio is None else {EDIT_MODE: args.edit_max_ratio}
     )
-    failures: tuple[str, ...] = ratio_failures(
-        comparisons=comparisons,
-        modes=modes,
-        max_ratio=args.max_ratio,
-        noise_floor_seconds=args.noise_floor_seconds,
-        mode_max_ratios=mode_max_ratios,
+    gate_phases: tuple[str, ...] = tuple(dict.fromkeys(args.gate_phases))
+    failures: tuple[str, ...] = (
+        phase_failures(
+            comparisons=comparisons,
+            modes=modes,
+            phases=gate_phases,
+            max_ratio=args.max_ratio,
+            noise_floor_ms=args.phase_noise_floor_ms,
+        )
+        if gate_phases
+        else ratio_failures(
+            comparisons=comparisons,
+            modes=modes,
+            max_ratio=args.max_ratio,
+            noise_floor_seconds=args.noise_floor_seconds,
+            mode_max_ratios=mode_max_ratios,
+        )
     )
     markdown: str = comparison_markdown(
         comparisons=comparisons,
@@ -77,6 +92,9 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
         per_side_projects=per_side_projects,
         failures=failures,
         mode_max_ratios=mode_max_ratios,
+        engines=(args.base_engine, args.head_engine),
+        gate_phases=gate_phases,
+        compile_args=tuple(args.compile_args),
     )
     print(markdown)
     _ = append_summary(path=Path(summary_value) if summary_value else None, markdown=markdown)
@@ -121,5 +139,36 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=float,
         default=NOISE_FLOOR_SECONDS,
         help="Seconds of slack added to the ratio allowance before a slowdown fails.",
+    )
+    parser.add_argument(
+        "--base-engine",
+        default=None,
+        help="Compiler engine the base build runs; defaults to the build's own default.",
+    )
+    parser.add_argument(
+        "--head-engine",
+        default=None,
+        help="Compiler engine the head build runs; defaults to the build's own default.",
+    )
+    parser.add_argument(
+        "--compile-arg",
+        dest="compile_args",
+        action="append",
+        default=[],
+        help="Extra `sqb compile` argument for both builds, e.g. `--compile-arg=--select=*`.",
+    )
+    parser.add_argument(
+        "--gate-phase",
+        dest="gate_phases",
+        action="append",
+        choices=REPORTED_PHASES,
+        default=[],
+        help="Gate only this reported phase's median instead of whole-compile wall and CPU.",
+    )
+    parser.add_argument(
+        "--phase-noise-floor-ms",
+        type=float,
+        default=PHASE_NOISE_FLOOR_MS,
+        help="Milliseconds of slack added to a gated phase's ratio allowance.",
     )
     return parser.parse_args(argv)

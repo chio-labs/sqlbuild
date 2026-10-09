@@ -40,6 +40,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompileProjectInputs,
     DynamicColumnContractProof,
+    InferredColumn,
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -349,6 +350,60 @@ def generated_analysis_files(*, rng: random.Random, model_count: int) -> dict[st
     return files
 
 
+def shared_analysis_files(
+    *, regions: tuple[str, ...], inexact_regions: tuple[str, ...]
+) -> dict[str, str]:
+    """Equal regional models and rollups, missing-column readers and one unshared summary."""
+
+    regional: dict[str, str] = {
+        f"models/staging/orders_{region}.sql": (
+            f'MODEL (description "Orders in {region}");\n\n'
+            'SELECT order_id, customer_id, amount FROM __source("raw_orders")\n'
+        )
+        for region in regions
+    }
+    rollups: dict[str, str] = {
+        f"models/marts/totals_{region}.sql": (
+            f'MODEL (description "Customer totals in {region}");\n\n'
+            "SELECT customer_id, SUM(amount) AS total_amount\n"
+            f'FROM __ref("orders_{region}")\nGROUP BY customer_id\n'
+        )
+        for region in regions
+    }
+    inexact: dict[str, str] = {
+        f"models/marts/missing_{region}.sql": (
+            f'MODEL (description "Orders in {region} with an unknown column");\n\n'
+            f'SELECT customer_id, missing_column FROM __ref("orders_{region}")\n'
+        )
+        for region in inexact_regions
+    }
+    return {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "sources/raw.yml": _SOURCES,
+        **regional,
+        **rollups,
+        **inexact,
+        "models/marts/orders_summary.sql": (
+            'MODEL (description "Order count");\n\n'
+            f'SELECT COUNT(*) AS order_count FROM __ref("orders_{regions[0]}")\n'
+        ),
+    }
+
+
+def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """Record every native session started; return the list they are appended to."""
+
+    started: list[Any] = []
+    original: Callable[..., Any] = native_module.start_model_analysis_session
+
+    def start(catalog: object, request: tuple[object, ...]) -> Any:
+        started.append(original(catalog, request))
+        return started[-1]
+
+    monkeypatch.setattr(native_module, "start_model_analysis_session", start)
+    return started
+
+
 def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjectInputs:
     """Write a project and attach its compile inputs with the DuckDB compile context."""
 
@@ -376,6 +431,8 @@ class AnalysisParity:
     standalone_proofs: int = 0
     proven_pivots: int = 0
     native_enrichments: int = 0
+    native_column_objects: int = 0
+    native_column_values: int = 0
 
 
 def compare_analyses(
@@ -405,6 +462,11 @@ def compare_analyses(
             )
         )
         python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
+        columns: list[InferredColumn] = list(
+            chain.from_iterable(map(_native_columns, (native or {}).values()))
+        )
+        parity.native_column_objects += len(set(map(id, columns)))
+        parity.native_column_values += len(set(columns))
         parity.analysed_models += len(python)
         _append(parity, "model analyses", _analysis_views(python), _analysis_views(native))
         _append(
@@ -513,6 +575,10 @@ def deferral_kinds(record_dir: Path) -> Counter[str]:
     )
     records: list[dict[str, str]] = [json.loads(line) for line in lines]
     return Counter(f"{record['site']}:{record['kind']}" for record in records)
+
+
+def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:
+    return analysis.polyglot_analysis.columns or ()
 
 
 def _append(parity: AnalysisParity, name: str, python: object, native: object) -> None:
