@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.semantic_checks._helpers.stage import completed_semantic_project
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 
@@ -16,4 +17,9 @@ def complete_native_semantic_diagnostics(
 ) -> CompiledProject | None:
     """Return the completed project, or None where Python must complete its diagnostics."""
 
-    return None
+    return completed_semantic_project(
+        project=project,
+        profile=profile,
+        binding_results=binding_results,
+        resource_sql_analysis=resource_sql_analysis,
+    )
