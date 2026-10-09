@@ -79,14 +79,14 @@ engine = "native"
 stage = "model_config"
 site = "model_config.python_templates"
 kind = "config"
-counts = { failure = 93, seed = 36 }
+counts = { failure = 98, seed = 36 }
 
 [[entry]]
 engine = "native"
 stage = "model_config"
 site = "model_config.python_templates"
 kind = "connection"
-counts = { failure = 95, seed = 63 }
+counts = { failure = 100, seed = 63 }
 
 [[entry]]
 engine = "native"
@@ -114,7 +114,7 @@ engine = "native"
 stage = "model_loop"
 site = "model_loop.cursor_intrinsic_validation"
 kind = "deferred"
-counts = { failure = 356, seed = 1100 }
+counts = { failure = 366, seed = 1100 }
 
 [[entry]]
 engine = "native"
@@ -191,7 +191,7 @@ engine = "native-preview"
 stage = "model_analysis"
 site = "analysis_session"
 kind = "input_enrichment"
-counts = { example = 52, failure = 160, fixture = 52, seed = 614 }
+counts = { example = 52, failure = 170, fixture = 52, seed = 614 }
 
 [[entry]]
 engine = "native-preview"
@@ -226,14 +226,14 @@ engine = "native-preview"
 stage = "model_config"
 site = "model_config.python_templates"
 kind = "config"
-counts = { example = 12, failure = 93, fixture = 8, seed = 36 }
+counts = { example = 12, failure = 98, fixture = 8, seed = 36 }
 
 [[entry]]
 engine = "native-preview"
 stage = "model_config"
 site = "model_config.python_templates"
 kind = "connection"
-counts = { example = 18, failure = 95, fixture = 9, seed = 63 }
+counts = { example = 18, failure = 100, fixture = 9, seed = 63 }
 
 [[entry]]
 engine = "native-preview"
@@ -261,7 +261,7 @@ engine = "native-preview"
 stage = "model_loop"
 site = "model_loop.cursor_intrinsic_validation"
 kind = "deferred"
-counts = { example = 56, failure = 356, fixture = 64, seed = 1100 }
+counts = { example = 56, failure = 366, fixture = 64, seed = 1100 }
 
 [[entry]]
 engine = "native-preview"
@@ -283,3 +283,10 @@ stage = "model_loop"
 site = "model_loop.sql_variables"
 kind = "error"
 counts = { failure = 2 }
+
+[[entry]]
+engine = "native-preview"
+stage = "semantic_checks"
+site = "metadata_validation.py"
+kind = "metadata_checks"
+counts = { example = 12, failure = 95, fixture = 8, seed = 36 }

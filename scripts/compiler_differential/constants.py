@@ -21,6 +21,9 @@ NATIVE_FALLBACK_PROJECT_CORPUS: str = "project"
 NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
     "analysis_session": "model_analysis",
     "fast_columns.py": "lineage_facts",
+    "type_recovery.py": "semantic_checks",
+    "recovery.py": "semantic_checks",
+    "metadata_validation.py": "semantic_checks",
 }
 NATIVE_FALLBACK_DEFERRAL_UNKNOWN_STAGE: str = "analysis"
 NATIVE_FALLBACK_LIST_HEADER: str = (
