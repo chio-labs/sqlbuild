@@ -110,7 +110,6 @@ TABLE_FUNCTION_RETURN_KEYS: frozenset[str] = frozenset({"table"})
 MACRO_TOKEN: str = "@"
 DECLARATION_REFERENCE_NAMES: frozenset[str] = frozenset({"enum", "const"})
 MACRO_CONTEXT_PARAMETER_NAME: str = "ctx"
-PYTHON_LITERAL_NAMES: frozenset[str] = frozenset({"True", "False", "None"})
 SQL_INTERPOLATION_TOKEN: str = "@@"
 
 TEMPLATE_OPEN_TOKEN: str = "${"

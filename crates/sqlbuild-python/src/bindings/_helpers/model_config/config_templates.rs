@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
-    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyString,
-    PyStringMethods, PyTuple, PyTupleMethods,
+    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods,
+    PyTuple, PyTupleMethods,
 };
 use pyo3::{FromPyObject, IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::errors::ConfigError;
@@ -26,7 +26,8 @@ const TEMPLATE_OPEN_TOKEN: &str = "${";
 const ENVIRONMENT_READ: &str = "env";
 const CONTEXT_READ: &str = "ctx";
 const EFFECTIVE_VARS_LABEL: &str = "effective vars";
-const PROJECT_VAR_VALUES_MODULE: &str = "sqlbuild.compiler.authored_values.main._project_var_values";
+const PROJECT_VAR_VALUES_MODULE: &str =
+    "sqlbuild.compiler.authored_values.main._project_var_values";
 const RENDER_PROJECT_VAR_TEXT: &str = "render_project_var_text";
 
 /// Variables, the process environment and context values, all read through Python.
@@ -75,9 +76,11 @@ impl<'py> PythonHost<'py> {
             TemplateFailure::Missing(error) | TemplateFailure::Invalid(error) => {
                 Stop::Failure(error)
             }
-            TemplateFailure::Host => Stop::Python(self.raised.borrow_mut().take().unwrap_or_else(
-                || PyRuntimeError::new_err("template expansion stopped without an error"),
-            )),
+            TemplateFailure::Host => {
+                Stop::Python(self.raised.borrow_mut().take().unwrap_or_else(|| {
+                    PyRuntimeError::new_err("template expansion stopped without an error")
+                }))
+            }
         }
     }
 
@@ -96,7 +99,12 @@ impl<'py> PythonHost<'py> {
         effective: &EffectiveVars<'py>,
         name: &str,
     ) -> Result<Option<Bound<'py, PyAny>>, TemplateFailure> {
-        let Some(raw) = self.sources.0.get_item(name).map_err(|error| self.hold(error))? else {
+        let Some(raw) = self
+            .sources
+            .0
+            .get_item(name)
+            .map_err(|error| self.hold(error))?
+        else {
             return Ok(None);
         };
         if let Some(value) = effective
@@ -176,7 +184,10 @@ impl<'py> TemplateHost for PythonHost<'py> {
             .borrow_mut()
             .push((ENVIRONMENT_READ, name.to_owned()));
         let environment: &Bound<'py, PyAny> = &self.sources.1;
-        if environment.contains(name).map_err(|error| self.hold(error))? {
+        if environment
+            .contains(name)
+            .map_err(|error| self.hold(error))?
+        {
             environment
                 .get_item(name)
                 .map(Some)

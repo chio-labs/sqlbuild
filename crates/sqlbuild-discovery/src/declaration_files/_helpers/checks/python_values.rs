@@ -29,7 +29,10 @@ pub(crate) enum PythonType {
 }
 
 /// The projected type; a bare number written with non-ASCII digits is rejected.
-pub(crate) fn python_type(value: &AuthoredValue, words: WordRules) -> Result<PythonType, ParseStop> {
+pub(crate) fn python_type(
+    value: &AuthoredValue,
+    words: WordRules,
+) -> Result<PythonType, ParseStop> {
     Ok(match value {
         AuthoredValue::Null => PythonType::None,
         AuthoredValue::Boolean(_) => PythonType::Bool,
@@ -151,7 +154,10 @@ fn is_float(word: &str) -> bool {
 
 /// Whether Python's `^[+-]?\d+$` or float pattern, with Unicode `\d`, matches a non-ASCII word.
 fn is_unicode_number(word: &str, python: PythonText) -> bool {
-    let digits = |part: &str| part.chars().all(|character| is_python_decimal(python, character));
+    let digits = |part: &str| {
+        part.chars()
+            .all(|character| is_python_decimal(python, character))
+    };
     let unsigned = unsigned(word);
     if !unsigned.is_empty() && digits(unsigned) {
         return true;

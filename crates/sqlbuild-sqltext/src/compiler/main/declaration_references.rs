@@ -12,5 +12,7 @@ pub fn scan_declaration_references(
     python: PythonText,
     sqls: &[String],
 ) -> Vec<DeclarationReferenceScan> {
-    sqls.par_iter().map(|sql| scan_references(python, sql)).collect()
+    sqls.par_iter()
+        .map(|sql| scan_references(python, sql))
+        .collect()
 }

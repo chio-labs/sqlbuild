@@ -47,7 +47,9 @@ pub fn template_error_message(error: &TemplateError, label: &str) -> String {
 
 /// Whether Python's `coalesce` treats this error message as a missing value and skips it.
 pub fn is_missing_value_message(message: &str) -> bool {
-    MISSING_VALUE_PARTS.iter().any(|part| message.contains(part))
+    MISSING_VALUE_PARTS
+        .iter()
+        .any(|part| message.contains(part))
         || (message.contains(UNAVAILABLE_CONTEXT_PART) && message.contains(NO_VALUE_PART))
 }
 

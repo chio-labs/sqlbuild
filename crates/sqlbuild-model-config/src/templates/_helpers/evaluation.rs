@@ -4,11 +4,11 @@ use crate::templates::errors::TemplateError;
 use crate::templates::main::template_error_message::{
     is_missing_value_message, template_error_message,
 };
-use sqlbuild_core::text::main::python_strip::python_strip;
 use crate::templates::models::{
     ContextValue, Expression, Scalar, TemplateFailure, TemplateOptions,
 };
 use crate::templates::types::TemplateHost;
+use sqlbuild_core::text::main::python_strip::python_strip;
 
 const TRUE_LITERAL: &str = "true";
 const FALSE_LITERAL: &str = "false";

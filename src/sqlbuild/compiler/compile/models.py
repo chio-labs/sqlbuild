@@ -67,6 +67,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -335,6 +336,15 @@ class DeclarationScopeBuild:
     index: ScopeIndex
     resolver: DeclarationScopeResolver
     sql_test_scans: SqlTestScanCache
+
+
+@dataclass(frozen=True)
+class ParsedMacroArguments:
+    """One macro call's argument objects and the typed references written in them, in order."""
+
+    args: tuple[object, ...]
+    kwargs: dict[str, object]
+    typed_references: tuple[SqlResourceRef, ...]
 
 
 @dataclass(frozen=True)

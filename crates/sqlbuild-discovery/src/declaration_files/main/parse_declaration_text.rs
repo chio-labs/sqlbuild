@@ -33,12 +33,10 @@ fn parse_text(
         CollectionKind::Enums => {
             parse_enum_file(file_path, contents, options.python).map(ParsedDeclarationText::Enum)
         }
-        CollectionKind::Constants => {
-            parse_constant_file(file_path, contents, options.python).map(ParsedDeclarationText::Constant)
-        }
-        CollectionKind::ModelSchemas => {
-            parse_schema_file(file_path, contents, options.python).map(ParsedDeclarationText::ModelSchema)
-        }
+        CollectionKind::Constants => parse_constant_file(file_path, contents, options.python)
+            .map(ParsedDeclarationText::Constant),
+        CollectionKind::ModelSchemas => parse_schema_file(file_path, contents, options.python)
+            .map(ParsedDeclarationText::ModelSchema),
         CollectionKind::SqlFunctions => parse_function_file(file_path, contents, options)
             .map(ParsedDeclarationText::SqlFunction),
         CollectionKind::SqlHooks => parse_hook_file(file_path, hook_name, contents, options)

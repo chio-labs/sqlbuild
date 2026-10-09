@@ -2,8 +2,7 @@
 
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::declaration_files::_helpers::checks::python_values::{
-    WordRules,
-    failure, get, non_empty_str, python_str,
+    WordRules, failure, get, non_empty_str, python_str,
 };
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::models::{DeclarationFileOptions, HookFile};
@@ -42,12 +41,27 @@ pub(crate) fn parse_hook_file(
     )?;
     let description: Option<String> = match get(&header_values, DESCRIPTION_KEY) {
         Some(value) => {
-            if non_empty_str(value, WordRules { python: options.python, file_path })?.is_none() {
+            if non_empty_str(
+                value,
+                WordRules {
+                    python: options.python,
+                    file_path,
+                },
+            )?
+            .is_none()
+            {
                 return Err(hook_failure(format!(
                     "HOOK() description in '{file_path}' must be a non-empty string"
                 )));
             }
-            python_str(value, WordRules { python: options.python, file_path })?.map(str::to_owned)
+            python_str(
+                value,
+                WordRules {
+                    python: options.python,
+                    file_path,
+                },
+            )?
+            .map(str::to_owned)
         }
         None => None,
     };

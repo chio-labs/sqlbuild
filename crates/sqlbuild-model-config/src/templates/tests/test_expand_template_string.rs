@@ -179,9 +179,9 @@ fn given_template_strings_when_expanding_then_values_and_reads_match_python() {
         TemplateTestCase {
             description: "coalesce stops at an error that is not a missing value",
             text: "${coalesce(other:thing, env)}",
-            expected: Err(TemplateFailure::Invalid(TemplateError::UnsupportedNamespace(
-                "other".to_owned(),
-            ))),
+            expected: Err(TemplateFailure::Invalid(
+                TemplateError::UnsupportedNamespace("other".to_owned()),
+            )),
             expected_reads: &[],
         },
         TemplateTestCase {

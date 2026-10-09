@@ -2,8 +2,7 @@
 
 use crate::declaration_files::_helpers::checks::identities::validate_public_identity;
 use crate::declaration_files::_helpers::checks::python_values::{
-    WordRules,
-    PythonType, failure, get, is_identifier, python_str, python_type, unknown_keys,
+    PythonType, WordRules, failure, get, is_identifier, python_str, python_type, unknown_keys,
 };
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::declaration_headers::declaration_headers;
@@ -118,7 +117,9 @@ fn shorthand_members(
 ) -> Result<Vec<(String, AuthoredValue)>, ParseStop> {
     let mut members: Vec<(String, AuthoredValue)> = Vec::with_capacity(items.len());
     for item in items {
-        let Some(member) = python_str(item, WordRules { python, file_path })?.filter(|member| is_identifier(member)) else {
+        let Some(member) = python_str(item, WordRules { python, file_path })?
+            .filter(|member| is_identifier(member))
+        else {
             return Err(declaration(format!(
                 "{file_path} enum '{enum_name}' shorthand members must be identifiers"
             )));
@@ -146,7 +147,10 @@ fn explicit_members(
                 "{file_path} enum '{enum_name}' member name must be a SQL identifier"
             )));
         }
-        if !matches!(python_type(value, WordRules { python, file_path })?, PythonType::Str | PythonType::Int) {
+        if !matches!(
+            python_type(value, WordRules { python, file_path })?,
+            PythonType::Str | PythonType::Int
+        ) {
             return Err(declaration(format!(
                 "{file_path} enum '{enum_name}' member '{member}' value must be a string or \
                  integer"
