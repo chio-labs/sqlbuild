@@ -60,7 +60,6 @@ class NativeFallbackSite(StrEnum):
     MACRO_UNBRIDGED_EXPANSION = "macro_calls.unbridged_expansion"
     MACRO_BRIDGE_UNAVAILABLE = "macro_calls.bridge_unavailable"
     MACRO_CALL_MOCKED = "macro_calls.mocked_evaluation"
-    CONFIG_HEADER_METADATA = "model_config.header_metadata"
     AUDIT_RENDERING = "attachments.audit_rendering"
     FUNCTION_HEADER = "attachments.function_header"
     CURSOR_INTRINSIC_REJECTION = "attachments.cursor_intrinsic_rejection"

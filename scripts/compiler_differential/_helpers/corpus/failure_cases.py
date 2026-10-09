@@ -667,6 +667,22 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="engine-error-non-ascii-digit-model-constant",
+            expected_code="D002",
+            files={
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    "MODEL (\n", "MODEL (\n  constants (_bonus \u0663),\n", 1
+                )
+            },
+            expected_message=(
+                f"<project>/{FAILURE_MART_PATH} has the bare number '\u0663', written with "
+                "non-ASCII digits"
+            ),
+            expected_help=(
+                'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
+            ),
+        ),
+        failure_case(
             name="engine-error-macro-argument-syntax",
             expected_code="P001",
             files={

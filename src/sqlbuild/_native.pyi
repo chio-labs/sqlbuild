@@ -171,10 +171,12 @@ class NativeConfigError:
     key: str | None
 
 def parse_model_header_metadata(
-    requests: list[tuple[object, object, dict[str, Any], str]], classes: dict[str, object]
-) -> list[
-    tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None] | str
-]: ...
+    columns: object,
+    audits: object,
+    locations: dict[str, Any],
+    path: str,
+    classes: dict[str, object],
+) -> tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None]: ...
 def expand_config_templates(
     value: object,
     sources: tuple[dict[str, object], object, dict[str, str | None]],

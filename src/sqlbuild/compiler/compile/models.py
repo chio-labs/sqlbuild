@@ -1660,31 +1660,6 @@ class ModelValidatorContext:
 
 
 @dataclass(frozen=True)
-class CachedModelHeaderColumns:
-    """Cached authored MODEL-header columns and source locations."""
-
-    raw_columns: object
-    columns: tuple[SchemaColumn, ...]
-    column_locations: dict[str, SourceLocation]
-
-
-@dataclass(frozen=True)
-class ModelHeaderColumnCache:
-    """Identity-safe cache of parsed authored MODEL-header columns."""
-
-    _values: dict[int, CachedModelHeaderColumns] = field(default_factory=dict)
-
-    def get(self, raw_columns: object) -> CachedModelHeaderColumns | None:
-        cached: CachedModelHeaderColumns | None = self._values.get(id(raw_columns))
-        if cached is None or cached.raw_columns is not raw_columns:
-            return None
-        return cached
-
-    def put(self, cached: CachedModelHeaderColumns) -> None:
-        self._values[id(cached.raw_columns)] = cached
-
-
-@dataclass(frozen=True)
 class SqlAnalysisOptOutRequest:
     """One model's opt-out, with what is needed to prove its SQL parses."""
 

@@ -98,7 +98,6 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
     MacroExpansionResult,
     MappedOffset,
-    ModelHeaderColumnCache,
     ModelInputBuildContext,
     ModelResourceNames,
     ModelValidationRequest,
@@ -132,10 +131,6 @@ from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_en
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
-from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
-    parse_native_header_metadata,
-)
-from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
@@ -264,10 +259,8 @@ class _ModelInputLoop:
     validation_context: _ModelValidationContext
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...]
-    model_header_column_cache: ModelHeaderColumnCache
     reusable_config_cache: _ReusableModelConfigCache
     declaration_cache: _VisibleModelDeclarationCache
-    native_header_metadata: dict[Path, NativeHeaderMetadata]
     native_declaration_references: dict[Path, NativeDeclarationScan]
 
 
@@ -541,14 +534,12 @@ def _build_model_inputs(
         validation_context=validation_context,
         sql_hook_definitions=sql_hook_definitions,
         legacy_schema_files=legacy_schema_files,
-        model_header_column_cache=ModelHeaderColumnCache(),
         reusable_config_cache=_ReusableModelConfigCache(
             defaults=discovered_inputs.project_config.defaults,
             path_defaults=discovered_inputs.project_config.path_defaults,
             target_config=context.target_config,
         ),
         declaration_cache=_VisibleModelDeclarationCache.build(context),
-        native_header_metadata=parse_native_header_metadata(model_files=render_files),
         native_declaration_references=dict(
             zip(
                 (model_file.file_path for model_file in prepared_files),
@@ -590,7 +581,6 @@ def _build_model_input(
     validation_context: _ModelValidationContext = loop.validation_context
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = loop.sql_hook_definitions
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = loop.legacy_schema_files
-    model_header_column_cache: ModelHeaderColumnCache = loop.model_header_column_cache
     reusable_config_cache: _ReusableModelConfigCache = loop.reusable_config_cache
     declaration_cache: _VisibleModelDeclarationCache = loop.declaration_cache
     effective_vars: dict[str, object] = context.effective_vars
@@ -795,8 +785,6 @@ def _build_model_input(
         model_schema_name=model_schema.name if model_schema is not None else None,
         model_schema_description=model_schema.description if model_schema is not None else None,
         audit_factories=discovered_inputs.audit_factories,
-        column_cache=model_header_column_cache,
-        native_metadata=loop.native_header_metadata.get(model_file.file_path),
     )
     model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
     header_schema_entry, enum_columns = resolve_enum_contract_columns(

@@ -1,4 +1,4 @@
-"""The native model config stage matches Python exactly or defers to it."""
+"""The native model config stage parses headers like the YAML schema parsers, on every engine."""
 
 from __future__ import annotations
 
@@ -28,12 +28,11 @@ from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
             count=4000,
             expected_minimum_parsed=400,
             expected_minimum_rejected=2000,
-            expected_minimum_unsupported=100,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_header_metadata_when_parsing_then_native_matches_python_or_defers(
+def test_given_generated_header_metadata_when_parsing_then_native_matches_yaml_schema_parsers(
     test_case: HeaderMetadataParityTestCase,
 ) -> None:
     parity: HeaderMetadataParity = header_metadata_parity(
@@ -44,8 +43,7 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_python
         parity.mismatches,
         parity.parsed >= test_case.expected_minimum_parsed,
         parity.rejected >= test_case.expected_minimum_rejected,
-        parity.unsupported >= test_case.expected_minimum_unsupported,
-    ) == ([], True, True, True), (parity.parsed, parity.rejected, parity.unsupported)
+    ) == ([], True, True), (parity.parsed, parity.rejected)
 
 
 @pytest.mark.parametrize(
@@ -55,7 +53,7 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_python
             description="python oracle",
             engine="python",
             expected_native_calls={
-                "parse_model_header_metadata": 1,
+                "parse_model_header_metadata": 2,
                 "expand_config_templates": 1,
             },
         ),
@@ -63,7 +61,7 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_python
             description="shipped native stages",
             engine="native",
             expected_native_calls={
-                "parse_model_header_metadata": 1,
+                "parse_model_header_metadata": 2,
                 "expand_config_templates": 1,
             },
         ),
@@ -71,7 +69,7 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_python
             description="native preview",
             engine="native-preview",
             expected_native_calls={
-                "parse_model_header_metadata": 1,
+                "parse_model_header_metadata": 2,
                 "expand_config_templates": 1,
             },
         ),

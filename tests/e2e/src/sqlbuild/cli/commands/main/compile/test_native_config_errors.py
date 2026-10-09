@@ -7,7 +7,6 @@ from types import ModuleType
 
 import pytest
 
-import sqlbuild.compiler.compile._helpers.attachment.model_config as model_config
 import sqlbuild.compiler.compile._helpers.render.context_templates as context_templates
 from scripts.compiler_differential.constants import FAILURE_BASE_MART
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -49,8 +48,6 @@ _INCREMENTAL: str = (
     "  cursor_type integer,\n"
 )
 _FALLBACKS: tuple[tuple[ModuleType, str], ...] = (
-    (model_config, "_parse_model_header_columns"),
-    (model_config, "parse_audit_instances"),
     (context_templates, "expand_template_data"),
 )
 _PROJECT_FILES: dict[str, str] = {

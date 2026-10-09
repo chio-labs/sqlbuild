@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
 from sqlbuild.compiler.compile._helpers.attachment.references import validate_external_reference
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
@@ -34,18 +33,15 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CachedModelHeaderColumns,
     CompileModelConfig,
     CompileModelInput,
     CompileSqlReference,
-    ModelHeaderColumnCache,
     ModelResourceNames,
     ModelValidationRequest,
     ModelValidatorContext,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
-from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFactory,
     DiscoveredSchemaFile,
@@ -56,9 +52,11 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
+from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
+    parse_native_header_metadata,
+)
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.compiler.planner.types import MaterializationType
@@ -208,8 +206,6 @@ def build_model_header_schema_entry(
     model_schema_name: str | None = None,
     model_schema_description: str | None = None,
     audit_factories: tuple[DiscoveredAuditFactory, ...] = (),
-    column_cache: ModelHeaderColumnCache | None = None,
-    native_metadata: NativeHeaderMetadata | None = None,
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
@@ -236,28 +232,15 @@ def build_model_header_schema_entry(
         error_class=CompileInputError,
     )
     description: str | None = model_description or model_schema_description
-    native: NativeHeaderMetadata | None = (
-        native_metadata
-        if native_metadata is not None
-        and native_metadata.applies_to(
-            raw_columns=raw_columns, raw_audits=raw_audits, column_locations=column_locations
-        )
-        else None
+    native: NativeHeaderMetadata = parse_native_header_metadata(
+        raw_columns=raw_columns,
+        raw_audits=raw_audits,
+        column_locations=column_locations or {},
+        file_path=file_path,
     )
-    if native_metadata is not None and native is None:
-        report_native_fallback(site=NativeFallbackSite.CONFIG_HEADER_METADATA, kind="stale")
-    if native is not None and native.columns_error is not None:
+    if native.columns_error is not None:
         raise native_config_error(error=native.columns_error, bridge_independent=True)
-    local_columns: tuple[SchemaColumn, ...] = (
-        native.columns
-        if native is not None
-        else _parse_model_header_columns(
-            raw_columns=raw_columns,
-            file_path=file_path,
-            column_locations=column_locations or {},
-            column_cache=column_cache,
-        )
-    )
+    local_columns: tuple[SchemaColumn, ...] = native.columns
     columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
         model_name=model_name,
         file_path=file_path,
@@ -269,19 +252,9 @@ def build_model_header_schema_entry(
         model_name=model_name,
         file_path=file_path,
     )
-    if native is not None and native.audits_error is not None:
+    if native.audits_error is not None:
         raise native_config_error(error=native.audits_error, bridge_independent=True)
-    audits: tuple[SchemaAuditInstance, ...] = (
-        native.audits
-        if native is not None
-        else parse_audit_instances(
-            raw_audits=raw_audits,
-            file_path=file_path,
-            label="model",
-            error_class=CompileInputError,
-            null_as_empty=True,
-        )
-    )
+    audits: tuple[SchemaAuditInstance, ...] = native.audits
     generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
         raw_audit_factories=raw_audit_factories,
         file_path=file_path,
@@ -328,82 +301,6 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
         logical_database=config.logical_database,
         time_travel_retention=config.time_travel_retention,
         table_type=config.table_type,
-    )
-
-
-def _parse_model_header_columns(
-    *,
-    raw_columns: object | None,
-    file_path: Path,
-    column_locations: dict[str, SourceLocation],
-    column_cache: ModelHeaderColumnCache | None = None,
-) -> tuple[SchemaColumn, ...]:
-    if raw_columns is None or column_cache is None:
-        return parse_schema_columns(
-            raw_columns=raw_columns,
-            file_path=file_path,
-            label="model",
-            error_class=CompileInputError,
-            column_locations=column_locations,
-            allow_migrate_from=True,
-        )
-    cached: CachedModelHeaderColumns | None = column_cache.get(raw_columns)
-    if cached is None:
-        parsed: tuple[SchemaColumn, ...] = parse_schema_columns(
-            raw_columns=raw_columns,
-            file_path=file_path,
-            label="model",
-            error_class=CompileInputError,
-            column_locations=column_locations,
-            allow_migrate_from=True,
-        )
-        cached = CachedModelHeaderColumns(
-            raw_columns=raw_columns,
-            columns=parsed,
-            column_locations=column_locations,
-        )
-        column_cache.put(cached)
-        return parsed
-    if cached.column_locations is column_locations or (
-        not cached.column_locations and not column_locations
-    ):
-        return cached.columns
-    return tuple(
-        _schema_column_at_location(
-            column=column,
-            location=column_locations.get(column.name),
-        )
-        for column in cached.columns
-    )
-
-
-def _schema_column_at_location(
-    *, column: SchemaColumn, location: SourceLocation | None
-) -> SchemaColumn:
-    return SchemaColumn(
-        name=column.name,
-        type=column.type,
-        nullable=column.nullable,
-        description=column.description,
-        meta=column.meta,
-        migrate_from=column.migrate_from,
-        audits=tuple(
-            SchemaAuditInstance(
-                definition_name=audit.definition_name,
-                arguments=audit.arguments,
-                name=audit.name,
-                description=audit.description,
-                severity=audit.severity,
-                run_scope=audit.run_scope,
-                always_run=audit.always_run,
-                thresholds=audit.thresholds,
-                minimum_samples=audit.minimum_samples,
-                evidence_limit=audit.evidence_limit,
-                location=location,
-            )
-            for audit in column.audits
-        ),
-        location=location,
     )
 
 

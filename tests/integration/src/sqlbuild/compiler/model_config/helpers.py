@@ -5,7 +5,6 @@ from __future__ import annotations
 import random
 from collections.abc import Callable
 from dataclasses import dataclass, fields
-from itertools import compress
 from pathlib import Path
 from typing import cast
 
@@ -60,12 +59,21 @@ _AUDIT_NAMES: tuple[str, ...] = (
     "",
     "_private",
     "a",
+    "na\u00efve_check",
+    "\u00dcniqueCheck",
+    " \u2003unique\u00a0",
 )
 _COLUMN_NAMES: tuple[str, ...] = (
     "order_id",
     "Order_ID",
     "amount",
     "caf\u00e9",
+    "CAF\u00c9",
+    "Stra\u00dfe",
+    "STRASSE",
+    "\u03a3\u0391\u03a3",
+    "\u03c3\u03b1\u03c2",
+    "\u0130d",
     "status",
     " ",
     "\u00a0",
@@ -78,7 +86,32 @@ _AUDIT_OPTIONS: tuple[tuple[str, tuple[object, ...]], ...] = (
     ("severity", ("warn", "error", "fatal", None, 1)),
     ("run_scope", ("final", "", None)),
     ("always_run", (True, False, None, "yes")),
-    ("thresholds", (None, {"warn": {"above": 1}})),
+    (
+        "thresholds",
+        (
+            None,
+            {"warn": {"above": 1}},
+            {"warn": {"below": 5}, "error": {"below": 1}},
+            {"warn": {"below": 5}, "error": {"below": 5.0}},
+            {"error": {"above": 1.5}, "warn": {"above": 1}},
+            {"warn": {"outside": (1, 5)}, "error": {"outside": (0, 6.5)}},
+            {"warn": {"outside": (1, 5)}, "error": {"outside": (2, 6)}},
+            {"warn": {"outside": (5, 1)}},
+            {"warn": {"outside": [1, 2]}},
+            {"warn": {"outside": (1, True)}},
+            {"warn": {"above": 1}, "error": {"below": 2}},
+            {"warn": {"above": True}},
+            {"warn": {"above": "1"}},
+            {"warn": {"above": 2**70}},
+            {"warn": {"above": 1, "below": 2}},
+            {"warn": {"sideways": 1}},
+            {"warn": None, "error": None},
+            {"warn": 1},
+            {"bogus": 1, "other": 2},
+            {},
+            "x",
+        ),
+    ),
     ("minimum_samples", (0, 5, -1, True, None, 2**70)),
     ("evidence_limit", (0, 10, -3, None)),
     ("values", (["PLACED", "SHIPPED"], None, {"nested": [1, 2]})),
@@ -123,7 +156,6 @@ class HeaderMetadataParity:
     mismatches: list[tuple[object, object, object]]
     parsed: int
     rejected: int
-    unsupported: int
 
 
 def generated_header_metadata(*, rng: random.Random, count: int) -> list[tuple[object, object]]:
@@ -193,32 +225,31 @@ def _counted(*, calls: dict[str, int], name: str) -> Callable[..., object]:
 
 
 def header_metadata_parity(*, headers: list[tuple[object, object]]) -> HeaderMetadataParity:
-    """Compare the native parse or rejection with Python's wherever native answers."""
+    """Compare the native parse or rejection with the YAML schema parsers Python still owns."""
 
     model_files: list[DiscoveredSqlModelFile] = [
         _model_file(index=index, columns=columns, audits=audits)
         for index, (columns, audits) in enumerate(headers)
     ]
-    native: dict[Path, NativeHeaderMetadata] = parse_native_header_metadata(model_files=model_files)
-    parsed: list[NativeHeaderMetadata | None] = [
-        native.get(model_file.file_path) for model_file in model_files
-    ]
-    python: list[object] = [_python_metadata(model_file=model_file) for model_file in model_files]
-    compared: list[tuple[DiscoveredSqlModelFile, object, NativeHeaderMetadata | None]] = list(
-        compress(
-            zip(model_files, python, parsed, strict=True),
-            [metadata is not None for metadata in parsed],
+    native: list[NativeHeaderMetadata] = [
+        parse_native_header_metadata(
+            raw_columns=model_file.header_values.get("columns"),
+            raw_audits=model_file.header_values.get("audits"),
+            column_locations=model_file.header_column_locations,
+            file_path=model_file.relative_path,
         )
-    )
+        for model_file in model_files
+    ]
     return HeaderMetadataParity(
         mismatches=mismatches(
-            inputs=[model_file.header_values for model_file, _, _ in compared],
-            expected=[_shape(value) for _, value, _ in compared],
-            actual=[_native_shape(metadata) for _, _, metadata in compared],
+            inputs=[model_file.header_values for model_file in model_files],
+            expected=[
+                _shape(_python_metadata(model_file=model_file)) for model_file in model_files
+            ],
+            actual=[_native_shape(metadata) for metadata in native],
         ),
-        parsed=sum(_native_error(metadata) is None for metadata in native.values()),
-        rejected=sum(_native_error(metadata) is not None for metadata in native.values()),
-        unsupported=len(model_files) - len(compared),
+        parsed=sum(_native_error(metadata) is None for metadata in native),
+        rejected=sum(_native_error(metadata) is not None for metadata in native),
     )
 
 
@@ -257,8 +288,7 @@ def _metadata_shape(value: object) -> object:
     return (repr(value), _attribute_orders(value), _locations(value))
 
 
-def _native_shape(metadata: NativeHeaderMetadata | None) -> object:
-    parsed: NativeHeaderMetadata = cast(NativeHeaderMetadata, metadata)
+def _native_shape(parsed: NativeHeaderMetadata) -> object:
     error: _native.NativeConfigError | None = _native_error(parsed)
     shapes: list[object] = [
         list(
@@ -351,7 +381,7 @@ def _column(*, rng: random.Random) -> object:
     keys: list[str] = rng.sample(_COLUMN_KEYS, k=rng.randint(0, len(_COLUMN_KEYS)))
     column: dict[object, object] = {key: _COLUMN_VALUES[key](rng) for key in keys}
     extra_keys: tuple[object, ...] = rng.choices(
-        ((), (rng.choice(("format", 1)),)), weights=(19, 1)
+        ((), (rng.choice(("format", "zone")),)), weights=(19, 1)
     )[0]
     column.update(dict.fromkeys(extra_keys, "x"))
     return rng.choices((column, rng.choice((None, "INTEGER", []))), weights=(19, 1))[0]

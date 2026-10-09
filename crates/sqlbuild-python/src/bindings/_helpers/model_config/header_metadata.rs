@@ -1,20 +1,15 @@
 //! MODEL header columns and audits parsed natively into the Python contract objects.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::header_metadata::main::parse_header_metadata::parse_header_metadata;
 use sqlbuild_model_config::header_metadata::models::{
-    HeaderMetadataStop, ParsedAudit, ParsedColumn,
+    ParsedAudit, ParsedColumn, ParsedThresholds, ThresholdBound,
 };
 
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
-
-/// A model's columns and audits, each a contract tuple or its error, or `unsupported`.
-type ParsedMetadataRow = Py<PyAny>;
-
-const UNSUPPORTED_OUTCOME: &str = "unsupported";
 
 /// The Python classes the parsed metadata becomes, read from a Python mapping.
 #[derive(FromPyObject)]
@@ -22,57 +17,36 @@ const UNSUPPORTED_OUTCOME: &str = "unsupported";
 struct ContractClasses<'py> {
     schema_column: Bound<'py, PyAny>,
     schema_audit_instance: Bound<'py, PyAny>,
+    measurement_thresholds: Bound<'py, PyAny>,
+    measurement_threshold_bound: Bound<'py, PyAny>,
     severities: Bound<'py, PyDict>,
+    threshold_operators: Bound<'py, PyDict>,
     allocate: Bound<'py, PyAny>,
 }
 
-/// One model's authored `columns` and `audits` values, its column locations and its file path.
-#[derive(FromPyObject)]
-struct HeaderMetadataRequest<'py>(
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    Bound<'py, PyDict>,
-    String,
-);
-
-/// Return each model's columns and audits, each as contract tuples or its error, or `unsupported`.
+/// Return a model's columns and audits, each as contract tuples or its error.
+///
+/// The audits are `None` when the columns failed, since parsing stops at the first error.
 #[pyfunction]
 fn parse_model_header_metadata<'py>(
     py: Python<'py>,
-    requests: Vec<HeaderMetadataRequest<'py>>,
+    columns: Bound<'py, PyAny>,
+    audits: Bound<'py, PyAny>,
+    locations: Bound<'py, PyDict>,
+    path: &str,
     classes: ContractClasses<'py>,
-) -> PyResult<Vec<ParsedMetadataRow>> {
-    let mut rows: Vec<ParsedMetadataRow> = Vec::with_capacity(requests.len());
-    for HeaderMetadataRequest(columns, audits, locations, path) in requests {
-        let metadata = parse_header_metadata(&PyNode(columns), &PyNode(audits), &path);
-        rows.push(match (metadata.columns, metadata.audits) {
-            (Err(HeaderMetadataStop::Unsupported), _)
-            | (Ok(_), Err(HeaderMetadataStop::Unsupported)) => {
-                PyString::new(py, UNSUPPORTED_OUTCOME).into_any().unbind()
-            }
-            (Err(HeaderMetadataStop::Error(error)), _) => {
-                (native_config_error(py, error)?, py.None())
-                    .into_pyobject(py)?
-                    .into_any()
-                    .unbind()
-            }
-            (Ok(columns), Err(HeaderMetadataStop::Error(error))) => (
-                column_tuple(py, &classes, &columns, &locations)?,
-                native_config_error(py, error)?,
-            )
-                .into_pyobject(py)?
-                .into_any()
-                .unbind(),
-            (Ok(columns), Ok(audits)) => (
-                column_tuple(py, &classes, &columns, &locations)?,
-                audit_tuple(py, &classes, &audits)?,
-            )
-                .into_pyobject(py)?
-                .into_any()
-                .unbind(),
-        });
+) -> PyResult<Bound<'py, PyTuple>> {
+    let metadata = parse_header_metadata(&PyNode(columns), &PyNode(audits), path);
+    let columns = match metadata.columns {
+        Err(error) => {
+            return (native_config_error(py, error)?, py.None()).into_pyobject(py);
+        }
+        Ok(columns) => column_tuple(py, &classes, &columns, &locations)?,
+    };
+    match metadata.audits {
+        Err(error) => (columns, native_config_error(py, error)?).into_pyobject(py),
+        Ok(audits) => (columns, audit_tuple(py, &classes, &audits)?).into_pyobject(py),
     }
-    Ok(rows)
 }
 
 fn column_tuple<'py>(
@@ -181,7 +155,10 @@ fn audit_instance<'py>(
             ("severity", severity),
             ("run_scope", optional(py, audit.run_scope.as_ref())),
             ("always_run", always_run),
-            ("thresholds", py.None().into_bound(py)),
+            (
+                "thresholds",
+                thresholds(py, classes, audit.thresholds.as_ref())?,
+            ),
             (
                 "minimum_samples",
                 optional(py, audit.minimum_samples.as_ref()),
@@ -191,6 +168,53 @@ fn audit_instance<'py>(
                 optional(py, audit.evidence_limit.as_ref()),
             ),
             ("location", location.clone()),
+        ],
+    )
+}
+
+fn thresholds<'py>(
+    py: Python<'py>,
+    classes: &ContractClasses<'py>,
+    parsed: Option<&ParsedThresholds>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let Some(parsed) = parsed else {
+        return Ok(py.None().into_bound(py));
+    };
+    contract_object(
+        &classes.allocate,
+        &classes.measurement_thresholds,
+        &[
+            ("warn", threshold_bound(py, classes, parsed.warn)?),
+            ("error", threshold_bound(py, classes, parsed.error)?),
+        ],
+    )
+}
+
+fn threshold_bound<'py>(
+    py: Python<'py>,
+    classes: &ContractClasses<'py>,
+    bound: Option<ThresholdBound>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let Some(bound) = bound else {
+        return Ok(py.None().into_bound(py));
+    };
+    let (operator, limit, lower, upper) = match bound {
+        ThresholdBound::Below(limit) => ("below", Some(limit), None, None),
+        ThresholdBound::Above(limit) => ("above", Some(limit), None, None),
+        ThresholdBound::Outside(lower, upper) => ("outside", None, Some(lower), Some(upper)),
+    };
+    let operator = classes
+        .threshold_operators
+        .get_item(operator)?
+        .unwrap_or_else(|| py.None().into_bound(py));
+    contract_object(
+        &classes.allocate,
+        &classes.measurement_threshold_bound,
+        &[
+            ("operator", operator),
+            ("limit", limit.into_pyobject(py)?.into_any()),
+            ("lower", lower.into_pyobject(py)?.into_any()),
+            ("upper", upper.into_pyobject(py)?.into_any()),
         ],
     )
 }

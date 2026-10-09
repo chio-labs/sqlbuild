@@ -102,7 +102,7 @@ engine = "native"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 303, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 304, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "native"
@@ -138,20 +138,6 @@ stage = "macro_calls"
 site = "macro_calls.resolution"
 kind = "deferred"
 counts = { failure = 4, seed = 3 }
-
-[[entry]]
-engine = "native"
-stage = "model_config"
-site = "model_config.header_metadata"
-kind = "stale"
-counts = { seed = 19 }
-
-[[entry]]
-engine = "native"
-stage = "model_config"
-site = "model_config.header_metadata"
-kind = "unsupported"
-counts = { failure = 1 }
 
 [[entry]]
 engine = "native"
@@ -326,7 +312,7 @@ engine = "native-preview"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 303, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 304, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "native-preview"
@@ -404,20 +390,6 @@ stage = "model_analysis"
 site = "model_analysis.native"
 kind = "model_analyses"
 counts = { example = 56, failure = 221, fixture = 52, seed = 686 }
-
-[[entry]]
-engine = "native-preview"
-stage = "model_config"
-site = "model_config.header_metadata"
-kind = "stale"
-counts = { seed = 19 }
-
-[[entry]]
-engine = "native-preview"
-stage = "model_config"
-site = "model_config.header_metadata"
-kind = "unsupported"
-counts = { failure = 1 }
 
 [[entry]]
 engine = "native-preview"
@@ -550,7 +522,7 @@ engine = "python"
 stage = "discovery"
 site = "discovery.native"
 kind = "model_file_listings"
-counts = { example = 12, failure = 303, fixture = 12, seed = 50 }
+counts = { example = 12, failure = 304, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "python"
@@ -558,20 +530,6 @@ stage = "macro_calls"
 site = "macro_calls.native"
 kind = "parsed_arguments"
 counts = { example = 32, failure = 16, fixture = 28, seed = 840 }
-
-[[entry]]
-engine = "python"
-stage = "model_config"
-site = "model_config.header_metadata"
-kind = "stale"
-counts = { seed = 19 }
-
-[[entry]]
-engine = "python"
-stage = "model_config"
-site = "model_config.header_metadata"
-kind = "unsupported"
-counts = { failure = 1 }
 
 [[entry]]
 engine = "python"

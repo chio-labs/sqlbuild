@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods};
 use pyo3::types::{
-    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyInt, PyList, PyListMethods, PyString,
+    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyListMethods, PyString,
     PyStringMethods, PyTuple, PyTupleMethods,
 };
 use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
@@ -41,6 +41,20 @@ impl AuthoredNode for PyNode<'_> {
             && let Ok(number) = self.0.extract::<i64>()
         {
             Some(number)
+        } else {
+            None
+        }
+    }
+
+    fn number(&self) -> Option<f64> {
+        let value = &self.0;
+        if value.is_instance_of::<PyFloat>() {
+            value.extract::<f64>().ok()
+        } else if value.is_instance_of::<PyInt>() && !value.is_instance_of::<PyBool>() {
+            value
+                .extract::<f64>()
+                .ok()
+                .or_else(|| self.python_str().parse::<f64>().ok())
         } else {
             None
         }

@@ -1,26 +1,21 @@
-//! `validate_resource_identity` for ASCII names, with its suggested snake_case spelling.
+//! `validate_resource_identity`, with its suggested snake_case spelling.
 
 use crate::errors::{ConfigError, ErrorClass};
-use crate::header_metadata::_helpers::text::ascii_strip;
-use crate::header_metadata::constants::{FALLBACK_IDENTITY, IDENTITY_HELP};
-use crate::header_metadata::models::HeaderMetadataStop;
+use sqlbuild_core::text::main::python_strip::python_strip;
 
-/// Raise `ResourceIdentityError` unless `name` is canonical snake_case; defer non-ASCII names.
-pub(crate) fn check_identity(name: &str, kind: &str, path: &str) -> Result<(), HeaderMetadataStop> {
+use crate::header_metadata::constants::{FALLBACK_IDENTITY, IDENTITY_HELP};
+
+/// Raise `ResourceIdentityError` unless `name` is canonical snake_case.
+pub(crate) fn check_identity(name: &str, kind: &str, path: &str) -> Result<(), ConfigError> {
     if is_snake_case(name) {
         return Ok(());
     }
-    if !name.is_ascii() {
-        return Err(HeaderMetadataStop::Unsupported);
-    }
     let suggestion = suggested_identity(name);
-    Err(HeaderMetadataStop::Error(
-        ConfigError::compile(format!(
-            "Invalid {kind} identity '{name}' in {path}; use snake_case '{suggestion}'"
-        ))
-        .with_class(ErrorClass::ResourceIdentity)
-        .with_help(IDENTITY_HELP),
+    Err(ConfigError::compile(format!(
+        "Invalid {kind} identity '{name}' in {path}; use snake_case '{suggestion}'"
     ))
+    .with_class(ErrorClass::ResourceIdentity)
+    .with_help(IDENTITY_HELP))
 }
 
 /// Return whether `name` fully matches `^[a-z](?:[a-z0-9_]*[a-z0-9])?$`.
@@ -38,9 +33,9 @@ fn is_snake_case(name: &str) -> bool {
     }
 }
 
-/// Return `suggest_resource_identity` for an ASCII public identity.
+/// Return `suggest_resource_identity` for a public identity; its patterns are ASCII-only.
 fn suggested_identity(name: &str) -> String {
-    let characters: Vec<char> = ascii_strip(name).chars().collect();
+    let characters: Vec<char> = python_strip(name).chars().collect();
     let acronyms = split_where(&characters, |index| {
         characters[index - 1].is_ascii_uppercase()
             && characters[index].is_ascii_uppercase()

@@ -23,6 +23,10 @@ pub trait AuthoredNode: Clone {
     fn kind(&self) -> NodeKind;
     /// Return an integer that is not a boolean and fits in `i64`, or `None`.
     fn integer(&self) -> Option<i64>;
+    /// Return Python's `float(value)` for an integer that is not a boolean or a float, or `None`.
+    ///
+    /// An integer beyond the float range reads as an infinity.
+    fn number(&self) -> Option<f64>;
     /// Return the text of a string value, or `None` for another value.
     fn text(&self) -> Option<String>;
     /// Return whether this is a string value equal to `text`.

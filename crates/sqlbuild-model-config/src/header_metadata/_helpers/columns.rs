@@ -10,14 +10,14 @@ use crate::header_metadata::_helpers::text::{
 use crate::header_metadata::constants::{
     MODEL_COLUMN_KEYS, MODEL_LABEL, NOT_NULL_AUDIT_NAME, NULLABLE_NOT_NULL_CODE,
 };
-use crate::header_metadata::models::{HeaderMetadataStop, ParsedColumn};
+use crate::header_metadata::models::ParsedColumn;
 use crate::types::{AuthoredNode, NodeKind};
 
 /// Parse an authored columns mapping; Python's `None` declares no columns.
 pub(crate) fn column_mapping<N: AuthoredNode>(
     node: &N,
     path: &str,
-) -> Result<Vec<ParsedColumn<N>>, HeaderMetadataStop> {
+) -> Result<Vec<ParsedColumn<N>>, ConfigError> {
     let site = Site {
         path,
         label: MODEL_LABEL,
@@ -30,13 +30,10 @@ pub(crate) fn column_mapping<N: AuthoredNode>(
     let mut seen: HashSet<String> = HashSet::new();
     let mut columns: Vec<ParsedColumn<N>> = Vec::new();
     for (name, metadata) in node.entries() {
-        let Some(text) = non_blank_text(&name)? else {
+        let Some(text) = non_blank_text(&name) else {
             return Err(site.error("column names must be non-empty strings"));
         };
-        if !text.is_ascii() {
-            return Err(HeaderMetadataStop::Unsupported);
-        }
-        if !seen.insert(text.to_ascii_lowercase()) {
+        if !seen.insert(text.to_lowercase()) {
             return Err(site.error(&format!(
                 "has duplicate column '{text}' (column names are case-insensitive)"
             )));
@@ -51,7 +48,7 @@ fn column<N: AuthoredNode>(
     text: &str,
     metadata: &N,
     path: &str,
-) -> Result<ParsedColumn<N>, HeaderMetadataStop> {
+) -> Result<ParsedColumn<N>, ConfigError> {
     let label = format!("{MODEL_LABEL} column '{text}'");
     let site = Site {
         path,
@@ -61,7 +58,7 @@ fn column<N: AuthoredNode>(
         return Err(site.error("metadata must be a mapping"));
     }
     let entries = metadata.entries();
-    let unknown = unknown_keys(&entries)?;
+    let unknown = unknown_keys(&entries);
     if !unknown.is_empty() {
         return Err(site.error(&format!(
             "has unknown metadata keys: {}",
@@ -81,13 +78,11 @@ fn column<N: AuthoredNode>(
             .iter()
             .any(|audit| audit.definition_name.is_text(NOT_NULL_AUDIT_NAME))
     {
-        return Err(HeaderMetadataStop::Error(
-            ConfigError::compile(format!(
-                "{path} column '{text}' cannot set nullable = true and audit not_null"
-            ))
-            .with_code(NULLABLE_NOT_NULL_CODE)
-            .with_help("remove the not_null audit or set nullable = false"),
-        ));
+        return Err(ConfigError::compile(format!(
+            "{path} column '{text}' cannot set nullable = true and audit not_null"
+        ))
+        .with_code(NULLABLE_NOT_NULL_CODE)
+        .with_help("remove the not_null audit or set nullable = false"));
     }
     Ok(ParsedColumn {
         name: name.clone(),
@@ -99,18 +94,13 @@ fn column<N: AuthoredNode>(
     })
 }
 
-/// Return the sorted metadata keys outside `MODEL_COLUMN_KEYS`, deferring keys Python cannot sort.
-fn unknown_keys<N: AuthoredNode>(entries: &[(N, N)]) -> Result<Vec<String>, HeaderMetadataStop> {
-    let mut unknown: Vec<String> = Vec::new();
-    for (key, _) in entries {
-        if MODEL_COLUMN_KEYS.iter().any(|name| key.is_text(name)) {
-            continue;
-        }
-        if key.kind() != NodeKind::Str {
-            return Err(HeaderMetadataStop::Unsupported);
-        }
-        unknown.push(key.text().ok_or(HeaderMetadataStop::Unsupported)?);
-    }
+/// Return the sorted metadata keys outside `MODEL_COLUMN_KEYS`; header keys are always strings.
+fn unknown_keys<N: AuthoredNode>(entries: &[(N, N)]) -> Vec<String> {
+    let mut unknown: Vec<String> = entries
+        .iter()
+        .filter(|(key, _)| !MODEL_COLUMN_KEYS.iter().any(|name| key.is_text(name)))
+        .map(|(key, _)| key.python_str())
+        .collect();
     unknown.sort_unstable();
-    Ok(unknown)
+    unknown
 }

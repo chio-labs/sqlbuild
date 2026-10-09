@@ -43,6 +43,15 @@ impl AuthoredNode for Value {
         }
     }
 
+    fn number(&self) -> Option<f64> {
+        match self {
+            Self::Int(value) => value.to_string().parse::<f64>().ok(),
+            Self::Float => Some(0.5),
+            Self::BigInt(digits) => digits.parse::<f64>().ok(),
+            _ => None,
+        }
+    }
+
     fn text(&self) -> Option<String> {
         match self {
             Self::Str(text) => Some((*text).to_owned()),

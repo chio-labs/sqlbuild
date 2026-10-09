@@ -14,7 +14,6 @@ class HeaderMetadataParityTestCase:
     count: int
     expected_minimum_parsed: int
     expected_minimum_rejected: int
-    expected_minimum_unsupported: int
 
 
 @dataclass(frozen=True)
