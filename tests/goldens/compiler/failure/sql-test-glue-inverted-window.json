@@ -1,0 +1,36 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL test 'inverted_window' in 'tests/unit/test_customer_totals.sql': cursor_start '20' must be before the exclusive cursor_end '10' for model 'windowed_orders'"
+    }
+   ]
+  }
+ ],
+ "compiled": {
+  "models/marts/customer_totals.sql": [
+   "SELECT customer_id, SUM(amount) AS total_amount",
+   "FROM __ref(\"stg_orders\")",
+   "GROUP BY customer_id",
+   ""
+  ],
+  "models/marts/windowed_orders.sql": [
+   "SELECT order_id, amount",
+   "FROM __source(\"raw_orders\")",
+   "WHERE order_id >= __cursor_start() AND order_id < __cursor_end()",
+   ""
+  ],
+  "models/staging/stg_orders.sql": [
+   "SELECT order_id, customer_id, amount, status",
+   "FROM __source(\"raw_orders\")",
+   ""
+  ]
+ },
+ "manifest": null
+}
