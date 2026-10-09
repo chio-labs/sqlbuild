@@ -49,8 +49,9 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.discovery.types import NativeFileScope, NativeLocation, NativeScopeFields
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 type _NativeDeclarationFile = tuple[str, NativeFileScope | None, tuple[object, ...]]
@@ -190,10 +191,12 @@ def native_macro_files(
 def native_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
     """Discover the seed files natively."""
 
-    return tuple(
+    seeds: tuple[DiscoveredSeedFile, ...] = tuple(
         DiscoveredSeedFile(file_path=project_dir / relative_path, relative_path=Path(relative_path))
         for relative_path, _scope, _payload in _native_files(project_dir=project_dir, kind="seed")
     )
+    report_native_answer(stage=NativeStage.DECLARATION_FILES, kind="seed_files", units=len(seeds))
+    return seeds
 
 
 def retained_discovery_session(*, project_dir: Path) -> _native.NativeDiscoverySession | None:
@@ -279,10 +282,12 @@ def _record[RecordT](
         report_native_fallback(site=NativeFallbackSite.DECLARATION_FILE)
         return parse_with_python(relative_path=relative_path, scope=scope)
     if tag == NATIVE_PARSED_TAG:
+        report_native_answer(stage=NativeStage.DECLARATION_FILES, kind="parsed_files")
         return build(
             project_dir=project_dir, relative_path=relative_path, scope=scope, payload=payload
         )
     if tag == NATIVE_FAILED_TAG:
+        report_native_answer(stage=NativeStage.DECLARATION_FILES, kind="failed_files")
         raise native_failure(payload)
     raise native_read_error(payload=payload, file_path=project_dir / relative_path)
 

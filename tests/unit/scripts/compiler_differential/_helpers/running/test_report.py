@@ -81,13 +81,15 @@ def test_given_covered_kinds_when_reporting_then_missing_kinds_are_named(
             description="identical_and_covered",
             comparisons=[_IDENTICAL],
             missing_coverage={"discovery": (), "render": ()},
+            gate_failures=(),
             expected_lines=("Compiler differential passed: 1 projects identical",),
-            expected_absent=("FAILED",),
+            expected_absent=("FAILED", "make compiler-baselines"),
         ),
         SummaryTestCase(
             description="identical_but_coverage_missing",
             comparisons=[_IDENTICAL],
             missing_coverage={"discovery": ("providers", "crlf"), "render": ("path_default",)},
+            gate_failures=(),
             expected_lines=(
                 "Compiler differential FAILED: 0 of 1 projects differ",
                 "Required discovery coverage missing: providers, crlf",
@@ -99,10 +101,24 @@ def test_given_covered_kinds_when_reporting_then_missing_kinds_are_named(
             description="differences_and_coverage_missing",
             comparisons=[_IDENTICAL, _DIFFERING],
             missing_coverage={"discovery": ("providers",)},
+            gate_failures=(),
             expected_lines=(
                 "Compiler differential FAILED: 1 of 2 projects differ",
                 "First difference: seed/1: `compile` stdout at /models/0",
                 "Required discovery coverage missing: providers",
+            ),
+            expected_absent=("passed", "make compiler-baselines"),
+        ),
+        SummaryTestCase(
+            description="gate_failure_says_how_to_record_intended_changes",
+            comparisons=[_IDENTICAL],
+            missing_coverage={},
+            gate_failures=("native model_loop model_loop.native variable_substitutions (seed)",),
+            expected_lines=(
+                "Compiler differential FAILED: 0 of 1 projects differ",
+                "Native fallback allow-list: 1 problems (listed above)",
+                "Intended? Run `make compiler-baselines` and commit the changes to "
+                "scripts/compiler_differential/native_fallbacks.toml and tests/goldens/compiler",
             ),
             expected_absent=("passed",),
         ),
@@ -117,6 +133,7 @@ def test_given_results_and_coverage_when_summarizing_then_failures_never_read_as
         engines=("python", "native"),
         seconds=2.0,
         missing_coverage=test_case.missing_coverage,
+        gate_failures=test_case.gate_failures,
     )
 
     assert all(line in summary for line in test_case.expected_lines), summary

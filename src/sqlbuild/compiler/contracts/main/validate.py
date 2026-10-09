@@ -13,6 +13,7 @@ from sqlbuild.compiler.contracts.main._evaluate_native_model_contracts import (
 )
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.spec.contracts.types import ColumnContractMode
 
@@ -29,6 +30,7 @@ def evaluate_model_contracts(
             project=project, dialect=dialect
         )
         if native_result is not None:
+            report_native_answer(stage=NativeStage.CONTRACTS, kind="contract_validations")
             return native_result
     mode: ColumnContractMode = project.settings.column_contract_mode
     if not any(requires_contract_evaluation(model=model, mode=mode) for model in project.models):

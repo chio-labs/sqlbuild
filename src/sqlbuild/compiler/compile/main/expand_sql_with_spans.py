@@ -11,8 +11,8 @@ from sqlbuild.compiler.compile.models import (
     ExpansionSpan,
     SqlExpansionContext,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 
 

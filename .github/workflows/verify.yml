@@ -96,7 +96,7 @@ jobs:
                 ;;
             esac
             case "${path}" in
-              scripts/compiler_differential/*|scripts/run_compiler_differential.py|tests/*/scripts/compiler_differential/*|tests/goldens/*|src/sqlbuild/cli/commands/_helpers/compile/*|.github/workflows/verify.yml|Makefile)
+              scripts/compiler_differential/*|scripts/run_compiler_differential.py|tests/*/scripts/compiler_differential/*|tests/goldens/*|tests/e2e/fixtures/*|website/examples/*|src/sqlbuild/cli/commands/_helpers/compile/*|.github/workflows/verify.yml|Makefile)
                 compiler_differential=true
                 ;;
             esac
@@ -317,7 +317,7 @@ jobs:
           path: ${{ runner.temp }}/compiler-differential-wheel-sites.json
           if-no-files-found: warn
           retention-days: 30
-      - name: Compare generated seeds and the failure corpus (python vs shipped native)
+      - name: Compare fixtures, examples, generated seeds and the failure corpus (python vs shipped native)
         run: >-
           make compiler-differential-shipped
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage

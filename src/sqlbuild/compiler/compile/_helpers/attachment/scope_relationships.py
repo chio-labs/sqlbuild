@@ -33,7 +33,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.scopes.main._native_expected_model_names import (
     native_expected_model_names,
@@ -160,6 +160,10 @@ def extract_scope_relationship_facts(
         if isinstance(scanned, str):
             faults.append(ScopeRelationshipFault(scenario.relative_path, scanned))
             continue
+        if scanned is None:
+            report_native_fallback(
+                site=NativeFallbackSite.SCOPE_RELATIONSHIP_CTES, kind="scenario_expected_names"
+            )
         try:
             facts.append(
                 RelationshipFact(

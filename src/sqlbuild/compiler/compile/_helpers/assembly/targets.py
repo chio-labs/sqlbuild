@@ -8,8 +8,8 @@ from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models import CompiledRelationLocation, CompileModelInput
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.spec.contracts.models import DefaultsConfig, SchemaSeedEntry, TargetConfig
 

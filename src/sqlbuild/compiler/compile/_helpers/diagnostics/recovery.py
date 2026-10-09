@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.semantic_checks.main._complete_native_semantic_diagnostics import (
     complete_native_semantic_diagnostics,
@@ -54,6 +55,7 @@ def complete_semantic_diagnostics(
             resource_sql_analysis=resource_sql_analysis,
         )
         if native_project is not None:
+            report_native_answer(stage=NativeStage.SEMANTIC_CHECKS, kind="semantic_completions")
             return native_project
     project = recover_output_types(project=project, binding_results=binding_results)
     project = replace(

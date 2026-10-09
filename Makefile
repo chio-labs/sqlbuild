@@ -304,10 +304,10 @@ compiler-differential:
 		$(COMPILER_DIFFERENTIAL_GATES) $(COMPILER_DIFFERENTIAL_ARGS)
 
 # python vs native-preview above covers every native stage; this keeps the shipped `native` default
-# (native discovery and rendering) covered on a bounded corpus.
+# (native discovery and rendering) and its goldens covered on the same corpus.
 compiler-differential-shipped:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
-		--engines python native --corpus seeds failures \
+		--engines python native --corpus fixtures examples seeds failures \
 		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SHIPPED_SEEDS) \
 		$(COMPILER_DIFFERENTIAL_GATES) $(COMPILER_DIFFERENTIAL_ARGS)
 

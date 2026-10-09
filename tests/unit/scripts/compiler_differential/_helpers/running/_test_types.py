@@ -67,6 +67,7 @@ class SummaryTestCase:
     description: str
     comparisons: list[ProjectComparison]
     missing_coverage: dict[str, tuple[str, ...]]
+    gate_failures: tuple[str, ...]
     expected_lines: tuple[str, ...]
     expected_absent: tuple[str, ...]
 

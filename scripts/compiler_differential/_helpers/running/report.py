@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from scripts.compiler_differential.constants import (
     ANALYSIS_INDIRECT_KINDS,
+    BASELINES_HINT,
     CONFIG_ONLY_KINDS,
+    GOLDEN_LABEL,
     RENDER_CONFIG_ONLY_KINDS,
     RENDER_INDIRECT_KINDS,
 )
@@ -57,7 +59,13 @@ def format_summary(
     )
     if gate_failures:
         lines.append(f"Native fallback allow-list: {len(gate_failures)} problems (listed above)")
+    if gate_failures or any(_golden_differs(comparison) for comparison in differing):
+        lines.append(BASELINES_HINT)
     return "\n".join(lines)
+
+
+def _golden_differs(comparison: ProjectComparison) -> bool:
+    return any(GOLDEN_LABEL in (difference.labels or ()) for difference in comparison.differences)
 
 
 def format_discovery_coverage(*, covered: frozenset[str], required: tuple[str, ...]) -> str:

@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.model_config.constants import (
     AUDITS_HEADER_KEY,

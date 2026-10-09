@@ -13,12 +13,14 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
 from scripts.compiler_differential._helpers.coverage.analysis import project_analysis_kinds
 from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import project_render_kinds
-from scripts.compiler_differential._helpers.goldens.goldens import golden_differences
+from scripts.compiler_differential._helpers.goldens.goldens import (
+    golden_differences,
+    golden_path_masks,
+)
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import (
     ERROR_SEVERITY,
     LEFT_SIDE,
-    PROJECT_DIRECTORY,
     RIGHT_SIDE,
     WARNING_SEVERITY,
 )
@@ -72,7 +74,7 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
                 runs=(left, right),
                 golden_dir=options.golden_dir,
                 mode=options.golden_mode,
-                masked_paths=_masked_paths(case_dir=case_dir, work_dir=options.work_dir),
+                masked_paths=golden_path_masks(case_dir=case_dir, work_dir=options.work_dir),
             )
             if options.golden_mode is not None and options.golden_dir is not None
             else ()
@@ -91,20 +93,6 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         analysed_kinds=project_analysis_kinds(left.captures) if counted else frozenset(),
         records=(left.records, right.records) if options.analysis_records else None,
     )
-
-
-def _masked_paths(*, case_dir: Path, work_dir: Path) -> tuple[str, ...]:
-    """The run's absolute paths, longest first, so goldens never mention a temporary directory."""
-
-    workspace: Path = case_dir / PROJECT_DIRECTORY
-    paths: set[str] = {
-        str(workspace),
-        str(workspace.resolve()),
-        str(work_dir),
-        str(work_dir.resolve()),
-    }
-    ordered: list[str] = sorted(paths, key=lambda path: (-len(path), path))
-    return tuple(ordered)
 
 
 def _materialized_source(*, project: CorpusProject, case_dir: Path) -> Path:

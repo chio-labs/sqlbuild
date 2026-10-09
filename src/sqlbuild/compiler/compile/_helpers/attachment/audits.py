@@ -72,8 +72,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
@@ -663,6 +664,8 @@ def build_attached_audit_input(
     )
     if native_rendering is None and native_stage_enabled(NativeStage.ATTACHMENTS):
         report_native_fallback(site=NativeFallbackSite.AUDIT_RENDERING)
+    if native_rendering is not None:
+        report_native_answer(stage=NativeStage.ATTACHMENTS, kind="audit_renderings")
     if native_rendering is not None and native_rendering.render_error is not None:
         raise CompileInputError(native_rendering.render_error, bridge_independent=True)
     rendered_sql_body, rendered_evidence_sql = (

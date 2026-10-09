@@ -32,8 +32,8 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
     ModelSchemaDeclaration,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_loop.constants import (
     ENUM_REFERENCE_KIND_CODE,
@@ -232,6 +232,11 @@ def resolve_declaration_context(
         and not _scope_query_parses_identity(resource=resource, target_path=target_path)
         else None
     )
+    if native_context is None and resolver.native_contexts is not None:
+        report_native_fallback(
+            site=NativeFallbackSite.DECLARATION_CONTEXT,
+            kind="deferred" if resources else "no_resource",
+        )
     context: DeclarationResolutionContext = (
         native_context
         if native_context is not None

@@ -142,8 +142,9 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
     parse_native_header_metadata,
@@ -555,6 +556,9 @@ def _build_model_inputs(
         if native_stage_enabled(NativeStage.MODEL_LOOP)
         else ()
     )
+    report_native_answer(
+        stage=NativeStage.MODEL_LOOP, kind="variable_substitutions", units=len(prepared_files)
+    )
     loop: _ModelInputLoop = _ModelInputLoop(
         discovered_inputs=discovered_inputs,
         context=context,
@@ -746,6 +750,8 @@ def _build_model_input(
         if prepared_var_substituted_sql is not None
         else None
     )
+    if declaration_expansion is not None and native_stage_enabled(NativeStage.MODEL_LOOP):
+        report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_expansions")
     if declaration_expansion is None:
         if native_stage_enabled(NativeStage.MODEL_LOOP):
             report_native_fallback(
@@ -1235,6 +1241,7 @@ def _native_seed_inputs(
             "has no matching CSV file under seeds/",
             bridge_independent=True,
         )
+    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="seed_pairs", units=len(pairs))
     return tuple(
         CompileSeedInput(
             seed_file=seed_files[file_index],
@@ -1315,6 +1322,8 @@ def build_effective_vars(
         values.update(target_config.vars)
     values.update(local_config.vars)
     values.update(cli_vars)
+    if native_stage_enabled(NativeStage.MODEL_CONFIG):
+        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="effective_vars")
     return expand_effective_vars(values)
 
 

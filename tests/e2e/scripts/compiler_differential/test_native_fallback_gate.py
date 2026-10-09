@@ -12,9 +12,25 @@ from tests.e2e.scripts.compiler_differential.helpers import (
     MODEL_ANALYSIS_SABOTAGE,
     REFERENCE_SCAN_SABOTAGE,
     harness_arguments,
+    stage_disable_sabotage,
     write_native_perturbation,
 )
 
+_WAFFLE_SHOP_NATIVE_STAGES: tuple[str, ...] = (
+    "attachments",
+    "contracts",
+    "declaration_files",
+    "declaration_scopes",
+    "lineage_facts",
+    "macro_call_store",
+    "macro_calls",
+    "model_analysis",
+    "model_config",
+    "model_loop",
+    "reference_extraction",
+    "semantic_checks",
+)
+_ANSWER_VANISHED: str = "native no longer answers here, so this work now runs in Python"
 _VANISHED_ENTRY: str = (
     '\n[[entry]]\nengine = "native-preview"\nstage = "reference_extraction"\n'
     'site = "reference_extraction.scan"\nkind = "deferred"\ncounts = { project = 1 }\n'
@@ -62,6 +78,29 @@ _VANISHED_ENTRY: str = (
                 "Native fallback allow-list: native-preview model_analysis analysis_session "
                 "session (project): ",
                 "Compiler differential FAILED: 0 of 1 projects differ",
+            ),
+        ),
+        NativeFallbackGateTestCase(
+            description="shipped_stages_switched_to_python_fail",
+            perturbation=stage_disable_sabotage(("reference_extraction", "declaration_files")),
+            appended_entries="",
+            expected_exit_code=1,
+            expected_lines=(
+                "Native fallback allow-list: native-preview reference_extraction "
+                f"reference_extraction.native reference_scans (project): {_ANSWER_VANISHED}",
+                "Native fallback allow-list: native-preview declaration_files "
+                f"declaration_files.native parsed_files (project): {_ANSWER_VANISHED}",
+                "Intended? Run `make compiler-baselines`",
+            ),
+        ),
+        NativeFallbackGateTestCase(
+            description="every_native_stage_switched_to_python_fails_by_name",
+            perturbation=stage_disable_sabotage(_WAFFLE_SHOP_NATIVE_STAGES),
+            appended_entries="",
+            expected_exit_code=1,
+            expected_lines=tuple(
+                f"Native fallback allow-list: native-preview {stage} {stage}.native "
+                for stage in _WAFFLE_SHOP_NATIVE_STAGES
             ),
         ),
     ],

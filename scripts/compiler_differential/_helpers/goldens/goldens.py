@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from importlib.metadata import version
 from pathlib import Path
 
@@ -16,15 +17,19 @@ from scripts.compiler_differential._helpers.comparing.normalize import (
 )
 from scripts.compiler_differential.constants import (
     GOLDEN_CORPUS_PREFIXES,
+    GOLDEN_LABEL,
     GOLDEN_MANIFEST_DROPPED_KEYS,
     GOLDEN_MANIFEST_RESOURCE_SECTIONS,
     GOLDEN_MISSING_HINT,
     GOLDEN_MODE_CHECK,
-    GOLDEN_OPTIONAL_CORPORA,
     GOLDEN_PATH_MASK,
     GOLDEN_RESOURCE_DROPPED_FIELDS,
+    GOLDEN_SEED_CORPUS,
+    GOLDEN_SEED_RANGE_FILE,
     GOLDEN_SUFFIX,
     GOLDEN_VERSION_MASK,
+    GOLDEN_WORK_MASK,
+    PROJECT_DIRECTORY,
 )
 from scripts.compiler_differential.models import (
     CommandOutcome,
@@ -43,7 +48,7 @@ def golden_differences(
     runs: tuple[EngineRun, ...],
     golden_dir: Path,
     mode: str,
-    masked_paths: tuple[str, ...],
+    masked_paths: tuple[tuple[str, str], ...],
 ) -> list[Difference]:
     """Check every run against the project's golden, or rewrite it from the first (oracle) run."""
 
@@ -58,7 +63,9 @@ def golden_differences(
         _ = path.write_text(golden_text(payloads[0]), encoding="utf-8")
         return []
     if not path.is_file():
-        if path.parent.name in GOLDEN_OPTIONAL_CORPORA:
+        if path.parent.name == GOLDEN_SEED_CORPUS and not _seed_in_recorded_range(
+            golden_dir=golden_dir, name=path.stem
+        ):
             return []
         return [
             Difference(
@@ -67,7 +74,7 @@ def golden_differences(
                 location="file",
                 left="<missing>",
                 right=GOLDEN_MISSING_HINT,
-                labels=("golden", "hint"),
+                labels=(GOLDEN_LABEL, "hint"),
             )
         ]
     golden: object = json.loads(path.read_text(encoding="utf-8"))
@@ -82,7 +89,7 @@ def golden_differences(
                     location=divergence.location,
                     left=divergence.left,
                     right=divergence.right,
-                    labels=("golden", run.engine),
+                    labels=(GOLDEN_LABEL, run.engine),
                 )
             )
     return found
@@ -97,7 +104,9 @@ def golden_path(*, golden_dir: Path, project: str) -> Path | None:
     return golden_dir / corpus / f"{name}{GOLDEN_SUFFIX}"
 
 
-def golden_payload(*, run: EngineRun, masked_paths: tuple[str, ...]) -> dict[str, object]:
+def golden_payload(
+    *, run: EngineRun, masked_paths: tuple[tuple[str, str], ...]
+) -> dict[str, object]:
     """Return a run's diagnostics, compiled SQL and slimmed manifest with run noise masked."""
 
     return {
@@ -122,7 +131,9 @@ def golden_text(payload: dict[str, object]) -> str:
     return json.dumps(payload, indent=1, ensure_ascii=False) + "\n"
 
 
-def _command(*, outcome: CommandOutcome, masked_paths: tuple[str, ...]) -> dict[str, object]:
+def _command(
+    *, outcome: CommandOutcome, masked_paths: tuple[tuple[str, str], ...]
+) -> dict[str, object]:
     stdout: str = _masked(text=outcome.stdout, masked_paths=masked_paths)
     try:
         report: dict[str, object] | None = as_json_object(json.loads(stdout))
@@ -141,7 +152,7 @@ def _command(*, outcome: CommandOutcome, masked_paths: tuple[str, ...]) -> dict[
     }
 
 
-def _manifest(*, text: str | None, masked_paths: tuple[str, ...]) -> object | None:
+def _manifest(*, text: str | None, masked_paths: tuple[tuple[str, str], ...]) -> object | None:
     if text is None:
         return None
     manifest: dict[str, object] = (
@@ -165,11 +176,50 @@ def _without_code(resource: object) -> object:
     }
 
 
-def _masked(*, text: str, masked_paths: tuple[str, ...]) -> str:
-    for path in masked_paths:
-        text = text.replace(path, GOLDEN_PATH_MASK)
+def _masked(*, text: str, masked_paths: tuple[tuple[str, str], ...]) -> str:
+    text = masked_text(text=text, masks=masked_paths)
     return normalize_artifact_text(text).replace(_SQLBUILD_VERSION, GOLDEN_VERSION_MASK)
 
 
 def _lines(*, text: str) -> list[str]:
     return text.split("\n")
+
+
+def write_golden_seed_range(*, golden_dir: Path, seed_start: int, seeds: int) -> None:
+    """Record the seed range the goldens hold; every seed in it must keep its golden."""
+
+    golden_dir.mkdir(parents=True, exist_ok=True)
+    _ = (golden_dir / GOLDEN_SEED_RANGE_FILE).write_text(
+        f"seed_start = {seed_start}\nseeds = {seeds}\n", encoding="utf-8"
+    )
+
+
+def _seed_in_recorded_range(*, golden_dir: Path, name: str) -> bool:
+    path: Path = golden_dir / GOLDEN_SEED_RANGE_FILE
+    if not path.is_file():
+        return False
+    recorded: dict[str, object] = tomllib.loads(path.read_text(encoding="utf-8"))
+    start: int = int(str(recorded.get("seed_start", 0)))
+    index: int = int(name.split("-", 1)[0])
+    return start <= index < start + int(str(recorded.get("seeds", 0)))
+
+
+def golden_path_masks(*, case_dir: Path, work_dir: Path) -> tuple[tuple[str, str], ...]:
+    """`(path, token)` for the project and work directories, resolved or not, longest first."""
+
+    workspace: Path = case_dir / PROJECT_DIRECTORY
+    masks: set[tuple[str, str]] = {
+        (str(workspace), GOLDEN_PATH_MASK),
+        (str(workspace.resolve()), GOLDEN_PATH_MASK),
+        (str(work_dir), GOLDEN_WORK_MASK),
+        (str(work_dir.resolve()), GOLDEN_WORK_MASK),
+    }
+    return tuple(sorted(masks, key=lambda mask: (-len(mask[0]), mask[0])))
+
+
+def masked_text(*, text: str, masks: tuple[tuple[str, str], ...]) -> str:
+    """Replace every masked path with its token, longest path first."""
+
+    for path, token in masks:
+        text = text.replace(path, token)
+    return text
