@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from functools import partial
-from pathlib import Path
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
@@ -16,44 +15,43 @@ from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contract impo
     prove_native_dynamic_contract,
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
+from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_syntax_checks
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     get_expression_source_shapes,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileProjectInputs,
     DynamicColumnContractProof,
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.types import NativeStage
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.project_assembly.main._assemble_native_project import (
-    assemble_native_project,
+from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
+    assemble_native_project_resources,
 )
+from sqlbuild.compiler.project_assembly.models import NativeProjectResources
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
-def assemble_project_by_engine(
+def project_resources_by_engine(
     *,
     inputs: CompileProjectInputs,
-    inference_profile: ExpressionInferenceProfile | None,
-    skip_column_inference: bool,
-    column_lineage_mode: ColumnLineageMode,
-    analysis_cache_dir: Path | None,
+    dialect: str | None,
     analysis_model_names: frozenset[str] | None,
-) -> CompiledProject | None:
-    """Return the natively assembled project, or None where Python must assemble it."""
+    analysis_succeeded: frozenset[str],
+) -> NativeProjectResources | None:
+    """Return the natively assembled resource facts, or None where Python must assemble them."""
 
     if not native_stage_enabled(NativeStage.PROJECT_ASSEMBLY):
         return None
-    return assemble_native_project(
+    return assemble_native_project_resources(
         inputs=inputs,
-        inference_profile=inference_profile,
-        skip_column_inference=skip_column_inference,
-        column_lineage_mode=column_lineage_mode,
-        analysis_cache_dir=analysis_cache_dir,
-        analysis_model_names=analysis_model_names,
+        dialect=dialect,
+        syntax_checks=model_syntax_checks(
+            model_inputs=inputs.model_inputs,
+            analysis_model_names=analysis_model_names,
+            analysis_succeeded=analysis_succeeded,
+        ),
     )
 
 

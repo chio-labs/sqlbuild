@@ -622,6 +622,32 @@ def plan_compiled_sql_tests(
 def resolve_compiled_sql_test_chains(request: NativeSqlTestChainRequest, /) -> list[list[str]]: ...
 
 # Native analysis: compiled project assembly.
+def assemble_project_resource_facts(
+    request: tuple[
+        str,
+        tuple[str | None, str | None, str | None] | None,
+        tuple[str | None, str | None, str | None, str | None],
+        list[tuple[str, str, str]],
+        list[tuple[str, str]],
+        list[tuple[list[tuple[str, str, str | None]], list[tuple[str, list[tuple[str, str]]]]]],
+        list[tuple[str, bool, str | None, str | None]],
+        list[tuple[str, str | None, str | None]],
+        list[list[tuple[str, str, str | None]]],
+        list[tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]],
+    ],
+    /,
+) -> tuple[
+    tuple[
+        list[list[tuple[str, str]]],
+        list[tuple[str | None, str | None] | None],
+        list[tuple[str | None, str | None, str | None, str | None]],
+        list[list[tuple[str, str]]],
+        list[list[tuple[str, str]]],
+        list[tuple[str, str]],
+    ]
+    | None,
+    str | None,
+]: ...
 
 # Internal oracle hooks for tests that compare native foundations with Python; not an API.
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
