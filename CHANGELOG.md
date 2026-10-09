@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.151.0](https://github.com/chio-labs/sqlbuild/compare/v0.150.0...v0.151.0) (2026-10-09)
+
+
+### Features
+
+* **native:** plan SQL tests natively behind the preview engine ([#1056](https://github.com/chio-labs/sqlbuild/issues/1056)) ([509d559](https://github.com/chio-labs/sqlbuild/commit/509d5598d1266021dcfb90dfcfb4c155951c655d))
+
 ## [0.150.0](https://github.com/chio-labs/sqlbuild/compare/v0.149.0...v0.150.0) (2026-10-09)
 
 
