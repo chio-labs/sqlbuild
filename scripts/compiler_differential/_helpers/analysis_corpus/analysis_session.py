@@ -13,6 +13,18 @@ _LAYERED_MODEL: str = (
     f"SELECT s.*, s.amount * 2 AS doubled_amount\nFROM {_ORDERS} s\n"
 )
 
+_PIVOT_PATH: str = "models/marts/status_amounts.sql"
+
+
+def _pivot_model(*, pivot_column: str, body: str) -> str:
+    return (
+        'MODEL (\n  description "Order amounts pivoted by status",\n  contract enforced,\n'
+        "  materialized table,\n  columns (customer_id (type INTEGER)),\n"
+        f"  dynamic_columns (\n    status_amounts (\n      pivot_column {pivot_column},\n"
+        "      value_column amount,\n      aggregate MAX,\n      type DOUBLE\n    )\n  ),\n);\n\n"
+        f"{body}"
+    )
+
 
 def analysis_session_failure_cases() -> tuple[FailureCase, ...]:
     """Return this lane's failure cases; the lane appends here without editing shared lists."""
@@ -45,6 +57,41 @@ def analysis_session_failure_cases() -> tuple[FailureCase, ...]:
                 FAILURE_MART_PATH: _MART_HEADER + f"WITH base AS (SELECT * FROM {_ORDERS}),\n"
                 "totals AS (SELECT customer_id, SUM(amount) AS total_amount FROM base GROUP BY 1)\n"
                 "SELECT customer_id, total_amount, order_count FROM totals\n",
+            },
+        ),
+        failure_case(
+            name="analysis-session-enriched-subquery-type-mismatch",
+            expected_code="K002",
+            files={
+                FAILURE_MART_PATH: 'MODEL (\n  description "Order totals per customer",\n'
+                "  contract enforced,\n"
+                "  columns (\n    customer_id (type INTEGER),\n    amount (type VARCHAR),\n  ),\n"
+                ");\n\n"
+                f"SELECT customer_id, amount\nFROM (SELECT * FROM {_ORDERS}) staged\n",
+            },
+        ),
+        failure_case(
+            name="analysis-session-pivot-values-on-clause",
+            expected_code="K011",
+            expected_message="exactly one pivot column",
+            files={
+                _PIVOT_PATH: _pivot_model(
+                    pivot_column="status",
+                    body="PIVOT __source(\"raw_orders\")\nON status IN ('placed')\n"
+                    "USING MAX(amount)\nGROUP BY customer_id\n",
+                ),
+            },
+        ),
+        failure_case(
+            name="analysis-session-pivot-family-column-mismatch",
+            expected_code="K011",
+            expected_message="declares pivot_column 'region'",
+            files={
+                _PIVOT_PATH: _pivot_model(
+                    pivot_column="region",
+                    body='PIVOT __source("raw_orders")\nON status\nUSING MAX(amount)\n'
+                    "GROUP BY customer_id\n",
+                ),
             },
         ),
     )

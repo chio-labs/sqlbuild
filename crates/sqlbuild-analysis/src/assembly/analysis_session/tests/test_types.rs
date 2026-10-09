@@ -1,3 +1,5 @@
+use crate::assembly::analysis_session::models::PivotOutcome;
+
 /// A model as `(name, sql, source names, model refs)`.
 pub(crate) type ModelSpec = (
     &'static str,
@@ -39,4 +41,13 @@ pub(crate) struct WavesTestCase {
     pub(crate) description: &'static str,
     pub(crate) producers: &'static [&'static [usize]],
     pub(crate) expected_waves: Option<&'static [&'static [usize]]>,
+}
+
+pub(crate) struct PivotTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) sql: &'static str,
+    /// `(pivot column, value column, aggregate)` of one `amounts` family, or none declared.
+    pub(crate) family: Option<(&'static str, &'static str, &'static str)>,
+    pub(crate) expected_outcome: PivotOutcome,
 }

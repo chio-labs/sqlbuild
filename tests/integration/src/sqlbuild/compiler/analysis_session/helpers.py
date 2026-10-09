@@ -23,6 +23,9 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
     infer_native_expression_source_shapes,
 )
+from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contract import (
+    prove_native_dynamic_contract,
+)
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     get_expression_source_shapes,
@@ -33,6 +36,7 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompileAdapterContext,
     CompileProjectInputs,
+    DynamicColumnContractProof,
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -78,26 +82,63 @@ _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     python_functions_inherit_default_namespace=True,
     sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
 )
-_PIVOT_MODEL: str = """MODEL (
+_PIVOT_HEADER: str = """MODEL (
   description "Order amounts pivoted by status",
   contract enforced,
   materialized table,
   columns (customer_id (type INTEGER)),
   dynamic_columns (
     status_amounts (
-      pivot_column status,
-      value_column amount,
-      aggregate MAX,
+      pivot_column {pivot},
+      value_column {value},
+      aggregate {aggregate},
       type DOUBLE
     )
   ),
 );
 
-PIVOT __source("raw_orders")
-ON status
-USING MAX(amount)
-GROUP BY customer_id
 """
+_PIVOT_BODIES: tuple[str, ...] = (
+    'PIVOT __source("raw_orders")\nON status\nUSING {aggregate}(amount)\nGROUP BY customer_id',
+    'PIVOT __source("raw_orders")\nON status\nUSING {aggregate}(CAST(amount AS DECIMAL(12, 2)))',
+    "WITH base AS (\n  SELECT customer_id, status, CAST(amount AS DOUBLE) AS amount\n"
+    '  FROM __source("raw_orders")\n)\nSELECT * FROM base\n'
+    "PIVOT ({aggregate}(amount) FOR status IN (ANY ORDER BY status))",
+    'WITH base AS (\n  SELECT * FROM __source("raw_orders")\n),\npivoted AS (\n'
+    "  PIVOT base ON status USING {aggregate}(amount) GROUP BY customer_id\n)\n"
+    "SELECT * FROM pivoted",
+    "PIVOT __source(\"raw_orders\")\nON status IN ('placed', 'shipped')\n"
+    "USING {aggregate}(amount)\nGROUP BY customer_id",
+    'PIVOT __source("raw_events")\nON kind\nUSING {aggregate}(order_id)\nGROUP BY event_id',
+    'SELECT * FROM __source("raw_orders") o\nJOIN __source("raw_customers") c USING (customer_id)',
+)
+_PIVOT_AGGREGATES: tuple[str, ...] = ("MAX", "MIN", "ANY_VALUE", "SUM")
+
+
+def _pivot_models(rng: random.Random) -> dict[str, str]:
+    """A typed pivot every passthrough reads, and seeded pivot shapes proven or refused."""
+
+    files: dict[str, str] = {
+        "models/marts/status_amounts.sql": _PIVOT_HEADER.format(
+            pivot="status", value="amount", aggregate="MAX"
+        )
+        + _PIVOT_BODIES[0].format(aggregate="MAX")
+        + "\n",
+        "models/marts/status_passthrough.sql": _PIVOT_HEADER.format(
+            pivot="status", value="amount", aggregate="MAX"
+        )
+        + 'SELECT * FROM __ref("status_amounts")\n',
+    }
+    for index, body in enumerate(rng.sample(_PIVOT_BODIES, k=4)):
+        aggregate: str = rng.choice(_PIVOT_AGGREGATES)
+        header: str = _PIVOT_HEADER.format(
+            pivot=rng.choice(("status", "status", "kind")),
+            value=rng.choice(("amount", "amount", "order_id")),
+            aggregate=aggregate,
+        )
+        files[f"models/marts/pivot_{index}.sql"] = header + body.format(aggregate=aggregate) + "\n"
+    return files
+
 
 type _Relation = tuple[str, tuple[str, ...]]
 type _Template = Callable[[random.Random, list[_Relation]], tuple[str, str, tuple[str, ...]]]
@@ -221,7 +262,7 @@ def generated_analysis_files(*, rng: random.Random, model_count: int) -> dict[st
     files: dict[str, str] = {
         "sqlbuild_project.toml": _PROJECT_TOML,
         "sources/raw.yml": _SOURCES,
-        "models/marts/status_amounts.sql": _PIVOT_MODEL,
+        **_pivot_models(rng),
     }
     relations: list[_Relation] = list(_INITIAL_RELATIONS)
     for index in range(model_count):
@@ -258,6 +299,9 @@ class AnalysisParity:
     native: list[object] = field(default_factory=list)
     analysed_models: int = 0
     expression_shapes: int = 0
+    pivot_proofs: int = 0
+    standalone_proofs: int = 0
+    proven_pivots: int = 0
 
 
 def compare_analyses(
@@ -295,6 +339,25 @@ def compare_analyses(
             _catalog_view(profile.binding_catalog),
             _catalog_view(native_catalog),
         )
+        return native or python
+
+    def proofs_by_both(
+        *,
+        sql_analysis: ModelSqlAnalysis | None,
+        python_proof: partial[DynamicColumnContractProof | None],
+    ) -> DynamicColumnContractProof | None:
+        native: DynamicColumnContractProof | None = getattr(
+            sql_analysis, "dynamic_column_contract", None
+        )
+        python: DynamicColumnContractProof | None = python_proof()
+        standalone: DynamicColumnContractProof | None = prove_native_dynamic_contract(
+            **python_proof.keywords
+        )
+        parity.pivot_proofs += native is not None
+        parity.proven_pivots += native is not None and native.output_proven
+        parity.standalone_proofs += standalone is not None
+        _append(parity, "dynamic pivot proof", python, native or python)
+        _append(parity, "standalone dynamic pivot proof", python, standalone or python)
         return python
 
     def shapes_by_both(
@@ -320,6 +383,7 @@ def compare_analyses(
     with monkeypatch.context() as patch:
         patch.setattr(project_assembly, "analyze_model_sql_by_engine", models_by_both)
         patch.setattr(project_assembly, "expression_source_shapes_by_engine", shapes_by_both)
+        patch.setattr(project_assembly, "dynamic_column_contract_by_engine", proofs_by_both)
         with suppress(CompileInputError):
             _ = project_assembly.assemble_compiled_project(
                 inputs=inputs,
@@ -387,7 +451,6 @@ def _analysis_views(analyses: dict[str, ModelSqlAnalysis] | None) -> object:
             analysis.polyglot_analysis.binding_validated,
             analysis.cleaned_sql,
             analysis.placeholders,
-            analysis.dynamic_column_contract,
         )
         for name, analysis in analyses.items()
     }

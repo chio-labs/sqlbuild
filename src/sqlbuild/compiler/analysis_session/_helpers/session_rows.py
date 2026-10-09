@@ -10,18 +10,25 @@ from sqlbuild.compiler.analysis_session.types import (
     ColumnRow,
     DeferredRow,
     DiagnosticRow,
+    FamilyRow,
     LineageItem,
+    ProofRow,
     ShapeRows,
 )
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
 from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
+    DynamicColumnContractProof,
+    DynamicColumnFamilyProof,
     InferredColumn,
     PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.sql_analysis.constants import CASE_SENSITIVE_BINDING_DIALECTS
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 def shape_rows(shapes: Mapping[str, Mapping[str, object]]) -> ShapeRows | None:
@@ -61,7 +68,27 @@ def session_request(
         list(profile.function_return_types.items()),
         request.rich_type_inference,
         *shapes,
+        family_rows(request.dynamic_families_by_table),
         python.model_rows(),
+    )
+
+
+def contract_proof(row: ProofRow | None) -> DynamicColumnContractProof | None:
+    """A native dynamic pivot proof as Python's, None when absent or left to Python."""
+
+    if row is None:
+        return None
+    output_proven, columns, families, input_relations, failure_reason, bare = row
+    return DynamicColumnContractProof(
+        output_proven=output_proven,
+        fixed_columns=inferred_columns(columns) or (),
+        families=tuple(
+            DynamicColumnFamilyProof(name=name, inferred_type=inferred_type)
+            for name, inferred_type in families
+        ),
+        input_relations=tuple(input_relations),
+        failure_reason=failure_reason,
+        bare_dynamic_pivot=bare,
     )
 
 
@@ -143,3 +170,38 @@ def compact_lineage(rows: list[LineageItem]) -> CompactLineageFacts:
             )
         )
     return CompactLineageFacts(string_pool=tuple(pool), rows=tuple(compact_rows))
+
+
+def lineage_facts(rows: list[LineageItem]) -> tuple[CompiledLineageColumnFact, ...]:
+    """Native lineage rows as the plain facts Python's re-analysis returns."""
+
+    return tuple(
+        CompiledLineageColumnFact(
+            output_column=output_column,
+            upstream_columns=_source_facts(sources),
+            transform_kind=CompactLineageFacts.transform_kind(transform_code),
+            confidence=CompactLineageFacts.confidence(confidence_code),
+        )
+        for output_column, transform_code, confidence_code, sources in rows
+    )
+
+
+def _source_facts(sources: list[tuple[str, str, str]]) -> tuple[CompiledLineageSourceFact, ...]:
+    return tuple(
+        CompiledLineageSourceFact(
+            resource_type=resource_type, resource_name=resource_name, column_name=column_name
+        )
+        for resource_type, resource_name, column_name in sources
+    )
+
+
+def family_rows(
+    families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
+) -> list[tuple[str, list[FamilyRow]]]:
+    """Declared dynamic families by relation, as native request rows."""
+
+    return [(name, _family_rows(families)) for name, families in families_by_table.items()]
+
+
+def _family_rows(families: tuple[SchemaDynamicColumnFamily, ...]) -> list[FamilyRow]:
+    return [PythonModelAnalysis.family_row(family) for family in families]

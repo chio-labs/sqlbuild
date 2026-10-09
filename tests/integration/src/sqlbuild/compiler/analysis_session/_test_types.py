@@ -14,6 +14,8 @@ class GeneratedAnalysisParityTestCase:
     dialects: tuple[str | None, ...]
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
+    expected_minimum_pivot_proofs: int
+    expected_minimum_proven_pivots: int
 
 
 @dataclass(frozen=True)

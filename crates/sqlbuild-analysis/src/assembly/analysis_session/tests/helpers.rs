@@ -4,8 +4,9 @@ use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_
 use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, Deferral, DeferredAnalysis, ModelOutcome, ModelReference, ModelRequest,
-    SessionRequest, SessionStep,
+    AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis, DynamicFamily,
+    ModelOutcome, ModelReference, ModelRequest, PivotOutcome, PivotRequest, SessionRequest,
+    SessionStep,
 };
 use crate::assembly::analysis_session::tests::test_types::ModelSpec;
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -79,6 +80,8 @@ pub(crate) fn model(name: &str, sql: &str, sources: &[&str], refs: &[&str]) -> M
         recover_cte_facts: false,
         has_set_operation: sql.contains("UNION"),
         snapshot_columns: None,
+        pivot_sql: sql.to_owned(),
+        dynamic_families: Vec::new(),
     }
 }
 
@@ -100,6 +103,7 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
         )]),
         complete_schemas: raw_orders.clone(),
         catalog_schemas: raw_orders,
+        dynamic_families_by_table: Vec::new(),
         models,
     }
 }
@@ -209,4 +213,87 @@ pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<
         steps.iter().map(step_lines).collect(),
         outcomes.iter().map(described).collect(),
     )
+}
+
+/// A pivot proof request over typed `raw_orders`, whose upstream `status_amounts` is a pivot.
+pub(crate) fn pivot_request(
+    dialect: &str,
+    sql: &str,
+    family: Option<(&str, &str, &str)>,
+) -> PivotRequest {
+    let raw_orders: Shapes = shapes(&[(
+        "raw_orders",
+        &[
+            ("order_id", "INTEGER"),
+            ("customer_id", "INTEGER"),
+            ("status", "VARCHAR"),
+            ("amount", "DOUBLE"),
+        ],
+    )]);
+    let upstream: Shapes = shapes(&[("status_amounts", &[("customer_id", "INTEGER")])]);
+    let families: Vec<DynamicFamily> = family
+        .map(|(pivot_column, value_column, aggregate)| {
+            amounts(pivot_column, value_column, aggregate)
+        })
+        .into_iter()
+        .collect();
+    PivotRequest {
+        dialect: dialect.to_owned(),
+        column_types: [raw_orders.clone(), upstream].concat(),
+        authoritative_types: raw_orders,
+        column_nullability: shapes(&[("raw_orders", &[("customer_id", "non_null")])]),
+        families_by_table: vec![(
+            "status_amounts".to_owned(),
+            vec![amounts("status", "amount", "MAX")],
+        )],
+        sql: sql.to_owned(),
+        families,
+    }
+}
+
+fn amounts(pivot_column: &str, value_column: &str, aggregate: &str) -> DynamicFamily {
+    DynamicFamily {
+        name: "amounts".to_owned(),
+        pivot_column: pivot_column.to_owned(),
+        value_column: value_column.to_owned(),
+        aggregate: aggregate.to_owned(),
+        data_type: "DOUBLE".to_owned(),
+        name_pattern: None,
+    }
+}
+
+/// A failed proof with Python's reason.
+pub(crate) fn failed(reason: &str) -> PivotOutcome {
+    PivotOutcome::Proof(ContractProof {
+        output_proven: false,
+        fixed_columns: Vec::new(),
+        families: Vec::new(),
+        input_relations: Vec::new(),
+        failure_reason: Some(reason.to_owned()),
+        bare_dynamic_pivot: false,
+    })
+}
+
+/// A proven output: `(name, type, nullability)` fixed columns and the `amounts` family type.
+pub(crate) fn proven(
+    fixed: &[(&str, &str, &str)],
+    family_type: Option<&str>,
+    input: &str,
+    bare: bool,
+) -> PivotOutcome {
+    PivotOutcome::Proof(ContractProof {
+        output_proven: true,
+        fixed_columns: fixed
+            .iter()
+            .map(|(name, data_type, nullability)| ColumnFact {
+                name: (*name).to_owned(),
+                data_type: Some((*data_type).to_owned()),
+                nullability: (*nullability).to_owned(),
+            })
+            .collect(),
+        families: vec![("amounts".to_owned(), family_type.map(str::to_owned))],
+        input_relations: vec![input.to_owned()],
+        failure_reason: None,
+        bare_dynamic_pivot: bare,
+    })
 }

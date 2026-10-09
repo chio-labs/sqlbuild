@@ -44,13 +44,15 @@ _ORDERS_PROJECT: dict[str, str] = {
     "test_case",
     [
         GeneratedAnalysisParityTestCase(
-            description="stars, CTEs, set operations, untyped inputs, contracts and a pivot",
+            description="stars, CTEs, set operations, untyped inputs, contracts and pivots",
             seed=20261008,
             count=6,
             model_count=24,
             dialects=("duckdb", "postgres", "snowflake", "bigquery"),
             expected_minimum_native=500,
             expected_minimum_expression_shapes=40,
+            expected_minimum_pivot_proofs=80,
+            expected_minimum_proven_pivots=12,
         )
     ],
     ids=lambda case: case.description,
@@ -75,11 +77,15 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
 
     assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
     assert kinds["analysis_session:session"] == kinds["analysis_session:expression_shapes"] == 0
+    assert kinds["analysis_session:dynamic_pivot"] == 0
     assert (
         parity.analysed_models - kinds["analysis_session:legacy_analysis"]
         >= test_case.expected_minimum_native
     )
     assert parity.expression_shapes >= test_case.expected_minimum_expression_shapes
+    assert parity.pivot_proofs >= test_case.expected_minimum_pivot_proofs
+    assert parity.standalone_proofs >= test_case.expected_minimum_pivot_proofs
+    assert parity.proven_pivots >= test_case.expected_minimum_proven_pivots
 
 
 @pytest.mark.parametrize(

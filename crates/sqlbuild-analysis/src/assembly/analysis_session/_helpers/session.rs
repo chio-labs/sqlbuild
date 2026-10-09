@@ -2,9 +2,15 @@
 
 use std::collections::HashMap;
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
+};
+use crate::assembly::analysis_session::_helpers::dynamic_pivot::{PivotFacts, pivot_outcome};
+use crate::assembly::analysis_session::_helpers::enrichment::{
+    Enrichment, EnrichmentInput, enrichment,
 };
 use crate::assembly::analysis_session::_helpers::mappings::{
     ShapeTable, dict_from_pairs, same_keys, same_relations,
@@ -16,7 +22,7 @@ use crate::assembly::analysis_session::constants::{
 };
 use crate::assembly::analysis_session::models::{
     AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, LineageFacts, ModelAnalysis,
-    ModelOutcome, ModelRequest, Phase, SessionOutcome, SessionRequest, SessionStep,
+    ModelOutcome, ModelRequest, Phase, PivotOutcome, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -128,7 +134,12 @@ impl AnalysisSession {
                         .get(&result.model)
                         .ok_or("an enrichment answers no deferral")?;
                     let outcome: &mut ModelOutcome = self.outcome_mut(result.model)?;
-                    outcome.analysis = enriched_analysis(&outcome.analysis, result, pending);
+                    outcome.analysis = enriched_analysis(
+                        &outcome.analysis,
+                        result,
+                        pending,
+                        LineageFacts::PythonEnrichment,
+                    );
                 }
                 self.phase = Phase::Finish(wave);
             }
@@ -141,6 +152,7 @@ impl AnalysisSession {
         if !matches!(self.phase, Phase::Done) {
             return Err("the session has not finished".to_owned());
         }
+        let dynamic_contracts: Vec<PivotOutcome> = self.dynamic_contracts()?;
         let models: Vec<ModelOutcome> = self
             .outcomes
             .into_iter()
@@ -151,7 +163,30 @@ impl AnalysisSession {
             models,
             schema_additions,
             analysis_names,
+            dynamic_contracts,
         })
+    }
+
+    /// Python's dynamic pivot proof of each model over the relation facts before analysis.
+    fn dynamic_contracts(&self) -> Result<Vec<PivotOutcome>, String> {
+        let models: &[ModelRequest] = &self.request.models;
+        if models.iter().all(|model| model.dynamic_families.is_empty()) {
+            return Ok(vec![PivotOutcome::Absent; models.len()]);
+        }
+        let facts = PivotFacts {
+            dialect: &self.request.dialect,
+            column_types: &self.request.column_types,
+            authoritative_types: &self.request.complete_schemas,
+            column_nullability: &self.request.column_nullability,
+            families_by_table: &self.request.dynamic_families_by_table,
+        };
+        let pool = self.catalog.native.analysis_pool()?;
+        Ok(pool.install(|| {
+            models
+                .par_iter()
+                .map(|model| pivot_outcome(&model.pivot_sql, &model.dynamic_families, &facts))
+                .collect()
+        }))
     }
 
     fn step(&mut self, deferrals: Vec<Deferral>) -> SessionStep {
@@ -251,6 +286,7 @@ impl AnalysisSession {
     fn complete_wave(&mut self, wave: usize) -> Result<Enrichments, String> {
         let mut deferrals: Vec<Deferral> = Vec::new();
         let mut star_pending_by_model: HashMap<usize, bool> = HashMap::new();
+        let mut candidates: Vec<(usize, Shapes, bool)> = Vec::new();
         for model in self.waves[wave].clone() {
             let request: &ModelRequest = &self.request.models[model];
             let required: Vec<String> = request.required_names.clone();
@@ -275,14 +311,51 @@ impl AnalysisSession {
                 .flatten()
                 .any(|column| column.data_type.is_none());
             if !required.is_empty() && (untyped || star_pending) && !has_set_operation {
+                candidates.push((model, input_schemas, star_pending));
+            }
+        }
+        let enrichments: Vec<Option<Enrichment>> = self.native_enrichments(&candidates)?;
+        for ((model, input_schemas, star_pending), native) in
+            candidates.into_iter().zip(enrichments)
+        {
+            let Some(native) = native else {
                 star_pending_by_model.insert(model, star_pending);
                 deferrals.push(Deferral::Enrichment {
                     model,
                     input_schemas,
                 });
-            }
+                continue;
+            };
+            let outcome: &mut ModelOutcome = self.outcome_mut(model)?;
+            outcome.analysis = enriched_analysis(
+                &outcome.analysis,
+                native_answer(model, native.columns, native.has_star),
+                star_pending,
+                LineageFacts::NativeEnrichment(native.lineage),
+            );
         }
         Ok((deferrals, star_pending_by_model))
+    }
+
+    /// Python's re-analysis of each candidate natively, None where Python must answer it.
+    fn native_enrichments(
+        &self,
+        candidates: &[(usize, Shapes, bool)],
+    ) -> Result<Vec<Option<Enrichment>>, String> {
+        if candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+        let inputs: Vec<EnrichmentInput<'_>> = candidates
+            .iter()
+            .map(|(model, input_schemas, _)| EnrichmentInput {
+                model: &self.request.models[*model],
+                input_schemas,
+                dialect: &self.request.dialect,
+                function_return_types: &self.request.function_return_types,
+            })
+            .collect();
+        let pool = self.catalog.native.analysis_pool()?;
+        Ok(pool.install(|| inputs.par_iter().map(enrichment).collect()))
     }
 
     fn input_schemas(&self, required: &[String]) -> Shapes {
@@ -470,6 +543,7 @@ fn enriched_analysis(
     analysis: &ModelAnalysis,
     enriched: DeferredAnalysis,
     star_pending: bool,
+    lineage: LineageFacts,
 ) -> ModelAnalysis {
     let mut recovered: HashMap<String, String> = HashMap::new();
     for column in enriched
@@ -489,7 +563,7 @@ fn enriched_analysis(
         ModelAnalysis {
             analysis_succeeded: enriched.analysis_succeeded,
             columns: enriched.columns,
-            lineage: LineageFacts::PythonEnrichment,
+            lineage,
             has_star: enriched.has_star,
             star_resolved: enriched.star_resolved,
             binding_diagnostics: analysis.binding_diagnostics.clone(),
@@ -507,4 +581,17 @@ fn enriched_analysis(
     merged.columns = Some(columns);
     merged.star_resolved = merged.star_resolved || star_expanded;
     merged
+}
+
+/// A native re-analysis as Python's successful answer.
+fn native_answer(model: usize, columns: Vec<ColumnFact>, has_star: bool) -> DeferredAnalysis {
+    DeferredAnalysis {
+        model,
+        analysis_succeeded: true,
+        columns: Some(columns),
+        has_star,
+        star_resolved: false,
+        binding_diagnostics: Vec::new(),
+        binding_validated: false,
+    }
 }
