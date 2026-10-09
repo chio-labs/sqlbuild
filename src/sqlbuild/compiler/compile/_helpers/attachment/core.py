@@ -79,6 +79,7 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_result,
 )
+from sqlbuild.compiler.compile._helpers.render.spans import map_through_passes
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     applied_interpolation,
     expand_authored_sql_result,
@@ -94,7 +95,7 @@ from sqlbuild.compiler.compile.constants import (
     MODEL_FULL_REFRESH_CONFIG_KEY,
     MODEL_SCHEMA_CONFIG_KEY,
 )
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroArgumentError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompiledSqlExpansion,
@@ -106,10 +107,12 @@ from sqlbuild.compiler.compile.models import (
     DeclarationExpansionResult,
     DeclarationResolutionContext,
     DeclarationScopeResolver,
+    ExpansionSpan,
     HookExpansionResult,
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
+    MappedOffset,
     ModelConfigBuildRequest,
     ModelConfigScanCache,
     ModelHeaderColumnCache,
@@ -735,15 +738,32 @@ def _build_model_input(
     )
     report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_expansions")
     declaration_expanded_sql: str = declaration_expansion.sql
-    macro_expansion: MacroExpansionResult = expand_sql_macros_result(
-        sql=declaration_expanded_sql,
-        file_path=model_file.file_path,
-        loaded_macros=loaded_macros,
-        macro_context=macro_context,
-        declaration_resolver=context.declaration_resolver,
-        declarations=(declaration_context if context.declaration_resolver is not None else None),
-        consumer=model_identity,
-    )
+    try:
+        macro_expansion: MacroExpansionResult = expand_sql_macros_result(
+            sql=declaration_expanded_sql,
+            file_path=model_file.file_path,
+            loaded_macros=loaded_macros,
+            macro_context=macro_context,
+            declaration_resolver=context.declaration_resolver,
+            declarations=(
+                declaration_context if context.declaration_resolver is not None else None
+            ),
+            consumer=model_identity,
+        )
+    except MacroArgumentError as error:
+        location: SourceLocation | None = (
+            _authored_model_location(
+                model_file=model_file,
+                sql=declaration_expanded_sql,
+                offset=error.offset,
+                passes=(declaration_expansion.spans,),
+            )
+            if var_substituted_sql == model_file.query_sql
+            else None
+        )
+        if location is None:
+            raise
+        raise error.located(location) from None
     expanded_query_sql: str = macro_expansion.sql
     if native_stage_enabled(NativeStage.MODEL_LOOP):
         report_native_fallback(site=NativeFallbackSite.CURSOR_INTRINSIC_VALIDATION)
@@ -1855,3 +1875,35 @@ def validate_model_config_has_no_macros(*, values: dict[str, object]) -> None:
     """Reject macro calls in declarative model config while allowing hook SQL strings."""
 
     validate_no_macros_in_config_value(value=values, path=())
+
+
+def _authored_model_location(
+    *,
+    model_file: DiscoveredSqlModelFile,
+    sql: str,
+    offset: int,
+    passes: tuple[tuple[ExpansionSpan, ...], ...],
+) -> SourceLocation | None:
+    """Map an offset in expanded model SQL to its authored file location, if it is authored."""
+
+    contents: str = model_file.contents
+    body_start: int | None = get_model_query_start(
+        contents=contents, query_sql=model_file.query_sql
+    )
+    if body_start is None and contents.lstrip().startswith(model_file.query_sql):
+        body_start = len(contents) - len(contents.lstrip())
+    mapped: MappedOffset = map_through_passes(offset=offset, passes=passes)
+    authored_offset: int = (body_start or 0) + mapped.offset
+    if (
+        body_start is None
+        or mapped.generated
+        or offset >= len(sql)
+        or authored_offset >= len(contents)
+        or contents[authored_offset] != sql[offset]
+    ):
+        return None
+    return SourceLocation(
+        path=model_file.relative_path,
+        line=contents.count("\n", 0, authored_offset) + 1,
+        column=authored_offset - (contents.rfind("\n", 0, authored_offset) + 1) + 1,
+    )

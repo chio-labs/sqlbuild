@@ -1,7 +1,7 @@
 //! Python's `parse_constant_declaration_file` up to value normalisation, which Python performs.
 
 use crate::declaration_files::_helpers::checks::python_values::{
-    WordRules, failure, get, python_str, unknown_keys,
+    WordRules, check_bare_numbers, failure, get, python_str, unknown_keys,
 };
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::declaration_headers::declaration_headers;
@@ -81,6 +81,7 @@ fn parse_constant(
             "{file_path} constant '{name}' is missing required value"
         )));
     };
+    check_bare_numbers(value, WordRules { python, file_path })?;
     let explicit_type: Option<String> = constant_option(
         explicit_type,
         file_path,

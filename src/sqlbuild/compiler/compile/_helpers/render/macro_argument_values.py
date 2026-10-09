@@ -10,14 +10,17 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     typed_reference_value,
 )
-from sqlbuild.compiler.compile.constants import MACRO_ARGUMENT_ERROR_TAG
-from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.constants import (
+    MACRO_ARGUMENT_ERROR_TAG,
+    MACRO_ARGUMENT_NESTED_CALL_TAG,
+)
+from sqlbuild.compiler.compile.exceptions import MacroArgumentError
 from sqlbuild.compiler.compile.models import ParsedMacroArguments
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 
 type _ValueRow = tuple[object, ...]
-type _BuildContext = tuple[Sequence[object], str]
+type _BuildContext = tuple[Sequence[object], Callable[..., MacroArgumentError]]
 _BUILDERS: dict[str, Callable[..., object]] = {
     "s": lambda *, row, context: row[1],
     "b": lambda *, row, context: row[1],
@@ -31,8 +34,8 @@ _BUILDERS: dict[str, Callable[..., object]] = {
     "l": lambda *, row, context: _items(row=row, context=context),
     "t": lambda *, row, context: tuple(_items(row=row, context=context)),
     "d": lambda *, row, context: _mapping(row=row, context=context),
-    "-": lambda *, row, context: -_number(row=row, context=context),
-    "+": lambda *, row, context: _number(row=row, context=context),
+    "-": lambda *, row, context: -_number(row=row, context=context, sign="-"),
+    "+": lambda *, row, context: _number(row=row, context=context, sign="+"),
 }
 
 
@@ -47,16 +50,44 @@ def parse_macro_call_arguments(
     """Parse `args_source` natively; nested calls at `nested` take their `nested_values`."""
 
     parsed: tuple[object, ...] = _native.parse_macro_arguments(args_source, list(nested))
-    label: str = f"the '@{macro_name}' arguments"
+
+    def argument_error(*, offset: int, detail: str, help_text: str) -> MacroArgumentError:
+        line: int = args_source.count("\n", 0, offset) + 1
+        column: int = offset - (args_source.rfind("\n", 0, offset) + 1) + 1
+        return MacroArgumentError(
+            detail=detail,
+            help=help_text,
+            macro_name=macro_name,
+            file_path=file_path,
+            offset=offset,
+            relative_position=(line, column),
+        )
+
     if parsed[0] == MACRO_ARGUMENT_ERROR_TAG:
         _, detail, help_text, line, column = parsed
-        raise CompileInputError(
-            f"Macro arguments in '{file_path}' {detail} at line {line}, column {column} of {label}",
-            help=cast(str, help_text),
+        line_start: int = sum(
+            len(text) + 1 for text in args_source.split("\n")[: cast(int, line) - 1]
+        )
+        raise argument_error(
+            offset=line_start + cast(int, column) - 1,
+            detail=cast(str, detail),
+            help_text=cast(str, help_text),
         )
     _, positional, keywords, references = parsed
     report_native_answer(stage=NativeStage.MACRO_CALLS, kind="parsed_arguments")
-    context: _BuildContext = (nested_values, f"'{file_path}' in {label}")
+
+    def unary_error(*, call: int, sign: str) -> MacroArgumentError:
+        value: object = nested_values[call]
+        return argument_error(
+            offset=nested[call][0],
+            detail=(
+                f"apply unary {sign} to the value of a nested macro call, which is a "
+                f"{type(value).__name__} and not a number"
+            ),
+            help_text="Return a number from the nested macro, or apply the sign inside the macro",
+        )
+
+    context: _BuildContext = (nested_values, unary_error)
     return ParsedMacroArguments(
         args=tuple(_built(row=row, context=context) for row in cast(list[_ValueRow], positional)),
         kwargs={
@@ -85,11 +116,17 @@ def _mapping(*, row: _ValueRow, context: _BuildContext) -> dict[object, object]:
     }
 
 
-def _number(*, row: _ValueRow, context: _BuildContext) -> int | float:
-    number: object = _built(row=cast(_ValueRow, row[1]), context=context)
+def _number(*, row: _ValueRow, context: _BuildContext, sign: str) -> int | float:
+    operand: _ValueRow = cast(_ValueRow, row[1])
+    number: object = _built(row=operand, context=context)
     if not isinstance(number, int | float):
-        raise CompileInputError(
-            f"Macro arguments in {context[1]} use unary + or - on a value that is not a number",
-            help="Apply the sign inside the macro, or pass a number literal",
-        )
+        raise context[1](call=_nested_call(operand), sign=sign)
     return number
+
+
+def _nested_call(row: _ValueRow) -> int:
+    """The nested call index under unary signs; only a nested call yields a non-number here."""
+
+    while row[0] != MACRO_ARGUMENT_NESTED_CALL_TAG:
+        row = cast(_ValueRow, row[1])
+    return cast(int, row[1])

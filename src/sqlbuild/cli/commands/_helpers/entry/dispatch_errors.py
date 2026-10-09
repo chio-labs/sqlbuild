@@ -29,6 +29,7 @@ from sqlbuild.cli.output.models import (
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild.spec.contracts.models import SourceLocation
 
 
 def dispatch_and_handle_errors(
@@ -147,7 +148,15 @@ def _write_compile_machine_error(
     from sqlbuild.cli.commands._helpers.compile.output import format_compile_error_json
 
     code, message, help_text = expected_error_parts(error=error, fallback_code=fallback_code)
-    print(format_compile_error_json(code=code, message=message, help_text=help_text))
+    location: object = getattr(error, "location", None)
+    print(
+        format_compile_error_json(
+            code=code,
+            message=message,
+            help_text=help_text,
+            location=location if isinstance(location, SourceLocation) else None,
+        )
+    )
 
 
 def _write_diff_machine_error(

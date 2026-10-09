@@ -15,12 +15,14 @@ class UnicodeEnvironment(Mapping[str, str]):
         value: str = os.environ[name]
         try:
             _ = value.encode("utf-8")
-        except UnicodeEncodeError:
+        except UnicodeEncodeError as error:
+            byte_offset: int = len(value[: error.start].encode("utf-8"))
             raise CompileInputError(
-                f"Environment variable '{name}' is not valid UTF-8 text",
+                f"Environment variable '{name}' is not valid UTF-8 text: byte {byte_offset} "
+                "starts an invalid UTF-8 sequence",
                 help=(
-                    f"Its value is {value.encode('utf-8', 'surrogateescape')!r}; set it to UTF-8 "
-                    "text, since SQLBuild cannot send undecodable bytes to a warehouse"
+                    f"Set '{name}' to UTF-8 text, since SQLBuild cannot send undecodable bytes "
+                    "to a warehouse; the value is not shown because it may be a secret"
                 ),
             ) from None
         return value

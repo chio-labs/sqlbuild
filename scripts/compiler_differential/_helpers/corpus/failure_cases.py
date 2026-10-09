@@ -46,6 +46,11 @@ _ENGINE_ERROR_CENTS: str = (
     'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
     '    return f"({expression} * 100)"\n'
 )
+_MACRO_LITERALS_HELP: str = (
+    "Macro arguments are Python literals (strings, numbers, True, False, None, lists, "
+    "tuples and dicts), nested macro calls, and __ref(), __source() or __seed() "
+    "references; compute anything else inside the macro"
+)
 
 
 def _rules(*codes: str) -> dict[str, str]:
@@ -634,6 +639,18 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="engine-error-non-ascii-digit-constant-value",
+            expected_code="D013",
+            files={"constants/limits.sql": "CONSTANT (name minimum_amount, value \u0663);\n"},
+            expected_message=(
+                "<project>/constants/limits.sql has the bare number '\u0663', written with "
+                "non-ASCII digits"
+            ),
+            expected_help=(
+                'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
+            ),
+        ),
+        failure_case(
             name="engine-error-non-ascii-digit-bare-number",
             expected_code="D013",
             files={
@@ -660,14 +677,94 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
                 ),
             },
             expected_message=(
-                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
-                "could not be parsed: a value is missing here at line 1, column 10 of the "
-                "'@cents' arguments"
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "could not be parsed: a value is missing here at line 5, column 37"
             ),
+            expected_location=(5, 37),
+            expected_help=_MACRO_LITERALS_HELP,
+        ),
+        failure_case(
+            name="engine-error-macro-argument-second-call",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents('amount') AS cents,\n"
+                    "  @cents('amount' 2) AS more_cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "could not be parsed: a comma is missing between arguments at line 6, column 19"
+            ),
+            expected_location=(6, 19),
             expected_help=(
-                "Macro arguments are Python literals (strings, numbers, True, False, None, lists, "
-                "tuples and dicts), nested macro calls, and __ref(), __source() or __seed() "
-                "references; compute anything else inside the macro"
+                "Separate arguments, and the items of lists, tuples and dicts, with commas, for "
+                "example @cents('amount', 2)"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-nested-call-sign",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents(-@cents('amount')) AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' apply unary - "
+                "to the value of a nested macro call, which is a str and not a number at line 5, "
+                "column 29"
+            ),
+            expected_location=(5, 29),
+            expected_help=(
+                "Return a number from the nested macro, or apply the sign inside the macro"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-named-sequence",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, "
+                    "@cents('\\N{LATIN CAPITAL LETTER A WITH MACRON AND GRAVE}') AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' could not be "
+                "parsed: \\N{LATIN CAPITAL LETTER A WITH MACRON AND GRAVE} names a sequence of 2 "
+                "characters, and \\N escapes name one character at line 5, column 29"
+            ),
+            expected_location=(5, 29),
+            expected_help=(
+                "Write each character of the sequence with its own \\N{...} escape, or write the "
+                "characters themselves"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-surrogate-pair",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents('\\ud83d\\ude00') AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' contain the lone "
+                "surrogate escape '\\ud83d' at line 5, column 29"
+            ),
+            expected_location=(5, 29),
+            expected_help=(
+                "Python strings hold code points, not UTF-16 surrogate pairs; write the character "
+                "as one escape: \\U0001F600 instead of the surrogate pair, or write the character "
+                "itself"
             ),
         ),
         failure_case(
@@ -676,13 +773,14 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             files={
                 _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
                 **mart_body_files(
-                    "SELECT customer_id, @cents(b'amount') AS cents\\nFROM __ref(\"stg_orders\")\n"
+                    "SELECT customer_id, @cents(b'amount') AS cents\nFROM __ref(\"stg_orders\")\n"
                 ),
             },
             expected_message=(
-                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
-                "use a bytes literal at line 1, column 1 of the '@cents' arguments"
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "use a bytes literal at line 5, column 28"
             ),
+            expected_location=(5, 28),
             expected_help=(
                 "Pass text as a string without the b prefix, for example 'orders' instead of "
                 "b'orders'"
@@ -694,13 +792,14 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             files={
                 _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
                 **mart_body_files(
-                    'SELECT customer_id, @cents(2j) AS cents\\nFROM __ref("stg_orders")\n'
+                    'SELECT customer_id, @cents(2j) AS cents\nFROM __ref("stg_orders")\n'
                 ),
             },
             expected_message=(
-                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
-                "use a complex number literal at line 1, column 1 of the '@cents' arguments"
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "use a complex number literal at line 5, column 28"
             ),
+            expected_location=(5, 28),
             expected_help=(
                 "Pass int or float numbers; give a complex value's real and imaginary parts as two "
                 "arguments"
@@ -712,13 +811,14 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             files={
                 _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
                 **mart_body_files(
-                    'SELECT customer_id, @cents(...) AS cents\\nFROM __ref("stg_orders")\n'
+                    'SELECT customer_id, @cents(...) AS cents\nFROM __ref("stg_orders")\n'
                 ),
             },
             expected_message=(
-                f"Macro arguments in '<project>/{FAILURE_MART_PATH}' "
-                "use '...' (Ellipsis) at line 1, column 1 of the '@cents' arguments"
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "use '...' (Ellipsis) at line 5, column 28"
             ),
+            expected_location=(5, 28),
             expected_help=("Pass None, or a string the macro understands, instead of '...'"),
         ),
         failure_case(
@@ -729,11 +829,13 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
                 'FROM __ref("stg_orders")\n'
             ),
             expected_message=(
-                f"Environment variable '{FAILURE_UNDECODABLE_ENV_VAR}' is not valid UTF-8 text"
+                f"Environment variable '{FAILURE_UNDECODABLE_ENV_VAR}' is not valid UTF-8 text: "
+                "byte 17 starts an invalid UTF-8 sequence"
             ),
             expected_help=(
-                "Its value is b'\\xff'; set it to UTF-8 text, since SQLBuild cannot send "
-                "undecodable bytes to a warehouse"
+                f"Set '{FAILURE_UNDECODABLE_ENV_VAR}' to UTF-8 text, since SQLBuild cannot send "
+                "undecodable bytes to a warehouse; the value is not shown because it may be a "
+                "secret"
             ),
         ),
         failure_case(

@@ -1,6 +1,6 @@
 //! Python string and number literals: escapes, prefixes, underscores and radixes.
 
-use crate::macro_arguments::_helpers::failures::{Failure, surrogate, syntax};
+use crate::macro_arguments::_helpers::failures::{Failure, named_sequence, surrogate, syntax};
 use crate::macro_arguments::_helpers::lexer::{NumberToken, StringPiece, is_name_start};
 use crate::macro_arguments::constants::{BINARY_RADIX, DECIMAL_RADIX, HEX_RADIX, OCTAL_RADIX};
 use crate::macro_arguments::types::ArgumentHost;
@@ -125,7 +125,7 @@ fn hex_escape(text: &[char], index: usize, width: usize) -> Result<(String, usiz
     let end: usize = index + 2 + width;
     if (0xD800..=0xDFFF).contains(&code) {
         let escape: String = text[index..end].iter().collect();
-        return Err(surrogate(&escape, index));
+        return Err(surrogate(&escape, surrogate_pair(text, code, end), index));
     }
     let character: char = char::from_u32(code).ok_or_else(|| {
         let escape: String = text[index..end].iter().collect();
@@ -150,10 +150,27 @@ fn named_escape(
         return Err(syntax("a \\N escape needs a {name}", index));
     };
     let name: String = text[index + 3..index + 3 + close].iter().collect();
-    let character: char = host
+    let named: String = host
         .character_named(&name)
         .ok_or_else(|| syntax(&format!("\\N{{{name}}} names no Unicode character"), index))?;
-    Ok((character.to_string(), index + 4 + close))
+    let length: usize = named.chars().count();
+    if length != 1 {
+        return Err(named_sequence(&name, length, index));
+    }
+    Ok((named, index + 4 + close))
+}
+
+/// The code point a high surrogate `code` and a `\u` low surrogate escape at `next` spell.
+fn surrogate_pair(text: &[char], code: u32, next: usize) -> Option<u32> {
+    let high: bool = (0xD800..=0xDBFF).contains(&code);
+    let digits: &[char] = text.get(next + 2..next + 6)?;
+    let low: u32 = (high
+        && text.get(next..next + 2) == Some(&['\\', 'u'][..])
+        && digits.iter().all(char::is_ascii_hexdigit))
+    .then(|| radix_value(digits, HEX_RADIX))?;
+    (0xDC00..=0xDFFF)
+        .contains(&low)
+        .then(|| 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00))
 }
 
 fn radix_value(digits: &[char], radix: u32) -> u32 {

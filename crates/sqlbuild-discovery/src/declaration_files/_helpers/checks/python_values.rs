@@ -49,6 +49,28 @@ pub(crate) fn python_type(
     })
 }
 
+/// Reject a bare number written with non-ASCII digits anywhere inside `value`.
+pub(crate) fn check_bare_numbers(value: &AuthoredValue, words: WordRules) -> Result<(), ParseStop> {
+    match value {
+        AuthoredValue::BareWord(word) => word_type(word, words).map(|_| ()),
+        AuthoredValue::List(items) | AuthoredValue::Set(items) | AuthoredValue::Tuple(items) => {
+            items
+                .iter()
+                .try_for_each(|item| check_bare_numbers(item, words))
+        }
+        AuthoredValue::Map(entries)
+        | AuthoredValue::TypedConstant(entries)
+        | AuthoredValue::NamedSqlHook(_, entries)
+        | AuthoredValue::PythonHook(_, entries) => entries
+            .iter()
+            .try_for_each(|(_, item)| check_bare_numbers(item, words)),
+        AuthoredValue::Null
+        | AuthoredValue::Boolean(_)
+        | AuthoredValue::String(_)
+        | AuthoredValue::InlineSqlHook(_) => Ok(()),
+    }
+}
+
 /// The text of a value that projects to `str`, or `None` for any other type.
 pub(crate) fn python_str<'value>(
     value: &'value AuthoredValue,

@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
+from sqlbuild.compiler.compile._helpers.render.templating import (
+    expand_effective_vars,
+    expand_template_data,
+)
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ExpandTemplateDataErrorTestCase,
     ExpandTemplateDataTestCase,
+    UndecodableSecretTestCase,
 )
+
+_SECRET: str = "warehouse-pass-7f3a"
 
 
 @pytest.mark.parametrize(
@@ -216,3 +223,68 @@ def test_given_invalid_template_expressions_when_expanding_then_raises_clear_err
             preserve_context_tokens=test_case.preserve_context_tokens,
             preserve_unknown_context=test_case.preserve_unknown_context,
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UndecodableSecretTestCase(
+            description="undecodable byte after the secret",
+            value=f"{_SECRET}\udcff",
+            secret=_SECRET,
+            expected_message=(
+                "Environment variable 'SQB_ORDERS_PASSWORD' is not valid UTF-8 text: byte 19 "
+                "starts an invalid UTF-8 sequence"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_undecodable_env_value_when_reading_then_error_never_shows_the_value(
+    test_case: UndecodableSecretTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SQB_ORDERS_PASSWORD", str(test_case.value))
+
+    with pytest.raises(CompileInputError) as raised:
+        _ = UnicodeEnvironment()["SQB_ORDERS_PASSWORD"]
+
+    assert (
+        raised.value.message,
+        test_case.secret in f"{raised.value.message} {raised.value.help}",
+    ) == (test_case.expected_message, False)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UndecodableSecretTestCase(
+            description="top-level text",
+            value=f"{_SECRET}\ud800",
+            secret=_SECRET,
+            expected_message=(
+                "Variable 'orders_password' holds a lone surrogate in its value at UTF-8 byte "
+                "19, which is not valid Unicode text"
+            ),
+        ),
+        UndecodableSecretTestCase(
+            description="nested list item",
+            value={"credentials": [_SECRET, f"{_SECRET}\udcff"]},
+            secret=_SECRET,
+            expected_message=(
+                "Variable 'orders_password' holds a lone surrogate in its value['credentials'][1] "
+                "at UTF-8 byte 19, which is not valid Unicode text"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_lone_surrogate_var_when_expanding_then_error_never_shows_the_value(
+    test_case: UndecodableSecretTestCase,
+) -> None:
+    with pytest.raises(CompileInputError) as raised:
+        expand_effective_vars({"orders_password": test_case.value})
+
+    assert (
+        raised.value.message,
+        test_case.secret in f"{raised.value.message} {raised.value.help}",
+    ) == (test_case.expected_message, False)

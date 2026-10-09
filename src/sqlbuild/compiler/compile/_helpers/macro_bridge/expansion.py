@@ -87,7 +87,10 @@ def expand_bridged_sql_macros(
         )
         for site, call_class in zip(sites, call_classes, strict=True)
     ]
-    report_native_answer(stage=NativeStage.MACRO_CALLS, kind="bridged_calls", units=len(sites))
+    mocked: int = sum(bool(state.macro_overrides.keys() & set(site.tree_names)) for site in sites)
+    report_native_answer(
+        stage=NativeStage.MACRO_CALLS, kind="bridged_calls", units=len(sites) - mocked
+    )
     return bridge.splice(sql=sql, sites=sites, outputs=outputs)
 
 
@@ -167,6 +170,8 @@ def _mocked_call_output(
     *, sql: str, consumer_path: Path, state: MacroExpansionState, site: MacroCallSite
 ) -> str:
     """Run a call whose tree a test mocks; its output differs from the shared memo's, so skip it."""
+
+    report_native_fallback(site=NativeFallbackSite.MACRO_CALL_MOCKED, kind="test_mock")
 
     macro_result: object
     next_index: int

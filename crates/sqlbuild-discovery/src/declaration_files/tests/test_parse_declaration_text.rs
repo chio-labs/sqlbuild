@@ -53,6 +53,15 @@ fn given_declaration_files_when_parsing_then_values_and_failures_match_python() 
             ],
         },
         DeclarationTextTestCase {
+            description: "a constant bare number in non-ASCII digits is rejected, nested too",
+            kind: CollectionKind::Constants,
+            contents: "CONSTANT (name limits, value [1, \u{663}]);",
+            expected_fragments: &[
+                "/project/declarations/orders.sql has the bare number '\u{663}', written with non-ASCII digits",
+                "Quote it to keep it as text",
+            ],
+        },
+        DeclarationTextTestCase {
             description: "a non-ASCII bare word that is not a number is text",
             kind: CollectionKind::Enums,
             contents: "ENUM (name status, members (A münchen, B \u{2167}));",

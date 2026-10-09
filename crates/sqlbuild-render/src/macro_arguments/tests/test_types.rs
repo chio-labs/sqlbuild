@@ -12,8 +12,12 @@ pub(crate) struct ParseMacroArgumentsTestCase {
 pub(crate) struct TestHost;
 
 impl ArgumentHost for TestHost {
-    fn character_named(&self, name: &str) -> Option<char> {
-        (name == "LATIN SMALL LETTER E WITH ACUTE").then_some('é')
+    fn character_named(&self, name: &str) -> Option<String> {
+        match name {
+            "LATIN SMALL LETTER E WITH ACUTE" => Some("é".to_owned()),
+            "LATIN CAPITAL LETTER A WITH MACRON AND GRAVE" => Some("\u{100}\u{300}".to_owned()),
+            _ => None,
+        }
     }
 
     fn identifier(&self, text: &str) -> Option<String> {

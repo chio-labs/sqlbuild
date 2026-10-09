@@ -35,7 +35,7 @@ fn located(characters: &[char], failure: Failure) -> ArgumentError {
     }
     ArgumentError {
         detail: failure.detail,
-        help: failure.help.to_owned(),
+        help: failure.help,
         line,
         column: failure.position - line_start + 1,
     }

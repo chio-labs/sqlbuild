@@ -520,8 +520,8 @@ def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still
             compile_args=("--vars", '{"regions": ["\\udcff"]}'),
             expected_returncodes=(1, 1, 1),
             expected_report_fragment=(
-                "Variable 'regions' holds the lone surrogate '\\udcff', which is not valid "
-                "Unicode text"
+                "Variable 'regions' holds a lone surrogate in its value[0] at UTF-8 byte 0, "
+                "which is not valid Unicode text"
             ),
         ),
     ],

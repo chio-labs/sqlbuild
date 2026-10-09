@@ -32,10 +32,10 @@ impl UnicodeHost<'_> {
 }
 
 impl ArgumentHost for UnicodeHost<'_> {
-    fn character_named(&self, name: &str) -> Option<char> {
+    fn character_named(&self, name: &str) -> Option<String> {
         let py: Python<'_> = self.unicodedata.py();
         match self.unicodedata.call_method1("lookup", (name,)) {
-            Ok(found) => self.held(found.extract::<char>()),
+            Ok(found) => self.held(found.extract::<String>()),
             Err(error) if error.is_instance_of::<PyKeyError>(py) => None,
             Err(error) => self.held(Err(error)),
         }
