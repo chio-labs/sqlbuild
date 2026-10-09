@@ -92,8 +92,8 @@ pub struct ProjectRequest {
     pub target: Option<TargetNamespace>,
     pub defaults: SeedDefaults,
     pub variables: Vec<(String, Variable)>,
-    /// The process environment `os.environ` holds.
-    pub environment: Vec<(String, String)>,
+    /// Python's `os.environ.get` of every name an `ENV:` template in the request names.
+    pub environment: Vec<(String, Option<String>)>,
     pub models: Vec<ModelFacts>,
     pub sources: Vec<SourceFacts>,
     pub seeds: Vec<SeedFacts>,

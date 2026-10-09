@@ -35,3 +35,13 @@ class DeferredAssemblyTestCase:
     seed_schema: str
     expected_schema: str
     expected_kind: str
+
+
+@dataclass(frozen=True)
+class WindowsEnvironmentTestCase:
+    """A seed schema reading ENV through a mapping that upper-cases keys, as Windows does."""
+
+    description: str
+    environment: dict[str, str]
+    seed_schema: str
+    expected_schema: str

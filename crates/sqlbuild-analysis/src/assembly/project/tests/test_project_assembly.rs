@@ -181,32 +181,43 @@ fn given_sources_when_resolving_managed_targets_then_matches_python() {
 fn given_model_sql_when_validating_syntax_then_matches_python_or_defers() {
     let test_cases = [
         SyntaxTestCase {
+            dialect: "duckdb",
             description: "markers and placeholder defaults parse",
             sql: "SELECT @@@x AS a FROM __ref(\"orders\")",
             placeholders: &[("x", "1")],
             expected_valid: Some(true),
         },
         SyntaxTestCase {
+            dialect: "duckdb",
             description: "a syntax error",
             sql: "SELECT FROM WHERE (",
             placeholders: &[],
             expected_valid: Some(false),
         },
         SyntaxTestCase {
+            dialect: "duckdb",
             description: "a placeholder run retried one character later, as re.sub does",
             sql: "SELECT @@@@@abc AS a",
             placeholders: &[("abc", "version")],
             expected_valid: Some(true),
         },
         SyntaxTestCase {
+            dialect: "duckdb",
             description: "a placeholder followed by text Python's \\w may extend",
             sql: "SELECT @@@x\u{e9} AS a",
             placeholders: &[("x", "1")],
             expected_valid: None,
         },
+        SyntaxTestCase {
+            dialect: "trino",
+            description: "a dialect this parser build does not carry",
+            sql: "SELECT 1 AS a FROM t QUALIFY a = 1",
+            placeholders: &[],
+            expected_valid: None,
+        },
     ];
     for test_case in test_cases {
-        let checked = valid(test_case.sql, test_case.placeholders);
+        let checked = valid(test_case.sql, test_case.placeholders, test_case.dialect);
 
         assert_eq!(
             checked, test_case.expected_valid,
@@ -228,7 +239,10 @@ fn given_environment_templates_when_resolving_seeds_then_matches_python_values_a
                     "${coalesce(ENV:SQB_UNSET_SCHEMA, 'main')}_${ENV:SQB_SET_SCHEMA}_${CTX:model.name}",
                 ),
             ),
-            environment: &[("SQB_SET_SCHEMA", "landing")],
+            environment: &[
+                ("SQB_UNSET_SCHEMA", None),
+                ("SQB_SET_SCHEMA", Some("landing")),
+            ],
             expected_schema: Some("main_landing_countries"),
             expected_reads: vec![
                 InputRead::Environment("SQB_UNSET_SCHEMA".to_owned()),
@@ -239,16 +253,27 @@ fn given_environment_templates_when_resolving_seeds_then_matches_python_values_a
         EnvironmentTestCase {
             description: "an unset variable Python raises for",
             seed: ("countries", None, Some("${ENV:SQB_UNSET_SCHEMA}")),
-            environment: &[],
+            environment: &[("SQB_UNSET_SCHEMA", None)],
             expected_schema: None,
             expected_reads: vec![InputRead::Environment("SQB_UNSET_SCHEMA".to_owned())],
         },
+        EnvironmentTestCase {
+            description: "a name Python did not resolve stays with Python",
+            seed: (
+                "countries",
+                None,
+                Some("${coalesce(ENV:app_schema, 'main')}"),
+            ),
+            environment: &[("APP_SCHEMA", Some("landing"))],
+            expected_schema: None,
+            expected_reads: vec![InputRead::Environment("app_schema".to_owned())],
+        },
     ];
     for test_case in test_cases {
-        let environment: Vec<(String, String)> = test_case
+        let environment: Vec<(String, Option<String>)> = test_case
             .environment
             .iter()
-            .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+            .map(|(name, value)| ((*name).to_owned(), value.map(str::to_owned)))
             .collect();
 
         let (resolved, reads) = seed_reads(test_case.seed, &environment);

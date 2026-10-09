@@ -8,10 +8,11 @@ use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::lineage::_helpers::parsed_lineage::{
-    ParsedModel, lineage_dialect, parsed_model_lineage, proxy_parse_options,
+    ParsedModel, parsed_model_lineage, proxy_parse_options,
 };
 use crate::lineage::_helpers::references::physical_resources;
 use crate::lineage::_helpers::stars::{schema_mapping, star_lineage};
+use crate::lineage::main::parser_dialect::parser_dialect;
 use crate::lineage::models::{
     FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageDeferral,
 };
@@ -29,7 +30,7 @@ pub fn build_fast_lineage(
 /// A parser panic defers only its own model.
 fn model_outcomes(request: &FastLineageRequest) -> Vec<FastLineageOutcome> {
     let schema = schema_mapping(&request.schema);
-    let dialect = lineage_dialect(request.dialect.as_deref());
+    let dialect = parser_dialect(request.dialect.as_deref());
     let options: Result<ParseOptions, serde_json::Error> = proxy_parse_options();
     request
         .models

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 from collections import Counter
 from collections.abc import Callable
@@ -129,6 +130,15 @@ def generated_assembly_files(*, rng: random.Random, model_count: int) -> dict[st
         ),
         **models,
     }
+
+
+def windows_environ(environment: dict[str, str]) -> os._Environ[str]:
+    """Return this process's environment plus `environment` with Windows' upper-cased keys."""
+
+    data: dict[str, str] = {
+        name.upper(): value for name, value in {**os.environ, **environment}.items()
+    }
+    return os._Environ(data, str.upper, str, str, str)
 
 
 def seed_yml(schema: str) -> str:

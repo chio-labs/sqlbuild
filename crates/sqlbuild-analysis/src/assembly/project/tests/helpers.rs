@@ -59,7 +59,7 @@ pub(crate) fn seed(
 /// The seed's namespace with `environment` set, and the reads its templates made.
 pub(crate) fn seed_reads(
     seed: SeedSpec,
-    environment: &[(String, String)],
+    environment: &[(String, Option<String>)],
 ) -> (Option<Namespace>, Vec<InputRead>) {
     let (name, database, schema) = seed;
     let variables: Vec<(String, Variable)> = variables();
@@ -100,7 +100,7 @@ pub(crate) fn source(
     .ok()
 }
 
-pub(crate) fn valid(sql: &str, placeholders: &[(&str, &str)]) -> Option<bool> {
+pub(crate) fn valid(sql: &str, placeholders: &[(&str, &str)], dialect: &str) -> Option<bool> {
     syntax_valid(
         &SyntaxCheck {
             sql: sql.to_owned(),
@@ -109,7 +109,7 @@ pub(crate) fn valid(sql: &str, placeholders: &[(&str, &str)]) -> Option<bool> {
                 .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
                 .collect(),
         },
-        "duckdb",
+        dialect,
     )
     .ok()
 }

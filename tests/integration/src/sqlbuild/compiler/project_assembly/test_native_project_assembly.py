@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 from collections import Counter
 from dataclasses import replace
@@ -18,6 +19,7 @@ from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import
     AssemblyDeferralTestCase,
     DeferredAssemblyTestCase,
     GeneratedAssemblyParityTestCase,
+    WindowsEnvironmentTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
     assemble_with,
@@ -28,6 +30,7 @@ from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
     python_resource_calls,
     recorded_assembly,
     seed_yml,
+    windows_environ,
 )
 
 _PROJECT_TOML: str = (
@@ -219,3 +222,42 @@ def test_given_a_variable_only_python_renders_when_assembling_natively_then_pyth
     assert assembly_deferrals(record_dir) == Counter(
         {f"project_assembly:{test_case.expected_kind}": 1}
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        WindowsEnvironmentTestCase(
+            description="a lower-case ENV name Windows resolves to an upper-case variable",
+            environment={"APP_SCHEMA": "landing"},
+            seed_schema="${coalesce(ENV:app_schema, 'main')}",
+            expected_schema="landing",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_windows_environment_when_assembling_natively_then_env_lookups_match_python(
+    test_case: WindowsEnvironmentTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setattr(os, "environ", windows_environ(test_case.environment))
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    inputs: CompileProjectInputs = project_inputs(
+        project_dir=tmp_path,
+        files={
+            "sqlbuild_project.toml": _PROJECT_TOML,
+            "seeds/lookups.yml": seed_yml(test_case.seed_schema),
+            **_SEED_FILES,
+        },
+    )
+
+    python: CompiledProject = assemble_with(
+        inputs=inputs, engine=CompilerEngine.PYTHON, monkeypatch=monkeypatch
+    )
+    native: CompiledProject = assemble_with(
+        inputs=inputs, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
+    )
+
+    assert python.seeds[0].destination.schema == test_case.expected_schema
+    assert assembly_view(native) == assembly_view(python)
+    assert assembly_deferrals(record_dir) == Counter()

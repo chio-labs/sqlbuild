@@ -47,7 +47,7 @@ type RequestRow = (
     Option<TargetRow>,
     DefaultsRow,
     Vec<VariableRow>,
-    Vec<(String, String)>,
+    Vec<(String, Option<String>)>,
     Vec<ModelRow>,
     Vec<SourceRow>,
     Vec<SeedRow>,

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
+from collections.abc import Iterable
 
 from sqlbuild.compiler.compile.models import CompileProjectInputs, CompileSqlReference
 from sqlbuild.compiler.project_assembly.constants import (
     BOOLEAN_VARIABLE,
+    ENVIRONMENT_NAME_PATTERN,
     FALSE_TEXT,
     NATIVE_INT_MAX,
     NATIVE_INT_MIN,
@@ -35,12 +38,24 @@ def project_request(
 
     target: TargetConfig | None = inputs.effective_target
     defaults: DefaultsConfig = inputs.project_config.defaults
+    target_values: tuple[str | None, ...] = (
+        (target.database, target.schema, target.loader_schema) if target is not None else ()
+    )
+    default_values: tuple[str | None, ...] = (
+        defaults.database,
+        defaults.schema,
+        defaults.seed_database,
+        defaults.seed_schema,
+    )
+    seed_values: list[str | None] = []
+    for seed_input in inputs.seed_inputs:
+        seed_values.extend((seed_input.schema_entry.database, seed_input.schema_entry.schema))
     return (
         dialect or "generic",
         (target.database, target.schema, target.loader_schema) if target is not None else None,
         (defaults.database, defaults.schema, defaults.seed_database, defaults.seed_schema),
         [_variable_row(name=name, value=value) for name, value in inputs.effective_vars.items()],
-        list(os.environ.items()),
+        _environment_rows((*target_values, *default_values, *seed_values)),
         [
             (_reference_rows(model_input.references), _syntax_check_rows(checks))
             for model_input, checks in zip(inputs.model_inputs, syntax_checks, strict=True)
@@ -75,6 +90,16 @@ def project_request(
             for audit_input in inputs.audit_inputs
         ],
     )
+
+
+def _environment_rows(values: Iterable[str | None]) -> list[tuple[str, str | None]]:
+    """Python's own `os.environ` lookup of every name an `ENV:` template may read."""
+
+    names: dict[str, None] = {}
+    for value in values:
+        if value is not None:
+            names.update(dict.fromkeys(re.findall(ENVIRONMENT_NAME_PATTERN, value)))
+    return [(name, os.environ.get(name)) for name in names]
 
 
 def _variable_row(*, name: str, value: object) -> VariableRow:

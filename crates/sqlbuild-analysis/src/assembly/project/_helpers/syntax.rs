@@ -2,15 +2,18 @@
 
 use std::collections::HashMap;
 
-use polyglot_sql::{ComplexityGuardOptions, Dialect, ValidationOptions, validate_with_dialect};
+use polyglot_sql::{
+    ComplexityGuardOptions, Dialect, DialectType, ValidationOptions, validate_with_dialect,
+};
 use serde_json::json;
 
 use crate::assembly::project::constants::{
     DIALECT_DEFERRAL, MAX_FUNCTION_CALL_DEPTH, NORMALIZATION_DEFERRAL, PLACEHOLDER_DEFERRAL,
-    PLACEHOLDER_PREFIX,
+    PLACEHOLDER_PREFIX, UNSUPPORTED_DIALECT_DEFERRAL,
 };
 use crate::assembly::project::models::SyntaxCheck;
 use crate::assembly::project::types::Fact;
+use crate::lineage::main::parser_dialect::parser_dialect;
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
 use crate::semantic_validation::models::NormalizationInput;
 
@@ -28,8 +31,8 @@ pub(crate) fn syntax_valid(check: &SyntaxCheck, dialect: &str) -> Fact<bool> {
     } else {
         placeholder_defaults(&cleaned, &check.placeholders)?
     };
-    let dialect: Dialect =
-        Dialect::get_by_name(dialect).ok_or_else(|| DIALECT_DEFERRAL.to_owned())?;
+    let dialect: DialectType =
+        parser_dialect(Some(dialect)).ok_or_else(|| UNSUPPORTED_DIALECT_DEFERRAL.to_owned())?;
     let complexity_guard: ComplexityGuardOptions =
         serde_json::from_value(json!({"maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH}))
             .map_err(|_| DIALECT_DEFERRAL.to_owned())?;
@@ -38,7 +41,7 @@ pub(crate) fn syntax_valid(check: &SyntaxCheck, dialect: &str) -> Fact<bool> {
         strict_syntax: false,
         semantic: false,
     };
-    Ok(validate_with_dialect(&cleaned, &dialect, &options).valid)
+    Ok(validate_with_dialect(&cleaned, &Dialect::get(dialect), &options).valid)
 }
 
 /// `substitute_placeholder_defaults`: `@@@name` becomes its default; unknown names stay.

@@ -10,3 +10,4 @@ FALSE_TEXT: str = "0"
 NATIVE_INT_MIN: int = -(2**63)
 NATIVE_INT_MAX: int = 2**63 - 1
 ENVIRONMENT_READ: str = "env"
+ENVIRONMENT_NAME_PATTERN: str = r"ENV:([^\s(),'\"}]+)"

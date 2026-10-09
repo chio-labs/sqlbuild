@@ -16,7 +16,7 @@ type ProjectRequestRow = tuple[
     TargetRow | None,
     DefaultsRow,
     list[VariableRow],
-    list[tuple[str, str]],
+    list[tuple[str, str | None]],
     list[ModelRow],
     list[SourceRow],
     list[SeedRow],

@@ -20,7 +20,8 @@ pub(crate) type Context<'a> = [(&'static str, Option<String>)];
 /// The variables and environment target templates read, and every lookup they make in order.
 pub(crate) struct TemplateInputs<'a> {
     pub(crate) variables: &'a [(String, Variable)],
-    pub(crate) environment: &'a [(String, String)],
+    /// Python's `os.environ.get` of each name the templates may read.
+    pub(crate) environment: &'a [(String, Option<String>)],
     pub(crate) reads: RefCell<Vec<InputRead>>,
 }
 
@@ -51,12 +52,15 @@ impl TemplateHost for ScalarHost<'_> {
             .reads
             .borrow_mut()
             .push(InputRead::Environment(name.to_owned()));
-        Ok(self
+        match self
             .inputs
             .environment
             .iter()
             .find(|(variable, _)| variable == name)
-            .map(|(_, value)| Scalar::Text(value.clone())))
+        {
+            None => Err(TemplateFailure::Unsupported),
+            Some((_, value)) => Ok(value.clone().map(Scalar::Text)),
+        }
     }
 
     fn context(&self, name: &str) -> Result<ContextValue<Self::Value>, TemplateFailure> {

@@ -50,6 +50,7 @@ pub(crate) struct SourceTestCase {
 
 pub(crate) struct SyntaxTestCase {
     pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
     pub(crate) sql: &'static str,
     pub(crate) placeholders: &'static [(&'static str, &'static str)],
     /// None where native defers to Python.
@@ -66,7 +67,8 @@ pub(crate) fn keys(values: &[(&str, &str)]) -> Vec<ObjectKey> {
 pub(crate) struct EnvironmentTestCase {
     pub(crate) description: &'static str,
     pub(crate) seed: SeedSpec,
-    pub(crate) environment: &'static [(&'static str, &'static str)],
+    /// Python's `os.environ.get` of each name.
+    pub(crate) environment: &'static [(&'static str, Option<&'static str>)],
     /// None where Python raises.
     pub(crate) expected_schema: Option<&'static str>,
     pub(crate) expected_reads: Vec<InputRead>,

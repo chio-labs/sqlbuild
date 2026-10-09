@@ -33,4 +33,5 @@ pub(crate) const SYNTAX_DEFERRAL: &str = "syntax_error";
 pub(crate) const PLACEHOLDER_DEFERRAL: &str = "placeholder_word";
 pub(crate) const NORMALIZATION_DEFERRAL: &str = "normalization";
 pub(crate) const DIALECT_DEFERRAL: &str = "dialect";
+pub(crate) const UNSUPPORTED_DIALECT_DEFERRAL: &str = "unsupported_dialect";
 pub(crate) const PANIC_DEFERRAL: &str = "panic";
