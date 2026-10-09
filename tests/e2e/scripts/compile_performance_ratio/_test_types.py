@@ -32,3 +32,5 @@ class EnginePhaseRatioTestCase:
     phase_noise_floor_ms: str
     expected_return_code: int
     expected_fragments: tuple[str, ...]
+    gate_phase: str = "contracts_cpu_ms"
+    compile_args: tuple[str, ...] = ()
