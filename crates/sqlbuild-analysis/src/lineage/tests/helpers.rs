@@ -21,9 +21,10 @@ pub(crate) fn outcome_lines(
         schema: schema(),
         models: vec![model],
     };
-    let outcomes: Vec<FastLineageOutcome> =
-        build_fast_lineage(&request, Some(&catalog())).expect("the analysis pool builds");
-    outcomes.into_iter().map(described_outcome).collect()
+    match build_fast_lineage(&request, Some(&catalog())) {
+        Ok(outcomes) => outcomes.into_iter().map(described_outcome).collect(),
+        Err(error) => vec![("error", Vec::new(), false, Some(error))],
+    }
 }
 
 /// A `branches`-deep `UNION ALL` chain built from a caller thread with a `stack_bytes` stack.

@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::{AnalyzeQueryOptions, analyze_query};
 use serde_json::{Map, Value, json};
-use sqlbuild_core::constants::PYTHON_VALUE_ERROR;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::cte_facts::{
@@ -15,10 +14,10 @@ use crate::assembly::analysis_session::_helpers::dict_walk::{truthy, upper};
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::constants::{
     CAST_TRANSFORM, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_UNKNOWN, FILTER_CONTEXT,
-    INVALID_ANALYZE_OPTIONS, MAX_FUNCTION_CALL_DEPTH, NON_NULL_NULLABILITY, NULL_KEYWORD,
-    RESOLVED_SOURCE_CONFIDENCE, SELECT_SHAPE, SET_OPERATION_SHAPE, TRANSFORM_AGGREGATION,
-    TRANSFORM_CAST, TRANSFORM_CONSTANT, TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR,
-    UNKNOWN_NULLABILITY, UNKNOWN_TYPE, WILDCARD,
+    MAX_FUNCTION_CALL_DEPTH, NON_NULL_NULLABILITY, NULL_KEYWORD, RESOLVED_SOURCE_CONFIDENCE,
+    SELECT_SHAPE, SET_OPERATION_SHAPE, TRANSFORM_AGGREGATION, TRANSFORM_CAST, TRANSFORM_CONSTANT,
+    TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
+    WILDCARD,
 };
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow, ModelRequest};
 use crate::assembly::analysis_session::types::{NullabilityCallback, Pairs, Shapes};
@@ -84,7 +83,7 @@ fn analysed(input: &EnrichmentInput<'_>) -> Result<Enrichment, String> {
         json!({"maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH}),
     );
     let options: AnalyzeQueryOptions = serde_json::from_value(Value::Object(options))
-        .map_err(|error| format!("{PYTHON_VALUE_ERROR}{INVALID_ANALYZE_OPTIONS}{error}"))?;
+        .map_err(|error| format!("query analysis options: {error}"))?;
     let analysis = match analyze_query(&cleaned, options) {
         Ok(analysis) => analysis,
         Err(_) => return legacy(input, &cleaned),

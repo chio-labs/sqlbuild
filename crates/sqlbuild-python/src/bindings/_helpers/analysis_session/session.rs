@@ -1,6 +1,5 @@
 //! The native model analysis session and expression-source shapes for the preview engine.
 
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyErr, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
@@ -24,7 +23,7 @@ use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::semantic_validation::types::DiagnosticRow;
 
 use sqlbuild_cache::store::models::NativeStore;
-use sqlbuild_core::constants::{PANIC_MESSAGE, PYTHON_VALUE_ERROR};
+use sqlbuild_core::constants::PANIC_MESSAGE;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
 use sqlbuild_core::panics::main::native_failure::native_failure;
@@ -143,12 +142,8 @@ impl NativeModelAnalysisSession {
     }
 }
 
-/// An internal native failure of the session as `NativeCompilerError`, or the `ValueError`
-/// Python's analysis raised for the same input.
+/// An internal native failure of the session as `NativeCompilerError`.
 fn internal_error(reason: &str) -> PyErr {
-    if let Some(message) = reason.strip_prefix(PYTHON_VALUE_ERROR) {
-        return PyValueError::new_err(message.to_owned());
-    }
     if is_compiler_panic(reason) && reason != PANIC_MESSAGE {
         return compiler_error(reason);
     }

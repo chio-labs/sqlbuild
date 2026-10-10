@@ -12,8 +12,8 @@ use crate::lineage::_helpers::references::{PhysicalResource, normalized_sql, phy
 use crate::lineage::_helpers::stars::star_lineage;
 use crate::lineage::constants::{KIND_SELECT, KIND_UNION, MAX_FUNCTION_CALL_DEPTH};
 use crate::lineage::models::{
-    FastLineageOutcome, LineageColumn, LineageConfidence, LineageDeferral, LineageResourceType,
-    LineageSource, LineageTransformKind,
+    FastLineageOutcome, LineageColumn, LineageConfidence, LineageResourceType, LineageSource,
+    LineageTransformKind,
 };
 
 /// The parse options SQLBuild's Polyglot proxy gives `parse_one`, decoded as the wheel does.
@@ -35,25 +35,31 @@ pub(crate) struct ParsedModel<'a> {
     pub(crate) options: &'a Result<ParseOptions, serde_json::Error>,
 }
 
-pub(crate) fn parsed_model_lineage(model: &ParsedModel<'_>) -> FastLineageOutcome {
+/// The model's lineage outcome.
+///
+/// # Errors
+///
+/// An internal native failure: a tree the lineage walk cannot read.
+pub(crate) fn parsed_model_lineage(model: &ParsedModel<'_>) -> Result<FastLineageOutcome, String> {
     let dialect: DialectType = match model.dialect {
         Ok(dialect) => dialect,
-        Err(name) => return FastLineageOutcome::UnknownDialect(name.to_owned()),
+        Err(name) => return Ok(FastLineageOutcome::UnknownDialect(name.to_owned())),
     };
-    let Ok(options) = model.options else {
-        return FastLineageOutcome::Deferred(LineageDeferral::NativeFailure);
-    };
+    let options: &ParseOptions = model
+        .options
+        .as_ref()
+        .map_err(|_| "the parse options do not build".to_owned())?;
     let physical = physical_resources(model.query_sql);
     let sql = normalized_sql(model.query_sql);
     let mut statements = match Dialect::get(dialect).parse_with_options(&sql, options) {
         Ok(statements) => statements,
-        Err(error) => return FastLineageOutcome::Unparsed(error.to_string()),
+        Err(error) => return Ok(FastLineageOutcome::Unparsed(error.to_string())),
     };
     if statements.len() != 1 {
-        return FastLineageOutcome::Unparsed(format!(
+        return Ok(FastLineageOutcome::Unparsed(format!(
             "Expected 1 statement, found {}",
             statements.len()
-        ));
+        )));
     }
     let parsed = statements.remove(0);
     let built = match parsed.variant_name() {
@@ -62,9 +68,9 @@ pub(crate) fn parsed_model_lineage(model: &ParsedModel<'_>) -> FastLineageOutcom
         _ => Ok(None),
     };
     match built {
-        Ok(Some((columns, has_star))) => FastLineageOutcome::Built { columns, has_star },
-        Ok(None) => FastLineageOutcome::Omitted,
-        Err(UnreadableExpression) => FastLineageOutcome::Deferred(LineageDeferral::NativeFailure),
+        Ok(Some((columns, has_star))) => Ok(FastLineageOutcome::Built { columns, has_star }),
+        Ok(None) => Ok(FastLineageOutcome::Omitted),
+        Err(UnreadableExpression) => Err("a parsed tree the lineage walk cannot read".to_owned()),
     }
 }
 

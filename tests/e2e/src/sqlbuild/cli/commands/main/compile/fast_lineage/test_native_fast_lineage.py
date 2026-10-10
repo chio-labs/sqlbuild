@@ -135,7 +135,6 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
         test_case.expected_minimum_traced_edges
     )
     assert runs["native-preview"] == native
-    assert native.fallback_parses == 0
 
 
 if __name__ == "__main__":

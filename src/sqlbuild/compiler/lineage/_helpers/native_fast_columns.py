@@ -14,14 +14,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.lineage._helpers.columns import _build_schema_mapping
-from sqlbuild.compiler.lineage._helpers.fast_columns import (
-    _build_polyglot_fast_model_column_lineage,
-)
-from sqlbuild.compiler.lineage._helpers.native_deferrals import record_lineage_deferral
 from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_BUILT,
-    NATIVE_LINEAGE_DEFERRED,
     NATIVE_LINEAGE_UNKNOWN_DIALECT,
     NATIVE_LINEAGE_UNPARSED,
 )
@@ -71,7 +65,6 @@ def build_native_fast_project_column_lineage(
         else []
     )
     outcome_index: int = 0
-    python_schema: dict[str, dict[str, str]] | None = None
     model_results: dict[str, ModelColumnLineage] = {}
     compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]] = {}
     model_order: list[str] = []
@@ -103,13 +96,6 @@ def build_native_fast_project_column_lineage(
             )
         elif status == NATIVE_LINEAGE_UNKNOWN_DIALECT:
             raise ValueError(f"Unknown dialect: {detail}")
-        elif status == NATIVE_LINEAGE_DEFERRED:
-            record_lineage_deferral(kind=str(detail))
-            if python_schema is None:
-                python_schema = _build_schema_mapping(project)
-            result = _build_polyglot_fast_model_column_lineage(
-                model=model, schema=python_schema, dialect=dialect
-            )
         if result is None:
             continue
         model_results[model.name] = result
