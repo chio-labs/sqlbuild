@@ -193,10 +193,22 @@ def test_given_type_past_the_wheel_depth_when_normalizing_natively_then_it_defer
             ),
             expected_answered=3,
         ),
+        PublicNativeTypeTestCase(
+            description="the public entry point asks native first under the default engine",
+            engine="native",
+            dialect="snowflake",
+            type_strings=("NUMBER(38, 0)", "VARCHAR", "TIMESTAMP_NTZ(9)"),
+            expected_native_calls=(
+                ("NUMBER(38, 0)", "snowflake"),
+                ("VARCHAR", "snowflake"),
+                ("TIMESTAMP_NTZ(9)", "snowflake"),
+            ),
+            expected_answered=3,
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_preview_engine_when_normalizing_publicly_then_native_answers(
+def test_given_native_engine_when_normalizing_publicly_then_native_answers(
     test_case: PublicNativeTypeTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[str, str]] = []

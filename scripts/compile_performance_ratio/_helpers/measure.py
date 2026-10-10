@@ -10,16 +10,21 @@ import statistics
 import subprocess
 import sys
 import time
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
 from scripts.compile_performance_ratio._helpers.edit import apply_one_model_edit
 from scripts.compile_performance_ratio.constants import (
+    ANALYSIS_CACHE_BYPASSES,
     ANALYSIS_CACHE_MISSES,
     BASE_GENERATOR_ENTRY,
     BASE_LABEL,
     COLD_MODE,
     COMPILE_ENTRY,
+    COMPILE_TIMINGS_KEY,
+    COMPILED_DIRECTORY,
     COMPILER_ENGINE_KEY,
     DENSE_KIND,
     EDIT_MODE,
@@ -36,6 +41,7 @@ from scripts.compile_performance_ratio.constants import (
     MODE_TITLES,
     PYTHONPATH_KEY,
     REPORTED_PHASES,
+    UNCACHED_MODE,
     WARM_MODE,
 )
 from scripts.compile_performance_ratio.exceptions import CompileComparisonError
@@ -166,8 +172,26 @@ def compare_builds(
                     engine=engine,
                     compile_args=compile_args,
                 )
-                _check_cache_use(run=run, mode=mode)
+                check_cache_use(run=run, mode=mode)
                 results[label].append(run)
+        if mode != COLD_MODE:
+            _, head_python, head_dir, head_build_engine = builds[1]
+            check_matches_uncached(
+                incremental=results[HEAD_LABEL][-1],
+                compiled=compiled_tree(project_dir=head_dir),
+                uncached=partial(
+                    _compile_once,
+                    label=HEAD_LABEL,
+                    python=head_python,
+                    project_dir=head_dir,
+                    mode=UNCACHED_MODE,
+                    engine=head_build_engine,
+                    compile_args=compile_args,
+                ),
+                project_dir=head_dir,
+                mode=mode,
+            )
+            cache_primed = False
         comparisons.append(
             _comparison(
                 kind=kind,
@@ -196,10 +220,18 @@ def _comparison(
     )
 
 
-def _check_cache_use(*, run: CompileRun, mode: str) -> None:
+def check_cache_use(*, run: CompileRun, mode: str) -> None:
+    """Fail a bypassing run, a warm run with misses, or an edit run that analysed nothing."""
+
     misses: int | None = run.analysis_cache_misses
     if misses is None or mode == COLD_MODE:
         return
+    bypasses: int = run.analysis_cache_bypasses or 0
+    if bypasses != 0:
+        raise CompileComparisonError(
+            f"{run.label} {mode} compile bypassed the analysis cache for {bypasses} models, so "
+            "it did not measure a cached compile"
+        )
     if mode == WARM_MODE and misses != 0:
         raise CompileComparisonError(
             f"{run.label} warm compile missed the analysis cache for {misses} models, so it "
@@ -209,6 +241,42 @@ def _check_cache_use(*, run: CompileRun, mode: str) -> None:
         raise CompileComparisonError(
             f"{run.label} one-model edit compile reported no analysis cache miss, so the edit "
             "did not invalidate the edited model"
+        )
+
+
+def compiled_tree(*, project_dir: Path) -> dict[str, bytes]:
+    """Every compiled artifact's bytes by its path under the compiled directory."""
+
+    root: Path = project_dir / COMPILED_DIRECTORY
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def check_matches_uncached(
+    *,
+    incremental: CompileRun,
+    compiled: dict[str, bytes],
+    uncached: Callable[[], CompileRun],
+    project_dir: Path,
+    mode: str,
+) -> None:
+    """Fail when an uncached compile of the same inputs reports or writes anything else."""
+
+    reference: CompileRun = uncached()
+    reference_compiled: dict[str, bytes] = compiled_tree(project_dir=project_dir)
+    differing: list[str] = sorted(
+        path
+        for path in compiled.keys() | reference_compiled.keys()
+        if compiled.get(path) != reference_compiled.get(path)
+    )
+    if incremental.report != reference.report or differing:
+        raise CompileComparisonError(
+            f"{incremental.label} {mode} compile differs from an uncached compile of the same "
+            f"project: report {'differs' if incremental.report != reference.report else 'equal'}, "
+            f"compiled artifacts differing {differing[:5]}"
         )
 
 
@@ -224,6 +292,7 @@ def _compile_once(
     cache_args: tuple[str, ...] = ()
     if mode == COLD_MODE:
         shutil.rmtree(project_dir / "target", ignore_errors=True)
+    if mode in {COLD_MODE, UNCACHED_MODE}:
         cache_args = ("--no-cache",)
     environment: dict[str, str] = _compile_environment()
     if engine is not None:
@@ -256,7 +325,7 @@ def _compile_once(
             f"{completed.stderr[-ERROR_TAIL_CHARACTERS:]}"
         )
     payload: dict[str, object] = json.loads(completed.stdout)
-    timings: object = payload.get("compile_timings", {})
+    timings: object = payload.pop(COMPILE_TIMINGS_KEY, {})
     numeric: dict[str, int] = {
         str(name): int(value)
         for name, value in (timings.items() if isinstance(timings, dict) else ())
@@ -268,6 +337,8 @@ def _compile_once(
         cpu_seconds=(after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime),
         timings_ms={name: value for name, value in numeric.items() if name in REPORTED_PHASES},
         analysis_cache_misses=numeric.get(ANALYSIS_CACHE_MISSES),
+        analysis_cache_bypasses=numeric.get(ANALYSIS_CACHE_BYPASSES),
+        report=json.dumps(payload, sort_keys=True),
     )
 
 

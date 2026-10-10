@@ -55,6 +55,16 @@
 - Performance fixes must not reduce coverage. Show that diagnostics are unchanged or a strict,
   validated superset on the dense benchmark and a real-project run.
 - Do not raise performance budgets or tolerances to make a regression pass.
+- Temporary user-approved exception (2026-10-10), removable after post-conversion memory
+  optimisation: only the 10,000-model case in `test_fresh_process_compile_cache_performance.py`
+  may use 3 GiB peak RSS instead of 2.5 GiB; release-performance `lineage column trace` may use
+  a 2.0 peak RSS ratio and `dag --json` a 1.5 ratio instead of 1.25. Smaller cache cases,
+  cold-only guards, all other commands, and all speed/correctness limits retain their budgets.
+  The prohibition above applies to every other budget or tolerance increase.
+- Additional temporary user-approved exception (2026-10-10): the dense 3,000-model
+  base/head edit comparison may use 1.20x wall and 1.75x CPU; release-performance
+  `compile (one-model edit)` may use 1.35x peak RSS. Remove after post-conversion
+  optimisation. Cold/warm modes, other workloads and correctness gates remain unchanged.
 
 ## Native SQL (Polyglot) Changes
 

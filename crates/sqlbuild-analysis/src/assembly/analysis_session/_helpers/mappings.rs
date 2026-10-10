@@ -1,8 +1,11 @@
-//! Python dict semantics over ordered pairs.
+//! Python dict semantics over ordered pairs, and the topological analysis waves.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
+
+use sha2::{Digest, Sha256};
 
 use crate::assembly::analysis_session::constants::DIALECT_ALIASES;
+use crate::assembly::analysis_session::models::ModelRequest;
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::Columns;
 use crate::semantic_validation::types::Relations;
@@ -74,13 +77,42 @@ pub(crate) fn with_pair(mut pairs: Pairs, key: &str, value: &str) -> Pairs {
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ShapeTable {
     shapes: HashMap<String, Pairs>,
+    /// Each name at its first insertion, Python's dict iteration order.
+    order: Vec<String>,
+    /// Digest chained over every insertion in order, so equal chains mean equal tables.
+    chain: [u8; 32],
 }
 
 impl ShapeTable {
     pub(crate) fn from_shapes(shapes: &Shapes) -> Self {
-        Self {
-            shapes: shapes.iter().cloned().collect(),
+        let mut table: Self = Self::default();
+        for (name, shape) in shapes {
+            match table.shapes.get_mut(name) {
+                Some(existing) => existing.clone_from(shape),
+                None => table.insert(name, shape.clone()),
+            }
         }
+        table.chain = shapes_chain(&table.ordered());
+        table
+    }
+
+    /// The digest of every shape in order, which changes whenever the table does.
+    pub(crate) fn chain(&self) -> [u8; 32] {
+        self.chain
+    }
+
+    fn insert(&mut self, name: &str, shape: Pairs) {
+        self.shapes.insert(name.to_owned(), shape);
+        self.order.push(name.to_owned());
+    }
+
+    /// The shapes in Python's dict iteration order.
+    pub(crate) fn ordered(&self) -> Vec<(&str, &Pairs)> {
+        self.order
+            .iter()
+            .filter_map(|name| self.shapes.get_key_value(name))
+            .map(|(name, shape)| (name.as_str(), shape))
+            .collect()
     }
 
     pub(crate) fn get(&self, name: &str) -> Option<&Pairs> {
@@ -93,8 +125,32 @@ impl ShapeTable {
 
     /// Python's `setdefault`.
     pub(crate) fn set_default(&mut self, name: &str, shape: Pairs) {
-        self.shapes.entry(name.to_owned()).or_insert(shape);
+        if !self.shapes.contains_key(name) {
+            self.chain = chained(&self.chain, name, &shape);
+            self.insert(name, shape);
+        }
     }
+}
+
+fn shapes_chain(shapes: &[(&str, &Pairs)]) -> [u8; 32] {
+    shapes
+        .iter()
+        .fold([0; 32], |chain, (name, shape)| chained(&chain, name, shape))
+}
+
+/// SHA-256 of `chain`, the pair count, then `name` and `shape` as length-prefixed fields.
+fn chained(chain: &[u8; 32], name: &str, shape: &Pairs) -> [u8; 32] {
+    let mut hasher: Sha256 = Sha256::new();
+    hasher.update(chain);
+    hasher.update((shape.len() as u64).to_le_bytes());
+    let fields = shape
+        .iter()
+        .flat_map(|(column, value)| [column.as_str(), value.as_str()]);
+    for field in std::iter::once(name).chain(fields) {
+        hasher.update((field.len() as u64).to_le_bytes());
+        hasher.update(field.as_bytes());
+    }
+    hasher.finalize().into()
 }
 
 /// Native catalog columns for a `{name: type}` shape.
@@ -123,4 +179,60 @@ pub(crate) fn native_dialect(dialect: &str) -> &str {
         .iter()
         .find(|(alias, _)| *alias == dialect)
         .map_or(dialect, |(_, native)| native)
+}
+
+/// Each model's analysed `ref` producers, or None when two models share a name.
+pub(crate) fn producers(models: &[ModelRequest]) -> Option<Vec<Vec<usize>>> {
+    let mut indexes: HashMap<&str, usize> = HashMap::with_capacity(models.len());
+    for (index, model) in models.iter().enumerate() {
+        if indexes.insert(model.name.as_str(), index).is_some() {
+            return None;
+        }
+    }
+    let mut producers: Vec<Vec<usize>> = Vec::with_capacity(models.len());
+    for model in models {
+        let mut model_producers: BTreeSet<usize> = BTreeSet::new();
+        for reference in model
+            .references
+            .iter()
+            .filter(|reference| reference.model_ref)
+        {
+            if let Some(index) = indexes.get(reference.analysis_name.as_str()) {
+                model_producers.insert(*index);
+            }
+        }
+        producers.push(model_producers.into_iter().collect());
+    }
+    Some(producers)
+}
+
+/// `TopologicalSorter` waves in request order, or None when the graph has a cycle.
+pub(crate) fn waves(producers: &[Vec<usize>]) -> Option<Vec<Vec<usize>>> {
+    let mut pending: Vec<usize> = producers.iter().map(Vec::len).collect();
+    let mut consumers: Vec<Vec<usize>> = vec![Vec::new(); producers.len()];
+    for (model, model_producers) in producers.iter().enumerate() {
+        for producer in model_producers {
+            consumers[*producer].push(model);
+        }
+    }
+    let mut ready: Vec<usize> = (0..producers.len())
+        .filter(|model| pending[*model] == 0)
+        .collect();
+    let mut waves: Vec<Vec<usize>> = Vec::new();
+    let mut scheduled: usize = 0;
+    while !ready.is_empty() {
+        scheduled += ready.len();
+        let mut next: Vec<usize> = Vec::new();
+        for model in &ready {
+            for consumer in &consumers[*model] {
+                pending[*consumer] -= 1;
+                if pending[*consumer] == 0 {
+                    next.push(*consumer);
+                }
+            }
+        }
+        next.sort_unstable();
+        waves.push(std::mem::replace(&mut ready, next));
+    }
+    (scheduled == producers.len()).then_some(waves)
 }

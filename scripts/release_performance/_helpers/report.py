@@ -57,6 +57,12 @@ def comparison_markdown(*, comparison: ReleaseComparison) -> str:
         )
     for skipped in comparison.skipped:
         lines.append(f"| `{skipped.name}` | – | – | – | – | – | – | ⚠️ skipped: {skipped.reason} |")
+    for command in comparison.commands:
+        if command.max_rss_ratio is not None:
+            lines.append(
+                f"\nPeak RSS limit for `{command.name}`: {command.max_rss_ratio:.2f}x "
+                f"({_percent(command.max_rss_ratio)}; temporary memory exception)."
+            )
     lines.append("")
     failures: tuple[str, ...] = regression_messages(commands=comparison.commands)
     if failures:

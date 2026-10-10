@@ -175,6 +175,7 @@ def fail_native_planner(monkeypatch: pytest.MonkeyPatch) -> None:
         raise NativeSqlTestPlanningError("native SQL-test planning failed: worker stopped")
 
     monkeypatch.setattr(target_writer, "plan_and_render_sql_test_artifacts", fail)
+    monkeypatch.setattr(target_writer, "plan_native_sql_test_artifacts", fail)
 
 
 def record_test_planning_threads(monkeypatch: pytest.MonkeyPatch) -> list[str]:

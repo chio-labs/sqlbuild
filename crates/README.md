@@ -62,9 +62,10 @@ stages run natively:
 | `native` | The default: native stages that passed their flip gate (`shipped` tier). |
 | `native-preview` | Opt-in: shipped stages plus stages still in development (`preview` tier). |
 
-The shipped tier covers discovery and rendering: declaration files and scopes, model config,
-reference extraction, the model loop, macro calls and the macro-call store, and attachments. SQL
-analysis, contracts, lineage, SQL-test glue and project assembly are still `preview`. A failing
+The shipped tier covers discovery, rendering and analysis: declaration files and scopes, model
+config, reference extraction, the model loop, macro calls and the macro-call store, attachments,
+the type system, model analysis and its `model-analyses.bin` cache, semantic checks, contracts,
+lineage facts, SQL-test glue and project assembly. A failing
 render raises its first error directly, as the Python stage would, and runs each macro call at
 most once; a divergence the bridge detects is reported as a native stage mismatch. Because the
 macro-call store is shipped, the

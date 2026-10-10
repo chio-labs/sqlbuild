@@ -39,6 +39,8 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     use_wave_analysis,
 )
 
+pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("python_compiler_engine")
+
 _PROJECT: RandomDagProject = RandomDagProject(seed=97, model_count=40, errors=True)
 _SHARED_ANALYSIS_SEED: int = 34
 _CAPTURE_SCHEDULES: tuple[DataflowScheduleCase, ...] = (

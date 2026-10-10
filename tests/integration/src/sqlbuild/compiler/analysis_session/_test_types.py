@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
+
 
 @dataclass(frozen=True)
 class GeneratedAnalysisParityTestCase:
@@ -11,11 +14,15 @@ class GeneratedAnalysisParityTestCase:
     seed: int
     count: int
     model_count: int
-    dialects: tuple[str | None, ...]
+    inference_profiles: tuple[ExpressionInferenceProfile, ...]
+    extra_files: dict[str, str]
+    lineage_mode: ColumnLineageMode
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
     expected_minimum_pivot_proofs: int
     expected_minimum_python_cte_recoveries: int
+    expected_minimum_legacy_analyses: int
+    expected_legacy_analysis_deferrals: int
     expected_minimum_proven_pivots: int
     expected_maximum_enrichment_deferrals: int
     expected_minimum_native_enrichments: int

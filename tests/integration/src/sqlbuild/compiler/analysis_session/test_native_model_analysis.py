@@ -11,6 +11,8 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
     analyze_native_model_sql,
 )
@@ -22,6 +24,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AnalysisFallbackTestCase,
@@ -31,12 +34,14 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
     StandalonePivotProofTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
+    ADAPTER_RULE_MODELS,
     AnalysisParity,
     FailingProvideSession,
     NativePivotProofs,
     analysis_request,
     compare_analyses,
     compile_inputs,
+    custom_nullability_rule,
     deferral_kinds,
     failing_provide_sessions,
     generated_analysis_files,
@@ -47,6 +52,14 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
 )
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
+_DIALECT_PROFILES: tuple[ExpressionInferenceProfile, ...] = tuple(
+    ExpressionInferenceProfile(sql_analysis_dialect=dialect)
+    for dialect in ("duckdb", "postgres", "snowflake", "bigquery")
+)
+_ADAPTER_PROFILES: tuple[ExpressionInferenceProfile, ...] = (
+    SnowflakeAdapter().expression_inference_profile(),
+    DuckDbAdapter().expression_inference_profile(),
+)
 _ORDERS_PROJECT: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders_cycle"\nadapter = "duckdb"\n',
     "models/orders.sql": 'MODEL (description "Orders");\n\nSELECT order_id FROM __ref("returns")\n',
@@ -62,15 +75,73 @@ _ORDERS_PROJECT: dict[str, str] = {
             seed=20261008,
             count=6,
             model_count=24,
-            dialects=("duckdb", "postgres", "snowflake", "bigquery"),
+            inference_profiles=_DIALECT_PROFILES,
+            extra_files={},
+            lineage_mode=ColumnLineageMode.FAST,
             expected_minimum_native=500,
             expected_minimum_expression_shapes=40,
             expected_minimum_pivot_proofs=80,
-            expected_minimum_python_cte_recoveries=40,
+            expected_minimum_python_cte_recoveries=39,
+            expected_minimum_legacy_analyses=152,
+            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=12,
             expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=90,
-        )
+        ),
+        GeneratedAnalysisParityTestCase(
+            description="rich lineage over untyped inputs, CTE facts and contracts",
+            seed=20261008,
+            count=6,
+            model_count=24,
+            inference_profiles=_DIALECT_PROFILES,
+            extra_files={},
+            lineage_mode=ColumnLineageMode.RICH,
+            expected_minimum_native=500,
+            expected_minimum_expression_shapes=40,
+            expected_minimum_pivot_proofs=80,
+            expected_minimum_python_cte_recoveries=27,
+            expected_minimum_legacy_analyses=95,
+            expected_legacy_analysis_deferrals=0,
+            expected_minimum_proven_pivots=12,
+            expected_maximum_enrichment_deferrals=0,
+            expected_minimum_native_enrichments=90,
+        ),
+        GeneratedAnalysisParityTestCase(
+            description="snowflake and duckdb adapter rules, fast lineage",
+            seed=20261010,
+            count=3,
+            model_count=24,
+            inference_profiles=_ADAPTER_PROFILES,
+            extra_files=ADAPTER_RULE_MODELS,
+            lineage_mode=ColumnLineageMode.FAST,
+            expected_minimum_native=200,
+            expected_minimum_expression_shapes=15,
+            expected_minimum_pivot_proofs=30,
+            expected_minimum_python_cte_recoveries=4,
+            expected_minimum_legacy_analyses=52,
+            expected_legacy_analysis_deferrals=6,
+            expected_minimum_proven_pivots=10,
+            expected_maximum_enrichment_deferrals=0,
+            expected_minimum_native_enrichments=30,
+        ),
+        GeneratedAnalysisParityTestCase(
+            description="snowflake and duckdb adapter rules, rich lineage",
+            seed=20261010,
+            count=3,
+            model_count=24,
+            inference_profiles=_ADAPTER_PROFILES,
+            extra_files=ADAPTER_RULE_MODELS,
+            lineage_mode=ColumnLineageMode.RICH,
+            expected_minimum_native=190,
+            expected_minimum_expression_shapes=15,
+            expected_minimum_pivot_proofs=30,
+            expected_minimum_python_cte_recoveries=4,
+            expected_minimum_legacy_analyses=62,
+            expected_legacy_analysis_deferrals=18,
+            expected_minimum_proven_pivots=10,
+            expected_maximum_enrichment_deferrals=0,
+            expected_minimum_native_enrichments=20,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -86,15 +157,26 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     for index in range(test_case.count):
         inputs: CompileProjectInputs = compile_inputs(
             project_dir=tmp_path / f"project_{index}",
-            files=generated_analysis_files(rng=rng, model_count=test_case.model_count),
+            files={
+                **generated_analysis_files(rng=rng, model_count=test_case.model_count),
+                **test_case.extra_files,
+            },
         )
-        for dialect in test_case.dialects:
-            compare_analyses(inputs=inputs, dialect=dialect, parity=parity, monkeypatch=monkeypatch)
+        for profile in test_case.inference_profiles:
+            compare_analyses(
+                inputs=inputs,
+                inference_profile=profile,
+                lineage_mode=test_case.lineage_mode,
+                parity=parity,
+                monkeypatch=monkeypatch,
+            )
     kinds: Counter[str] = deferral_kinds(record_dir)
 
     assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
     assert kinds["analysis_session:session"] == kinds["analysis_session:expression_shapes"] == 0
     assert kinds["analysis_session:dynamic_pivot"] == 0
+    assert kinds["analysis_session:legacy_analysis"] == test_case.expected_legacy_analysis_deferrals
+    assert parity.legacy_analyses >= test_case.expected_minimum_legacy_analyses
     assert parity.python_cte_recoveries >= test_case.expected_minimum_python_cte_recoveries
     assert (
         parity.analysed_models
@@ -147,7 +229,13 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
     parity: AnalysisParity = AnalysisParity()
 
     _ = [
-        compare_analyses(inputs=inputs, dialect=dialect, parity=parity, monkeypatch=monkeypatch)
+        compare_analyses(
+            inputs=inputs,
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
+            lineage_mode=ColumnLineageMode.FAST,
+            parity=parity,
+            monkeypatch=monkeypatch,
+        )
         for dialect in test_case.dialects
     ]
 
@@ -229,7 +317,7 @@ def test_given_unsupported_analysis_when_analysing_natively_then_python_analyses
     "test_case",
     [
         SessionFailureTestCase(
-            description="untyped inputs defer enrichments before the session fails",
+            description="a custom adapter rule defers analyses before the session fails",
             seed=20261009,
             model_count=12,
             expected_kinds={"analysis_session:session": 1},
@@ -249,6 +337,10 @@ def test_given_session_failure_after_deferrals_when_analysing_then_records_only_
             ),
         ),
         monkeypatch=monkeypatch,
+        inference_profile=ExpressionInferenceProfile(
+            sql_analysis_dialect="duckdb",
+            function_nullability_rules={"SUM": custom_nullability_rule},
+        ),
     )
     sessions: list[FailingProvideSession] = failing_provide_sessions(monkeypatch=monkeypatch)
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))

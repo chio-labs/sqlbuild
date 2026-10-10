@@ -1,3 +1,4 @@
+pub mod attach_analysis_cache;
 pub mod expression_shapes;
 pub mod finish_analysis_session;
 pub mod finished_fact_models;
@@ -9,3 +10,4 @@ pub mod recover_cte_facts;
 pub mod run_analysis_session;
 pub mod session_sharing;
 pub mod start_analysis_session;
+pub mod take_analysis_cache;

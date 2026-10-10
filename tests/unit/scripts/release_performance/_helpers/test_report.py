@@ -18,6 +18,32 @@ from tests.unit.scripts.release_performance._helpers.helpers import comparison
     "test_case",
     (
         ComparisonMarkdownTestCase(
+            description="temporary RSS allowances are reported for each affected command",
+            commands=(
+                comparison(
+                    name="lineage column trace",
+                    baseline=((10.0, 10.0, 400),) * 3,
+                    candidate=((10.0, 10.0, 800),) * 3,
+                    max_rss_ratio=2.0,
+                ),
+                comparison(
+                    name="dag --json",
+                    baseline=((10.0, 10.0, 400),) * 3,
+                    candidate=((10.0, 10.0, 601),) * 3,
+                    max_rss_ratio=1.5,
+                ),
+            ),
+            skipped=(),
+            expected_fragments=(
+                "Peak RSS limit for `lineage column trace`: 2.00x "
+                "(+100%; temporary memory exception).",
+                "Peak RSS limit for `dag --json`: 1.50x (+50%; temporary memory exception).",
+                "| 400 → 800 | 2.000x | ✅ ok |",
+                "**Result: failed.** dag --json: peak RSS 1.502x exceeds 1.50x.",
+            ),
+            unexpected_fragments=("lineage column trace: peak RSS",),
+        ),
+        ComparisonMarkdownTestCase(
             description="a passing comparison lists every command and the limits",
             commands=(
                 comparison(

@@ -34,7 +34,7 @@ _ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
     [
         NativeAnalysisSeamTestCase(
             description="models_contracts_lineage_and_sql_tests",
-            expected_preview_returns={
+            expected_native_returns={
                 "assemble_native_project_resources": [ANY],
                 "infer_native_expression_source_shapes": [ANY],
                 "analyze_native_model_sql": [ANY],
@@ -78,27 +78,30 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
     assert python_run.compiled
     assert (python_seams, native_seams, preview_seams) == (
         {},
-        {},
-        test_case.expected_preview_returns,
+        test_case.expected_native_returns,
+        test_case.expected_native_returns,
     )
-    assert isinstance(preview_seams["build_native_column_lineage"][0], ProjectColumnLineage)
-    assert isinstance(preview_seams["assemble_native_project_resources"][0], NativeProjectResources)
-    assert isinstance(preview_seams["analyze_native_model_sql"][0], NativeModelAnalyses)
-    assert preview_seams["analyze_native_model_sql"][0].session is not None
-    assert isinstance(preview_seams["infer_native_expression_source_shapes"][0], tuple)
-    assembled_tests: object = preview_seams["assemble_native_sql_tests"][0]
-    assert isinstance(assembled_tests, tuple)
-    assert assembled_tests
-    assert all(isinstance(assembled, NativeSqlTestAssembly) for assembled in assembled_tests)
-    planned_artifacts: object = preview_seams["plan_native_sql_test_artifacts"][0]
-    assert isinstance(planned_artifacts, tuple)
-    assert planned_artifacts
-    assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
-    assert [len(call.args[0].tests) for call in native_sql_test_planning.call_args_list] == [
-        len(planned_artifacts)
-    ]
-    assert isinstance(preview_seams["complete_native_semantic_diagnostics"][0], CompiledProject)
-    assert isinstance(preview_seams["evaluate_native_model_contracts"][0], ContractValidationResult)
+    planned_counts: list[int] = []
+    for seams in (native_seams, preview_seams):
+        assert isinstance(seams["build_native_column_lineage"][0], ProjectColumnLineage)
+        assert isinstance(seams["assemble_native_project_resources"][0], NativeProjectResources)
+        assert isinstance(seams["analyze_native_model_sql"][0], NativeModelAnalyses)
+        assert seams["analyze_native_model_sql"][0].session is not None
+        assert isinstance(seams["infer_native_expression_source_shapes"][0], tuple)
+        assembled_tests: object = seams["assemble_native_sql_tests"][0]
+        assert isinstance(assembled_tests, tuple)
+        assert assembled_tests
+        assert all(isinstance(assembled, NativeSqlTestAssembly) for assembled in assembled_tests)
+        planned_artifacts: object = seams["plan_native_sql_test_artifacts"][0]
+        assert isinstance(planned_artifacts, tuple)
+        assert planned_artifacts
+        assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
+        planned_counts.append(len(planned_artifacts))
+        assert isinstance(seams["complete_native_semantic_diagnostics"][0], CompiledProject)
+        assert isinstance(seams["evaluate_native_model_contracts"][0], ContractValidationResult)
+    assert [
+        len(call.args[0].tests) for call in native_sql_test_planning.call_args_list
+    ] == planned_counts
     assert (native_run.returncode, preview_run.returncode) == (0, 0)
     assert report_without_engine(native_run) == report_without_engine(python_run)
     assert report_without_engine(preview_run) == report_without_engine(python_run)

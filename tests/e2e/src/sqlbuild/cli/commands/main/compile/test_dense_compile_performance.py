@@ -19,13 +19,18 @@ from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.models import Rule, RulesConfig
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     DenseCompileGuardTestCase,
+    DenseMetadataTextGuardTestCase,
     DenseWarmEditCompileGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    CompileReuseRun,
     FreshProcessCompileBenchmarkResult,
     _run_fresh_process_compile_benchmark,
     fresh_process_compile_cache_metrics,
+    in_process_reuse_run,
     measure_model_sql_bytes,
+    project_text_characters,
+    record_metadata_text_characters,
     run_dense_warm_edit_benchmark,
 )
 
@@ -129,6 +134,36 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
     assert result.semantic_fingerprint == test_case.expected_fingerprint
     assert result.elapsed_seconds < test_case.expected_max_wall_seconds
     assert result.peak_rss_bytes < test_case.expected_max_rss_bytes
+
+
+@pytest.mark.performance
+@pytest.mark.cold_compile_performance
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DenseMetadataTextGuardTestCase(f"dense_models_{models}_metadata_file_texts", models)
+        for models in (1000, 3000, 5000, 10000)
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_dense_project_when_checking_semantic_metadata_then_each_file_text_crosses_once(
+    test_case: DenseMetadataTextGuardTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = tmp_path / "dense_orders"
+    write_dense_compile_project(project_dir=project_dir, model_count=test_case.model_count)
+    budget: int = project_text_characters(project_dir)
+    sizes: list[int] = record_metadata_text_characters(monkeypatch)
+
+    run: CompileReuseRun = in_process_reuse_run(
+        project_dir=project_dir, capsys=capsys, args=("--no-cache",)
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert len(sizes) == test_case.expected_requests
+    assert 0 < sizes[0] <= budget, (sizes, budget)
 
 
 @pytest.mark.performance

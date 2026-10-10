@@ -1,14 +1,23 @@
 //! The session's phases: Python's uncached model analysis, wave by wave.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use rayon::ThreadPool;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use sqlbuild_cache::digest::types::ContentDigest;
+use sqlbuild_cache::store::errors::StoreDecodeError;
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
+use crate::assembly::analysis_session::_helpers::analysis_cache::{
+    CachedOutcome, decode_outcome, encode_outcome,
+};
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
+};
+use crate::assembly::analysis_session::_helpers::cte_facts::{
+    LegacyAnalysis, LegacyInput, RecoveryProfile, legacy_analysis,
 };
 use crate::assembly::analysis_session::_helpers::dynamic_pivot::{PivotFacts, pivot_outcome};
 use crate::assembly::analysis_session::_helpers::enrichment::{
@@ -17,8 +26,8 @@ use crate::assembly::analysis_session::_helpers::enrichment::{
 use crate::assembly::analysis_session::_helpers::mappings::{
     ShapeTable, dict_from_pairs, same_keys, same_relations,
 };
+use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
 use crate::assembly::analysis_session::_helpers::publication::{ShapeOptions, ShapeSource};
-use crate::assembly::analysis_session::_helpers::schedule::{producers, waves};
 use crate::assembly::analysis_session::constants::{
     DEFERRAL_ANALYSIS, DEFERRAL_ENRICHMENT, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
@@ -60,6 +69,7 @@ impl AnalysisSession {
             phase: Phase::Analyze,
             publications: Vec::new(),
             failures: Vec::new(),
+            cache: None,
             request,
         })
     }
@@ -124,6 +134,7 @@ impl AnalysisSession {
                 }
                 for result in results {
                     let model: usize = result.model;
+                    self.mark_uncacheable(model);
                     self.outcome_mut(model)?.analysis = python_analysis(result);
                 }
                 self.phase = Phase::Complete(wave);
@@ -136,6 +147,7 @@ impl AnalysisSession {
                     let pending: bool = *star_pending
                         .get(&result.model)
                         .ok_or("an enrichment answers no deferral")?;
+                    self.mark_uncacheable(result.model);
                     let outcome: &mut ModelOutcome = self.outcome_mut(result.model)?;
                     outcome.analysis = enriched_analysis(
                         &outcome.analysis,
@@ -227,27 +239,32 @@ impl AnalysisSession {
             .ok_or_else(|| "a deferral names an unanalysed model".to_owned())
     }
 
-    /// Python's `_analyze_model_sql_requests` for one wave.
+    /// Python's `_analyze_model_sql_requests` for one wave, less the models the cache answers.
     fn analyze_wave(&mut self, models: &[usize]) -> Result<Vec<Deferral>, String> {
         let schemas: Vec<Shapes> = models
             .iter()
             .map(|model| self.binding_schema(&self.request.models[*model]))
             .collect();
+        let misses: Vec<usize> = self.read_cache(models, &schemas)?;
         let batch = Batch {
             dialect: &self.request.dialect,
             function_return_types: &self.request.function_return_types,
             rich_type_inference: self.request.rich_type_inference,
-            members: models
+            members: misses
                 .iter()
-                .zip(&schemas)
-                .map(|(model, schema)| batch_member(&self.request.models[*model], schema))
+                .map(|position| {
+                    batch_member(&self.request.models[models[*position]], &schemas[*position])
+                })
                 .collect(),
             types: &self.available_types,
             nullability: &self.available_nullability,
         };
         let results: Vec<MemberResult> = self.catalog.analyze_batch(&batch)?;
         let mut deferrals: Vec<Deferral> = Vec::new();
-        for ((model, schema), result) in models.iter().zip(schemas).zip(results) {
+        let mut tables: Option<ContentDigest> = None;
+        for (position, result) in misses.into_iter().zip(results) {
+            let model: &usize = &models[position];
+            let schema: Shapes = schemas[position].clone();
             if let Some(failure) = result.failure {
                 self.failures.push(failure);
             }
@@ -271,14 +288,22 @@ impl AnalysisSession {
                     failed_analysis(LineageFacts::Native(Vec::new()), diagnostics)
                 }
                 MemberAnalysis::Legacy { lineage } => {
-                    deferrals.push(Deferral::Analysis {
-                        model: *model,
-                        cleaned_sql: result.cleaned_sql.clone(),
-                        binding_schema: schema.clone(),
-                        binding_diagnostics: diagnostics.clone(),
-                        lineage,
-                    });
-                    failed_analysis(LineageFacts::PythonAnalysis, diagnostics)
+                    match self.native_legacy(&self.request.models[*model], &result.cleaned_sql) {
+                        Ok(legacy) => {
+                            self.record_legacy_tables(*model, &mut tables);
+                            legacy_outcome(legacy, lineage, diagnostics)
+                        }
+                        Err(_deferred) => {
+                            deferrals.push(Deferral::Analysis {
+                                model: *model,
+                                cleaned_sql: result.cleaned_sql.clone(),
+                                binding_schema: schema.clone(),
+                                binding_diagnostics: diagnostics.clone(),
+                                lineage,
+                            });
+                            failed_analysis(LineageFacts::PythonAnalysis, diagnostics)
+                        }
+                    }
                 }
             };
             self.outcomes[*model] = Some(ModelOutcome {
@@ -289,6 +314,28 @@ impl AnalysisSession {
             });
         }
         Ok(deferrals)
+    }
+
+    /// Python's legacy analysis of a model the engine handed back, or why Python must answer.
+    fn native_legacy(
+        &self,
+        model: &ModelRequest,
+        cleaned_sql: &str,
+    ) -> Result<LegacyAnalysis, String> {
+        catch_compiler_panic(|| {
+            legacy_analysis(&LegacyInput {
+                cleaned_sql,
+                lineage_references: &model.lineage_references,
+                recover: model.recover_cte_facts,
+                types: &self.available_types,
+                nullability: &self.available_nullability,
+                profile: RecoveryProfile {
+                    dialect: &self.request.dialect,
+                    function_return_types: &self.request.function_return_types,
+                    rules: self.request.nullability_rules.as_ref(),
+                },
+            })
+        })
     }
 
     /// The closed shape of each relation the model binds, open relations empty.
@@ -311,6 +358,9 @@ impl AnalysisSession {
         let mut star_pending_by_model: HashMap<usize, bool> = HashMap::new();
         let mut candidates: Vec<(usize, Shapes, bool)> = Vec::new();
         for model in self.waves[wave].clone() {
+            if self.cached(model) {
+                continue;
+            }
             let request: &ModelRequest = &self.request.models[model];
             let required: Vec<String> = request.required_names.clone();
             let has_set_operation: bool = request.has_set_operation;
@@ -352,9 +402,14 @@ impl AnalysisSession {
             let outcome: &mut ModelOutcome = self.outcome_mut(model)?;
             outcome.analysis = enriched_analysis(
                 &outcome.analysis,
-                native_answer(model, native.columns, native.has_star),
+                native_answer(
+                    model,
+                    native.analysis_succeeded,
+                    native.columns,
+                    native.has_star,
+                ),
                 star_pending,
-                LineageFacts::NativeEnrichment(native.lineage),
+                LineageFacts::NativeFacts(native.lineage),
             );
         }
         Ok((deferrals, star_pending_by_model))
@@ -430,11 +485,148 @@ impl AnalysisSession {
             }
         }
         if self.dependency_ordered {
-            for model in models {
-                self.publish(model)?;
+            for model in &models {
+                self.publish(*model)?;
             }
         }
+        self.store_cached(&models);
         Ok(())
+    }
+
+    /// Answer `models` from the cache where it can; returns the positions it cannot answer.
+    fn read_cache(&mut self, models: &[usize], schemas: &[Shapes]) -> Result<Vec<usize>, String> {
+        let Some(mut cache) = self.cache.take() else {
+            return Ok((0..models.len()).collect());
+        };
+        let mut required: Vec<String> = Vec::new();
+        let mut seen: HashSet<&str> = HashSet::new();
+        for model in models {
+            for reference in &self.request.models[*model].references {
+                if seen.insert(reference.analysis_name.as_str()) {
+                    required.push(reference.analysis_name.clone());
+                }
+            }
+        }
+        self.catalog.prepare_analysis(
+            &required,
+            &self.available_types,
+            &self.available_nullability,
+        );
+        for schema in schemas {
+            let _ = self.catalog.prepare(&[("", schema)]);
+        }
+        let pool: Arc<ThreadPool> = self.catalog.native.analysis_pool()?;
+        let session_digest: ContentDigest = cache.session_digest;
+        let names: Vec<&str> = models
+            .iter()
+            .flat_map(|model| self.model_relation_names(*model))
+            .collect::<HashSet<&str>>()
+            .into_iter()
+            .collect();
+        let keys: Vec<ContentDigest> = pool.install(|| {
+            let relations: HashMap<&str, ContentDigest> = names
+                .par_iter()
+                .map(|name| (*name, self.relation_digest(name)))
+                .collect();
+            models
+                .par_iter()
+                .zip(schemas)
+                .map(|(model, schema)| self.model_key(&session_digest, *model, schema, &relations))
+                .collect()
+        });
+        let stored: Vec<Option<Vec<u8>>> = keys
+            .iter()
+            .map(|key| cache.store.get(key).map(<[u8]>::to_vec))
+            .collect();
+        let decoded: Vec<Option<Result<CachedOutcome, StoreDecodeError>>> = pool.install(|| {
+            stored
+                .par_iter()
+                .zip(schemas)
+                .map(|(bytes, schema)| Some(decode_outcome(bytes.as_ref()?, schema)))
+                .collect()
+        });
+        let mut tables: Option<ContentDigest> = None;
+        let mut hits: Vec<(usize, ModelOutcome)> = Vec::new();
+        let mut misses: Vec<usize> = Vec::new();
+        for (position, (model, found)) in models.iter().zip(decoded).enumerate() {
+            cache.keys[*model] = Some(keys[position]);
+            let hit: Option<ModelOutcome> = match found {
+                Some(Ok((outcome, None))) => Some(outcome),
+                Some(Ok((outcome, Some(required)))) => {
+                    let current: ContentDigest =
+                        *tables.get_or_insert_with(|| self.tables_digest());
+                    (current == required).then_some(outcome)
+                }
+                Some(Err(StoreDecodeError)) | None => None,
+            };
+            match hit {
+                Some(outcome) => hits.push((position, outcome)),
+                None => misses.push(position),
+            }
+        }
+        let members: Vec<BatchMember<'_>> = hits
+            .iter()
+            .map(|(position, _)| {
+                batch_member(&self.request.models[models[*position]], &schemas[*position])
+            })
+            .collect();
+        let cleaned: Vec<Result<String, String>> = self
+            .catalog
+            .normalize_each(&self.request.dialect, &members)
+            .unwrap_or_else(|error| members.iter().map(|_| Err(error.clone())).collect());
+        for ((position, mut outcome), sql) in hits.into_iter().zip(cleaned) {
+            let model: usize = models[position];
+            match sql {
+                Ok(sql) => {
+                    outcome.cleaned_sql = sql;
+                    self.outcomes[model] = Some(outcome);
+                    cache.hits[model] = true;
+                }
+                Err(_) => misses.push(position),
+            }
+        }
+        misses.sort_unstable();
+        cache.stats.hits += models.len() - misses.len();
+        cache.stats.misses += misses.len();
+        self.cache = Some(cache);
+        Ok(misses)
+    }
+
+    /// Store each finished native outcome of `models` the cache did not answer.
+    fn store_cached(&mut self, models: &[usize]) {
+        let Some(cache) = self.cache.as_mut() else {
+            return;
+        };
+        for model in models {
+            if cache.hits[*model] || cache.uncacheable[*model] {
+                continue;
+            }
+            let (Some(key), Some(outcome)) = (cache.keys[*model], self.outcomes[*model].as_ref())
+            else {
+                continue;
+            };
+            if let Some(bytes) = encode_outcome(outcome, cache.legacy_tables[*model].as_ref()) {
+                cache.store.put(key, bytes);
+                cache.stats.stored += 1;
+            }
+        }
+    }
+
+    fn mark_uncacheable(&mut self, model: usize) {
+        if let Some(cache) = self.cache.as_mut() {
+            cache.uncacheable[model] = true;
+        }
+    }
+
+    /// Record the whole-table digest a legacy analysis of `model` read, computed once a wave.
+    fn record_legacy_tables(&mut self, model: usize, tables: &mut Option<ContentDigest>) {
+        if self.cache.is_none() {
+            return;
+        }
+        let digest: ContentDigest = *tables.get_or_insert_with(|| self.tables_digest());
+        if let Some(cache) = self.cache.as_mut() {
+            cache.legacy_tables[model] = Some(digest);
+        }
     }
 
     /// The dataflow's `_publish` for one analysed model.
@@ -533,6 +725,37 @@ fn failed_analysis(lineage: LineageFacts, diagnostics: Vec<DiagnosticRow>) -> Mo
     }
 }
 
+/// Python's `analyze_deferred` result, answered natively.
+fn legacy_outcome(
+    legacy: LegacyAnalysis,
+    native_lineage: Option<Vec<LineageRow>>,
+    diagnostics: Vec<DiagnosticRow>,
+) -> ModelAnalysis {
+    if !legacy.succeeded {
+        return ModelAnalysis {
+            analysis_succeeded: false,
+            columns: None,
+            lineage: LineageFacts::NativeFacts(Vec::new()),
+            has_star: false,
+            star_resolved: false,
+            binding_diagnostics: Vec::new(),
+            binding_validated: false,
+        };
+    }
+    ModelAnalysis {
+        analysis_succeeded: true,
+        columns: legacy.columns,
+        lineage: match native_lineage {
+            Some(rows) => LineageFacts::Native(rows),
+            None => LineageFacts::NativeFacts(legacy.lineage),
+        },
+        has_star: legacy.has_star,
+        star_resolved: false,
+        binding_diagnostics: diagnostics,
+        binding_validated: true,
+    }
+}
+
 fn python_analysis(result: DeferredAnalysis) -> ModelAnalysis {
     ModelAnalysis {
         analysis_succeeded: result.analysis_succeeded,
@@ -608,11 +831,16 @@ fn enriched_analysis(
 }
 
 /// A native re-analysis as Python's successful answer.
-fn native_answer(model: usize, columns: Vec<ColumnFact>, has_star: bool) -> DeferredAnalysis {
+fn native_answer(
+    model: usize,
+    analysis_succeeded: bool,
+    columns: Option<Vec<ColumnFact>>,
+    has_star: bool,
+) -> DeferredAnalysis {
     DeferredAnalysis {
         model,
-        analysis_succeeded: true,
-        columns: Some(columns),
+        analysis_succeeded,
+        columns,
         has_star,
         star_resolved: false,
         binding_diagnostics: Vec::new(),
@@ -623,7 +851,7 @@ fn native_answer(model: usize, columns: Vec<ColumnFact>, has_star: bool) -> Defe
 /// A compiled model's output names and lineage from a successful analysis with native lineage.
 fn session_model_facts(analysis: &ModelAnalysis) -> Option<SessionModelFacts> {
     let rows: &Vec<LineageRow> = match &analysis.lineage {
-        LineageFacts::Native(rows) | LineageFacts::NativeEnrichment(rows) => rows,
+        LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows) => rows,
         LineageFacts::PythonAnalysis | LineageFacts::PythonEnrichment => return None,
     };
     analysis.analysis_succeeded.then(|| SessionModelFacts {

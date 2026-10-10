@@ -27,6 +27,8 @@ pub(crate) const BINDING_SEVERITIES: [&str; 2] = ["error", "warning"];
 pub(crate) const DEFAULT_BINDING_MESSAGE: &str = "SQL binding failed";
 /// Analysis workers per compact batch, as Python requests.
 pub(crate) const COMPACT_WORKERS: usize = 4;
+/// Members a large batch analyses at a time, bounding the native response a run holds.
+pub(crate) const BATCH_CHUNK_MEMBERS: usize = 512;
 /// Python's `NATIVE_DIALECT_ALIASES`.
 pub(crate) const DIALECT_ALIASES: [(&str, &str); 3] = [
     ("postgres", "postgresql"),
@@ -150,6 +152,15 @@ pub(crate) const BOOLEAN_RESULT_AST_KINDS: [&str; 18] = [
 pub(crate) const NULLIF_FUNCTION_NAME: &str = "NULLIF";
 pub(crate) const STRING_LITERAL_TYPE: &str = "string";
 pub(crate) const BINARY_OPERAND_COUNT: usize = 2;
+pub(crate) const AGGREGATE_AST_KINDS: [&str; 7] = [
+    "avg",
+    "count",
+    "max",
+    "min",
+    "sum",
+    "array_agg",
+    "string_agg",
+];
 /// The type Python's set operation slots give a bare NULL.
 pub(crate) const NULL_SET_OPERATION_TYPE: &str = "__SQLBUILD_NULL_SET_OPERATION_TYPE__";
 pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";
@@ -184,3 +195,13 @@ pub(crate) const FIRST_ARG_RULE: &str = "first_arg";
 pub(crate) const CONDITIONAL_RESULT_RULE: &str = "conditional_result";
 pub(crate) const NON_NULL_NULLABILITY: &str = "non_null";
 pub(crate) const NULLABLE_NULLABILITY: &str = "nullable";
+/// Bumped whenever the stored outcome or a key's fields change; older entries never match.
+pub(crate) const ANALYSIS_CACHE_FORMAT: &str = "native-model-analysis-v2";
+/// A stored varint byte at or above this value continues into the next byte.
+pub(crate) const VARINT_CONTINUATION: u64 = 0x80;
+/// The value bits each stored varint byte carries.
+pub(crate) const VARINT_PAYLOAD_MASK: u8 = 0x7f;
+/// How many value bits each stored varint byte carries.
+pub(crate) const VARINT_PAYLOAD_BITS: u32 = 7;
+/// The most bytes one stored `u64` varint takes.
+pub(crate) const VARINT_MAX_BYTES: usize = 10;

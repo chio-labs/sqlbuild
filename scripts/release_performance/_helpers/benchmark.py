@@ -167,6 +167,7 @@ def compare_command(
         baseline=tuple(samples[baseline.label]),
         candidate=tuple(samples[candidate.label]),
         max_time_ratio=command.max_time_ratio,
+        max_rss_ratio=command.max_rss_ratio,
     )
 
 

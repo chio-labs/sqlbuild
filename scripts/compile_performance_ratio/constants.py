@@ -6,6 +6,7 @@ DEFAULT_RUNS: int = 3
 DEFAULT_MAX_RATIO: float = 1.10
 NOISE_FLOOR_SECONDS: float = 0.2
 DENSE_KIND: str = "dense"
+CPU_METRIC: str = "CPU"
 FRESH_KIND: str = "fresh"
 PROJECT_KINDS: tuple[str, ...] = (DENSE_KIND, FRESH_KIND)
 COLD_MODE: str = "cold"
@@ -18,6 +19,7 @@ MODE_TITLES: dict[str, str] = {
     EDIT_MODE: "one-model edit on a warm cache",
 }
 ANALYSIS_CACHE_MISSES: str = "analysis_cache_misses"
+ANALYSIS_CACHE_BYPASSES: str = "analysis_cache_bypasses"
 MODELS_DIRECTORY: str = "models"
 MODEL_FILE_PATTERN: str = "*.sql"
 EDIT_COMMENT: str = "-- Benchmark edit {revision}.\n"
@@ -36,6 +38,9 @@ BASE_GENERATOR_ENTRY: str = (
 PYTHONPATH_KEY: str = "PYTHONPATH"
 COMPILER_ENGINE_KEY: str = "SQLBUILD_COMPILER_ENGINE"
 PHASE_NOISE_FLOOR_MS: float = 50.0
+COMPILE_TIMINGS_KEY: str = "compile_timings"
+COMPILED_DIRECTORY: str = "target/compiled"
+UNCACHED_MODE: str = "uncached"
 ERROR_TAIL_CHARACTERS: int = 2000
 FRESH_SOURCE_SHARE: float = 713 / 3000
 FRESH_SEED_SHARE: float = 141 / 3000

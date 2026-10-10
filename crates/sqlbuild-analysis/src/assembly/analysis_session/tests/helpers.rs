@@ -1,22 +1,40 @@
 use std::collections::HashMap;
 
 use crate::assembly::analysis_session::_helpers::cte_facts::{
-    Recovery, RecoveryInput, RecoveryProfile, recovery,
+    LegacyAnalysis, LegacyInput, Recovery, RecoveryInput, RecoveryProfile, legacy_analysis,
+    recovery,
 };
-use crate::assembly::analysis_session::_helpers::mappings::catalog_relations;
+use crate::assembly::analysis_session::_helpers::mappings::{ShapeTable, catalog_relations};
+use sqlbuild_cache::digest::types::ContentDigest;
+use sqlbuild_cache::store::models::NativeStore;
+
+use crate::assembly::analysis_session::main::attach_analysis_cache::attach_analysis_cache;
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
+use crate::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
 use crate::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
 use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
+use crate::assembly::analysis_session::main::take_analysis_cache::take_analysis_cache;
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis, DynamicFamily,
-    FinishedSession, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest, PivotModel,
-    PivotOutcome, PivotTables, SessionModelFacts, SessionRequest, SessionStep,
+    AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis,
+    DynamicFamily, FinishedSession, LineageRow, ModelOutcome, ModelReference, ModelRequest,
+    PivotBatchRequest, PivotModel, PivotOutcome, PivotTables, SessionModelFacts, SessionOutcome,
+    SessionRequest, SessionStep,
 };
-use crate::assembly::analysis_session::tests::test_types::{ModelSpec, RecoveredFacts};
+use crate::assembly::analysis_session::tests::test_types::{CachedRun, ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::{CatalogInput, ProjectCatalog};
+
+const TRANSFORM_NAMES: [&str; 6] = [
+    "direct",
+    "cast",
+    "expression",
+    "aggregation",
+    "star",
+    "constant",
+];
+const CONFIDENCE_NAMES: [&str; 3] = ["unknown", "high", "medium"];
 
 pub(crate) fn pairs(values: &[(&str, &str)]) -> Pairs {
     values
@@ -122,9 +140,19 @@ pub(crate) fn started(request: SessionRequest) -> AnalysisSession {
 
 /// Run to completion, answering every deferral with `answer`: the steps, outcomes and session.
 pub(crate) fn completed(
-    mut session: AnalysisSession,
+    session: AnalysisSession,
     answer: fn(&Deferral) -> DeferredAnalysis,
 ) -> (Vec<SessionStep>, Vec<ModelOutcome>, FinishedSession) {
+    let (steps, outcome, finished, ()) = completed_with(session, answer, |_| ());
+    (steps, outcome.models, finished)
+}
+
+/// [`completed`], reading the session with `before_finish` once every wave has run.
+pub(crate) fn completed_with<T>(
+    mut session: AnalysisSession,
+    answer: fn(&Deferral) -> DeferredAnalysis,
+    before_finish: impl FnOnce(&mut AnalysisSession) -> T,
+) -> (Vec<SessionStep>, SessionOutcome, FinishedSession, T) {
     let mut done: bool = false;
     let steps: Vec<SessionStep> = std::iter::from_fn(|| {
         (!done).then(|| {
@@ -138,26 +166,70 @@ pub(crate) fn completed(
         })
     })
     .collect();
+    let read: T = before_finish(&mut session);
     let (outcome, finished) = finish_analysis_session(session).expect("the session finished");
-    (steps, outcome.models, finished)
+    (steps, outcome, finished, read)
+}
+
+/// Run `request` reading and filling `store`, answering deferrals as [`session_lines`] does.
+pub(crate) fn cached_run(request: SessionRequest, store: NativeStore) -> CachedRun {
+    let mut session: AnalysisSession = started(request);
+    attach_analysis_cache(&mut session, store);
+    let (steps, outcome, finished, (keys, hits, (store, stats))) =
+        completed_with(session, empty_answer, |session| {
+            let (keys, hits) = session
+                .cache
+                .as_ref()
+                .map(|cache| (cache.keys.clone(), cache.hits.clone()))
+                .unwrap_or_default();
+            let taken = take_analysis_cache(session).expect("the cache stays attached");
+            (keys, hits, taken)
+        });
+    CachedRun {
+        lines: (
+            steps.iter().map(step_lines).collect(),
+            outcome.models.iter().map(described).collect(),
+        ),
+        catalog: catalog_changes(outcome, &finished),
+        store,
+        stats,
+        keys,
+        hits,
+    }
+}
+
+/// The catalog changes and fact models of `request` run without a cache.
+pub(crate) fn uncached_catalog(request: SessionRequest) -> (Shapes, Vec<String>, Vec<String>) {
+    let (_, outcome, finished, ()) = completed_with(started(request), empty_answer, |_| ());
+    catalog_changes(outcome, &finished)
+}
+
+fn catalog_changes(
+    outcome: SessionOutcome,
+    finished: &FinishedSession,
+) -> (Shapes, Vec<String>, Vec<String>) {
+    let mut facts: Vec<String> = finished_fact_models(finished);
+    facts.sort_unstable();
+    (outcome.schema_additions, outcome.analysis_names, facts)
+}
+
+/// The models' keys from a cold cached run of `request`.
+pub(crate) fn model_keys(request: SessionRequest) -> Vec<Option<ContentDigest>> {
+    cached_run(request, NativeStore::default()).keys
+}
+
+/// `store` with every key in `keys` holding bytes no outcome encodes to.
+pub(crate) fn damaged(mut store: NativeStore, keys: &[Option<ContentDigest>]) -> NativeStore {
+    for key in keys.iter().flatten() {
+        store.put(*key, b"not an outcome".to_vec());
+    }
+    store
 }
 
 /// `name type nullability` per column, or `failed` when analysis did not succeed.
 pub(crate) fn described(outcome: &ModelOutcome) -> Vec<String> {
     let analysis = &outcome.analysis;
-    let mut lines: Vec<String> = analysis
-        .columns
-        .iter()
-        .flatten()
-        .map(|column| {
-            format!(
-                "{} {} {}",
-                column.name,
-                column.data_type.as_deref().unwrap_or("-"),
-                column.nullability
-            )
-        })
-        .collect();
+    let mut lines: Vec<String> = analysis.columns.iter().flatten().map(column_line).collect();
     lines.push(format!(
         "succeeded={} star={}/{} diagnostics={:?}",
         analysis.analysis_succeeded,
@@ -394,4 +466,131 @@ pub(crate) fn expected_facts(
             non_null.iter().map(|name| (*name).to_owned()).collect(),
         )
     })
+}
+
+/// Python's legacy analysis of `sql` over typed `orders` and `customers`, as outcome lines.
+pub(crate) fn legacy_lines(sql: &str) -> Option<Vec<String>> {
+    let types: ShapeTable = ShapeTable::from_shapes(&shapes(&[
+        (
+            "orders",
+            &[
+                ("order_id", "INTEGER"),
+                ("amount", "DOUBLE"),
+                ("status", "VARCHAR"),
+            ],
+        ),
+        ("customers", &[("customer_id", "INTEGER")]),
+    ]));
+    let nullability: ShapeTable = ShapeTable::from_shapes(&shapes(&[
+        (
+            "orders",
+            &[
+                ("order_id", "non_null"),
+                ("amount", "unknown"),
+                ("status", "unknown"),
+            ],
+        ),
+        ("customers", &[("customer_id", "unknown")]),
+    ]));
+    let references: Vec<(String, String, String)> = [
+        ("orders", "model", "orders"),
+        ("customers", "source", "customers"),
+    ]
+    .iter()
+    .map(|(name, kind, resource)| {
+        (
+            (*name).to_owned(),
+            (*kind).to_owned(),
+            (*resource).to_owned(),
+        )
+    })
+    .collect();
+    let rules: Pairs = pairs(&[("UPPER", "first_arg")]);
+    let analysis: LegacyAnalysis = legacy_analysis(&LegacyInput {
+        cleaned_sql: sql,
+        lineage_references: &references,
+        recover: true,
+        types: &types,
+        nullability: &nullability,
+        profile: RecoveryProfile {
+            dialect: "duckdb",
+            function_return_types: &Vec::new(),
+            rules: Some(&rules),
+        },
+    })
+    .ok()?;
+    let mut lines: Vec<String> = vec![format!(
+        "succeeded={} star={}",
+        analysis.succeeded, analysis.has_star
+    )];
+    lines.extend(analysis.columns.iter().flatten().map(column_line));
+    lines.extend(analysis.lineage.iter().map(legacy_lineage_line));
+    Some(lines)
+}
+
+fn legacy_lineage_line(row: &LineageRow) -> String {
+    let sources: Vec<String> = row
+        .sources
+        .iter()
+        .map(|(kind, name, column)| format!("{kind}:{name}:{column}"))
+        .collect();
+    format!(
+        "{} {} {} [{}]",
+        row.output_column,
+        TRANSFORM_NAMES[usize::from(row.transform_code)],
+        CONFIDENCE_NAMES[usize::from(row.confidence_code)],
+        sources.join(", ")
+    )
+}
+
+fn column_line(column: &ColumnFact) -> String {
+    format!(
+        "{} {} {}",
+        column.name,
+        column.data_type.as_deref().unwrap_or("-"),
+        column.nullability
+    )
+}
+
+/// `(hits, misses, stored)` of a cached run.
+pub(crate) fn cache_stats(run: &CachedRun) -> (usize, usize, usize) {
+    let AnalysisCacheStats {
+        hits,
+        misses,
+        stored,
+    } = run.stats;
+    (hits, misses, stored)
+}
+
+/// The request's second model, the one key tests change.
+pub(crate) fn second_model(request: &mut SessionRequest) -> &mut ModelRequest {
+    &mut request.models[1]
+}
+
+/// One dynamic pivot family over orders' amounts by status.
+pub(crate) fn amounts_family() -> DynamicFamily {
+    DynamicFamily {
+        name: "amounts".to_owned(),
+        pivot_column: "status".to_owned(),
+        value_column: "amount".to_owned(),
+        aggregate: "SUM".to_owned(),
+        data_type: "DOUBLE".to_owned(),
+        name_pattern: None,
+    }
+}
+
+/// The key of the session's model named `name` over its relations' current facts.
+pub(crate) fn current_model_key(session: &AnalysisSession, name: &str) -> ContentDigest {
+    let model: usize = session
+        .request
+        .models
+        .iter()
+        .position(|model| model.name == name)
+        .expect("the model is in the request");
+    let relations: HashMap<&str, ContentDigest> = session
+        .model_relation_names(model)
+        .into_iter()
+        .map(|relation| (relation, session.relation_digest(relation)))
+        .collect();
+    session.model_key(&ContentDigest::default(), model, &Vec::new(), &relations)
 }

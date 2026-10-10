@@ -249,6 +249,15 @@ class DenseCompileGuardTestCase:
 
 
 @dataclass(frozen=True)
+class DenseMetadataTextGuardTestCase:
+    """A dense project whose semantic metadata request may carry each file's text only once."""
+
+    description: str
+    model_count: int
+    expected_requests: int = 1
+
+
+@dataclass(frozen=True)
 class DenseWarmEditCompileGuardTestCase:
     description: str
     model_count: int
@@ -755,6 +764,15 @@ class ExternalModuleEditTestCase:
 
 
 @dataclass(frozen=True)
+class NativeAnalysisStoreTestCase:
+    """A change between two compiles, and how many stored native model analyses it misses."""
+
+    description: str
+    change: Callable[[Path, pytest.MonkeyPatch], None]
+    expected_misses: int
+
+
+@dataclass(frozen=True)
 class SqlTestScanStoreTestCase:
     """A change between two compiles, and how many stored SQL-test scans it must invalidate."""
 
@@ -831,7 +849,7 @@ class NativeAnalysisSeamTestCase:
     """Every engine compiling a copy of one project while the analysis stage seams are recorded."""
 
     description: str
-    expected_preview_returns: dict[str, list[object]]
+    expected_native_returns: dict[str, list[object]]
 
 
 @dataclass(frozen=True)

@@ -58,6 +58,7 @@ def comparison(
     baseline: tuple[tuple[float, float, int], ...],
     candidate: tuple[tuple[float, float, int], ...],
     max_time_ratio: float | None = None,
+    max_rss_ratio: float | None = None,
 ) -> CommandComparison:
     """Build a comparison from (wall seconds, CPU seconds, peak RSS MiB) samples."""
 
@@ -66,6 +67,7 @@ def comparison(
         baseline=tuple(_sample(values=values) for values in baseline),
         candidate=tuple(_sample(values=values) for values in candidate),
         max_time_ratio=max_time_ratio,
+        max_rss_ratio=max_rss_ratio,
     )
 
 

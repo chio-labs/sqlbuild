@@ -18,6 +18,7 @@ def comparison_markdown(
     per_side_projects: bool,
     failures: tuple[str, ...],
     mode_max_ratios: Mapping[str, float] | None = None,
+    mode_cpu_max_ratios: Mapping[str, float] | None = None,
     engines: tuple[str | None, str | None] = (None, None),
     gate_phases: tuple[str, ...] = (),
     compile_args: tuple[str, ...] = (),
@@ -67,6 +68,11 @@ def comparison_markdown(
             ratio: str = f"{head / base:.3f}" if base else "n/a"
             lines.append(f"| {phase} | {base:.0f} | {head:.0f} | {ratio} |")
         lines.append("")
+        if comparison.mode in (mode_cpu_max_ratios or {}):
+            lines.append(
+                f"CPU limit for {comparison.mode}: "
+                f"{(mode_cpu_max_ratios or {})[comparison.mode]:.2f}x (explicit override)."
+            )
     if failures:
         lines.append("**Result: failed.** " + "; ".join(failures) + ".")
     else:

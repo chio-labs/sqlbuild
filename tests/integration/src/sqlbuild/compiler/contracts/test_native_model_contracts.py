@@ -92,8 +92,8 @@ def test_given_generated_lifecycles_when_finding_promotion_conflicts_natively_th
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
-    calls: Counter[str] = record_native_promotion_calls(monkeypatch=monkeypatch)
     base: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
+    calls: Counter[str] = record_native_promotion_calls(monkeypatch=monkeypatch)
     labels: list[object] = []
     python_views: list[object] = []
     native_views: list[object] = []

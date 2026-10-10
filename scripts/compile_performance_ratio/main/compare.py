@@ -68,6 +68,9 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
         {} if args.edit_max_ratio is None else {EDIT_MODE: args.edit_max_ratio}
     )
     gate_phases: tuple[str, ...] = tuple(dict.fromkeys(args.gate_phases))
+    mode_cpu_max_ratios: dict[str, float] = (
+        {} if args.edit_max_cpu_ratio is None else {EDIT_MODE: args.edit_max_cpu_ratio}
+    )
     failures: tuple[str, ...] = (
         phase_failures(
             comparisons=comparisons,
@@ -83,6 +86,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             max_ratio=args.max_ratio,
             noise_floor_seconds=args.noise_floor_seconds,
             mode_max_ratios=mode_max_ratios,
+            mode_cpu_max_ratios=mode_cpu_max_ratios,
         )
     )
     markdown: str = comparison_markdown(
@@ -92,6 +96,7 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
         per_side_projects=per_side_projects,
         failures=failures,
         mode_max_ratios=mode_max_ratios,
+        mode_cpu_max_ratios=mode_cpu_max_ratios,
         engines=(args.base_engine, args.head_engine),
         gate_phases=gate_phases,
         compile_args=tuple(args.compile_args),
@@ -128,6 +133,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("--runs", type=int, default=DEFAULT_RUNS)
     parser.add_argument("--max-ratio", type=float, default=DEFAULT_MAX_RATIO)
+    parser.add_argument(
+        "--edit-max-cpu-ratio",
+        type=float,
+        default=None,
+        help="CPU ratio limit for edit mode only; defaults to the mode's ratio limit.",
+    )
     parser.add_argument(
         "--edit-max-ratio",
         type=float,

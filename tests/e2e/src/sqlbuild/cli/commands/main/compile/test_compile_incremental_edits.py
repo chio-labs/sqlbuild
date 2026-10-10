@@ -10,6 +10,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     BrokenEditInvalidationTestCase,
     ExternalModuleEditTestCase,
     IncrementalEditSequenceTestCase,
+    NativeAnalysisStoreTestCase,
     RandomEditChainTestCase,
     SharedCacheKeyTestCase,
     SqlTestScanStoreTestCase,
@@ -31,10 +32,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     compiled_artifact_tampered,
     compiled_text,
     completed_order_udf_signature_change,
+    corrupt_native_analysis_store,
     corrupt_sql_test_scan_store,
     disable_project_reuse,
     edit_installed_code,
     edit_sql_test_scan_input,
+    edit_staging_type,
     edit_step,
     edit_unrelated_model,
     enable_compile_reuse,
@@ -50,6 +53,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     in_process_reuse_run,
     keep_invalidation,
     move_project_file,
+    native_analysis_counts,
     order_status_nullability_change,
     other_target_build_between,
     payment_expression_type_change,
@@ -370,7 +374,7 @@ def test_given_random_edit_chain_when_compiling_with_caches_then_each_step_match
             expected_matches_uncached=True,
         ),
         BrokenEditInvalidationTestCase(
-            description="stale_analysis_despite_query_edit",
+            description="stale_python_analysis_despite_query_edit",
             edit=fact_error_introduced,
             sabotage=ignore_query_in_analysis_key,
             expected_matches_uncached=False,
@@ -529,6 +533,72 @@ def test_given_stored_sql_test_scans_when_inputs_change_then_only_changed_files_
     assert sql_test_scan_counts(reference) == (0, 0)
     assert comparison.matches is test_case.expected_matches_uncached, (
         comparison.mismatched_artifacts
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeAnalysisStoreTestCase(
+            description="unchanged_project",
+            change=lambda _root, _monkeypatch: None,
+            expected_misses=0,
+        ),
+        NativeAnalysisStoreTestCase(
+            description="leaf_model_comment",
+            change=edit_unrelated_model,
+            expected_misses=1,
+        ),
+        NativeAnalysisStoreTestCase(
+            description="staging_type_reaches_consumers",
+            change=edit_staging_type,
+            expected_misses=10,
+        ),
+        NativeAnalysisStoreTestCase(
+            description="native_build_upgraded",
+            change=upgrade_native_build,
+            expected_misses=14,
+        ),
+        NativeAnalysisStoreTestCase(
+            description="installed_python_code_changed",
+            change=edit_installed_code,
+            expected_misses=14,
+        ),
+        NativeAnalysisStoreTestCase(
+            description="store_file_corrupted",
+            change=corrupt_native_analysis_store,
+            expected_misses=14,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stored_native_analyses_when_inputs_change_then_only_changed_models_miss(
+    compile_reuse_project: Path,
+    test_case: NativeAnalysisStoreTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = compile_reuse_project
+    disable_project_reuse(monkeypatch)
+    cold: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    test_case.change(project_dir, monkeypatch)
+
+    incremental: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
+    reference: CompileReuseRun = in_process_reuse_run(
+        project_dir=project_dir, capsys=capsys, args=("--no-cache",)
+    )
+    analysed: int = native_analysis_counts(cold)[1]
+
+    assert cold.returncode == 0, cold.stderr
+    assert native_analysis_counts(cold) == (0, analysed, 0)
+    assert native_analysis_counts(incremental) == (
+        analysed - test_case.expected_misses,
+        test_case.expected_misses,
+        0,
+    )
+    assert native_analysis_counts(reference) == (0, 0, analysed)
+    assert IncrementalEditComparison(incremental=incremental, reference=reference).matches, (
+        incremental.stderr
     )
 
 
