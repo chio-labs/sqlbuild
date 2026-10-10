@@ -48,12 +48,21 @@ fn given_source_expressions_when_inferring_shapes_then_matches_python_shapes() {
             expression: "SELECT 1 AS \"Mixed_Case\", CAST(2 AS BIGINT) AS total",
             expected_shape: r#"Inferred([("\"Mixed_Case\"", "INT"), ("total", "BIGINT")])"#,
         },
+        ExpressionShapeTestCase {
+            description: "untyped projections take Python's legacy analysis natively",
+            dialect: "duckdb",
+            case_sensitive_shapes: false,
+            expression: "SELECT mystery_fn(1) AS event_id, NULL AS note",
+            expected_shape: r#"Inferred([("event_id", "UNKNOWN"), ("note", "UNKNOWN")])"#,
+        },
     ];
     for test_case in test_cases {
         let request = ExpressionShapeRequest {
             dialect: test_case.dialect.to_owned(),
             case_sensitive_shapes: test_case.case_sensitive_shapes,
             function_return_types: Vec::new(),
+            nullability_rules: Some(Vec::new()),
+            nullability_callback: None,
             expressions: vec![test_case.expression.to_owned()],
         };
 

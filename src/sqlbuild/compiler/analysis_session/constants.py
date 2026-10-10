@@ -1,12 +1,9 @@
 """Native model analysis session constants."""
 
 ANALYSIS_DEFERRAL_SITE: str = "analysis_session"
-DEFERRAL_NO_CATALOG: str = "no_analysis_catalog"
-DEFERRAL_EXPRESSION_SHAPES: str = "expression_shapes"
 LINEAGE_NATIVE: str = "native"
 LINEAGE_FACTS: str = "facts"
 NATIVE_ANALYSIS_FAILURE_MESSAGE: str = "native compact query analysis failed"
-NATIVE_SHAPES_FAILURE_MESSAGE: str = "native expression-source shape inference failed; falling back"
 NULLABILITY_RULE_FIRST_ARG: str = "first_arg"
 NULLABILITY_RULE_CONDITIONAL_RESULT: str = "conditional_result"
 NULLABILITY_RULE_SAFE_CAST: str = "safe_cast"

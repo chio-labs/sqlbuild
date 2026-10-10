@@ -209,7 +209,7 @@ def generated_lineage_files(*, rng: random.Random, model_count: int) -> dict[str
 
 
 def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledProject:
-    """Write and compile a project with the Python compiler, keeping any diagnostics."""
+    """Write and compile a project, keeping any diagnostics."""
 
     for relative_path, contents in files.items():
         path: Path = project_dir / relative_path

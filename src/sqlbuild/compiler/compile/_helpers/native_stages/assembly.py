@@ -21,9 +21,6 @@ from sqlbuild.compiler.analysis_session.models import (
 )
 from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import standalone_pivot_models
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_syntax_checks
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    get_expression_source_shapes,
-)
 from sqlbuild.compiler.compile.models import (
     CompileProjectInputs,
     DynamicColumnContractProof,
@@ -108,14 +105,9 @@ def project_facts_by_engine(
 def expression_source_shapes_by_engine(
     *, expressions: tuple[str, ...], profile: ExpressionInferenceProfile
 ) -> tuple[dict[str, str] | None, ...]:
-    """Infer one shape per expression source natively, or with Python where native defers."""
+    """Infer one shape per expression source natively."""
 
-    native_shapes: tuple[dict[str, str] | None, ...] | None = infer_native_expression_source_shapes(
-        expressions=expressions, profile=profile
-    )
-    if native_shapes is not None:
-        return native_shapes
-    return get_expression_source_shapes(expressions=expressions, profile=profile)
+    return infer_native_expression_source_shapes(expressions=expressions, profile=profile)
 
 
 def analyze_model_sql(

@@ -208,7 +208,6 @@ pub struct SessionOutcome {
 pub enum ExpressionShape {
     Inferred(Pairs),
     Absent,
-    Deferred,
 }
 
 /// What expression-source shape inference reads from the inference profile.
@@ -217,6 +216,10 @@ pub struct ExpressionShapeRequest {
     pub dialect: String,
     pub case_sensitive_shapes: bool,
     pub function_return_types: Pairs,
+    /// Adapter nullability rules as `(function name, rule id)`.
+    pub nullability_rules: Option<Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub nullability_callback: Option<NullabilityCallback>,
     pub expressions: Vec<String>,
 }
 
