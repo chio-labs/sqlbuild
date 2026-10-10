@@ -40,11 +40,3 @@ pub(super) fn analysing_settings(
 pub(super) fn keys(keys: &[&str]) -> Vec<String> {
     keys.iter().map(|key| (*key).to_owned()).collect()
 }
-
-pub(super) fn column(
-    column_type: Option<&str>,
-) -> crate::compiled_project::models::HeaderColumnShape {
-    crate::compiled_project::models::HeaderColumnShape {
-        column_type: column_type.map(str::to_owned),
-    }
-}

@@ -44,12 +44,6 @@ pub(super) struct HeaderFeatureTestCase {
     pub(super) expected_feature: Option<crate::compiled_project::models::AttachmentFeature>,
 }
 
-pub(super) struct EnumColumnsTestCase {
-    pub(super) description: &'static str,
-    pub(super) column_type: Option<&'static str>,
-    pub(super) expected_enum_typed: bool,
-}
-
 pub(super) struct DeclarationErrorTestCase {
     pub(super) description: &'static str,
     pub(super) error: crate::compiled_project::errors::DeclarationError,

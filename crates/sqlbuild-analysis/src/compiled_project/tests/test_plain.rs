@@ -1,11 +1,8 @@
 use crate::compiled_project::main::analysis_gate::analysis_gate;
-use crate::compiled_project::main::enum_typed_columns::enum_typed_columns;
 use crate::compiled_project::main::header_attachment_feature::header_attachment_feature;
 use crate::compiled_project::models::{AnalysisGate, AnalysisOverride, AttachmentFeature};
-use crate::compiled_project::tests::helpers::{analysing_settings, column, keys};
-use crate::compiled_project::tests::test_types::{
-    AnalysisGateTestCase, EnumColumnsTestCase, HeaderFeatureTestCase,
-};
+use crate::compiled_project::tests::helpers::{analysing_settings, keys};
+use crate::compiled_project::tests::test_types::{AnalysisGateTestCase, HeaderFeatureTestCase};
 
 #[test]
 fn given_override_when_gating_analysis_then_project_switches_come_first() {
@@ -53,7 +50,7 @@ fn given_override_when_gating_analysis_then_project_switches_come_first() {
 fn given_header_keys_when_classifying_then_attachment_features_are_found_in_order() {
     let test_cases = [
         HeaderFeatureTestCase {
-            description: "columns, audits, enums and constants are native",
+            description: "columns, audits, dynamic columns and audit factories are native",
             keys: &[
                 "description",
                 "columns",
@@ -65,14 +62,9 @@ fn given_header_keys_when_classifying_then_attachment_features_are_found_in_orde
             expected_feature: None,
         },
         HeaderFeatureTestCase {
-            description: "model schema before dynamic columns",
+            description: "model schema",
             keys: &["dynamic_columns", "model_schema"],
             expected_feature: Some(AttachmentFeature::ModelSchema),
-        },
-        HeaderFeatureTestCase {
-            description: "audit factories",
-            keys: &["audit_factories"],
-            expected_feature: Some(AttachmentFeature::AuditFactories),
         },
     ];
 
@@ -80,31 +72,6 @@ fn given_header_keys_when_classifying_then_attachment_features_are_found_in_orde
         assert_eq!(
             header_attachment_feature(&keys(test_case.keys)),
             test_case.expected_feature,
-            "{}",
-            test_case.description
-        );
-    }
-}
-
-#[test]
-fn given_header_columns_when_checking_enum_types_then_visible_enums_are_matched() {
-    let test_cases = [
-        EnumColumnsTestCase {
-            description: "scalar column",
-            column_type: Some("INTEGER"),
-            expected_enum_typed: false,
-        },
-        EnumColumnsTestCase {
-            description: "enum column",
-            column_type: Some("order_status"),
-            expected_enum_typed: true,
-        },
-    ];
-
-    for test_case in test_cases {
-        assert_eq!(
-            enum_typed_columns(&[column(test_case.column_type)], &keys(&["order_status"])),
-            test_case.expected_enum_typed,
             "{}",
             test_case.description
         );

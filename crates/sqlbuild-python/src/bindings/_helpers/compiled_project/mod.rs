@@ -1,4 +1,5 @@
 pub(crate) mod model_loop;
+pub(crate) mod model_loop_contracts;
 pub(crate) mod model_loop_header;
 pub(crate) mod model_loop_hooks;
 pub(crate) mod model_loop_host;

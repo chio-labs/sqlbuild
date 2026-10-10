@@ -12,8 +12,6 @@ pub(crate) const HEADER_METADATA_KEYS: [&str; 8] = [
     "constants",
 ];
 pub(crate) const MODEL_SCHEMA_KEY: &str = "model_schema";
-pub(crate) const DYNAMIC_COLUMNS_KEY: &str = "dynamic_columns";
-pub(crate) const AUDIT_FACTORIES_KEY: &str = "audit_factories";
 pub(crate) const DECLARATION_EXPANSION_CONTEXT: &str = "Enum and constant expansion";
 pub(crate) const UNCLOSED_BLOCK_COMMENT_STOP: u8 = 1;
 pub(crate) const INVALID_ENUM_REFERENCE_STOP: u8 = 2;

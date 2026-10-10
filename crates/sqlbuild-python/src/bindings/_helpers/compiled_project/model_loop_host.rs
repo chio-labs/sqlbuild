@@ -1,7 +1,7 @@
 //! The Python host the loop hands finished models and user-code steps to.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{FromPyObject, IntoPyObject};
 use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
 use sqlbuild_analysis::compiled_project::models::{
@@ -35,6 +35,7 @@ const DESCRIPTION_ARGUMENT: &str = "description";
 const SCHEMA_ARGUMENT: &str = "schema";
 const HOOK_STATEMENTS_ARGUMENT: &str = "hook_statements";
 const DECLARATIONS_ARGUMENT: &str = "declarations";
+const ENUM_COLUMNS_ARGUMENT: &str = "enum_columns";
 
 /// `((name, POSIX path, relative path, file path), column locations, query, contents, scan)`.
 #[derive(FromPyObject)]
@@ -88,6 +89,14 @@ pub(crate) fn plain_input<'py>(
     let py: Python<'py> = host.py();
     let ModelLoopRow((name, relative_path, _, _), _, authored_query_sql, authored_sql, _) = row;
     let stripped: Bound<'py, PyDict> = stripped_values(py, &finished.values)?;
+    let mut usages: Vec<Bound<'py, PyAny>> = finished.declarations.usages;
+    if let Some(schema) = &finished.header.schema {
+        usages.extend(schema.generated_usages.iter().cloned());
+    }
+    let enum_columns: Vec<String> = match &finished.header.schema {
+        Some(schema) => schema.enum_columns.keys().extract()?,
+        None => Vec::new(),
+    };
     let arguments = [
         (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
         (VALUES_ARGUMENT, stripped.clone().into_any()),
@@ -112,11 +121,18 @@ pub(crate) fn plain_input<'py>(
             finished.hook_statements.into_pyobject(py)?.into_any(),
         ),
         (
+            ENUM_COLUMNS_ARGUMENT,
+            finished.header.schema.as_ref().map_or_else(
+                || PyDict::new(py).into_any(),
+                |schema| schema.enum_columns.clone().into_any(),
+            ),
+        ),
+        (
             DECLARATIONS_ARGUMENT,
             (
                 finished.declarations.spliced.sql.as_str(),
                 span_rows(&finished.declarations.spliced),
-                finished.declarations.usages,
+                usages,
             )
                 .into_pyobject(py)?
                 .into_any(),
@@ -143,6 +159,7 @@ pub(crate) fn plain_input<'py>(
             .into_iter()
             .map(reference_fact)
             .collect(),
+        enum_columns,
         enum_declarations: declarations(enums)?,
         constant_declarations: declarations(constants)?,
     });
@@ -174,6 +191,7 @@ fn schema_argument<'py>(
             schema.columns.clone(),
             schema.audits.clone(),
             schema.type_enforcement,
+            schema.dynamic_columns.clone(),
         )
             .into_pyobject(py)?
             .into_any()),

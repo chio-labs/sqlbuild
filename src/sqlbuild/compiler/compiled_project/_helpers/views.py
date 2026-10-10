@@ -70,6 +70,7 @@ def plain_model_input_impl(
         sql_validation_enabled=True,
         enum_declarations=local_enums,
         constant_declarations=local_constants,
+        enum_columns=facts.enum_columns,
         macro_deps=(
             ()
             if facts.macro_expansion is None
@@ -91,12 +92,13 @@ def _schema_entry(
 ) -> SchemaModelEntry | None:
     if facts.schema is None:
         return None
-    columns, audits, typed = facts.schema
+    columns, audits, typed, dynamic_columns = facts.schema
     return SchemaModelEntry(
         name=model_file.file_path.stem,
         description=facts.description,
         type_enforcement=True if typed else None,
         columns=columns,
+        dynamic_columns=dynamic_columns,
         audits=audits,
     )
 

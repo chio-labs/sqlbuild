@@ -19,7 +19,9 @@ use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::bindings::_helpers::compiled_project::model_loop_header::{HeaderSource, header_schema};
+use crate::bindings::_helpers::compiled_project::model_loop_header::{
+    AttachedHeader, HeaderSource, header_schema,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_hooks::expanded_hooks;
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
     FinishedModel, ModelLoopRow, ReferenceRow, attached_input, callback, plain_input,
@@ -45,7 +47,6 @@ const RETENTION_ATTRIBUTE: &str = "time_travel_retention";
 const UNMANAGED_ATTRIBUTE: &str = "unmanaged";
 const TABLE_TYPE_ATTRIBUTE: &str = "table_type";
 const DECLARED_ATTRIBUTE: &str = "declared";
-const ENUMS_ATTRIBUTE: &str = "enums";
 const VALIDATE_METHOD: &str = "validate";
 const CONFIG_CALLBACK: &str = "config";
 const CHECK_HOOKS_CALLBACK: &str = "check_hooks";
@@ -73,6 +74,12 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) sql_hook_entry: Bound<'py, PyAny>,
     /// `native_config_error`: the exception a native config error raises as.
     pub(crate) config_error: Bound<'py, PyAny>,
+    /// Discovered audit factories by name.
+    pub(crate) audit_factories: Bound<'py, PyDict>,
+    /// `UsageKind.GENERATED`, for usages an enum-typed column generates.
+    pub(crate) generated_usage: Bound<'py, PyAny>,
+    /// `ContractPolicy.ENFORCED`.
+    pub(crate) contract_enforced: Bound<'py, PyAny>,
 }
 
 /// The ordered model loop of one compile-input stage.
@@ -98,7 +105,6 @@ pub(crate) struct LoopContext<'a, 'py> {
 pub(crate) struct VisibleDeclarations<'py> {
     pub(crate) declarations: Bound<'py, PyAny>,
     pub(crate) consumer: Bound<'py, PyAny>,
-    pub(crate) enum_names: Vec<String>,
 }
 
 /// What the model loop knows about a model before finishing it.
@@ -162,11 +168,6 @@ impl NativeModelLoop {
                 Bound<'py, PyAny>,
             ) = callback(&host, CONFIG_CALLBACK, &index_argument)?.extract()?;
             let visible: VisibleDeclarations<'py> = VisibleDeclarations {
-                enum_names: declarations
-                    .getattr(ENUMS_ATTRIBUTE)?
-                    .downcast_into::<PyDict>()?
-                    .keys()
-                    .extract()?,
                 declarations,
                 consumer,
             };
@@ -314,11 +315,9 @@ impl NativeModelLoop {
             values: &values,
             locations: locations.bind(py),
             relative_path,
-            enum_names: &visible.enum_names,
+            visible: (&visible.declarations, &visible.consumer),
         };
-        let Some(header) = header_schema(py, context, &source)? else {
-            return Ok(None);
-        };
+        let header: AttachedHeader<'py> = header_schema(py, context, &source)?;
         if self.settings.legacy_schema_files {
             return Ok(None);
         }

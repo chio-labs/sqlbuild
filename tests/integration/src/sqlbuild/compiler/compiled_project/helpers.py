@@ -154,6 +154,41 @@ PARITY_FILES: dict[str, str] = {
 }
 
 
+HEADER_CONTRACT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+    "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+    "audits/generic/expression_is_true.sql": (
+        'AUDIT ();\nSELECT * FROM __ref("@model") WHERE NOT (@expression)\n'
+    ),
+    "python/quality.py": (
+        "from sqlbuild.audits import AuditCase, audit_factory\n\n\n"
+        "@audit_factory\n"
+        "def order_checks():\n"
+        "    return [\n"
+        '        AuditCase(name="positive_total", definition="expression_is_true",\n'
+        '                  arguments={"expression": "total > 0"}),\n'
+        "    ]\n"
+    ),
+    "models/order_amounts.sql": (
+        "MODEL (columns (customer_id (type INTEGER)));\n"
+        "SELECT 1 AS customer_id, 'books' AS category, 2 AS amount\n"
+    ),
+    "models/category_amounts.sql": (
+        "MODEL (\n  columns (customer_id (type INTEGER)),\n"
+        "  dynamic_columns (category_amounts (pivot_column category, value_column amount,"
+        ' aggregate max, type INTEGER, name_pattern "^[a-z]+$")),\n);\n'
+        'SELECT * FROM __ref("order_amounts")\n'
+        "PIVOT(MAX(amount) FOR category IN (ANY ORDER BY category))\n"
+    ),
+    "models/order_statuses.sql": (
+        "MODEL (\n  contract enforced,\n"
+        "  columns (status (type order_status, audits [not_null]), total (type INTEGER)),\n"
+        "  audit_factories [order_checks],\n);\n"
+        'SELECT @enum("order_status").PLACED AS status, 3 AS total\n'
+    ),
+}
+
+
 def build_inputs_with_native_loop(
     *, project_dir: Path, native: bool, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[CompileProjectInputs, list[int]]:

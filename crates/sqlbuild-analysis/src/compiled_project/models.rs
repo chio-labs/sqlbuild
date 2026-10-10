@@ -148,9 +148,6 @@ pub enum AnalysisGate {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AttachmentFeature {
     ModelSchema,
-    DynamicColumns,
-    AuditFactories,
-    EnumColumns,
     AnalysisOptOut,
     ImmediateValidation,
     ReferenceScan,
@@ -194,12 +191,6 @@ pub struct SplicedSql {
     pub spans: Vec<SplicedSpan>,
 }
 
-/// One parsed header column as the model loop's enum check reads it.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct HeaderColumnShape {
-    pub column_type: Option<String>,
-}
-
 /// A natively finished model's facts.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PlainModel {
@@ -212,6 +203,8 @@ pub struct PlainModel {
     /// The attached schema entry; present when the header declares description, columns or audits.
     pub schema: Option<ModelSchemaFact>,
     pub references: Vec<ModelReferenceFact>,
+    /// Header columns typed as an enum, in column order.
+    pub enum_columns: Vec<String>,
     pub enum_declarations: Vec<DeclarationFact>,
     pub constant_declarations: Vec<DeclarationFact>,
 }

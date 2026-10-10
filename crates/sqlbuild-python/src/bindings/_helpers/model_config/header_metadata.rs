@@ -15,8 +15,10 @@ use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
 pub(crate) struct ContractClasses<'py> {
-    schema_column: Bound<'py, PyAny>,
-    schema_audit_instance: Bound<'py, PyAny>,
+    pub(crate) schema_column: Bound<'py, PyAny>,
+    pub(crate) schema_audit_instance: Bound<'py, PyAny>,
+    pub(crate) schema_dynamic_column_family: Bound<'py, PyAny>,
+    pub(crate) source_location: Bound<'py, PyAny>,
     measurement_thresholds: Bound<'py, PyAny>,
     measurement_threshold_bound: Bound<'py, PyAny>,
     severities: Bound<'py, PyDict>,

@@ -142,6 +142,7 @@ from sqlbuild.compiler.model_loop.main._scan_native_declaration_references impor
     scan_native_declaration_references,
 )
 from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
+from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -165,6 +166,7 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     SchemaAuditInstance,
     SchemaColumn,
+    SchemaDynamicColumnFamily,
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
@@ -500,7 +502,16 @@ class _ModelLoopHost:
         references: list[tuple[str, str, str | None, int | None]],
         query_sql: str,
         description: str | None,
-        schema: tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...], bool] | None,
+        schema: (
+            tuple[
+                tuple[SchemaColumn, ...],
+                tuple[SchemaAuditInstance, ...],
+                bool,
+                tuple[SchemaDynamicColumnFamily, ...],
+            ]
+            | None
+        ),
+        enum_columns: dict[str, EnumDeclaration],
         hook_statements: int,
         declarations: tuple[str, list[tuple[int, int, int, int]], list[UsageRecord]],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
@@ -519,6 +530,7 @@ class _ModelLoopHost:
                 query_sql=query_sql,
                 description=description,
                 schema=schema,
+                enum_columns=enum_columns,
                 declaration_sql=declarations[0],
                 declaration_spans=_expansion_spans(declarations[1]),
                 macro_expansion=self.macros.pop(index, None),
@@ -740,6 +752,11 @@ def _run_native_model_loop(
                 "compile_error": CompileInputError,
                 "sql_hook_entry": SqlHookEntry,
                 "config_error": native_config_error,
+                "audit_factories": {
+                    factory.name: factory for factory in loop.discovered_inputs.audit_factories
+                },
+                "generated_usage": UsageKind.GENERATED,
+                "contract_enforced": ContractPolicy.ENFORCED,
             },
         ),
         loop.context.sql_lexical_syntax.native_mapping,

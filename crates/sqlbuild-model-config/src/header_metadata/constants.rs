@@ -33,3 +33,15 @@ pub const FALLBACK_IDENTITY: &str = "resource_name";
 pub const MODEL_LABEL: &str = "model";
 /// The code of the nullable column that also declares `not_null`.
 pub const NULLABLE_NOT_NULL_CODE: &str = "P002";
+/// Keys one `dynamic_columns` family may declare.
+pub const DYNAMIC_FAMILY_KEYS: [&str; 5] = [
+    "pivot_column",
+    "value_column",
+    "aggregate",
+    "type",
+    "name_pattern",
+];
+/// The family keys that must hold non-blank text, in the order they are checked.
+pub const DYNAMIC_REQUIRED_KEYS: [&str; 4] = ["pivot_column", "value_column", "aggregate", "type"];
+/// The optional regular expression that classifies a family's runtime columns.
+pub const DYNAMIC_NAME_PATTERN_KEY: &str = "name_pattern";

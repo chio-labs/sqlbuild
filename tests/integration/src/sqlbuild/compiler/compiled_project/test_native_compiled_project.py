@@ -17,6 +17,7 @@ from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import
     ZeroMaterializationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
+    HEADER_CONTRACT_FILES,
     LEGACY_PROJECT_TYPES,
     PARITY_FILES,
     TYPE_PROOF_FILES,
@@ -98,6 +99,12 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
             expected_native_models=8,
         ),
         ModelLoopParityTestCase(
+            description="dynamic columns, audit factories and enforced enum columns",
+            fixtures=(),
+            files=HEADER_CONTRACT_FILES,
+            expected_native_models=3,
+        ),
+        ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",
             fixtures=("tests/e2e/fixtures/waffle_shop",),
             files={},
@@ -155,6 +162,28 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
                 "incremental and snapshot models, or for table and view models that declare "
                 "migrate_from themselves (the old name's compatibility view then presents the "
                 "column under its old name); 'table' models are rebuilt with their new columns"
+            ),
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
+            description="invalid dynamic column pattern",
+            model_sql=(
+                "MODEL (dynamic_columns (amounts (pivot_column category, value_column amount,"
+                ' aggregate max, type INTEGER, name_pattern "(")));\n'
+                "SELECT 1 AS order_id\n"
+            ),
+            expected_message=(
+                "model 'orders' dynamic column family 'amounts' has invalid name_pattern: "
+                "missing ), unterminated subpattern at position 0"
+            ),
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
+            description="unknown audit factory",
+            model_sql="MODEL (audit_factories [order_checks]);\nSELECT 1 AS order_id\n",
+            expected_message=(
+                "model 'orders' in models/orders.sql references unknown audit factory "
+                "'order_checks'. Available audit factories: none discovered"
             ),
             expected_code="P001",
         ),

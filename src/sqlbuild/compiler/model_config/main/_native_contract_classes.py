@@ -4,7 +4,12 @@ from functools import cache
 
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditSeverity, ThresholdOperator
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn
+from sqlbuild.spec.contracts.models import (
+    SchemaAuditInstance,
+    SchemaColumn,
+    SchemaDynamicColumnFamily,
+    SourceLocation,
+)
 
 
 @cache
@@ -14,6 +19,8 @@ def native_contract_classes() -> dict[str, object]:
     return {
         "schema_column": SchemaColumn,
         "schema_audit_instance": SchemaAuditInstance,
+        "schema_dynamic_column_family": SchemaDynamicColumnFamily,
+        "source_location": SourceLocation,
         "measurement_thresholds": MeasurementThresholds,
         "measurement_threshold_bound": MeasurementThresholdBound,
         "severities": {severity.value: severity for severity in AuditSeverity},

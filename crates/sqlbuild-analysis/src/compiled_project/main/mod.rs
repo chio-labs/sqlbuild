@@ -2,7 +2,6 @@ pub mod analysis_gate;
 pub mod calls_macros;
 pub mod declaration_error_message;
 pub mod enum_member_literal;
-pub mod enum_typed_columns;
 pub mod header_attachment_feature;
 pub mod header_metadata_keys;
 pub mod merge_call_site_references;

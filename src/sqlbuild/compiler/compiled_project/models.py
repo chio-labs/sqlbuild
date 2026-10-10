@@ -9,8 +9,13 @@ from sqlbuild.compiler.compile.models import (
     ExpansionSpan,
     MacroExpansionResult,
 )
+from sqlbuild.compiler.discovery.models import EnumDeclaration
 from sqlbuild.compiler.scopes.models import UsageRecord
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn
+from sqlbuild.spec.contracts.models import (
+    SchemaAuditInstance,
+    SchemaColumn,
+    SchemaDynamicColumnFamily,
+)
 
 
 @dataclass(frozen=True)
@@ -22,7 +27,16 @@ class PlainModelFacts:
     references: list[tuple[str, str, str | None, int | None]]
     query_sql: str
     description: str | None
-    schema: tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...], bool] | None
+    schema: (
+        tuple[
+            tuple[SchemaColumn, ...],
+            tuple[SchemaAuditInstance, ...],
+            bool,
+            tuple[SchemaDynamicColumnFamily, ...],
+        ]
+        | None
+    )
+    enum_columns: dict[str, EnumDeclaration]
     declaration_sql: str
     declaration_spans: tuple[ExpansionSpan, ...]
     declaration_usages: tuple[UsageRecord, ...]

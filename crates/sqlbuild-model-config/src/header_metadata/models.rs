@@ -52,3 +52,14 @@ pub struct HeaderMetadata<N> {
     pub columns: Result<Vec<ParsedColumn<N>>, ConfigError>,
     pub audits: Result<Vec<ParsedAudit<N>>, ConfigError>,
 }
+
+/// One `dynamic_columns` family; `aggregate` is upper-cased as Python stores it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DynamicFamily {
+    pub name: String,
+    pub pivot_column: String,
+    pub value_column: String,
+    pub aggregate: String,
+    pub data_type: String,
+    pub name_pattern: Option<String>,
+}

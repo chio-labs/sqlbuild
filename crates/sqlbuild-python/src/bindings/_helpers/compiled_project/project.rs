@@ -20,9 +20,9 @@ use crate::bindings::_helpers::compiled_project::values::{object_value, plain_va
 /// `(name, type)`.
 type NamedType = (String, Option<String>);
 /// `(name, type, nullable, audit count)`.
-type SchemaColumnPy = (String, Option<String>, Option<bool>, u32);
+pub(crate) type SchemaColumnPy = (String, Option<String>, Option<bool>, u32);
 /// `(key, name, pivot column, value column, aggregate, type, name pattern)`.
-type DynamicFamilyPy = (
+pub(crate) type DynamicFamilyPy = (
     String,
     String,
     String,
@@ -32,7 +32,7 @@ type DynamicFamilyPy = (
     Option<String>,
 );
 /// `(entry audit count, columns, dynamic families)`.
-type SchemaPy = (u32, Vec<SchemaColumnPy>, Vec<DynamicFamilyPy>);
+pub(crate) type SchemaPy = (u32, Vec<SchemaColumnPy>, Vec<DynamicFamilyPy>);
 /// `(output proven, bare dynamic pivot, (family key, inferred type))`.
 type ProofPy = (bool, bool, Vec<NamedType>);
 
@@ -177,7 +177,7 @@ pub(crate) fn config_values(values: &Bound<'_, PyDict>) -> ConfigValues {
     }
 }
 
-fn schema_fact((audit_count, columns, dynamic_columns): SchemaPy) -> ModelSchemaFact {
+pub(crate) fn schema_fact((audit_count, columns, dynamic_columns): SchemaPy) -> ModelSchemaFact {
     ModelSchemaFact {
         audit_count,
         columns: columns
