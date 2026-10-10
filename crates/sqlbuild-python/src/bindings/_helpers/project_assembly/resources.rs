@@ -16,10 +16,15 @@ use sqlbuild_analysis::assembly::project::models::{
     TargetNamespace, Variable,
 };
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
+use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
+use sqlbuild_core::panics::main::native_failure::native_failure;
 use sqlbuild_model_config::templates::models::Scalar;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
+
+const PROJECT_ASSEMBLY_CONTEXT: &str = "native project assembly";
+const SYNTAX_CHECK_CONTEXT: &str = "native SQL syntax check";
 
 const TEXT_VARIABLE: &str = "text";
 const BOOLEAN_VARIABLE: &str = "bool";
@@ -93,11 +98,15 @@ type ResourcesRow = (
 fn assemble_project_resource_facts(
     py: Python<'_>,
     request: RequestRow,
-) -> (Option<ResourcesRow>, Option<String>) {
+) -> PyResult<(Option<ResourcesRow>, Option<String>)> {
     let request: ProjectRequest = project_request(request);
     match py.compiler_detach(|| assemble_project_resources(&request)) {
-        Ok(resources) => (Some(resources_row(resources)), None),
-        Err(reason) => (None, Some(reason)),
+        Ok(resources) => Ok((Some(resources_row(resources)), None)),
+        Err(reason) if is_compiler_panic(&reason) => Err(compiler_error(native_failure(
+            PROJECT_ASSEMBLY_CONTEXT,
+            &reason,
+        ))),
+        Err(reason) => Ok((None, Some(reason))),
     }
 }
 
@@ -138,15 +147,19 @@ fn sql_syntax_error(
 fn check_native_sql_syntax(
     py: Python<'_>,
     request: (String, Vec<(String, Pairs)>),
-) -> (Option<bool>, Option<String>) {
+) -> PyResult<(Option<bool>, Option<String>)> {
     let (dialect, rows) = request;
     let checks: Vec<SyntaxCheck> = rows
         .into_iter()
         .map(|(sql, placeholders)| SyntaxCheck { sql, placeholders })
         .collect();
     match py.compiler_detach(|| check_sql_syntax(&dialect, &checks)) {
-        Ok(valid) => (Some(valid), None),
-        Err(reason) => (None, Some(reason)),
+        Ok(valid) => Ok((Some(valid), None)),
+        Err(reason) if is_compiler_panic(&reason) => Err(compiler_error(native_failure(
+            SYNTAX_CHECK_CONTEXT,
+            &reason,
+        ))),
+        Err(reason) => Ok((None, Some(reason))),
     }
 }
 

@@ -66,3 +66,13 @@ class GraphFactsTestCase:
     expected_model_tags: tuple[list[str], ...]
     expected_seeds: list[tuple[str, list[str]]]
     expected_function_kinds: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativePanicTestCase:
+    """A project whose native assembly panics in the parser."""
+
+    description: str
+    files: dict[str, str]
+    dialect: str
+    expected_message: str

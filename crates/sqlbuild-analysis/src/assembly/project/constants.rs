@@ -37,4 +37,3 @@ pub(crate) const NORMALIZATION_DEFERRAL: &str = "normalization";
 /// Python's message when `validate` rejects SQL without naming an error.
 pub(crate) const INVALID_SQL: &str = "invalid SQL";
 pub(crate) const UNSUPPORTED_DIALECT_DEFERRAL: &str = "unsupported_dialect";
-pub(crate) const PANIC_DEFERRAL: &str = "panic";

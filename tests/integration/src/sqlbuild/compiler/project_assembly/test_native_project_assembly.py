@@ -10,8 +10,12 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
@@ -21,6 +25,7 @@ from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import
     DeferredAssemblyTestCase,
     GeneratedAssemblyParityTestCase,
     GraphFactsTestCase,
+    NativePanicTestCase,
     OptOutTestCase,
     WindowsEnvironmentTestCase,
 )
@@ -397,3 +402,47 @@ def test_given_project_when_assembling_natively_then_request_carries_graph_facts
         ],
     )
     assert [kind for kind, _, _, _ in request[8]] == list(test_case.expected_function_kinds)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativePanicTestCase(
+            description="a T-SQL hook the parser panics on",
+            files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/orders.sql": (
+                    'MODEL (\n  description "Orders",\n'
+                    '  pre_hooks [inline_sql("SELECT IF(region > 1, re")],\n);\n\nSELECT 1 AS n\n'
+                ),
+            },
+            dialect="tsql",
+            expected_message=(
+                "NativeCompilerError: native SQL compilation panicked (native project assembly)"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_assembly_panics_when_assembling_then_raises_without_python_retry(
+    test_case: NativePanicTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
+    inputs: CompileProjectInputs = project_inputs(
+        project_dir=tmp_path / "project", files=test_case.files
+    )
+    calls: Counter[str] = python_resource_calls(monkeypatch=monkeypatch)
+
+    with pytest.raises(native_module.NativeCompilerError) as raised:
+        _ = assemble_compiled_project(
+            inputs=inputs,
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=test_case.dialect),
+        )
+
+    assert (str(raised.value), calls, assembly_deferrals(record_dir)) == (
+        test_case.expected_message,
+        Counter(),
+        Counter(),
+    )
