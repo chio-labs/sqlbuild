@@ -1,11 +1,14 @@
 use crate::json::_helpers::floats::python_repr;
 use crate::json::errors::JsonEmitError;
 use crate::json::main::dumps::dumps;
-use crate::json::models::{JsonDialect, JsonInteger, OrjsonOptions, StdlibJsonOptions};
+use crate::json::models::{JsonDialect, JsonInteger, JsonValue, OrjsonOptions, StdlibJsonOptions};
 use crate::json::tests::helpers::{
-    digits, lone_surrogate_text, nested_arrays, non_finite_floats, sample_document,
+    digits, lone_surrogate_text, nested_arrays, non_finite_floats, on_large_stack, sample_document,
+    wrapped_in_arrays,
 };
-use crate::json::tests::test_types::{DumpsTestCase, FloatReprTestCase, IntegerParseTestCase};
+use crate::json::tests::test_types::{
+    DumpsTestCase, FloatReprTestCase, IntegerParseTestCase, NestingTestCase,
+};
 
 const BIG: &str = "1180591620717411303424";
 const U64_MAX: &str = "18446744073709551615";
@@ -108,18 +111,6 @@ fn given_python_serializer_options_when_dumping_then_output_matches_python_bytes
             value: digits(4_301),
             dialect: JsonDialect::Stdlib(StdlibJsonOptions::new(None)),
             expected_text: Err(JsonEmitError::IntegerTooLong),
-        },
-        DumpsTestCase {
-            description: "deeply nested values are refused instead of exhausting the stack",
-            value: nested_arrays(1_000),
-            dialect: JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2))),
-            expected_text: Err(JsonEmitError::NestingTooDeep),
-        },
-        DumpsTestCase {
-            description: "orjson refuses deeply nested values too",
-            value: nested_arrays(130),
-            dialect: JsonDialect::Orjson(OrjsonOptions::default()),
-            expected_text: Err(JsonEmitError::NestingTooDeep),
         },
         DumpsTestCase {
             description: "json.dumps escapes lone surrogates beside escapes and a non-BMP pair",
@@ -283,6 +274,65 @@ fn given_python_integer_text_when_parsing_then_text_is_canonical() {
         assert_eq!(
             parsed.as_ref().map(JsonInteger::as_str),
             test_case.expected_decimal,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_nesting_near_python_limits_when_dumping_then_refusal_matches_python() {
+    let orjson = || JsonDialect::Orjson(OrjsonOptions::default());
+    let stdlib = || JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2)));
+    let test_cases = [
+        NestingTestCase {
+            description: "orjson writes 254 non-empty lists",
+            value: wrapped_in_arrays(254, JsonValue::Bool(true)),
+            dialect: orjson(),
+            expected_written: true,
+        },
+        NestingTestCase {
+            description: "orjson refuses the 255th non-empty list",
+            value: wrapped_in_arrays(255, JsonValue::Bool(true)),
+            dialect: orjson(),
+            expected_written: false,
+        },
+        NestingTestCase {
+            description: "orjson does not count an empty list",
+            value: nested_arrays(255),
+            dialect: orjson(),
+            expected_written: true,
+        },
+        NestingTestCase {
+            description: "orjson counts an empty dict",
+            value: wrapped_in_arrays(254, JsonValue::Object(Vec::new())),
+            dialect: orjson(),
+            expected_written: false,
+        },
+        NestingTestCase {
+            description: "orjson writes an empty dict one level up",
+            value: wrapped_in_arrays(253, JsonValue::Object(Vec::new())),
+            dialect: orjson(),
+            expected_written: true,
+        },
+        NestingTestCase {
+            description: "json.dumps writes what orjson refuses, up to the recursion limit",
+            value: nested_arrays(1_000),
+            dialect: stdlib(),
+            expected_written: true,
+        },
+        NestingTestCase {
+            description: "json.dumps refuses nesting beyond Python's default recursion limit",
+            value: nested_arrays(1_001),
+            dialect: stdlib(),
+            expected_written: false,
+        },
+    ];
+    for test_case in test_cases {
+        let written: bool =
+            on_large_stack(move || dumps(&test_case.value, &test_case.dialect).is_ok());
+        assert_eq!(
+            written, test_case.expected_written,
             "{}",
             test_case.description
         );

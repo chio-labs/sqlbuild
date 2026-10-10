@@ -62,3 +62,21 @@ class CliJsonReportTestCase:
     description: str
     args: tuple[str, ...]
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class NestedReportTestCase:
+    """A report nested `depth` lists deep under one key, beyond what `json.dumps` can write."""
+
+    description: str
+    depth: int
+    expected_error: type[Exception]
+
+
+@dataclass(frozen=True)
+class NestedHookReportTestCase:
+    """A real compile whose Python hook payload nests `depth` lists inside the report."""
+
+    description: str
+    depth: int
+    expected_exit_code: int

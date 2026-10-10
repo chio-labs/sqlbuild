@@ -1,7 +1,7 @@
 //! Emit a command's JSON report as orjson would, or as `json.dumps` does when orjson rejects it.
 
-use pyo3::exceptions::PyTypeError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::exceptions::{PyRecursionError, PyTypeError};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{
     PyBool, PyBoolMethods, PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList,
     PyString, PyStringMethods, PyTuple, PyTypeMethods,
@@ -17,6 +17,12 @@ use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_
 const ORJSON_SURROGATE: &str = "str is not valid UTF-8: surrogates not allowed";
 const ORJSON_WIDE_INTEGER: &str = "Integer exceeds 64-bit range";
 const ORJSON_KEY: &str = "Dict key must be str";
+const ORJSON_RECURSION: &str = "Recursion limit reached";
+/// orjson refuses a dict, or a non-empty list or tuple, nested this many containers deep.
+const ORJSON_MAX_CONTAINER_DEPTH: usize = 254;
+/// CPython's default `sys.getrecursionlimit()`; `json.dumps(indent=2)` recurses once per level.
+const PYTHON_RECURSION_LIMIT: usize = 1_000;
+const PYTHON_RECURSION_MESSAGE: &str = "maximum recursion depth exceeded";
 const SURROGATE_KEY: &str = "a JSON report key holds a lone surrogate, which report keys never do";
 const ENCODE: &str = "encode";
 const UTF16_LE: &str = "utf-16-le";
@@ -31,8 +37,10 @@ const INDENTED: OrjsonOptions = OrjsonOptions {
 struct Conversion {
     /// The `TypeError` orjson raises at the first value it rejects.
     orjson_error: Option<String>,
-    /// The `TypeError` `json.dumps` raises at the first value it cannot encode either.
-    stdlib_error: Option<String>,
+    /// The error `json.dumps` raises at the first value it cannot encode either.
+    stdlib_error: Option<PyErr>,
+    /// Containers entered above the value being converted.
+    depth: usize,
 }
 
 /// The report as `orjson.dumps(report, option=OPT_INDENT_2)`, raising orjson's `TypeError`.
@@ -58,7 +66,7 @@ fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
             return emitted(&value, &JsonDialect::Orjson(INDENTED));
         }
         if let Some(error) = conversion.stdlib_error {
-            return Err(PyTypeError::new_err(error));
+            return Err(error);
         }
         emitted(
             &value,
@@ -76,8 +84,21 @@ impl Conversion {
         self.orjson_error.get_or_insert(error);
     }
 
-    fn stdlib_rejects(&mut self, error: String) {
+    fn stdlib_rejects(&mut self, error: PyErr) {
         self.stdlib_error.get_or_insert(error);
+    }
+
+    /// Enter a container under both recursion limits; `false` means do not descend into it.
+    fn enter(&mut self, counted_by_orjson: bool) -> bool {
+        if counted_by_orjson && self.depth >= ORJSON_MAX_CONTAINER_DEPTH {
+            self.orjson_rejects(ORJSON_RECURSION.to_owned());
+        }
+        if self.depth >= PYTHON_RECURSION_LIMIT {
+            self.stdlib_rejects(PyRecursionError::new_err(PYTHON_RECURSION_MESSAGE));
+            return false;
+        }
+        self.depth += 1;
+        true
     }
 
     fn json_value(&mut self, value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
@@ -104,7 +125,9 @@ impl Conversion {
         }
         let name: String = value.get_type().name()?.to_string();
         self.orjson_rejects(format!("Type is not JSON serializable: {name}"));
-        self.stdlib_rejects(format!("Object of type {name} is not JSON serializable"));
+        self.stdlib_rejects(PyTypeError::new_err(format!(
+            "Object of type {name} is not JSON serializable"
+        )));
         Ok(JsonValue::Null)
     }
 
@@ -140,20 +163,28 @@ impl Conversion {
     }
 
     fn array(&mut self, value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
+        if !self.enter(value.len()? > 0) {
+            return Ok(JsonValue::Null);
+        }
         let mut items: Vec<JsonValue> = Vec::new();
         for item in value.try_iter()? {
             items.push(self.json_value(&item?)?);
         }
+        self.depth -= 1;
         Ok(JsonValue::Array(items))
     }
 
     fn object(&mut self, mapping: &Bound<'_, PyDict>) -> PyResult<JsonValue> {
+        if !self.enter(true) {
+            return Ok(JsonValue::Null);
+        }
         let mut entries: Vec<(String, JsonValue)> = Vec::with_capacity(mapping.len());
         for (key, item) in mapping.iter() {
             let key: String = self.object_key(&key)?;
             let item: JsonValue = self.json_value(&item)?;
             entries.push((key, item));
         }
+        self.depth -= 1;
         Ok(JsonValue::Object(entries))
     }
 
@@ -179,9 +210,9 @@ impl Conversion {
             return float_key(key);
         }
         let name: String = key.get_type().name()?.to_string();
-        self.stdlib_rejects(format!(
+        self.stdlib_rejects(PyTypeError::new_err(format!(
             "keys must be str, int, float, bool or None, not {name}"
-        ));
+        )));
         Ok(String::new())
     }
 }

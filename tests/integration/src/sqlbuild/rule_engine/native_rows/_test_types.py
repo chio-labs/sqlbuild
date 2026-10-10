@@ -21,3 +21,14 @@ class NativeTypeProofTestCase:
     engine: str
     expected_findings: tuple[tuple[str, str, int | None, int | None, str], ...]
     expected_built_rows: tuple[int, int, int]
+
+
+@dataclass(frozen=True)
+class StructPassthroughTestCase:
+    """A STRUCT passthrough whose type proof asks the adapter's `types_equal` callback."""
+
+    description: str
+    engine: str
+    declared_type: str
+    expected_exit_code: int
+    expected_codes: tuple[str, ...]

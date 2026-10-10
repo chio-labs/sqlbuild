@@ -15,12 +15,17 @@ from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs._test_type
     CliJsonReportTestCase,
     JsonReportErrorTestCase,
     JsonReportTextTestCase,
+    NestedHookReportTestCase,
+    NestedReportTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs.helpers import (
     COMPILE_OUTPUTS_PREFIX,
     SURROGATE_HOOK_FILES,
     SURROGATE_SELECTOR,
     compile_json_text,
+    main_compile_json,
+    nested_lists,
+    nested_payload_hook_files,
     record_output_work,
     write_files,
 )
@@ -68,6 +73,18 @@ _ORJSON_EMITTERS: dict[bool, Callable[[object], str | None]] = {
             ),
         ),
         JsonReportTextTestCase(
+            description="253 nested lists under a key are the deepest orjson writes",
+            report={"a": nested_lists(depth=253)},
+            expected_text=orjson.dumps(
+                {"a": nested_lists(depth=253)}, option=orjson.OPT_INDENT_2
+            ).decode(),
+        ),
+        JsonReportTextTestCase(
+            description="orjson's recursion limit falls back to json.dumps for the whole report",
+            report={"a": nested_lists(depth=254)},
+            expected_text=json.dumps({"a": nested_lists(depth=254)}, indent=2),
+        ),
+        JsonReportTextTestCase(
             description="scalar keys fall back to json.dumps key text",
             report={1: "a", 1.5: "b", float("nan"): "c", None: "d", False: "e"},
             expected_text=json.dumps(
@@ -97,6 +114,12 @@ def test_given_report_values_when_emitting_natively_then_text_matches_the_shippe
             report={"line": -(2**64)},
             orjson_only=True,
             expected_message="Integer exceeds 64-bit range",
+        ),
+        JsonReportErrorTestCase(
+            description="error report: orjson's recursion limit",
+            report={"a": nested_lists(depth=254)},
+            orjson_only=True,
+            expected_message="Recursion limit reached",
         ),
         JsonReportErrorTestCase(
             description="error report: integer key",
@@ -196,6 +219,55 @@ def test_given_lone_surrogate_in_error_report_when_compiling_json_then_orjson_er
     _ = capsys.readouterr()
 
     assert str(raised.value) == test_case.expected_fragment
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NestedHookReportTestCase(
+            description="hook payload 122 lists deep inside the report wrappers",
+            depth=122,
+            expected_exit_code=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_deeply_nested_hook_payload_when_compiling_json_then_orjson_writes_the_report(
+    test_case: NestedHookReportTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_files(project_dir=tmp_path, files=nested_payload_hook_files(depth=test_case.depth))
+    counts: Counter[str] = record_output_work(
+        monkeypatch=monkeypatch, engine="native", reuse_disabled="1"
+    )
+
+    exit_code: int = main_compile_json(project_dir=tmp_path)
+    text: str = capsys.readouterr().out
+
+    assert exit_code == test_case.expected_exit_code
+    assert text == orjson.dumps(json.loads(text), option=orjson.OPT_INDENT_2).decode() + "\n"
+    assert '"payload": [' in text
+    assert counts[f"{COMPILE_OUTPUTS_PREFIX}json_reports"] == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NestedReportTestCase(
+            description="beyond Python's default recursion limit",
+            depth=1_000,
+            expected_error=RecursionError,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_report_deeper_than_python_recursion_when_emitting_then_recursion_error(
+    test_case: NestedReportTestCase,
+) -> None:
+    with pytest.raises(test_case.expected_error):
+        _ = native_module.emit_json_report({"a": nested_lists(depth=test_case.depth)})
 
 
 if __name__ == "__main__":
