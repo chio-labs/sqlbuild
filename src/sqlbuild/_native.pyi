@@ -649,7 +649,7 @@ def native_promotion_conflicts(
 
 # Native analysis: column lineage facts.
 def build_fast_column_lineage(
-    catalog: object,
+    catalog: object | None,
     request: tuple[str | None, list[tuple[str, str, list[str]]], list[tuple[bool, str, list[str]]]],
     /,
 ) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class GeneratedLineageParityTestCase:
-    """Seeded generated projects whose fast lineage Python and the native engine must agree on."""
+    """Seeded generated projects whose fast lineage must not depend on the analysis catalog."""
 
     description: str
     seed: int
@@ -17,14 +17,14 @@ class GeneratedLineageParityTestCase:
 
 
 @dataclass(frozen=True)
-class DeferredLineageTestCase:
-    """Parsed models the native engine hands back to Python, which records each deferral."""
+class FormerlyDeferredLineageTestCase:
+    """Parsed models Python once built, now answered natively or raising Python's error."""
 
     description: str
     dialect: str
     keeps_catalog: bool
     expected_native_statuses: dict[str, int]
-    expected_kind: str
+    expected_error: str | None
 
 
 @dataclass(frozen=True)

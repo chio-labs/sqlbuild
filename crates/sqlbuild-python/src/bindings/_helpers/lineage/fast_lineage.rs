@@ -25,11 +25,11 @@ type LineageRequestInput = (
 /// `(status, columns, has_star, detail)`; see `FastLineageOutcome::into_parts`.
 type OutcomeRow = (&'static str, Vec<ColumnRow>, bool, Option<String>);
 
-/// Build fast lineage for the requested models on `catalog`'s analysis pool.
+/// Build fast lineage for the requested models on `catalog`'s analysis pool, if any.
 #[pyfunction]
 fn build_fast_column_lineage(
     py: Python<'_>,
-    catalog: PyRef<'_, ProjectCatalog>,
+    catalog: Option<PyRef<'_, ProjectCatalog>>,
     request: LineageRequestInput,
 ) -> PyResult<Vec<OutcomeRow>> {
     let (dialect, schema, models) = request;
@@ -43,7 +43,8 @@ fn build_fast_column_lineage(
         schema,
         models,
     };
-    let catalog: &validation::ProjectCatalog = &catalog.inner;
+    let catalog: Option<&validation::ProjectCatalog> =
+        catalog.as_ref().map(|catalog| &catalog.inner);
     let outcomes: Vec<FastLineageOutcome> = py
         .compiler_detach(|| build_fast_lineage(&request, catalog))
         .map_err(compiler_error)?;

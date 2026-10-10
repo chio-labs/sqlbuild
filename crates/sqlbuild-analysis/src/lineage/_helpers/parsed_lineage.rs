@@ -30,13 +30,15 @@ pub(crate) struct ParsedModel<'a> {
     pub(crate) query_sql: &'a str,
     pub(crate) inferred_names: &'a [String],
     pub(crate) schema: &'a HashMap<String, Vec<String>>,
-    pub(crate) dialect: Option<DialectType>,
+    /// The parser dialect, or the dialect name Polyglot does not know.
+    pub(crate) dialect: Result<DialectType, &'a str>,
     pub(crate) options: &'a Result<ParseOptions, serde_json::Error>,
 }
 
 pub(crate) fn parsed_model_lineage(model: &ParsedModel<'_>) -> FastLineageOutcome {
-    let Some(dialect) = model.dialect else {
-        return FastLineageOutcome::Deferred(LineageDeferral::UnsupportedDialect);
+    let dialect: DialectType = match model.dialect {
+        Ok(dialect) => dialect,
+        Err(name) => return FastLineageOutcome::UnknownDialect(name.to_owned()),
     };
     let Ok(options) = model.options else {
         return FastLineageOutcome::Deferred(LineageDeferral::NativeFailure);

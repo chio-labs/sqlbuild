@@ -122,12 +122,10 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
                     &["events"],
                 ),
             ],
-            expected_steps: &[
-                &[
-                    "publish events gr\u{f6}\u{df}e:UNKNOWN",
-                    "publish events_mart gr\u{f6}\u{df}e:UNKNOWN",
-                ],
-            ],
+            expected_steps: &[&[
+                "publish events gr\u{f6}\u{df}e:UNKNOWN",
+                "publish events_mart gr\u{f6}\u{df}e:UNKNOWN",
+            ]],
             expected_outcomes: &[
                 &[
                     "gr\u{f6}\u{df}e - unknown",
