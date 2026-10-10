@@ -3,8 +3,8 @@
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{
-    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString,
-    PyStringMethods, PyTuple, PyTypeMethods,
+    PyBool, PyBoolMethods, PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList,
+    PyString, PyStringMethods, PyTuple, PyTypeMethods,
 };
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::main::dumps::dumps;
@@ -12,11 +12,15 @@ use sqlbuild_core::json::models::{
     JsonDialect, JsonInteger, JsonValue, OrjsonOptions, StdlibJsonOptions,
 };
 
-use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_guard};
 
 const ORJSON_SURROGATE: &str = "str is not valid UTF-8: surrogates not allowed";
 const ORJSON_WIDE_INTEGER: &str = "Integer exceeds 64-bit range";
 const ORJSON_KEY: &str = "Dict key must be str";
+const SURROGATE_KEY: &str = "a JSON report key holds a lone surrogate, which report keys never do";
+const ENCODE: &str = "encode";
+const UTF16_LE: &str = "utf-16-le";
+const SURROGATE_PASS: &str = "surrogatepass";
 const INDENTED: OrjsonOptions = OrjsonOptions {
     indent_2: true,
     sort_keys: false,
@@ -29,8 +33,6 @@ struct Conversion {
     orjson_error: Option<String>,
     /// The `TypeError` `json.dumps` raises at the first value it cannot encode either.
     stdlib_error: Option<String>,
-    /// A string holds a lone surrogate, which only `json.dumps` writes (as an escape).
-    surrogate: bool,
 }
 
 /// The report as `orjson.dumps(report, option=OPT_INDENT_2)`, raising orjson's `TypeError`.
@@ -46,26 +48,22 @@ fn emit_orjson_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
     })
 }
 
-/// The report as orjson or `json.dumps(indent=2)` writes it; `None` for a lone surrogate.
+/// The report as orjson writes it, or as `json.dumps(indent=2)` does when orjson rejects it.
 #[pyfunction]
-fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
     compiler_guard(|| {
         let mut conversion: Conversion = Conversion::default();
         let value: JsonValue = conversion.json_value(report)?;
         if conversion.orjson_error.is_none() {
-            return emitted(&value, &JsonDialect::Orjson(INDENTED)).map(Some);
+            return emitted(&value, &JsonDialect::Orjson(INDENTED));
         }
         if let Some(error) = conversion.stdlib_error {
             return Err(PyTypeError::new_err(error));
-        }
-        if conversion.surrogate {
-            return Ok(None);
         }
         emitted(
             &value,
             &JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2))),
         )
-        .map(Some)
     })
 }
 
@@ -96,7 +94,7 @@ impl Conversion {
             return Ok(JsonValue::Float(value.extract::<f64>()?));
         }
         if let Ok(text) = value.downcast::<PyString>() {
-            return Ok(JsonValue::String(self.text(text)));
+            return self.text(text);
         }
         if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
             return self.array(value);
@@ -110,14 +108,22 @@ impl Conversion {
         Ok(JsonValue::Null)
     }
 
-    /// The string, noting a lone surrogate orjson rejects and only `json.dumps` escapes.
-    fn text(&mut self, text: &Bound<'_, PyString>) -> String {
-        let Ok(text) = text.to_str() else {
-            self.orjson_rejects(ORJSON_SURROGATE.to_owned());
-            self.surrogate = true;
-            return String::new();
-        };
-        text.to_owned()
+    /// The string; one with a lone surrogate, which orjson rejects, as its UTF-16 code units.
+    fn text(&mut self, text: &Bound<'_, PyString>) -> PyResult<JsonValue> {
+        if let Ok(text) = text.to_str() {
+            return Ok(JsonValue::String(text.to_owned()));
+        }
+        self.orjson_rejects(ORJSON_SURROGATE.to_owned());
+        let encoded: Bound<'_, PyBytes> = text
+            .call_method1(ENCODE, (UTF16_LE, SURROGATE_PASS))?
+            .downcast_into::<PyBytes>()?;
+        Ok(JsonValue::Utf16(
+            encoded
+                .as_bytes()
+                .chunks_exact(2)
+                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .collect(),
+        ))
     }
 
     /// orjson encodes 64-bit integers; wider ones make it raise, so `json.dumps` writes them.
@@ -154,7 +160,10 @@ impl Conversion {
     /// A string key, or the text `json.dumps` writes for a scalar key orjson rejects.
     fn object_key(&mut self, key: &Bound<'_, PyAny>) -> PyResult<String> {
         if let Ok(text) = key.downcast::<PyString>() {
-            return Ok(self.text(text));
+            return match self.text(text)? {
+                JsonValue::String(text) => Ok(text),
+                _ => Err(NativeCompilerError::new_err(SURROGATE_KEY)),
+            };
         }
         self.orjson_rejects(ORJSON_KEY.to_owned());
         if key.is_none() {

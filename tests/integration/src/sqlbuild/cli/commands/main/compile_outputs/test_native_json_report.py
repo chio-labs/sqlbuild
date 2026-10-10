@@ -10,16 +10,17 @@ import orjson
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild.cli.commands._helpers.compile import output as output_module
 from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs._test_types import (
     CliJsonReportTestCase,
     JsonReportErrorTestCase,
     JsonReportTextTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs.helpers import (
+    COMPILE_OUTPUTS_PREFIX,
     SURROGATE_HOOK_FILES,
     SURROGATE_SELECTOR,
     compile_json_text,
-    record_json_fallbacks,
     record_output_work,
     write_files,
 )
@@ -58,6 +59,13 @@ _ORJSON_EMITTERS: dict[bool, Callable[[object], str | None]] = {
             description="a wider integer falls back to json.dumps for the whole report",
             report={"rows": 2**70, "é": "é"},
             expected_text=json.dumps({"rows": 2**70, "é": "é"}, indent=2),
+        ),
+        JsonReportTextTestCase(
+            description="lone surrogates beside escapes, a non-BMP pair and a wide integer",
+            report={"text": '"q"\\é\udcff\U0001f600\ud83d', "rows": 2**70},
+            expected_text=json.dumps(
+                {"text": '"q"\\é\udcff\U0001f600\ud83d', "rows": 2**70}, indent=2
+            ),
         ),
         JsonReportTextTestCase(
             description="scalar keys fall back to json.dumps key text",
@@ -132,12 +140,15 @@ def test_given_report_value_the_shipped_encoder_rejects_when_emitting_then_same_
         CliJsonReportTestCase(
             description="hook docstring with a lone surrogate",
             args=("--no-cache",),
-            expected_fragment='"description": "Notify \\udcff complete."',
+            expected_fragment=(
+                r'"description": "Notify \"q\" \\ caf\u00e9 '
+                r'\udcff\ud83d\ude00\ud83d\ude00\ud83d end."'
+            ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_lone_surrogate_in_full_report_when_compiling_json_then_json_dumps_escapes_it(
+def test_given_lone_surrogate_in_full_report_when_compiling_json_then_native_writes_json_dumps_bytes(
     test_case: CliJsonReportTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -147,15 +158,15 @@ def test_given_lone_surrogate_in_full_report_when_compiling_json_then_json_dumps
     counts: Counter[str] = record_output_work(
         monkeypatch=monkeypatch, engine="native", reuse_disabled="1"
     )
-    fallbacks: list[str] = record_json_fallbacks(monkeypatch=monkeypatch)
 
     text: str = compile_json_text(project_dir=tmp_path, args=test_case.args, capsys=capsys)
 
     assert test_case.expected_fragment in text
     assert text.isascii()
-    assert json.loads(text)["command"] == "compile"
-    assert fallbacks == ["compile_outputs.json_report"]
-    assert counts["compile_outputs.native:json_reports"] == 0
+    assert text == json.dumps(json.loads(text), indent=2) + "\n"
+    assert counts[f"{COMPILE_OUTPUTS_PREFIX}json_reports"] == 1
+    assert not hasattr(output_module, "json")
+    assert not hasattr(output_module, "orjson")
 
 
 @pytest.mark.parametrize(

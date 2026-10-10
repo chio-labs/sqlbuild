@@ -26,7 +26,7 @@ from sqlbuild.cli.compile_reuse.constants import (
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeStage
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
 OUTPUT_MODEL_HEADER: str = (
@@ -58,7 +58,8 @@ SURROGATE_HOOK_FILES: dict[str, str] = {
     "models/orders.sql": "MODEL (description 'Orders.');\nSELECT 1 AS order_id\n",
     "hooks/python/notify.py": (
         "from sqlbuild.hooks import hook\n\n\n@hook\ndef notify_complete(ctx):\n"
-        '    """Notify \\udcff complete."""\n    return None\n'
+        '    """Notify "q" \\\\ café \\udcff\\U0001F600\\ud83d\\ude00\\ud83d end."""\n'
+        "    return None\n"
     ),
 }
 
@@ -96,18 +97,6 @@ def record_output_work(
     ):
         monkeypatch.setattr(module, "report_native_answer", counted)
     return counts
-
-
-def record_json_fallbacks(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Record every JSON report the native emitter left to `json.dumps`."""
-
-    sites: list[str] = []
-
-    def recorded(*, site: NativeFallbackSite) -> None:
-        sites.append(site.value)
-
-    monkeypatch.setattr(output_module, "report_native_fallback", recorded)
-    return sites
 
 
 def compile_json_text(

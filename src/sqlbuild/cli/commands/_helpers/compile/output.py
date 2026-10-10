@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -38,9 +37,8 @@ from sqlbuild.compiler.compile.types import (
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
@@ -216,10 +214,7 @@ def format_compile_json(
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
     }
-    emitted: str | None = _native.emit_json_report(result)
-    if emitted is None:
-        report_native_fallback(site=NativeFallbackSite.COMPILE_JSON_REPORT)
-        return json.dumps(result, indent=2)
+    emitted: str = _native.emit_json_report(result)
     report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
     return emitted
 

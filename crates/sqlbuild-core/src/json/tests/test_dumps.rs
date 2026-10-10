@@ -2,7 +2,9 @@ use crate::json::_helpers::floats::python_repr;
 use crate::json::errors::JsonEmitError;
 use crate::json::main::dumps::dumps;
 use crate::json::models::{JsonDialect, JsonInteger, OrjsonOptions, StdlibJsonOptions};
-use crate::json::tests::helpers::{digits, nested_arrays, non_finite_floats, sample_document};
+use crate::json::tests::helpers::{
+    digits, lone_surrogate_text, nested_arrays, non_finite_floats, sample_document,
+};
 use crate::json::tests::test_types::{DumpsTestCase, FloatReprTestCase, IntegerParseTestCase};
 
 const BIG: &str = "1180591620717411303424";
@@ -118,6 +120,27 @@ fn given_python_serializer_options_when_dumping_then_output_matches_python_bytes
             value: nested_arrays(130),
             dialect: JsonDialect::Orjson(OrjsonOptions::default()),
             expected_text: Err(JsonEmitError::NestingTooDeep),
+        },
+        DumpsTestCase {
+            description: "json.dumps escapes lone surrogates beside escapes and a non-BMP pair",
+            value: lone_surrogate_text(),
+            dialect: JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2))),
+            expected_text: Ok(r#""\"q\"\\\u00e9\udcff\ud83d\ude00\ud83d""#),
+        },
+        DumpsTestCase {
+            description: "json.dumps ensure_ascii=False cannot write a lone surrogate as text",
+            value: lone_surrogate_text(),
+            dialect: JsonDialect::Stdlib(StdlibJsonOptions {
+                ensure_ascii: false,
+                ..StdlibJsonOptions::new(None)
+            }),
+            expected_text: Err(JsonEmitError::LoneSurrogate),
+        },
+        DumpsTestCase {
+            description: "orjson refuses lone surrogates",
+            value: lone_surrogate_text(),
+            dialect: JsonDialect::Orjson(OrjsonOptions::default()),
+            expected_text: Err(JsonEmitError::LoneSurrogate),
         },
         DumpsTestCase {
             description: "nesting within the limit is written",
