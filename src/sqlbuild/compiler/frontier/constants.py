@@ -33,6 +33,7 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.SQL_TEST_GLUE: NativeStageTier.SHIPPED,
     NativeStage.PROJECT_ASSEMBLY: NativeStageTier.SHIPPED,
     NativeStage.COMPILE_LINT_INPUTS: NativeStageTier.PREVIEW,
+    NativeStage.RULES_REQUEST: NativeStageTier.PREVIEW,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
     CompilerEngine.PYTHON: frozenset(),

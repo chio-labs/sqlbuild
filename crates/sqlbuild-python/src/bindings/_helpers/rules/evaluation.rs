@@ -101,5 +101,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(load_config_json, module)?)?;
     module.add_function(wrap_pyfunction!(catalogue_json, module)?)?;
     module.add_function(wrap_pyfunction!(selected_codes_json, module)?)?;
-    Ok(())
+    crate::bindings::_helpers::rules::rows::register(module)
 }

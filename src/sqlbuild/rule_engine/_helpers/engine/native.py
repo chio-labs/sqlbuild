@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import inspect
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
-from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
@@ -28,6 +28,8 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
@@ -42,6 +44,12 @@ from sqlbuild.rule_engine._helpers.run.native_memo import (
     read_native_response,
     write_native_response,
 )
+from sqlbuild.rule_engine._helpers.run.native_rows import (
+    build_rules_request,
+    evaluate_rules_request,
+    finalize_rules_rows,
+    typed_value_payload,
+)
 from sqlbuild.rule_engine.constants import (
     NATIVE_RULES_CACHE_FILE,
     RULES_NATIVE_API_VERSION,
@@ -51,12 +59,11 @@ from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
     Finding,
+    NativeRulesEvaluation,
     Rule,
     RulesConfig,
     RulesResult,
 )
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 
 @dataclass(frozen=True)
@@ -93,6 +100,30 @@ def evaluate_native(
         if custom_payloads is None
         else custom_payloads
     )
+    if native_stage_enabled(NativeStage.RULES_REQUEST):
+        return _evaluate_native_rows(
+            project=project,
+            config=config,
+            project_dir=project_dir,
+            dialect=dialect,
+            initial_findings=initial_findings,
+            defer_suppressions=defer_suppressions,
+            custom_payloads=payloads,
+            start_custom=(
+                (lambda **_: custom_outcome)
+                if custom_payloads is not None
+                else partial(
+                    start_custom_rules,
+                    project=project,
+                    config=config,
+                    project_dir=project_dir,
+                    catalogue=catalogue,
+                    custom_payloads=payloads,
+                    dialect=dialect,
+                    verify_determinism=verify_determinism,
+                )
+            ),
+        )
     prepared: _PreparedNativeRequest = _prepare_native_request(
         encoded=_encode_native_request(
             project=project,
@@ -160,6 +191,60 @@ def evaluate_native(
         cache_hits=(native_hits + native_misses if reused else native_hits) + custom.cache_hits,
         cache_misses=(0 if reused else native_misses) + custom.cache_misses,
         built_in_ms=0 if reused else int(payload.get("built_in_ms", 0)),
+        custom_ms=custom.custom_ms,
+        custom_cpu_ms=custom.custom_cpu_ms,
+    )
+
+
+def _evaluate_native_rows(
+    *,
+    project: CompiledProject,
+    config: RulesConfig,
+    project_dir: Path,
+    dialect: str,
+    initial_findings: tuple[Finding, ...],
+    defer_suppressions: bool,
+    custom_payloads: list[dict[str, object]],
+    start_custom: Callable[..., Future[CustomRulesOutcome] | None],
+) -> RulesResult:
+    request: _native.NativeRulesRequest = build_rules_request(
+        project=project,
+        config=config,
+        project_dir=project_dir,
+        dialect=dialect,
+        initial_findings=initial_findings,
+        custom_payloads=custom_payloads,
+        include_type_proof=any(
+            _rule_selected(config=config, code=code) for code in TYPE_PROOF_RULE_CODES
+        ),
+    )
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-custom-rules") as pool:
+        custom_future: Future[CustomRulesOutcome] | None = start_custom(executor=pool)
+        native: NativeRulesEvaluation = evaluate_rules_request(request)
+        del request
+        custom: CustomRulesOutcome = (
+            CustomRulesOutcome(findings=(), cache_hits=0, cache_misses=0, custom_ms=0)
+            if custom_future is None
+            else custom_future.result()
+        )
+    findings: tuple[Finding, ...] = (
+        *native.findings,
+        *(decode_rule_finding(value) for value in custom.findings),
+    )
+    if not defer_suppressions:
+        findings = finalize_native_findings(
+            config=config,
+            project_dir=project_dir,
+            evaluated_codes=native.selected_codes,
+            findings=findings,
+        )
+    return RulesResult(
+        findings=findings,
+        evaluated_models=native.evaluated_models,
+        cache_hits=(native.cache_hits + native.cache_misses if native.reused else native.cache_hits)
+        + custom.cache_hits,
+        cache_misses=(0 if native.reused else native.cache_misses) + custom.cache_misses,
+        built_in_ms=0 if native.reused else native.built_in_ms,
         custom_ms=custom.custom_ms,
         custom_cpu_ms=custom.custom_cpu_ms,
     )
@@ -346,6 +431,16 @@ def finalize_native_findings(
 ) -> tuple[Finding, ...]:
     """Apply exception policy once to completed SQL, native, and custom findings."""
 
+    if native_stage_enabled(NativeStage.RULES_REQUEST):
+        return _with_fixable(
+            original=findings,
+            finalized=finalize_rules_rows(
+                config=config,
+                project_dir=project_dir,
+                evaluated_codes=evaluated_codes,
+                findings=findings,
+            ),
+        )
     request: dict[str, object] = {
         "version": RULES_NATIVE_API_VERSION,
         "project_dir": str(project_dir.resolve()),
@@ -361,10 +456,18 @@ def finalize_native_findings(
         raise RulesError(str(error)) from error
     if not isinstance(payload, list):
         raise RulesError("native rules engine returned invalid finalized findings")
-    fixable: frozenset[tuple[str, str, int, int, str]] = frozenset(
-        _finding_identity(finding) for finding in findings if finding.fixable
+    return _with_fixable(
+        original=findings,
+        finalized=tuple(decode_rule_finding(value) for value in payload),
     )
-    finalized: tuple[Finding, ...] = tuple(decode_rule_finding(value) for value in payload)
+
+
+def _with_fixable(
+    *, original: tuple[Finding, ...], finalized: tuple[Finding, ...]
+) -> tuple[Finding, ...]:
+    fixable: frozenset[tuple[str, str, int, int, str]] = frozenset(
+        _finding_identity(finding) for finding in original if finding.fixable
+    )
     return tuple(
         replace(finding, fixable=True) if _finding_identity(finding) in fixable else finding
         for finding in finalized
@@ -558,7 +661,7 @@ def _sql_test_payload(test: CompiledSqlTest) -> dict[str, object]:
                     {
                         "name": name,
                         "type": parameter_types[name],
-                        "value": _typed_value_payload(value),
+                        "value": typed_value_payload(value),
                     }
                     for name, value in test.parameter_values
                 ],
@@ -706,28 +809,9 @@ def _constant_payload(declaration: ConstantDeclaration) -> dict[str, object]:
         "name": declaration.name,
         "relative_path": declaration.relative_path.as_posix(),
         "members": [],
-        "value": _typed_value_payload(declaration.value),
+        "value": typed_value_payload(declaration.value),
         "value_type": declaration.logical_type.display_name,
         "render_as": declaration.render_as.value if declaration.render_as is not None else None,
-    }
-
-
-def _typed_value_payload(value: SqlValue) -> object:
-    if value.kind == SqlValueKind.DECIMAL:
-        return str(cast(Decimal, value.value))
-    if value.kind in {
-        SqlValueKind.STRING,
-        SqlValueKind.INTEGER,
-        SqlValueKind.BOOLEAN,
-        SqlValueKind.FLOAT,
-        SqlValueKind.NULL,
-    }:
-        return value.value
-    if value.kind in {SqlValueKind.LIST, SqlValueKind.SET}:
-        return [_typed_value_payload(item) for item in cast(tuple[SqlValue, ...], value.value)]
-    return {
-        key: _typed_value_payload(item)
-        for key, item in cast(tuple[tuple[str, SqlValue], ...], value.value)
     }
 
 

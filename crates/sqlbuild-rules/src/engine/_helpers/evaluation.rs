@@ -463,15 +463,30 @@ pub(crate) fn finalize_findings_json(request_json: &str) -> Result<String, Strin
             input.version
         ));
     }
-    config::validate(&input.config)?;
+    let faults = finalize_findings(
+        input.project_dir,
+        input.config,
+        &input.evaluated_codes,
+        input.findings,
+    )?;
+    serde_json::to_string(&faults).map_err(|error| error.to_string())
+}
+
+/// Apply the exception policy once to completed built-in, SQL and custom findings.
+pub(crate) fn finalize_findings(
+    project_dir: String,
+    config: crate::models::RulesConfig,
+    evaluated_codes: &[String],
+    findings: Vec<Fault>,
+) -> Result<Vec<Fault>, String> {
+    config::validate(&config)?;
     let request = EvaluateRequest {
-        project_dir: input.project_dir,
-        config: input.config,
+        project_dir,
+        config,
         ..Default::default()
     };
     validate_exception_paths(&request)?;
-    let faults = apply_fault_policy(&request, &input.evaluated_codes, input.findings)?;
-    serde_json::to_string(&faults).map_err(|error| error.to_string())
+    apply_fault_policy(&request, evaluated_codes, findings)
 }
 
 fn apply_fault_policy(
