@@ -120,7 +120,7 @@ from sqlbuild.compiler.compiled_project.main._model_input_row import model_input
 from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
 from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
 from sqlbuild.compiler.compiled_project.models import PlainModelFacts
-from sqlbuild.compiler.compiled_project.types import PlainSchemaRow
+from sqlbuild.compiler.compiled_project.types import PlainSchemaRow, ReferenceRow, SpanRow
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.main._model_query_start import get_model_query_start
 from sqlbuild.compiler.discovery.models import (
@@ -457,9 +457,7 @@ class _ModelLoopHost:
             loop=self.loop, model_file=model_file, values=self.configs[index].values
         )
 
-    def expand_hooks(
-        self, *, index: int
-    ) -> tuple[dict[str, object], list[tuple[str, str, str | None, int | None]]]:
+    def expand_hooks(self, *, index: int) -> tuple[dict[str, object], list[ReferenceRow]]:
         expansion: HookExpansionResult = _model_hook_expansion(
             loop=self.loop,
             model_file=self.loop.discovered_inputs.model_files[index],
@@ -473,8 +471,8 @@ class _ModelLoopHost:
         ]
 
     def expand_macros(
-        self, *, index: int, sql: str, spans: list[tuple[int, int, int, int]]
-    ) -> tuple[str, list[tuple[str, str, str | None, int | None]]]:
+        self, *, index: int, sql: str, spans: list[SpanRow]
+    ) -> tuple[str, list[ReferenceRow], list[SpanRow]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         expansion: MacroExpansionResult = _macro_expansion(
             loop=self.loop,
@@ -489,26 +487,31 @@ class _ModelLoopHost:
             interpolated_sql=applied_interpolation(self.interpolations[model_file.file_path]),
         )
         self.macros[index] = expansion
-        return expansion.sql, [
-            (str(item.ref_kind), item.ref_name, item.ref_package, item.call_argument_count)
-            for item in expansion.argument_references
-        ]
+        return (
+            expansion.sql,
+            [
+                (str(item.ref_kind), item.ref_name, item.ref_package, item.call_argument_count)
+                for item in expansion.argument_references
+            ],
+            [
+                (span.source_start, span.source_end, span.output_start, span.output_end)
+                for span in expansion.spans
+            ],
+        )
 
     def plain_input(
         self,
         *,
         index: int,
         values: dict[str, object],
-        references: list[tuple[str, str, str | None, int | None]],
+        references: list[ReferenceRow],
         query_sql: str,
         description: str | None,
         schema: PlainSchemaRow | None,
         enum_columns: dict[str, EnumDeclaration],
         analysis: tuple[bool, SourceLocation | None],
         hook_statements: int,
-        declarations: tuple[
-            str, list[tuple[int, int, int, int]], list[UsageRecord], list[UsageRecord]
-        ],
+        declarations: tuple[str, list[SpanRow], list[UsageRecord], list[UsageRecord]],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         visible: _VisibleModelDeclarations = self.declarations.pop(index)
@@ -751,6 +754,7 @@ def _run_native_model_loop(
                 audit_factories=loop.discovered_inputs.audit_factories,
                 context=loop.context,
                 report_diagnostic=report_compile_diagnostic,
+                external_resolver=loop.validation_context.external_sql_reference_resolver,
             ),
         ),
         loop.context.sql_lexical_syntax.native_mapping,
@@ -795,7 +799,7 @@ def _run_native_model_loop(
     return list(inputs)
 
 
-def _expansion_spans(rows: list[tuple[int, int, int, int]]) -> tuple[ExpansionSpan, ...]:
+def _expansion_spans(rows: list[SpanRow]) -> tuple[ExpansionSpan, ...]:
     return tuple(
         ExpansionSpan(
             source_start=source_start,

@@ -16,6 +16,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.planner.types import ContractPolicy
+from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import DeclarationRecord, UsageRecord
 from sqlbuild.compiler.scopes.types import DeclarationKind, UsageKind
 
@@ -25,6 +26,7 @@ def model_loop_classes(
     audit_factories: tuple[DiscoveredAuditFactory, ...],
     context: ModelInputBuildContext,
     report_diagnostic: Callable[..., None],
+    external_resolver: ExternalSqlReferenceResolver | None,
 ) -> dict[str, object]:
     """Return the classes, error factories and project declarations the model loop reads."""
 
@@ -43,6 +45,8 @@ def model_loop_classes(
         "compiler_diagnostic": CompilerDiagnostic,
         "report_diagnostic": report_diagnostic,
         "path_class": Path,
+        "external_resolver": external_resolver,
+        "reference_kind": SqlReferenceKind,
     }
 
 

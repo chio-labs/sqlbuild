@@ -55,3 +55,24 @@ pub(super) fn legacy_schema_files(
         )
         .collect()
 }
+
+pub(super) fn generic_syntax() -> sqlbuild_sqltext::sql_scan::models::LexicalSyntax {
+    sqlbuild_sqltext::sql_scan::models::LexicalSyntax {
+        line_comment_prefixes: vec!["--".to_owned()],
+        ..sqlbuild_sqltext::sql_scan::models::LexicalSyntax::default()
+    }
+}
+
+pub(super) fn span(
+    source_start: usize,
+    source_end: usize,
+    output_start: usize,
+    output_end: usize,
+) -> crate::compiled_project::models::SplicedSpan {
+    crate::compiled_project::models::SplicedSpan {
+        source_start,
+        source_end,
+        output_start,
+        output_end,
+    }
+}

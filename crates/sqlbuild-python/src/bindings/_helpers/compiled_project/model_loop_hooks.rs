@@ -1,14 +1,15 @@
 //! A model's hooks, expanded by the project's hook code and checked natively.
 
 use pyo3::IntoPyObject;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
 
 use crate::bindings::_helpers::compiled_project::model_loop::{
-    LoopContext, NativeModelLoop, compile_error, config_error,
+    LoopContext, NativeModelLoop, compile_error, validation_outcome,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
 use crate::bindings::_helpers::compiled_project::model_loop_host::{ReferenceRow, callback};
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{HOOK_KEYS, present};
 
@@ -16,15 +17,14 @@ const EXPAND_HOOKS_CALLBACK: &str = "expand_hooks";
 const INDEX_ARGUMENT: &str = "index";
 const REFERENCES_METHOD: &str = "references";
 const STATEMENT_ATTRIBUTE: &str = "statement";
-const DBT_REF_KIND: &str = "dbt_ref";
 
-/// The hook-expanded config values and SQL hook count; `None` when a hook references dbt.
+/// The hook-expanded config values and SQL hook count, after checking the hooks' references.
 pub(crate) fn expanded_hooks<'py>(
     model_loop: &NativeModelLoop,
     context: &LoopContext<'_, 'py>,
     index: usize,
     model: (&str, &str),
-) -> PyResult<Option<(Bound<'py, PyDict>, usize)>> {
+) -> PyResult<(Bound<'py, PyDict>, usize)> {
     let py: Python<'py> = context.host.py();
     let (values, references): (Bound<'py, PyDict>, Vec<ReferenceRow>) = callback(
         context.host,
@@ -32,29 +32,19 @@ pub(crate) fn expanded_hooks<'py>(
         &[(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())],
     )?
     .extract()?;
-    if references
-        .iter()
-        .any(|(kind, _, _, _)| kind == DBT_REF_KIND)
-    {
-        return Ok(None);
-    }
+    let external: Vec<Option<PyErr>> = external_errors(context, &references, model.1)?;
     let rows: Vec<(&str, &str, bool)> = references
         .iter()
-        .map(|(kind, name, _, _)| (kind.as_str(), name.as_str(), false))
+        .zip(&external)
+        .map(|((kind, name, _, _), error)| (kind.as_str(), name.as_str(), error.is_some()))
         .collect();
     let outcome: Bound<'py, PyAny> = model_loop
         .validator
         .bind(py)
         .call_method1(REFERENCES_METHOD, (model, rows))?;
-    if !outcome.is_none() {
-        return Err(config_error(
-            context.classes,
-            &outcome,
-            Some(&PyDict::new(py)),
-        ));
-    }
+    validation_outcome(context, &outcome, external, &PyDict::new(py))?;
     let statements: usize = reject_hook_intrinsics(model_loop, context, model.0, &values)?;
-    Ok(Some((values, statements)))
+    Ok((values, statements))
 }
 
 /// Reject cursor intrinsics in each SQL hook statement; return how many statements were checked.

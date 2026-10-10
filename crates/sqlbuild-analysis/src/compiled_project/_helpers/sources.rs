@@ -18,6 +18,12 @@ pub(crate) fn opt_out_position(python: PythonText, text: &str, start: usize) -> 
             break;
         }
     }
+    char_position(&characters, offset)
+}
+
+/// The one-based line and column of character `offset`.
+pub(crate) fn char_position(characters: &[char], offset: usize) -> TextPosition {
+    let offset: usize = offset.min(characters.len());
     let mut line: usize = 1;
     let mut line_start: usize = 0;
     for (index, character) in characters[..offset].iter().enumerate() {

@@ -197,7 +197,9 @@ OPT_OUT_FILES: dict[str, str] = {
     "models/header_opt_out.sql": "MODEL (\n  sql_analysis false\n);\nSELECT 1 AS order_id\n",
     "models/legacy/path_opt_out.sql": "MODEL ();\nSELECT 1 AS order_id\n",
     "models/unparsed.sql": "MODEL (sql_analysis false);\nSELECT FROM WHERE (\n",
-    "models/invalid_call.sql": "MODEL ();\nSELECT * FROM __ref(order_name)\n",
+    "models/invalid_call.sql": (
+        "MODEL ();\nSELECT * FROM __ref(order_name)\nCROSS JOIN __table_fn('customer_orders')\n"
+    ),
 }
 
 

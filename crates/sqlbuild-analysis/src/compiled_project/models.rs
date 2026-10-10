@@ -211,3 +211,14 @@ pub struct LegacySchemaFile {
     pub relative_path: String,
     pub model_names: Vec<String>,
 }
+
+/// The authored model a reference-scan fault is located in.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScanFaultOrigin<'a> {
+    /// The POSIX relative path the error names.
+    pub relative_path: &'a str,
+    pub contents: &'a str,
+    pub query_sql: &'a str,
+    /// The declaration and macro expansion passes, or `None` when the SQL was not authored text.
+    pub passes: Option<Vec<Vec<SplicedSpan>>>,
+}

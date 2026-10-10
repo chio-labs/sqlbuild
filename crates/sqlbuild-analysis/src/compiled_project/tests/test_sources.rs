@@ -1,5 +1,6 @@
 use crate::compiled_project::main::legacy_schema_error::legacy_schema_error;
 use crate::compiled_project::main::opt_out_position::opt_out_position;
+use crate::compiled_project::main::text_position::text_position;
 use crate::compiled_project::models::TextPosition;
 use crate::compiled_project::tests::helpers::{legacy_schema_files, python_312};
 use crate::compiled_project::tests::test_types::{LegacySchemaTestCase, OptOutPositionTestCase};
@@ -75,6 +76,33 @@ fn given_legacy_schema_files_when_matching_model_then_attachment_error_is_return
             )
             .as_deref(),
             test_case.expected_error,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_character_offset_when_positioning_then_line_and_column_count_characters() {
+    let test_cases = [
+        OptOutPositionTestCase {
+            description: "start of text",
+            text: "SELECT 1",
+            start: 0,
+            expected_position: TextPosition { line: 1, column: 1 },
+        },
+        OptOutPositionTestCase {
+            description: "after a multi-byte character on the second line",
+            text: "MODEL ();\né __ref",
+            start: 12,
+            expected_position: TextPosition { line: 2, column: 3 },
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            text_position(test_case.text, test_case.start),
+            test_case.expected_position,
             "{}",
             test_case.description
         );

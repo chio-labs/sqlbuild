@@ -146,6 +146,7 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
     assert native_counts == [test_case.expected_native_models]
     assert attached_counts == [0]
     assert native.model_inputs == attached.model_inputs
+    assert native.diagnostics == attached.diagnostics
     assert expansions(native) == expansions(attached)
     assert native.native_project == attached.native_project
 
@@ -208,6 +209,21 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
                 "model 'orders' references unknown model_schema 'order_shape'; "
                 "available schemas: none"
             ),
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
+            description="dbt reference without a dbt manifest",
+            model_sql='MODEL ();\nSELECT * FROM __dbt_ref("raw_orders")\n',
+            expected_message=(
+                'Model file models/orders.sql uses __dbt_ref("raw_orders") but no dbt manifest '
+                "was found"
+            ),
+            expected_code="C214",
+        ),
+        ModelLoopErrorTestCase(
+            description="unclosed reference call located in the model file",
+            model_sql='MODEL ();\nSELECT *\nFROM __ref("stg_orders"\n',
+            expected_message="models/orders.sql:3:6: SQL reference contains an unclosed parenthesis",
             expected_code="P001",
         ),
         ModelLoopErrorTestCase(

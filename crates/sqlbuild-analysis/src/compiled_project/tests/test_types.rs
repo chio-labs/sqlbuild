@@ -57,3 +57,11 @@ pub(super) struct LegacySchemaTestCase {
     pub(super) schema_files: &'static [(&'static str, &'static [&'static str])],
     pub(super) expected_error: Option<&'static str>,
 }
+
+pub(super) struct LocatedScanErrorTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) contents: &'static str,
+    pub(super) passes: Option<Vec<Vec<crate::compiled_project::models::SplicedSpan>>>,
+    pub(super) expected_message: &'static str,
+}

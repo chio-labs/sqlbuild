@@ -8,9 +8,10 @@ use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
 use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
 use sqlbuild_analysis::compiled_project::main::legacy_schema_error::legacy_schema_error;
+use sqlbuild_analysis::compiled_project::main::located_scan_error::located_scan_error;
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_analysis::compiled_project::models::{
-    AnalysisGate, LegacySchemaFile, ModelLoopSettings,
+    AnalysisGate, LegacySchemaFile, ModelLoopSettings, ScanFaultOrigin, SplicedSpan,
 };
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
@@ -19,6 +20,8 @@ use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
+use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
 use crate::bindings::_helpers::compiled_project::model_loop_header::{
     AttachedHeader, HeaderSource, header_schema,
 };
@@ -39,7 +42,7 @@ use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::discovery::project_files::python_semantics;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::render::declaration_expansion::{
-    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
+    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations, span_rows,
 };
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -47,7 +50,6 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 const MATERIALIZED_KEY: &str = "materialized";
 const CURSOR_KEY: &str = "cursor";
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
-const DBT_REF_KIND: &str = "dbt_ref";
 const VALUES_ATTRIBUTE: &str = "values";
 const RETENTION_ATTRIBUTE: &str = "time_travel_retention";
 const UNMANAGED_ATTRIBUTE: &str = "unmanaged";
@@ -103,6 +105,10 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) report_diagnostic: Bound<'py, PyAny>,
     /// `pathlib.Path`.
     pub(crate) path_class: Bound<'py, PyAny>,
+    /// The dbt manifest's `ExternalSqlReferenceResolver`, or `None`.
+    pub(crate) external_resolver: Bound<'py, PyAny>,
+    /// `SqlReferenceKind`.
+    pub(crate) reference_kind: Bound<'py, PyAny>,
 }
 
 /// The ordered model loop of one compile-input stage.
@@ -245,7 +251,13 @@ impl NativeModelLoop {
             config,
             visible,
         } = model;
-        let ModelLoopRow((name, _, relative_path, file_path), locations, _, contents, scan) = row;
+        let ModelLoopRow(
+            (name, posix_path, relative_path, file_path),
+            locations,
+            authored_query,
+            contents,
+            scan,
+        ) = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
         let index_argument = [(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())];
@@ -283,32 +295,35 @@ impl NativeModelLoop {
             render_constant: &render_constant,
             classes: &expansion_classes,
         })?;
-        let (macro_sql, argument_references): (String, Vec<ReferenceRow>) =
-            if calls_macros(&declarations.spliced.sql) {
-                callback(
-                    context.host,
-                    EXPAND_MACROS_CALLBACK,
-                    &[
-                        (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
-                        (
-                            SQL_ARGUMENT,
-                            declarations
-                                .spliced
-                                .sql
-                                .as_str()
-                                .into_pyobject(py)?
-                                .into_any(),
-                        ),
-                        (
-                            SPANS_ARGUMENT,
-                            span_rows(&declarations.spliced).into_pyobject(py)?,
-                        ),
-                    ],
-                )?
-                .extract()?
-            } else {
-                (declarations.spliced.sql.clone(), Vec::new())
-            };
+        let (macro_sql, argument_references, macro_spans): (
+            String,
+            Vec<ReferenceRow>,
+            Vec<SpanRow>,
+        ) = if calls_macros(&declarations.spliced.sql) {
+            callback(
+                context.host,
+                EXPAND_MACROS_CALLBACK,
+                &[
+                    (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
+                    (
+                        SQL_ARGUMENT,
+                        declarations
+                            .spliced
+                            .sql
+                            .as_str()
+                            .into_pyobject(py)?
+                            .into_any(),
+                    ),
+                    (
+                        SPANS_ARGUMENT,
+                        span_rows(&declarations.spliced).into_pyobject(py)?,
+                    ),
+                ],
+            )?
+            .extract()?
+        } else {
+            (declarations.spliced.sql.clone(), Vec::new(), Vec::new())
+        };
         let query_sql: String = self
             .canonical_query(name, &macro_sql, &values)?
             .map_err(|message| compile_error(context.classes, &message, None))?;
@@ -322,18 +337,32 @@ impl NativeModelLoop {
         let Some((analysed, rejected_opt_out)) = self.analysis(context, &opt_out_model)? else {
             return Ok(None);
         };
-        let ReferenceExtraction::Extracted(scanned) =
-            extract_sql_references(&query_sql, &self.syntax)
-        else {
-            return Ok(None);
+        let scanned = match extract_sql_references(&query_sql, &self.syntax) {
+            ReferenceExtraction::Extracted(scanned) => scanned,
+            ReferenceExtraction::Failed(failure) => {
+                let authored: bool = &interpolated == authored_query && query_sql == macro_sql;
+                let origin: ScanFaultOrigin<'_> = ScanFaultOrigin {
+                    relative_path: posix_path,
+                    contents,
+                    query_sql: authored_query,
+                    passes: authored.then(|| {
+                        vec![
+                            declarations.spliced.spans.clone(),
+                            spliced_spans(&macro_spans),
+                        ]
+                    }),
+                };
+                let message: String =
+                    located_scan_error(&failure, &query_sql, &origin, &self.syntax);
+                return Err(compile_error(context.classes, &message, None));
+            }
         };
-        if scanned
-            .references
-            .iter()
-            .any(|reference| reference.kind == DBT_REF_KIND)
-        {
-            return Ok(None);
-        }
+        report_invalid_calls(
+            context,
+            &self.syntax,
+            &scanned.invalid_calls,
+            (name, relative_path, file_path, contents),
+        )?;
         let analysis: (bool, Option<Bound<'py, PyAny>>) = (
             analysed && scanned.invalid_calls.is_empty(),
             rejected_opt_out,
@@ -351,11 +380,7 @@ impl NativeModelLoop {
             (&references, declared_columns),
         )?;
         let (values, hook_statements): (Bound<'py, PyDict>, usize) = if hooked {
-            let Some(expanded) = expanded_hooks(self, context, index, (name, relative_path))?
-            else {
-                return Ok(None);
-            };
-            expanded
+            expanded_hooks(self, context, index, (name, relative_path))?
         } else {
             (values, 0)
         };
@@ -456,9 +481,11 @@ impl NativeModelLoop {
         let (references, declared_columns) = references;
         let py: Python<'_> = context.host.py();
         let (config, values) = config;
+        let external: Vec<Option<PyErr>> = external_errors(context, references, model.2)?;
         let rows: Vec<(&str, &str, bool)> = references
             .iter()
-            .map(|(kind, name, _, _)| (kind.as_str(), name.as_str(), false))
+            .zip(&external)
+            .map(|((kind, name, _, _), error)| (kind.as_str(), name.as_str(), error.is_some()))
             .collect();
         let unmanaged: Bound<'_, PyAny> = config
             .getattr(RETENTION_ATTRIBUTE)?
@@ -474,11 +501,26 @@ impl NativeModelLoop {
                 (rows, declared_columns, unmanaged, declared),
             ),
         )?;
-        if outcome.is_none() {
-            return Ok(());
-        }
-        Err(config_error(context.classes, &outcome, Some(values)))
+        validation_outcome(context, &outcome, external, values)
     }
+}
+
+/// `_raise_validation_outcome`: nothing, the validator's error, or a rejected reference's error.
+pub(crate) fn validation_outcome(
+    context: &LoopContext<'_, '_>,
+    outcome: &Bound<'_, PyAny>,
+    external: Vec<Option<PyErr>>,
+    values: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    if outcome.is_none() {
+        return Ok(());
+    }
+    if let Ok(index) = outcome.extract::<usize>()
+        && let Some(error) = external.into_iter().nth(index).flatten()
+    {
+        return Err(error);
+    }
+    Err(config_error(context.classes, outcome, Some(values)))
 }
 
 /// `CompileInputError(message, code=...)`, raised as the attachment raises it.
@@ -516,4 +558,18 @@ pub(crate) fn config_error(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelLoop>()
+}
+
+/// Span rows as the spliced spans the scan-fault locator maps through.
+fn spliced_spans(rows: &[SpanRow]) -> Vec<SplicedSpan> {
+    rows.iter()
+        .map(
+            |&(source_start, source_end, output_start, output_end)| SplicedSpan {
+                source_start,
+                source_end,
+                output_start,
+                output_end,
+            },
+        )
+        .collect()
 }

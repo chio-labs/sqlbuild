@@ -2,6 +2,8 @@
 mod helpers;
 #[path = "tests/test_declaration_errors.rs"]
 mod test_declaration_errors;
+#[path = "tests/test_locating.rs"]
+mod test_locating;
 #[path = "tests/test_plain.rs"]
 mod test_plain;
 #[path = "tests/test_sources.rs"]

@@ -13,3 +13,6 @@ type PlainSchemaRow = tuple[
     tuple[SchemaDynamicColumnFamily, ...],
     str | None,
 ]
+
+type ReferenceRow = tuple[str, str, str | None, int | None]
+type SpanRow = tuple[int, int, int, int]
