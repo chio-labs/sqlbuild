@@ -695,7 +695,7 @@ fn native_answer(
 /// A compiled model's output names and lineage from a successful analysis with native lineage.
 fn session_model_facts(analysis: &ModelAnalysis) -> Option<SessionModelFacts> {
     let rows: &Vec<LineageRow> = match &analysis.lineage {
-        LineageFacts::Native(rows) | LineageFacts::NativeEnrichment(rows) => rows,
+        LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows) => rows,
         LineageFacts::PythonAnalysis | LineageFacts::PythonEnrichment => return None,
     };
     analysis.analysis_succeeded.then(|| SessionModelFacts {

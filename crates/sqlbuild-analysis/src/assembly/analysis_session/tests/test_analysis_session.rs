@@ -188,7 +188,7 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
             ],
         },
         SessionFactsTestCase {
-            description: "a model Python analysed keeps no session facts",
+            description: "a native legacy analysis keeps its output names and sources",
             models: &[
                 (
                     "events",
@@ -205,6 +205,28 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
             ],
             expected_facts: &[
                 "Some([\"event_id\"]) event_id<-[(\"raw_events\", \"event_id\")]",
+                "Some([\"event_id\", \"one\"]) event_id<-[(\"events\", \"event_id\")] one<-[]",
+            ],
+        },
+        SessionFactsTestCase {
+            description: "a model Python analysed keeps no session facts",
+            models: &[
+                (
+                    "events",
+                    "SELECT event_id AS \"gr\u{f6}\u{df}e\" FROM __source(\"raw_events\")",
+                    &["raw_events"],
+                    &[],
+                ),
+                (
+                    "events_mart",
+                    "SELECT \"gr\u{f6}\u{df}e\" FROM __ref(\"events\") \
+                     WHERE \"gr\u{f6}\u{df}e\" IS NOT NULL",
+                    &[],
+                    &["events"],
+                ),
+            ],
+            expected_facts: &[
+                "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"raw_events\", \"event_id\")]",
                 "none",
             ],
         },

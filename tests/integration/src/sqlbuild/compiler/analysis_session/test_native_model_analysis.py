@@ -229,7 +229,13 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
     parity: AnalysisParity = AnalysisParity()
 
     _ = [
-        compare_analyses(inputs=inputs, dialect=dialect, parity=parity, monkeypatch=monkeypatch)
+        compare_analyses(
+            inputs=inputs,
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
+            lineage_mode=ColumnLineageMode.FAST,
+            parity=parity,
+            monkeypatch=monkeypatch,
+        )
         for dialect in test_case.dialects
     ]
 
