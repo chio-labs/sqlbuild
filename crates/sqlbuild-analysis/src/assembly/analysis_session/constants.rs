@@ -6,6 +6,8 @@ pub(crate) const LEGACY_FALLBACK: &str = "native project type recovery requires 
 pub(crate) const INVALID_NATIVE_RESPONSE: &str = "invalid native response";
 /// Python's `UNKNOWN` column type.
 pub(crate) const UNKNOWN_TYPE: &str = "UNKNOWN";
+/// The wheel's `analyze_query` message for options it cannot read, such as a dialect alias.
+pub(crate) const INVALID_ANALYZE_OPTIONS: &str = "Invalid analyze_query options object: ";
 /// Python's `InferredNullability.UNKNOWN`.
 pub(crate) const UNKNOWN_NULLABILITY: &str = "unknown";
 /// Python's `InferredNullability` values by native code.
@@ -37,9 +39,6 @@ pub(crate) const DIALECT_ALIASES: [(&str, &str); 3] = [
 ];
 /// The quote that marks an exact identifier.
 pub(crate) const QUOTED_IDENTIFIER_DELIMITER: char = '"';
-/// Python's names for a legacy-analysis and an enrichment deferral.
-pub(crate) const DEFERRAL_ANALYSIS: &str = "analysis";
-pub(crate) const DEFERRAL_ENRICHMENT: &str = "enrichment";
 /// Python's `ColumnTransformKind` compact codes.
 pub(crate) const TRANSFORM_DIRECT: u8 = 0;
 pub(crate) const TRANSFORM_CAST: u8 = 1;

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from pathlib import Path
 
 import pytest
@@ -14,27 +13,18 @@ from tests.e2e.scripts.compiler_differential._test_types import (
     CoverageFailureTestCase,
     HarnessRunTestCase,
     ProjectExpectationTestCase,
-    SharedAnalysisSeedTestCase,
     WheelSiteReportTestCase,
 )
 from tests.e2e.scripts.compiler_differential.helpers import (
     CATALOG_PERTURBATION,
-    COMPILED_PROJECT_CAPTURE,
     DEFERRAL_PERTURBATION,
     DISCOVERY_PERTURBATION,
     NATIVE_ONLY_STDERR_LINE,
     RENDER_PERTURBATION,
-    SHARED_ANALYSIS_SEED,
     harness_arguments,
     perturbation_arguments,
-    shared_analysis_seed_arguments,
     write_broken_ref_project,
     write_failure_case_project,
-)
-from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
-    CompiledProjectRun,
-    compiled_project_capture,
-    use_wave_analysis,
 )
 
 
@@ -336,62 +326,6 @@ def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_s
     assert exit_code == test_case.expected_exit_code, output
     assert all(line in output for line in test_case.expected_lines), output
     assert not any(text in output for text in test_case.expected_absent), output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SharedAnalysisSeedTestCase(
-            description="shared_analysis_seed_against_itself",
-            seed=SHARED_ANALYSIS_SEED,
-            expected_lines=(
-                f"OK   seed/{SHARED_ANALYSIS_SEED}",
-                "Compiler differential passed: 3 projects identical (native vs native)",
-            ),
-            expected_capture_sides=("left-native-captures", "right-native-captures"),
-            expected_compile_exit_code=0,
-            expected_minimum_shareable_members=1,
-            expected_minimum_shared_reuse=1,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-@pytest.mark.usefixtures("deferred_native_analysis")
-def test_given_native_engine_twice_when_capturing_stages_then_captures_are_identical(
-    test_case: SharedAnalysisSeedTestCase,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    work_dir: Path = tmp_path / "work"
-    exit_code: int = run_compiler_differential(
-        shared_analysis_seed_arguments(work_dir=work_dir, seed=test_case.seed)
-    )
-    output: str = capsys.readouterr().out
-    seed_dir: Path = work_dir / f"seed__{test_case.seed}"
-    project_dir: Path = Path(shutil.copytree(seed_dir / "source", tmp_path / "project"))
-    with monkeypatch.context() as waves_patch:
-        use_wave_analysis(waves_patch)
-        compiled: CompiledProjectRun = compiled_project_capture(
-            project_dir=project_dir,
-            capture_dir=tmp_path / "captures",
-            capsys=capsys,
-            monkeypatch=waves_patch,
-        )
-
-    assert (exit_code, all(line in output for line in test_case.expected_lines)) == (0, True), (
-        output
-    )
-    assert "DIFF" not in output, output
-    assert all(
-        (seed_dir / side / COMPILED_PROJECT_CAPTURE).is_file()
-        for side in test_case.expected_capture_sides
-    ), output
-    assert (
-        compiled.exit_code,
-        compiled.shareable_members >= test_case.expected_minimum_shareable_members,
-        compiled.shared_reuse >= test_case.expected_minimum_shared_reuse,
-    ) == (test_case.expected_compile_exit_code, True, True), compiled
 
 
 @pytest.mark.parametrize(

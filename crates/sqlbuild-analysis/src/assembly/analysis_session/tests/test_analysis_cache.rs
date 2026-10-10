@@ -354,7 +354,7 @@ fn given_any_analysis_input_changed_when_keying_then_the_key_changes() {
         },
         CacheKeyTestCase {
             description: "dialect",
-            change: |request| request.dialect = "postgres".to_owned(),
+            change: |request| request.dialect = "snowflake".to_owned(),
             expected_key_changed: true,
         },
         CacheKeyTestCase {

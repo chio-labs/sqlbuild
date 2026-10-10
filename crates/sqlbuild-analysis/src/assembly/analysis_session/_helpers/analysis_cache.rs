@@ -33,7 +33,6 @@ impl AnalysisSession {
             session_digest: session_digest(&self.request),
             keys: vec![None; models],
             hits: vec![false; models],
-            uncacheable: vec![false; models],
             legacy_tables: vec![None; models],
             stats: AnalysisCacheStats::default(),
         });
@@ -412,12 +411,11 @@ impl<'a> Decoder<'a> {
 pub(crate) fn encode_outcome(
     outcome: &ModelOutcome,
     legacy_tables: Option<&ContentDigest>,
-) -> Option<Vec<u8>> {
+) -> Vec<u8> {
     let analysis: &ModelAnalysis = &outcome.analysis;
     let (tag, rows) = match &analysis.lineage {
         LineageFacts::Native(rows) => (LINEAGE_NATIVE, rows),
         LineageFacts::NativeFacts(rows) => (LINEAGE_FACTS, rows),
-        LineageFacts::PythonAnalysis | LineageFacts::PythonEnrichment => return None,
     };
     let mut encoder: Encoder<'_> = Encoder::default();
     match legacy_tables {
@@ -465,7 +463,7 @@ pub(crate) fn encode_outcome(
         encoder.text(severity);
     }
     encoder.flag(analysis.binding_validated);
-    Some(encoder.into_bytes())
+    encoder.into_bytes()
 }
 
 /// The outcome [`encode_outcome`] stored, validated against `schema`, without cleaned SQL.

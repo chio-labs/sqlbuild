@@ -175,28 +175,3 @@ def perturbation_arguments(directory: Path, *, source: str = _SITECUSTOMIZE) -> 
         "--engine-env",
         f"native-preview:PYTHONPATH={write_native_perturbation(directory, source=source)}",
     )
-
-
-SHARED_ANALYSIS_SEED: int = 34
-COMPILED_PROJECT_CAPTURE: str = "0-compile/003-compiled_project.json"
-
-
-def shared_analysis_seed_arguments(*, work_dir: Path, seed: int) -> list[str]:
-    """Harness arguments comparing one generated seed with itself, capturing every stage."""
-
-    return [
-        "--jobs",
-        "1",
-        "--work-dir",
-        str(work_dir),
-        "--corpus",
-        "seeds",
-        "--seed-start",
-        str(seed),
-        "--seeds",
-        "1",
-        "--engines",
-        "native",
-        "native",
-        "--stage-captures",
-    ]

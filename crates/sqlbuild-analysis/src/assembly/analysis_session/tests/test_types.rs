@@ -27,7 +27,14 @@ pub(crate) struct SessionFactsTestCase {
 pub(crate) struct UnscheduledTestCase {
     pub(crate) description: &'static str,
     pub(crate) models: &'static [ModelSpec],
-    pub(crate) expected_started: bool,
+    pub(crate) expected_error: Option<&'static str>,
+}
+
+pub(crate) struct SessionFailureTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) models: &'static [ModelSpec],
+    pub(crate) expected_error: Option<&'static str>,
 }
 
 pub(crate) struct ExpressionShapeTestCase {

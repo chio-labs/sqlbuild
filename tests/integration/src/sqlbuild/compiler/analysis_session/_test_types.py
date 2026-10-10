@@ -7,8 +7,8 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
-class GeneratedAnalysisParityTestCase:
-    """Seeded generated projects whose model analysis both engines must agree on."""
+class GeneratedAnalysisTestCase:
+    """Seeded generated projects whose uncached, cached and re-proven native analyses agree."""
 
     description: str
     seed: int
@@ -20,23 +20,17 @@ class GeneratedAnalysisParityTestCase:
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
     expected_minimum_pivot_proofs: int
-    expected_minimum_python_cte_recoveries: int
-    expected_minimum_legacy_analyses: int
-    expected_legacy_analysis_deferrals: int
     expected_minimum_proven_pivots: int
-    expected_maximum_enrichment_deferrals: int
     expected_minimum_native_enrichments: int
 
 
 @dataclass(frozen=True)
-class AnalysisFallbackTestCase:
-    """A project the native session hands back to Python whole, recording why."""
+class InternalFailureTestCase:
+    """A project whose native analysis fails internally, and the error the compile raises."""
 
     description: str
     files: dict[str, str]
-    allow_compact_analysis: bool
-    keeps_catalog: bool
-    expected_kind: str
+    expected_message: str
 
 
 @dataclass(frozen=True)

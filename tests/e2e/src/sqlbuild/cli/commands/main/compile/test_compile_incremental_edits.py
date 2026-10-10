@@ -22,7 +22,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     adapter_switched,
     add_external_flavor_macro,
     analyze_in_one_batch,
-    analyze_one_model_at_a_time,
     build_between,
     change_adapter_lexical_rules,
     compare_incremental_compile,
@@ -420,9 +419,6 @@ def test_given_broken_cache_invalidation_when_compiling_an_edit_then_the_oracle_
 @pytest.mark.parametrize(
     "test_case",
     [
-        SharedCacheKeyTestCase(
-            description="dataflow_one_model_at_a_time", schedule=analyze_one_model_at_a_time
-        ),
         SharedCacheKeyTestCase(description="one_batch", schedule=analyze_in_one_batch),
     ],
     ids=lambda case: case.description,

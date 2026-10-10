@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.dynamic_pivot import (
-    analyze_dynamic_column_contract,
+from sqlbuild.compiler.analysis_session._helpers.dynamic_contracts import (
+    native_dynamic_contracts,
 )
-from sqlbuild.compiler.compile.models import DynamicColumnContractProof
+from sqlbuild.compiler.analysis_session.models import NativePivotTables
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types import (
     DynamicPivotAnalysisTestCase,
@@ -147,41 +147,48 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types impo
 def test_given_dynamic_family_when_analyzing_output_then_requires_supported_closed_shape(
     test_case: DynamicPivotAnalysisTestCase,
 ) -> None:
-    proof: DynamicColumnContractProof | None = analyze_dynamic_column_contract(
-        query_sql=test_case.query_sql,
-        dialect=test_case.dialect,
-        families=(
-            SchemaDynamicColumnFamily(
-                name="category_amounts",
-                pivot_column="category",
-                value_column="amount",
-                aggregate=test_case.aggregate,
-                type="DECIMAL(12,2)",
+    (proof,) = native_dynamic_contracts(
+        session=None,
+        tables=NativePivotTables(
+            dialect=test_case.dialect,
+            column_types_by_table={
+                "order_amounts": {
+                    "customer_id": "INTEGER",
+                    "category": "VARCHAR",
+                    "amount": "DECIMAL(12,2)",
+                    "country": "VARCHAR",
+                },
+                "partial_order_amounts": {
+                    "customer_id": "INTEGER",
+                    "category": "VARCHAR",
+                    "amount": "DECIMAL(12,2)",
+                },
+            },
+            authoritative_column_types_by_table={
+                "order_amounts": {
+                    "customer_id": "INTEGER",
+                    "category": "VARCHAR",
+                    "amount": "DECIMAL(12,2)",
+                    "country": "VARCHAR",
+                }
+            },
+            column_nullability_by_table={},
+            dynamic_families_by_table={},
+        ),
+        models=(
+            (
+                test_case.query_sql,
+                (
+                    SchemaDynamicColumnFamily(
+                        name="category_amounts",
+                        pivot_column="category",
+                        value_column="amount",
+                        aggregate=test_case.aggregate,
+                        type="DECIMAL(12,2)",
+                    ),
+                ),
             ),
         ),
-        column_types_by_table={
-            "order_amounts": {
-                "customer_id": "INTEGER",
-                "category": "VARCHAR",
-                "amount": "DECIMAL(12,2)",
-                "country": "VARCHAR",
-            },
-            "partial_order_amounts": {
-                "customer_id": "INTEGER",
-                "category": "VARCHAR",
-                "amount": "DECIMAL(12,2)",
-            },
-        },
-        authoritative_column_types_by_table={
-            "order_amounts": {
-                "customer_id": "INTEGER",
-                "category": "VARCHAR",
-                "amount": "DECIMAL(12,2)",
-                "country": "VARCHAR",
-            }
-        },
-        column_nullability_by_table={},
-        dynamic_families_by_table={},
     )
 
     assert proof is not None

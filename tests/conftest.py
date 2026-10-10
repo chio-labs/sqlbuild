@@ -18,9 +18,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture
-def deferred_native_analysis(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make native model analysis and expression-source shapes defer, so compiles run the Python
-    analysis that answers native deferrals."""
+def deferred_native_expression_shapes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make native expression-source shapes defer, so compiles run the Python shape inference."""
 
-    monkeypatch.setattr(native_assembly, "analyze_native_model_sql", lambda **_: None)
     monkeypatch.setattr(native_assembly, "infer_native_expression_source_shapes", lambda **_: None)

@@ -792,13 +792,6 @@ class RetiredCompilerCacheTestCase:
     expected_removed: bool
 
 
-@dataclass(frozen=True)
-class DenseBatchedPreparationTestCase:
-    description: str
-    model_count: int
-    expected_exit_code: int
-
-
 type DensePreparedCompile = PreparedCompile
 
 
