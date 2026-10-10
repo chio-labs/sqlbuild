@@ -6,30 +6,12 @@ from enum import StrEnum
 class CompilerEngine(StrEnum):
     """Which compiler implementation produces the frontier objects."""
 
-    PYTHON = "python"
     NATIVE = "native"
     NATIVE_PREVIEW = "native-preview"
 
 
 class NativeStage(StrEnum):
-    """A native implementation that replaces one Python compiler stage when its tier is active."""
-
-    DISCOVERY = "discovery"
-    DECLARATION_SCOPES = "declaration_scopes"
-    MODEL_CONFIG = "model_config"
-    REFERENCE_EXTRACTION = "reference_extraction"
-    DECLARATION_FILES = "declaration_files"
-    MODEL_LOOP = "model_loop"
-    MACRO_CALLS = "macro_calls"
-    MACRO_CALL_STORE = "macro_call_store"
-    ATTACHMENTS = "attachments"
-    TYPE_SYSTEM = "type_system"
-    MODEL_ANALYSIS = "model_analysis"
-    SEMANTIC_CHECKS = "semantic_checks"
-    CONTRACTS = "contracts"
-    LINEAGE_FACTS = "lineage_facts"
-    SQL_TEST_GLUE = "sql_test_glue"
-    PROJECT_ASSEMBLY = "project_assembly"
+    """A native implementation behind the preview engine until its tier is shipped."""
 
 
 class NativeStageTier(StrEnum):

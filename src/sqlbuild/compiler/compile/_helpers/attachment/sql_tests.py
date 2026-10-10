@@ -84,8 +84,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
@@ -327,16 +325,12 @@ def build_test_inputs(
             test_block=failed.test_block,
             sql=failed.sql_body,
         ) from None
-    target_catalog: _native.SqlTestTargetCatalog | None = (
-        native_test_target_catalog(
-            models=known_model_names,
-            sources=known_source_names,
-            seeds=known_seed_names,
-            table_functions=known_table_function_names,
-            macros=loaded_macros,
-        )
-        if native_stage_enabled(NativeStage.ATTACHMENTS)
-        else None
+    target_catalog: _native.SqlTestTargetCatalog = native_test_target_catalog(
+        models=known_model_names,
+        sources=known_source_names,
+        seeds=known_seed_names,
+        table_functions=known_table_function_names,
+        macros=loaded_macros,
     )
     for test, test_ctes in zip(expanded_tests, test_ctes_batch, strict=True):
         assertion_target_model_names: tuple[str, ...] = (
@@ -700,10 +694,8 @@ def build_scenario_inputs(
             )
         )
     scenario_inputs: list[CompileSqlScenarioInput] = []
-    source_catalog: _native.SqlTestTargetCatalog | None = (
-        native_test_target_catalog(sources=known_source_names)
-        if native_stage_enabled(NativeStage.ATTACHMENTS)
-        else None
+    source_catalog: _native.SqlTestTargetCatalog = native_test_target_catalog(
+        sources=known_source_names
     )
     scenario_file: DiscoveredSqlScenarioFile
     for scenario_file in discovered_inputs.scenario_files:
@@ -792,49 +784,19 @@ def _validate_scenario_source_references(
     syntax: SqlLexicalSyntax,
     target_catalog: _native.SqlTestTargetCatalog | None = None,
 ) -> None:
-    if native_stage_enabled(NativeStage.ATTACHMENTS):
-        cte_sources: list[tuple[str, bool, list[str]]]
-        extraction_error: CompileInputError | None
-        cte_sources, extraction_error = _scenario_cte_sources(
-            scenario_ctes=scenario_ctes, scenario_file=scenario_file, syntax=syntax
-        )
-        error: str | None = (
-            target_catalog or native_test_target_catalog(sources=known_source_names)
-        ).scenario_source_error(str(scenario_file.relative_path), cte_sources)
-        if error is not None:
-            raise CompileInputError(error)
-        if extraction_error is not None:
-            raise extraction_error
-        return
-    cte: CompileSqlScenarioCte
-    for cte in (*scenario_ctes.expected_ctes, *scenario_ctes.assertion_ctes):
-        references: tuple[CompileSqlReference, ...] = extract_sql_references(
-            sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(scenario_file)
-        )
-        reference: CompileSqlReference
-        for reference in references:
-            if reference.ref_kind != SqlReferenceKind.SOURCE:
-                continue
-            raise CompileInputError(
-                f"SQL scenario file {scenario_file.relative_path} CTE '{cte.name}' must not "
-                f"reference project source '{reference.ref_name}' with "
-                f"{SqlReferenceKind.SOURCE.placeholder_call()}; source-backed scenario data "
-                "is only allowed in helper and fixture CTEs"
-            )
-
-    for cte in scenario_ctes.authored_ctes:
-        references = extract_sql_references(
-            sql=cte.sql_body, syntax=syntax, origin=_sql_file_reference_origin(scenario_file)
-        )
-        for reference in references:
-            if reference.ref_kind != SqlReferenceKind.SOURCE:
-                continue
-            if reference.ref_name in known_source_names:
-                continue
-            raise CompileInputError(
-                f"SQL scenario file {scenario_file.relative_path} references unknown source "
-                f"'{reference.ref_name}'"
-            )
+    cte_sources: list[tuple[str, bool, list[str]]]
+    extraction_error: CompileInputError | None
+    cte_sources, extraction_error = _scenario_cte_sources(
+        scenario_ctes=scenario_ctes, scenario_file=scenario_file, syntax=syntax
+    )
+    error: str | None = (
+        target_catalog or native_test_target_catalog(sources=known_source_names)
+    ).scenario_source_error(str(scenario_file.relative_path), cte_sources)
+    if error is not None:
+        raise CompileInputError(error)
+    if extraction_error is not None:
+        raise extraction_error
+    return
 
 
 def _scenario_cte_sources(
@@ -889,73 +851,25 @@ def validate_test_ctes(
         return
 
     model_payload: CompileModelSqlTestCtes = test_ctes.payload
-    if native_stage_enabled(NativeStage.ATTACHMENTS):
-        catalog: _native.SqlTestTargetCatalog = target_catalog or native_test_target_catalog(
-            models=known_model_names,
-            sources=known_source_names,
-            seeds=known_seed_names,
-            table_functions=known_table_function_names,
-            macros=loaded_macros,
-        )
-        error: str | None = catalog.unknown_test_target(
-            str(test_file.relative_path),
-            (
-                [*model_payload.mock_model_names],
-                [*model_payload.mock_source_names],
-                [*model_payload.mock_seed_names],
-                [*model_payload.mock_table_function_names],
-                [*model_payload.macro_mocks],
-                [*model_payload.expected_model_names],
-                [*assertion_target_model_names],
-            ),
-        )
-        if error is not None:
-            raise CompileInputError(error)
-        return
-
-    mock_model_name: str
-    for mock_model_name in model_payload.mock_model_names:
-        if mock_model_name not in known_model_names:
-            raise CompileInputError(
-                f"SQL test file {test_file.relative_path} mocks unknown model '{mock_model_name}'"
-            )
-    mock_source_name: str
-    for mock_source_name in model_payload.mock_source_names:
-        if mock_source_name not in known_source_names:
-            raise CompileInputError(
-                f"SQL test file {test_file.relative_path} mocks unknown source '{mock_source_name}'"
-            )
-    mock_seed_name: str
-    for mock_seed_name in model_payload.mock_seed_names:
-        if mock_seed_name not in known_seed_names:
-            raise CompileInputError(
-                f"SQL test file {test_file.relative_path} mocks unknown seed '{mock_seed_name}'"
-            )
-    mock_table_function_name: str
-    for mock_table_function_name in model_payload.mock_table_function_names:
-        if mock_table_function_name not in known_table_function_names:
-            raise CompileInputError(
-                f"SQL test file {test_file.relative_path} mocks unknown table function "
-                f"'{mock_table_function_name}'"
-            )
-    macro_mock_name: str
-    for macro_mock_name in model_payload.macro_mocks:
-        if macro_mock_name not in loaded_macros:
-            raise CompileInputError(
-                f"SQL test file {test_file.relative_path} mocks unknown macro '{macro_mock_name}'"
-            )
-    expected_model_name: str
-    for expected_model_name in model_payload.expected_model_names:
-        if expected_model_name not in known_model_names:
-            raise CompileInputError(
-                f"SQL test file {test_file.relative_path} expects unknown model "
-                f"'{expected_model_name}'"
-            )
-
-    assertion_target_name: str
-    for assertion_target_name in assertion_target_model_names:
-        if assertion_target_name not in known_model_names:
-            raise CompileInputError(
-                f"SQL test file {test_file.relative_path} assertion references unknown model "
-                f"'{assertion_target_name}'"
-            )
+    catalog: _native.SqlTestTargetCatalog = target_catalog or native_test_target_catalog(
+        models=known_model_names,
+        sources=known_source_names,
+        seeds=known_seed_names,
+        table_functions=known_table_function_names,
+        macros=loaded_macros,
+    )
+    error: str | None = catalog.unknown_test_target(
+        str(test_file.relative_path),
+        (
+            [*model_payload.mock_model_names],
+            [*model_payload.mock_source_names],
+            [*model_payload.mock_seed_names],
+            [*model_payload.mock_table_function_names],
+            [*model_payload.macro_mocks],
+            [*model_payload.expected_model_names],
+            [*assertion_target_model_names],
+        ),
+    )
+    if error is not None:
+        raise CompileInputError(error)
+    return

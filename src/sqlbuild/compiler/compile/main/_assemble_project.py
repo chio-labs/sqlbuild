@@ -25,8 +25,6 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     PythonSqlReferenceReport,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge import run_with_macro_bridge
@@ -54,9 +52,7 @@ def assemble_project(
         analysis_model_names=analysis_model_names,
     )
     project: CompiledProject = (
-        run_with_macro_bridge(stage=assemble)
-        if native_stage_enabled(NativeStage.MACRO_CALLS) and active_macro_bridge() is None
-        else assemble()
+        run_with_macro_bridge(stage=assemble) if active_macro_bridge() is None else assemble()
     )
     python_sql: PythonSqlReferenceReport = (
         python_sql_reference_diagnostics(

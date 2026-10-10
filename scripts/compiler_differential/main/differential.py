@@ -153,8 +153,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=list(DEFAULT_ENGINES),
         metavar="ENGINE",
         help=(
-            "oracle and candidate engines (default: python native-preview, every native stage; "
-            "pass python native to cover only the shipped native stages)"
+            "oracle and candidate engines (default: native native-preview, the shipped default "
+            "against every preview stage)"
         ),
     )
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1)

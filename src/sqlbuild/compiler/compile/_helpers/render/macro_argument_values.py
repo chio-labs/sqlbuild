@@ -16,8 +16,6 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import MacroArgumentError
 from sqlbuild.compiler.compile.models import ParsedMacroArguments
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 
 type _ValueRow = tuple[object, ...]
 type _BuildContext = tuple[Sequence[object], Callable[..., MacroArgumentError]]
@@ -74,7 +72,6 @@ def parse_macro_call_arguments(
             help_text=cast(str, help_text),
         )
     _, positional, keywords, references = parsed
-    report_native_answer(stage=NativeStage.MACRO_CALLS, kind="parsed_arguments")
 
     def unary_error(*, call: int, sign: str) -> MacroArgumentError:
         value: object = nested_values[call]

@@ -47,13 +47,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     FunctionLanguage,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.execution.sql_test_artifacts import (
-    plan_and_render_sql_test_artifacts,
-)
 from sqlbuild.compiler.planner.main.execution.sql_test_model_chain import (
     sql_test_model_chain_names_by_key,
 )
@@ -576,20 +570,12 @@ def _plan_static_test_artifacts(
     with OperationLifecycle(
         operation_kind="project", operation_name="sql_test_planning"
     ) as lifecycle:
-        native_planning: bool = native_stage_enabled(NativeStage.SQL_TEST_GLUE)
-        plan_artifacts: Callable[..., tuple[NativeSqlTestArtifact, ...]] = (
-            plan_native_sql_test_artifacts
-            if native_planning
-            else plan_and_render_sql_test_artifacts
-        )
-        native_artifacts: tuple[NativeSqlTestArtifact, ...] = plan_artifacts(
+        native_artifacts: tuple[NativeSqlTestArtifact, ...] = plan_native_sql_test_artifacts(
             project=project,
             tests=tests,
             adapter=adapter,
             sql_analysis_enabled=project.settings.sql_analysis,
         )
-        if native_planning:
-            report_native_answer(stage=NativeStage.SQL_TEST_GLUE, kind="sql_test_plans")
         lifecycle.completed(metadata={"item_count": len(native_artifacts)})
     return native_artifacts
 

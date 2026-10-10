@@ -25,10 +25,7 @@ from sqlbuild.compiler.contracts._helpers.evaluation import (
     requires_contract_evaluation,
 )
 from sqlbuild.compiler.contracts._helpers.native_deferrals import record_contract_deferral
-from sqlbuild.compiler.contracts.constants import (
-    NATIVE_CONTRACTS_DEFERRAL_SITE,
-    NATIVE_CONTRACTS_UNSUPPORTED_INPUT,
-)
+from sqlbuild.compiler.contracts.constants import NATIVE_CONTRACTS_DEFERRAL_SITE
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry, SourceLocation
@@ -53,14 +50,9 @@ type _DiagnosticRow = tuple[
 
 def native_model_contracts(
     *, project: CompiledProject, dialect: TypeDialect | str | None
-) -> ContractValidationResult | None:
+) -> ContractValidationResult:
     """Return `evaluate_model_contracts`'s result, with deferred models evaluated by Python."""
 
-    if not isinstance(dialect, str | None):
-        record_contract_deferral(
-            kind=NATIVE_CONTRACTS_UNSUPPORTED_INPUT, site=NATIVE_CONTRACTS_DEFERRAL_SITE
-        )
-        return None
     mode: ColumnContractMode = project.settings.column_contract_mode
     outcomes: list[tuple[str | None, list[_DiagnosticRow]]] = (
         _native.evaluate_native_model_contracts(

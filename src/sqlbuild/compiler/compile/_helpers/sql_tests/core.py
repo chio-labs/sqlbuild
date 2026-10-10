@@ -24,8 +24,6 @@ from sqlbuild.compiler.compile.models import (
     SqlReferenceOrigin,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
 from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
@@ -143,7 +141,6 @@ def complete_omitted_ceremonial_select(*, sql: str, syntax: SqlLexicalSyntax) ->
     """Return test or scenario SQL as one statement, adding an omitted trailing `SELECT 1`."""
 
     offset: int | None = _native.omitted_ceremonial_select(sql, syntax.native_mapping)
-    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="omitted_select_scans")
     if offset is None:
         return sql
     return f"{sql[:offset]}{OMITTED_CEREMONIAL_SELECT_SQL}{sql[offset:]}"

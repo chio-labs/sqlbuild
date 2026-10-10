@@ -21,9 +21,8 @@ from sqlbuild.compiler.compile.models import (
     MacroExpansionState,
 )
 from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import (
     ARGUMENT_REFERENCE_EVENT,
@@ -87,10 +86,6 @@ def expand_bridged_sql_macros(
         )
         for site, call_class in zip(sites, call_classes, strict=True)
     ]
-    mocked: int = sum(bool(state.macro_overrides.keys() & set(site.tree_names)) for site in sites)
-    report_native_answer(
-        stage=NativeStage.MACRO_CALLS, kind="bridged_calls", units=len(sites) - mocked
-    )
     return bridge.splice(sql=sql, sites=sites, outputs=outputs)
 
 

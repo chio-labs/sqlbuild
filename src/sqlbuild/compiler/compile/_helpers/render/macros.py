@@ -55,9 +55,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import (
     DECLARATION_READ_EVENT,
@@ -1218,7 +1217,7 @@ def expand_sql_macros_result(
         consumer=consumer,
     )
     bridge: MacroBridge | None = active_macro_bridge()
-    if bridge is None and MACRO_TOKEN in sql and native_stage_enabled(NativeStage.MACRO_CALLS):
+    if bridge is None and MACRO_TOKEN in sql:
         report_native_fallback(
             site=NativeFallbackSite.MACRO_UNBRIDGED_EXPANSION, kind="outside_compile_inputs"
         )

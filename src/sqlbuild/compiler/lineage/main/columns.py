@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage._helpers.fast_columns import (
     build_fast_project_column_lineage,
 )
@@ -30,13 +27,11 @@ def build_project_column_lineage(
 
     match mode:
         case ColumnLineageMode.FAST:
-            if native_stage_enabled(NativeStage.LINEAGE_FACTS):
-                native_lineage: ProjectColumnLineage | None = build_native_column_lineage(
-                    project=project, dialect=dialect, model_names=model_names
-                )
-                if native_lineage is not None:
-                    report_native_answer(stage=NativeStage.LINEAGE_FACTS, kind="lineage_graphs")
-                    return native_lineage
+            native_lineage: ProjectColumnLineage | None = build_native_column_lineage(
+                project=project, dialect=dialect, model_names=model_names
+            )
+            if native_lineage is not None:
+                return native_lineage
             return build_fast_project_column_lineage(
                 project=project,
                 dialect=dialect,

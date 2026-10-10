@@ -24,8 +24,6 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
@@ -90,7 +88,6 @@ def _build_native_declaration_scope(
         native.grant(facts)
     index: ScopeIndex = native.index_with_relationships()
     lookup: ScopeLookup = native.lookup(index=index)
-    report_native_answer(stage=NativeStage.DECLARATION_SCOPES, kind="scope_indexes")
     return DeclarationScopeBuild(
         loaded_macros=loaded_macros,
         index=index,
