@@ -60,6 +60,23 @@ pub(crate) fn top_level_calls(
     (calls, None)
 }
 
+/// Python's `_scan_sqlbuild_call_names(include_nested=True)`: every call start's name in order,
+/// continuing just past the character after each name, as Python's cursor does.
+pub(crate) fn every_call_name(python: PythonText, text: &str) -> Result<Vec<String>, ScanError> {
+    let mut names: Vec<String> = Vec::new();
+    let mut cursor = 0;
+    while cursor < text.len() {
+        let Some(start) = next_macro_start(python, text, cursor)? else {
+            break;
+        };
+        let name_end = identifier_end(python, text, start + 1);
+        names.push(text[start + 1..name_end].to_owned());
+        let open = skip_whitespace(text, name_end);
+        cursor = open + char_at(text, open).map_or(1, char::len_utf8);
+    }
+    Ok(names)
+}
+
 /// Names of every call nested in `args` in source order, in one pass without recursion.
 pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>, ScanError> {
     let bytes: &[u8] = args.as_bytes();

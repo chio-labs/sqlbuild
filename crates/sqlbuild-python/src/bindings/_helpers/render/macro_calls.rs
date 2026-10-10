@@ -4,7 +4,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::panics::main::native_failure::native_failure;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_text::python_text;
+use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names as scan_names;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
 use sqlbuild_render::macro_calls::models::{MacroCallScan, MacroScanFailure};
@@ -42,6 +44,24 @@ pub(crate) fn scan_macro_call_sites(
 
 const MACRO_SCAN_CONTEXT: &str = "native macro call scan";
 
+/// Python's `find_macro_call_names` (or with `nested`, `find_nested_macro_call_names`): the
+/// names, or the message of the `CompileInputError` Python's scan raises.
+#[pyfunction]
+pub(crate) fn macro_call_names(
+    py: Python<'_>,
+    sql: &str,
+    nested: bool,
+) -> PyResult<(Option<Vec<String>>, Option<&'static str>)> {
+    let python = active_python_text();
+    let names = py
+        .compiler_detach(|| Ok(scan_names(python, sql, nested)))
+        .map_err(compiler_error)?;
+    Ok(match names {
+        Ok(names) => (Some(names), None),
+        Err(error) => (None, Some(error.message())),
+    })
+}
+
 /// Splice rendered macro outputs over their call sites, returning the SQL and substitution spans.
 #[pyfunction]
 pub(crate) fn splice_macro_calls(
@@ -60,6 +80,7 @@ pub(crate) fn splice_macro_calls(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scan_macro_call_sites, module)?)?;
+    module.add_function(wrap_pyfunction!(macro_call_names, module)?)?;
     module.add_function(wrap_pyfunction!(splice_macro_calls, module)?)?;
     module.add_class::<MacroCallMemo>()?;
     Ok(())

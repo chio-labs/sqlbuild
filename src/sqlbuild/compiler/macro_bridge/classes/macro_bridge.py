@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
+from sqlbuild.compiler.macro_bridge._helpers.call_sites import scan_macro_calls, splice_macro_calls
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     digest_module_files,
     module_digests_metadata,
@@ -32,7 +33,6 @@ from sqlbuild.compiler.macro_bridge.models import (
     MacroCallClass,
     MacroCallScan,
     MacroCallSite,
-    MacroScanFailure,
     ModuleSources,
 )
 from sqlbuild.compiler.macro_bridge.types import MacroCallEvent, MacroCallRecord
@@ -139,25 +139,8 @@ class MacroBridge:
     def scan(self, sql: str) -> MacroCallScan:
         """The complete top-level call sites of `sql`, and where its scan raises, if it does."""
 
-        rows: list[tuple[int, int, str, list[str] | None, bool]]
-        failure: tuple[int | None, str] | None
-        rows, failure = _native.scan_macro_call_sites(
-            sql, self._python_version, self._unicode_version
-        )
-        return MacroCallScan(
-            sites=tuple(
-                MacroCallSite(
-                    start=start,
-                    end=end,
-                    name=name,
-                    tree_names=None if tree_names is None else tuple(tree_names),
-                    typed_reference_text=typed_reference_text,
-                )
-                for start, end, name, tree_names, typed_reference_text in rows
-            ),
-            failure=None
-            if failure is None
-            else MacroScanFailure(call_start=failure[0], message=failure[1]),
+        return scan_macro_calls(
+            sql, python_version=self._python_version, unicode_version=self._unicode_version
         )
 
     def call_class(
@@ -271,19 +254,7 @@ class MacroBridge:
     ) -> tuple[str, tuple[ExpansionSpan, ...]]:
         """Replace each call site with its output, returning the SQL and substitution spans."""
 
-        rendered: str
-        spans: list[tuple[int, int, int, int]]
-        bounds: list[tuple[int, int]] = [(site.start, site.end) for site in sites]
-        rendered, spans = _native.splice_macro_calls(sql, bounds, outputs)
-        return rendered, tuple(
-            ExpansionSpan(
-                source_start=source_start,
-                source_end=source_end,
-                output_start=output_start,
-                output_end=output_end,
-            )
-            for source_start, source_end, output_start, output_end in spans
-        )
+        return splice_macro_calls(sql=sql, sites=sites, outputs=outputs)
 
     def stats(self) -> tuple[int, int, int]:
         """Memo hits, misses and recorded results so far."""

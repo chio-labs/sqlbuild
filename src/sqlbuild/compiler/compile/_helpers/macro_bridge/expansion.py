@@ -22,6 +22,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
+from sqlbuild.compiler.macro_bridge._helpers.call_sites import scan_macro_calls, splice_macro_calls
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import (
     ARGUMENT_REFERENCE_EVENT,
@@ -77,25 +78,9 @@ def expand_bridged_sql_macros(
         ]
     )
     if scan.failure is not None or None in call_classes:
-        unmemoised: list[str] = [
-            _evaluated_call_output(
-                sql=sql,
-                consumer_path=consumer_path,
-                state=state,
-                declarations=declarations,
-                site=site,
-            )
-            for site in sites
-        ]
-        if scan.failure is not None:
-            _raise_scan_failure(
-                sql=sql,
-                consumer_path=consumer_path,
-                state=state,
-                declarations=declarations,
-                failure=scan.failure,
-            )
-        return bridge.splice(sql=sql, sites=sites, outputs=unmemoised)
+        return _unmemoised_sql_macros(
+            sql=sql, consumer_path=consumer_path, state=state, declarations=declarations, scan=scan
+        )
     outputs: list[str] = [
         _bridged_call_output(
             sql=sql,
@@ -182,6 +167,53 @@ def _bridged_call_output(  # noqa: PLR0913
             events=events,
         )
     return facts.render_relation_placeholders(macro_result)
+
+
+def expand_unbridged_sql_macros(
+    *, sql: str, consumer_path: Path, state: MacroExpansionState
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
+    """Expand one string outside compile inputs: native call sites, each evaluated in order."""
+
+    if MACRO_TOKEN not in sql:
+        return sql, ()
+    return _unmemoised_sql_macros(
+        sql=sql,
+        consumer_path=consumer_path,
+        state=state,
+        declarations=_expansion_declarations(state=state, consumer_path=consumer_path),
+        scan=scan_macro_calls(sql),
+    )
+
+
+def _unmemoised_sql_macros(
+    *,
+    sql: str,
+    consumer_path: Path,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    scan: MacroCallScan,
+) -> tuple[str, tuple[ExpansionSpan, ...]]:
+    """Evaluate every call in order without the memo, raising where Python's scan raises."""
+
+    outputs: list[str] = [
+        _evaluated_call_output(
+            sql=sql,
+            consumer_path=consumer_path,
+            state=state,
+            declarations=declarations,
+            site=site,
+        )
+        for site in scan.sites
+    ]
+    if scan.failure is not None:
+        _raise_scan_failure(
+            sql=sql,
+            consumer_path=consumer_path,
+            state=state,
+            declarations=declarations,
+            failure=scan.failure,
+        )
+    return splice_macro_calls(sql=sql, sites=scan.sites, outputs=outputs)
 
 
 def _raise_scan_failure(

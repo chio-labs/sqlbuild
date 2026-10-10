@@ -30,7 +30,13 @@ from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     render_error,
     write_project,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
+from tests.integration.src.sqlbuild.compiler.golden_views import (
+    GoldenEntry,
+    golden_differences,
+    golden_entry,
+    golden_name,
+    read_golden,
+)
 
 _FAILURE_BASE_FILES: dict[str, str] = {
     "sqlbuild_project.toml": MACRO_BRIDGE_PROJECT_FILES["sqlbuild_project.toml"],
@@ -205,25 +211,15 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
         python_version=(sys.version_info[0], sys.version_info[1]),
         unicode_version=unicodedata.unidata_version,
     )
-
-    python_outcomes: list[tuple[object, ...]] = [
-        expansion_outcome(sql=sql, bridge=None) for sql in texts
-    ]
-    bridged_outcomes: list[tuple[object, ...]] = [
-        expansion_outcome(sql=sql, bridge=bridge) for sql in texts
-    ]
+    unbridged: list[tuple[object, ...]] = [expansion_outcome(sql=sql, bridge=None) for sql in texts]
+    bridged: list[tuple[object, ...]] = [expansion_outcome(sql=sql, bridge=bridge) for sql in texts]
+    expected: list[GoldenEntry] = read_golden(golden_name("macro_expansion", test_case.description))
 
     assert (
-        mismatches(
-            inputs=list[object](texts),
-            expected=list[object](python_outcomes),
-            actual=list[object](bridged_outcomes),
-        )
-        == test_case.expected_mismatches
-    )
-    assert sum(len(outcome) == 5 for outcome in python_outcomes) >= (
-        test_case.expected_minimum_successes
-    )
+        golden_differences(expected, [golden_entry("macro_expansion", item) for item in bridged]),
+        golden_differences(expected, [golden_entry("macro_expansion", item) for item in unbridged]),
+    ) == (test_case.expected_mismatches, test_case.expected_mismatches)
+    assert sum(len(outcome) == 5 for outcome in bridged) >= test_case.expected_minimum_successes
     assert bridge.stats()[0] > 0
 
 

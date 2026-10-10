@@ -32,7 +32,8 @@ class MacroBridgeFailureTestCase:
 
 @dataclass(frozen=True)
 class MacroExpansionDifferentialTestCase:
-    """Seeded random SQL text that must expand identically with and without the bridge."""
+    """Seeded random SQL text that must expand, with and without the bridge, as Python's
+    expansion recorded in its golden did."""
 
     description: str
     seed: int

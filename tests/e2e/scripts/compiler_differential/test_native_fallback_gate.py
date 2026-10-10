@@ -9,8 +9,8 @@ import pytest
 from scripts.compiler_differential.main.differential import run_compiler_differential
 from tests.e2e.scripts.compiler_differential._test_types import NativeFallbackGateTestCase
 from tests.e2e.scripts.compiler_differential.helpers import (
-    MACRO_BRIDGE_SABOTAGE,
     MODEL_ANALYSIS_SABOTAGE,
+    PROJECT_ASSEMBLY_SABOTAGE,
     harness_arguments,
     write_native_perturbation,
 )
@@ -43,13 +43,13 @@ _VANISHED_ENTRY: str = (
             ),
         ),
         NativeFallbackGateTestCase(
-            description="shipped_macro_bridge_sabotaged_to_python_fails",
-            perturbation=MACRO_BRIDGE_SABOTAGE,
+            description="shipped_project_assembly_sabotaged_to_python_fails",
+            perturbation=PROJECT_ASSEMBLY_SABOTAGE,
             appended_entries="",
             expected_exit_code=1,
             expected_lines=(
-                "Native fallback allow-list: native-preview macro_calls "
-                "macro_calls.bridge_unavailable deferred (project): ",
+                "Native fallback allow-list: native-preview project_assembly "
+                "project_assembly.assembly deferred (project): ",
                 "not on the allow-list; port it or list it with a reason",
             ),
         ),

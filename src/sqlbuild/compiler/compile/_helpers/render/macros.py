@@ -16,6 +16,7 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     call_site_sql_references,
     reject_macro_generated_references,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansi
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
     MACRO_CONTEXT_PARAMETER_NAME,
-    MACRO_TOKEN,
     SQL_OPEN_PAREN_TOKEN,
     SQL_QUOTE_TOKENS,
 )
@@ -55,8 +55,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import (
     DECLARATION_READ_EVENT,
@@ -255,20 +253,6 @@ def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[st
                 dependencies=export_dependencies[(macro_file.relative_path, attribute_name)],
             )
     return loaded_macros
-
-
-def _inventory_project_macros(
-    *, macro_files: tuple[DiscoveredMacroFile, ...]
-) -> StaticMacroInventory:
-    """Validate and inventory project macro exports without executing authored code."""
-
-    try:
-        analyses: dict[str, _MacroModuleAnalysis] = _analyze_project_macro_modules(
-            macro_files=macro_files
-        )
-    except CompileInputError:
-        return _inventory_project_macros_tolerantly(macro_files=macro_files)
-    return _inventory_from_analyses(macro_files=macro_files, analyses=analyses)
 
 
 def _macro_inventory_fault(
@@ -1217,24 +1201,8 @@ def expand_sql_macros_result(
         consumer=consumer,
     )
     bridge: MacroBridge | None = active_macro_bridge()
-    if bridge is None and MACRO_TOKEN in sql:
-        report_native_fallback(
-            site=NativeFallbackSite.MACRO_UNBRIDGED_EXPANSION, kind="outside_compile_inputs"
-        )
-    expanded_sql, spans = (
-        _expand_sql_macros(
-            sql=sql,
-            consumer_path=file_path,
-            state=state,
-            stack=(),
-        )
-        if bridge is None
-        else _bridged_sql_macros(
-            sql=sql,
-            consumer_path=file_path,
-            state=state,
-            bridge=bridge,
-        )
+    expanded_sql, spans = _bridged_sql_macros(
+        sql=sql, consumer_path=file_path, state=state, bridge=bridge
     )
     return MacroExpansionResult(
         sql=expanded_sql,
@@ -1246,33 +1214,32 @@ def expand_sql_macros_result(
 
 
 def _bridged_sql_macros(
-    *, sql: str, consumer_path: Path, state: MacroExpansionState, bridge: MacroBridge
+    *, sql: str, consumer_path: Path, state: MacroExpansionState, bridge: MacroBridge | None
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     from sqlbuild.compiler.compile._helpers.macro_bridge.expansion import (
         expand_bridged_sql_macros,
+        expand_unbridged_sql_macros,
     )
 
+    if bridge is None:
+        return expand_unbridged_sql_macros(sql=sql, consumer_path=consumer_path, state=state)
     return expand_bridged_sql_macros(
         sql=sql, consumer_path=consumer_path, state=state, bridge=bridge
     )
 
 
-def _expand_sql_macros(
-    *,
-    sql: str,
-    consumer_path: Path,
-    state: MacroExpansionState,
-    stack: tuple[DeclarationIdentity, ...],
-) -> tuple[str, tuple[ExpansionSpan, ...]]:
-    if MACRO_TOKEN not in sql:
-        return sql, ()
-    return _expand_resolved_sql_macros(
-        sql=sql,
-        consumer_path=consumer_path,
-        state=state,
-        declarations=_expansion_declarations(state=state, consumer_path=consumer_path),
-        stack=stack,
-    )
+def _inventory_project_macros(
+    *, macro_files: tuple[DiscoveredMacroFile, ...]
+) -> StaticMacroInventory:
+    """Validate and inventory project macro exports without executing authored code."""
+
+    try:
+        analyses: dict[str, _MacroModuleAnalysis] = _analyze_project_macro_modules(
+            macro_files=macro_files
+        )
+    except CompileInputError:
+        return _inventory_project_macros_tolerantly(macro_files=macro_files)
+    return _inventory_from_analyses(macro_files=macro_files, analyses=analyses)
 
 
 def _expansion_declarations(
@@ -1290,62 +1257,13 @@ def _expansion_declarations(
     return declarations
 
 
-def _expand_resolved_sql_macros(
-    *,
-    sql: str,
-    consumer_path: Path,
-    state: MacroExpansionState,
-    declarations: DeclarationResolutionContext | None,
-    stack: tuple[DeclarationIdentity, ...],
-) -> tuple[str, tuple[ExpansionSpan, ...]]:
-    rendered_sql_parts: list[str] = []
-    spans: list[ExpansionSpan] = []
-    output_length: int = 0
-    cursor: int = 0
-    while cursor < len(sql):
-        macro_start_index: int | None = _find_next_macro_start(sql=sql, start_index=cursor)
-        if macro_start_index is None:
-            rendered_sql_parts.append(sql[cursor:])
-            break
-        leading_literal: str = sql[cursor:macro_start_index]
-        rendered_sql_parts.append(leading_literal)
-        output_length += len(leading_literal)
-        macro_result: object
-        next_index: int
-        macro_result, next_index = _evaluate_macro_call(
-            sql=sql,
-            call_start_index=macro_start_index,
-            file_path=consumer_path,
-            state=state,
-            declarations=declarations,
-            stack=stack,
-            top_level=True,
-        )
-        if not isinstance(macro_result, str):
-            raise CompileInputError(
-                f"Macro '@{_parse_macro_name(sql=sql, call_start_index=macro_start_index)}' in "
-                f"'{consumer_path}' must return a SQL string when used directly in SQL"
-            )
-        macro_result = state.facts.render_relation_placeholders(macro_result)
-        rendered_sql_parts.append(macro_result)
-        spans.append(
-            ExpansionSpan(
-                source_start=macro_start_index,
-                source_end=next_index,
-                output_start=output_length,
-                output_end=output_length + len(macro_result),
-            )
-        )
-        output_length += len(macro_result)
-        cursor = next_index
-    return "".join(rendered_sql_parts), tuple(spans)
-
-
 def find_macro_call_names(sql: str) -> tuple[str, ...]:
     """Return unique authored macro call names in encounter order."""
 
     return tuple(
-        name for name in _find_sqlbuild_call_names(sql) if name not in DECLARATION_REFERENCE_NAMES
+        name
+        for name in _native_macro_call_names(sql=sql, nested=False)
+        if name not in DECLARATION_REFERENCE_NAMES
     )
 
 
@@ -1354,40 +1272,19 @@ def find_nested_macro_call_names(sql: str) -> tuple[str, ...]:
 
     return tuple(
         name
-        for name in _scan_sqlbuild_call_names(sql=sql, include_nested=True)
+        for name in _native_macro_call_names(sql=sql, nested=True)
         if name not in DECLARATION_REFERENCE_NAMES
     )
 
 
-def _find_sqlbuild_call_names(sql: str) -> tuple[str, ...]:
-    """Return executable SQLBuild call names, excluding quoted and commented text."""
+def _native_macro_call_names(*, sql: str, nested: bool) -> tuple[str, ...]:
+    """Every call name Python's scan finds, declaration calls included."""
 
-    return _scan_sqlbuild_call_names(sql=sql, include_nested=False)
-
-
-def _scan_sqlbuild_call_names(*, sql: str, include_nested: bool) -> tuple[str, ...]:
-    if MACRO_TOKEN not in sql:
-        return ()
-
-    names: list[str] = []
-    seen: set[str] = set()
-    cursor: int = 0
-    while cursor < len(sql):
-        macro_start_index: int | None = _find_next_macro_start(sql=sql, start_index=cursor)
-        if macro_start_index is None:
-            break
-        macro_name: str = _parse_macro_name(sql=sql, call_start_index=macro_start_index)
-        if macro_name not in seen:
-            seen.add(macro_name)
-            names.append(macro_name)
-        opening_paren_index: int = _skip_whitespace(
-            sql=sql, start_index=macro_start_index + 1 + len(macro_name)
-        )
-        cursor = (
-            opening_paren_index + 1
-            if include_nested
-            else _find_matching_paren(sql=sql, opening_paren_index=opening_paren_index) + 1
-        )
+    names: list[str] | None
+    message: str | None
+    names, message = _native.macro_call_names(sql, nested)
+    if names is None:
+        raise CompileInputError(message or "")
     return tuple(names)
 
 
@@ -1759,7 +1656,7 @@ def _validate_final_macro_sql(*, macro_name: str, file_path: Path, macro_result:
                 "bytes decoded with errors='surrogateescape'"
             ),
         ) from None
-    generated_calls: tuple[str, ...] = _find_sqlbuild_call_names(macro_result)
+    generated_calls: tuple[str, ...] = _native_macro_call_names(sql=macro_result, nested=False)
     if not generated_calls:
         return
     calls: str = ", ".join(f"@{name}()" for name in generated_calls)
