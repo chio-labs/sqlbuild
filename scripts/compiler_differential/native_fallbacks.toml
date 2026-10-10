@@ -1,10 +1,31 @@
-# Every native-to-Python fallback and preview analysis deferral the CI corpus may still
+# Every native-to-Python fallback and analysis deferral the CI corpus may still
 # reach, with its exact count per corpus. `--native-fallbacks check` fails on anything new,
 # changed or gone. Ports delete their entries; see scripts/compiler_differential/README.md.
 # The corpus does not reach type normalization (type_system): its callers are the planner,
-# the executor and the preview fallbacks, so test_native_type_parity.py covers that stage.
+# the executor and the analysis fallbacks, so test_native_type_parity.py covers that stage.
 seed_start = 0
 seeds = 12
+
+[[entry]]
+engine = "native"
+stage = "analysis"
+site = "project_assembly"
+kind = "syntax_error"
+counts = { failure = 3 }
+
+[[entry]]
+engine = "native"
+stage = "analysis"
+site = "project_assembly"
+kind = "unsupported_dialect"
+counts = { failure = 1 }
+
+[[entry]]
+engine = "native"
+stage = "analysis"
+site = "sql_test_assembly"
+kind = "macro_mocks"
+counts = { seed = 29 }
 
 [[entry]]
 engine = "native"
@@ -50,6 +71,20 @@ counts = { example = 8, fixture = 4, seed = 26 }
 
 [[entry]]
 engine = "native"
+stage = "contracts"
+site = "contracts.native"
+kind = "contract_validations"
+counts = { example = 9, failure = 113, fixture = 6, seed = 25 }
+
+[[entry]]
+engine = "native"
+stage = "contracts"
+site = "contracts.native"
+kind = "promotion_checks"
+counts = { example = 12, failure = 113, fixture = 8, seed = 33 }
+
+[[entry]]
+engine = "native"
 stage = "declaration_files"
 site = "declaration_files.native"
 kind = "failed_files"
@@ -92,6 +127,13 @@ counts = { example = 12, failure = 326, fixture = 12, seed = 50 }
 
 [[entry]]
 engine = "native"
+stage = "lineage_facts"
+site = "lineage_facts.native"
+kind = "lineage_graphs"
+counts = { example = 9, failure = 113, fixture = 6, seed = 22 }
+
+[[entry]]
+engine = "native"
 stage = "macro_call_store"
 site = "macro_call_store.native"
 kind = "served_calls"
@@ -127,6 +169,27 @@ counts = { failure = 4, seed = 3 }
 
 [[entry]]
 engine = "native"
+stage = "model_analysis"
+site = "model_analysis.native"
+kind = "dynamic_contract_proofs"
+counts = { seed = 3 }
+
+[[entry]]
+engine = "native"
+stage = "model_analysis"
+site = "model_analysis.native"
+kind = "expression_shapes"
+counts = { example = 4, failure = 119, fixture = 4, seed = 100 }
+
+[[entry]]
+engine = "native"
+stage = "model_analysis"
+site = "model_analysis.native"
+kind = "model_analyses"
+counts = { example = 56, failure = 232, fixture = 52, seed = 698 }
+
+[[entry]]
+engine = "native"
 stage = "model_config"
 site = "model_config.native"
 kind = "config_builds"
@@ -151,7 +214,7 @@ engine = "native"
 stage = "model_config"
 site = "model_config.native"
 kind = "template_expansions"
-counts = { example = 230, failure = 1657, fixture = 333, seed = 1524 }
+counts = { example = 214, failure = 1657, fixture = 333, seed = 1471 }
 
 [[entry]]
 engine = "native"
@@ -190,10 +253,52 @@ counts = { example = 56, failure = 522, fixture = 72, seed = 1187 }
 
 [[entry]]
 engine = "native"
+stage = "project_assembly"
+site = "project_assembly.assembly"
+kind = "deferred"
+counts = { failure = 4 }
+
+[[entry]]
+engine = "native"
+stage = "project_assembly"
+site = "project_assembly.native"
+kind = "project_assemblies"
+counts = { example = 12, failure = 115, fixture = 8, seed = 36 }
+
+[[entry]]
+engine = "native"
 stage = "reference_extraction"
 site = "reference_extraction.native"
 kind = "reference_scans"
-counts = { example = 250, failure = 514, fixture = 249, seed = 1532 }
+counts = { example = 250, failure = 512, fixture = 249, seed = 1532 }
+
+[[entry]]
+engine = "native"
+stage = "semantic_checks"
+site = "semantic_checks.native"
+kind = "semantic_completions"
+counts = { example = 12, failure = 115, fixture = 8, seed = 36 }
+
+[[entry]]
+engine = "native"
+stage = "sql_test_glue"
+site = "sql_test_glue.assembly"
+kind = "deferred"
+counts = { seed = 29 }
+
+[[entry]]
+engine = "native"
+stage = "sql_test_glue"
+site = "sql_test_glue.native"
+kind = "sql_test_assemblies"
+counts = { example = 16, failure = 7, fixture = 20, seed = 143 }
+
+[[entry]]
+engine = "native"
+stage = "sql_test_glue"
+site = "sql_test_glue.native"
+kind = "sql_test_plans"
+counts = { example = 1, failure = 5, fixture = 1, seed = 9 }
 
 [[entry]]
 engine = "native-preview"
@@ -355,20 +460,6 @@ stage = "macro_calls"
 site = "macro_calls.resolution"
 kind = "deferred"
 counts = { failure = 4, seed = 3 }
-
-[[entry]]
-engine = "native-preview"
-stage = "model_analysis"
-site = "analysis_session"
-kind = "input_enrichment"
-counts = { failure = 1 }
-
-[[entry]]
-engine = "native-preview"
-stage = "model_analysis"
-site = "analysis_session"
-kind = "legacy_analysis"
-counts = { failure = 2, seed = 10 }
 
 [[entry]]
 engine = "native-preview"
