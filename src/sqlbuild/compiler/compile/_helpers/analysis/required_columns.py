@@ -5,15 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlbuild.compiler.compile._helpers.analysis.columns import (
-    _analysis_reference_name,
-    _lineage_resource_type,
-    _replace_refs_with_stubs,
-)
-from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
+from sqlbuild.compiler.compile._helpers.analysis.cte_scopes import (
     _polyglot_direct_select_tables,
     _polyglot_top_level_ctes,
     _unwrap_polyglot_annotations,
+)
+from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
+    _analysis_reference_name,
+    _lineage_resource_type,
+    _replace_refs_with_stubs,
 )
 from sqlbuild.compiler.compile.models import CompiledLineageSourceFact, CompileSqlReference
 from sqlbuild.compiler.compile.types import CompiledResourceType

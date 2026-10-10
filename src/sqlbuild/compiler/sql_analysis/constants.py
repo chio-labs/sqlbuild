@@ -183,3 +183,5 @@ NATIVE_DIALECT_ALIASES: dict[str, str] = {
     "sqlserver": "tsql",
 }
 ANALYSIS_NORMALIZATION_CHUNK_SIZE: int = 256
+TABLE_FUNCTION_ANALYSIS_PREFIX: str = "__sqlbuild_table_function_"
+NATIVE_FAILURE_PREFIX: str = "NativeCompilerError: "

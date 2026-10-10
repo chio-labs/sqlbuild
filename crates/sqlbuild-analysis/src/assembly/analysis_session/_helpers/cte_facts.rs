@@ -108,6 +108,9 @@ pub(crate) struct LegacyInput<'a> {
     /// Python's `lineage_reference_map` items.
     pub(crate) lineage_references: &'a [(String, String, String)],
     pub(crate) recover: bool,
+    /// Python's `_infer_columns_from_polyglot_ast`, which infers nullability through input
+    /// columns even where no input nullability is known; lineage analysis stays shallow there.
+    pub(crate) full_nullability: bool,
     /// Python's `column_types_by_table`: every known relation's types.
     pub(crate) types: &'a ShapeTable,
     /// Python's `column_nullability_by_table`, in its dict order.
@@ -197,7 +200,7 @@ pub(crate) fn legacy_analysis(input: &LegacyInput<'_>) -> Fact<LegacyAnalysis> {
             NON_NULL_NULLABILITY
         } else if let Some(cte_nullability) = dict_get(&cte_nullability, output) {
             cte_nullability
-        } else if known {
+        } else if known || input.full_nullability {
             context.nullability(inner, &aliases, &nullability)?
         } else {
             context.shallow_nullability(inner)?

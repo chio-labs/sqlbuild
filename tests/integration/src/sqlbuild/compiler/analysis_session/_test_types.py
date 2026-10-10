@@ -110,3 +110,30 @@ class SharedQueryOutputTestCase:
     models: dict[str, str]
     expected_lineage: tuple[tuple[str, str, str], ...] = ()
     expected_findings: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class FallbackColumnsTestCase:
+    """A model native analysis cannot project, and the columns its parsed tree still gives."""
+
+    description: str
+    query_sql: str
+    expected_columns: tuple[tuple[str, str | None, str], ...] | None
+
+
+@dataclass(frozen=True)
+class TableFunctionColumnsTestCase:
+    """A table function's declared return columns against its body's output columns."""
+
+    description: str
+    returns: str
+    body_sql: str
+    expected_error: str | None
+
+
+@dataclass(frozen=True)
+class MissingSessionAnalysisTestCase:
+    """A broken invariant: the session returns no analysis for a model it was asked about."""
+
+    description: str
+    expected_message: str

@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.analysis.compact import (
-    analyze_columns_and_lineage_with_polyglot,
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
 )
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile.constants import (
     POLYGLOT_ARRAY_KIND,
     POLYGLOT_FUNCTION_KIND,
@@ -17,7 +18,6 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.models import (
     FixtureColumnInference,
     InferredColumn,
-    PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_KIND_NULL
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
@@ -28,11 +28,11 @@ def infer_fixture_column_facts(
 ) -> FixtureColumnInference | None:
     """Infer fixture columns and identify explicitly untyped NULL projections."""
 
-    analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-        query_sql=query_sql,
-        inference_profile=inference_profile,
-    )
-    if not analysis.analysis_succeeded or analysis.has_star or analysis.columns is None:
+    analysis: NativeQueryColumns = infer_native_query_columns(
+        queries=(NativeColumnQuery(sql=query_sql, mode="legacy", recover_cte_facts=False),),
+        profile=inference_profile,
+    )[0]
+    if not analysis.succeeded or analysis.has_star or analysis.columns is None:
         return None
     simple_types, null_literal_names, quoted_names = _simple_projection_facts(
         query_sql=query_sql,

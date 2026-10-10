@@ -50,7 +50,6 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     generated_analysis_files,
     native_pivot_proofs,
     pivot_project_files,
-    record_python_model_analyses,
     shared_analysis_files,
     started_sessions,
 )
@@ -425,7 +424,6 @@ def test_given_internal_native_failure_when_assembling_then_raises_without_pytho
     inputs: CompileProjectInputs = compile_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
-    python_analyses: list[object] = record_python_model_analyses(monkeypatch=monkeypatch)
     duplicate_analysed_model_names(monkeypatch=monkeypatch)
 
     with pytest.raises(native_module.NativeCompilerError) as raised:
@@ -434,9 +432,8 @@ def test_given_internal_native_failure_when_assembling_then_raises_without_pytho
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
         )
 
-    assert (str(raised.value), python_analyses, deferral_kinds(record_dir)) == (
+    assert (str(raised.value), deferral_kinds(record_dir)) == (
         test_case.expected_message,
-        [],
         Counter(),
     )
 

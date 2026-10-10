@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from sqlbuild.compiler.compile._helpers.analysis.columns import substitute_placeholder_defaults
+from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
+    substitute_placeholder_defaults,
+)
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_placeholders
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,

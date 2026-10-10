@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import record_analysis_cache_metrics
-from sqlbuild.compiler.compile._helpers.analysis.columns import (
+from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
     substitute_placeholder_defaults,
     table_function_analysis_name,
 )

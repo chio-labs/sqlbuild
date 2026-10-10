@@ -7,6 +7,11 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
 from sqlbuild.compiler.attachments.constants import (
     HEADER_ARGUMENTS_STAGE,
     HEADER_METADATA_STAGE,
@@ -25,7 +30,6 @@ from sqlbuild.compiler.attachments.models import (
     NativeFunctionNamespace,
     NativeFunctionNamespaceInputs,
 )
-from sqlbuild.compiler.compile._helpers.analysis.compact import infer_columns_with_sql_analysis
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_function_sql_syntax,
 )
@@ -404,9 +408,10 @@ def _validate_table_function_output_contract(
     return_columns: tuple[FunctionReturnColumn, ...],
     function_file: DiscoveredSqlFunctionFile,
 ) -> None:
-    inferred_columns: tuple[InferredColumn, ...] | None = infer_columns_with_sql_analysis(
-        query_sql=body_sql
-    )
+    inferred_columns: tuple[InferredColumn, ...] | None = infer_native_query_columns(
+        queries=(NativeColumnQuery(sql=body_sql, mode="parse"),),
+        profile=ExpressionInferenceProfile(),
+    )[0].columns
     if not inferred_columns:
         return
     declared_count: int = len(return_columns)

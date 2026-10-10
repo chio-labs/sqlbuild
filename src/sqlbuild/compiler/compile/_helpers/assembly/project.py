@@ -7,16 +7,18 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
-from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeModelAnalysisRequest
+from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
+    get_complete_schema_binding_request,
+)
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
-)
-from sqlbuild.compiler.compile._helpers.analysis.compact import (
-    analyze_columns_and_lineage_with_polyglot,
-    get_complete_schema_binding_request,
-    infer_columns_with_sql_analysis,
 )
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import (
     model_placeholders as _model_placeholders,
@@ -145,6 +147,7 @@ from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
     BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
     NATIVE_DIALECT_ALIASES,
+    NATIVE_FAILURE_PREFIX,
 )
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
@@ -526,19 +529,12 @@ def _assemble_compiled_model(
                 dialect=profile.sql_analysis_dialect,
             )
     if sql_analysis_enabled:
-        polyglot_analysis: PolyglotAnalysisResult = (
-            sql_analysis.polyglot_analysis
-            if sql_analysis is not None
-            else analyze_columns_and_lineage_with_polyglot(
-                query_sql=analysis_query_sql,
-                references=model_input.references,
-                placeholders=placeholders,
-                column_nullability_by_table=column_nullability_by_table,
-                column_types_by_table=column_types_by_table,
-                inference_profile=profile,
-                allow_compact_analysis=allow_compact_analysis,
+        if sql_analysis is None:
+            raise _native.NativeCompilerError(
+                f"{NATIVE_FAILURE_PREFIX}native model analysis: the session returned no "
+                f"analysis for model '{model_name}'"
             )
-        )
+        polyglot_analysis: PolyglotAnalysisResult = sql_analysis.polyglot_analysis
         if polyglot_analysis.analysis_succeeded:
             inferred_columns = polyglot_analysis.columns
             fast_lineage_columns = polyglot_analysis.lineage_columns
@@ -553,12 +549,15 @@ def _assemble_compiled_model(
                     placeholders=placeholders,
                     dialect=profile.sql_analysis_dialect,
                 )
-            inferred_columns = infer_columns_with_sql_analysis(
-                query_sql=analysis_query_sql,
-                placeholders=placeholders,
+            inferred_columns = infer_native_query_columns(
+                queries=(
+                    NativeColumnQuery(
+                        sql=analysis_query_sql, mode="parse", placeholders=placeholders
+                    ),
+                ),
+                profile=profile,
                 column_nullability_by_table=column_nullability_by_table,
-                inference_profile=profile,
-            )
+            )[0].columns
     elif sql_validation_enabled and model_input.sql_validation_enabled and not syntax_validated:
         validate_sql_syntax(
             query_sql=analysis_query_sql,

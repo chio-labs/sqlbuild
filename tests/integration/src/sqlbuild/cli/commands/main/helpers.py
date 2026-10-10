@@ -27,8 +27,8 @@ from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile.models import PlannedStaticSqlTests
+from sqlbuild.compiler.analysis_session.models import NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
-from sqlbuild.compiler.compile.models import PolyglotAnalysisResult
 from sqlbuild.compiler.discovery._helpers.native import (
     model_files as native_model_files_module,
 )
@@ -661,17 +661,15 @@ def record_source_rebinding_analyses(monkeypatch: pytest.MonkeyPatch) -> list[st
     """Record every model query analysed again against inspected source columns."""
 
     analysed: list[str] = []
-    original: Callable[..., PolyglotAnalysisResult] = (
-        source_bindings_module.analyze_columns_and_lineage_with_polyglot
+    original: Callable[..., tuple[NativeQueryColumns, ...]] = (
+        source_bindings_module.infer_native_query_columns
     )
 
-    def recording(**kwargs: Any) -> PolyglotAnalysisResult:
-        analysed.append(str(kwargs["query_sql"]))
+    def recording(**kwargs: Any) -> tuple[NativeQueryColumns, ...]:
+        analysed.extend(query.sql for query in kwargs["queries"])
         return original(**kwargs)
 
-    monkeypatch.setattr(
-        source_bindings_module, "analyze_columns_and_lineage_with_polyglot", recording
-    )
+    monkeypatch.setattr(source_bindings_module, "infer_native_query_columns", recording)
     return analysed
 
 

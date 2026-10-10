@@ -6,10 +6,8 @@ import random
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.analysis.compact as compact_analysis
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
@@ -23,13 +21,6 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.analysis_session._helpers.profile_rows import nullability_rule_rows
-from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
-    _polyglot_cte_passthrough_facts,
-    _polyglot_filtered_non_null_outputs,
-)
-from sqlbuild.compiler.compile.models import CteFactResolvers
-from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 
 type Generate = Callable[[random.Random, list[str], int], str]
 type CteFactView = (
@@ -49,10 +40,9 @@ class CteFactQuery:
 
 @dataclass
 class CteFactParity:
-    """Python's and native's recovered facts for every query native answered."""
+    """Native's recovered facts for every query it answered."""
 
     queries: list[object]
-    python: list[object]
     native: list[object]
     counts: Counter[str]
 
@@ -86,20 +76,9 @@ _SCHEMAS: dict[str, dict[str, str]] = {
     "Events": {"event_id": "INT", "kind": "VARCHAR(10)"},
     "events": {"event_id": "BIGINT", "payload": "JSON"},
 }
-_INPUT_NULLABILITY: dict[str, dict[str, InferredNullability]] = {
-    table: dict.fromkeys(columns, InferredNullability.UNKNOWN)
-    for table, columns in _SCHEMAS.items()
-}
 _INPUT_SHAPES: list[tuple[str, list[tuple[str, str]]]] = [
     (table, list(columns.items())) for table, columns in _SCHEMAS.items()
 ]
-_NULL_FILTER_USE: dict[str, str] = {"context": "filter", "expressionSql": "x IS NOT NULL"}
-_RESOLVERS: CteFactResolvers = CteFactResolvers(
-    expression_type=compact_analysis._polyglot_expression_type,
-    nullability=compact_analysis._infer_polyglot_nullability,
-    shallow_nullability=compact_analysis._infer_polyglot_shallow_nullability,
-    alias_nullability=compact_analysis._polyglot_alias_nullability_from_select,
-)
 _ADAPTERS: tuple[BaseAdapter, ...] = (
     DuckDbAdapter(),
     SnowflakeAdapter(),
@@ -369,43 +348,6 @@ def generated_cte_fact_query(*, rng: random.Random) -> CteFactQuery:
     )
 
 
-def python_cte_facts(*, query: CteFactQuery) -> CteFactView:
-    """Python's recovered facts, as enrichment computes them, or what it raises."""
-
-    analysis: dict[str, Any] = {
-        "cteFacts": [1][: int(query.recover)],
-        "columnUses": [_NULL_FILTER_USE][: int(query.null_filter)],
-    }
-    dialect: str | None = query.profile.sql_analysis_dialect
-    try:
-        types, nullability, direct, parsed = _polyglot_cte_passthrough_facts(
-            polyglot_module=import_polyglot(),
-            cleaned_sql=query.sql,
-            dialect=dialect,
-            column_types_by_table=_SCHEMAS,
-            column_nullability_by_table=_INPUT_NULLABILITY,
-            inference_profile=query.profile,
-            analysis=analysis,
-            resolvers=_RESOLVERS,
-        )
-        non_null: frozenset[str] = _polyglot_filtered_non_null_outputs(
-            polyglot_module=import_polyglot(),
-            cleaned_sql=query.sql,
-            dialect=dialect,
-            analysis=analysis,
-            column_nullability_by_table=_INPUT_NULLABILITY,
-            parsed=parsed,
-        )
-    except Exception as error:  # noqa: BLE001 - native must not answer where Python raises
-        return (type(error).__name__, str(error))
-    return (
-        list(types.items()),
-        [(name, value.value) for name, value in nullability.items()],
-        sorted(direct),
-        sorted(non_null),
-    )
-
-
 def native_cte_facts(*, query: CteFactQuery) -> tuple[str | None, CteFactView]:
     """Native recovery's deferral reason, or None and its facts."""
 
@@ -424,11 +366,10 @@ def native_cte_facts(*, query: CteFactQuery) -> tuple[str | None, CteFactView]:
 
 
 def compare_cte_facts(*, query: CteFactQuery, parity: CteFactParity) -> None:
-    """Record both recoveries of `query` where native answers, and what each recovered."""
+    """Record native recovery of `query` where it answers, and what it recovered."""
 
     deferral, native = native_cte_facts(query=query)
     answered: list[CteFactView] = [native][: int(deferral is None)]
-    python: list[CteFactView] = [python_cte_facts(query=query) for _ in answered]
     parity.counts.update(
         [f"deferred:{str(deferral).partition(' ')[0]}"][: int(deferral is not None)]
     )
@@ -436,5 +377,4 @@ def compare_cte_facts(*, query: CteFactQuery, parity: CteFactParity) -> None:
     for index, kind in enumerate(_FACT_KINDS):
         parity.counts[f"recovered_{kind}"] += sum(bool(view[index]) for view in answered)
     parity.queries.extend((query.sql, query.profile.sql_analysis_dialect) for _ in answered)
-    parity.python.extend(python)
     parity.native.extend(answered)

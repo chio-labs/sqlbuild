@@ -17,14 +17,6 @@ class DynamicPivotAnalysisTestCase:
 
 
 @dataclass(frozen=True)
-class CompactAnalysisWorkersTestCase:
-    description: str
-    model_count: int
-    sql_bytes_per_model: int
-    expected_workers: int
-
-
-@dataclass(frozen=True)
 class SetOperationSearchTestCase:
     description: str
     seed: int

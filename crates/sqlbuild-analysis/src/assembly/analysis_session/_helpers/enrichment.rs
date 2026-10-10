@@ -108,6 +108,7 @@ fn legacy(input: &EnrichmentInput<'_>, cleaned: &str) -> Result<Enrichment, Stri
         cleaned_sql: cleaned,
         lineage_references: &input.model.lineage_references,
         recover: input.model.recover_cte_facts,
+        full_nullability: false,
         types: &types,
         nullability: &nullability,
         profile: RecoveryProfile {
