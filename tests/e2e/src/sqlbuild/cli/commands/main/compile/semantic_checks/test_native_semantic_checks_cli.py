@@ -103,14 +103,12 @@ _METADATA_FILES: dict[str, str] = {
                 "o.ordered_at is TIMESTAMP, 5 is INTEGER",
                 "raw_orders has: amount, status, ordered_at, customer_id, order_id",
             ),
-            expected_native_deferrals=(),
         ),
         NativeSemanticChecksCliTestCase(
             description="UDF calls, config and cursor references, a source cursor and a SQL test",
             files=_METADATA_FILES,
             expected_codes=("B301", "B102", "B300", "B300", "B301", "B300", "B302"),
             expected_notes=(),
-            expected_native_deferrals=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -131,8 +129,6 @@ def test_given_failing_project_when_compiling_with_each_engine_then_diagnostics_
     assert diagnostic_codes(native.report) == test_case.expected_codes
     assert set(test_case.expected_notes) <= diagnostic_notes(native.report)
     assert (preview.report, preview.returncode) == (native.report, native.returncode)
-    assert (native.semantic_wheel_calls, preview.semantic_wheel_calls) == (0, 0)
-    assert native.deferrals == preview.deferrals == test_case.expected_native_deferrals
 
 
 if __name__ == "__main__":

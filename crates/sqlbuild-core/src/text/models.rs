@@ -123,6 +123,16 @@ impl PythonText {
     pub fn minor_version(&self) -> u8 {
         self.minor_version
     }
+
+    /// Inclusive code point ranges where `str.isalnum()` is true, in order.
+    pub fn alnum_ranges(&self) -> &'static [(u32, u32)] {
+        self.alnum_ranges
+    }
+
+    /// Inclusive code point ranges where `str.isdecimal()` (regex `\d`) is true, in order.
+    pub fn decimal_ranges(&self) -> &'static [(u32, u32)] {
+        self.decimal_ranges
+    }
 }
 
 /// The characters `inspect.cleandoc` strips from line starts.

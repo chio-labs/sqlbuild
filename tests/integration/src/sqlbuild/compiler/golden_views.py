@@ -50,19 +50,22 @@ def canonical(value: object) -> object:
     return ["repr", repr(value)]
 
 
-def digest(value: object) -> str:
-    """The SHA-256 of `value`'s canonical JSON, shortened for golden files."""
+def digest(value: object, *, masked: tuple[str, ...] = ()) -> str:
+    """The SHA-256 of `value`'s canonical JSON, with `masked` texts such as temporary paths
+    replaced, shortened for golden files."""
 
-    encoded: bytes = json.dumps(canonical(value), sort_keys=True, ensure_ascii=False).encode()
-    return hashlib.sha256(encoded).hexdigest()[:24]
+    text: str = json.dumps(canonical(value), sort_keys=True, ensure_ascii=False)
+    for mask in masked:
+        text = text.replace(mask, "<masked>")
+    return hashlib.sha256(text.encode()).hexdigest()[:24]
 
 
-def golden_entry(kind: str, view: object) -> GoldenEntry:
+def golden_entry(kind: str, view: object, *, masked: tuple[str, ...] = ()) -> GoldenEntry:
     """One seam call's golden entry: a digest per named item for mappings, else one digest."""
 
     if isinstance(view, dict):
-        return [kind, {str(name): digest(item) for name, item in view.items()}]
-    return [kind, digest(view)]
+        return [kind, {str(name): digest(item, masked=masked) for name, item in view.items()}]
+    return [kind, digest(view, masked=masked)]
 
 
 def golden_name(prefix: str, description: str) -> str:

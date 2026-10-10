@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import random
+import re
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -13,13 +13,9 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.assembly.project as assembly_project
-import sqlbuild.compiler.compile._helpers.diagnostics.recovery as recovery
 import sqlbuild.compiler.semantic_checks._helpers.stage as semantic_stage
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
-    get_semantic_metadata_diagnostics,
-)
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import (
     complete_semantic_diagnostics,
 )
@@ -68,12 +64,25 @@ _SOURCES: str = """sources:
         type: DATE
 """
 _OPT_OUT_SHARE: float = 0.2
+_NON_ASCII_NAMES: list[tuple[str, str]] = [
+    ("amount", "am\u00f6unt"),
+    ("status", "\u017ftatus"),
+    ("customer_id", "customer_\u0130d"),
+    ("order_date", "order_d\u0101te"),
+    ("value", "va\u212alue"),
+    ("ordered_at", "ordered_\u0430t"),
+]
+_NON_ASCII_COMMENTS: tuple[str, ...] = (
+    " /* caf\u00e9 \u00df \u2028 \u0131 */ ",
+    " -- na\u00efve\u0085x\n",
+    " /* \u0663\u0664 \u3000 */ ",
+    " ",
+)
 _TYPO_SHARE: float = 0.45
 _MIN_TYPO_LENGTH: int = 4
 _ALIASES: tuple[tuple[str, str], ...] = (("", ""), ("o.", " AS o"))
 _SETTINGS: tuple[str, str] = ("", "\n[settings]\nrequire_sql_analysis = true\n")
 _OPT_OUTS: tuple[str, str] = ("", ", sql_analysis false")
-_COMPLETION_STATUSES: tuple[str, str] = ("completion_native", "completion_deferred")
 _SOURCE_COMPARISON_SHARE: float = 0.6
 
 type _Template = Callable[[random.Random, str, tuple[str, ...]], tuple[str, tuple[str, ...]]]
@@ -208,7 +217,7 @@ def captured_semantic_inputs(
     return captured[0]
 
 
-def with_dialect(inputs: SemanticInputs, dialect: str) -> SemanticInputs:
+def with_dialect(inputs: SemanticInputs, dialect: str | None) -> SemanticInputs:
     """The same stage inputs read under another SQL dialect."""
 
     return replace(
@@ -218,27 +227,10 @@ def with_dialect(inputs: SemanticInputs, dialect: str) -> SemanticInputs:
     )
 
 
-def python_completion(
-    *, inputs: SemanticInputs, monkeypatch: pytest.MonkeyPatch
-) -> CompiledProject:
-    """The project Python completes when native semantic completion defers."""
-
-    with monkeypatch.context() as patch:
-        patch.setattr(recovery, "complete_native_semantic_diagnostics", lambda **_kwargs: None)
-        return complete_semantic_diagnostics(
-            project=inputs.project,
-            profile=inputs.profile,
-            binding_results=inputs.binding_results,
-            resource_sql_analysis=inputs.resource_sql_analysis,
-        )
-
-
 def completed_natively(inputs: SemanticInputs) -> CompiledProject:
-    """The native stage's completed project, which must not defer."""
+    """The native stage's completed project."""
 
-    project: CompiledProject | None = native_completion(inputs)
-    assert project is not None
-    return project
+    return native_completion(inputs)
 
 
 def note_kinds(project: CompiledProject, kinds: tuple[str, ...]) -> Counter[str]:
@@ -251,8 +243,8 @@ def note_kinds(project: CompiledProject, kinds: tuple[str, ...]) -> Counter[str]
     return counts
 
 
-def native_completion(inputs: SemanticInputs) -> CompiledProject | None:
-    """The native stage's completed project, or None when it defers."""
+def native_completion(inputs: SemanticInputs) -> CompiledProject:
+    """The native stage's completed project."""
 
     return complete_native_semantic_diagnostics(
         project=inputs.project,
@@ -323,7 +315,7 @@ def _model_view(model: CompiledModel) -> tuple[object, ...]:
 
 
 def record_native_statuses(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count native type recovery plans and completed or deferred completions."""
+    """Count native type recovery plans, completions and completed diagnostics."""
 
     statuses: Counter[str] = Counter()
     plan: Callable[..., Any] = native_module.plan_semantic_type_recovery
@@ -336,8 +328,8 @@ def record_native_statuses(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
 
     def counted_complete(*arguments: Any) -> Any:
         outcome: Any = complete(*arguments)
-        statuses[_COMPLETION_STATUSES[outcome[0] is not None]] += 1
-        statuses["diagnostics_native"] += len(outcome[1])
+        statuses["completion_native"] += 1
+        statuses["diagnostics_native"] += len(outcome[0])
         return outcome
 
     monkeypatch.setattr(native_module, "plan_semantic_type_recovery", counted_plan)
@@ -345,15 +337,36 @@ def record_native_statuses(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     return statuses
 
 
-def deferral_records(record_dir: Path) -> tuple[tuple[str, str], ...]:
-    """Every `(kind, site)` deferral the native stage recorded below `record_dir`."""
+def non_ascii_variant(*, files: dict[str, str], rng: random.Random) -> dict[str, str]:
+    """The project with some column names spelt beyond ASCII and a comment after each model
+    header holding non-ASCII text, digits and Python-only line separators."""
 
-    records: list[tuple[str, str]] = []
-    for path in sorted(record_dir.glob("analysis-deferrals-*.jsonl")):
-        for line in path.read_text("utf-8").splitlines():
-            record: dict[str, str] = json.loads(line)
-            records.append((record["kind"], record["site"]))
-    return tuple(records)
+    renamed: list[tuple[str, str]] = rng.sample(_NON_ASCII_NAMES, k=rng.randint(1, 6))
+    variant: dict[str, str] = {}
+    for path, text in files.items():
+        for old, new in renamed:
+            text = re.sub(rf"\b{old}\b", new, text)
+        if path.endswith(".sql") and ";" in text:
+            header_end: int = text.index(";") + 1
+            text = text[:header_end] + rng.choice(_NON_ASCII_COMMENTS) + text[header_end:]
+        variant[path] = text
+    return variant
+
+
+def semantic_outcome(complete: Callable[[], object]) -> tuple[str, object]:
+    """`("completed", result)`, or the type and message of the error the stage raised."""
+
+    try:
+        return ("completed", complete())
+    except Exception as error:  # noqa: BLE001 - the error is the outcome under comparison
+        return (type(error).__name__, str(error))
+
+
+def outcome_label(outcome: tuple[str, object]) -> str:
+    """`completed`, or the error as `Type: message`."""
+
+    kind, value = outcome
+    return kind if kind == "completed" else f"{kind}: {value}"
 
 
 _SOURCE_COLUMNS: tuple[str, ...] = (
@@ -507,18 +520,8 @@ def generated_metadata_files(*, rng: random.Random, model_count: int) -> dict[st
     return files
 
 
-def python_metadata(*, inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...]:
-    """Python's metadata diagnostics, which native semantic completion defers to."""
-
-    return get_semantic_metadata_diagnostics(
-        project=inputs.project,
-        profile=inputs.profile,
-        resource_sql_analysis=inputs.resource_sql_analysis,
-    )
-
-
-def native_metadata(inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...] | None:
-    """The native stage's metadata diagnostics, or None when it defers."""
+def native_metadata(inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...]:
+    """The native stage's metadata diagnostics."""
 
     catalog: Any = cast(Any, inputs.project.binding_catalog)
     return native_metadata_diagnostics(
@@ -531,23 +534,23 @@ def native_metadata(inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...] | 
 
 def _family_counts(outcome: Any) -> Counter[str]:
     counts: Counter[str] = Counter()
-    for function_rows, reference_rows in outcome[1]:
+    for function_rows, reference_rows in outcome[0]:
         counts.update(f"function {row[0]}" for row in function_rows)
         counts.update(f"reference {row[0]}" for row in reference_rows)
-    counts.update(f"source {row[0]}" for _, row in outcome[2])
-    counts.update(f"sql_test {row[0]}" for _, row, _ in outcome[3])
+    counts.update(f"source {row[0]}" for _, row in outcome[1])
+    counts.update(f"sql_test {row[0]}" for _, row, _ in outcome[2])
     return counts
 
 
 def record_metadata_families(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count native metadata runs, deferrals and errors by family and code."""
+    """Count native metadata runs and errors by family and code."""
 
     counts: Counter[str] = Counter()
     check: Callable[..., Any] = native_module.check_semantic_metadata_rows
 
     def counted(*arguments: Any) -> Any:
         outcome: Any = check(*arguments)
-        counts[("native", "deferred")[outcome[0] is not None]] += 1
+        counts["native"] += 1
         counts.update(_family_counts(outcome))
         return outcome
 

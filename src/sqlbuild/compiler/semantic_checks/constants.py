@@ -1,14 +1,11 @@
-"""Native semantic completion statuses and deferral record sites."""
+"""Native semantic completion statuses and inputs."""
 
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
 NATIVE_TYPE_RECOVERY_UNCHANGED: str = "unchanged"
-NATIVE_TYPE_RECOVERY_DEFERRED: str = "deferred"
-NATIVE_SEMANTIC_NO_CATALOG: str = "no_analysis_catalog"
-NATIVE_SEMANTIC_FAILURE: str = "native_failure"
-TYPE_RECOVERY_DEFERRAL_SITE: str = "type_recovery.py"
-COMPLETION_DEFERRAL_SITE: str = "recovery.py"
-METADATA_DEFERRAL_SITE: str = "metadata_validation.py"
+NATIVE_SEMANTIC_NO_CATALOG: str = (
+    "NativeCompilerError: native semantic completion: the project has no analysis catalog"
+)
 UNKNOWN_RECOVERED_TYPE: str = "UNKNOWN"
 METADATA_CONFIG_KEYS: tuple[str, ...] = (
     "unique_key",

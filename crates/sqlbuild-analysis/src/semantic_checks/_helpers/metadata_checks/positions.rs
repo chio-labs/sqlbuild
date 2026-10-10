@@ -1,14 +1,13 @@
 //! Python's `_text_position`: the first whole-word occurrence of a name, in code points.
 
-use crate::semantic_checks::models::SemanticDeferral;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::is_python_word::is_python_word;
 
-/// Python's `\w` for a character next to a match; beyond ASCII the two engines may disagree.
-fn word_character(character: char) -> Result<bool, SemanticDeferral> {
-    if character.is_ascii() {
-        Ok(character.is_ascii_alphanumeric() || character == '_')
-    } else {
-        Err(SemanticDeferral::NonAsciiText)
-    }
+use crate::semantic_checks::models::SemanticFailure;
+
+/// Python's `\w` for a character next to a match.
+fn word_character(character: char) -> Result<bool, SemanticFailure> {
+    Ok(is_python_word(active_python_text(), character))
 }
 
 /// Python's `text.find(needle)` in code points, or None.
@@ -22,7 +21,7 @@ fn whole_word_at(
     name: &[char],
     start: usize,
     position: usize,
-) -> Result<bool, SemanticDeferral> {
+) -> Result<bool, SemanticFailure> {
     if characters[position..position + name.len()] != *name {
         return Ok(false);
     }
@@ -40,7 +39,7 @@ fn match_start(
     characters: &[char],
     name: &[char],
     offset: usize,
-) -> Result<usize, SemanticDeferral> {
+) -> Result<usize, SemanticFailure> {
     let start: usize = offset.min(characters.len());
     if name.len() <= characters.len() - start {
         for position in start..=characters.len() - name.len() {
@@ -57,7 +56,7 @@ pub(crate) fn text_position(
     text: &str,
     name: &str,
     offset: usize,
-) -> Result<(i64, i64), SemanticDeferral> {
+) -> Result<(i64, i64), SemanticFailure> {
     let characters: Vec<char> = text.chars().collect();
     let name: Vec<char> = name.chars().collect();
     let start: usize = match_start(&characters, &name, offset)?;

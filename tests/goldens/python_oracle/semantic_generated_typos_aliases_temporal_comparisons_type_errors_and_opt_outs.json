@@ -1,0 +1,74 @@
+[
+[
+"completion",
+{
+"bigquery": "386e47117f671dcf1e99ba79",
+"duckdb": "f8a96a6ad1b63bd08886df5e",
+"postgres": "f8a96a6ad1b63bd08886df5e",
+"snowflake": "f8a96a6ad1b63bd08886df5e"
+}
+],
+[
+"completion",
+{
+"bigquery": "6b2a976a568aea0841340272",
+"duckdb": "6b2a976a568aea0841340272",
+"postgres": "6b2a976a568aea0841340272",
+"snowflake": "6b2a976a568aea0841340272"
+}
+],
+[
+"completion",
+{
+"bigquery": "da1919b4d28cc12b6aeb0d6a",
+"duckdb": "da1919b4d28cc12b6aeb0d6a",
+"postgres": "da1919b4d28cc12b6aeb0d6a",
+"snowflake": "da1919b4d28cc12b6aeb0d6a"
+}
+],
+[
+"completion",
+{
+"bigquery": "0f8a7d8a92a2525f96180eab",
+"duckdb": "0f8a7d8a92a2525f96180eab",
+"postgres": "0f8a7d8a92a2525f96180eab",
+"snowflake": "0f8a7d8a92a2525f96180eab"
+}
+],
+[
+"completion",
+{
+"bigquery": "a0775e9568c53c1c04d03b9e",
+"duckdb": "a0775e9568c53c1c04d03b9e",
+"postgres": "a0775e9568c53c1c04d03b9e",
+"snowflake": "a0775e9568c53c1c04d03b9e"
+}
+],
+[
+"completion",
+{
+"bigquery": "56d1dd61d4d03302a8f2934a",
+"duckdb": "ec5f01a5076273dcce4865e9",
+"postgres": "ec5f01a5076273dcce4865e9",
+"snowflake": "ec5f01a5076273dcce4865e9"
+}
+],
+[
+"completion",
+{
+"bigquery": "f9877a22ff91f0e41760f3cc",
+"duckdb": "f9877a22ff91f0e41760f3cc",
+"postgres": "f9877a22ff91f0e41760f3cc",
+"snowflake": "f9877a22ff91f0e41760f3cc"
+}
+],
+[
+"completion",
+{
+"bigquery": "89c0ecb9bfa8db140822ca46",
+"duckdb": "e8762d8e3f7d18a056f664ad",
+"postgres": "e8762d8e3f7d18a056f664ad",
+"snowflake": "e8762d8e3f7d18a056f664ad"
+}
+]
+]

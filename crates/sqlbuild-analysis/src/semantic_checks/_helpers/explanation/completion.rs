@@ -19,25 +19,22 @@ use crate::semantic_checks::_helpers::recovery::poison::Poison;
 use crate::semantic_checks::_helpers::sql_text::parsed_sql::{
     ParsedModelFacts, parsed_model_facts,
 };
-use crate::semantic_checks::_helpers::sql_text::text::{LineIndex, ascii, plain_text};
+use crate::semantic_checks::_helpers::sql_text::text::LineIndex;
 use crate::semantic_checks::constants::{
     MODEL_RESOURCE_TYPE, SEMANTIC_CODE_PREFIX, SQL_TEST_COLUMN_CODE, SQL_TEST_COLUMN_PATTERN,
     UNKNOWN_COLUMN_CODE,
 };
 use crate::semantic_checks::models::{
     CompletedDiagnostic, CompletionModel, CompletionOutcome, CompletionRequest, FinalDiagnostic,
-    LineageOutput, SemanticDeferral, SemanticDiagnostic,
+    LineageOutput, SemanticDiagnostic, SemanticFailure,
 };
 
 static SQL_TEST_COLUMN: LazyLock<Result<Regex, String>> =
     LazyLock::new(|| compiled(SQL_TEST_COLUMN_PATTERN));
 
-/// Complete recovery, explanation and opt-out rejection, or defer all three to Python.
-pub(crate) fn complete(request: &CompletionRequest) -> CompletionOutcome {
-    match completed(request) {
-        Ok(outcome) => outcome,
-        Err(deferral) => CompletionOutcome::Deferred(deferral),
-    }
+/// Complete recovery, explanation and opt-out rejection.
+pub(crate) fn complete(request: &CompletionRequest) -> Result<CompletionOutcome, SemanticFailure> {
+    completed(request)
 }
 
 /// The request with its shapes and models indexed, and the parsed facts of failing models.
@@ -49,7 +46,7 @@ struct Completion<'a> {
 }
 
 impl<'a> Completion<'a> {
-    fn new(request: &'a CompletionRequest) -> Result<Self, SemanticDeferral> {
+    fn new(request: &'a CompletionRequest) -> Result<Self, SemanticFailure> {
         let models: HashMap<&'a str, usize> = request
             .models
             .iter()
@@ -95,14 +92,14 @@ impl<'a> Completion<'a> {
             .map(|index| (*index, &self.request.models[*index]))
     }
 
-    fn facts(&self, index: usize) -> Result<&ParsedModelFacts, SemanticDeferral> {
+    fn facts(&self, index: usize) -> Result<&ParsedModelFacts, SemanticFailure> {
         self.parsed
             .get(&index)
-            .ok_or(SemanticDeferral::NativeFailure)
+            .ok_or_else(|| SemanticFailure::internal("a failing model without parsed facts"))
     }
 }
 
-fn completed(request: &CompletionRequest) -> Result<CompletionOutcome, SemanticDeferral> {
+fn completed(request: &CompletionRequest) -> Result<CompletionOutcome, SemanticFailure> {
     let completion = Completion::new(request)?;
     let initial: Vec<CompletedDiagnostic> = request
         .diagnostics
@@ -142,7 +139,7 @@ fn completed(request: &CompletionRequest) -> Result<CompletionOutcome, SemanticD
         (explained, Some(bindings))
     };
     let order = reject_opt_outs(&completion, &diagnostics)?;
-    Ok(CompletionOutcome::Completed {
+    Ok(CompletionOutcome {
         diagnostics,
         model_bindings,
         order,
@@ -206,7 +203,7 @@ fn reads_input_column(lineage: &[LineageOutput], table: &str, column: &str) -> b
 fn recovered_output(
     completion: &Completion<'_>,
     diagnostic: &CompletedDiagnostic,
-) -> Result<Option<(String, String)>, SemanticDeferral> {
+) -> Result<Option<(String, String)>, SemanticFailure> {
     let Some((index, model)) = completion.model(diagnostic) else {
         return Ok(None);
     };
@@ -237,7 +234,7 @@ fn recovered_output(
 fn recover(
     completion: &Completion<'_>,
     diagnostics: Vec<CompletedDiagnostic>,
-) -> Result<Option<Vec<CompletedDiagnostic>>, SemanticDeferral> {
+) -> Result<Option<Vec<CompletedDiagnostic>>, SemanticFailure> {
     let mut poisoned = Poison::default();
     let mut origins: HashMap<usize, (String, String)> = HashMap::new();
     let mut has_roots = false;
@@ -300,10 +297,7 @@ fn recover(
 }
 
 /// The `(table, column)` use a diagnostic reports, which a poisoned output may explain.
-fn recovery_target(
-    code: &str,
-    message: &str,
-) -> Result<Option<(String, String)>, SemanticDeferral> {
+fn recovery_target(code: &str, message: &str) -> Result<Option<(String, String)>, SemanticFailure> {
     let mut target: Option<(String, String)> = None;
     if code == UNKNOWN_COLUMN_CODE
         && let Some((column, Some(table))) = missing_column(message)?
@@ -311,7 +305,7 @@ fn recovery_target(
         target = Some((table, column));
     }
     if code == SQL_TEST_COLUMN_CODE
-        && let Some(captures) = pattern(&SQL_TEST_COLUMN)?.captures(ascii(message)?)
+        && let Some(captures) = pattern(&SQL_TEST_COLUMN)?.captures(message)
     {
         target = Some((captures[1].to_owned(), captures[2].to_owned()));
     }
@@ -322,14 +316,14 @@ fn recovery_target(
 fn explain(
     completion: &Completion<'_>,
     diagnostics: Vec<CompletedDiagnostic>,
-) -> Result<Vec<CompletedDiagnostic>, SemanticDeferral> {
+) -> Result<Vec<CompletedDiagnostic>, SemanticFailure> {
     let mut binaries: HashMap<usize, Vec<Binary>> = HashMap::new();
     let mut explained: Vec<CompletedDiagnostic> = Vec::with_capacity(diagnostics.len());
     for diagnostic in diagnostics {
         let code: &str = &completion.source(&diagnostic).code;
         match completion.model(&diagnostic) {
             Some((index, model)) if is_explained_code(code) => {
-                let authored_sql: &str = plain_text(&model.authored_sql)?;
+                let authored_sql: &str = &model.authored_sql;
                 if is_type_code(code) && !binaries.contains_key(&index) {
                     binaries.insert(index, binary_index(authored_sql)?);
                 }
@@ -360,7 +354,7 @@ fn explain(
 fn with_semantic_help(
     diagnostic: CompletedDiagnostic,
     code: &str,
-) -> Result<CompletedDiagnostic, SemanticDeferral> {
+) -> Result<CompletedDiagnostic, SemanticFailure> {
     let Some(help) = semantic_help(code) else {
         return Ok(diagnostic);
     };
@@ -394,7 +388,7 @@ fn hidden_by_opt_out(source: &SemanticDiagnostic, rejected: &BTreeMap<&str, usiz
 fn reject_opt_outs(
     completion: &Completion<'_>,
     diagnostics: &[CompletedDiagnostic],
-) -> Result<Vec<FinalDiagnostic>, SemanticDeferral> {
+) -> Result<Vec<FinalDiagnostic>, SemanticFailure> {
     let mut rejected: BTreeMap<&str, usize> = BTreeMap::new();
     for (index, model) in completion.request.models.iter().enumerate() {
         if model.rejected_opt_out_file.is_some() {

@@ -7,31 +7,48 @@ use regex::Regex;
 
 use crate::semantic_checks::_helpers::explanation::columns::{closest_column, ordered_columns};
 use crate::semantic_checks::_helpers::explanation::messages::{
-    comparison_help, compiled, missing_column, pattern, semantic_help, sentence_message, type_words,
+    comparison_help, missing_column, pattern, semantic_help, sentence_message, type_words,
 };
+use crate::semantic_checks::_helpers::sql_text::python_regex::{ignorecase_word, python_regex};
 use crate::semantic_checks::_helpers::sql_text::text::{
-    LineIndex, ascii, last_newline_before, newlines_before, prefix,
+    LineIndex, byte_offset, code_point_offset, last_newline_before, newlines_before, prefix, upper,
 };
 use crate::semantic_checks::constants::{
     COMPARISON_CODE, DECIMAL_OPERAND_PATTERN, DISPLAY_LIMIT, INTEGER_OPERAND_PATTERN,
     OPERAND_PATTERN, QUALIFIER_PATTERN, TEMPORAL_OPERAND_PATTERN, TYPE_CODES, UNKNOWN_COLUMN_CODE,
 };
-use crate::semantic_checks::models::{CompletedDiagnostic, SemanticDeferral, SemanticLocation};
+use crate::semantic_checks::models::{CompletedDiagnostic, SemanticFailure, SemanticLocation};
 
-static QUALIFIER: LazyLock<Result<Regex, String>> = LazyLock::new(|| compiled(QUALIFIER_PATTERN));
+/// A diagnostic located past the model's authored lines, where Python raised `IndexError`.
+const OUTSIDE_AUTHORED_LINES: &str = "a diagnostic line outside the model's authored SQL";
+
+static QUALIFIER: LazyLock<Result<Regex, String>> =
+    LazyLock::new(|| python_regex(QUALIFIER_PATTERN));
 static BINARY: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
-    compiled(&format!(
-        r"(?i)(?P<left>{OPERAND_PATTERN})\s*(?:>=|<=|<>|!=|=|>|<|\+|\*|/|-)\s*(?P<right>{OPERAND_PATTERN})"
+    let operand: String = operand_template();
+    python_regex(&format!(
+        r"(?P<left>{operand}){{S}}*(?:>=|<=|<>|!=|=|>|<|\+|\*|/|-){{S}}*(?P<right>{operand})"
     ))
 });
 static OPERAND_AT: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| compiled(&format!(r"(?i)\A{OPERAND_PATTERN}")));
+    LazyLock::new(|| python_regex(&format!(r"\A{}", operand_template())));
 static TEMPORAL_OPERAND: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| compiled(TEMPORAL_OPERAND_PATTERN));
+    LazyLock::new(|| python_regex(&temporal_words(TEMPORAL_OPERAND_PATTERN)));
 static INTEGER_OPERAND: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| compiled(INTEGER_OPERAND_PATTERN));
+    LazyLock::new(|| python_regex(INTEGER_OPERAND_PATTERN));
 static DECIMAL_OPERAND: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| compiled(DECIMAL_OPERAND_PATTERN));
+    LazyLock::new(|| python_regex(DECIMAL_OPERAND_PATTERN));
+
+/// `TIMESTAMP` and `DATE` in a template, as Python's `re.IGNORECASE` matches them.
+fn temporal_words(template: &str) -> String {
+    template
+        .replace("{TIMESTAMP}", &ignorecase_word("TIMESTAMP"))
+        .replace("{DATE}", &ignorecase_word("DATE"))
+}
+
+fn operand_template() -> String {
+    temporal_words(OPERAND_PATTERN)
+}
 
 /// Closed relation shapes by name, each in Python's dict order.
 pub(crate) type Shapes<'a> = HashMap<&'a str, &'a [(String, String)]>;
@@ -50,13 +67,16 @@ pub(crate) struct Binary {
 }
 
 /// Python's `_binary_index`: every binary operation in authored SQL, in order.
-pub(crate) fn binary_index(sql: &str) -> Result<Vec<Binary>, SemanticDeferral> {
+pub(crate) fn binary_index(sql: &str) -> Result<Vec<Binary>, SemanticFailure> {
     let binary: &Regex = pattern(&BINARY)?;
     let mut found: Vec<Binary> = Vec::new();
     for captures in binary.captures_iter(sql) {
-        let (start, end) = captures
-            .get(0)
-            .map_or((0, 0), |item| (item.start(), item.end()));
+        let (start, end) = captures.get(0).map_or((0, 0), |item| {
+            (
+                code_point_offset(sql, item.start()),
+                code_point_offset(sql, item.end()),
+            )
+        });
         found.push(Binary {
             start,
             end,
@@ -87,7 +107,7 @@ pub(crate) struct ExplainContext<'a> {
 pub(crate) fn explain_model(
     diagnostic: &CompletedDiagnostic,
     context: &ExplainContext<'_>,
-) -> Result<CompletedDiagnostic, SemanticDeferral> {
+) -> Result<CompletedDiagnostic, SemanticFailure> {
     let ExplainContext {
         code,
         model,
@@ -203,8 +223,8 @@ fn position(offset: usize) -> i64 {
     i64::try_from(offset).unwrap_or(i64::MAX)
 }
 
-/// Python's `lines[line - 1]`, including its negative indexing; out of range is not reproduced.
-fn python_line<'a>(lines: &'a LineIndex<'a>, line: i64) -> Result<&'a str, SemanticDeferral> {
+/// Python's `lines[line - 1]`, including its negative indexing; out of range is internal.
+fn python_line<'a>(lines: &'a LineIndex<'a>, line: i64) -> Result<&'a str, SemanticFailure> {
     let count: i64 = i64::try_from(lines.lines.len()).unwrap_or(i64::MAX);
     let index: i64 = if line - 1 < 0 {
         line - 1 + count
@@ -216,13 +236,13 @@ fn python_line<'a>(lines: &'a LineIndex<'a>, line: i64) -> Result<&'a str, Seman
             .lines
             .get(index)
             .copied()
-            .ok_or(SemanticDeferral::UnexpectedPosition),
-        Err(_) => Err(SemanticDeferral::UnexpectedPosition),
+            .ok_or_else(|| SemanticFailure::internal(OUTSIDE_AUTHORED_LINES)),
+        Err(_) => Err(SemanticFailure::internal(OUTSIDE_AUTHORED_LINES)),
     }
 }
 
 /// The alias qualifying the column that ends `prefix`, with doubled quotes undone.
-fn qualifier(prefix: &str) -> Result<Option<String>, SemanticDeferral> {
+fn qualifier(prefix: &str) -> Result<Option<String>, SemanticFailure> {
     let Some(captures) = pattern(&QUALIFIER)?.captures(prefix) else {
         return Ok(None);
     };
@@ -242,12 +262,14 @@ fn binary_at(binaries: &[Binary], offset: i64) -> Option<&Binary> {
 }
 
 /// Python's `re.compile(_OPERAND, re.IGNORECASE).match(sql, offset)`.
-fn operand_at(sql: &str, offset: i64) -> Result<Option<&str>, SemanticDeferral> {
+fn operand_at(sql: &str, offset: i64) -> Result<Option<&str>, SemanticFailure> {
     let operand: &Regex = pattern(&OPERAND_AT)?;
     let start: usize = usize::try_from(offset.max(0)).unwrap_or(usize::MAX);
-    Ok(sql
-        .get(start..)
-        .and_then(|rest| operand.find(rest))
+    if start > sql.chars().count() {
+        return Ok(None);
+    }
+    Ok(operand
+        .find(&sql[byte_offset(sql, start)..])
         .map(|found| found.as_str()))
 }
 
@@ -256,9 +278,9 @@ fn operand_type(
     text: &str,
     aliases: &HashMap<String, String>,
     shapes: &Shapes<'_>,
-) -> Result<Option<String>, SemanticDeferral> {
+) -> Result<Option<String>, SemanticFailure> {
     if let Some(captures) = pattern(&TEMPORAL_OPERAND)?.captures(text) {
-        return Ok(Some(captures[1].to_ascii_uppercase()));
+        return Ok(Some(upper(&captures[1])));
     }
     if pattern(&INTEGER_OPERAND)?.is_match(text) {
         return Ok(Some("INTEGER".to_owned()));
@@ -273,7 +295,7 @@ fn operand_type(
         let table: &str = aliases.get(alias).map_or(alias, String::as_str);
         let value = shape_type(shapes, table, column);
         return match value {
-            Some(value) if !value.is_empty() => Ok(Some(ascii(value)?.to_ascii_uppercase())),
+            Some(value) if !value.is_empty() => Ok(Some(upper(value))),
             _ => Ok(None),
         };
     }
@@ -281,7 +303,7 @@ fn operand_type(
     let mut candidates: HashSet<String> = HashSet::new();
     for table in tables {
         if let Some(value) = shape_type(shapes, table, text) {
-            candidates.insert(ascii(value)?.to_ascii_uppercase());
+            candidates.insert(upper(value));
         }
     }
     Ok(if candidates.len() == 1 {

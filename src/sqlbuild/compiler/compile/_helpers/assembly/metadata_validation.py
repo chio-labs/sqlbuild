@@ -3,27 +3,18 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
 from functools import lru_cache
-from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.adapter.contract.types import TypeFamily
-from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
-from sqlbuild.compiler.compile._helpers.analysis.columns import _polyglot_expression_type
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
     analyze_queries_with_compact_polyglot_batch,
-    get_complete_schema_binding_request,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
 )
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
-from sqlbuild.compiler.compile._helpers.diagnostics.resource_sql import get_resource_sql_diagnostics
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
@@ -36,152 +27,15 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import BINDING_UNKNOWN_TABLE_INTERNAL_CODE
 from sqlbuild.compiler.sql_analysis.main._resolve_binding_column import resolve_binding_column
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
-from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SourceLocation
+from sqlbuild.spec.contracts.models import SchemaAuditInstance
 
-_UNKNOWN_TYPE: str = "UNKNOWN"
 _EXPRESSION_AUDIT: str = "expression_is_true"
 _RELATIONSHIPS_AUDIT: str = "relationships"
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
-_SELECT_KIND: str = "select"
-_FUNCTION_KIND: str = "function"
-_CURSOR_FAMILIES: dict[str, frozenset[TypeFamily]] = {
-    "integer": frozenset({TypeFamily.INTEGER, TypeFamily.DECIMAL}),
-    "timestamp": frozenset({TypeFamily.TIMESTAMP, TypeFamily.DATETIME, TypeFamily.DATE}),
-    "date": frozenset({TypeFamily.TIMESTAMP, TypeFamily.DATETIME, TypeFamily.DATE}),
-}
-
-
-def get_semantic_metadata_diagnostics(
-    *,
-    project: CompiledProject,
-    profile: ExpressionInferenceProfile,
-    resource_sql_analysis: bool = True,
-) -> tuple[CompilerDiagnostic, ...]:
-    """Reject metadata names only where absence can be proven; resource SQL only when analysed."""
-
-    if not project.settings.sql_analysis:
-        return ()
-    shapes: dict[str, dict[str, str]] = semantic_shapes(project=project, profile=profile)
-    functions: dict[str, CompiledFunction] = {
-        function.name.casefold(): function for function in project.functions
-    }
-    diagnostics: list[CompilerDiagnostic] = []
-    for model in project.models:
-        if model.config.values.get("sql_analysis") is False or not model.binding_validated:
-            continue
-        diagnostics.extend(
-            _function_errors(
-                model=model,
-                functions=functions,
-                shapes=shapes,
-                profile=profile,
-            )
-        )
-        shape: dict[str, str] | None = shapes.get(model.name)
-        if shape is None:
-            continue
-        diagnostics.extend(
-            _audit_errors(model=model, project=project, shape=shape, shapes=shapes, profile=profile)
-        )
-        values: dict[str, object] = model.config.values
-        references: list[tuple[str, str, dict[str, str]]] = []
-        for key in ("unique_key", "cursor", "partition_column", "row_diff_exclude_columns"):
-            references.extend((key, name, shape) for name in _names(values.get(key)))
-        custom: object = values.get("config")
-        if isinstance(custom, dict):
-            references.extend(
-                ("partition_column", name, shape)
-                for name in _names(cast(dict[str, object], custom).get("partition_column"))
-            )
-        tolerances: object = values.get("row_diff_tolerances")
-        by_column: object = (
-            cast(dict[str, object], tolerances).get("by_column")
-            if isinstance(tolerances, dict)
-            else None
-        )
-        if isinstance(by_column, dict):
-            references.extend(("row_diff_tolerances", str(name), shape) for name in by_column)
-        cursor_inputs: object = values.get("cursor_inputs")
-        if isinstance(cursor_inputs, dict):
-            for upstream, columns in cursor_inputs.items():
-                upstream_shape: dict[str, str] | None = shapes.get(str(upstream))
-                if upstream_shape is not None:
-                    references.extend(
-                        (f"cursor_inputs {upstream}", name, upstream_shape)
-                        for name in _names(columns)
-                    )
-        for key, name, reference_shape in references:
-            if name.casefold() not in {column.casefold() for column in reference_shape}:
-                diagnostics.append(
-                    _model_error(
-                        model=model,
-                        code="B300",
-                        name=name,
-                        message=f"{key} references unknown column '{name}'",
-                    )
-                )
-        cursor: object = values.get("cursor")
-        cursor_type: object = values.get("cursor_type")
-        if isinstance(cursor, str) and isinstance(cursor_type, str):
-            actual: str = next(
-                (value for key, value in shape.items() if key.casefold() == cursor.casefold()),
-                "UNKNOWN",
-            )
-            if cursor_type.lower() in _CURSOR_FAMILIES:
-                family: TypeFamily = normalize_type(
-                    type_sql=actual, dialect=profile.sql_analysis_dialect
-                ).family
-                if (
-                    family != TypeFamily.OTHER
-                    and family not in _CURSOR_FAMILIES[cursor_type.lower()]
-                ):
-                    diagnostics.append(
-                        _model_error(
-                            model=model,
-                            code="B301",
-                            name=cursor,
-                            message=(
-                                f"cursor_type {cursor_type} does not match "
-                                f"column '{cursor}' type {actual}"
-                            ),
-                        )
-                    )
-    for source in project.sources:
-        cursor = source.source_entry.cursor_column
-        shape = shapes.get(source.name)
-        if (
-            cursor
-            and shape is not None
-            and cursor.casefold() not in {name.casefold() for name in shape}
-        ):
-            line: int
-            column: int
-            line, column = _text_position(text=source.source_file.contents, name=cursor)
-            diagnostics.append(
-                CompilerDiagnostic(
-                    phase=DiagnosticPhase.COMPILE,
-                    severity=DiagnosticSeverity.ERROR,
-                    code="B300",
-                    message=f"cursor_column references unknown column '{cursor}'",
-                    resource_type=CompiledResourceType.SOURCE,
-                    resource_name=source.name,
-                    path=source.source_file.relative_path,
-                    line=line,
-                    column=column,
-                )
-            )
-    diagnostics.extend(_sql_test_errors(project=project, shapes=shapes, profile=profile))
-    if resource_sql_analysis:
-        diagnostics.extend(
-            get_resource_sql_diagnostics(project=project, shapes=shapes, profile=profile)
-        )
-    return tuple(diagnostics)
 
 
 def _audit_errors(
@@ -293,22 +147,6 @@ def _audit_errors(
     return tuple(diagnostics)
 
 
-def _different_argument_families(
-    *, left: str, right: str, profile: ExpressionInferenceProfile
-) -> bool:
-    families: set[TypeFamily] = {
-        normalize_type(type_sql=value, dialect=profile.sql_analysis_dialect).family
-        for value in (left, right)
-    }
-    different_families: bool = (
-        len(families) > 1
-        and TypeFamily.OTHER not in families
-        and not families <= {TypeFamily.INTEGER, TypeFamily.DECIMAL, TypeFamily.FLOAT}
-        and not families <= {TypeFamily.TIMESTAMP, TypeFamily.DATE, TypeFamily.DATETIME}
-    )
-    return different_families
-
-
 @lru_cache(maxsize=256)
 def _comparison_result(*, left: str, right: str, dialect: str | None) -> SqlBindingResult:
     return get_schema_validations(
@@ -347,57 +185,6 @@ def _accepted_values_result(
             ),
         )
     )[0]
-
-
-def _sql_test_errors(
-    *,
-    project: CompiledProject,
-    shapes: dict[str, dict[str, str]],
-    profile: ExpressionInferenceProfile,
-) -> tuple[CompilerDiagnostic, ...]:
-    diagnostics: list[CompilerDiagnostic] = []
-    columns_by_sql: dict[str, tuple[str, ...]] = _sql_test_columns(project=project, profile=profile)
-    for test in project.sql_tests:
-        if not isinstance(test.payload, CompiledModelSqlTestPayload):
-            continue
-        for cte in (*test.payload.authored_ctes, *test.payload.expected_ctes):
-            match: re.Match[str] | None = re.match(
-                r"__(?:expected|ref|source|seed)__(.+)$", cte.name
-            )
-            shape: dict[str, str] | None = shapes.get(match.group(1)) if match else None
-            if shape is None:
-                continue
-            available: set[str] = {name.casefold() for name in shape}
-            for column_name in columns_by_sql[cte.sql_body]:
-                if column_name.casefold() not in available:
-                    line: int
-                    column_position: int
-                    line, column_position = _text_position(
-                        text=test.test_file.contents,
-                        name=column_name,
-                        offset=max(test.test_file.contents.find(cte.name), 0),
-                    )
-                    diagnostics.append(
-                        CompilerDiagnostic(
-                            phase=DiagnosticPhase.COMPILE,
-                            severity=DiagnosticSeverity.ERROR,
-                            code="B302",
-                            message=f"SQL test '{cte.name}' names unknown column '{column_name}'",
-                            resource_type=CompiledResourceType.SQL_TEST,
-                            resource_name=test.name,
-                            path=test.test_file.relative_path,
-                            line=line,
-                            column=column_position,
-                            location=SourceLocation(
-                                path=test.test_file.relative_path,
-                                line=line,
-                                column=column_position,
-                                end_line=line,
-                                end_column=column_position + len(column_name),
-                            ),
-                        )
-                    )
-    return tuple(diagnostics)
 
 
 def _sql_test_columns(
@@ -440,182 +227,6 @@ def _names(value: object) -> tuple[str, ...]:
     if isinstance(value, (tuple, list)):
         return tuple(item for item in value if isinstance(item, str))
     return ()
-
-
-def _function_errors(
-    *,
-    model: CompiledModel,
-    functions: dict[str, CompiledFunction],
-    shapes: dict[str, dict[str, str]],
-    profile: ExpressionInferenceProfile,
-) -> tuple[CompilerDiagnostic, ...]:
-    if not functions or not any(
-        reference.ref_kind in {SqlReferenceKind.UDF, SqlReferenceKind.TABLE_FUNCTION}
-        for reference in model.references
-    ):
-        return ()
-    module: Any = import_polyglot_sql()
-    request: SqlSchemaValidationRequest = get_complete_schema_binding_request(
-        query_sql=model.query_sql,
-        placeholders=None,
-        dialect=profile.sql_analysis_dialect,
-        binding_schema=shapes,
-    )
-    try:
-        parsed: Any = module.parse_one(request.sql, dialect=profile.sql_analysis_dialect)
-    except module.PolyglotError:
-        return ()
-    calls: list[tuple[Any, Any, dict[str, Any], CompiledFunction]] = list(
-        _declared_function_calls(root=parsed, functions=functions)
-    )
-    column_selects: dict[int, Any] = {
-        id(select): select
-        for _, select, payload, function in calls
-        if select is not None and _resolves_argument_columns(payload=payload, function=function)
-    }
-    relations_by_select: dict[int, list[dict[str, Any]]] = {
-        key: _select_relations(select=select) for key, select in column_selects.items()
-    }
-    table_names: set[str] = set()
-    for relations in relations_by_select.values():
-        table_names.update(map(_relation_table_name, relations))
-    folded_shapes: dict[str, dict[str, list[str]]] = {
-        table_name: _folded_columns(shapes[table_name])
-        for table_name in table_names
-        if table_name in shapes
-    }
-    diagnostics: list[CompilerDiagnostic] = []
-    for call, select, payload, function in calls:
-        name: str = str(payload.get("name", "")).removeprefix("__sqlbuild_udf_")
-        arguments: list[dict[str, Any]] = payload.get("args", [])
-        if len(arguments) != len(function.arguments):
-            diagnostics.append(
-                _model_error(
-                    model=model,
-                    code="B102",
-                    name=name,
-                    message=(
-                        f"Function '{name}' expects {len(function.arguments)} arguments "
-                        f"but received {len(arguments)}"
-                    ),
-                )
-            )
-            continue
-        argument_expressions: list[Any] = call.expressions
-        for argument, expression, declaration in zip(
-            arguments, argument_expressions, function.arguments, strict=True
-        ):
-            actual: str = (
-                _polyglot_expression_type(expression=expression, inference_profile=profile)
-                or _UNKNOWN_TYPE
-            )
-            literal: Any = argument.get("literal")
-            column: Any = argument.get("column")
-            if literal:
-                actual = {"string": "VARCHAR", "number": "DOUBLE", "boolean": "BOOLEAN"}.get(
-                    literal.get("literal_type"), "UNKNOWN"
-                )
-            elif column:
-                actual = _argument_column_type(
-                    column=column,
-                    relations=None if select is None else relations_by_select[id(select)],
-                    folded_shapes=folded_shapes,
-                )
-            if actual != _UNKNOWN_TYPE and _different_argument_families(
-                left=actual, right=declaration.type, profile=profile
-            ):
-                diagnostics.append(
-                    _model_error(
-                        model=model,
-                        code="B301",
-                        severity=DiagnosticSeverity.ERROR,
-                        name=name,
-                        message=(
-                            f"Function '{name}' argument '{declaration.name}' "
-                            f"expects {declaration.type}, received {actual}; "
-                            "convert the argument explicitly"
-                        ),
-                    )
-                )
-    return tuple(diagnostics)
-
-
-def _declared_function_calls(
-    *, root: Any, functions: dict[str, CompiledFunction]
-) -> Iterator[tuple[Any, Any, dict[str, Any], CompiledFunction]]:
-    """Yield calls of declared functions with their nearest select and serialised payload."""
-
-    for call, select in _function_scopes(root):
-        payload: dict[str, Any] = call.to_dict().get("function", {})
-        name: str = str(payload.get("name", "")).removeprefix("__sqlbuild_udf_")
-        function: CompiledFunction | None = functions.get(name.casefold())
-        if function is not None:
-            yield call, select, payload, function
-
-
-def _resolves_argument_columns(*, payload: dict[str, Any], function: CompiledFunction) -> bool:
-    arguments: list[dict[str, Any]] = payload.get("args", [])
-    return len(arguments) == len(function.arguments) and any(
-        not argument.get("literal") and argument.get("column") for argument in arguments
-    )
-
-
-def _function_scopes(root: Any) -> Iterator[tuple[Any, Any]]:
-    pending: list[tuple[Any, Any]] = [(root, None)]
-    node: Any
-    select: Any
-    while pending:
-        node, select = pending.pop()
-        if node.kind == _SELECT_KIND:
-            select = node
-        if node.kind == _FUNCTION_KIND:
-            yield node, select
-        pending.extend((child, select) for child in reversed(node.children()))
-
-
-def _select_relations(*, select: Any) -> list[dict[str, Any]]:
-    payload: dict[str, Any] = select.to_dict().get("select", {})
-    relations: list[dict[str, Any]] = list((payload.get("from") or {}).get("expressions", []))
-    relations.extend(join.get("this", {}) for join in payload.get("joins", []))
-    return relations
-
-
-def _relation_table_name(relation: dict[str, Any]) -> str:
-    return str(relation.get("table", {}).get("name", {}).get("name", ""))
-
-
-def _folded_columns(shape: dict[str, str]) -> dict[str, list[str]]:
-    """Index column types by case-folded name, preserving declaration order per name."""
-
-    folded: dict[str, list[str]] = {}
-    for key, value in shape.items():
-        folded.setdefault(key.casefold(), []).append(value)
-    return folded
-
-
-def _argument_column_type(
-    *,
-    column: dict[str, Any],
-    relations: list[dict[str, Any]] | None,
-    folded_shapes: dict[str, dict[str, list[str]]],
-) -> str:
-    if relations is None:
-        return _UNKNOWN_TYPE
-    qualifier: str | None = (column.get("table") or {}).get("name")
-    name: str = str(column.get("name", {}).get("name", ""))
-    folded_name: str = name.casefold()
-    candidates: list[str] = []
-    for relation in relations:
-        table: dict[str, Any] = relation.get("table", {})
-        table_name: str = _relation_table_name(relation)
-        alias: str = str((table.get("alias") or {}).get("name", table_name))
-        if qualifier is not None and qualifier.casefold() != alias.casefold():
-            continue
-        shape: dict[str, list[str]] | None = folded_shapes.get(table_name)
-        if shape is None:
-            return _UNKNOWN_TYPE
-        candidates.extend(shape.get(folded_name, ()))
-    return candidates[0] if len(candidates) == 1 else _UNKNOWN_TYPE
 
 
 def _model_error(

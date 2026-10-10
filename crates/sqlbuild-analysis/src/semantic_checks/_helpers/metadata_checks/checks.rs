@@ -13,14 +13,14 @@ use crate::semantic_checks::_helpers::metadata_checks::function_calls::{
 use crate::semantic_checks::_helpers::metadata_checks::positions::{
     find_code_point, text_position,
 };
-use crate::semantic_checks::_helpers::sql_text::text::{ascii, casefold};
+use crate::semantic_checks::_helpers::sql_text::text::casefold;
 use crate::semantic_checks::constants::{
     CURSOR_INPUTS_KEY, SQL_TEST_COLUMN_CODE, SQL_TEST_CTE_PATTERN, TYPE_MISMATCH_CODE,
     UNKNOWN_COLUMN_REFERENCE_CODE, UNKNOWN_TYPE,
 };
 use crate::semantic_checks::models::{
     MetadataFinding, MetadataFunction, MetadataModel, MetadataOutcome, MetadataRequest,
-    MetadataSource, MetadataSqlTest, ModelMetadataFindings, SemanticDeferral,
+    MetadataSource, MetadataSqlTest, ModelMetadataFindings, SemanticFailure,
 };
 use crate::type_system::models::TypeFamily;
 
@@ -38,10 +38,10 @@ type Shapes<'a> = HashMap<&'a str, &'a [(String, String)]>;
 /// One config reference: `(key, column name, the shape it must name a column of)`.
 type Reference<'a> = (String, &'a str, &'a [(String, String)]);
 
-/// The metadata errors of every model, source and SQL test, or a deferral.
+/// The metadata errors of every model, source and SQL test, or the error Python raised.
 pub(crate) fn check_metadata(
     request: &MetadataRequest,
-) -> Result<MetadataOutcome, SemanticDeferral> {
+) -> Result<MetadataOutcome, SemanticFailure> {
     let shapes: Shapes<'_> = request
         .shapes
         .iter()
@@ -78,7 +78,7 @@ pub(crate) fn check_metadata(
 fn model_errors(
     model: &MetadataModel,
     context: &FunctionContext<'_>,
-) -> Result<ModelMetadataFindings, SemanticDeferral> {
+) -> Result<ModelMetadataFindings, SemanticFailure> {
     if !model.checked {
         return Ok(ModelMetadataFindings::default());
     }
@@ -102,7 +102,7 @@ fn model_error(
     code: &'static str,
     name: &str,
     message: String,
-) -> Result<MetadataFinding, SemanticDeferral> {
+) -> Result<MetadataFinding, SemanticFailure> {
     let (line, column) = text_position(&model.authored_sql, name, 0)?;
     Ok(MetadataFinding {
         code,
@@ -113,10 +113,10 @@ fn model_error(
 }
 
 /// Python's `{column.casefold() for column in shape}`.
-fn folded_names(shape: &[(String, String)]) -> Result<HashSet<String>, SemanticDeferral> {
+fn folded_names(shape: &[(String, String)]) -> Result<HashSet<String>, SemanticFailure> {
     let mut names: HashSet<String> = HashSet::with_capacity(shape.len());
     for (name, _) in shape {
-        names.insert(casefold(ascii(name)?));
+        names.insert(casefold(name));
     }
     Ok(names)
 }
@@ -126,7 +126,7 @@ fn reference_errors(
     model: &MetadataModel,
     shape: &[(String, String)],
     context: &FunctionContext<'_>,
-) -> Result<Vec<MetadataFinding>, SemanticDeferral> {
+) -> Result<Vec<MetadataFinding>, SemanticFailure> {
     let mut references: Vec<Reference<'_>> = Vec::new();
     for (key, names) in &model.references {
         for name in names {
@@ -146,7 +146,7 @@ fn reference_errors(
     }
     let mut errors: Vec<MetadataFinding> = Vec::new();
     for (key, name, reference_shape) in references {
-        if !folded_names(reference_shape)?.contains(&casefold(ascii(name)?)) {
+        if !folded_names(reference_shape)?.contains(&casefold(name)) {
             let message = format!("{key} references unknown column '{name}'");
             errors.push(model_error(
                 model,
@@ -167,20 +167,20 @@ fn cursor_error(
     model: &MetadataModel,
     shape: &[(String, String)],
     families: &Families,
-) -> Result<Option<MetadataFinding>, SemanticDeferral> {
+) -> Result<Option<MetadataFinding>, SemanticFailure> {
     let (Some(cursor), Some(cursor_type)) = (model.cursor.as_deref(), model.cursor_type.as_deref())
     else {
         return Ok(None);
     };
-    let folded_cursor: String = casefold(ascii(cursor)?);
+    let folded_cursor: String = casefold(cursor);
     let mut actual: &str = UNKNOWN_TYPE;
     for (name, column_type) in shape {
-        if casefold(ascii(name)?) == folded_cursor {
+        if casefold(name) == folded_cursor {
             actual = column_type;
             break;
         }
     }
-    let allowed: &[TypeFamily] = match ascii(cursor_type)?.to_ascii_lowercase().as_str() {
+    let allowed: &[TypeFamily] = match cursor_type.to_ascii_lowercase().as_str() {
         "integer" => INTEGER_CURSOR_FAMILIES,
         "timestamp" | "date" => TEMPORAL_CURSOR_FAMILIES,
         _ => return Ok(None),
@@ -203,14 +203,14 @@ fn cursor_error(
 fn source_errors(
     sources: &[MetadataSource],
     shapes: &Shapes<'_>,
-) -> Result<Vec<(usize, MetadataFinding)>, SemanticDeferral> {
+) -> Result<Vec<(usize, MetadataFinding)>, SemanticFailure> {
     let mut errors: Vec<(usize, MetadataFinding)> = Vec::new();
     for (index, source) in sources.iter().enumerate() {
         let (Some(cursor), Some(shape)) = (&source.cursor_column, shapes.get(source.name.as_str()))
         else {
             continue;
         };
-        if folded_names(shape)?.contains(&casefold(ascii(cursor)?)) {
+        if folded_names(shape)?.contains(&casefold(cursor)) {
             continue;
         }
         let (line, column) = text_position(&source.contents, cursor, 0)?;
@@ -231,23 +231,21 @@ fn source_errors(
 fn sql_test_errors(
     tests: &[MetadataSqlTest],
     shapes: &Shapes<'_>,
-) -> Result<Vec<(usize, MetadataFinding, i64)>, SemanticDeferral> {
+) -> Result<Vec<(usize, MetadataFinding, i64)>, SemanticFailure> {
     let cte_pattern: &Regex = pattern(&SQL_TEST_CTE)?;
     let mut errors: Vec<(usize, MetadataFinding, i64)> = Vec::new();
     for (index, test) in tests.iter().enumerate() {
         for (cte_name, columns) in &test.ctes {
-            if cte_name.ends_with('\n') {
-                return Err(SemanticDeferral::NonAsciiText);
-            }
+            let matched_name: &str = cte_name.strip_suffix('\n').unwrap_or(cte_name);
             let Some(shape) = cte_pattern
-                .captures(cte_name)
+                .captures(matched_name)
                 .and_then(|captures| shapes.get(&captures[1]))
             else {
                 continue;
             };
             let available: HashSet<String> = folded_names(shape)?;
             for column_name in columns {
-                if available.contains(&casefold(ascii(column_name)?)) {
+                if available.contains(&casefold(column_name)) {
                     continue;
                 }
                 let offset: usize = find_code_point(&test.contents, cte_name).unwrap_or(0);

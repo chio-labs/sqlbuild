@@ -37,7 +37,7 @@ fn given_poisoned_projection_when_recovering_types_then_counts_and_drops_like_py
             dialect: None,
             errors: true,
             revised: &[],
-            expected_status: "unsupported_dialect",
+            expected_status: "NoDialect",
             expected_poisoned: &[],
             expected_revalidated: &[],
             expected_kept: &[],

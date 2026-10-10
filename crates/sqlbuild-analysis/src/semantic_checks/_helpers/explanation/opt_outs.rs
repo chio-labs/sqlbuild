@@ -9,7 +9,7 @@ use crate::semantic_checks::constants::{
     ADDITIONAL_HELP_SEPARATOR, FINDING_KINDS, PROJECT_CONFIG_FILENAME, REQUIRE_SQL_ANALYSIS_KEY,
     SETTING_SNIPPET_INDENT, SETTINGS_SECTION,
 };
-use crate::semantic_checks::models::{OptOutDiagnostic, SemanticDeferral};
+use crate::semantic_checks::models::{OptOutDiagnostic, SemanticFailure};
 
 static FINDING_PATTERNS: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     let alternatives: Vec<String> = FINDING_KINDS
@@ -25,7 +25,7 @@ pub(crate) fn opt_out_diagnostic(
     name: &str,
     location_file: Option<&str>,
     hidden_codes: &[&str],
-) -> Result<OptOutDiagnostic, SemanticDeferral> {
+) -> Result<OptOutDiagnostic, SemanticFailure> {
     let findings: String = finding_counts(pattern(&FINDING_PATTERNS)?, hidden_codes);
     let opt_out: &str = if location_file == Some(PROJECT_CONFIG_FILENAME) {
         "`sql_analysis = false` from this [path_defaults] entry"

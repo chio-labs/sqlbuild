@@ -1,0 +1,24 @@
+[
+[
+"completion",
+{
+"databricks": "25140233ccf8e7760c91ffd6",
+"mysql": "25140233ccf8e7760c91ffd6",
+"oracle": "25140233ccf8e7760c91ffd6",
+"sqlite": "25140233ccf8e7760c91ffd6",
+"trino": "25140233ccf8e7760c91ffd6",
+"tsql": "25140233ccf8e7760c91ffd6"
+}
+],
+[
+"completion",
+{
+"databricks": "edd3b1ec05f9481067078045",
+"mysql": "edd3b1ec05f9481067078045",
+"oracle": "edd3b1ec05f9481067078045",
+"sqlite": "edd3b1ec05f9481067078045",
+"trino": "edd3b1ec05f9481067078045",
+"tsql": "edd3b1ec05f9481067078045"
+}
+]
+]

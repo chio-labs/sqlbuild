@@ -6,20 +6,17 @@ use crate::semantic_checks::_helpers::recovery::bindings::{BindingOwner, binding
 use crate::semantic_checks::_helpers::recovery::poison::Poison;
 use crate::semantic_checks::_helpers::sql_text::parsed_sql::{normalized_sql, projection_spans};
 use crate::semantic_checks::models::{
-    RecoveryModel, SemanticDeferral, TypeRecoveryOutcome, TypeRecoveryPlan, TypeRecoveryRequest,
+    RecoveryModel, SemanticFailure, TypeRecoveryOutcome, TypeRecoveryPlan, TypeRecoveryRequest,
     TypeRecoveryStep,
 };
 use crate::semantic_checks::types::RevisedBinding;
 
 /// Find poisoned outputs and the failed models Python must revalidate with unknown types.
-pub(crate) fn plan(request: &TypeRecoveryRequest) -> TypeRecoveryStep {
-    match planned(request) {
-        Ok(step) => step,
-        Err(deferral) => TypeRecoveryStep::Deferred(deferral),
-    }
+pub(crate) fn plan(request: &TypeRecoveryRequest) -> Result<TypeRecoveryStep, SemanticFailure> {
+    planned(request)
 }
 
-fn planned(request: &TypeRecoveryRequest) -> Result<TypeRecoveryStep, SemanticDeferral> {
+fn planned(request: &TypeRecoveryRequest) -> Result<TypeRecoveryStep, SemanticFailure> {
     let failed: Vec<usize> = failed_models(request);
     if !has_blocking_error(request, &failed) {
         return Ok(TypeRecoveryStep::Unchanged);

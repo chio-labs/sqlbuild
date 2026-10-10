@@ -5,23 +5,23 @@ use std::collections::HashMap;
 use polyglot_sql::{DataType, Expression};
 use serde_json::Value;
 
-use crate::semantic_checks::_helpers::sql_text::text::ascii;
+use crate::semantic_checks::_helpers::sql_text::text::upper;
 use crate::semantic_checks::constants::{
     BOOLEAN_RESULT_KINDS, BOOLEAN_TYPE_NAME, COLUMN_KIND, CUSTOM_TYPE_NAME, DECIMAL_TYPE_NAME,
     KNOWN_CAST_TYPE_NAMES, TIMESTAMP_KIND, TIMESTAMP_WITH_TIME_ZONE_TYPE_NAME, VARCHAR_DATA_TYPES,
 };
-use crate::semantic_checks::models::SemanticDeferral;
+use crate::semantic_checks::models::SemanticFailure;
 
 /// The type Python infers for `expression`, or None.
 pub(crate) fn expression_type(
     expression: &Expression,
     return_types: &HashMap<String, String>,
-) -> Result<Option<String>, SemanticDeferral> {
+) -> Result<Option<String>, SemanticFailure> {
     let kind: &str = expression.variant_name();
     let name: &str = expression.get_name();
     let function_name: &str = if name.is_empty() { kind } else { name };
     if kind != COLUMN_KIND
-        && let Some(declared) = return_types.get(&ascii(function_name)?.to_ascii_uppercase())
+        && let Some(declared) = return_types.get(&upper(function_name))
     {
         return Ok(Some(declared.clone()));
     }
@@ -35,9 +35,9 @@ pub(crate) fn expression_type(
 }
 
 /// Python's reading of a cast's serialised `to` payload.
-fn cast_type(data_type: &DataType) -> Result<Option<String>, SemanticDeferral> {
-    let target: Value =
-        serde_json::to_value(data_type).map_err(|_| SemanticDeferral::NativeFailure)?;
+fn cast_type(data_type: &DataType) -> Result<Option<String>, SemanticFailure> {
+    let target: Value = serde_json::to_value(data_type)
+        .map_err(|_| SemanticFailure::internal("a cast type does not serialize"))?;
     let Some(raw_type) = target
         .get("data_type")
         .and_then(Value::as_str)
@@ -45,7 +45,6 @@ fn cast_type(data_type: &DataType) -> Result<Option<String>, SemanticDeferral> {
     else {
         return Ok(None);
     };
-    let raw_type: &str = ascii(raw_type)?;
     let custom_name: Option<&str> = target
         .get("name")
         .and_then(Value::as_str)
@@ -53,7 +52,7 @@ fn cast_type(data_type: &DataType) -> Result<Option<String>, SemanticDeferral> {
     if raw_type.eq_ignore_ascii_case(CUSTOM_TYPE_NAME)
         && let Some(name) = custom_name
     {
-        return Ok(Some(ascii(name)?.to_ascii_uppercase()));
+        return Ok(Some(upper(name)));
     }
     let lowered: String = raw_type.to_ascii_lowercase();
     if lowered == TIMESTAMP_KIND && target.get("timezone") == Some(&Value::Bool(true)) {

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class GeneratedSemanticParityTestCase:
-    """Seeded failing projects whose semantic completion Python and the native engine agree on."""
+    """Seeded failing projects whose native completion matches the recorded Python outputs."""
 
     description: str
     seed: int
@@ -19,25 +19,36 @@ class GeneratedSemanticParityTestCase:
 
 
 @dataclass(frozen=True)
-class DeferredSemanticTestCase:
-    """A project the native stage hands back to Python, which records the deferral."""
+class FormerlyDeferredSemanticTestCase:
+    """Projects the native stage once handed back to Python, now answered or raising natively."""
 
     description: str
-    dialect: str
-    keeps_catalog: bool
-    non_ascii_comment: bool
-    expected_kinds: tuple[tuple[str, str], ...]
+    seed: int
+    count: int
+    non_ascii: bool
+    dialects: tuple[str | None, ...]
+    expected_outcomes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class MissingCatalogTestCase:
+    """A project without the analysis catalog every compile builds."""
+
+    description: str
+    expected_message: str
 
 
 @dataclass(frozen=True)
 class GeneratedMetadataParityTestCase:
-    """Seeded projects whose metadata checks Python and the native engine must agree on."""
+    """Seeded projects whose native metadata checks match the recorded Python outputs."""
 
     description: str
     seed: int
     count: int
     model_count: int
-    dialects: tuple[str, ...]
+    dialects: tuple[str | None, ...]
+    non_ascii: bool
+    golden_prefix: str
     expected_minimum_native: int
     expected_minimum_families: dict[str, int]
 

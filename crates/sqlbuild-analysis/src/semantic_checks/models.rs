@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::semantic_checks::types::CompletedParts;
+use crate::type_system::models::TypeNormalizationError;
 
 /// One compiled model output column and the upstream columns it reads.
 #[derive(Clone, Debug, Default)]
@@ -60,28 +61,24 @@ pub struct TypeRecoveryRequest {
     pub diagnostics: Vec<DiagnosticOwner>,
 }
 
-/// Why native semantic completion hands a stage back to Python.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SemanticDeferral {
-    UnsupportedDialect,
-    UnreadableSql,
-    NonAsciiText,
-    UnexpectedPosition,
-    UnsupportedType,
-    NativeFailure,
+/// Why native semantic completion fails: the error Python's completion raised for the same
+/// input, or an internal native failure.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SemanticFailure {
+    /// The wheel's `TypeError` for tokenizing without a dialect.
+    NoDialect,
+    /// The wheel's `ValueError` for a dialect name Polyglot does not know.
+    UnknownDialect(String),
+    /// The error Python's type normalization raised.
+    TypeNormalization(TypeNormalizationError),
+    /// An internal native failure, raised as `NativeCompilerError`.
+    Internal(String),
 }
 
-impl SemanticDeferral {
-    /// The deferral kind recorded for the harness.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::UnsupportedDialect => "unsupported_dialect",
-            Self::UnreadableSql => "unreadable_sql",
-            Self::NonAsciiText => "non_ascii_text",
-            Self::UnexpectedPosition => "unexpected_position",
-            Self::UnsupportedType => "unsupported_type",
-            Self::NativeFailure => "native_failure",
-        }
+impl SemanticFailure {
+    /// An internal failure with a fixed reason that never quotes SQL.
+    pub(crate) fn internal(reason: &str) -> Self {
+        Self::Internal(reason.to_owned())
     }
 }
 
@@ -109,29 +106,19 @@ impl TypeRecoveryPlan {
     }
 }
 
-/// Type recovery's first step: nothing to recover, a plan, or a deferral.
+/// Type recovery's first step: nothing to recover, or a plan.
 #[derive(Clone, Debug)]
 pub enum TypeRecoveryStep {
     Unchanged,
     Planned(TypeRecoveryPlan),
-    Deferred(SemanticDeferral),
 }
 
 impl TypeRecoveryStep {
-    /// `unchanged`, `planned` or `deferred`.
+    /// `unchanged` or `planned`.
     pub fn status(&self) -> &'static str {
         match self {
             Self::Unchanged => "unchanged",
             Self::Planned(_) => "planned",
-            Self::Deferred(_) => "deferred",
-        }
-    }
-
-    /// The deferral kind, when the stage is handed back to Python.
-    pub fn deferral(&self) -> Option<&'static str> {
-        match self {
-            Self::Deferred(deferral) => Some(deferral.as_str()),
-            _ => None,
         }
     }
 
@@ -240,29 +227,19 @@ impl FinalDiagnostic {
     }
 }
 
-/// Recovery, explanation and opt-out rejection, or a deferral.
+/// Recovery, explanation and opt-out rejection.
 #[derive(Clone, Debug)]
-pub enum CompletionOutcome {
-    Completed {
-        diagnostics: Vec<CompletedDiagnostic>,
-        /// Indexes into `diagnostics` per model, or `None` when models keep their bindings.
-        model_bindings: Option<Vec<Vec<usize>>>,
-        order: Vec<FinalDiagnostic>,
-    },
-    Deferred(SemanticDeferral),
+pub struct CompletionOutcome {
+    pub diagnostics: Vec<CompletedDiagnostic>,
+    /// Indexes into `diagnostics` per model, or `None` when models keep their bindings.
+    pub model_bindings: Option<Vec<Vec<usize>>>,
+    pub order: Vec<FinalDiagnostic>,
 }
 
 impl CompletionOutcome {
-    /// `(deferral kind, completed parts)`: exactly one side is set.
-    pub fn into_parts(self) -> (Option<&'static str>, Option<CompletedParts>) {
-        match self {
-            Self::Completed {
-                diagnostics,
-                model_bindings,
-                order,
-            } => (None, Some((diagnostics, model_bindings, order))),
-            Self::Deferred(deferral) => (Some(deferral.as_str()), None),
-        }
+    /// The completed diagnostics, model binding positions and final order.
+    pub fn into_parts(self) -> CompletedParts {
+        (self.diagnostics, self.model_bindings, self.order)
     }
 }
 

@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use crate::semantic_checks::constants::GENERIC_DIALECT;
-use crate::semantic_checks::models::SemanticDeferral;
+use crate::semantic_checks::models::SemanticFailure;
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{TypeFamily, TypeNormalization};
 
@@ -29,10 +29,10 @@ impl Families {
         }
     }
 
-    /// The family of `type_sql`, or a deferral where Python would leave the native type system.
-    pub(crate) fn family(&self, type_sql: &str) -> Result<TypeFamily, SemanticDeferral> {
-        let normalization: TypeNormalization = normalize_type(type_sql, &self.dialect)
-            .map_err(|_| SemanticDeferral::UnsupportedType)?;
+    /// The family of `type_sql`, or the error Python's type normalization raised for it.
+    pub(crate) fn family(&self, type_sql: &str) -> Result<TypeFamily, SemanticFailure> {
+        let normalization: TypeNormalization =
+            normalize_type(type_sql, &self.dialect).map_err(SemanticFailure::TypeNormalization)?;
         if normalization.parse_error.is_some() {
             self.fallback_types.borrow_mut().push(type_sql.to_owned());
         }
@@ -40,7 +40,7 @@ impl Families {
     }
 
     /// Python's `_different_argument_families`.
-    pub(crate) fn different(&self, left: &str, right: &str) -> Result<bool, SemanticDeferral> {
+    pub(crate) fn different(&self, left: &str, right: &str) -> Result<bool, SemanticFailure> {
         let left: TypeFamily = self.family(left)?;
         let right: TypeFamily = self.family(right)?;
         let families: [TypeFamily; 2] = [left, right];

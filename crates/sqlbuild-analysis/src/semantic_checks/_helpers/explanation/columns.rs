@@ -2,14 +2,14 @@
 
 use std::cmp::Ordering;
 
-use crate::semantic_checks::_helpers::sql_text::text::{ascii, casefold};
+use crate::semantic_checks::_helpers::sql_text::text::casefold;
 use crate::semantic_checks::constants::{MAX_EDIT_DISTANCE, MIN_ABBREVIATION_LENGTH};
-use crate::semantic_checks::models::SemanticDeferral;
+use crate::semantic_checks::models::SemanticFailure;
 
 /// Python's `column_distance`: Levenshtein distance between case-folded names.
 pub(crate) fn column_distance(left: &str, right: &str) -> usize {
-    let left: Vec<u8> = casefold(left).into_bytes();
-    let right: Vec<u8> = casefold(right).into_bytes();
+    let left: Vec<char> = casefold(left).chars().collect();
+    let right: Vec<char> = casefold(right).chars().collect();
     let mut row: Vec<usize> = (0..=right.len()).collect();
     for (i, a) in left.iter().enumerate() {
         let mut following: Vec<usize> = Vec::with_capacity(right.len() + 1);
@@ -31,12 +31,11 @@ pub(crate) fn column_distance(left: &str, right: &str) -> usize {
 pub(crate) fn ordered_columns<'a>(
     name: &str,
     columns: &'a [(String, String)],
-) -> Result<Vec<&'a str>, SemanticDeferral> {
-    ascii(name)?;
+) -> Result<Vec<&'a str>, SemanticFailure> {
+    let name_length: usize = name.chars().count();
     let mut keyed: Vec<(f64, &'a str)> = Vec::with_capacity(columns.len());
     for (column, _) in columns {
-        ascii(column)?;
-        let longest = name.len().max(column.len()).max(1);
+        let longest = name_length.max(column.chars().count()).max(1);
         keyed.push((
             column_distance(name, column) as f64 / longest as f64,
             column.as_str(),
@@ -55,15 +54,17 @@ pub(crate) fn ordered_columns<'a>(
 pub(crate) fn closest_column<'a>(
     name: &str,
     columns: &'a [(String, String)],
-) -> Result<Option<&'a str>, SemanticDeferral> {
-    let folded_name: String = casefold(name);
+) -> Result<Option<&'a str>, SemanticFailure> {
+    let folded_name: Vec<char> = casefold(name).chars().collect();
+    let name_first: String = folded_end(name, str::chars);
+    let name_last: String = folded_end(name, |text| text.chars().rev());
     for candidate in ordered_columns(name, columns)? {
         let distance = column_distance(name, candidate);
-        let folded_candidate: String = casefold(candidate);
-        let abbreviation = name.len() >= MIN_ABBREVIATION_LENGTH
-            && folded_candidate.as_bytes().first() == folded_name.as_bytes().first()
-            && folded_candidate.as_bytes().last() == folded_name.as_bytes().last()
-            && is_subsequence(folded_name.as_bytes(), folded_candidate.as_bytes());
+        let folded_candidate: Vec<char> = casefold(candidate).chars().collect();
+        let abbreviation = name.chars().count() >= MIN_ABBREVIATION_LENGTH
+            && folded_end(candidate, str::chars) == name_first
+            && folded_end(candidate, |text| text.chars().rev()) == name_last
+            && is_subsequence(&folded_name, &folded_candidate);
         if distance <= MAX_EDIT_DISTANCE || abbreviation {
             return Ok(Some(candidate));
         }
@@ -71,8 +72,18 @@ pub(crate) fn closest_column<'a>(
     Ok(None)
 }
 
+/// Python's `text[:1].casefold()` or `text[-1:].casefold()`, by the end `characters` reads first.
+fn folded_end<'t, I: Iterator<Item = char>>(
+    text: &'t str,
+    characters: impl Fn(&'t str) -> I,
+) -> String {
+    characters(text)
+        .next()
+        .map_or_else(String::new, |character| casefold(&character.to_string()))
+}
+
 /// Python's `all(character in remaining for character in name)` over one shared iterator.
-fn is_subsequence(name: &[u8], candidate: &[u8]) -> bool {
+fn is_subsequence(name: &[char], candidate: &[char]) -> bool {
     let mut position: usize = 0;
     for character in name {
         match candidate[position..]

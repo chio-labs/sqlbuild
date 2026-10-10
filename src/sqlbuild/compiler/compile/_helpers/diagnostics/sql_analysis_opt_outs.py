@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
@@ -15,8 +14,6 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
 from sqlbuild.compiler.compile.constants import UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledProject,
     CompilerDiagnostic,
     SqlAnalysisOptOutRequest,
 )
@@ -42,7 +39,6 @@ from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.spec.contracts.models import SettingsConfig, SourceLocation
 
 _LEGACY_KEY: str = "sql_validation"
-_SEMANTIC_CODE_PREFIX: str = "B"
 _OPT_OUT_KEYS: tuple[str, ...] = (SQL_ANALYSIS_CONFIG_KEY, _LEGACY_KEY)
 _HOOK_KEYS: tuple[str, ...] = ("pre_hooks", "post_hooks")
 _OPT_OUT_KEY_PATTERN: re.Pattern[str] = re.compile(r"\b(?:sql_analysis|sql_validation)\b")
@@ -106,48 +102,6 @@ def _parses(request: SqlAnalysisOptOutRequest) -> bool:
     except CompileInputError:
         return False
     return True
-
-
-def reject_unneeded_sql_analysis_opt_outs(project: CompiledProject) -> CompiledProject:
-    """Replace each rejected opt-out model's findings with one error that counts them."""
-
-    rejected: dict[str, CompiledModel] = {
-        model.name: model
-        for model in project.models
-        if model.rejected_sql_analysis_opt_out is not None
-    }
-    if not rejected:
-        return project
-    hidden: dict[str, list[CompilerDiagnostic]] = {name: [] for name in rejected}
-    kept: list[CompilerDiagnostic] = []
-    for diagnostic in project.diagnostics:
-        if (
-            diagnostic.resource_name in hidden
-            and diagnostic.resource_type in (None, CompiledResourceType.MODEL)
-            and diagnostic.code.startswith(_SEMANTIC_CODE_PREFIX)
-        ):
-            hidden[diagnostic.resource_name].append(diagnostic)
-        else:
-            kept.append(diagnostic)
-    kept.extend(
-        _opt_out_diagnostic(model=model, hidden=tuple(hidden[name]))
-        for name, model in sorted(rejected.items())
-    )
-    return replace(project, diagnostics=tuple(kept))
-
-
-def _opt_out_diagnostic(
-    *, model: CompiledModel, hidden: tuple[CompilerDiagnostic, ...]
-) -> CompilerDiagnostic:
-    location: SourceLocation | None = model.rejected_sql_analysis_opt_out
-    return unneeded_opt_out_diagnostic(
-        resource_type=CompiledResourceType.MODEL,
-        kind="model",
-        name=model.name,
-        location=location,
-        hidden=hidden,
-        path_default=location is not None and location.path.name == PROJECT_CONFIG_FILENAME,
-    )
 
 
 def unneeded_opt_out_diagnostic(
