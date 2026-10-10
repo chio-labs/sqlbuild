@@ -1,6 +1,6 @@
 use crate::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use crate::cursor_intrinsics::models::IntrinsicCheck;
-use crate::cursor_intrinsics::tests::helpers::rejected;
+use crate::cursor_intrinsics::tests::helpers::{python, rejected};
 use crate::cursor_intrinsics::tests::test_types::IntrinsicCheckTestCase;
 
 #[test]
@@ -60,20 +60,42 @@ fn given_sql_when_checking_cursor_intrinsics_then_python_acceptance_or_error_is_
             expected_check: rejected("Audit 'fresh' contains a reserved internal cursor marker"),
         },
         IntrinsicCheckTestCase {
-            description: "quotes inside a call defer to Python's parenthesis matching",
+            description: "a quoted parenthesis inside a call is an argument",
             sql: "WHERE ts >= __cursor_start(')')",
-            expected_check: IntrinsicCheck::Deferred,
+            expected_check: rejected(
+                "Audit 'fresh' intrinsic __cursor_start does not accept arguments",
+            ),
         },
         IntrinsicCheckTestCase {
-            description: "a non-ASCII neighbour defers to Python's Unicode identifier rules",
-            sql: "SELECT é__cursor_end",
-            expected_check: IntrinsicCheck::Deferred,
+            description: "a comment-only call is an argument",
+            sql: "WHERE ts >= __cursor_start(/* now */)",
+            expected_check: rejected(
+                "Audit 'fresh' intrinsic __cursor_start does not accept arguments",
+            ),
+        },
+        IntrinsicCheckTestCase {
+            description: "an unclosed quote inside a call names the cursor intrinsic context",
+            sql: "WHERE ts >= __cursor_start('open",
+            expected_check: rejected(
+                "Audit 'fresh' cursor intrinsic contains an unclosed quoted string",
+            ),
+        },
+        IntrinsicCheckTestCase {
+            description: "a non-ASCII letter neighbour continues the identifier",
+            sql: "SELECT é__cursor_end, __cursor_endé",
+            expected_check: IntrinsicCheck::Free,
+        },
+        IntrinsicCheckTestCase {
+            description: "a non-ASCII symbol neighbour is a boundary",
+            sql: "SELECT ·__cursor_end",
+            expected_check: rejected("Audit 'fresh' intrinsic __cursor_end must be called with ()"),
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
             intrinsic_free(
+                python(),
                 test_case.sql,
                 &["__reserved_marker__".to_owned()],
                 "Audit 'fresh'"

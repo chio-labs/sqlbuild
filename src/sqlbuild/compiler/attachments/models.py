@@ -7,11 +7,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class NativeAuditPolicies:
-    """One attachment's evaluation mode, threshold facts, severities and run scopes."""
+    """One attachment's threshold facts, severities and run scopes."""
 
-    measurement: bool
     has_thresholds: bool
-    has_minimum_samples: bool
     threshold_error: bool
     instance_severity: str | None
     default_severity: str | None
@@ -21,7 +19,7 @@ class NativeAuditPolicies:
 
 @dataclass(frozen=True, slots=True)
 class NativeRenderedAudit:
-    """Rendered audit SQL and policies, or Python's render error and later policy error."""
+    """Rendered audit SQL and policies, or the render error and the later policy error."""
 
     render_error: str | None
     sql_body: str

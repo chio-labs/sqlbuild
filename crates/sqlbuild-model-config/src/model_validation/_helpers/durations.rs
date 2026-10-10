@@ -1,7 +1,10 @@
-//! `Duration.parse` for ASCII text; other text is left to Python.
+//! `Duration.parse`: `^(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$`.
 
-use crate::model_validation::constants::DAY_UNIT_INDEX;
-use crate::model_validation::models::Rejected;
+use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
+use sqlbuild_core::text::models::PythonText;
+
+use crate::model_validation::constants::{DAY_UNIT_INDEX, MAX_DURATION_AMOUNT};
+use crate::model_validation::errors::DurationNumberError;
 
 const MONTHS_PER_YEAR: u128 = 12;
 const UNIT_SECONDS: [u128; 4] = [86_400, 3_600, 60, 1];
@@ -33,42 +36,47 @@ impl Duration {
     }
 }
 
-/// Return `Duration.parse(text)`: a duration, `None` when it does not parse, or a rejection.
-pub(crate) fn parse_duration(text: &str) -> Result<Option<Duration>, Rejected> {
-    if !text.is_ascii() || text.contains('\n') {
-        return Err(Rejected);
-    }
+/// `Duration.parse(text)`, `None` when it does not parse, or why the duration is rejected.
+pub(crate) fn parse_duration(
+    python: PythonText,
+    text: &str,
+) -> Result<Option<Duration>, DurationNumberError> {
+    let text: &str = text.strip_suffix('\n').unwrap_or(text);
+    let is_digit = |character: char| is_python_decimal(python, character);
     let mut amounts = [0_u128; 6];
     let mut next_unit = 0;
     let mut rest = text;
+    let mut non_ascii = false;
     while !rest.is_empty() {
-        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        let digits: usize = rest
+            .char_indices()
+            .find(|(_, character)| !is_digit(*character))
+            .map_or(rest.len(), |(at, _)| at);
         if digits == 0 {
             return Ok(None);
         }
-        let amount: u128 = rest[..digits].parse().map_err(|_| Rejected)?;
-        rest = &rest[digits..];
-        let Some(unit) = (next_unit..UNITS.len()).find(|index| rest.starts_with(UNITS[*index]))
+        let Some(unit) =
+            (next_unit..UNITS.len()).find(|index| rest[digits..].starts_with(UNITS[*index]))
         else {
             return Ok(None);
         };
-        amounts[unit] = amount;
-        rest = &rest[UNITS[unit].len()..];
+        non_ascii |= !rest[..digits].is_ascii();
+        amounts[unit] = bounded_amount(&rest[..digits]);
+        rest = &rest[digits + UNITS[unit].len()..];
         next_unit = unit + 1;
     }
-    let total_months = amounts[0]
-        .checked_mul(MONTHS_PER_YEAR)
-        .and_then(|months| months.checked_add(amounts[1]))
-        .ok_or(Rejected)?;
+    if non_ascii {
+        return Err(DurationNumberError::NonAsciiDigits);
+    }
+    if amounts.contains(&u128::MAX) {
+        return Err(DurationNumberError::TooLarge);
+    }
+    let total_months = amounts[0] * MONTHS_PER_YEAR + amounts[1];
     let fixed_seconds = amounts[DAY_UNIT_INDEX..]
         .iter()
         .zip(UNIT_SECONDS)
-        .try_fold(0_u128, |total, (amount, seconds)| {
-            amount
-                .checked_mul(seconds)
-                .and_then(|value| total.checked_add(value))
-        })
-        .ok_or(Rejected)?;
+        .map(|(amount, seconds)| amount * seconds)
+        .sum();
     if total_months == 0 && fixed_seconds == 0 {
         return Ok(None);
     }
@@ -77,4 +85,12 @@ pub(crate) fn parse_duration(text: &str) -> Result<Option<Duration>, Rejected> {
         fixed_seconds,
         amounts,
     }))
+}
+
+/// The amount `digits` spell, or `u128::MAX` when it is not ASCII or exceeds a signed 64-bit integer.
+fn bounded_amount(digits: &str) -> u128 {
+    match digits.parse::<u128>() {
+        Ok(amount) if amount <= MAX_DURATION_AMOUNT => amount,
+        Ok(_) | Err(_) => u128::MAX,
+    }
 }

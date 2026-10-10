@@ -33,9 +33,14 @@ fn given_test_bodies_when_locating_omitted_select_then_python_offset_is_returned
             expected_offset: OmittedSelect::Absent,
         },
         OmittedSelectTestCase {
-            description: "non-ASCII keyword text defers to Python's case mapping",
+            description: "a dotless i upper-cases to WITH",
             sql: "w\u{131}th a AS (SELECT 1)",
-            expected_offset: OmittedSelect::Deferred,
+            expected_offset: OmittedSelect::At(20),
+        },
+        OmittedSelectTestCase {
+            description: "a non-ASCII letter after WITH continues the word",
+            sql: "WITH\u{e9} a AS (SELECT 1)",
+            expected_offset: OmittedSelect::Absent,
         },
     ];
 

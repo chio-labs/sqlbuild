@@ -1,6 +1,7 @@
 pub mod assembly;
 pub mod authored_macro_calls;
 pub mod case_identity;
+pub(crate) mod check_independence;
 pub mod cte_rename;
 pub mod cte_slices;
 pub mod cte_sql;

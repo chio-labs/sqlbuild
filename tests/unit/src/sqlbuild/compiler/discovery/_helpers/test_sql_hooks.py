@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_sql_hook_files
-from sqlbuild.compiler.discovery._helpers.sql.hooks import parse_sql_hook_file
 from sqlbuild.compiler.discovery.exceptions import SqlHookParseError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
@@ -14,6 +14,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseSqlHookErrorTestCase,
     ParseSqlHookTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import discover_declaration_file
 
 
 @pytest.mark.parametrize(
@@ -191,11 +192,15 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
 )
 def test_given_hook_header_and_sql_when_parsing_then_returns_named_resource(
     test_case: ParseSqlHookTestCase,
+    tmp_path: Path,
 ) -> None:
-    hook: DiscoveredSqlHookFile = parse_sql_hook_file(
-        contents=test_case.contents,
-        file_path=Path("/project/hooks/sql/grant_access.sql"),
-        relative_path=Path("hooks/sql/grant_access.sql"),
+    hook: DiscoveredSqlHookFile = cast(
+        DiscoveredSqlHookFile,
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path="hooks/sql/grant_access.sql",
+            contents=test_case.contents,
+        ),
     )
 
     assert hook.name == test_case.expected_name
@@ -276,12 +281,11 @@ def test_given_nested_sql_hook_files_when_discovering_then_names_come_from_stems
 )
 def test_given_invalid_sql_hook_when_parsing_then_raises(
     test_case: ParseSqlHookErrorTestCase,
+    tmp_path: Path,
 ) -> None:
     with pytest.raises(SqlHookParseError, match=test_case.expected_error_fragment):
-        parse_sql_hook_file(
-            contents=test_case.contents,
-            file_path=Path("hooks/sql/invalid.sql"),
-            relative_path=Path("hooks/sql/invalid.sql"),
+        discover_declaration_file(
+            project_dir=tmp_path, relative_path="hooks/sql/invalid.sql", contents=test_case.contents
         )
 
 

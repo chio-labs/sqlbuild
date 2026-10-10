@@ -31,89 +31,44 @@ pub(crate) fn policies(
     Ok((severity, run_scope_source))
 }
 
-/// One SQL text rendered, Python's missing-argument error, or None to defer.
+/// One SQL text rendered, or the missing-argument or unsupported-value error.
 pub(crate) fn rendered(
     attachment: &AuditAttachment,
     sql: &str,
     arguments: &[(String, ArgumentValue)],
-) -> Option<Result<String, String>> {
-    match render_parameterized_sql(sql, arguments, false) {
-        Ok(rendered) => Some(Ok(rendered)),
-        Err(RenderStop::MissingArgument(name)) => Some(Err(format!(
+) -> Result<String, String> {
+    render_parameterized_sql(sql, arguments).map_err(|stop| match stop {
+        RenderStop::MissingArgument(name) => format!(
             "{} is missing argument '{name}' for generic audit '{}'",
             attachment.owner_label, attachment.definition_name
-        ))),
-        Err(RenderStop::UnsupportedValue(name)) => Some(Err(format!(
+        ),
+        RenderStop::UnsupportedValue(name) => format!(
             "{} generic audit '{}' argument '{name}' uses an unsupported value",
             attachment.owner_label, attachment.definition_name
-        ))),
-        Err(RenderStop::Deferred) => None,
-    }
+        ),
+    })
 }
 
-/// Python's `merge_audit_arguments`; None where only Python's `!=` can compare the values.
+/// `merge_audit_arguments`: an explicit argument may repeat an implicit one only as equal text.
 pub(crate) fn merged_arguments(
     attachment: &AuditAttachment,
-) -> Option<Result<Vec<(String, ArgumentValue)>, String>> {
-    let mut merged: Vec<(String, ArgumentValue)> = attachment.implicit_arguments.clone();
+) -> Result<Vec<(String, ArgumentValue)>, String> {
+    let mut merged: Vec<(String, ArgumentValue)> = attachment
+        .implicit_arguments
+        .iter()
+        .map(|(name, value)| (name.clone(), ArgumentValue::Text(value.clone())))
+        .collect();
     for (name, value) in &attachment.explicit_arguments {
-        match merged.iter_mut().find(|(existing, _)| existing == name) {
-            Some((_, existing)) => {
-                if python_unequal(existing, value)? {
-                    return Some(Err(format!(
-                        "{} audit '{}' must not override implicit {name} from attached context",
-                        attachment.owner_label, attachment.definition_name
-                    )));
-                }
+        match merged.iter().find(|(existing, _)| existing == name) {
+            Some((_, existing)) if existing != value => {
+                return Err(format!(
+                    "{} audit '{}' must not override implicit {name} from attached context",
+                    attachment.owner_label, attachment.definition_name
+                ));
             }
+            Some(_) => {}
             None => merged.push((name.clone(), value.clone())),
         }
     }
-    Some(Ok(merged))
-}
-
-/// Python's `left != right`, or None for nested opaque values and numbers differing in text.
-fn python_unequal(left: &ArgumentValue, right: &ArgumentValue) -> Option<bool> {
-    if contains_opaque(left) || contains_opaque(right) {
-        return None;
-    }
-    if left == right {
-        return Some(false);
-    }
-    match (left, right) {
-        (ArgumentValue::List(left), ArgumentValue::List(right)) => {
-            if left.len() != right.len() {
-                return Some(true);
-            }
-            let mut undecided: bool = false;
-            for (left, right) in left.iter().zip(right) {
-                match python_unequal(left, right) {
-                    Some(true) => return Some(true),
-                    Some(false) => {}
-                    None => undecided = true,
-                }
-            }
-            if undecided { None } else { Some(false) }
-        }
-        (
-            ArgumentValue::Number(_) | ArgumentValue::Boolean(_),
-            ArgumentValue::Number(_) | ArgumentValue::Boolean(_),
-        ) if !matches!(
-            (left, right),
-            (ArgumentValue::Boolean(_), ArgumentValue::Boolean(_))
-        ) =>
-        {
-            None
-        }
-        _ => Some(true),
-    }
-}
-
-/// Whether `value` holds an opaque value at any depth, which only Python can compare.
-fn contains_opaque(value: &ArgumentValue) -> bool {
-    match value {
-        ArgumentValue::Opaque => true,
-        ArgumentValue::List(items) => items.iter().any(contains_opaque),
-        _ => false,
-    }
+    Ok(merged)
 }

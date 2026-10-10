@@ -7,22 +7,15 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    prepare_static_project_vars_batch,
+    interpolate_sql_batch,
     substitute_sql_vars,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import SqlInterpolation
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     StaticProjectVarBatchTestCase,
-    StaticProjectVarDifferentialTestCase,
     SubstituteSqlVarsErrorTestCase,
     SubstituteSqlVarsTestCase,
-)
-from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
-    BACKTICK_SQL_FRAGMENTS,
-    LEXICAL_SQL_FRAGMENTS,
-    StaticProjectVarDifferential,
-    generated_lexical_sqls,
-    native_static_project_var_differential,
 )
 
 _FILE_PATH: Path = Path("models/test_model.sql")
@@ -233,101 +226,43 @@ def test_given_missing_var_when_substituting_then_raises(
     "test_case",
     [
         StaticProjectVarBatchTestCase(
-            description="static scalars use native results and dynamic values fall back",
+            description="each model is interpolated; an error waits in its own result",
             sqls=(
                 "SELECT @@revision, '@@status', @@@window_start",
                 "-- @@revision\nSELECT 1",
-                "SELECT '@@ENV:SQLBUILD_TEST_BATCH_USER'",
-            ),
-            effective_vars={"revision": 7, "status": "ready"},
-            expected_sqls=(
-                "SELECT 7, 'ready', @@@window_start",
-                "-- @@revision\nSELECT 1",
-                None,
-            ),
-        ),
-        StaticProjectVarBatchTestCase(
-            description="dollar-quoted text is quoted text, not comments",
-            sqls=(
-                "SELECT $$--@@revision$$ AS x",
-                "SELECT $$ /* $$ AS a, '@@status' AS b -- */",
+                "SELECT '@@ENV:SQLBUILD_TEST_BATCH_UNSET'",
                 "SELECT $tag$ it's $$ -- @@status $tag$, price$1$, $1, @@revision",
+                "SELECT @@grants",
             ),
-            effective_vars={"revision": 7, "status": "ready"},
-            expected_sqls=(
-                "SELECT $$--7$$ AS x",
-                "SELECT $$ /* $$ AS a, 'ready' AS b -- */",
-                "SELECT $tag$ it's $$ -- ready $tag$, price$1$, $1, 7",
+            effective_vars={"revision": 7, "status": "ready", "grants": {"role": "analyst"}},
+            expected_results=(
+                ("SELECT 7, 'ready', @@@window_start", None),
+                ("-- @@revision\nSELECT 1", None),
+                (
+                    "SELECT '@@ENV:SQLBUILD_TEST_BATCH_UNSET'",
+                    "unknown environment variable '@@ENV:SQLBUILD_TEST_BATCH_UNSET' in "
+                    "'models/test_model.sql'",
+                ),
+                ("SELECT $tag$ it's $$ -- ready $tag$, price$1$, $1, 7", None),
+                (
+                    "SELECT @@grants",
+                    "SQL variable '@@grants' is an object and cannot be interpolated as text: "
+                    '{"role":"analyst"}. Use a macro to consume structured vars.',
+                ),
             ),
-        ),
-        StaticProjectVarBatchTestCase(
-            description="unclosed dollar quotes fall back to the Python scanner",
-            sqls=("SELECT $tag$ @@revision", "-- @@revision\nSELECT $$ open"),
-            effective_vars={"revision": 7},
-            expected_sqls=(None, None),
-        ),
-        StaticProjectVarBatchTestCase(
-            description="structured project variables fall back",
-            sqls=("SELECT @@grants",),
-            effective_vars={"grants": {"role": "analyst"}},
-            expected_sqls=(None,),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_static_model_sql_when_batch_preparing_then_returns_safe_results_and_fallbacks(
+def test_given_model_sqls_when_interpolating_a_batch_then_each_holds_its_sql_or_error(
     test_case: StaticProjectVarBatchTestCase,
 ) -> None:
-    result: tuple[str | None, ...] = prepare_static_project_vars_batch(
-        sqls=test_case.sqls,
+    results: tuple[SqlInterpolation, ...] = interpolate_sql_batch(
+        sqls=tuple((sql, _FILE_PATH) for sql in test_case.sqls),
         effective_vars=test_case.effective_vars,
     )
 
-    assert result == test_case.expected_sqls
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        StaticProjectVarDifferentialTestCase(
-            description="generated quotes, dollar quotes, comments and tokens",
-            seed=550,
-            sql_count=4000,
-            effective_vars={"revision": 7, "status": "ready"},
-            fragments=LEXICAL_SQL_FRAGMENTS,
-            expected_minimum_dollar_quote_substitutions=1,
-            expected_minimum_doubled_backtick_substitutions=0,
-        ),
-        StaticProjectVarDifferentialTestCase(
-            description="generated doubled backticks beside quotes, comments and tokens",
-            seed=1038,
-            sql_count=4000,
-            effective_vars={"revision": 7, "status": "ready"},
-            fragments=BACKTICK_SQL_FRAGMENTS,
-            expected_minimum_dollar_quote_substitutions=0,
-            expected_minimum_doubled_backtick_substitutions=200,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_generated_lexical_sql_when_batch_preparing_then_native_matches_python_scanner(
-    test_case: StaticProjectVarDifferentialTestCase,
-) -> None:
-    sqls: tuple[str, ...] = generated_lexical_sqls(
-        seed=test_case.seed, count=test_case.sql_count, fragments=test_case.fragments
-    )
-
-    differential: StaticProjectVarDifferential = native_static_project_var_differential(
-        sqls=sqls, effective_vars=test_case.effective_vars
-    )
-
-    assert (
-        differential.native == differential.python,
-        differential.substituted_dollar_quotes
-        >= test_case.expected_minimum_dollar_quote_substitutions,
-        differential.substituted_doubled_backticks
-        >= test_case.expected_minimum_doubled_backtick_substitutions,
-    ) == (True, True, True), test_case.description
+    assert [(result.sql, result.error) for result in results] == list(test_case.expected_results)
 
 
 if __name__ == "__main__":

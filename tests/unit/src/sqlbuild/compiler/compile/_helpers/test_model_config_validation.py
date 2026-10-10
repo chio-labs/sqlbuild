@@ -6,15 +6,6 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.config.model_validation import (
-    validate_contract_config,
-    validate_custom_materialization_config,
-    validate_incremental_config,
-    validate_non_incremental_config,
-    validate_placeholder_config,
-    validate_snapshot_config,
-    validate_time_travel_retention,
-)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
@@ -37,8 +28,10 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     SnapshotConfigErrorTestCase,
     SnapshotConfigValidTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import validate_natively
 
 _SNIPPET_INDENT: str = " " * 12
+_CUSTOM: frozenset[str] = frozenset({"partition_tracked"})
 
 
 @pytest.mark.parametrize(
@@ -64,7 +57,7 @@ def test_given_valid_contract_config_when_validating_then_passes(
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
-    validate_contract_config(config=config, model_name="test_model")
+    validate_natively(config=config, model_name="test_model")
 
     assert test_case.expected_valid is True
 
@@ -91,7 +84,7 @@ def test_given_invalid_contract_config_when_validating_then_raises(
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
     with pytest.raises(CompileInputError) as exc_info:
-        validate_contract_config(config=config, model_name="test_model")
+        validate_natively(config=config, model_name="test_model")
 
     assert test_case.expected_error_fragment in str(exc_info.value)
 
@@ -321,11 +314,12 @@ def test_given_valid_config_when_validating_then_passes(
     )
     known_input_names: frozenset[str] = frozenset(str(name) for name in cursor_input_dict)
 
-    validate_incremental_config(
+    validate_natively(
         config=config,
         model_name="test_model",
         ref_count=test_case.ref_count,
-        known_input_names=known_input_names,
+        input_names=known_input_names,
+        microbatch_concurrency=True,
     )
 
     assert test_case.expected_valid
@@ -811,11 +805,11 @@ def test_given_invalid_config_when_validating_then_raises(
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_incremental_config(
+        validate_natively(
             config=config,
             model_name="test_model",
             ref_count=test_case.ref_count,
-            known_input_names=frozenset({"orders", "shipments"}),
+            input_names=frozenset({"orders", "shipments"}),
         )
 
 
@@ -861,11 +855,11 @@ def test_given_unknown_change_policy_when_validating_then_help_shows_valid_heade
     )
 
     with pytest.raises(CompileInputError) as error_info:
-        validate_incremental_config(
+        validate_natively(
             config=config,
             model_name="test_model",
             ref_count=1,
-            known_input_names=frozenset({"orders"}),
+            input_names=frozenset({"orders"}),
         )
 
     assert f"unknown {test_case.key} '{test_case.value}'" in str(error_info.value)
@@ -898,11 +892,11 @@ def test_given_integer_batch_size_when_validating_then_raises_typed_config_error
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
     with pytest.raises(ConfigValueTypeError) as error_info:
-        validate_incremental_config(
+        validate_natively(
             config=config,
             model_name="test_model",
             ref_count=test_case.ref_count,
-            known_input_names=frozenset({"orders"}),
+            input_names=frozenset({"orders"}),
         )
 
     assert error_info.value.key == "batch_size"
@@ -923,12 +917,17 @@ def test_given_integer_batch_size_when_validating_then_raises_typed_config_error
         ),
         NonIncrementalConfigValidTestCase(
             description="incremental model with on_schema_change passes",
-            config_values={"materialized": "incremental", "on_schema_change": "append_new_columns"},
+            config_values={
+                "materialized": "incremental",
+                "incremental_strategy": "append",
+                "on_schema_change": "append_new_columns",
+            },
         ),
         NonIncrementalConfigValidTestCase(
             description="incremental model with replay_on_change passes",
             config_values={
                 "materialized": "incremental",
+                "incremental_strategy": "append",
                 "replay_on_change": "bounded-30d",
             },
         ),
@@ -951,7 +950,7 @@ def test_given_valid_non_incremental_config_when_validating_then_passes(
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
-    validate_non_incremental_config(
+    validate_natively(
         config=config,
         model_name="test_model",
     )
@@ -1012,7 +1011,7 @@ def test_given_non_incremental_config_with_incremental_keys_when_validating_then
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_non_incremental_config(
+        validate_natively(
             config=config,
             model_name="test_model",
         )
@@ -1146,7 +1145,7 @@ def test_given_valid_snapshot_config_when_validating_then_passes(
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
-    validate_snapshot_config(config=config, model_name="test_model")
+    validate_natively(config=config, model_name="test_model")
 
     assert test_case.expected_valid is True
 
@@ -1364,7 +1363,7 @@ def test_given_invalid_snapshot_config_when_validating_then_raises(
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment) as exc_info:
-        validate_snapshot_config(config=config, model_name="test_model")
+        validate_natively(config=config, model_name="test_model")
 
     assert exc_info.value.code == test_case.expected_error_code
 
@@ -1413,7 +1412,7 @@ def test_given_valid_custom_materialization_config_when_validating_then_passes(
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
-    validate_custom_materialization_config(
+    validate_natively(
         config=config,
         model_name="test_model",
         custom_materialization_names=test_case.custom_materialization_names,
@@ -1453,7 +1452,7 @@ def test_given_valid_custom_materialization_config_when_validating_then_passes(
             description="on_schema_change disallowed on custom materialization",
             config_values={"materialized": "partition_tracked", "on_schema_change": "fail"},
             custom_materialization_names=frozenset({"partition_tracked"}),
-            expected_error_fragment="on_schema_change is not allowed on custom materializations",
+            expected_error_fragment="on_schema_change is only valid for incremental models",
         ),
         CustomMaterializationConfigErrorTestCase(
             description="batch_size disallowed on custom materialization",
@@ -1476,7 +1475,7 @@ def test_given_invalid_custom_materialization_config_when_validating_then_raises
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_custom_materialization_config(
+        validate_natively(
             config=config,
             model_name="test_model",
             custom_materialization_names=test_case.custom_materialization_names,
@@ -1518,7 +1517,7 @@ def test_given_unsupported_managed_retention_when_validating_then_raises(
     )
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_time_travel_retention(config=config, model_name="test_model")
+        validate_natively(config=config, custom_materialization_names=_CUSTOM)
 
 
 @pytest.mark.parametrize(
@@ -1544,7 +1543,7 @@ def test_given_disabled_retention_when_validating_then_passes(
         time_travel_retention=test_case.retention,
     )
 
-    validate_time_travel_retention(config=config, model_name="test_model")
+    validate_natively(config=config, model_name="test_model")
 
     assert config.time_travel_retention.unmanaged is test_case.expected_unmanaged
 
@@ -1590,7 +1589,7 @@ def test_given_valid_placeholder_config_when_validating_then_passes(
 ) -> None:
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
-    validate_placeholder_config(
+    validate_natively(
         config=config,
         model_name="test_model",
         query_sql=test_case.query_sql,
@@ -1653,7 +1652,7 @@ def test_given_invalid_placeholder_config_when_validating_then_raises(
     config: CompileModelConfig = CompileModelConfig(values=test_case.config_values)
 
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_placeholder_config(
+        validate_natively(
             config=config,
             model_name="test_model",
             query_sql=test_case.query_sql,

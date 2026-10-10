@@ -214,7 +214,6 @@ fn outcome_object<T>(
         FileOutcome::Parsed(value) => parsed(py, value),
         FileOutcome::Failed(failure) => failure_object(py, failure.clone()),
         FileOutcome::Unreadable(failure) => read_object(py, failure.clone()),
-        FileOutcome::Deferred => tuple_object(py, vec![object(py, "defer")?]),
     }
 }
 

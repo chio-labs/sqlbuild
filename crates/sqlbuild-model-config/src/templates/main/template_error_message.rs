@@ -41,5 +41,6 @@ pub fn template_error_message(error: &TemplateError, label: &str) -> String {
         TemplateError::UnterminatedString { quote, position } => format!(
             "template expression has unterminated {quote}-quoted string at position {position}"
         ),
+        TemplateError::Message(message) => message.clone(),
     }
 }

@@ -39,13 +39,11 @@ pub struct ReferenceScanFailure {
     pub start: usize,
 }
 
-/// The references of one SQL text, Python's error for it, or a deferral to Python.
+/// The references of one SQL text, or the error that stops the scan.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReferenceExtraction {
     /// Every reference and rejected call in authored order, exactly as Python scans them.
     Extracted(ReferenceScan),
-    /// The `CompileInputError` Python raises for this text.
+    /// The `CompileInputError` raised for this text.
     Failed(ReferenceScanFailure),
-    /// A character or syntax rule the scan cannot classify exactly as Python does.
-    Deferred,
 }

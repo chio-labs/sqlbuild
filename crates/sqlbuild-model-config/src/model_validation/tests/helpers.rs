@@ -4,6 +4,13 @@ use crate::model_validation::models::{
     ModelReference, ModelValidationFacts, ProjectValidationFacts, ValidationStop,
 };
 use crate::tests::test_types::Value;
+use sqlbuild_core::text::main::python_text::python_text;
+use sqlbuild_core::text::models::PythonText;
+
+/// The string semantics of Python 3.12.
+pub(super) fn python_312() -> PythonText {
+    python_text((3, 12), "15.0.0").expect("Python 3.12 is supported")
+}
 
 /// The validator error `model 'orders_daily': <text>`.
 pub(super) fn validator_error(text: &str) -> ValidationStop {
@@ -12,7 +19,7 @@ pub(super) fn validator_error(text: &str) -> ValidationStop {
     )))
 }
 
-/// Validate `config` for `orders_daily`: `accepted`, `deferred`, or the error message.
+/// Validate `config` for `orders_daily`; a `kind!:name` reference is one its resolver rejects.
 pub(super) fn validation_outcome(
     config: Vec<(&'static str, Value)>,
     references: &[&str],
@@ -22,8 +29,9 @@ pub(super) fn validation_outcome(
         .iter()
         .filter_map(|reference| reference.split_once(':'))
         .map(|(kind, name)| ModelReference {
-            kind: kind.to_owned(),
+            kind: kind.trim_end_matches('!').to_owned(),
             name: name.to_owned(),
+            externally_rejected: kind.ends_with('!'),
         })
         .collect();
     let facts = ModelValidationFacts {
@@ -44,10 +52,8 @@ pub(super) fn validation_outcome(
 }
 
 fn stop_text(stop: ValidationStop) -> String {
-    let ValidationStop::Error(error) = stop else {
-        return "deferred".to_owned();
-    };
-    error.message
+    stop.into_error()
+        .map_or_else(|index| format!("external {index}"), |error| error.message)
 }
 
 /// A list of strings.
@@ -74,6 +80,7 @@ pub(super) fn map(entries: Vec<(&'static str, Value)>) -> Value {
 pub(super) fn project() -> ProjectValidationFacts {
     let names = |values: &[&str]| values.iter().map(|value| (*value).to_owned()).collect();
     ProjectValidationFacts {
+        python: python_312(),
         custom_materializations: names(&["ledger"]),
         microbatch_concurrency: false,
         models: names(&["orders", "customers"]),

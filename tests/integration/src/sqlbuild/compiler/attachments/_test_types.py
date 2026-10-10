@@ -29,7 +29,6 @@ class AttachedAuditParityTestCase:
     count: int
     expected_minimum_native: int
     expected_minimum_native_errors: int
-    expected_minimum_deferred: int
     expected_minimum_python_errors: int
 
 
@@ -41,18 +40,6 @@ class AttachmentProjectTestCase:
     overrides: dict[str, str]
     expected_native_entries: frozenset[str]
     expected_outcome_fragment: str
-
-
-@dataclass(frozen=True)
-class CursorIntrinsicParityTestCase:
-    """Seeded SQL checked for cursor intrinsics natively and by Python, with the native errors."""
-
-    description: str
-    seed: int
-    count: int
-    expected_minimum_free: int
-    expected_minimum_native_errors: int
-    expected_minimum_python_errors: int
 
 
 @dataclass(frozen=True)
@@ -112,20 +99,6 @@ class TargetParityTestCase:
     count: int
     expected_minimum_valid: int
     expected_minimum_python_errors: int
-
-
-@dataclass(frozen=True)
-class FunctionHeaderParityTestCase:
-    """Seeded SQL and Python function headers attached by each engine."""
-
-    description: str
-    seed: int
-    count: int
-    target_schema: str | None
-    inherit_default_namespace: bool
-    expected_minimum_attached: int
-    expected_minimum_python_errors: int
-    expected_minimum_exact_errors: int
 
 
 @dataclass(frozen=True)

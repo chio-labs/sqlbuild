@@ -7,8 +7,6 @@ from types import ModuleType
 
 import pytest
 
-import sqlbuild.compiler.compile._helpers.attachment.core as attachment_core
-import sqlbuild.compiler.compile._helpers.attachment.model_config as model_config
 import sqlbuild.compiler.compile._helpers.render.context_templates as context_templates
 from scripts.compiler_differential.constants import FAILURE_BASE_MART
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -49,13 +47,7 @@ _INCREMENTAL: str = (
     "  materialized incremental,\n  incremental_strategy append,\n  cursor order_id,\n"
     "  cursor_type integer,\n"
 )
-_FALLBACKS: tuple[tuple[ModuleType, str], ...] = (
-    (model_config, "run_python_model_validators"),
-    (model_config, "_parse_model_header_columns"),
-    (model_config, "parse_audit_instances"),
-    (attachment_core, "build_model_config"),
-    (context_templates, "expand_template_data"),
-)
+_FALLBACKS: tuple[tuple[ModuleType, str], ...] = ((context_templates, "expand_template_data"),)
 _PROJECT_FILES: dict[str, str] = {
     "macros/counted.py": _COUNTED_MACRO,
     "models/marts/customer_totals.sql": _COUNTED_MART,

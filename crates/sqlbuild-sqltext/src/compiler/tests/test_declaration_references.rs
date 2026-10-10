@@ -55,9 +55,14 @@ fn given_sql_when_scanning_declaration_references_then_python_offsets_are_return
             expected_references: Some("enum:order_status.PLACED@7..40"),
         },
         DeclarationReferenceScanTestCase {
-            description: "a non-ASCII character after the keyword defers its word boundary to Python",
-            sql: "SELECT @consté",
-            expected_references: None,
+            description: "a non-ASCII letter or number after the keyword continues the word",
+            sql: "SELECT @consté, @enum\u{2167}, @const(\"a\")",
+            expected_references: Some("const:a@24..35"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "a non-ASCII symbol after the keyword ends the word, so the reference is malformed",
+            sql: "SELECT @const\u{2192}",
+            expected_references: Some(" | stop:invalid const"),
         },
         DeclarationReferenceScanTestCase {
             description: "an unclosed block comment before a reference stops the walk",

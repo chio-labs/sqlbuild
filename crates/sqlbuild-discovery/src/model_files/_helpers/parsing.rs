@@ -3,6 +3,7 @@
 use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
 use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
 use crate::_helpers::locations::header_column_locations;
+use crate::declaration_files::main::bare_number_failure::bare_number_failure;
 use crate::model_files::_helpers::output_columns::output_column_locations;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use crate::models::{DiscoveryFailure, FailureKind};
@@ -72,6 +73,14 @@ pub(crate) fn parse_model_file(
             supported_keys: &options.supported_keys,
             python: options.python,
         }));
+    }
+    for (_, value) in &header_values {
+        bare_number_failure(value, options.python, file_path).map_err(|failure| {
+            DiscoveryFailure {
+                kind: FailureKind::ModelSql,
+                ..failure
+            }
+        })?;
     }
     let query_sql: String = python_strip(&contents[sql_start..]).to_owned();
     if query_sql.is_empty() {

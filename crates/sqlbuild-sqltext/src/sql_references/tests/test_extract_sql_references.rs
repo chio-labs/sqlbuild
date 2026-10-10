@@ -1,8 +1,7 @@
 use crate::sql_references::main::extract_sql_references::extract_sql_references;
-use crate::sql_references::models::ReferenceExtraction;
 use crate::sql_references::tests::helpers::{
     backslash_hash_comments, dbt_reference, extracted, failed, generic, invalid_call, reference,
-    rejected, table_function, unsupported_comments,
+    rejected, table_function,
 };
 use crate::sql_references::tests::test_types::ExtractSqlReferencesTestCase;
 
@@ -362,10 +361,20 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
             expected_extraction: extracted(vec![table_function("f", 1)]),
         },
         ExtractSqlReferencesTestCase {
-            description: "unsupported line comment prefix defers",
-            sql: "SELECT * FROM __ref(\"a\")",
-            syntax: unsupported_comments(),
-            expected_extraction: ReferenceExtraction::Deferred,
+            description: "non-ASCII text inside and around a rejected call keeps its characters",
+            sql: "SELECT 'é' FROM __ref(größe, \u{3000}\"b\")",
+            syntax: generic(),
+            expected_extraction: rejected(
+                vec![],
+                vec![invalid_call(
+                    "ref",
+                    "__ref(größe, \u{3000}\"b\")",
+                    16,
+                    "__ref(größe, \"b\") is not a valid __ref() call",
+                    "__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref(\"model_name\")",
+                    "__ref(\"model_name\")",
+                )],
+            ),
         },
     ];
 

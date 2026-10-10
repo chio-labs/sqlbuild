@@ -28,6 +28,17 @@ class InvalidQualifiedIdentityError(ScopeError):
     code: str = "S002"
 
 
+class UnindexableScopeError(ScopeError):
+    """Raised when the native scope index cannot place a discovered path or resource kind."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Native scope indexing could not place a discovered path or resource kind. Discovery "
+            "always yields normalized project-relative paths, so this is a SQLBuild bug; please "
+            "file an issue with the project layout"
+        )
+
+
 class ScopeCacheDecodeError(ScopeError):
     """Raised when a persistent scope-index payload is malformed."""
 

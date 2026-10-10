@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Python function file functions/python/order_flag.py packages must be a list"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -1,4 +1,4 @@
-"""Render one attached generic audit natively for the preview compiler engine."""
+"""Render one attached generic audit natively."""
 
 from __future__ import annotations
 
@@ -13,28 +13,17 @@ def render_native_attached_audit(
     labels: tuple[str, str],
     sql_body: str,
     evidence_sql: str | None,
-    implicit_arguments: dict[str, object],
+    implicit_arguments: dict[str, str],
     explicit_arguments: dict[str, object],
     policies: NativeAuditPolicies,
-) -> NativeRenderedAudit | None:
-    """Return the rendering with Python's errors for `(owner, audit)`, or None for Python."""
+) -> NativeRenderedAudit:
+    """Return the rendering of `(owner, audit)`, or its render and policy errors."""
 
-    if not all(
-        value is None or isinstance(value, str)
-        for value in (
-            policies.instance_severity,
-            policies.default_severity,
-            policies.instance_run_scope,
-            policies.default_run_scope,
-        )
-    ) or not isinstance(explicit_arguments, dict):
-        return None
-    rendered: tuple[str | None, str, str | None, str, str, str | None] | None = (
-        _native.render_attached_generic_audit(
+    return NativeRenderedAudit(
+        *_native.render_attached_generic_audit(
             labels,
             (sql_body, evidence_sql),
-            (implicit_arguments, explicit_arguments),
+            (list(implicit_arguments.items()), explicit_arguments),
             asdict(policies),
         )
     )
-    return None if rendered is None else NativeRenderedAudit(*rendered)

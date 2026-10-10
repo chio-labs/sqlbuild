@@ -152,6 +152,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
+    DeclarationScopeResolver,
     DynamicColumnContractProof,
     InferredColumn,
     MacroContext,
@@ -171,9 +172,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     SqlTestMode,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.profiling.main._record_cpu import record_compile_cpu_timing
@@ -1583,8 +1581,6 @@ def _build_source_relation_entry(
 def _expand_target_value(*, value: str | None, effective_vars: dict[str, object]) -> str | None:
     if value is None:
         return None
-    if native_stage_enabled(NativeStage.MODEL_CONFIG):
-        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="source_target")
     return str(
         expand_template_data(
             value=value,
@@ -1888,6 +1884,16 @@ def _build_test_model_query_overrides(
         vars=inputs.effective_vars,
     )
     macro_context: MacroContext = replace(model_macro_context, _enforce_explicit_references=False)
+    declaration_resolver: DeclarationScopeResolver = build_declaration_scope_resolver(
+        discovered_inputs=inputs.discovered_inputs,
+        scope_index=inputs.scope_index,
+        loaded_macros=inputs.loaded_macros,
+        lookup=(
+            inputs.declaration_scope.resolver.lookup
+            if inputs.declaration_scope is not None
+            else None
+        ),
+    )
     overrides: dict[str, str] = {}
     model_input: CompileModelInput
     for model_input in model_inputs:
@@ -1900,13 +1906,7 @@ def _build_test_model_query_overrides(
                 loaded_macros=inputs.loaded_macros,
                 macro_overrides=test_input.payload.macro_mocks,
                 macro_context=macro_context,
-                declaration_resolver=(
-                    build_declaration_scope_resolver(
-                        discovered_inputs=inputs.discovered_inputs,
-                        scope_index=inputs.scope_index,
-                        loaded_macros=inputs.loaded_macros,
-                    )
-                ),
+                declaration_resolver=declaration_resolver,
             ),
             config_values=model_input.config.values,
             model_name=model_name,

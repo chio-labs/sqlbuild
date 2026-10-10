@@ -2,8 +2,17 @@
 
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::models::{DiscoveryFailure, FailureKind};
+use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
 use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
+
+/// The Python whose `\d` decides bare-word numbers, and the file a rejected word is reported in.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WordRules<'file> {
+    pub(crate) python: PythonText,
+    pub(crate) file_path: &'file str,
+}
 
 /// The Python type a header value projects to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,12 +28,15 @@ pub(crate) enum PythonType {
     Other,
 }
 
-/// The projected type; a bare word with non-ASCII text may be a Unicode number, so it defers.
-pub(crate) fn python_type(value: &AuthoredValue) -> Result<PythonType, ParseStop> {
+/// The projected type; a bare number written with non-ASCII digits is rejected.
+pub(crate) fn python_type(
+    value: &AuthoredValue,
+    words: WordRules,
+) -> Result<PythonType, ParseStop> {
     Ok(match value {
         AuthoredValue::Null => PythonType::None,
         AuthoredValue::Boolean(_) => PythonType::Bool,
-        AuthoredValue::BareWord(word) => word_type(word)?,
+        AuthoredValue::BareWord(word) => word_type(word, words)?,
         AuthoredValue::String(_) => PythonType::Str,
         AuthoredValue::List(_) => PythonType::List,
         AuthoredValue::Map(_) => PythonType::Dict,
@@ -37,18 +49,46 @@ pub(crate) fn python_type(value: &AuthoredValue) -> Result<PythonType, ParseStop
     })
 }
 
+/// Reject a bare number written with non-ASCII digits anywhere inside `value`.
+pub(crate) fn check_bare_numbers(value: &AuthoredValue, words: WordRules) -> Result<(), ParseStop> {
+    match value {
+        AuthoredValue::BareWord(word) => word_type(word, words).map(|_| ()),
+        AuthoredValue::List(items) | AuthoredValue::Set(items) | AuthoredValue::Tuple(items) => {
+            items
+                .iter()
+                .try_for_each(|item| check_bare_numbers(item, words))
+        }
+        AuthoredValue::Map(entries)
+        | AuthoredValue::TypedConstant(entries)
+        | AuthoredValue::NamedSqlHook(_, entries)
+        | AuthoredValue::PythonHook(_, entries) => entries
+            .iter()
+            .try_for_each(|(_, item)| check_bare_numbers(item, words)),
+        AuthoredValue::Null
+        | AuthoredValue::Boolean(_)
+        | AuthoredValue::String(_)
+        | AuthoredValue::InlineSqlHook(_) => Ok(()),
+    }
+}
+
 /// The text of a value that projects to `str`, or `None` for any other type.
-pub(crate) fn python_str(value: &AuthoredValue) -> Result<Option<&str>, ParseStop> {
+pub(crate) fn python_str<'value>(
+    value: &'value AuthoredValue,
+    words: WordRules,
+) -> Result<Option<&'value str>, ParseStop> {
     Ok(match value {
         AuthoredValue::String(text) => Some(text),
-        AuthoredValue::BareWord(word) if word_type(word)? == PythonType::Str => Some(word),
+        AuthoredValue::BareWord(word) if word_type(word, words)? == PythonType::Str => Some(word),
         _ => None,
     })
 }
 
 /// `isinstance(value, str) and value.strip()`.
-pub(crate) fn non_empty_str(value: &AuthoredValue) -> Result<Option<&str>, ParseStop> {
-    Ok(python_str(value)?.filter(|text| !python_strip(text).is_empty()))
+pub(crate) fn non_empty_str<'value>(
+    value: &'value AuthoredValue,
+    words: WordRules,
+) -> Result<Option<&'value str>, ParseStop> {
+    Ok(python_str(value, words)?.filter(|text| !python_strip(text).is_empty()))
 }
 
 /// Python's `dict.get(key)`.
@@ -89,9 +129,22 @@ pub(crate) fn failure(kind: FailureKind, message: String) -> ParseStop {
 }
 
 /// `_parse_word_value`: `true`, `false` and `null` are parsed as values; numbers become numbers.
-fn word_type(word: &str) -> Result<PythonType, ParseStop> {
+fn word_type(word: &str, words: WordRules) -> Result<PythonType, ParseStop> {
     if !word.is_ascii() {
-        return Err(ParseStop::Deferred);
+        if is_unicode_number(word, words.python) {
+            return Err(ParseStop::Failed(DiscoveryFailure {
+                kind: FailureKind::Declaration,
+                message: format!(
+                    "{} has the bare number '{word}', written with non-ASCII digits",
+                    words.file_path
+                ),
+                help: Some(format!(
+                    "Quote it to keep it as text (\"{word}\"), or write the number with ASCII \
+                     digits 0-9"
+                )),
+            }));
+        }
+        return Ok(PythonType::Str);
     }
     Ok(match word {
         "true" | "false" => PythonType::Bool,
@@ -119,4 +172,19 @@ fn is_float(word: &str) -> bool {
     };
     let digits = |part: &str| part.bytes().all(|byte| byte.is_ascii_digit());
     digits(whole) && digits(fraction) && !(whole.is_empty() && fraction.is_empty())
+}
+
+/// Whether Python's `^[+-]?\d+$` or float pattern, with Unicode `\d`, matches a non-ASCII word.
+fn is_unicode_number(word: &str, python: PythonText) -> bool {
+    let digits = |part: &str| {
+        part.chars()
+            .all(|character| is_python_decimal(python, character))
+    };
+    let unsigned = unsigned(word);
+    if !unsigned.is_empty() && digits(unsigned) {
+        return true;
+    }
+    unsigned.split_once('.').is_some_and(|(whole, fraction)| {
+        digits(whole) && digits(fraction) && !(whole.is_empty() && fraction.is_empty())
+    })
 }

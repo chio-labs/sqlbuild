@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "model 'customer_totals': time_travel_retention '99999999999999999999d' has a number larger than a 64-bit integer",
+     "help": "use a time_travel_retention whose days fit in 64 bits, add this to the MODEL header:\n            MODEL (\n              time_travel_retention '7d',\n              ...\n            );"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

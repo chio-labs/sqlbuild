@@ -99,10 +99,10 @@ if _directory:
         _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
 """
 
-REFERENCE_SCAN_SABOTAGE: str = """
-import sqlbuild.compiler.compile._helpers.refs.references as references
+MACRO_RESOLUTION_SABOTAGE: str = """
+from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 
-references.extract_native_sql_references = lambda **_: None
+MacroBridge.call_class = lambda self, **_: None
 """
 
 MODEL_ANALYSIS_SABOTAGE: str = """

@@ -2,29 +2,22 @@
 
 from __future__ import annotations
 
-import os
-import re
+import sys
+import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile._helpers.render.declarations import (
-    expand_declaration_references_result,
-    expand_declaration_references_with_spans,
     expand_scanned_declaration_references,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_result,
     expand_sql_macros_with_spans,
 )
-from sqlbuild.compiler.compile.constants import (
-    COMPILE_INPUT_READS,
-    SQL_CONTEXT_NAME_EXTRA_TOKENS,
-    SQL_IDENTIFIER_EXTRA_TOKEN,
-    SQL_INTERPOLATION_TOKEN,
-    SQL_QUOTE_TOKENS,
-)
+from sqlbuild.compiler.compile._helpers.render.templating import record_template_reads
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
@@ -35,38 +28,17 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
+    SqlInterpolation,
 )
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
-from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
-    is_identifier_character as _is_identifier_continue,
-)
-from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
-    is_identifier_start as _is_identifier_start,
-)
-from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.sql_values.types import CollectionRendering
 
-_SQL_INTERPOLATION_SPECIAL: re.Pattern[str] = re.compile(r"['\"`$\-/@]")
-
-_CONTEXT: str = "SQL interpolation"
-_NATIVE_UNCHANGED: int = 0
-_NATIVE_SUBSTITUTED: int = 1
-_NATIVE_FALLBACK: int = 2
-_NATIVE_UNKNOWN_VARIABLE: int = 3
-_NATIVE_UNCLOSED_QUOTE: int = 4
-_NATIVE_UNCLOSED_BLOCK_COMMENT: int = 5
-_NATIVE_RESULT_LENGTH: int = 2
-_NATIVE_ERROR_STATUSES: frozenset[int] = frozenset(
-    {_NATIVE_UNKNOWN_VARIABLE, _NATIVE_UNCLOSED_QUOTE, _NATIVE_UNCLOSED_BLOCK_COMMENT}
-)
+type _InterpolationRow = tuple[
+    str | None, list[tuple[int, int, int, int]], list[tuple[str, str]], str | None
+]
 
 
 def expand_authored_sql_result(  # noqa: PLR0913
@@ -84,51 +56,22 @@ def expand_authored_sql_result(  # noqa: PLR0913
 ) -> AuthoredSqlExpansionResult:
     """Apply all expansion passes and retain facts emitted by those passes."""
 
-    native: bool = native_stage_enabled(NativeStage.ATTACHMENTS)
-    prepared_sql: str | None = (
-        prepare_static_project_vars_batch(
-            sqls=(sql,), effective_vars=effective_vars, error_file_path=file_path
-        )[0]
-        if native
-        else None
-    )
-    interpolated_sql: str = (
-        prepared_sql
-        if prepared_sql is not None
-        else substitute_sql_vars(
-            sql=sql,
-            file_path=file_path,
-            effective_vars=effective_vars,
-            context_values=context_values,
-        )
+    interpolated_sql: str = substitute_sql_vars(
+        sql=sql,
+        file_path=file_path,
+        effective_vars=effective_vars,
+        context_values=context_values,
     )
     declaration_context: DeclarationResolutionContext = (
         declarations or DeclarationResolutionContext()
     )
-    scanned_result: DeclarationExpansionResult | None = (
-        expand_scanned_declaration_references(
-            sql=interpolated_sql,
-            references=scan_native_declaration_references(sqls=(interpolated_sql,))[0],
-            file_path=file_path,
-            declarations=declaration_context,
-            value_renderer=value_renderer,
-            collection_rendering=collection_rendering,
-        )
-        if native
-        else None
-    )
-    if native and scanned_result is None:
-        report_native_fallback(site=NativeFallbackSite.DECLARATION_REFERENCES, kind="scan")
-    declaration_result: DeclarationExpansionResult = (
-        scanned_result
-        if scanned_result is not None
-        else expand_declaration_references_result(
-            sql=interpolated_sql,
-            file_path=file_path,
-            declarations=declaration_context,
-            value_renderer=value_renderer,
-            collection_rendering=collection_rendering,
-        )
+    declaration_result: DeclarationExpansionResult = expand_scanned_declaration_references(
+        sql=interpolated_sql,
+        references=scan_native_declaration_references(sqls=(interpolated_sql,))[0],
+        file_path=file_path,
+        declarations=declaration_context,
+        value_renderer=value_renderer,
+        collection_rendering=collection_rendering,
     )
     macro_result: MacroExpansionResult = expand_sql_macros_result(
         sql=declaration_result.sql,
@@ -168,20 +111,23 @@ def expand_authored_sql_with_spans(
         effective_vars=effective_vars,
         context_values=context_values,
     )
-    declaration_expanded_sql: str
-    declaration_spans: tuple[ExpansionSpan, ...]
-    declaration_expanded_sql, declaration_spans = expand_declaration_references_with_spans(
+    declaration_result: DeclarationExpansionResult = expand_scanned_declaration_references(
         sql=interpolated_sql,
+        references=scan_native_declaration_references(sqls=(interpolated_sql,))[0],
         file_path=file_path,
-        enums=declarations.enums if declarations is not None else {},
-        constants=declarations.constants if declarations is not None else {},
+        declarations=DeclarationResolutionContext(
+            enums=declarations.enums if declarations is not None else {},
+            constants=declarations.constants if declarations is not None else {},
+            inaccessible_enums=declarations.inaccessible_enums if declarations is not None else {},
+            inaccessible_constants=(
+                declarations.inaccessible_constants if declarations is not None else {}
+            ),
+        ),
         value_renderer=value_renderer,
         collection_rendering=collection_rendering,
-        inaccessible_enums=(declarations.inaccessible_enums if declarations is not None else None),
-        inaccessible_constants=(
-            declarations.inaccessible_constants if declarations is not None else None
-        ),
     )
+    declaration_expanded_sql: str = declaration_result.sql
+    declaration_spans: tuple[ExpansionSpan, ...] = declaration_result.spans
     macro_expanded_sql: str
     macro_spans: tuple[ExpansionSpan, ...]
     macro_expanded_sql, macro_spans = expand_sql_macros_with_spans(
@@ -203,93 +149,12 @@ def substitute_sql_vars(
 ) -> str:
     """Replace @@name, @@ENV:NAME, and allowed @@CTX:name references in SQL text."""
 
-    rendered_sql: str
-    rendered_sql, _spans = substitute_sql_vars_with_spans(
-        sql=sql,
-        file_path=file_path,
-        effective_vars=effective_vars,
-        context_values=context_values,
-    )
-    return rendered_sql
-
-
-def prepare_static_project_vars_batch(
-    *,
-    sqls: tuple[str, ...],
-    effective_vars: dict[str, object],
-    error_file_path: Path | None = None,
-) -> tuple[str | None, ...]:
-    """Prepare static substitutions in order; with a file path, raise exact errors for it."""
-
-    scalar_variables: list[tuple[str, str]] = [
-        (name, render_project_var_text(value=value, label=f"SQL variable '@@{name}'"))
-        for name, value in effective_vars.items()
-        if value is None or isinstance(value, str | int | float | bool)
-    ]
-    raw_results: object = _native.substitute_static_project_vars(list(sqls), scalar_variables)
-    if not isinstance(raw_results, list) or len(raw_results) != len(sqls):
-        raise CompileInputError("native static SQL interpolation returned an invalid batch")
-    results: list[str | None] = []
-    counted: bool = native_stage_enabled(NativeStage.MODEL_LOOP)
-    for sql, raw_result in zip(sqls, raw_results, strict=True):
-        if not (
-            isinstance(raw_result, tuple)
-            and len(raw_result) == _NATIVE_RESULT_LENGTH
-            and type(raw_result[0]) is int
-            and (raw_result[1] is None or isinstance(raw_result[1], str))
-        ):
-            raise CompileInputError("native static SQL interpolation returned an invalid result")
-        status, rendered = raw_result
-        if status == _NATIVE_UNCHANGED and rendered is None:
-            results.append(sql)
-        elif status == _NATIVE_SUBSTITUTED and rendered is not None:
-            results.append(rendered)
-        elif status == _NATIVE_FALLBACK and rendered is None:
-            if counted:
-                report_native_fallback(site=NativeFallbackSite.SQL_VARIABLES)
-            results.append(None)
-        elif status in _NATIVE_ERROR_STATUSES:
-            if error_file_path is not None:
-                _raise_native_interpolation_error(
-                    status=status,
-                    name=rendered,
-                    file_path=error_file_path,
-                    effective_vars=effective_vars,
-                )
-            if counted:
-                report_native_fallback(site=NativeFallbackSite.SQL_VARIABLES, kind="error")
-            results.append(None)
-        else:
-            raise CompileInputError("native static SQL interpolation returned an invalid status")
-    return tuple(results)
-
-
-def _raise_native_interpolation_error(
-    *, status: int, name: str | None, file_path: Path, effective_vars: dict[str, object]
-) -> None:
-    if status == _NATIVE_UNCLOSED_QUOTE:
-        raise CompileInputError(
-            f"{_CONTEXT} contains an unclosed quoted string", bridge_independent=True
-        )
-    if status == _NATIVE_UNCLOSED_BLOCK_COMMENT:
-        raise CompileInputError(
-            f"{_CONTEXT} contains an unclosed block comment", bridge_independent=True
-        )
-    if name is not None and name not in effective_vars:
-        raise CompileInputError(
-            _unknown_project_variable_message(
-                var_name=name, file_path=file_path, effective_vars=effective_vars
-            ),
-            bridge_independent=True,
-        )
-
-
-def _unknown_project_variable_message(
-    *, var_name: str, file_path: Path, effective_vars: dict[str, object]
-) -> str:
-    return (
-        f"unknown project variable '@@{var_name}' in '{file_path}'. "
-        f"Available vars: {', '.join(sorted(effective_vars)) or 'none'}"
+    return applied_interpolation(
+        interpolate_sql_batch(
+            sqls=((sql, file_path),),
+            effective_vars=effective_vars,
+            context_values=context_values,
+        )[0]
     )
 
 
@@ -302,251 +167,49 @@ def substitute_sql_vars_with_spans(
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
     """Replace SQL interpolation tokens, returning the span of every substitution."""
 
-    if SQL_INTERPOLATION_TOKEN not in sql:
-        return sql, ()
-    parts: list[str] = []
-    spans: list[ExpansionSpan] = []
-    output_length: int = 0
-    cursor: int = 0
-    while cursor < len(sql):
-        special: re.Match[str] | None = _SQL_INTERPOLATION_SPECIAL.search(sql, cursor)
-        if special is None:
-            parts.append(sql[cursor:])
-            break
-        if special.start() > cursor:
-            plain: str = sql[cursor : special.start()]
-            parts.append(plain)
-            output_length += len(plain)
-            cursor = special.start()
-        character: str = sql[cursor]
-        if character in SQL_QUOTE_TOKENS:
-            end: int = skip_quoted_text(sql=sql, start=cursor, context=_CONTEXT)
-            segment_text: str
-            segment_spans: tuple[ExpansionSpan, ...]
-            segment_text, segment_spans = _interpolate_sql_segment(
-                segment=sql[cursor:end],
-                file_path=file_path,
-                effective_vars=effective_vars,
-                context_values=context_values,
-            )
-            parts.append(segment_text)
-            segment_span: ExpansionSpan
-            for segment_span in segment_spans:
-                spans.append(
-                    _rebased_span(span=segment_span, source_base=cursor, output_base=output_length)
-                )
-            output_length += len(segment_text)
-            cursor = end
-            continue
-        if sql.startswith("--", cursor):
-            end = skip_line_comment(sql=sql, start=cursor)
-            parts.append(sql[cursor:end])
-            output_length += end - cursor
-            cursor = end
-            continue
-        if sql.startswith("/*", cursor):
-            end = skip_block_comment(sql=sql, start=cursor, context=_CONTEXT)
-            parts.append(sql[cursor:end])
-            output_length += end - cursor
-            cursor = end
-            continue
-        if sql.startswith("@@", cursor):
-            rendered_token: str
-            next_cursor: int
-            rendered_token, next_cursor = _render_interpolation_token(
-                sql=sql,
-                start=cursor,
-                file_path=file_path,
-                effective_vars=effective_vars,
-                context_values=context_values,
-            )
-            parts.append(rendered_token)
-            spans.append(
-                ExpansionSpan(
-                    source_start=cursor,
-                    source_end=next_cursor,
-                    output_start=output_length,
-                    output_end=output_length + len(rendered_token),
-                )
-            )
-            output_length += len(rendered_token)
-            cursor = next_cursor
-            continue
-        parts.append(character)
-        output_length += 1
-        cursor += 1
-    return "".join(parts), tuple(spans)
+    interpolation: SqlInterpolation = interpolate_sql_batch(
+        sqls=((sql, file_path),), effective_vars=effective_vars, context_values=context_values
+    )[0]
+    return applied_interpolation(interpolation), interpolation.spans
 
 
-def _rebased_span(*, span: ExpansionSpan, source_base: int, output_base: int) -> ExpansionSpan:
-    return ExpansionSpan(
-        source_start=span.source_start + source_base,
-        source_end=span.source_end + source_base,
-        output_start=span.output_start + output_base,
-        output_end=span.output_end + output_base,
+def interpolate_sql_batch(
+    *,
+    sqls: tuple[tuple[str, Path], ...],
+    effective_vars: dict[str, object],
+    context_values: Mapping[str, str | None] | None = None,
+) -> tuple[SqlInterpolation, ...]:
+    """Interpolate every `(sql, file path)` natively; errors wait in their result."""
+
+    rows: list[_InterpolationRow] = _native.interpolate_sql_batch(
+        [(sql, str(file_path)) for sql, file_path in sqls],
+        (effective_vars, UnicodeEnvironment(), context_values, render_project_var_text),
+        (sys.version_info[0], sys.version_info[1]),
+        unicodedata.unidata_version,
+    )
+    return tuple(
+        _interpolation(sql=sql, row=row) for (sql, _file_path), row in zip(sqls, rows, strict=True)
     )
 
 
-def _interpolate_sql_segment(
-    *,
-    segment: str,
-    file_path: Path,
-    effective_vars: dict[str, object],
-    context_values: Mapping[str, str | None] | None,
-) -> tuple[str, tuple[ExpansionSpan, ...]]:
-    if SQL_INTERPOLATION_TOKEN not in segment:
-        return segment, ()
-    parts: list[str] = []
-    spans: list[ExpansionSpan] = []
-    output_length: int = 0
-    cursor: int = 0
-    while cursor < len(segment):
-        token_start: int = segment.find(SQL_INTERPOLATION_TOKEN, cursor)
-        if token_start < 0:
-            parts.append(segment[cursor:])
-            break
-        if token_start > cursor:
-            plain: str = segment[cursor:token_start]
-            parts.append(plain)
-            output_length += len(plain)
-        rendered_token: str
-        next_cursor: int
-        rendered_token, next_cursor = _render_interpolation_token(
-            sql=segment,
-            start=token_start,
-            file_path=file_path,
-            effective_vars=effective_vars,
-            context_values=context_values,
-        )
-        parts.append(rendered_token)
-        spans.append(
-            ExpansionSpan(
-                source_start=token_start,
-                source_end=next_cursor,
-                output_start=output_length,
-                output_end=output_length + len(rendered_token),
-            )
-        )
-        output_length += len(rendered_token)
-        cursor = next_cursor
-    return "".join(parts), tuple(spans)
+def applied_interpolation(interpolation: SqlInterpolation) -> str:
+    """Record the interpolation's environment and context reads, then return or raise it."""
+
+    record_template_reads(interpolation.reads)
+    if interpolation.error is not None:
+        raise CompileInputError(interpolation.error)
+    return interpolation.sql
 
 
-def _render_interpolation_token(
+def _interpolation(
     *,
     sql: str,
-    start: int,
-    file_path: Path,
-    effective_vars: dict[str, object],
-    context_values: Mapping[str, str | None] | None,
-) -> tuple[str, int]:
-    if sql.startswith("@@@", start):
-        name_start: int = start + 3
-        if name_start < len(sql) and _is_identifier_start(sql[name_start]):
-            name_end: int = _consume_identifier(sql=sql, start=name_start)
-            return sql[start:name_end], name_end
-        return "@@@", start + 3
-
-    token_start: int = start + 2
-    if sql.startswith("ENV:", token_start):
-        env_name_start: int = token_start + len("ENV:")
-        env_name_end: int = _consume_env_name(sql=sql, start=env_name_start)
-        if env_name_end == env_name_start:
-            raise CompileInputError(f"invalid environment interpolation token in '{file_path}'")
-        env_name: str = sql[env_name_start:env_name_end]
-        COMPILE_INPUT_READS.environment_read(env_name)
-        if env_name not in os.environ:
-            raise CompileInputError(
-                f"unknown environment variable '@@ENV:{env_name}' in '{file_path}'"
-            )
-        return os.environ[env_name], env_name_end
-
-    if sql.startswith("CTX:", token_start):
-        context_name_start: int = token_start + len("CTX:")
-        context_name_end: int = _consume_context_name(sql=sql, start=context_name_start)
-        if context_name_end == context_name_start:
-            raise CompileInputError(f"invalid CTX interpolation token in '{file_path}'")
-        context_name: str = sql[context_name_start:context_name_end]
-        if context_values is None:
-            raise CompileInputError(f"SQL text in '{file_path}' does not allow @@CTX templates")
-        context_name_end = _known_context_name_end(
-            sql=sql,
-            start=context_name_start,
-            greedy_end=context_name_end,
-            context_values=context_values,
-        )
-        context_name = sql[context_name_start:context_name_end]
-        COMPILE_INPUT_READS.context_read(context_name)
-        if context_name not in context_values:
-            raise CompileInputError(
-                f"SQL text in '{file_path}' references unknown CTX key '{context_name}'"
-            )
-        context_value: str | None = context_values[context_name]
-        if context_value is None:
-            raise CompileInputError(
-                f"SQL text in '{file_path}' references CTX key '{context_name}' "
-                "but no value is available"
-            )
-        return context_value, context_name_end
-
-    if token_start < len(sql) and _is_identifier_start(sql[token_start]):
-        name_end = _consume_identifier(sql=sql, start=token_start)
-        var_name: str = sql[token_start:name_end]
-        if var_name not in effective_vars:
-            raise CompileInputError(
-                _unknown_project_variable_message(
-                    var_name=var_name, file_path=file_path, effective_vars=effective_vars
-                )
-            )
-        try:
-            return render_project_var_text(
-                value=effective_vars[var_name],
-                label=f"SQL variable '@@{var_name}'",
-            ), name_end
-        except ValueError as error:
-            raise CompileInputError(str(error)) from error
-
-    return "@@", start + 2
-
-
-def _consume_identifier(*, sql: str, start: int) -> int:
-    cursor: int = start + 1
-    while cursor < len(sql) and _is_identifier_continue(sql[cursor]):
-        cursor += 1
-    return cursor
-
-
-def _consume_env_name(*, sql: str, start: int) -> int:
-    cursor: int = start
-    while cursor < len(sql) and (
-        sql[cursor].isalnum() or sql[cursor] == SQL_IDENTIFIER_EXTRA_TOKEN
-    ):
-        cursor += 1
-    return cursor
-
-
-def _consume_context_name(*, sql: str, start: int) -> int:
-    cursor: int = start
-    while cursor < len(sql) and (
-        sql[cursor].isalnum() or sql[cursor] in SQL_CONTEXT_NAME_EXTRA_TOKENS
-    ):
-        cursor += 1
-    return cursor
-
-
-def _known_context_name_end(
-    *,
-    sql: str,
-    start: int,
-    greedy_end: int,
-    context_values: Mapping[str, str | None],
-) -> int:
-    greedy_name: str = sql[start:greedy_end]
-    if greedy_name in context_values:
-        return greedy_end
-    matching_names: tuple[str, ...] = tuple(
-        name for name in context_values if greedy_name.startswith(f"{name}.")
+    row: _InterpolationRow,
+) -> SqlInterpolation:
+    rendered, spans, reads, error = row
+    return SqlInterpolation(
+        sql=rendered if rendered is not None else sql,
+        spans=tuple(ExpansionSpan(*span) for span in spans),
+        reads=tuple(reads),
+        error=error,
     )
-    if not matching_names:
-        return greedy_end
-    return start + len(max(matching_names, key=len))

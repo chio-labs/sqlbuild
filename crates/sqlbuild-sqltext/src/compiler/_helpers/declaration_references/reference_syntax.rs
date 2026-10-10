@@ -1,6 +1,8 @@
 //! Python's `@enum("name").MEMBER` and `@const("name")` patterns at one reference start.
 
+use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
+use sqlbuild_core::text::models::PythonText;
 
 use crate::compiler::models::DeclarationReferenceKind;
 
@@ -19,12 +21,10 @@ pub(crate) enum ReferenceSyntax<'sql> {
     Matched(MatchedReference<'sql>),
     /// A reference start whose full pattern does not match: Python raises an invalid reference.
     Malformed(DeclarationReferenceKind),
-    /// A non-ASCII character after the keyword, whose word boundary only Python decides.
-    Deferred,
 }
 
 /// Match Python's `@(enum|const)\b` start and the full reference pattern at `start`.
-pub(crate) fn match_reference(sql: &str, start: usize) -> ReferenceSyntax<'_> {
+pub(crate) fn match_reference(python: PythonText, sql: &str, start: usize) -> ReferenceSyntax<'_> {
     let bytes: &[u8] = sql.as_bytes();
     let (kind, keyword_end) = if bytes[start..].starts_with(b"@enum") {
         (DeclarationReferenceKind::Enum, start + 5)
@@ -33,18 +33,12 @@ pub(crate) fn match_reference(sql: &str, start: usize) -> ReferenceSyntax<'_> {
     } else {
         return ReferenceSyntax::NotReference;
     };
-    match bytes.get(keyword_end) {
-        Some(byte)
-            if !byte.is_ascii()
-                && !sql[keyword_end..]
-                    .chars()
-                    .next()
-                    .is_some_and(is_python_space) =>
-        {
-            return ReferenceSyntax::Deferred;
-        }
-        Some(byte) if is_word(*byte) => return ReferenceSyntax::NotReference,
-        _ => {}
+    if sql[keyword_end..]
+        .chars()
+        .next()
+        .is_some_and(|next| next == '_' || is_python_alnum(python, next))
+    {
+        return ReferenceSyntax::NotReference;
     }
     match_arguments(sql, kind, keyword_end)
         .map_or(ReferenceSyntax::Malformed(kind), ReferenceSyntax::Matched)

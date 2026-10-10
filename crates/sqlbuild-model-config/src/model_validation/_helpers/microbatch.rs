@@ -3,9 +3,8 @@
 use std::collections::HashSet;
 
 use crate::model_validation::_helpers::config::{
-    ConfigView, non_blank_string_check, one_of, python_str, sorted_values,
+    ConfigView, non_blank_string_check, one_of, sorted_values,
 };
-use crate::model_validation::_helpers::durations::parse_duration;
 use crate::model_validation::_helpers::incremental::IncrementalValues;
 use crate::model_validation::constants::{
     CAP_FROM_START_ACTION, CURSOR_INPUT_ROLES, DELETE_INSERT_STRATEGY, EFFECTIVE_BATCH_SIZE,
@@ -14,7 +13,7 @@ use crate::model_validation::constants::{
     ROLLING_WINDOW_STRATEGY, TIMESTAMP_CURSOR, UNACCOUNTED_PARTITION_POLICIES,
     WATERMARK_BLOCK_KEYS, WATERMARK_MODES, WATERMARK_ROLE, WATERMARK_STRATEGY,
 };
-use crate::model_validation::models::{ModelValidationFacts, Rejected, ValidationStop};
+use crate::model_validation::models::{ModelValidationFacts, ValidationStop};
 use crate::model_validation::types::Check;
 use crate::types::{AuthoredNode, NodeKind};
 
@@ -67,7 +66,13 @@ fn check_state_config<N: AuthoredNode>(
     if let Some(concurrency) = config.get("batch_concurrency") {
         let concurrent = match (concurrency.kind(), concurrency.integer()) {
             (NodeKind::Int { negative: false }, Some(value)) if value > 0 => value > 1,
-            (NodeKind::Int { negative: false }, None) => true,
+            (NodeKind::Int { negative: false }, None) => {
+                return Err(config.integer_out_of_range(
+                    "batch_concurrency",
+                    concurrency,
+                    |limit| format!("batch_concurrency {limit}"),
+                ));
+            }
             _ => return Err(config.error("batch_concurrency must be a positive integer")),
         };
         if concurrent && !microbatch {
@@ -165,12 +170,19 @@ fn check_cursor_inputs<N: AuthoredNode>(
         );
     }
     if let Some(limit) = &values.max_microbatches {
-        if !is_positive_integer(limit) {
+        if !is_positive_integer(limit) && !is_big_positive_integer(limit) {
             return Err(config.error("max_microbatches must be a positive integer"));
         }
         if !watermark {
             return Err(
                 config.error("max_microbatches is only valid with microbatch_strategy=watermark")
+            );
+        }
+        if is_big_positive_integer(limit) {
+            return Err(
+                config.integer_out_of_range("max_microbatches", limit, |bound| {
+                    format!("max_microbatches {bound}")
+                }),
             );
         }
     }
@@ -183,11 +195,15 @@ fn check_cursor_inputs<N: AuthoredNode>(
 }
 
 fn is_positive_integer<N: AuthoredNode>(value: &N) -> bool {
-    match (value.kind(), value.integer()) {
-        (NodeKind::Int { negative: false }, Some(number)) => number >= 1,
-        (NodeKind::Int { negative: false }, None) => true,
-        _ => false,
-    }
+    matches!(
+        (value.kind(), value.integer()),
+        (NodeKind::Int { negative: false }, Some(number)) if number >= 1
+    )
+}
+
+/// Whether the value is a positive integer beyond a signed 64-bit integer.
+fn is_big_positive_integer<N: AuthoredNode>(value: &N) -> bool {
+    value.kind() == (NodeKind::Int { negative: false }) && value.integer().is_none()
 }
 
 fn expected_inputs(input_names: &HashSet<&str>) -> String {
@@ -209,18 +225,18 @@ fn check_input_map<N: AuthoredNode>(
         return Err(config.error("cursor_inputs must not be empty"));
     }
     for (relation, column) in &entries {
-        if !non_blank_string_check(relation)? {
+        if !non_blank_string_check(relation) {
             return Err(config.error("cursor_inputs relation names must be non-empty strings"));
         }
-        if !non_blank_string_check(column)? {
-            let relation = relation.text().ok_or(Rejected)?;
+        if !non_blank_string_check(column) {
+            let relation: String = relation.text().unwrap_or_default();
             return Err(config.error(format!(
                 "cursor_inputs column for relation '{relation}' must be a non-empty string"
             )));
         }
     }
     for (relation, _) in &entries {
-        let relation = relation.text().ok_or(Rejected)?;
+        let relation: String = relation.text().unwrap_or_default();
         if !input_names.contains(relation.as_str()) {
             return Err(config.error(format!(
                 "cursor_inputs references unknown input '{relation}'; expected one of: {}",
@@ -242,28 +258,30 @@ fn check_watermark_inputs<N: AuthoredNode>(
     }
     let mut has_watermark = false;
     for (relation, block) in &entries {
-        if !non_blank_string_check(relation)? || block.kind() != NodeKind::Map {
-            let relation = python_str(relation)?;
+        if !non_blank_string_check(relation) || block.kind() != NodeKind::Map {
+            let relation: String = relation.python_str();
             return Err(config.error(format!(
                 "watermark cursor_inputs relation '{relation}' must use \
                  (column ..., roles [...])"
             )));
         }
-        let relation = relation.text().ok_or(Rejected)?;
+        let relation: String = relation.text().unwrap_or_default();
         let block = block.entries();
-        if !has_exact_keys(&block, &WATERMARK_BLOCK_KEYS) {
+        let (true, Some(column), Some(roles)) = (
+            has_exact_keys(&block, &WATERMARK_BLOCK_KEYS),
+            block_value(&block, COLUMN_KEY),
+            block_value(&block, ROLES_KEY),
+        ) else {
             return Err(config.error(format!(
                 "cursor_inputs relation '{relation}' requires exactly column and roles"
             )));
-        }
-        let column = block_value(&block, COLUMN_KEY).ok_or(Rejected)?;
-        if !non_blank_string_check(column)? {
+        };
+        if !non_blank_string_check(column) {
             return Err(config.error(format!(
                 "cursor_inputs column for relation '{relation}' must be a non-empty string"
             )));
         }
-        let roles = block_value(&block, ROLES_KEY).ok_or(Rejected)?;
-        let Some(roles) = valid_roles(roles)? else {
+        let Some(roles) = valid_roles(roles) else {
             return Err(config.error(format!(
                 "cursor_inputs roles for relation '{relation}' must be a non-empty list \
                  containing only filter and/or watermark"
@@ -311,27 +329,24 @@ fn block_value<'b, N: AuthoredNode>(block: &'b [(N, N)], key: &str) -> Option<&'
         .map(|(_, value)| value)
 }
 
-/// Return a non-empty list of valid roles, `None` when Python rejects it, or defer.
-fn valid_roles<N: AuthoredNode>(roles: &N) -> Result<Option<Vec<&'static str>>, Rejected> {
+/// Return a non-empty list of valid roles, or `None` when the roles are invalid.
+fn valid_roles<N: AuthoredNode>(roles: &N) -> Option<Vec<&'static str>> {
     if roles.kind() != NodeKind::List {
-        return Ok(None);
+        return None;
     }
     let items = roles.items();
     if items.is_empty() {
-        return Ok(None);
+        return None;
     }
-    let mut valid: Vec<&'static str> = Vec::with_capacity(items.len());
-    for item in &items {
-        match item.kind() {
-            NodeKind::Str => match CURSOR_INPUT_ROLES.iter().find(|role| item.is_text(role)) {
-                Some(role) => valid.push(role),
-                None => return Ok(None),
-            },
-            NodeKind::Int { .. } | NodeKind::Bool(_) | NodeKind::Null => return Ok(None),
-            _ => return Err(Rejected),
-        }
-    }
-    Ok(Some(valid))
+    items.iter().map(input_role).collect()
+}
+
+/// The cursor input role `item` names, if it names one.
+fn input_role<N: AuthoredNode>(item: &N) -> Option<&'static str> {
+    CURSOR_INPUT_ROLES
+        .iter()
+        .copied()
+        .find(|role| item.is_text(role))
 }
 
 /// The resolved batch limit and its action, as `_validate_model_microbatch_limit` returns them.
@@ -359,15 +374,18 @@ fn microbatch_limit<N: AuthoredNode>(
         return Err(config.error("use either max_microbatches or microbatch_limit, not both"));
     }
     let block = limit.entries();
-    if limit.kind() != NodeKind::Map || !has_exact_keys(&block, &MICROBATCH_LIMIT_KEYS) {
-        return Err(config.error("microbatch_limit requires exactly max_batches and action"));
-    }
     let [max_key, action_key] = MICROBATCH_LIMIT_KEYS;
-    let max_batches = block_value(&block, max_key).ok_or(Rejected)?;
-    if !is_positive_integer(max_batches) {
+    let (true, true, Some(max_batches), Some(action)) = (
+        limit.kind() == NodeKind::Map,
+        has_exact_keys(&block, &MICROBATCH_LIMIT_KEYS),
+        block_value(&block, max_key),
+        block_value(&block, action_key),
+    ) else {
+        return Err(config.error("microbatch_limit requires exactly max_batches and action"));
+    };
+    if !is_positive_integer(max_batches) && !is_big_positive_integer(max_batches) {
         return Err(config.error("microbatch_limit max_batches must be a positive integer"));
     }
-    let action = block_value(&block, action_key).ok_or(Rejected)?;
     let Some(action) = MICROBATCH_LIMIT_ACTIONS
         .iter()
         .find(|valid| action.is_text(valid))
@@ -381,6 +399,13 @@ fn microbatch_limit<N: AuthoredNode>(
         return Err(
             config.error("microbatch_limit is only valid with microbatch_strategy=watermark")
         );
+    }
+    if is_big_positive_integer(max_batches) {
+        return Err(config.integer_out_of_range(
+            "microbatch_limit max_batches",
+            max_batches,
+            |bound| format!("microbatch_limit (max_batches {bound}, action {action})"),
+        ));
     }
     Ok(Some(MicrobatchLimit {
         max_batches: max_batches.integer(),
@@ -406,8 +431,10 @@ fn check_static_watermark_limit<N: AuthoredNode>(
     let (Some(lookback), Some(batch_size)) = (lookback, batch_size) else {
         return Ok(());
     };
-    let (Some(lookback), Some(batch)) = (parse_duration(lookback)?, parse_duration(batch_size)?)
-    else {
+    let (Some(lookback), Some(batch)) = (
+        config.duration("lookback", lookback)?,
+        config.duration("batch_size", batch_size)?,
+    ) else {
         return Ok(());
     };
     let lookback_batches = if lookback.total_months == 0 && batch.total_months == 0 {
@@ -432,8 +459,7 @@ fn check_static_watermark_limit<N: AuthoredNode>(
     let Some(max_batches) = limit.max_batches else {
         return Ok(());
     };
-    let max = u128::try_from(max_batches).map_err(|_| Rejected)?;
-    if max < required {
+    if u128::try_from(max_batches).is_ok_and(|max| max < required) {
         Err(config.error(format!(
             "max_microbatches {max_batches} is below the ordinary lookback requirement of \
              {required} batches"

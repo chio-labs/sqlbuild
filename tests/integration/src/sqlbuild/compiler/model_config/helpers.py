@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import random
 from collections.abc import Callable
 from dataclasses import dataclass, fields
-from itertools import compress
 from pathlib import Path
 from typing import cast
 
@@ -15,12 +13,6 @@ import pytest
 import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
-from sqlbuild.compiler.compile._helpers.render.context_templates import expand_config_templates
-from sqlbuild.compiler.compile._helpers.render.templating import (
-    contains_template_data,
-    expand_template_data,
-)
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, MACRO_CALL_PATTERN
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
@@ -28,13 +20,6 @@ from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.model_config.constants import UNSUPPORTED_OUTCOME
-from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
-    native_config_contains_macro_call,
-)
-from sqlbuild.compiler.model_config.main._native_config_contains_template import (
-    native_config_contains_template,
-)
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
     parse_native_header_metadata,
@@ -74,12 +59,21 @@ _AUDIT_NAMES: tuple[str, ...] = (
     "",
     "_private",
     "a",
+    "na\u00efve_check",
+    "\u00dcniqueCheck",
+    " \u2003unique\u00a0",
 )
 _COLUMN_NAMES: tuple[str, ...] = (
     "order_id",
     "Order_ID",
     "amount",
     "caf\u00e9",
+    "CAF\u00c9",
+    "Stra\u00dfe",
+    "STRASSE",
+    "\u03a3\u0391\u03a3",
+    "\u03c3\u03b1\u03c2",
+    "\u0130d",
     "status",
     " ",
     "\u00a0",
@@ -92,8 +86,33 @@ _AUDIT_OPTIONS: tuple[tuple[str, tuple[object, ...]], ...] = (
     ("severity", ("warn", "error", "fatal", None, 1)),
     ("run_scope", ("final", "", None)),
     ("always_run", (True, False, None, "yes")),
-    ("thresholds", (None, {"warn": {"above": 1}})),
-    ("minimum_samples", (0, 5, -1, True, None, 2**70)),
+    (
+        "thresholds",
+        (
+            None,
+            {"warn": {"above": 1}},
+            {"warn": {"below": 5}, "error": {"below": 1}},
+            {"warn": {"below": 5}, "error": {"below": 5.0}},
+            {"error": {"above": 1.5}, "warn": {"above": 1}},
+            {"warn": {"outside": (1, 5)}, "error": {"outside": (0, 6.5)}},
+            {"warn": {"outside": (1, 5)}, "error": {"outside": (2, 6)}},
+            {"warn": {"outside": (5, 1)}},
+            {"warn": {"outside": [1, 2]}},
+            {"warn": {"outside": (1, True)}},
+            {"warn": {"above": 1}, "error": {"below": 2}},
+            {"warn": {"above": True}},
+            {"warn": {"above": "1"}},
+            {"warn": {"above": 2**70}},
+            {"warn": {"above": 1, "below": 2}},
+            {"warn": {"sideways": 1}},
+            {"warn": None, "error": None},
+            {"warn": 1},
+            {"bogus": 1, "other": 2},
+            {},
+            "x",
+        ),
+    ),
+    ("minimum_samples", (0, 5, -1, True, None, 2**63 - 1)),
     ("evidence_limit", (0, 10, -3, None)),
     ("values", (["PLACED", "SHIPPED"], None, {"nested": [1, 2]})),
     ("minimum", (1, 2.5)),
@@ -103,9 +122,10 @@ _AUDIT_OPTIONS: tuple[tuple[str, tuple[object, ...]], ...] = (
 NATIVE_MODEL_CONFIG_ENTRIES: tuple[str, ...] = (
     "parse_model_header_metadata",
     "expand_config_templates",
-    "config_contains_template",
-    "config_contains_macro_call",
 )
+_NATIVE_ENTRIES: dict[str, Callable[..., object]] = {
+    name: getattr(_native, name) for name in NATIVE_MODEL_CONFIG_ENTRIES
+}
 MODEL_CONFIG_PROJECT: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
@@ -136,47 +156,12 @@ class HeaderMetadataParity:
     mismatches: list[tuple[object, object, object]]
     parsed: int
     rejected: int
-    unsupported: int
-
-
-@dataclass(frozen=True)
-class ConfigTemplateParity:
-    """How native template expansion compared with Python's over one corpus."""
-
-    mismatches: list[tuple[object, object, object]]
-    expanded: int
-    rejected: int
-    unsupported: int
-
-
-@dataclass(frozen=True)
-class TemplateFlags:
-    """The resolver flags one expansion runs with."""
-
-    allow_context: bool
-    preserve_context_tokens: bool
-    preserve_unknown_context: bool
-
-
-@dataclass(frozen=True)
-class ConfigPresenceParity:
-    """How the native presence scans compared with Python's over one corpus."""
-
-    mismatches: list[tuple[object, object, object]]
-    present: int
-    deferred: int
 
 
 def generated_header_metadata(*, rng: random.Random, count: int) -> list[tuple[object, object]]:
     """Return seeded `(columns, audits)` header values mixing valid and invalid shapes."""
 
     return [(_columns(rng=rng), _audit_list(rng=rng)) for _ in range(count)]
-
-
-def generated_config_values(*, rng: random.Random, count: int) -> list[object]:
-    """Return seeded nested config values holding templates, macro calls and plain text."""
-
-    return [_config_value(rng=rng, depth=0) for _ in range(count)]
 
 
 def model_config_engine_outcome(
@@ -225,12 +210,11 @@ def error_shape(error: Exception) -> tuple[object, ...]:
         str(error),
         getattr(error, "code", None),
         getattr(error, "help", None),
-        getattr(error, "bridge_independent", None),
     )
 
 
 def _counted(*, calls: dict[str, int], name: str) -> Callable[..., object]:
-    entry: Callable[..., object] = getattr(_native, name)
+    entry: Callable[..., object] = _NATIVE_ENTRIES[name]
 
     def counted(*args: object) -> object:
         calls[name] += 1
@@ -239,209 +223,33 @@ def _counted(*, calls: dict[str, int], name: str) -> Callable[..., object]:
     return counted
 
 
-def generated_template_values(*, rng: random.Random, count: int) -> list[object]:
-    """Return seeded config values holding valid, invalid and unusual `${...}` templates."""
-
-    return [_template_value(rng=rng, depth=0) for _ in range(count)]
-
-
-def config_template_parity(*, values: list[object], flags: TemplateFlags) -> ConfigTemplateParity:
-    """Compare native expansion, its reads and its rejections with Python's expansion."""
-
-    answered: list[object] = list(
-        compress(
-            values,
-            [
-                _native_classification(value=value, flags=flags) != UNSUPPORTED_OUTCOME
-                for value in values
-            ],
-        )
-    )
-    outcomes: list[tuple[object, object, object]] = [
-        (value, _python_expansion(value=value, flags=flags), _native_expansion(value, flags))
-        for value in answered
-    ]
-    return ConfigTemplateParity(
-        mismatches=mismatches(
-            inputs=[value for value, _, _ in outcomes],
-            expected=[expected for _, expected, _ in outcomes],
-            actual=[actual for _, _, actual in outcomes],
-        ),
-        expanded=sum(not _is_error(actual) for _, _, actual in outcomes),
-        rejected=sum(_is_error(actual) for _, _, actual in outcomes),
-        unsupported=len(values) - len(outcomes),
-    )
-
-
-def _python_expansion(*, value: object, flags: TemplateFlags) -> object:
-    with COMPILE_INPUT_READS.recording() as reads:
-        try:
-            result: object = expand_template_data(
-                value=value,
-                variables=TEMPLATE_VARIABLES,
-                context_values=TEMPLATE_CONTEXT,
-                context_label="model config",
-                allow_context=flags.allow_context,
-                preserve_context_tokens=flags.preserve_context_tokens,
-                preserve_unknown_context=flags.preserve_unknown_context,
-            )
-        except CompileInputError as error:
-            return _python_error_shape(error)
-    return (_expansion_shape(result), reads.environment_names, reads.read_run_id)
-
-
-def _python_error_shape(error: Exception) -> tuple[object, ...]:
-    return (*error_shape(error)[:4], True)
-
-
-def _is_error(outcome: object) -> bool:
-    return isinstance(outcome, tuple) and len(outcome) == len(error_shape(ValueError()))
-
-
-def _native_classification(*, value: object, flags: TemplateFlags) -> object:
-    return _native.expand_config_templates(
-        value,
-        (TEMPLATE_VARIABLES, os.environ, TEMPLATE_CONTEXT),
-        (
-            flags.allow_context,
-            flags.preserve_context_tokens,
-            flags.preserve_unknown_context,
-            "model config",
-        ),
-    )
-
-
-def _native_expansion(value: object, flags: TemplateFlags) -> object:
-    with COMPILE_INPUT_READS.recording() as reads:
-        try:
-            result: object = expand_config_templates(
-                value=value,
-                variables=TEMPLATE_VARIABLES,
-                context_values=TEMPLATE_CONTEXT,
-                context_label="model config",
-                allow_context=flags.allow_context,
-                preserve_context_tokens=flags.preserve_context_tokens,
-                preserve_unknown_context=flags.preserve_unknown_context,
-                native=True,
-            )
-        except CompileInputError as error:
-            return error_shape(error)
-    return (_expansion_shape(result), reads.environment_names, reads.read_run_id)
-
-
-def _expansion_shape(value: object) -> object:
-    return (repr(value), _type_tree(value))
-
-
-def _type_tree(value: object) -> object:
-    children: tuple[object, ...] = _CHILDREN.get(type(value), _no_children)(value)
-    return (type(value).__name__, tuple(_type_tree(item) for item in children))
-
-
-def _no_children(value: object) -> tuple[object, ...]:
-    del value
-    return ()
-
-
-def _mapping_children(value: object) -> tuple[object, ...]:
-    return tuple(cast(dict[object, object], value).values())
-
-
-def _sequence_children(value: object) -> tuple[object, ...]:
-    return tuple(cast(tuple[object, ...], value))
-
-
-_CHILDREN: dict[type, Callable[[object], tuple[object, ...]]] = {
-    dict: _mapping_children,
-    list: _sequence_children,
-    tuple: _sequence_children,
-}
-
-
 def header_metadata_parity(*, headers: list[tuple[object, object]]) -> HeaderMetadataParity:
-    """Compare the native parse or rejection with Python's wherever native answers."""
+    """Compare the native parse or rejection with the YAML schema parsers Python still owns."""
 
     model_files: list[DiscoveredSqlModelFile] = [
         _model_file(index=index, columns=columns, audits=audits)
         for index, (columns, audits) in enumerate(headers)
     ]
-    native: dict[Path, NativeHeaderMetadata] = parse_native_header_metadata(model_files=model_files)
-    parsed: list[NativeHeaderMetadata | None] = [
-        native.get(model_file.file_path) for model_file in model_files
-    ]
-    python: list[object] = [_python_metadata(model_file=model_file) for model_file in model_files]
-    compared: list[tuple[DiscoveredSqlModelFile, object, NativeHeaderMetadata | None]] = list(
-        compress(
-            zip(model_files, python, parsed, strict=True),
-            [metadata is not None for metadata in parsed],
+    native: list[NativeHeaderMetadata] = [
+        parse_native_header_metadata(
+            raw_columns=model_file.header_values.get("columns"),
+            raw_audits=model_file.header_values.get("audits"),
+            column_locations=model_file.header_column_locations,
+            file_path=model_file.relative_path,
         )
-    )
+        for model_file in model_files
+    ]
     return HeaderMetadataParity(
         mismatches=mismatches(
-            inputs=[model_file.header_values for model_file, _, _ in compared],
-            expected=[_shape(value) for _, value, _ in compared],
-            actual=[_native_shape(metadata) for _, _, metadata in compared],
+            inputs=[model_file.header_values for model_file in model_files],
+            expected=[
+                _shape(_python_metadata(model_file=model_file)) for model_file in model_files
+            ],
+            actual=[_native_shape(metadata) for metadata in native],
         ),
-        parsed=sum(_native_error(metadata) is None for metadata in native.values()),
-        rejected=sum(_native_error(metadata) is not None for metadata in native.values()),
-        unsupported=len(model_files) - len(compared),
+        parsed=sum(_native_error(metadata) is None for metadata in native),
+        rejected=sum(_native_error(metadata) is not None for metadata in native),
     )
-
-
-def config_presence_parity(*, values: list[object]) -> ConfigPresenceParity:
-    """Compare the native template and macro scans with Python's wherever they answer."""
-
-    native: list[tuple[bool | None, bool | None]] = [
-        (native_config_contains_template(value), native_config_contains_macro_call(value))
-        for value in values
-    ]
-    python: list[tuple[bool, bool]] = [
-        (contains_template_data(value), _python_contains_macro(value)) for value in values
-    ]
-    answered: list[tuple[object, tuple[bool, bool], tuple[bool | None, bool | None]]] = list(
-        compress(
-            zip(values, python, native, strict=True),
-            [None not in answer for answer in native],
-        )
-    )
-    return ConfigPresenceParity(
-        mismatches=mismatches(
-            inputs=[value for value, _, _ in answered],
-            expected=[expected for _, expected, _ in answered],
-            actual=[actual for _, _, actual in answered],
-        ),
-        present=sum(any(expected) for _, expected, _ in answered),
-        deferred=len(values) - len(answered),
-    )
-
-
-def _python_contains_macro(value: object) -> bool:
-    return _MACRO_SCANS.get(type(value), _absent)(value)
-
-
-def _absent(value: object) -> bool:
-    del value
-    return False
-
-
-def _string_contains_macro(value: object) -> bool:
-    return MACRO_CALL_PATTERN.search(str(value)) is not None
-
-
-def _mapping_contains_macro(value: object) -> bool:
-    return any(_python_contains_macro(item) for item in cast(dict[object, object], value).values())
-
-
-def _sequence_contains_macro(value: object) -> bool:
-    return any(_python_contains_macro(item) for item in cast(tuple[object, ...], value))
-
-
-_MACRO_SCANS: dict[type, Callable[[object], bool]] = {
-    str: _string_contains_macro,
-    dict: _mapping_contains_macro,
-    list: _sequence_contains_macro,
-    tuple: _sequence_contains_macro,
-}
 
 
 def _python_metadata(*, model_file: DiscoveredSqlModelFile) -> object:
@@ -479,17 +287,10 @@ def _metadata_shape(value: object) -> object:
     return (repr(value), _attribute_orders(value), _locations(value))
 
 
-def _native_shape(metadata: NativeHeaderMetadata | None) -> object:
-    parsed: NativeHeaderMetadata = cast(NativeHeaderMetadata, metadata)
+def _native_shape(parsed: NativeHeaderMetadata) -> object:
     error: _native.NativeConfigError | None = _native_error(parsed)
     shapes: list[object] = [
-        list(
-            error_shape(
-                native_config_error(
-                    error=cast(_native.NativeConfigError, error), bridge_independent=True
-                )
-            )[:4]
-        )
+        list(error_shape(native_config_error(error=cast(_native.NativeConfigError, error)))[:4])
         for _ in range(error is not None)
     ]
     return (*shapes, _shape((parsed.columns, parsed.audits)))[0]
@@ -573,7 +374,7 @@ def _column(*, rng: random.Random) -> object:
     keys: list[str] = rng.sample(_COLUMN_KEYS, k=rng.randint(0, len(_COLUMN_KEYS)))
     column: dict[object, object] = {key: _COLUMN_VALUES[key](rng) for key in keys}
     extra_keys: tuple[object, ...] = rng.choices(
-        ((), (rng.choice(("format", 1)),)), weights=(19, 1)
+        ((), (rng.choice(("format", "zone")),)), weights=(19, 1)
     )[0]
     column.update(dict.fromkeys(extra_keys, "x"))
     return rng.choices((column, rng.choice((None, "INTEGER", []))), weights=(19, 1))[0]
@@ -623,131 +424,3 @@ def _audit(*, rng: random.Random) -> object:
         ),
         weights=(35, 10, 5, 50),
     )[0]
-
-
-def _template_value(*, rng: random.Random, depth: int) -> object:
-    factories: tuple[Callable[[], object], ...] = (
-        lambda: _template_text(rng=rng),
-        lambda: rng.choice(_TEXTS),
-        lambda: [_template_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 3))],
-        lambda: tuple(_template_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 2))),
-        lambda: {
-            rng.choice(("schema", "database", "${key}", 1)): _template_value(
-                rng=rng, depth=depth + 1
-            )
-            for _ in range(rng.randint(0, 3))
-        },
-    )
-    return rng.choices(factories, weights=(60 + 1000 * (depth > 1), 10, 10, 5, 15))[0]()
-
-
-def _template_text(*, rng: random.Random) -> str:
-    parts: list[str] = [
-        rng.choices(
-            (f"${{{_template_expression(rng=rng, depth=0)}}}", rng.choice(_TEMPLATE_NOISE)),
-            weights=(4, 1),
-        )[0]
-        for _ in range(rng.randint(1, 3))
-    ]
-    text: str = "".join(parts)
-    noise: str = rng.choices((rng.choice(_TEMPLATE_NOISE), ""), weights=(15, 85))[0]
-    position: int = rng.randrange(len(text) + 1)
-    return text[:position] + noise + text[position:]
-
-
-def _template_expression(*, rng: random.Random, depth: int) -> str:
-    factories: tuple[Callable[[], str], ...] = (
-        lambda: rng.choice(_TEMPLATE_REFERENCES),
-        lambda: rng.choice(_TEMPLATE_LITERALS),
-        lambda: "{}({})".format(
-            rng.choice(_TEMPLATE_FUNCTIONS),
-            rng.choice((",", ", ", " ,\t", "\x1f,")).join(
-                _template_expression(rng=rng, depth=depth + 1)
-                for _ in range(rng.choice((0, 1, 2, 2, 3, 3, 4)))
-            ),
-        ),
-    )
-    return rng.choices(factories, weights=(5, 3, 4 - 3 * (depth > 2)))[0]()
-
-
-TEMPLATE_VARIABLES: dict[str, object] = {
-    "flag": True,
-    "zero": 0,
-    "count": 12,
-    "big": 2**70,
-    "env": "prod",
-    "spaced": " FALSE ",
-    "ratio": 1.5,
-    "items": [1, "a"],
-    "mapping": {"a": 1},
-    "none": None,
-    "unicode": "caf\u00e9",
-}
-TEMPLATE_CONTEXT: dict[str, str | None] = {
-    "run.id": "20261007T000000Z_abc",
-    "run.target": "prod",
-    "model.name": "orders",
-    "model.schema": None,
-}
-TEMPLATE_ENVIRONMENT: dict[str, str] = {
-    "SQB_TEMPLATE_SCHEMA": "analytics",
-    "SQB_TEMPLATE_EMPTY": "",
-    "SQB_TEMPLATE_ZERO": "0",
-}
-_TEMPLATE_REFERENCES: tuple[str, ...] = (
-    *TEMPLATE_VARIABLES,
-    "missing",
-    "ENV:SQB_TEMPLATE_SCHEMA",
-    "ENV:SQB_TEMPLATE_EMPTY",
-    "ENV:SQB_TEMPLATE_ZERO",
-    "ENV:SQB_TEMPLATE_MISSING",
-    "CTX:run.id",
-    "CTX:run.target",
-    "CTX:model.name",
-    "CTX:model.schema",
-    "CTX:model.alias",
-    "OTHER:name",
-    "true",
-    "false",
-    "null",
-)
-_TEMPLATE_LITERALS: tuple[str, ...] = (
-    "'prod'",
-    '"0"',
-    "''",
-    "' False '",
-    "'a\\'b'",
-    "'caf\u00e9'",
-    "'unterminated",
-    "'trailing\\",
-)
-_TEMPLATE_FUNCTIONS: tuple[str, ...] = ("if", "eq", "ne", "coalesce", "upper")
-_TEMPLATE_NOISE: tuple[str, ...] = (
-    "orders_",
-    "${",
-    "}",
-    "{",
-    "$",
-    "${}",
-    "(",
-    ")",
-    ",",
-    "\u00a0",
-    "\u2003",
-    "\x1c",
-    " ",
-    "caf\u00e9",
-)
-
-
-def _config_value(*, rng: random.Random, depth: int) -> object:
-    factories: tuple[Callable[[], object], ...] = (
-        lambda: rng.choice(_TEXTS),
-        lambda: [_config_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 3))],
-        lambda: tuple(_config_value(rng=rng, depth=depth + 1) for _ in range(rng.randint(0, 3))),
-        lambda: {
-            rng.choice(("schema", "${key}", "tags", 1)): _config_value(rng=rng, depth=depth + 1)
-            for _ in range(rng.randint(0, 3))
-        },
-    )
-    return rng.choices(factories, weights=(50 + 1000 * (depth > 2), 20, 10, 20))[0]()

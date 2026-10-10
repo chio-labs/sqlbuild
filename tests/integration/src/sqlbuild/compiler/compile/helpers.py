@@ -51,8 +51,7 @@ _DIFFERENTIAL_FRAGMENTS: tuple[str, ...] = (
     "@n(@mm(3), '@m(4)')", "@tag(__ref('orders'))", "@tag(__seed('rates'))",
     "@tag(__ref('customers'))", "@cols(__ref('orders'))", "@gen()", "@nope(1)", "@m(x)",
     "@ab c(1)", "@m('é')", "'@m(1)'", "-- @m(1)\n", "/* @n() */", "$$@m()$$", "`@m()`", "@@v",
-    "@", " ", "\n", "\u3000", "é", "'", "(", ")", "SELECT ", ", ", "\"q\"", "'\udcff'",
-    "@m('\udcff')", "@sur()",
+    "@", " ", "\n", "\u3000", "é", "'", "(", ")", "SELECT ", ", ", "\"q\"", "@sur()",
 )  # fmt: skip
 _DIFFERENTIAL_FILE: Path = Path("models/orders_summary.sql")
 

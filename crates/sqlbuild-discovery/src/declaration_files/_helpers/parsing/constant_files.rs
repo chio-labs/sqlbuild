@@ -1,13 +1,14 @@
 //! Python's `parse_constant_declaration_file` up to value normalisation, which Python performs.
 
 use crate::declaration_files::_helpers::checks::python_values::{
-    failure, get, python_str, unknown_keys,
+    WordRules, check_bare_numbers, failure, get, python_str, unknown_keys,
 };
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::declaration_headers::declaration_headers;
 use crate::declaration_files::_helpers::parsing::enum_files::declaration_name;
 use crate::declaration_files::models::{ConstantDeclaration, ConstantFile};
 use crate::models::FailureKind;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const CONSTANT_KEYS: [&str; 4] = ["name", "value", "type", "render_as"];
@@ -17,18 +18,18 @@ const COLLECTION_RENDERINGS: [&str; 2] = ["value_list", "array"];
 pub(crate) fn parse_constant_file(
     file_path: &str,
     contents: String,
+    python: PythonText,
 ) -> Result<ConstantFile, ParseStop> {
     let headers = declaration_headers(&contents, file_path, "CONSTANT")?;
     let mut declarations: Vec<ConstantDeclaration> = Vec::with_capacity(headers.len());
     let mut failure: Option<_> = None;
     for header in headers {
-        match parse_constant(&header.values, file_path) {
+        match parse_constant(&header.values, file_path, python) {
             Ok(declaration) => declarations.push(declaration),
             Err(ParseStop::Failed(stopped)) => {
                 failure = Some(stopped);
                 break;
             }
-            Err(ParseStop::Deferred) => return Err(ParseStop::Deferred),
         }
     }
     Ok(ConstantFile {
@@ -45,6 +46,7 @@ fn declaration(message: String) -> ParseStop {
 fn parse_constant(
     values: &[(String, AuthoredValue)],
     file_path: &str,
+    python: PythonText,
 ) -> Result<ConstantDeclaration, ParseStop> {
     let unknown: Vec<String> = unknown_keys(values, &CONSTANT_KEYS);
     if !unknown.is_empty() {
@@ -53,7 +55,7 @@ fn parse_constant(
             unknown.join(", ")
         )));
     }
-    let name: String = declaration_name(get(values, "name"), file_path, "constant")?;
+    let name: String = declaration_name(get(values, "name"), file_path, "constant", python)?;
     let mut value: Option<&AuthoredValue> = get(values, "value");
     let mut explicit_type: Option<&AuthoredValue> = get(values, "type");
     let mut render_as: Option<&AuthoredValue> = get(values, "render_as");
@@ -79,12 +81,18 @@ fn parse_constant(
             "{file_path} constant '{name}' is missing required value"
         )));
     };
-    let explicit_type: Option<String> =
-        constant_option(explicit_type, file_path, &format!("constant '{name}' type"))?;
+    check_bare_numbers(value, WordRules { python, file_path })?;
+    let explicit_type: Option<String> = constant_option(
+        explicit_type,
+        file_path,
+        &format!("constant '{name}' type"),
+        python,
+    )?;
     let render_as: Option<String> = constant_option(
         render_as,
         file_path,
         &format!("constant '{name}' render_as"),
+        python,
     )?;
     if let Some(rendering) = &render_as
         && !COLLECTION_RENDERINGS.contains(&rendering.as_str())
@@ -106,11 +114,12 @@ fn constant_option(
     raw_value: Option<&AuthoredValue>,
     file_path: &str,
     label: &str,
+    python: PythonText,
 ) -> Result<Option<String>, ParseStop> {
     let Some(raw_value) = raw_value else {
         return Ok(None);
     };
-    match python_str(raw_value)? {
+    match python_str(raw_value, WordRules { python, file_path })? {
         Some(text) if !text.is_empty() => Ok(Some(text.to_owned())),
         _ => Err(declaration(format!(
             "{file_path} {label} must be an identifier"

@@ -30,6 +30,8 @@ pub(super) struct CloseMatchesTestCase {
 pub(super) struct CharacterClassTestCase {
     pub(super) description: &'static str,
     pub(super) character: char,
+    pub(super) expected_decimal: bool,
+    pub(super) expected_alpha: bool,
     pub(super) expected_alnum: bool,
     pub(super) expected_word: bool,
     pub(super) expected_space: bool,

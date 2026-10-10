@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlbuild.spec.contracts.models import SourceLocation
 
 
@@ -16,13 +18,69 @@ class CompileInputError(ValueError):
         *,
         code: str | None = None,
         help: str | None = None,
-        bridge_independent: bool = False,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.code = code if code is not None else self.code
         self.help = help
-        self.bridge_independent: bool = bridge_independent
+
+
+class MacroArgumentError(CompileInputError):
+    """Raised when one macro call's arguments do not parse; `offset` is in the expanded SQL."""
+
+    def __init__(  # noqa: PLR0913
+        self,
+        *,
+        detail: str,
+        help: str,
+        macro_name: str,
+        file_path: Path,
+        offset: int,
+        relative_position: tuple[int, int],
+        location: SourceLocation | None = None,
+    ) -> None:
+        line, column = (
+            (location.line, location.column) if location is not None else relative_position
+        )
+        scope: str = (
+            f"of '@{macro_name}' in '{file_path}'" if location is not None else f"in '{file_path}'"
+        )
+        suffix: str = "" if location is not None else f" of the '@{macro_name}' arguments"
+        super().__init__(
+            f"Macro arguments {scope} {detail} at line {line}, column {column}{suffix}",
+            help=help,
+        )
+        self.detail: str = detail
+        self.macro_name: str = macro_name
+        self.file_path: Path = file_path
+        self.offset: int = offset
+        self.relative_position: tuple[int, int] = relative_position
+        self.location: SourceLocation | None = location
+
+    def shifted(self, by: int) -> MacroArgumentError:
+        """The same error, its offset moved by `by` into the enclosing SQL."""
+
+        return MacroArgumentError(
+            detail=self.detail,
+            help=self.help or "",
+            macro_name=self.macro_name,
+            file_path=self.file_path,
+            offset=self.offset + by,
+            relative_position=self.relative_position,
+        )
+
+    def located(self, location: SourceLocation) -> MacroArgumentError:
+        """The same error at its authored file location."""
+
+        return MacroArgumentError(
+            detail=self.detail,
+            help=self.help or "",
+            macro_name=self.macro_name,
+            file_path=self.file_path,
+            offset=self.offset,
+            relative_position=self.relative_position,
+            location=location,
+        )
 
 
 class SqlTestReferenceError(CompileInputError):

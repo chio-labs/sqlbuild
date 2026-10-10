@@ -13,8 +13,8 @@ use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
 
-/// One scan's Python error, or its values; `None` where Python must scan the text itself.
-type Scanned<T> = Option<(Option<String>, Vec<T>)>;
+/// One scan's error, or its values.
+type Scanned<T> = (Option<String>, Vec<T>);
 
 fn source(scenario: bool) -> RelationshipSource {
     if scenario {
@@ -24,7 +24,7 @@ fn source(scenario: bool) -> RelationshipSource {
     }
 }
 
-/// Each `(sql, file label)` body's expected models or Python's error; `None` defers to Python.
+/// Each `(sql, file label)` body's expected models or the scan's error.
 #[pyfunction]
 fn scope_expected_model_names(
     py: Python<'_>,
@@ -39,14 +39,13 @@ fn scope_expected_model_names(
     Ok(outcomes
         .into_iter()
         .map(|outcome| match outcome {
-            ExpectedNames::Scanned(names) => Some((None, names)),
-            ExpectedNames::Failed(message) => Some((Some(message), Vec::new())),
-            ExpectedNames::Deferred => None,
+            ExpectedNames::Scanned(names) => (None, names),
+            ExpectedNames::Failed(message) => (Some(message), Vec::new()),
         })
         .collect())
 }
 
-/// Each `(sql, file label)` test body's top-level CTEs or Python's error; `None` defers.
+/// Each `(sql, file label)` test body's top-level CTEs or the scan's error.
 #[pyfunction]
 fn scope_test_ctes(
     py: Python<'_>,
@@ -67,9 +66,8 @@ fn scope_test_ctes(
     Ok(outcomes
         .into_iter()
         .map(|outcome| match outcome {
-            TopLevelCtes::Scanned(ctes) => Some((None, ctes)),
-            TopLevelCtes::Failed(message) => Some((Some(message), Vec::new())),
-            TopLevelCtes::Deferred => None,
+            TopLevelCtes::Scanned(ctes) => (None, ctes),
+            TopLevelCtes::Failed(message) => (Some(message), Vec::new()),
         })
         .collect())
 }

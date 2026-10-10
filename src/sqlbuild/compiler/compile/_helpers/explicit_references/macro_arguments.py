@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 
@@ -265,25 +264,7 @@ def _generated_references(sql: str) -> tuple[SqlResourceRef, ...]:
     return tuple(generated)
 
 
-def evaluate_typed_reference(*, node: ast.Call, file_path: Path) -> SqlResourceRef:
-    function_name: str | None = node.func.id if isinstance(node.func, ast.Name) else None
-    kind: SqlResourceRefKind | None = (
-        _TYPED_REFERENCE_KINDS.get(function_name) if function_name is not None else None
-    )
-    if kind is None:
-        raise CompileInputError(
-            f"Macro arguments in '{file_path}' must use only Python literals, nested macro "
-            "calls, and __ref(), __source(), or __seed() references"
-        )
-    if (
-        node.keywords
-        or len(node.args) != 1
-        or not isinstance(node.args[0], ast.Constant)
-        or not isinstance(node.args[0].value, str)
-        or not node.args[0].value
-    ):
-        raise CompileInputError(
-            f"Macro argument {function_name}() in '{file_path}' must contain exactly one "
-            "quoted resource name"
-        )
-    return SqlResourceRef(kind=kind, name=node.args[0].value)
+def typed_reference_value(*, function: str, name: str) -> SqlResourceRef:
+    """Return the reference a `__ref`, `__source` or `__seed` macro argument names."""
+
+    return SqlResourceRef(kind=_TYPED_REFERENCE_KINDS[function], name=name)

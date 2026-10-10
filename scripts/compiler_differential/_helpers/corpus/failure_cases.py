@@ -33,12 +33,24 @@ from scripts.compiler_differential.constants import (
     FAILURE_CONFIG_PATH,
     FAILURE_MART_PATH,
     FAILURE_SOURCES_PATH,
+    FAILURE_UNDECODABLE_ENV_VAR,
 )
 from scripts.compiler_differential.models import FailureCase
 
 _MART_HEADER_START: str = 'MODEL (\n  description "Order totals per customer",\n'
 
 _RULES_CONFIG: str = '\n[rules]\nselect = ["{codes}"]\n'
+
+_ENGINE_ERROR_MACROS: str = "macros/cents.py"
+_ENGINE_ERROR_CENTS: str = (
+    'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
+    '    return f"({expression} * 100)"\n'
+)
+_MACRO_LITERALS_HELP: str = (
+    "Macro arguments are Python literals (strings, numbers, True, False, None, lists, "
+    "tuples and dicts), nested macro calls, and __ref(), __source() or __seed() "
+    "references; compute anything else inside the macro"
+)
 
 
 def _rules(*codes: str) -> dict[str, str]:
@@ -627,6 +639,243 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="engine-error-non-ascii-digit-constant-value",
+            expected_code="D013",
+            files={"constants/limits.sql": "CONSTANT (name minimum_amount, value \u0663);\n"},
+            expected_message=(
+                "<project>/constants/limits.sql has the bare number '\u0663', written with "
+                "non-ASCII digits"
+            ),
+            expected_help=(
+                'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
+            ),
+        ),
+        failure_case(
+            name="engine-error-non-ascii-digit-bare-number",
+            expected_code="D013",
+            files={
+                "enums/order_priority.sql": (
+                    "ENUM (\n  name order_priority,\n  members (LOW 1, HIGH \u0663),\n);\n"
+                )
+            },
+            expected_message=(
+                "<project>/enums/order_priority.sql has the bare number '\u0663', written with "
+                "non-ASCII digits"
+            ),
+            expected_help=(
+                'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
+            ),
+        ),
+        failure_case(
+            name="engine-error-non-ascii-digit-model-constant",
+            expected_code="D002",
+            files={
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    "MODEL (\n", "MODEL (\n  constants (_bonus \u0663),\n", 1
+                )
+            },
+            expected_message=(
+                f"<project>/{FAILURE_MART_PATH} has the bare number '\u0663', written with "
+                "non-ASCII digits"
+            ),
+            expected_help=(
+                'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-syntax",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents('amount',, 2) AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "could not be parsed: a value is missing here at line 5, column 37"
+            ),
+            expected_location=(5, 37),
+            expected_help=_MACRO_LITERALS_HELP,
+        ),
+        failure_case(
+            name="engine-error-macro-argument-second-call",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents('amount') AS cents,\n"
+                    "  @cents('amount' 2) AS more_cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "could not be parsed: a comma is missing between arguments at line 6, column 19"
+            ),
+            expected_location=(6, 19),
+            expected_help=(
+                "Separate arguments, and the items of lists, tuples and dicts, with commas, for "
+                "example @cents('amount', 2)"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-nested-call-sign",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents(-@cents('amount')) AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' apply unary - "
+                "to the value of a nested macro call, which is a str and not a number at line 5, "
+                "column 29"
+            ),
+            expected_location=(5, 29),
+            expected_help=(
+                "Return a number from the nested macro, or apply the sign inside the macro"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-named-sequence",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, "
+                    "@cents('\\N{LATIN CAPITAL LETTER A WITH MACRON AND GRAVE}') AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' could not be "
+                "parsed: \\N{LATIN CAPITAL LETTER A WITH MACRON AND GRAVE} names a sequence of 2 "
+                "characters, and \\N escapes name one character at line 5, column 29"
+            ),
+            expected_location=(5, 29),
+            expected_help=(
+                "Write each character of the sequence with its own \\N{...} escape, or write the "
+                "characters themselves"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-surrogate-pair",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents('\\ud83d\\ude00') AS cents\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' contain the lone "
+                "surrogate escape '\\ud83d' at line 5, column 29"
+            ),
+            expected_location=(5, 29),
+            expected_help=(
+                "Python strings hold code points, not UTF-16 surrogate pairs; write the character "
+                "as one escape: \\U0001F600 instead of the surrogate pair, or write the character "
+                "itself"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-bytes",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    "SELECT customer_id, @cents(b'amount') AS cents\nFROM __ref(\"stg_orders\")\n"
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "use a bytes literal at line 5, column 28"
+            ),
+            expected_location=(5, 28),
+            expected_help=(
+                "Pass text as a string without the b prefix, for example 'orders' instead of "
+                "b'orders'"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-complex",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    'SELECT customer_id, @cents(2j) AS cents\nFROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "use a complex number literal at line 5, column 28"
+            ),
+            expected_location=(5, 28),
+            expected_help=(
+                "Pass int or float numbers; give a complex value's real and imaginary parts as two "
+                "arguments"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-argument-ellipsis",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    'SELECT customer_id, @cents(...) AS cents\nFROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "use '...' (Ellipsis) at line 5, column 28"
+            ),
+            expected_location=(5, 28),
+            expected_help=("Pass None, or a string the macro understands, instead of '...'"),
+        ),
+        failure_case(
+            name="engine-error-undecodable-environment-variable",
+            expected_code="P001",
+            files=mart_body_files(
+                f"SELECT customer_id, '@@ENV:{FAILURE_UNDECODABLE_ENV_VAR}' AS region\n"
+                'FROM __ref("stg_orders")\n'
+            ),
+            expected_message=(
+                f"Environment variable '{FAILURE_UNDECODABLE_ENV_VAR}' is not valid UTF-8 text: "
+                "byte 17 starts an invalid UTF-8 sequence"
+            ),
+            expected_help=(
+                f"Set '{FAILURE_UNDECODABLE_ENV_VAR}' to UTF-8 text, since SQLBuild cannot send "
+                "undecodable bytes to a warehouse; the value is not shown because it may be a "
+                "secret"
+            ),
+        ),
+        failure_case(
+            name="engine-error-macro-output-lone-surrogate",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: (
+                    'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
+                    "    return expression + chr(0xDCFF)\n"
+                ),
+                **mart_body_files(
+                    "SELECT customer_id, @cents('amount') AS cents\nFROM __ref(\"stg_orders\")\n"
+                ),
+            },
+            expected_message=(
+                f"Macro '@cents' in '<project>/{FAILURE_MART_PATH}' returned text with the lone "
+                "surrogate '\\udcff', which is not valid Unicode"
+            ),
+            expected_help=(
+                "Return valid Unicode text from the macro; lone surrogates usually come from "
+                "bytes decoded with errors='surrogateescape'"
+            ),
+        ),
+        failure_case(
             name="engine-error-week-date-cursor-start",
             expected_code="P001",
             files={
@@ -639,6 +888,42 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             expected_message=(
                 "model 'customer_totals': cursor_start value '2024-W01-1T25:00' is not a valid "
                 "ISO timestamp: hour must be in 0..23"
+            ),
+        ),
+        failure_case(
+            name="engine-error-non-ascii-replay-duration",
+            expected_code="P001",
+            files={
+                FAILURE_MART_PATH: _MART_HEADER_START
+                + "  materialized incremental,\n  incremental_strategy append,\n"
+                + '  replay_on_change "bounded-\u0661d",\n);\n\n'
+                + 'SELECT customer_id\nFROM __ref("stg_orders")\n'
+            },
+            expected_message=(
+                "model 'customer_totals': replay_on_change '\u0661d' uses digits outside ASCII"
+            ),
+            expected_help=(
+                "write replay_on_change with ASCII digits 0-9, add this to the MODEL header:\n"
+                "            MODEL (\n              replay_on_change 'bounded-14d',\n"
+                "              ...\n            );"
+            ),
+        ),
+        failure_case(
+            name="engine-error-oversized-retention",
+            expected_code="P001",
+            files={
+                FAILURE_MART_PATH: _MART_HEADER_START
+                + '  materialized table,\n  time_travel_retention "99999999999999999999d",\n);\n\n'
+                + 'SELECT customer_id\nFROM __ref("stg_orders")\n'
+            },
+            expected_message=(
+                "model 'customer_totals': time_travel_retention '99999999999999999999d' has a "
+                "number larger than a 64-bit integer"
+            ),
+            expected_help=(
+                "use a time_travel_retention whose days fit in 64 bits, add this to the MODEL "
+                "header:\n            MODEL (\n              time_travel_retention '7d',\n"
+                "              ...\n            );"
             ),
         ),
     )

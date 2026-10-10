@@ -1,10 +1,13 @@
 //! The Python template evaluator: references, `if`, `eq`, `ne` and `coalesce`.
 
+use crate::templates::_helpers::missing_values::is_missing_value_message;
 use crate::templates::errors::TemplateError;
+use crate::templates::main::template_error_message::template_error_message;
 use crate::templates::models::{
     ContextValue, Expression, Scalar, TemplateFailure, TemplateOptions,
 };
 use crate::templates::types::TemplateHost;
+use sqlbuild_core::text::main::python_strip::python_strip;
 
 const TRUE_LITERAL: &str = "true";
 const FALSE_LITERAL: &str = "false";
@@ -33,14 +36,6 @@ pub(crate) fn evaluate<H: TemplateHost>(
             evaluate_function(host, name, arguments, options)
         }
     }
-}
-
-/// Render a value as interpolated text, as `render_project_var_text` does for scalars.
-pub(crate) fn render_text<H: TemplateHost>(
-    host: &H,
-    value: &H::Value,
-) -> Result<String, TemplateFailure> {
-    comparison_text(host, value)
 }
 
 fn evaluate_reference<H: TemplateHost>(
@@ -116,7 +111,12 @@ fn evaluate_function<H: TemplateHost>(
             for argument in arguments {
                 match evaluate(host, argument, options) {
                     Ok(value) if truthiness(host, &value)? => return Ok(value),
-                    Ok(_) | Err(TemplateFailure::Missing(_)) => {}
+                    Ok(_) => {}
+                    Err(TemplateFailure::Missing(error) | TemplateFailure::Invalid(error))
+                        if is_missing_value_message(&template_error_message(
+                            &error,
+                            host.label(),
+                        )) => {}
                     Err(failure) => return Err(failure),
                 }
             }
@@ -134,7 +134,7 @@ fn argument_count(function: &'static str, expected: &'static str) -> TemplateFai
 }
 
 fn comparison_text<H: TemplateHost>(host: &H, value: &H::Value) -> Result<String, TemplateFailure> {
-    match host.scalar(value).ok_or(TemplateFailure::Unsupported)? {
+    match host.scalar(value)? {
         Scalar::Null => Ok(String::new()),
         Scalar::Bool(flag) => Ok(if flag { TRUE_LITERAL } else { FALSE_LITERAL }.to_owned()),
         Scalar::Text(text) => Ok(text),
@@ -142,17 +142,12 @@ fn comparison_text<H: TemplateHost>(host: &H, value: &H::Value) -> Result<String
 }
 
 fn truthiness<H: TemplateHost>(host: &H, value: &H::Value) -> Result<bool, TemplateFailure> {
-    match host.scalar(value).ok_or(TemplateFailure::Unsupported)? {
+    match host.scalar(value)? {
         Scalar::Null => Ok(false),
         Scalar::Bool(flag) => Ok(flag),
-        Scalar::Text(text) if text.is_ascii() => {
-            let normalized = text
-                .trim_matches(
-                    |character: char| matches!(character, '\t'..='\r' | '\u{1c}'..='\u{1f}' | ' '),
-                )
-                .to_ascii_lowercase();
+        Scalar::Text(text) => {
+            let normalized = python_strip(&text).to_lowercase();
             Ok(!FALSE_VALUES.contains(&normalized.as_str()))
         }
-        Scalar::Text(_) => Err(TemplateFailure::Unsupported),
     }
 }

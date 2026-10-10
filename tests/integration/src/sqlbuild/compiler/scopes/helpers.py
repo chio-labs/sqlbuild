@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable, Mapping
+from collections import defaultdict
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, fields, replace
-from itertools import chain, compress
+from itertools import chain
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -34,22 +36,42 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
+    DiscoveredProjectInputs,
+    EnumDeclaration,
+)
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
+from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
+from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
 from sqlbuild.compiler.scopes.main._native_expected_model_names import (
     native_expected_model_names,
 )
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
+from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
+    resolve_scope_declaration_visibility,
+)
+from sqlbuild.compiler.scopes.main._resolve_scope_path_visibility import (
+    resolve_scope_path_visibility,
+)
 from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import (
+    DeclarationIdentity,
+    DeclarationRecord,
+    DeclarationVisibility,
     ResourceIdentity,
     ScopeIndex,
     ScopeLookup,
     VisibilityRecord,
 )
-from sqlbuild.compiler.scopes.types import VisibilityReason
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    ResourceKind,
+    ScopeKind,
+    VisibilityReason,
+)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
@@ -312,10 +334,8 @@ def scope_engine_outcomes(
         engine=CompilerEngine.NATIVE_PREVIEW.value,
         monkeypatch=monkeypatch,
     )
-    built: bool = (
-        open_native_scope_index(discovered_inputs=discovered, loaded_macros=macros) is not None
-    )
-    return python, native, built
+    _ = open_native_scope_index(discovered_inputs=discovered, loaded_macros=macros)
+    return python, native, True
 
 
 def scope_command_indexes(
@@ -341,7 +361,7 @@ def native_scope_attempts(
 
     def counted(
         *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: Mapping[str, LoadedMacro]
-    ) -> NativeScopeIndex | None:
+    ) -> NativeScopeIndex:
         attempts.append(None)
         return open_native_scope_index(
             discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
@@ -477,7 +497,6 @@ class ExpectedNameScanParity:
 
     mismatches: list[tuple[object, object, object]]
     scanned: int
-    deferred: int
     python_errors: int
     native_errors: int
 
@@ -513,15 +532,9 @@ def expected_name_scan_parity(
         *(_python_scenario_names(sql=sql, syntax=syntax) for sql in sqls),
         *(_python_test_ctes(sql=sql, syntax=syntax) for sql in sqls),
     ]
-    answered: list[bool] = [outcome is not None for outcome in native]
     return ExpectedNameScanParity(
-        mismatches=mismatches(
-            inputs=list(compress([*sqls, *sqls, *sqls], answered)),
-            expected=list(compress(python, answered)),
-            actual=list(compress(native, answered)),
-        ),
+        mismatches=mismatches(inputs=[*sqls, *sqls, *sqls], expected=python, actual=native),
         scanned=sum(isinstance(outcome, tuple) for outcome in native),
-        deferred=answered.count(False),
         python_errors=sum(isinstance(outcome, str) for outcome in python),
         native_errors=sum(isinstance(outcome, str) for outcome in native),
     )
@@ -612,11 +625,7 @@ def declaration_context_parity(
         for file_path, resource in targets
     ]
     python: list[DeclarationResolutionContext] = [
-        resolve_declaration_context(
-            resolver=replace(resolver, contexts_by_directory={}, native_contexts=None),
-            file_path=file_path,
-            resource=resource,
-        )
+        _python_declaration_context(resolver=resolver, file_path=file_path, resource=resource)
         for file_path, resource in targets
     ]
     indexed: list[bool] = [
@@ -675,4 +684,134 @@ def _context_shape(context: DeclarationResolutionContext) -> tuple[object, ...]:
     return (
         *(tuple(getattr(context, name).items()) for name in _CONTEXT_DICT_FIELDS),
         context.consumer,
+    )
+
+
+def _python_declaration_context(
+    *, resolver: DeclarationScopeResolver, file_path: Path, resource: ResourceIdentity | None
+) -> DeclarationResolutionContext:
+    """The context the deleted Python projection built from the scope library's resolution."""
+
+    resolution: DeclarationVisibility = resolve_scope_declaration_visibility(
+        lookup=resolver.lookup, target=resource or file_path
+    )
+    visible, inaccessible, visibility = {
+        True: _path_visibility,
+        False: _resource_visibility,
+    }[resolution.target.unknown](resolver=resolver, resolution=resolution, target_path=file_path)
+    values: Mapping[DeclarationIdentity, object] = resolver.projection.declarations
+    macro_records: tuple[DeclarationRecord, ...] = _valued(visible, values, LoadedMacro)
+    return DeclarationResolutionContext(
+        enums=_values_by_name(visible, values, EnumDeclaration),
+        constants=_values_by_name(visible, values, ConstantDeclaration),
+        inaccessible_enums=_by_name(inaccessible, DeclarationKind.ENUM),
+        inaccessible_constants=_by_name(inaccessible, DeclarationKind.CONSTANT),
+        enum_visibility=_visibility_by_name(visible, visibility, DeclarationKind.ENUM),
+        constant_visibility=_visibility_by_name(visible, visibility, DeclarationKind.CONSTANT),
+        macros=_values_by_name(visible, values, LoadedMacro),
+        macro_records={record.identity.name: record for record in macro_records},
+        macro_visibility=_visibility_by_name(visible, visibility, DeclarationKind.MACRO),
+        inaccessible_macros=_by_name(inaccessible, DeclarationKind.MACRO),
+        consumer=resource or next((match.identity for match in resolution.target.matches), None),
+    )
+
+
+def _valued(
+    records: tuple[DeclarationRecord, ...],
+    values: Mapping[DeclarationIdentity, object],
+    value_type: type,
+) -> tuple[DeclarationRecord, ...]:
+    return tuple(
+        filter(lambda record: isinstance(values.get(record.identity), value_type), records)
+    )
+
+
+def _values_by_name[T](
+    records: tuple[DeclarationRecord, ...],
+    values: Mapping[DeclarationIdentity, object],
+    value_type: type[T],
+) -> dict[str, T]:
+    return {
+        record.identity.name: cast(T, values[record.identity])
+        for record in _valued(records, values, value_type)
+    }
+
+
+def _of_kind(
+    records: tuple[DeclarationRecord, ...], kind: DeclarationKind
+) -> tuple[DeclarationRecord, ...]:
+    return tuple(filter(lambda record: record.identity.kind is kind, records))
+
+
+def _by_name(
+    records: tuple[DeclarationRecord, ...], kind: DeclarationKind
+) -> dict[str, DeclarationRecord]:
+    return {record.identity.name: record for record in _of_kind(records, kind)}
+
+
+def _visibility_by_name(
+    records: tuple[DeclarationRecord, ...],
+    visibility: dict[DeclarationIdentity, list[VisibilityRecord]],
+    kind: DeclarationKind,
+) -> dict[str, tuple[VisibilityRecord, ...]]:
+    return {
+        record.identity.name: tuple(visibility.get(record.identity, ()))
+        for record in _of_kind(records, kind)
+    }
+
+
+type _Visibility = tuple[
+    tuple[DeclarationRecord, ...],
+    tuple[DeclarationRecord, ...],
+    dict[DeclarationIdentity, list[VisibilityRecord]],
+]
+
+
+def _resource_visibility(
+    *, resolver: DeclarationScopeResolver, resolution: DeclarationVisibility, target_path: Path
+) -> _Visibility:
+    _ = target_path
+    visibility: defaultdict[DeclarationIdentity, list[VisibilityRecord]] = defaultdict(list)
+    for record in resolution.visible:
+        visibility[record.declaration].append(record)
+    return (
+        tuple(resolver.lookup.declarations[item.declaration][0] for item in resolution.visible),
+        tuple(resolver.lookup.declarations[identity][0] for identity in resolution.inaccessible),
+        dict(visibility),
+    )
+
+
+def _path_visibility(
+    *, resolver: DeclarationScopeResolver, resolution: DeclarationVisibility, target_path: Path
+) -> _Visibility:
+    _ = resolution
+    lexical_path: Path = next(
+        map(
+            lambda record: Path(declaration_lexical_path(record=record)),
+            filter(
+                lambda record: (
+                    record.path == target_path.as_posix() and record.scope is not ScopeKind.PRIVATE
+                ),
+                resolver.lookup.index.declarations,
+            ),
+        ),
+        target_path,
+    )
+    visible, inaccessible = resolve_scope_path_visibility(lookup=resolver.lookup, path=lexical_path)
+    path_resource: ResourceIdentity = ResourceIdentity(
+        ResourceKind.MODEL, f"<path:{lexical_path.as_posix()}>"
+    )
+    reasons: Iterator[tuple[DeclarationRecord, VisibilityReason | None]] = (
+        (record, declaration_visibility(declaration=record, consumer=lexical_path))
+        for record in visible
+    )
+    return (
+        visible,
+        inaccessible,
+        {
+            record.identity: [
+                VisibilityRecord(path_resource, record.identity, cast(VisibilityReason, reason))
+            ]
+            for record, reason in filter(lambda pair: pair[1] is not None, reasons)
+        },
     )

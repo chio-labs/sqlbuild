@@ -9,24 +9,20 @@ pub enum RelationshipSource {
     Scenario,
 }
 
-/// The expected-model names of one SQL text, Python's error, or a deferral to Python.
+/// The expected-model names of one SQL text, or the error the scan raises.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExpectedNames {
     /// The `__expected__<model>` names in CTE order, exactly as Python extracts them.
     Scanned(Vec<String>),
-    /// The message Python's extraction raises.
+    /// The message the extraction raises.
     Failed(String),
-    /// Python classifies a character the scan reached differently.
-    Deferred,
 }
 
-/// The top-level CTEs of one SQL text, Python's scanner error, or a deferral to Python.
+/// The top-level CTEs of one SQL text, or the scanner's error.
 #[derive(Debug, PartialEq, Eq)]
 pub enum TopLevelCtes {
     /// Each CTE's name and stripped body in authored order, exactly as Python's scanner reads them.
     Scanned(Vec<(String, String)>),
-    /// The message Python's scanner raises.
+    /// The message the scanner raises.
     Failed(String),
-    /// Python classifies a character the scan reached differently.
-    Deferred,
 }

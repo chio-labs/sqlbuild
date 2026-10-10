@@ -18,114 +18,30 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 
 
-def validate_model_references(
+def validate_external_reference(
     *,
-    references: tuple[CompileSqlReference, ...],
+    reference: CompileSqlReference,
     model_file: DiscoveredSqlModelFile,
-    known_model_names: set[str],
-    known_seed_names: set[str],
-    known_source_names: set[str],
-    known_function_names: set[str],
-    known_table_function_names: set[str],
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
 ) -> None:
-    """Validate extracted model refs against discovered project inputs."""
+    """Validate one `__dbt_ref` against the dbt manifest, which the external resolver owns."""
 
-    reference: CompileSqlReference
-    for reference in references:
-        if (
-            reference.ref_kind == SqlReferenceKind.REF
-            and reference.ref_name not in known_model_names
-        ):
-            if reference.ref_name in known_seed_names:
-                raise CompileInputError(
-                    f"Model file {model_file.relative_path} references seed '{reference.ref_name}' "
-                    f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} for seed "
-                    f"references; {SqlReferenceKind.REF.function_name} only resolves models."
-                )
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} references unknown model "
-                f"'{reference.ref_name}'"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.SEED
-            and reference.ref_name not in known_seed_names
-        ):
-            if reference.ref_name in known_model_names:
-                raise CompileInputError(
-                    f"Model file {model_file.relative_path} references model "
-                    f"'{reference.ref_name}' "
-                    f"with {SqlReferenceKind.SEED.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.REF.example_call(reference.ref_name, quote='"')} for model "
-                    "references."
-                )
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} references unknown seed "
-                f"'{reference.ref_name}'"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.SOURCE
-            and reference.ref_name not in known_source_names
-        ):
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} references unknown source "
-                f"'{reference.ref_name}'"
-            )
-        if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            if external_sql_reference_resolver is None:
-                raise CompileInputError(
-                    f"Model file {model_file.relative_path} uses "
-                    f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} "
-                    "but no dbt manifest was found",
-                    code="C214",
-                    help=(
-                        "Run dbt compile or configure dbt target_path so SQLBuild can read "
-                        "manifest.json."
-                    ),
-                )
-            external_sql_reference_resolver.validate_reference(
-                ref_kind=reference.ref_kind,
-                ref_name=reference.ref_name,
-                ref_package=reference.ref_package,
-                owner_relative_sql_path=model_file.relative_path,
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.UDF
-            and reference.ref_name not in known_function_names
-        ):
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} references unknown SQL function "
-                f"'{reference.ref_name}'"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.UDF
-            and reference.ref_name in known_table_function_names
-        ):
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} references table function "
-                f"'{reference.ref_name}' with {SqlReferenceKind.UDF.placeholder_call()}; "
-                f"use {SqlReferenceKind.TABLE_FUNCTION.placeholder_call()} in SQL contexts "
-                "that support table-valued functions"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
-            and reference.ref_name not in known_function_names
-        ):
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} references unknown table function "
-                f"'{reference.ref_name}'"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
-            and reference.ref_name not in known_table_function_names
-        ):
-            raise CompileInputError(
-                f"Model file {model_file.relative_path} references scalar function "
-                f"'{reference.ref_name}' with "
-                f"{SqlReferenceKind.TABLE_FUNCTION.placeholder_call()}; use "
-                f"{SqlReferenceKind.UDF.placeholder_call()} for scalar UDFs"
-            )
+    if external_sql_reference_resolver is None:
+        raise CompileInputError(
+            f"Model file {model_file.relative_path} uses "
+            f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} "
+            "but no dbt manifest was found",
+            code="C214",
+            help=(
+                "Run dbt compile or configure dbt target_path so SQLBuild can read manifest.json."
+            ),
+        )
+    external_sql_reference_resolver.validate_reference(
+        ref_kind=reference.ref_kind,
+        ref_name=reference.ref_name,
+        ref_package=reference.ref_package,
+        owner_relative_sql_path=model_file.relative_path,
+    )
 
 
 def validate_table_function_call_arities(

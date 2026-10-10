@@ -1,7 +1,8 @@
-//! The Python template tokenizer, deferring wherever Python's `str.isspace` would decide.
+//! The Python template tokenizer.
 
 use crate::templates::errors::TemplateError;
 use crate::templates::models::TemplateFailure;
+use sqlbuild_core::text::main::is_python_space::is_python_space;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TokenKind {
@@ -38,9 +39,6 @@ pub(crate) fn tokenize(expression: &str) -> Result<Vec<Token>, TemplateFailure> 
     let mut tokens: Vec<Token> = Vec::new();
     let mut index = 0;
     while let Some(&character) = characters.get(index) {
-        if !character.is_ascii() {
-            return Err(TemplateFailure::Unsupported);
-        }
         if is_python_space(character) {
             index += 1;
         } else if SYMBOLS.contains(&character) {
@@ -59,9 +57,6 @@ pub(crate) fn tokenize(expression: &str) -> Result<Vec<Token>, TemplateFailure> 
         } else {
             let start = index;
             while let Some(&next) = characters.get(index) {
-                if !next.is_ascii() {
-                    return Err(TemplateFailure::Unsupported);
-                }
                 if is_python_space(next) || SYMBOLS.contains(&next) || is_quote(next) {
                     break;
                 }
@@ -111,9 +106,4 @@ fn quoted_text(characters: &[char], start: usize) -> Result<(String, usize), Tem
 
 fn is_quote(character: char) -> bool {
     matches!(character, '\'' | '"')
-}
-
-/// ASCII characters Python's `str.isspace` accepts, including the information separators.
-fn is_python_space(character: char) -> bool {
-    matches!(character, '\t'..='\r' | '\u{1c}'..='\u{1f}' | ' ')
 }

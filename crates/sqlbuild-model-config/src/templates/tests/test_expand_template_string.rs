@@ -151,15 +151,37 @@ fn given_template_strings_when_expanding_then_values_and_reads_match_python() {
             expected_reads: &[],
         },
         TemplateTestCase {
-            description: "rendering an opaque value is left to Python",
+            description: "a mapping cannot be interpolated into text",
             text: "x_${opaque}",
-            expected: Err(TemplateFailure::Unsupported),
+            expected: Err(TemplateFailure::Invalid(TemplateError::Message(
+                "model config variable 'opaque' is an object".to_owned(),
+            ))),
             expected_reads: &[],
         },
         TemplateTestCase {
-            description: "non-ASCII outside quotes is left to Python's whitespace rules",
+            description: "non-ASCII Python whitespace separates tokens",
             text: "${coalesce(\u{a0}env)}",
-            expected: Err(TemplateFailure::Unsupported),
+            expected: value(Value::Text("prod".to_owned())),
+            expected_reads: &[],
+        },
+        TemplateTestCase {
+            description: "a mapping is truthy by its text",
+            text: "${if(opaque, 'truthy', 'falsy')}",
+            expected: value(Value::Text("truthy".to_owned())),
+            expected_reads: &[],
+        },
+        TemplateTestCase {
+            description: "non-ASCII text is truthy unless it strips and lowers to a false value",
+            text: "${coalesce('\u{3000}FALSE\u{3000}', 'Ünset')}",
+            expected: value(Value::Text("Ünset".to_owned())),
+            expected_reads: &[],
+        },
+        TemplateTestCase {
+            description: "coalesce stops at an error that is not a missing value",
+            text: "${coalesce(other:thing, env)}",
+            expected: Err(TemplateFailure::Invalid(
+                TemplateError::UnsupportedNamespace("other".to_owned()),
+            )),
             expected_reads: &[],
         },
         TemplateTestCase {

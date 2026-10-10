@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "SQL function file functions/sql/order_label.sql tags entries must be non-empty strings"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -90,10 +90,12 @@ fn given_header_metadata_when_parsing_then_python_parses_and_errors_result() {
             ),
         },
         HeaderMetadataTestCase {
-            description: "non-ASCII column names defer to Python's lower()",
-            columns: map(&[("caf\u{e9}", map(&[]))]),
+            description: "non-ASCII column names compare case-insensitively",
+            columns: map(&[("caf\u{e9}", map(&[])), ("CAF\u{c9}", map(&[]))]),
             audits: Value::Null,
-            expected_summary: Err("unsupported"),
+            expected_summary: Err(
+                "/project/models/orders.sql model has duplicate column 'CAF\u{c9}' (column names are case-insensitive)",
+            ),
         },
         HeaderMetadataTestCase {
             description: "an audit name that is not snake_case fails",
@@ -115,10 +117,69 @@ fn given_header_metadata_when_parsing_then_python_parses_and_errors_result() {
             ),
         },
         HeaderMetadataTestCase {
-            description: "thresholds are left to Python's parser",
+            description: "empty thresholds need one bound",
             columns: Value::Null,
             audits: Value::List(vec![map(&[("b", map(&[("thresholds", map(&[]))]))])]),
-            expected_summary: Err("unsupported"),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'b' invalid thresholds: at least one measurement threshold is required",
+            ),
+        },
+        HeaderMetadataTestCase {
+            description: "below error limits must sit under the warn limit",
+            columns: Value::Null,
+            audits: Value::List(vec![map(&[(
+                "b",
+                map(&[(
+                    "thresholds",
+                    map(&[
+                        ("warn", map(&[("below", Value::Int(5))])),
+                        ("error", map(&[("below", Value::Int(5))])),
+                    ]),
+                )]),
+            )])]),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'b' invalid thresholds: below error limit must be less than warn limit",
+            ),
+        },
+        HeaderMetadataTestCase {
+            description: "outside thresholds read their limits as floats",
+            columns: Value::Null,
+            audits: Value::List(vec![map(&[(
+                "b",
+                map(&[(
+                    "thresholds",
+                    map(&[
+                        (
+                            "warn",
+                            map(&[("outside", Value::Tuple(vec![Value::Float, Value::Int(1)]))]),
+                        ),
+                        (
+                            "error",
+                            map(&[("outside", Value::Tuple(vec![Value::Int(0), Value::Int(2)]))]),
+                        ),
+                    ]),
+                )]),
+            )])]),
+            expected_summary: Ok(&[
+                "b: warn=Some(Outside(0.5, 1.0)) error=Some(Outside(0.0, 2.0))",
+            ]),
+        },
+        HeaderMetadataTestCase {
+            description: "outside bounds need a tuple of two numbers",
+            columns: Value::Null,
+            audits: Value::List(vec![map(&[(
+                "b",
+                map(&[(
+                    "thresholds",
+                    map(&[(
+                        "warn",
+                        map(&[("outside", Value::List(vec![Value::Int(1), Value::Int(2)]))]),
+                    )]),
+                )]),
+            )])]),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'b' invalid thresholds: outside threshold requires two numeric values",
+            ),
         },
         HeaderMetadataTestCase {
             description: "ASCII control characters are text to Python's strip",

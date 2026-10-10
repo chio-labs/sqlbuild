@@ -1,0 +1,27 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' could not be parsed: \\N{LATIN CAPITAL LETTER A WITH MACRON AND GRAVE} names a sequence of 2 characters, and \\N escapes name one character at line 5, column 29",
+     "path": "models/marts/customer_totals.sql",
+     "line": 5,
+     "column": 29,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 5,
+      "column": 29
+     },
+     "help": "Write each character of the sequence with its own \\N{...} escape, or write the characters themselves"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

@@ -21,19 +21,16 @@ from sqlbuild.compiler.attachments.main._render_native_attached_audit import (
 from sqlbuild.compiler.attachments.models import NativeAuditPolicies, NativeRenderedAudit
 from sqlbuild.compiler.auditing.types import AuditRunScope, AuditSeverity
 from sqlbuild.compiler.compile._helpers.attachment.audits import (
-    merge_audit_arguments,
-    render_generic_audit_sql,
     resolve_audit_run_scope,
     resolve_audit_severity,
 )
-from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_test_inputs,
     validate_test_ctes,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
 from sqlbuild.compiler.compile._helpers.render import macros
-from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import reject_cursor_intrinsics
+from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
 from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile._helpers.render.sql_vars import expand_authored_sql_result
@@ -58,35 +55,23 @@ from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
-    DiscoveredPythonFunctionFile,
-    DiscoveredSqlFunctionFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
-from sqlbuild.compiler.planner.constants import (
-    MICROBATCH_END_SENTINEL,
-    MICROBATCH_START_SENTINEL,
-)
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
 from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
     LocalConfig,
     ProjectConfig,
-    SettingsConfig,
-    TargetConfig,
 )
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import CollectionRendering
-from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
-    FunctionHeaderParityTestCase,
-)
 from tests.integration.src.sqlbuild.compiler.model_loop.helpers import (
     DECLARATIONS,
     generated_reference_sql,
@@ -170,19 +155,6 @@ def generated_dollar_authored_sql(*, rng: random.Random) -> str:
     return "".join(parts)
 
 
-class ExactErrorText(str):
-    """The text of an error marked bridge-independent, equal to Python's text."""
-
-    __slots__ = ()
-
-
-def error_text(error: CompileInputError) -> str:
-    """The error's text, marked when the error is bridge-independent."""
-
-    marker: type[str] = {True: ExactErrorText, False: str}[error.bridge_independent]
-    return marker(error)
-
-
 def authored_outcome(
     *, sql: str, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> AuthoredSqlExpansionResult | str:
@@ -202,7 +174,7 @@ def authored_outcome(
             declarations=DECLARATIONS,
         )
     except CompileInputError as error:
-        return error_text(error)
+        return str(error)
 
 
 _SQL_PIECES: tuple[str, ...] = (
@@ -220,6 +192,8 @@ _SQL_PIECES: tuple[str, ...] = (
     "'@column'",
     "@column\u00e9",
     "@column\u00a0(",
+    "@values\u2003(",
+    "@'values'\u3000",
     "\n",
 )
 _VALUES: tuple[object, ...] = (
@@ -232,6 +206,8 @@ _VALUES: tuple[object, ...] = (
     None,
     ["placed", 2, None],
     ("placed",),
+    ("placed", 3.5, float("inf")),
+    [("placed",), ["shipped"]],
     {"nested": 1},
     float("nan"),
     AuditSeverity.WARN,
@@ -246,6 +222,8 @@ _RARE: tuple[tuple[str, object], ...] = (
     ("run_scope", "delta"),
     ("column", "amount"),
     ("column", 1),
+    ("column", ("status",)),
+    ("column", ["amount"]),
 )
 
 
@@ -255,8 +233,8 @@ class GeneratedAudit:
 
     sql_body: str
     evidence_sql: str
-    implicit_arguments: dict[str, object]
-    explicit_arguments: dict[str, object]
+    implicit_arguments: dict[str, str]
+    explicit_arguments: dict[object, object]
     instance_severity: str | None
     default_severity: str | None
     instance_run_scope: str | None
@@ -265,22 +243,23 @@ class GeneratedAudit:
 
 @dataclass(frozen=True)
 class AuditParity:
-    """Python's rendering (or error text) and the native rendering (or None)."""
+    """Python's rendering (or error text) and the native rendering."""
 
     audit: GeneratedAudit
     python: tuple[object, ...] | str
-    native: NativeRenderedAudit | None
+    native: NativeRenderedAudit
 
 
 def generated_audit(*, rng: random.Random) -> GeneratedAudit:
     """Return one attachment mixing parameter shapes, argument values and policies."""
 
     rare: dict[str, object] = dict(rng.choices(_RARE, k=int(rng.random() < 0.3)))
-    explicit: dict[str, object] = {
+    explicit: dict[object, object] = {
         "values": rng.choice(_VALUES),
         "limit_rows": rng.choice(_VALUES),
     }
     explicit.update(filter(_is_column_override, rare.items()))
+    explicit.update(dict.fromkeys(rng.choices((7,), k=int(rng.random() < 0.1)), "x"))
     return GeneratedAudit(
         sql_body="".join(rng.choices(_SQL_PIECES, k=rng.randint(1, 8))) + str(rare.get("sql", "")),
         evidence_sql="SELECT @column FROM t",
@@ -308,11 +287,9 @@ def audit_parity(audit: GeneratedAudit) -> AuditParity:
             sql_body=audit.sql_body,
             evidence_sql=audit.evidence_sql,
             implicit_arguments=audit.implicit_arguments,
-            explicit_arguments=audit.explicit_arguments,
+            explicit_arguments=cast(dict[str, object], audit.explicit_arguments),
             policies=NativeAuditPolicies(
-                measurement=False,
                 has_thresholds=False,
-                has_minimum_samples=False,
                 threshold_error=False,
                 instance_severity=audit.instance_severity,
                 default_severity=audit.default_severity,
@@ -323,21 +300,15 @@ def audit_parity(audit: GeneratedAudit) -> AuditParity:
     )
 
 
-def is_native(parity: AuditParity) -> bool:
-    """Whether the native rendering answered instead of deferring to Python."""
-
-    return parity.native is not None
-
-
 def native_outcome(parity: AuditParity) -> tuple[object, ...] | str:
     """The native rendering or error spelled like Python's, with the run scope it selects."""
 
-    rendered: NativeRenderedAudit = cast(NativeRenderedAudit, parity.native)
+    rendered: NativeRenderedAudit = parity.native
     return rendered.render_error or rendered.policy_error or _native_rendering(parity)
 
 
 def _native_rendering(parity: AuditParity) -> tuple[object, ...]:
-    rendered: NativeRenderedAudit = cast(NativeRenderedAudit, parity.native)
+    rendered: NativeRenderedAudit = parity.native
     run_scope: str | None = {
         "instance": parity.audit.instance_run_scope,
         "default": parity.audit.default_run_scope,
@@ -347,16 +318,28 @@ def _native_rendering(parity: AuditParity) -> tuple[object, ...]:
 
 def _python_rendering(audit: GeneratedAudit) -> tuple[object, ...] | str:
     owner: Path = Path("models/orders.sql")
+    implicit: dict[object, object] = cast(dict[object, object], audit.implicit_arguments)
+    overrides: list[object] = [
+        name
+        for name, value in filter(
+            lambda item: item[0] in implicit and implicit[item[0]] != item[1],
+            audit.explicit_arguments.items(),
+        )
+    ]
     try:
-        merged: dict[str, object] = merge_audit_arguments(
-            owner_file=owner,
-            definition_name="floor",
-            implicit_arguments=audit.implicit_arguments,
-            explicit_arguments=audit.explicit_arguments,
+        for name in overrides[:1]:
+            raise CompileInputError(
+                f"{owner} audit 'floor' must not override implicit {name} from attached context"
+            )
+        merged: dict[str, object] = cast(
+            dict[str, object], {**audit.implicit_arguments, **audit.explicit_arguments}
         )
         rendered: tuple[str, ...] = tuple(
-            render_generic_audit_sql(
-                sql=sql, arguments=merged, owner_file=owner, definition_name="floor"
+            render_parameterized_sql(
+                sql=sql,
+                arguments=merged,
+                owner_label=str(owner),
+                definition_label="generic audit 'floor'",
             )
             for sql in (audit.sql_body, audit.evidence_sql)
         )
@@ -382,7 +365,7 @@ NATIVE_ATTACHMENT_ENTRIES: tuple[str, ...] = (
     "pair_seed_files",
     "render_attached_generic_audit",
     "expand_config_templates",
-    "substitute_static_project_vars",
+    "interpolate_sql_batch",
     "scan_sql_declaration_references",
 )
 _MISSING_ENV: str = "SQB_ATTACHMENTS_UNSET"
@@ -548,58 +531,6 @@ def _recorded(*, called: set[str], name: str) -> Callable[..., object]:
     return recorded
 
 
-_INTRINSIC_PIECES: tuple[str, ...] = (
-    "SELECT ",
-    "__cursor_start",
-    "__cursor_end",
-    "()",
-    "( )",
-    "(1)",
-    "x",
-    "_",
-    "\u00e9",
-    "'",
-    '"',
-    "`",
-    "``",
-    "''",
-    "$$",
-    "$tag$",
-    "$1",
-    "--",
-    "\n",
-    "/*",
-    "*/",
-    " ",
-    MICROBATCH_START_SENTINEL,
-)
-
-
-def generated_intrinsic_sql(*, rng: random.Random) -> str:
-    """Return SQL mixing intrinsic names with quotes, comments and identifier neighbours."""
-
-    return "".join(rng.choices(_INTRINSIC_PIECES, k=rng.randint(1, 10)))
-
-
-def python_intrinsic_outcome(sql: str) -> str | None:
-    """Python's rejection message, or None where Python accepts the SQL."""
-
-    try:
-        reject_cursor_intrinsics(sql=sql, context="Source expression 'orders'")
-    except CompileInputError as error:
-        return str(error)
-    return None
-
-
-def native_intrinsic_outcome(sql: str) -> tuple[bool, str | None]:
-    """Whether the native check answers without Python, and its rejection message if any."""
-
-    free, error = _native.sql_free_of_cursor_intrinsics(
-        sql, [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL], "Source expression 'orders'"
-    )
-    return free or error is not None, error
-
-
 _PARAMETER_PIECES: tuple[str, ...] = (
     "SELECT ",
     '@param("region")',
@@ -650,7 +581,7 @@ def parameter_outcome(
             case_name="north",
         )
     except CompileInputError as error:
-        return error_text(error)
+        return str(error)
 
 
 _BODY_PIECES: tuple[str, ...] = (
@@ -975,127 +906,8 @@ def target_validation_outcome(
     return None
 
 
-_TYPES: tuple[object, ...] = (
-    "STRING",
-    " INTEGER ",
-    "  ",
-    "${coalesce(ENV:SQB_ATTACHMENTS_UNSET, 'DOUBLE')}",
-    "${missing}",
-    "DECIMAL(${if(precision)})",
-    "${'open}",
-    "${eq(a, b, c)}",
-    "${upper(x)}",
-    "${coalesce()}",
-    "${CTX:model.name}",
-    2,
-)
 _NAMES: tuple[object, ...] = ("raw_status", " amount ", "", "  ", 1)
 _TEXTS: tuple[object, ...] = ("orders", " Orders. ", "", "  ", 3, None)
-_SCHEMAS: tuple[object, ...] = (
-    "udfs",
-    "${coalesce(ENV:SQB_ATTACHMENTS_UNSET, 'udfs')}",
-    "${ENV:SQB_ATTACHMENTS_UNSET}",
-    "${VAR:udfs}",
-    "udfs_${x y}",
-    1,
-    None,
-)
-
-
-def _random_map(rng: random.Random, keys: tuple[object, ...]) -> dict[object, object]:
-    return {rng.choice(keys): rng.choice(_TYPES) for _ in range(rng.randint(0, 3))}
-
-
-def generated_function_header(*, rng: random.Random, python: bool) -> dict[str, object]:
-    """Return SQL or Python function header values Python may accept or reject."""
-
-    returns: tuple[object, ...] = (
-        "STRING",
-        " STRING ",
-        "",
-        {"table": _random_map(rng, _NAMES)},
-        {"table": {"id": "INTEGER"}, "extra": 1},
-        ["STRING"],
-    )
-    candidates: dict[str, object] = {
-        "arguments": rng.choice((_random_map(rng, _NAMES), ["x"], None)),
-        "returns": rng.choice((*returns, *returns[:2] * 3)),
-        "tags": rng.choice((["orders", " sales "], ("orders",), [""], "orders", [1], None)),
-        "description": rng.choice(_TEXTS),
-        "database": rng.choice(_SCHEMAS),
-        "schema": rng.choice(_SCHEMAS),
-        "runtime_version": rng.choice(("3.12", " 3.12 ", "", None, 3)),
-        "entry_point": rng.choice(("label", "", None)),
-        "packages": rng.choice((["numpy"], ("numpy",), [""], "numpy", None)),
-    }
-    present: list[str] = rng.sample(sorted(candidates), k=rng.randint(4, len(candidates)))
-    header: dict[str, object] = {key: candidates[key] for key in present}
-    required: dict[bool, dict[str, object]] = {
-        False: {"returns": "STRING"},
-        True: {"returns": "STRING", "runtime_version": "3.12", "entry_point": "label"},
-    }
-    return {**required[python], **header}
-
-
-def function_outcome(
-    *,
-    header_values: dict[str, object],
-    python: bool,
-    test_case: FunctionHeaderParityTestCase,
-    engine: CompilerEngine,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[str, bool]:
-    """Attach one function under `engine`: its input or error, and whether that is bridge-free."""
-
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    sql_file: DiscoveredSqlFunctionFile = DiscoveredSqlFunctionFile(
-        file_path=Path("/project/functions/sql/order_label.sql"),
-        relative_path=Path("functions/sql/order_label.sql"),
-        contents="",
-        header_values=header_values,
-        body_sql="UPPER(raw_status)",
-    )
-    python_file: DiscoveredPythonFunctionFile = DiscoveredPythonFunctionFile(
-        file_path=Path("/project/functions/python/order_label.py"),
-        relative_path=Path("functions/python/order_label.py"),
-        contents="",
-        header_values=header_values,
-        entry_point="label",
-        body_python="def label(value):\n    return value\n",
-    )
-    sql_files: tuple[DiscoveredSqlFunctionFile, ...] = (sql_file,)[python:]
-    python_files: tuple[DiscoveredPythonFunctionFile, ...] = (python_file,)[not python :]
-    adapter: DuckDbAdapter = DuckDbAdapter()
-    try:
-        return repr(
-            build_sql_function_inputs(
-                discovered_inputs=DiscoveredProjectInputs(
-                    project_config=ProjectConfig(
-                        name="orders",
-                        adapter="duckdb",
-                        defaults=DefaultsConfig(database="analytics", schema="shared"),
-                    ),
-                    local_config=LocalConfig(),
-                    sql_function_files=sql_files,
-                    python_function_files=python_files,
-                ),
-                effective_vars={},
-                effective_settings=SettingsConfig(),
-                target_config=TargetConfig(database="warehouse", schema=test_case.target_schema),
-                macro_context=_MACRO_CONTEXT,
-                loaded_macros={},
-                declaration_expansion=DeclarationExpansionContext(
-                    declarations=DeclarationResolutionContext(),
-                    value_renderer=adapter,
-                    collection_rendering=CollectionRendering.VALUE_LIST,
-                ),
-                sql_lexical_syntax=adapter.sql_lexical_syntax,
-                no_sql_validation=True,
-                python_functions_inherit_default_namespace=test_case.inherit_default_namespace,
-            )
-        ), False
-    except CompileInputError as error:
-        return f"error: {error}", error.bridge_independent
 
 
 _MACRO_PIECES: tuple[str, ...] = (

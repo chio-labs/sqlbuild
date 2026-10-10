@@ -2,51 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile._helpers.config.retention import resolve_time_travel_retention
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import ResolvedTableType
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.spec.contracts.models import (
     MaterializationDefaultsConfig,
-    ResolvedTimeTravelRetention,
     TargetConfig,
 )
 from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TableTypeValue
-
-_STORAGE_POLICY_KEYS: frozenset[str] = frozenset({"time_travel_retention", "table_type"})
-
-
-def resolve_storage_policies(
-    *,
-    resolved_values: dict[str, object],
-    model_header_values: dict[str, object],
-    materialization_defaults: MaterializationDefaultsConfig | None,
-    target_config: TargetConfig | None,
-    model_name: str,
-) -> tuple[dict[str, object], ResolvedTimeTravelRetention, ResolvedTableType]:
-    """Resolve storage policies and remove authored values from ordinary model config."""
-
-    defaults: MaterializationDefaultsConfig = (
-        materialization_defaults or MaterializationDefaultsConfig()
-    )
-    retention: ResolvedTimeTravelRetention = resolve_time_travel_retention(
-        materialized=resolved_values.get("materialized"),
-        model_value=model_header_values.get("time_travel_retention"),
-        materialization_defaults=defaults,
-        target_config=target_config,
-        model_name=model_name,
-    )
-    table_type: ResolvedTableType = resolve_table_type(
-        materialized=resolved_values.get("materialized"),
-        model_value=model_header_values.get("table_type"),
-        materialization_defaults=defaults,
-        target_config=target_config,
-        model_name=model_name,
-    )
-    cleaned_values: dict[str, object] = {
-        key: value for key, value in resolved_values.items() if key not in _STORAGE_POLICY_KEYS
-    }
-    return cleaned_values, retention, table_type
 
 
 def resolve_table_type(

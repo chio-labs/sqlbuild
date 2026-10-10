@@ -1,0 +1,27 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' apply unary - to the value of a nested macro call, which is a str and not a number at line 5, column 29",
+     "path": "models/marts/customer_totals.sql",
+     "line": 5,
+     "column": 29,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 5,
+      "column": 29
+     },
+     "help": "Return a number from the nested macro, or apply the sign inside the macro"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

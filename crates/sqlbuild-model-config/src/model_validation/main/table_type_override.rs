@@ -5,23 +5,23 @@ use crate::model_validation::_helpers::config::text_if_string;
 use crate::model_validation::constants::{
     INHERIT_POLICY, PERMANENT_TABLE_TYPE, TRANSIENT_TABLE_TYPE,
 };
-use crate::model_validation::models::{TableTypeOverride, ValidationStop};
+use crate::model_validation::models::TableTypeOverride;
 use crate::types::{AuthoredNode, NodeKind};
 
-/// Return the header table-type override, the error Python raises, or a deferral.
+/// Return the header table-type override, or the error it raises.
 pub fn table_type_override<N: AuthoredNode>(
     value: Option<&N>,
     model_name: &str,
-) -> Result<TableTypeOverride, ValidationStop> {
+) -> Result<TableTypeOverride, ConfigError> {
     let Some(value) = value.filter(|node| node.kind() != NodeKind::Null) else {
         return Ok(TableTypeOverride::Inherit);
     };
-    match text_if_string(value)?.as_deref() {
+    match text_if_string(value).as_deref() {
         Some(INHERIT_POLICY) => Ok(TableTypeOverride::Inherit),
         Some(PERMANENT_TABLE_TYPE) => Ok(TableTypeOverride::Permanent),
         Some(TRANSIENT_TABLE_TYPE) => Ok(TableTypeOverride::Transient),
-        _ => Err(ValidationStop::Error(ConfigError::compile(format!(
+        _ => Err(ConfigError::compile(format!(
             "model '{model_name}': table_type must be permanent, transient, or inherit"
-        )))),
+        ))),
     }
 }

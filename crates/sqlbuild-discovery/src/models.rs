@@ -84,8 +84,6 @@ pub enum FileOutcome<T> {
     Failed(DiscoveryFailure),
     /// The file could not be read or decoded as Python's `read_text` would.
     Unreadable(ReadFailure),
-    /// Native parsing cannot reproduce Python for this file; the Python parser reads it.
-    Deferred,
 }
 
 /// One discovered file, by `/`-separated path relative to the project directory.

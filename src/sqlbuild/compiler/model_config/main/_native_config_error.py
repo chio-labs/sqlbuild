@@ -20,10 +20,9 @@ from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
 def native_config_error(
     *,
     error: _native.NativeConfigError,
-    bridge_independent: bool,
     values: Mapping[str, object] | None = None,
 ) -> Exception:
-    """Return Python's exception for `error`, marked `bridge_independent` when SQL is unread."""
+    """Return the exception class `error` names, with its message, code and help."""
 
     if error.class_name == CONFIG_VALUE_TYPE_ERROR and error.key is not None and values is not None:
         return ConfigValueTypeError(
@@ -33,6 +32,4 @@ def native_config_error(
         return ResourceIdentityError(error.message, help=error.help)
     if error.class_name == DISCOVERY_CONFLICT_ERROR:
         return DiscoveryConflictError(error.message, help=error.help)
-    return CompileInputError(
-        error.message, code=error.code, help=error.help, bridge_independent=bridge_independent
-    )
+    return CompileInputError(error.message, code=error.code, help=error.help)

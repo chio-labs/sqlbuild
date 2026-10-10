@@ -14,18 +14,6 @@ class HeaderMetadataParityTestCase:
     count: int
     expected_minimum_parsed: int
     expected_minimum_rejected: int
-    expected_minimum_unsupported: int
-
-
-@dataclass(frozen=True)
-class ConfigPresenceParityTestCase:
-    """Seeded config values scanned for templates and macro calls natively and in Python."""
-
-    description: str
-    seed: int
-    count: int
-    expected_minimum_present: int
-    expected_minimum_deferred: int
 
 
 @dataclass(frozen=True)
@@ -35,18 +23,3 @@ class ModelConfigTierTestCase:
     description: str
     engine: str
     expected_native_calls: dict[str, int]
-
-
-@dataclass(frozen=True)
-class ConfigTemplateParityTestCase:
-    """Seeded config values whose templates expand natively and in Python."""
-
-    description: str
-    seed: int
-    count: int
-    allow_context: bool
-    preserve_context_tokens: bool
-    preserve_unknown_context: bool
-    expected_minimum_expanded: int
-    expected_minimum_rejected: int
-    expected_minimum_unsupported: int

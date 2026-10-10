@@ -1,7 +1,7 @@
 use crate::model_validation::main::retention_override::retention_override;
 use crate::model_validation::main::table_type_override::table_type_override;
-use crate::model_validation::models::{RetentionOverride, TableTypeOverride};
-use crate::model_validation::tests::helpers::validator_error;
+use crate::model_validation::models::{RetentionOverride, TableTypeOverride, ValidationStop};
+use crate::model_validation::tests::helpers::{python_312, validator_error};
 use crate::model_validation::tests::test_types::{
     RetentionOverrideTestCase, TableTypeOverrideTestCase,
 };
@@ -53,7 +53,8 @@ fn given_header_retention_values_when_reading_then_python_policies_result() {
     ];
 
     for test_case in test_cases {
-        let resolved = retention_override(test_case.value.as_ref(), "orders_daily");
+        let resolved = retention_override(python_312(), test_case.value.as_ref(), "orders_daily")
+            .map_err(ValidationStop::Error);
 
         assert_eq!(
             resolved, test_case.expected_override,
@@ -96,7 +97,8 @@ fn given_header_table_types_when_reading_then_python_types_result() {
     ];
 
     for test_case in test_cases {
-        let resolved = table_type_override(test_case.value.as_ref(), "orders_daily");
+        let resolved = table_type_override(test_case.value.as_ref(), "orders_daily")
+            .map_err(ValidationStop::Error);
 
         assert_eq!(
             resolved, test_case.expected_override,

@@ -248,6 +248,14 @@ def _interpolation_cases() -> tuple[FailureCase, ...]:
             files=_staging_columns(columns="amount, status, __cursor_start() AS window_start"),
         ),
         failure_case(
+            name="cursor-intrinsic-quoted-argument",
+            expected_code="P001",
+            expected_message="intrinsic __cursor_end does not accept arguments",
+            files=_staging_columns(
+                columns="amount, status, __cursor_end(')') AS window_end, ·__cursor_start()"
+            ),
+        ),
+        failure_case(
             name="named-hook-missing-argument",
             expected_code="P001",
             expected_message="is missing argument 'label'",

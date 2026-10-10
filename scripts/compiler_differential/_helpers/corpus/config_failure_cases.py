@@ -21,6 +21,22 @@ _WATERMARK: str = (
     "  cursor_watermark_mode all,\n  batch_size 1d,\n"
     "  cursor_inputs (raw_orders (column placed_at, roles [filter, watermark])),\n"
 )
+_ROLLING: str = (
+    _WATERMARK.replace("microbatch_strategy watermark", "microbatch_strategy rolling_window")
+    .replace("  cursor_watermark_mode all,\n", "")
+    .replace("(raw_orders (column placed_at, roles [filter, watermark]))", "(raw_orders placed_at)")
+    + "  lookback 1d,\n"
+)
+_BEYOND_64_BITS: int = 2**64
+_INT64_MAX: int = 2**63 - 1
+
+
+def _header_help(*, purpose: str, entry: str) -> str:
+    indent: str = " " * 12
+    return (
+        f"{purpose}, add this to the MODEL header:\n{indent}MODEL (\n"
+        f"{indent}  {entry},\n{indent}  ...\n{indent});"
+    )
 
 
 def _staging_header(extra: str) -> dict[str, str]:
@@ -38,6 +54,7 @@ def config_failure_cases() -> tuple[FailureCase, ...]:
         *_materialization_cases(),
         *_template_cases(),
         *_header_metadata_cases(),
+        *_integer_range_cases(),
         *_combined_fault_cases(),
     )
 
@@ -259,6 +276,121 @@ def _header_metadata_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message="column 'order_id' audits must be a list",
             files=_staging_header("  columns (order_id (audits not_null)),"),
+        ),
+    )
+
+
+def _integer_range_cases() -> tuple[FailureCase, ...]:
+    return (
+        failure_case(
+            name="config-cursor-start-below-64-bits",
+            expected_code="P001",
+            expected_message=f"cursor_start -{_BEYOND_64_BITS} is smaller than a 64-bit integer",
+            expected_help=_header_help(
+                purpose="set cursor_start to a value that fits in 64 bits",
+                entry=f"cursor_start {-_INT64_MAX - 1}",
+            ),
+            files=_staging_header(f"{_INCREMENTAL}  cursor_start -{_BEYOND_64_BITS},"),
+        ),
+        failure_case(
+            name="config-batch-concurrency-beyond-64-bits",
+            expected_code="P001",
+            expected_message=f"batch_concurrency {_BEYOND_64_BITS} is larger than a 64-bit integer",
+            expected_help=_header_help(
+                purpose="set batch_concurrency to a value that fits in 64 bits",
+                entry=f"batch_concurrency {_INT64_MAX}",
+            ),
+            files=_staging_header(f"{_WATERMARK}  batch_concurrency {_BEYOND_64_BITS},"),
+        ),
+        failure_case(
+            name="config-max-microbatches-beyond-64-bits",
+            expected_code="P001",
+            expected_message=f"max_microbatches {_BEYOND_64_BITS} is larger than a 64-bit integer",
+            expected_help=_header_help(
+                purpose="set max_microbatches to a value that fits in 64 bits",
+                entry=f"max_microbatches {_INT64_MAX}",
+            ),
+            files=_staging_header(f"{_WATERMARK}  max_microbatches {_BEYOND_64_BITS},"),
+        ),
+        failure_case(
+            name="config-microbatch-limit-beyond-64-bits",
+            expected_code="P001",
+            expected_message=(
+                f"microbatch_limit max_batches {_BEYOND_64_BITS} is larger than a 64-bit integer"
+            ),
+            expected_help=_header_help(
+                purpose="set microbatch_limit max_batches to a value that fits in 64 bits",
+                entry=f"microbatch_limit (max_batches {_INT64_MAX}, action error)",
+            ),
+            files=_staging_header(
+                f"{_WATERMARK}  microbatch_limit (max_batches {_BEYOND_64_BITS}, action error),"
+            ),
+        ),
+        failure_case(
+            name="config-rolling-max-microbatches-beyond-64-bits",
+            expected_code="P001",
+            expected_message="max_microbatches is only valid with microbatch_strategy=watermark",
+            files=_staging_header(f"{_ROLLING}  max_microbatches {_BEYOND_64_BITS},"),
+        ),
+        failure_case(
+            name="config-rolling-microbatch-limit-beyond-64-bits",
+            expected_code="P001",
+            expected_message="microbatch_limit is only valid with microbatch_strategy=watermark",
+            files=_staging_header(
+                f"{_ROLLING}  microbatch_limit (max_batches {_BEYOND_64_BITS}, action error),"
+            ),
+        ),
+        failure_case(
+            name="config-lookback-beyond-64-bits",
+            expected_code="P001",
+            expected_message=(
+                "lookback '99999999999999999999d' has a number larger than a 64-bit integer"
+            ),
+            expected_help=_header_help(
+                purpose="use a lookback whose numbers fit in 64 bits", entry="lookback '7d'"
+            ),
+            files=_staging_header(f"{_INCREMENTAL}  lookback 99999999999999999999d,"),
+        ),
+        failure_case(
+            name="config-batch-size-beyond-64-bits",
+            expected_code="P001",
+            expected_message=(
+                "batch_size '99999999999999999999d' has a number larger than a 64-bit integer"
+            ),
+            expected_help=_header_help(
+                purpose="use a batch_size whose numbers fit in 64 bits", entry="batch_size '7d'"
+            ),
+            files=_staging_header(
+                _WATERMARK.replace("batch_size 1d", "batch_size 99999999999999999999d")
+            ),
+        ),
+        failure_case(
+            name="header-audit-minimum-samples-beyond-64-bits",
+            expected_code="P001",
+            expected_message=(
+                f"audit 'not_null' 'minimum_samples' {_BEYOND_64_BITS} is larger than a 64-bit "
+                "integer"
+            ),
+            expected_help=_header_help(
+                purpose="set minimum_samples to a value that fits in 64 bits",
+                entry=f"audits [not_null (minimum_samples {_INT64_MAX})]",
+            ),
+            files=_staging_header(f"  audits [not_null (minimum_samples {_BEYOND_64_BITS})],"),
+        ),
+        failure_case(
+            name="header-column-audit-evidence-limit-beyond-64-bits",
+            expected_code="P001",
+            expected_message=(
+                f"column 'order_id' audit 'not_null' 'evidence_limit' {_BEYOND_64_BITS} is larger "
+                "than a 64-bit integer"
+            ),
+            expected_help=_header_help(
+                purpose="set evidence_limit to a value that fits in 64 bits",
+                entry=f"columns (order_id (audits [not_null (evidence_limit {_INT64_MAX})]))",
+            ),
+            files=_staging_header(
+                f"  columns (order_id (audits [not_null (evidence_limit {_BEYOND_64_BITS})])),"
+            ),
         ),
     )
 

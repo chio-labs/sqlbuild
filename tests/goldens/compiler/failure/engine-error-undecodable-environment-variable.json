@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Environment variable 'SQB_FAILURE_UNDECODABLE_REGION' is not valid UTF-8 text: byte 17 starts an invalid UTF-8 sequence",
+     "help": "Set 'SQB_FAILURE_UNDECODABLE_REGION' to UTF-8 text, since SQLBuild cannot send undecodable bytes to a warehouse; the value is not shown because it may be a secret"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

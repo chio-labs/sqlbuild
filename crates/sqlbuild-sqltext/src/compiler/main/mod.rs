@@ -6,5 +6,4 @@ pub mod model_header_parsing;
 pub mod model_header_single_parsing;
 pub mod model_header_tokenizing;
 pub mod sql_interpolation;
-pub mod sql_references;
 pub mod statement_header_matching;

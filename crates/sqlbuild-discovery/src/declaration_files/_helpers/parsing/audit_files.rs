@@ -2,7 +2,7 @@
 
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::declaration_files::_helpers::checks::python_values::{
-    PythonType, failure, get, non_empty_str, python_str, python_type,
+    PythonType, WordRules, failure, get, non_empty_str, python_str, python_type,
 };
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::audit_text::{AuditText, chars, text};
@@ -11,6 +11,7 @@ use crate::models::FailureKind;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
 use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const AUDIT_KEYWORD: &str = "AUDIT";
@@ -113,7 +114,8 @@ impl AuditParse<'_> {
                 .filter(|character| **character == '\n')
                 .count();
         let header_values: Vec<(String, AuthoredValue)> = self.header(&header, header_line)?;
-        let evaluation_mode: &'static str = evaluation_mode(&header_values, file_path)?;
+        let evaluation_mode: &'static str =
+            evaluation_mode(&header_values, file_path, self.options.python)?;
         let body: &[char] = &block_chars[body_start..];
         let mut measure_sql: Option<String> = None;
         let mut evidence_sql: Option<String> = None;
@@ -143,7 +145,14 @@ impl AuditParse<'_> {
             sql_body
         };
         let name: Option<String> = match get(&header_values, "name") {
-            Some(value) => python_str(value)?.map(str::to_owned),
+            Some(value) => python_str(
+                value,
+                WordRules {
+                    python: self.options.python,
+                    file_path,
+                },
+            )?
+            .map(str::to_owned),
             None => None,
         };
         Ok(AuditBlock {
@@ -177,7 +186,14 @@ impl AuditParse<'_> {
         )?;
         for key in STRING_KEYS {
             if let Some(value) = get(&values, key)
-                && non_empty_str(value)?.is_none()
+                && non_empty_str(
+                    value,
+                    WordRules {
+                        python: self.options.python,
+                        file_path,
+                    },
+                )?
+                .is_none()
             {
                 return Err(audit_failure(format!(
                     "AUDIT() {key} in '{file_path}' must be a non-empty string"
@@ -186,7 +202,13 @@ impl AuditParse<'_> {
         }
         for key in BOOLEAN_KEYS {
             if let Some(value) = get(&values, key)
-                && python_type(value)? != PythonType::Bool
+                && python_type(
+                    value,
+                    WordRules {
+                        python: self.options.python,
+                        file_path,
+                    },
+                )? != PythonType::Bool
             {
                 return Err(audit_failure(format!(
                     "AUDIT() {key} in '{file_path}' must be a boolean"
@@ -343,9 +365,10 @@ fn keyword_at_slice_start(
 fn evaluation_mode(
     header_values: &[(String, AuthoredValue)],
     file_path: &str,
+    python: PythonText,
 ) -> Result<&'static str, ParseStop> {
     let mode: &str = match get(header_values, "evaluation") {
-        Some(value) => python_str(value)?.unwrap_or_default(),
+        Some(value) => python_str(value, WordRules { python, file_path })?.unwrap_or_default(),
         None => VIOLATIONS,
     };
     let mode: &'static str = match mode {

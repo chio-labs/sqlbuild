@@ -12,7 +12,6 @@ from tests.integration.src.sqlbuild.compiler.attachments._test_types import (
     AuthoredSqlParityTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.attachments.helpers import (
-    ExactErrorText,
     authored_outcome,
     generated_authored_sql,
     generated_dollar_authored_sql,
@@ -64,8 +63,7 @@ def test_given_generated_authored_sql_when_expanding_with_preview_then_python_ou
         sum(isinstance(item, AuthoredSqlExpansionResult) for item in python)
         >= test_case.expected_minimum_expanded,
         sum(isinstance(item, str) for item in python) >= test_case.expected_minimum_python_errors,
-        sum(isinstance(item, ExactErrorText) for item in preview)
-        >= test_case.expected_minimum_exact_errors,
+        sum(isinstance(item, str) for item in preview) >= test_case.expected_minimum_exact_errors,
     ) == ([], True, True, True), test_case.description
 
 

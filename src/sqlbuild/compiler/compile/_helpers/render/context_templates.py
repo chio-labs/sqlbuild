@@ -8,26 +8,9 @@ from uuid import uuid4
 
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile.constants import (
-    COMPILE_INPUT_READS,
-    MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
-    MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
-    MISSING_TEMPLATE_VALUE_MESSAGE_PARTS,
     PRESERVE_TARGET_VALUE,
 )
 from sqlbuild.compiler.compile.types import CompileContextKey
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
-from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
-from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
-    expand_native_config_templates,
-)
-from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
-from sqlbuild.compiler.model_config.models import (
-    NativeTemplateExpansion,
-    NativeTemplateRejection,
-    TemplateResolutionFlags,
-)
 from sqlbuild.spec.contracts.models import TargetConfig
 
 
@@ -37,7 +20,6 @@ def resolve_early_model_templates(
     effective_vars: dict[str, object],
     effective_target_name: str | None,
     run_id: str,
-    native: bool = False,
 ) -> dict[str, object]:
     """Resolve `${name}`, `${ENV:...}`, and early `run.*` model templates."""
 
@@ -54,7 +36,6 @@ def resolve_early_model_templates(
             allow_context=True,
             preserve_context_tokens=False,
             preserve_unknown_context=True,
-            native=native,
         ),
     )
 
@@ -65,7 +46,6 @@ def resolve_model_context_templates(
     model_name: str,
     effective_target_name: str | None,
     run_id: str,
-    native: bool = False,
 ) -> dict[str, object]:
     """Resolve model-bound `CTX` values once logical model identity is known."""
 
@@ -85,7 +65,6 @@ def resolve_model_context_templates(
             allow_context=True,
             preserve_context_tokens=False,
             preserve_unknown_context=True,
-            native=native,
         ),
     )
 
@@ -96,7 +75,6 @@ def resolve_chained_model_context_templates(
     model_name: str,
     effective_target_name: str | None,
     run_id: str,
-    native: bool = False,
 ) -> dict[str, object]:
     """Resolve twice so ${CTX:model.*} values may chain exactly one level without looping."""
 
@@ -105,14 +83,12 @@ def resolve_chained_model_context_templates(
         model_name=model_name,
         effective_target_name=effective_target_name,
         run_id=run_id,
-        native=native,
     )
     return resolve_model_context_templates(
         values=first_pass_values,
         model_name=model_name,
         effective_target_name=effective_target_name,
         run_id=run_id,
-        native=native,
     )
 
 
@@ -122,7 +98,6 @@ def resolve_target_context_templates(
     model_name: str,
     effective_target_name: str | None,
     run_id: str,
-    native: bool = False,
 ) -> dict[str, object]:
     """Resolve late `target.*` values after environment overrides finalize naming."""
 
@@ -142,7 +117,6 @@ def resolve_target_context_templates(
             allow_context=True,
             preserve_context_tokens=False,
             preserve_unknown_context=False,
-            native=native,
         ),
     )
 
@@ -208,7 +182,6 @@ def apply_environment_database_schema_overrides(
     effective_vars: dict[str, object],
     target_config: TargetConfig | None,
     model_context_values: dict[str, str | None],
-    native: bool = False,
 ) -> dict[str, object]:
     """Return values with environment database/schema overrides applied."""
 
@@ -225,7 +198,6 @@ def apply_environment_database_schema_overrides(
             allow_context=True,
             preserve_context_tokens=False,
             preserve_unknown_context=False,
-            native=native,
         )
     if target_config.schema is not None and target_config.schema != PRESERVE_TARGET_VALUE:
         overridden["schema"] = expand_config_templates(
@@ -236,7 +208,6 @@ def apply_environment_database_schema_overrides(
             allow_context=True,
             preserve_context_tokens=False,
             preserve_unknown_context=False,
-            native=native,
         )
     return overridden
 
@@ -260,40 +231,9 @@ def expand_config_templates(
     allow_context: bool,
     preserve_context_tokens: bool,
     preserve_unknown_context: bool,
-    native: bool,
 ) -> object:
-    """Expand like `expand_template_data`, natively when set; unsupported values run Python."""
+    """Expand `${...}` templates in a config value natively, recording what it reads."""
 
-    outcome: NativeTemplateExpansion | NativeTemplateRejection | str | None = (
-        expand_native_config_templates(
-            value=value,
-            variables=variables,
-            context_values=context_values,
-            flags=TemplateResolutionFlags(
-                allow_context=allow_context,
-                preserve_context_tokens=preserve_context_tokens,
-                preserve_unknown_context=preserve_unknown_context,
-            ),
-            context_label=context_label,
-        )
-        if native
-        else None
-    )
-    if isinstance(outcome, NativeTemplateExpansion):
-        record_template_reads(outcome.reads)
-        return outcome.value
-    if isinstance(outcome, NativeTemplateRejection) and not _names_missing_template_value(
-        context_label
-    ):
-        record_template_reads(outcome.reads)
-        raise native_config_error(error=outcome.error, bridge_independent=True)
-    if native:
-        report_native_fallback(
-            site=NativeFallbackSite.CONFIG_TEMPLATES,
-            kind="unsupported" if outcome is None or isinstance(outcome, str) else "missing_value",
-        )
-    elif native_stage_enabled(NativeStage.MODEL_CONFIG):
-        report_native_fallback(site=NativeFallbackSite.PYTHON_TEMPLATES, kind="config")
     return expand_template_data(
         value=value,
         variables=variables,
@@ -303,26 +243,3 @@ def expand_config_templates(
         preserve_context_tokens=preserve_context_tokens,
         preserve_unknown_context=preserve_unknown_context,
     )
-
-
-def _names_missing_template_value(context_label: str) -> bool:
-    """Whether Python's `coalesce` would read errors naming this label as missing values."""
-
-    return any(
-        part in context_label
-        for part in (
-            *MISSING_TEMPLATE_VALUE_MESSAGE_PARTS,
-            MISSING_TEMPLATE_CONTEXT_MESSAGE_PART,
-            MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART,
-        )
-    )
-
-
-def record_template_reads(reads: tuple[tuple[str, str], ...]) -> None:
-    """Record native template environment and context reads for project reuse, in order."""
-
-    for kind, name in reads:
-        if kind == ENVIRONMENT_READ:
-            COMPILE_INPUT_READS.environment_read(name)
-        else:
-            COMPILE_INPUT_READS.context_read(name)

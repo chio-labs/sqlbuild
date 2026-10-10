@@ -28,6 +28,11 @@ pub(crate) const DESTINATION_TABLE_CONTEXT: &str = "destination.table";
 pub(crate) const DESTINATION_QUALIFIED_CONTEXT: &str = "destination.qualified";
 pub(crate) const AUDIT_TARGET_DEFERRAL: &str = "audit_target_kind";
 pub(crate) const TEMPLATE_DEFERRAL: &str = "target_template";
+/// `render_project_var_text` of booleans inside a larger template string.
+pub(crate) const PROJECT_VAR_TRUE: &str = "true";
+pub(crate) const PROJECT_VAR_FALSE: &str = "false";
+/// The label template errors would name; assembly defers every template error.
+pub(crate) const TEMPLATE_LABEL: &str = "project assembly template";
 pub(crate) const PRESERVED_NAMESPACE_DEFERRAL: &str = "preserved_namespace";
 pub(crate) const SYNTAX_DEFERRAL: &str = "syntax_error";
 pub(crate) const PLACEHOLDER_DEFERRAL: &str = "placeholder_word";

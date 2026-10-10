@@ -2,20 +2,26 @@
 
 use crate::errors::ConfigError;
 use crate::model_validation::constants::{
-    REF_KIND, SEED_KIND, SOURCE_KIND, TABLE_FUNCTION_KIND, UDF_KIND,
+    DBT_REF_KIND, REF_KIND, SEED_KIND, SOURCE_KIND, TABLE_FUNCTION_KIND, UDF_KIND,
 };
 use crate::model_validation::models::{
     ModelReference, ModelValidationFacts, ProjectValidationFacts, ValidationStop,
 };
 use crate::model_validation::types::Check;
 
-/// Check each reference in order; external dbt references and unknown kinds defer to Python.
+/// Check each reference in order; a dbt reference stops where its resolver rejected it.
 pub(crate) fn check_references(
     facts: &ModelValidationFacts<'_>,
     project: &ProjectValidationFacts,
 ) -> Check {
-    for reference in facts.references {
-        if let Some(problem) = reference_problem(reference, project)? {
+    for (index, reference) in facts.references.iter().enumerate() {
+        if reference.kind == DBT_REF_KIND {
+            if reference.externally_rejected {
+                return Err(ValidationStop::External(index));
+            }
+            continue;
+        }
+        if let Some(problem) = reference_problem(reference, project) {
             return Err(ValidationStop::Error(ConfigError::compile(format!(
                 "Model file {} {problem}",
                 facts.relative_path
@@ -28,13 +34,13 @@ pub(crate) fn check_references(
 fn reference_problem(
     reference: &ModelReference,
     project: &ProjectValidationFacts,
-) -> Result<Option<String>, ValidationStop> {
+) -> Option<String> {
     let name = &reference.name;
     let model = project.models.contains(name);
     let seed = project.seeds.contains(name);
     let function = project.functions.contains(name);
     let table_function = project.table_functions.contains(name);
-    Ok(match reference.kind.as_str() {
+    match reference.kind.as_str() {
         REF_KIND if !model && seed => Some(format!(
             "references seed '{name}' with __ref(...). Use {} for seed references; __ref only \
              resolves models.",
@@ -60,9 +66,8 @@ fn reference_problem(
         TABLE_FUNCTION_KIND if !table_function => Some(format!(
             "references scalar function '{name}' with __table_fn(); use __udf() for scalar UDFs"
         )),
-        REF_KIND | SEED_KIND | SOURCE_KIND | UDF_KIND | TABLE_FUNCTION_KIND => None,
-        _ => return Err(ValidationStop::Defer),
-    })
+        _ => None,
+    }
 }
 
 /// Return `SqlReferenceKind.example_call(name, quote='"')`.

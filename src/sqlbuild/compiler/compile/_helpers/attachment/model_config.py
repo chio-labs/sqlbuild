@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import os
+import sys
+import unicodedata
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
-from sqlbuild.compiler.compile._helpers.attachment.references import validate_model_references
+from sqlbuild.compiler.compile._helpers.attachment.references import validate_external_reference
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     merge_validated_model_audits,
     parse_model_header_audit_factories,
@@ -20,42 +20,28 @@ from sqlbuild.compiler.compile._helpers.config.dynamic_columns import (
 )
 from sqlbuild.compiler.compile._helpers.config.model_validation import (
     validate_column_migration_config,
-    validate_contract_config,
-    validate_custom_materialization_config,
-    validate_incremental_config,
-    validate_microbatch_project_capability,
-    validate_model_migration_config,
-    validate_non_incremental_config,
-    validate_placeholder_config,
-    validate_snapshot_config,
-    validate_storage_policies,
 )
 from sqlbuild.compiler.compile._helpers.config.retention import resolve_time_travel_retention
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_table_type
-from sqlbuild.compiler.compile._helpers.render.context_templates import record_template_reads
 from sqlbuild.compiler.compile._helpers.render.templating import (
-    contains_template_data,
+    record_template_reads,
 )
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.constants import (
-    MACRO_CALL_PATTERN,
     MODEL_AUDIT_OVERRIDE_KEYS,
     MODEL_HEADER_METADATA_KEYS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CachedModelHeaderColumns,
     CompileModelConfig,
     CompileModelInput,
-    IdentityPresenceCache,
-    ModelConfigScanCache,
-    ModelHeaderColumnCache,
+    CompileSqlReference,
     ModelResourceNames,
     ModelValidationRequest,
     ModelValidatorContext,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
-from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFactory,
     DiscoveredSchemaFile,
@@ -66,18 +52,15 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
-from sqlbuild.compiler.model_config.main._native_config_contains_macro_call import (
-    native_config_contains_macro_call,
-)
-from sqlbuild.compiler.model_config.main._native_config_contains_template import (
-    native_config_contains_template,
-)
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
+from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
+    parse_native_header_metadata,
+)
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.compiler.planner.types import MaterializationType
+from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
@@ -100,6 +83,7 @@ _TABLE_BACKED_MATERIALIZATIONS: tuple[str, ...] = (
     MaterializationType.INCREMENTAL,
     MaterializationType.SNAPSHOT,
 )
+_PYTHON_VERSION: tuple[int, int] = (sys.version_info[0], sys.version_info[1])
 _MATERIALIZED_CONFIG_KEY: str = "materialized"
 type _BuiltNamespace = tuple[str | None, bool, str | None]
 type _StorageOverrides = tuple[tuple[int | None, bool] | None, str | None]
@@ -112,107 +96,6 @@ type _BuiltConfig = tuple[
 ]
 _MODEL_DESCRIPTION_KEY: str = "description"
 _MODEL_SCHEMA_KEY: str = "model_schema"
-
-
-def _contains_template_data_cached(*, value: object, cache: IdentityPresenceCache | None) -> bool:
-    if cache is None or not isinstance(value, dict | list | tuple):
-        return contains_template_data(value)
-    cached: bool | None = cache.get(value)
-    if cached is not None:
-        return cached
-    if isinstance(value, dict):
-        result: bool = any(
-            _contains_template_data_cached(value=item, cache=cache) for item in value.values()
-        )
-    else:
-        result = any(_contains_template_data_cached(value=item, cache=cache) for item in value)
-    cache.put(value=value, result=result)
-    return result
-
-
-def contains_config_templates(
-    *, values: dict[str, object], scan_cache: ModelConfigScanCache | None
-) -> bool:
-    """Return whether layered model config holds a `${...}` template, scanning natively if set."""
-
-    if scan_cache is not None and scan_cache.native:
-        native: bool | None = native_config_contains_template(values)
-        if native is not None:
-            return native
-        report_native_fallback(site=NativeFallbackSite.CONFIG_PRESENCE_SCAN, kind="templates")
-    return _contains_template_data_cached(
-        value=values, cache=scan_cache.template_presence if scan_cache is not None else None
-    )
-
-
-def contains_config_macro_calls(
-    *, values: dict[str, object], scan_cache: ModelConfigScanCache | None
-) -> bool:
-    """Return whether model config outside hooks holds a macro call, scanning natively if set."""
-
-    if scan_cache is not None and scan_cache.native:
-        native: bool | None = native_config_contains_macro_call(
-            [value for key, value in values.items() if key not in _MODEL_HOOK_KEYS]
-        )
-        if native is not None:
-            return native
-        report_native_fallback(site=NativeFallbackSite.CONFIG_PRESENCE_SCAN, kind="macros")
-    return _contains_model_config_macro_cached(
-        values=values, cache=scan_cache.macro_presence if scan_cache is not None else None
-    )
-
-
-def _contains_model_config_macro_cached(
-    *, values: dict[str, object], cache: IdentityPresenceCache | None
-) -> bool:
-    return any(
-        _contains_macro_data_cached(value=value, cache=cache)
-        for key, value in values.items()
-        if key not in _MODEL_HOOK_KEYS
-    )
-
-
-def _contains_macro_data_cached(*, value: object, cache: IdentityPresenceCache | None) -> bool:
-    if isinstance(value, str):
-        return MACRO_CALL_PATTERN.search(value) is not None
-    if not isinstance(value, dict | list | tuple):
-        return False
-    if cache is not None:
-        cached: bool | None = cache.get(value)
-        if cached is not None:
-            return cached
-    if isinstance(value, dict):
-        result: bool = any(
-            _contains_macro_data_cached(value=item, cache=cache) for item in value.values()
-        )
-    else:
-        result = any(_contains_macro_data_cached(value=item, cache=cache) for item in value)
-    if cache is not None:
-        cache.put(value=value, result=result)
-    return result
-
-
-def validate_no_macros_in_config_value(*, value: object, path: tuple[str, ...]) -> None:
-    """Recursively reject macro calls outside hook fields."""
-
-    if path and path[0] in _MODEL_HOOK_KEYS:
-        return
-    if isinstance(value, str):
-        if MACRO_CALL_PATTERN.search(value) is not None:
-            field_path: str = ".".join(path) if path else "<root>"
-            raise CompileInputError(f"model config field '{field_path}' does not allow macros")
-        return
-    if isinstance(value, dict):
-        key: object
-        item_value: object
-        for key, item_value in value.items():
-            if isinstance(key, str):
-                validate_no_macros_in_config_value(value=item_value, path=(*path, key))
-        return
-    if isinstance(value, list | tuple):
-        item: object
-        for item in value:
-            validate_no_macros_in_config_value(value=item, path=path)
 
 
 def build_layered_model_values(
@@ -313,24 +196,6 @@ def _as_string_list(value: object) -> list[str]:
     return []
 
 
-def _validate_model_header_tags(
-    *,
-    model_header_values: dict[str, object],
-    model_name: str,
-) -> None:
-    """Validate that tags in a MODEL header is a list of strings."""
-
-    raw_tags: object | None = model_header_values.get("tags")
-    if raw_tags is None:
-        return
-    if not isinstance(raw_tags, list):
-        raise CompileInputError(f"model '{model_name}' tags must be a list")
-    item: object
-    for item in raw_tags:
-        if not isinstance(item, str):
-            raise CompileInputError(f"model '{model_name}' tags entries must be strings")
-
-
 def build_model_header_schema_entry(
     *,
     model_name: str,
@@ -341,8 +206,6 @@ def build_model_header_schema_entry(
     model_schema_name: str | None = None,
     model_schema_description: str | None = None,
     audit_factories: tuple[DiscoveredAuditFactory, ...] = (),
-    column_cache: ModelHeaderColumnCache | None = None,
-    native_metadata: NativeHeaderMetadata | None = None,
 ) -> SchemaModelEntry | None:
     """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
 
@@ -369,28 +232,16 @@ def build_model_header_schema_entry(
         error_class=CompileInputError,
     )
     description: str | None = model_description or model_schema_description
-    native: NativeHeaderMetadata | None = (
-        native_metadata
-        if native_metadata is not None
-        and native_metadata.applies_to(
-            raw_columns=raw_columns, raw_audits=raw_audits, column_locations=column_locations
-        )
-        else None
+    native: NativeHeaderMetadata = parse_native_header_metadata(
+        raw_columns=raw_columns,
+        raw_audits=raw_audits,
+        column_locations=column_locations or {},
+        file_path=file_path,
     )
-    if native_metadata is not None and native is None:
-        report_native_fallback(site=NativeFallbackSite.CONFIG_HEADER_METADATA, kind="stale")
-    if native is not None and native.columns_error is not None:
-        raise native_config_error(error=native.columns_error, bridge_independent=True)
-    local_columns: tuple[SchemaColumn, ...] = (
-        native.columns
-        if native is not None
-        else _parse_model_header_columns(
-            raw_columns=raw_columns,
-            file_path=file_path,
-            column_locations=column_locations or {},
-            column_cache=column_cache,
-        )
-    )
+    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="header_metadata_parses")
+    if native.columns_error is not None:
+        raise native_config_error(error=native.columns_error)
+    local_columns: tuple[SchemaColumn, ...] = native.columns
     columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
         model_name=model_name,
         file_path=file_path,
@@ -402,19 +253,9 @@ def build_model_header_schema_entry(
         model_name=model_name,
         file_path=file_path,
     )
-    if native is not None and native.audits_error is not None:
-        raise native_config_error(error=native.audits_error, bridge_independent=True)
-    audits: tuple[SchemaAuditInstance, ...] = (
-        native.audits
-        if native is not None
-        else parse_audit_instances(
-            raw_audits=raw_audits,
-            file_path=file_path,
-            label="model",
-            error_class=CompileInputError,
-            null_as_empty=True,
-        )
-    )
+    if native.audits_error is not None:
+        raise native_config_error(error=native.audits_error)
+    audits: tuple[SchemaAuditInstance, ...] = native.audits
     generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
         raw_audit_factories=raw_audit_factories,
         file_path=file_path,
@@ -461,82 +302,6 @@ def strip_model_header_metadata_from_config(config: CompileModelConfig) -> Compi
         logical_database=config.logical_database,
         time_travel_retention=config.time_travel_retention,
         table_type=config.table_type,
-    )
-
-
-def _parse_model_header_columns(
-    *,
-    raw_columns: object | None,
-    file_path: Path,
-    column_locations: dict[str, SourceLocation],
-    column_cache: ModelHeaderColumnCache | None = None,
-) -> tuple[SchemaColumn, ...]:
-    if raw_columns is None or column_cache is None:
-        return parse_schema_columns(
-            raw_columns=raw_columns,
-            file_path=file_path,
-            label="model",
-            error_class=CompileInputError,
-            column_locations=column_locations,
-            allow_migrate_from=True,
-        )
-    cached: CachedModelHeaderColumns | None = column_cache.get(raw_columns)
-    if cached is None:
-        parsed: tuple[SchemaColumn, ...] = parse_schema_columns(
-            raw_columns=raw_columns,
-            file_path=file_path,
-            label="model",
-            error_class=CompileInputError,
-            column_locations=column_locations,
-            allow_migrate_from=True,
-        )
-        cached = CachedModelHeaderColumns(
-            raw_columns=raw_columns,
-            columns=parsed,
-            column_locations=column_locations,
-        )
-        column_cache.put(cached)
-        return parsed
-    if cached.column_locations is column_locations or (
-        not cached.column_locations and not column_locations
-    ):
-        return cached.columns
-    return tuple(
-        _schema_column_at_location(
-            column=column,
-            location=column_locations.get(column.name),
-        )
-        for column in cached.columns
-    )
-
-
-def _schema_column_at_location(
-    *, column: SchemaColumn, location: SourceLocation | None
-) -> SchemaColumn:
-    return SchemaColumn(
-        name=column.name,
-        type=column.type,
-        nullable=column.nullable,
-        description=column.description,
-        meta=column.meta,
-        migrate_from=column.migrate_from,
-        audits=tuple(
-            SchemaAuditInstance(
-                definition_name=audit.definition_name,
-                arguments=audit.arguments,
-                name=audit.name,
-                description=audit.description,
-                severity=audit.severity,
-                run_scope=audit.run_scope,
-                always_run=audit.always_run,
-                thresholds=audit.thresholds,
-                minimum_samples=audit.minimum_samples,
-                evidence_limit=audit.evidence_limit,
-                location=location,
-            )
-            for audit in column.audits
-        ),
-        location=location,
     )
 
 
@@ -882,14 +647,18 @@ def native_model_config_session(
                 project_config.path_defaults,
                 (SqlHookEntry, NamedSqlHookEntry, PythonHookEntry),
             ),
-            (inputs.effective_vars, os.environ),
-            (inputs.effective_target_name, inputs.run_id),
-            None if target is None else (target.database, target.schema),
+            (inputs.effective_vars, UnicodeEnvironment()),
+            (
+                (inputs.effective_target_name, inputs.run_id),
+                None if target is None else (target.database, target.schema),
+            ),
+            (_PYTHON_VERSION, unicodedata.unidata_version),
         ),
         validator=_native.NativeModelValidator(
             (names.models, names.seeds, names.sources, names.functions, names.table_functions),
             set(names.custom_materializations),
             inputs.microbatch_concurrency,
+            (_PYTHON_VERSION, unicodedata.unidata_version),
         ),
         inherited_storage={
             materialized: (
@@ -922,7 +691,7 @@ def native_path_default(
         str(model_file.relative_path)
     )
     if isinstance(selected, _native.NativeConfigError):
-        raise native_config_error(error=selected, bridge_independent=True)
+        raise native_config_error(error=selected)
     return selected
 
 
@@ -931,18 +700,15 @@ def build_native_model_config(
     session: NativeModelConfigSession,
     model_file: DiscoveredSqlModelFile,
     matched_path_default: str | None,
-) -> CompileModelConfig | None:
-    """Build a model's effective config natively, raising Python's error; None defers to Python."""
+) -> CompileModelConfig:
+    """Build a model's effective config natively, raising its first config error."""
 
-    built: _BuiltConfig | _native.NativeConfigError | None = session.builder.build(
+    built: _BuiltConfig | _native.NativeConfigError = session.builder.build(
         model_file.header_values, matched_path_default, model_file.file_path.stem
     )
-    if built is None:
-        report_native_fallback(site=NativeFallbackSite.CONFIG_BUILD)
-        return None
     report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds")
     if isinstance(built, _native.NativeConfigError):
-        raise native_config_error(error=built, bridge_independent=True)
+        raise native_config_error(error=built)
     values, header_keys, namespace, overrides, reads = built
     logical_schema, layer_schema_configured, logical_database = namespace
     retention_override, table_type_override = overrides
@@ -982,9 +748,9 @@ def build_native_model_config(
 
 
 def native_model_validation(
-    *, session: NativeModelConfigSession, request: ModelValidationRequest
-) -> bool | _native.NativeConfigError:
-    """Return True when every model validator accepts, the first error, or False to run Python."""
+    *, session: NativeModelConfigSession, request: ModelValidationRequest, rejected: list[bool]
+) -> int | _native.NativeConfigError | None:
+    """Validate natively: None, the first error, or the index of a rejected dbt reference."""
 
     config: CompileModelConfig = request.config
     return session.validator.validate(
@@ -995,7 +761,10 @@ def native_model_validation(
             str(request.model_file.relative_path),
         ),
         (
-            request.references,
+            [
+                (str(reference.ref_kind), reference.ref_name, reference_rejected)
+                for reference, reference_rejected in zip(request.references, rejected, strict=True)
+            ],
             (
                 None
                 if request.declared_columns is None
@@ -1012,69 +781,81 @@ def native_validation_error(
 ) -> Exception:
     """Return a native validator error, unmarked because validators read macro-expanded SQL."""
 
-    return native_config_error(error=error, bridge_independent=False, values=values)
+    return native_config_error(error=error, values=values)
 
 
 def validate_model_config(
     *, context: ModelValidatorContext, request: ModelValidationRequest
 ) -> None:
-    """Validate one model natively, raising the first validator error; deferrals run Python."""
+    """Validate one model natively, raising the first validator error."""
 
-    if context.native_config is not None:
-        outcome: bool | _native.NativeConfigError = native_model_validation(
-            session=context.native_config, request=request
+    external_errors: list[Exception | None] = [
+        _external_reference_error(
+            context=context, model_file=request.model_file, reference=reference
         )
-        if isinstance(outcome, _native.NativeConfigError):
-            raise native_validation_error(error=outcome, values=request.config.values)
-        if outcome:
-            report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="validations")
-            return
-        report_native_fallback(site=NativeFallbackSite.CONFIG_VALIDATORS)
-    run_python_model_validators(context=context, request=request)
+        for reference in request.references
+    ]
+    outcome: int | _native.NativeConfigError | None = native_model_validation(
+        session=context.native_config,
+        request=request,
+        rejected=[error is not None for error in external_errors],
+    )
+    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="validations")
+    _raise_validation_outcome(
+        outcome=outcome, external_errors=external_errors, values=request.config.values
+    )
 
 
-def run_python_model_validators(
-    *, context: ModelValidatorContext, request: ModelValidationRequest
+def validate_model_references(
+    *,
+    context: ModelValidatorContext,
+    model_file: DiscoveredSqlModelFile,
+    references: tuple[CompileSqlReference, ...],
 ) -> None:
-    """Run every Python model validator in order, raising the first error."""
+    """Check references alone, as hook references are, raising the first problem."""
 
-    names: ModelResourceNames = context.names
-    model_name: str = request.model_file.file_path.stem
-    validate_model_references(
-        references=request.references,
-        model_file=request.model_file,
-        known_model_names=names.models,
-        known_seed_names=names.seeds,
-        known_source_names=names.sources,
-        known_function_names=names.functions,
-        known_table_function_names=names.table_functions,
-        external_sql_reference_resolver=context.external_sql_reference_resolver,
+    external_errors: list[Exception | None] = [
+        _external_reference_error(context=context, model_file=model_file, reference=reference)
+        for reference in references
+    ]
+    outcome: int | _native.NativeConfigError | None = context.native_config.validator.references(
+        (model_file.file_path.stem, str(model_file.relative_path)),
+        [
+            (str(reference.ref_kind), reference.ref_name, error is not None)
+            for reference, error in zip(references, external_errors, strict=True)
+        ],
     )
-    validate_incremental_config(
-        config=request.config,
-        model_name=model_name,
-        ref_count=len(request.references),
-        known_input_names=frozenset(reference.ref_name for reference in request.references),
-        declared_columns=request.declared_columns,
-    )
-    validate_microbatch_project_capability(
-        config=request.config, settings=context.settings, model_name=model_name
-    )
-    validate_contract_config(config=request.config, model_name=model_name)
-    validate_non_incremental_config(config=request.config, model_name=model_name)
-    validate_snapshot_config(
-        config=request.config, model_name=model_name, declared_columns=request.declared_columns
-    )
-    validate_custom_materialization_config(
-        config=request.config,
-        model_name=model_name,
-        custom_materialization_names=names.custom_materializations,
-    )
-    validate_storage_policies(config=request.config, model_name=model_name)
-    validate_model_migration_config(config=request.config, model_name=model_name)
-    validate_placeholder_config(
-        config=request.config,
-        model_name=model_name,
-        query_sql=request.query_sql,
-        custom_materialization_names=names.custom_materializations,
-    )
+    _raise_validation_outcome(outcome=outcome, external_errors=external_errors, values={})
+
+
+def _raise_validation_outcome(
+    *,
+    outcome: int | _native.NativeConfigError | None,
+    external_errors: list[Exception | None],
+    values: dict[str, object],
+) -> None:
+    if isinstance(outcome, _native.NativeConfigError):
+        raise native_validation_error(error=outcome, values=values)
+    if outcome is not None:
+        raise cast(Exception, external_errors[outcome])
+
+
+def _external_reference_error(
+    *,
+    context: ModelValidatorContext,
+    model_file: DiscoveredSqlModelFile,
+    reference: CompileSqlReference,
+) -> Exception | None:
+    """The error the dbt manifest gives a `__dbt_ref`, or None when it accepts the reference."""
+
+    if reference.ref_kind != SqlReferenceKind.DBT_REF:
+        return None
+    try:
+        validate_external_reference(
+            reference=reference,
+            model_file=model_file,
+            external_sql_reference_resolver=context.external_sql_reference_resolver,
+        )
+    except CompileInputError as error:
+        return error
+    return None

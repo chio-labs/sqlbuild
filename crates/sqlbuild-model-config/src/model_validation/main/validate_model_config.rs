@@ -13,13 +13,13 @@ use crate::model_validation::models::{
 };
 use crate::types::AuthoredNode;
 
-/// Run the Python validators' rules in their order; defer where only Python can decide.
+/// Run the model validators in order, stopping at the first problem.
 pub fn validate_model_config<N: AuthoredNode>(
     entries: Vec<(N, N)>,
     project: &ProjectValidationFacts,
     facts: &ModelValidationFacts<'_>,
 ) -> Result<(), ValidationStop> {
-    let config = ConfigView::new(entries, facts.model_name);
+    let config = ConfigView::new(entries, facts.model_name, project.python);
     check_references(facts, project)?;
     check_incremental(&config, facts)?;
     check_project_capability(&config, project)?;

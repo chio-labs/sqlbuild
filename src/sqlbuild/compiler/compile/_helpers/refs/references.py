@@ -2,20 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
-import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.refs.native import extract_native_sql_references
 from sqlbuild.compiler.compile._helpers.render.spans import map_through_passes
 from sqlbuild.compiler.compile.constants import (
     REFERENCE_CALL_SYNTAX_CODE,
-    SQL_ARGUMENT_SEPARATOR_TOKEN,
-    SQL_CLOSE_PAREN_TOKEN,
-    SQL_OPEN_PAREN_TOKEN,
-    SQL_QUOTE_TOKENS,
-    SQL_REFERENCE_NAME_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -33,42 +26,10 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     SqlReferenceScanFailure,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
-from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main._skip_dialect_non_code import dialect_non_code_end
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceLocation
-
-_CONTEXT: str = "SQL reference"
-_PAIRED_QUOTE_CHARACTER_COUNT: int = 2
-_DBT_REF_PACKAGE_ARGUMENT_COUNT: int = 2
-_NAME_ARGUMENT_PATTERN: re.Pattern[str] = re.compile(r'"([^"]+)"')
-_DBT_REF_ARGUMENTS_PATTERN: re.Pattern[str] = re.compile(r'"([^"]+)"(?:\s*,\s*"([^"]+)")?')
-_AUTHORED_NAME_PATTERN: re.Pattern[str] = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
-_PLACEHOLDER_NAMES: dict[SqlReferenceKind, tuple[str, ...]] = {
-    SqlReferenceKind.REF: ("model_name",),
-    SqlReferenceKind.SOURCE: ("source_name",),
-    SqlReferenceKind.SEED: ("seed_name",),
-    SqlReferenceKind.UDF: ("function_name",),
-    SqlReferenceKind.TABLE_FUNCTION: ("function_name",),
-    SqlReferenceKind.DBT_REF: ("package_name", "model_name"),
-}
-_REFERENCE_PREFIXES: tuple[tuple[str, SqlReferenceKind], ...] = (
-    ("__dbt_ref(", SqlReferenceKind.DBT_REF),
-    ("__table_fn(", SqlReferenceKind.TABLE_FUNCTION),
-    ("__source(", SqlReferenceKind.SOURCE),
-    ("__seed(", SqlReferenceKind.SEED),
-    ("__udf(", SqlReferenceKind.UDF),
-    ("__ref(", SqlReferenceKind.REF),
-)
-_REFERENCE_PREFIX_BY_KIND: dict[SqlReferenceKind, str] = {
-    ref_kind: prefix[:-1] for prefix, ref_kind in _REFERENCE_PREFIXES
-}
-_REFERENCE_SCAN_PATTERN: re.Pattern[str] = re.compile(r"__|--|/\*|//|#|'|\"|`|\$")
 
 
 def extract_sql_references(
@@ -97,33 +58,11 @@ def scan_sql_reference_calls(
 def _reference_scan_outcome(
     *, sql: str, syntax: SqlLexicalSyntax
 ) -> SqlReferenceScan | SqlReferenceScanFailure:
-    if native_stage_enabled(NativeStage.REFERENCE_EXTRACTION):
-        native: SqlReferenceScan | SqlReferenceScanFailure | None = extract_native_sql_references(
-            sql=sql, syntax=syntax
-        )
-        if native is not None:
-            report_native_answer(stage=NativeStage.REFERENCE_EXTRACTION, kind="reference_scans")
-            return native
-        report_native_fallback(site=NativeFallbackSite.REFERENCE_SCAN)
-        return python_reference_scan(sql=sql, syntax=syntax)
-    if syntax.reads_differently_from_generic(sql):
-        return python_reference_scan(sql=sql, syntax=syntax)
-    native_references: list[tuple[str, str, str | None, int | None]] | None = (
-        _native.extract_static_sql_references(sql)
+    outcome: SqlReferenceScan | SqlReferenceScanFailure = extract_native_sql_references(
+        sql=sql, syntax=syntax
     )
-    if native_references is not None:
-        return SqlReferenceScan(
-            references=tuple(
-                CompileSqlReference(
-                    ref_kind=SqlReferenceKind(kind),
-                    ref_name=name,
-                    ref_package=package,
-                    call_argument_count=call_argument_count,
-                )
-                for kind, name, package, call_argument_count in native_references
-            )
-        )
-    return python_reference_scan(sql=sql, syntax=syntax)
+    report_native_answer(stage=NativeStage.REFERENCE_EXTRACTION, kind="reference_scans")
+    return outcome
 
 
 def _located_scan_error(
@@ -147,7 +86,7 @@ def _located_scan_error(
     contents: str = origin.contents
     line: int = contents.count("\n", 0, authored_offset) + 1
     column: int = authored_offset - (contents.rfind("\n", 0, authored_offset) + 1) + 1
-    return CompileInputError(f"{path}:{line}:{column}: {message}", bridge_independent=True)
+    return CompileInputError(f"{path}:{line}:{column}: {message}")
 
 
 def _authored_fault_offset(
@@ -301,254 +240,3 @@ def reference_call_location(*, path: Path, text: str, start: int, call: str) -> 
         end_line=text.count("\n", 0, end) + 1,
         end_column=end - (text.rfind("\n", 0, end) + 1) + 1,
     )
-
-
-def python_reference_scan(
-    *, sql: str, syntax: SqlLexicalSyntax
-) -> SqlReferenceScan | SqlReferenceScanFailure:
-    """Scan with the Python scanner; an error carries the start of its quote, comment or call."""
-
-    references: list[CompileSqlReference] = []
-    invalid_calls: list[InvalidSqlReferenceCall] = []
-    index: int = 0
-    length: int = len(sql)
-    while index < length:
-        index = _next_reference_scan_position(sql=sql, start=index)
-        if index >= length:
-            break
-        try:
-            non_code_end: int | None = dialect_non_code_end(
-                sql=sql, start=index, syntax=syntax, context=_CONTEXT
-            )
-        except CompileInputError as error:
-            return (error.message, index)
-        if non_code_end is not None:
-            index = non_code_end
-            continue
-
-        try:
-            parsed: tuple[CompileSqlReference | InvalidSqlReferenceCall, int] | None = (
-                _parse_reference_at(sql=sql, start=index, syntax=syntax)
-            )
-        except CompileInputError as error:
-            return (error.message, index)
-        if parsed is None:
-            index += 1
-            continue
-        if isinstance(parsed[0], InvalidSqlReferenceCall):
-            invalid_calls.append(parsed[0])
-        else:
-            references.append(parsed[0])
-        index = parsed[1]
-    return SqlReferenceScan(references=tuple(references), invalid_calls=tuple(invalid_calls))
-
-
-def _next_reference_scan_position(*, sql: str, start: int) -> int:
-    match: re.Match[str] | None = _REFERENCE_SCAN_PATTERN.search(sql, start)
-    return match.start() if match is not None else len(sql)
-
-
-def _parse_reference_at(
-    *, sql: str, start: int, syntax: SqlLexicalSyntax
-) -> tuple[CompileSqlReference | InvalidSqlReferenceCall, int] | None:
-    ref_kind: SqlReferenceKind | None = None
-    prefix: str
-    for prefix, candidate_kind in _REFERENCE_PREFIXES:
-        if sql.startswith(prefix, start):
-            ref_kind = candidate_kind
-            break
-    if ref_kind is None:
-        return None
-
-    open_paren_index: int = start + len(_REFERENCE_PREFIX_BY_KIND[ref_kind])
-    closing_paren_index: int = find_matching_paren(
-        sql=sql, open_paren_index=open_paren_index, context=_CONTEXT, syntax=syntax
-    )
-    raw_arguments: str = sql[open_paren_index + 1 : closing_paren_index]
-    call: str = sql[start : closing_paren_index + 1]
-    argument_match: re.Match[str] | None = (
-        _DBT_REF_ARGUMENTS_PATTERN
-        if ref_kind == SqlReferenceKind.DBT_REF
-        else _NAME_ARGUMENT_PATTERN
-    ).fullmatch(raw_arguments)
-    if argument_match is None:
-        return (
-            _invalid_reference_arguments(
-                ref_kind=ref_kind,
-                call=call,
-                start=start,
-                raw_arguments=raw_arguments,
-                syntax=syntax,
-            ),
-            closing_paren_index + 1,
-        )
-    if ref_kind == SqlReferenceKind.DBT_REF and argument_match.group(2) is not None:
-        return (
-            CompileSqlReference(
-                ref_kind=ref_kind,
-                ref_package=argument_match.group(1),
-                ref_name=argument_match.group(2),
-            ),
-            closing_paren_index + 1,
-        )
-    call_argument_count: int | None = None
-    if ref_kind == SqlReferenceKind.TABLE_FUNCTION:
-        call_suffix_start: int = _skip_whitespace(sql=sql, start=closing_paren_index + 1)
-        if call_suffix_start >= len(sql) or sql[call_suffix_start] != SQL_OPEN_PAREN_TOKEN:
-            corrected_call: str = ref_kind.example_call(argument_match.group(1), quote='"')
-            return (
-                InvalidSqlReferenceCall(
-                    ref_kind=ref_kind,
-                    call=call,
-                    start=start,
-                    message=f"{ref_prefix(ref_kind)} must be followed by an argument list",
-                    help=(
-                        "pass the function arguments in a second set of parentheses, using () "
-                        f"for no arguments: {corrected_call}()"
-                    ),
-                    corrected_call=f"{corrected_call}()",
-                ),
-                closing_paren_index + 1,
-            )
-        call_suffix_end: int = find_matching_paren(
-            sql=sql,
-            open_paren_index=call_suffix_start,
-            context="SQL table function call",
-            syntax=syntax,
-        )
-        call_argument_count = len(
-            _split_top_level_arguments(
-                raw_arguments=sql[call_suffix_start + 1 : call_suffix_end], syntax=syntax
-            )
-        )
-    return (
-        CompileSqlReference(
-            ref_kind=ref_kind,
-            ref_name=argument_match.group(1),
-            call_argument_count=call_argument_count,
-        ),
-        closing_paren_index + 1,
-    )
-
-
-def _invalid_reference_arguments(
-    *,
-    ref_kind: SqlReferenceKind,
-    call: str,
-    start: int,
-    raw_arguments: str,
-    syntax: SqlLexicalSyntax,
-) -> InvalidSqlReferenceCall:
-    """Describe a reference call that later compile stages could not replace."""
-
-    names: tuple[str, ...] | None = _authored_reference_names(
-        raw_arguments=raw_arguments, syntax=syntax
-    )
-    allowed_counts: frozenset[int] = (
-        frozenset({1, _DBT_REF_PACKAGE_ARGUMENT_COUNT})
-        if ref_kind == SqlReferenceKind.DBT_REF
-        else frozenset({1})
-    )
-    if names is None or len(names) not in allowed_counts:
-        names = _PLACEHOLDER_NAMES[ref_kind]
-    corrected_call: str = ref_kind.example_call(*names, quote='"')
-    if ref_kind == SqlReferenceKind.TABLE_FUNCTION:
-        corrected_call += "(...)"
-    accepted: str = (
-        "one double-quoted model name, or a double-quoted package name and model name "
-        "separated by a comma"
-        if ref_kind == SqlReferenceKind.DBT_REF
-        else "exactly one double-quoted name"
-    )
-    return InvalidSqlReferenceCall(
-        ref_kind=ref_kind,
-        call=call,
-        start=start,
-        message=f"{' '.join(call.split())} is not a valid {ref_prefix(ref_kind)}() call",
-        help=(
-            f"{ref_prefix(ref_kind)}() takes {accepted}, with no comments or extra spaces "
-            f"inside the parentheses: {corrected_call}"
-        ),
-        corrected_call=corrected_call,
-    )
-
-
-def _authored_reference_names(
-    *, raw_arguments: str, syntax: SqlLexicalSyntax
-) -> tuple[str, ...] | None:
-    """Return the names the author meant, when each argument is a plain name or string."""
-
-    try:
-        arguments: tuple[str, ...] = _split_top_level_arguments(
-            raw_arguments=raw_arguments, syntax=syntax
-        )
-    except CompileInputError:
-        return None
-    names: list[str] = []
-    for argument in arguments:
-        name: str = argument
-        if (
-            len(argument) >= _PAIRED_QUOTE_CHARACTER_COUNT
-            and argument[0] == argument[-1]
-            and argument[0] in SQL_REFERENCE_NAME_QUOTE_TOKENS
-        ):
-            name = argument[1:-1]
-        if _AUTHORED_NAME_PATTERN.fullmatch(name) is None:
-            return None
-        names.append(name)
-    return tuple(names)
-
-
-def ref_prefix(ref_kind: SqlReferenceKind | str) -> str:
-    normalized_ref_kind: SqlReferenceKind = SqlReferenceKind(ref_kind)
-    return _REFERENCE_PREFIX_BY_KIND[normalized_ref_kind]
-
-
-def _skip_whitespace(*, sql: str, start: int) -> int:
-    index: int = start
-    while index < len(sql) and sql[index].isspace():
-        index += 1
-    return index
-
-
-def _split_top_level_arguments(*, raw_arguments: str, syntax: SqlLexicalSyntax) -> tuple[str, ...]:
-    arguments: list[str] = []
-    current: list[str] = []
-    depth: int = 0
-    index: int = 0
-    saw_separator: bool = False
-    while index < len(raw_arguments):
-        non_code_end: int | None = dialect_non_code_end(
-            sql=raw_arguments, start=index, syntax=syntax, context=_CONTEXT
-        )
-        if non_code_end is not None:
-            current.append(
-                raw_arguments[index:non_code_end]
-                if raw_arguments[index] in SQL_QUOTE_TOKENS
-                else " "
-            )
-            index = non_code_end
-            continue
-        character: str = raw_arguments[index]
-        if character == SQL_OPEN_PAREN_TOKEN:
-            depth += 1
-        elif character == SQL_CLOSE_PAREN_TOKEN:
-            depth -= 1
-        elif character == SQL_ARGUMENT_SEPARATOR_TOKEN and depth == 0:
-            argument_text: str = "".join(current).strip()
-            if not argument_text:
-                raise CompileInputError(f"{_CONTEXT} contains an empty argument")
-            arguments.append(argument_text)
-            current = []
-            saw_separator = True
-            index += 1
-            continue
-        current.append(character)
-        index += 1
-
-    final_argument: str = "".join(current).strip()
-    if final_argument:
-        arguments.append(final_argument)
-    elif saw_separator:
-        raise CompileInputError(f"{_CONTEXT} contains an empty argument")
-    return tuple(arguments)

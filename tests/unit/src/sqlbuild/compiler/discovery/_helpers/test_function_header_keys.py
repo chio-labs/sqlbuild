@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
-from sqlbuild.compiler.discovery._helpers.sql.functions import parse_function_sql
 from sqlbuild.compiler.discovery.exceptions import ModelSqlParseError
+from sqlbuild.compiler.discovery.models import DiscoveredSqlFunctionFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     FunctionHeaderKeysTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import discover_declaration_file
 
 
 @pytest.mark.parametrize(
@@ -40,12 +42,16 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ids=lambda case: case.description,
 )
 def test_given_supported_function_header_keys_when_parsing_then_accepts_header(
-    test_case: FunctionHeaderKeysTestCase,
+    test_case: FunctionHeaderKeysTestCase, tmp_path: Path
 ) -> None:
-    header_values: dict[str, object]
-    header_values, _ = parse_function_sql(
-        contents=test_case.contents, file_path=Path(test_case.file_name)
-    )
+    header_values: dict[str, object] = cast(
+        DiscoveredSqlFunctionFile,
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path=f"functions/sql/{test_case.file_name}",
+            contents=test_case.contents,
+        ),
+    ).header_values
 
     assert tuple(sorted(header_values)) == test_case.expected_keys
 
@@ -78,12 +84,19 @@ def test_given_supported_function_header_keys_when_parsing_then_accepts_header(
     ids=lambda case: case.description,
 )
 def test_given_unknown_sql_function_header_key_when_parsing_then_rejects_key_with_location(
-    test_case: FunctionHeaderKeysTestCase,
+    test_case: FunctionHeaderKeysTestCase, tmp_path: Path
 ) -> None:
+    file_path: Path = tmp_path / "functions" / "sql" / test_case.file_name
     with pytest.raises(ModelSqlParseError) as raised:
-        parse_function_sql(contents=test_case.contents, file_path=Path(test_case.file_name))
+        discover_declaration_file(
+            project_dir=tmp_path,
+            relative_path=f"functions/sql/{test_case.file_name}",
+            contents=test_case.contents,
+        )
 
-    assert raised.value.message == test_case.expected_error
+    assert raised.value.message == test_case.expected_error.replace(
+        f"'{test_case.file_name}", f"'{file_path}"
+    )
     assert raised.value.code == "D002"
 
 

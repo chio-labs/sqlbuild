@@ -4,7 +4,6 @@ use crate::engine::tests::test_types::{
 use crate::rules::_helpers::evaluation::normalize_rules_sql;
 use crate::rules::_helpers::numeric_decisions::compact_sql;
 use crate::sql_lint::_helpers::preparation::prepare;
-use sqlbuild_sqltext::compiler::main::sql_references::extract;
 use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy as rules_quote_policy;
 use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
@@ -25,7 +24,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=aandb",
             expected_snowflake_compact: "a=aandb",
             expected_lint_site: Some("@m(a x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "single quote containing open paren",
@@ -38,7 +36,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a='a(b'andb",
             expected_snowflake_compact: "a='a(b'andb",
             expected_lint_site: Some("@m('a(b' x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "single quote containing close paren",
@@ -51,7 +48,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a='a)b'andb",
             expected_snowflake_compact: "a='a)b'andb",
             expected_lint_site: Some("@m('a)b' x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "doubled single quote",
@@ -64,7 +60,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a='it''s )'andb",
             expected_snowflake_compact: "a='it''s )'andb",
             expected_lint_site: Some("@m('it''s )' x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "backslash escaped quote before close paren",
@@ -77,7 +72,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a='a\\')' and  b",
             expected_snowflake_compact: "a='a\\')'andb",
             expected_lint_site: Some("@m('a\\')' x)"),
-            expected_reference_fast_path: false,
         },
         SqlScannerTestCase {
             description: "backslash escaped quote before open paren",
@@ -90,7 +84,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a='a\\'(' and  b",
             expected_snowflake_compact: "a='a\\'('andb",
             expected_lint_site: Some("@m('a\\'(' x)"),
-            expected_reference_fast_path: false,
         },
         SqlScannerTestCase {
             description: "double quote containing close paren",
@@ -103,7 +96,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=\"a)b\"andb",
             expected_snowflake_compact: "a=\"a)b\"andb",
             expected_lint_site: Some("@m(\"a)b\" x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "backtick containing close paren",
@@ -116,7 +108,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=`a)b`andb",
             expected_snowflake_compact: "a=`a)b`andb",
             expected_lint_site: Some("@m(`a)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "doubled backtick",
@@ -129,7 +120,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=`a``)b`andb",
             expected_snowflake_compact: "a=`a``)b`andb",
             expected_lint_site: Some("@m(`a``)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "line comment",
@@ -142,7 +132,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=andb",
             expected_snowflake_compact: "a=andb",
             expected_lint_site: Some("@m(-- )\n x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "block comment",
@@ -155,7 +144,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=andb",
             expected_snowflake_compact: "a=andb",
             expected_lint_site: Some("@m(/* ) */ x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "nested block comment",
@@ -168,7 +156,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=)*/andb",
             expected_snowflake_compact: "a=)*/andb",
             expected_lint_site: Some("@m(/* /* ) */ )"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "dollar quote",
@@ -181,7 +168,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=$$)$$andb",
             expected_snowflake_compact: "a=$$)$$andb",
             expected_lint_site: Some("@m($$ ) $$ x)"),
-            expected_reference_fast_path: true,
         },
         SqlScannerTestCase {
             description: "unterminated quote",
@@ -194,7 +180,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a='abc and  b",
             expected_snowflake_compact: "a='abc and  b",
             expected_lint_site: Some(""),
-            expected_reference_fast_path: false,
         },
         SqlScannerTestCase {
             description: "unterminated block comment",
@@ -207,7 +192,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a=",
             expected_snowflake_compact: "a=",
             expected_lint_site: Some(""),
-            expected_reference_fast_path: false,
         },
         SqlScannerTestCase {
             description: "multibyte utf8",
@@ -220,7 +204,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_compact: "a='é)ü'ñandb",
             expected_snowflake_compact: "a='é)ü'ñandb",
             expected_lint_site: None,
-            expected_reference_fast_path: true,
         },
     ];
 
@@ -296,12 +279,6 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             lint_site.as_deref(),
             test_case.expected_lint_site,
             "SQL lint macro site: {}",
-            test_case.description
-        );
-        assert_eq!(
-            extract(&format!("SELECT {fragment} __ref(\"b\")")).is_some(),
-            test_case.expected_reference_fast_path,
-            "SQL reference fast path: {}",
             test_case.description
         );
     }

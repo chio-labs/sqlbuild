@@ -69,6 +69,16 @@ Macro calls accept Python literal values:
 - `__ref("model")`, `__source("source")`, and `__seed("seed")` references, alone or inside lists
   and dictionaries
 
+These inputs are rejected with an error. In a model body the error names the file line and
+column; elsewhere it names the position within the macro's arguments:
+
+- bytes (`b"text"`), complex numbers (`2j`), f-strings, and `...`
+- a keyword argument passed twice, such as `@lit(a=1, a=2)`, which Python also rejects
+- lone surrogate escapes such as `"\ud800"`; write a character outside the Basic Multilingual
+  Plane as one escape, such as `"\U0001F600"`, rather than as a surrogate pair
+- `\N{...}` naming a multi-character named sequence; `\N` escapes name one character
+- two values with no comma between them
+
 Positional and keyword arguments are supported:
 
 ```sql

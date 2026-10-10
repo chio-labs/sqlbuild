@@ -3,9 +3,14 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_core::text::models::PythonText;
+
 use crate::errors::ConfigError;
-use crate::model_validation::_helpers::text::{python_lower, python_strip};
-use crate::model_validation::models::{Rejected, ValidationStop};
+use crate::model_validation::_helpers::durations::{Duration, parse_duration};
+use crate::model_validation::constants::SETTING_SNIPPET_INDENT;
+use crate::model_validation::errors::DurationNumberError;
+use crate::model_validation::models::ValidationStop;
 use crate::types::{AuthoredNode, NodeKind};
 
 /// Config values by string key; Python's `dict.get` never matches other keys.
@@ -13,18 +18,24 @@ pub(crate) struct ConfigView<'a, N> {
     values: HashMap<String, N>,
     /// The model name every validator message starts with.
     pub(crate) model_name: &'a str,
+    /// The Python string semantics the validators follow.
+    pub(crate) python: PythonText,
 }
 
 impl<'a, N: AuthoredNode> ConfigView<'a, N> {
     /// View the entries of one config mapping for the model `model_name`.
-    pub(crate) fn new(entries: Vec<(N, N)>, model_name: &'a str) -> Self {
+    pub(crate) fn new(entries: Vec<(N, N)>, model_name: &'a str, python: PythonText) -> Self {
         let mut values: HashMap<String, N> = HashMap::with_capacity(entries.len());
         for (key, value) in entries {
             if let Some(text) = key.text() {
                 values.insert(text, value);
             }
         }
-        Self { values, model_name }
+        Self {
+            values,
+            model_name,
+            python,
+        }
     }
 
     /// Return `values[key]` when the key is present, even when its value is `None`.
@@ -53,7 +64,7 @@ impl<'a, N: AuthoredNode> ConfigView<'a, N> {
     pub(crate) fn string(&self, key: &str) -> Result<Option<String>, ValidationStop> {
         match self.get(key) {
             None => Ok(None),
-            Some(value) if value.kind() == NodeKind::Str => Ok(Some(value.text().ok_or(Rejected)?)),
+            Some(value) if value.kind() == NodeKind::Str => Ok(value.text()),
             Some(_) => Err(ValidationStop::Error(ConfigError::config_value_type(key))),
         }
     }
@@ -72,69 +83,73 @@ impl<'a, N: AuthoredNode> ConfigView<'a, N> {
     pub(crate) fn config_error(&self, text: impl Display) -> ConfigError {
         ConfigError::compile(format!("model '{}': {text}", self.model_name))
     }
+
+    /// Parse `key`'s duration `text`, raising for a duration SQLBuild cannot read exactly.
+    pub(crate) fn duration(
+        &self,
+        key: &str,
+        text: &str,
+    ) -> Result<Option<Duration>, ValidationStop> {
+        self.duration_written_as(key, text, "7d")
+    }
+
+    /// Parse `key`'s duration `text`; a raised error's help shows `key '<example>'`.
+    pub(crate) fn duration_written_as(
+        &self,
+        key: &str,
+        text: &str,
+        example: &str,
+    ) -> Result<Option<Duration>, ValidationStop> {
+        parse_duration(self.python, text).map_err(|error| {
+            let (problem, purpose) = match error {
+                DurationNumberError::NonAsciiDigits => (
+                    "uses digits outside ASCII",
+                    format!("write {key} with ASCII digits 0-9"),
+                ),
+                DurationNumberError::TooLarge => (
+                    "has a number larger than a 64-bit integer",
+                    format!("use a {key} whose numbers fit in 64 bits"),
+                ),
+            };
+            ValidationStop::Error(
+                self.config_error(format!("{key} '{text}' {problem}"))
+                    .with_help(model_header_help(&purpose, &format!("{key} '{example}'"))),
+            )
+        })
+    }
+
+    /// The error for an integer `key` beyond 64 bits; `entry` writes the header entry for a bound.
+    pub(crate) fn integer_out_of_range(
+        &self,
+        key: &str,
+        value: &N,
+        entry: impl Fn(i64) -> String,
+    ) -> ValidationStop {
+        let (comparison, bound) = if value.python_str().starts_with('-') {
+            ("smaller", i64::MIN)
+        } else {
+            ("larger", i64::MAX)
+        };
+        ValidationStop::Error(
+            self.config_error(format!(
+                "{key} {} is {comparison} than a 64-bit integer",
+                value.python_str()
+            ))
+            .with_help(model_header_help(
+                &format!("set {key} to a value that fits in 64 bits"),
+                &entry(bound),
+            )),
+        )
+    }
 }
 
-/// Return the text of a string value, or reject any other type.
-pub(crate) fn string_value<N: AuthoredNode>(value: &N) -> Result<String, Rejected> {
+/// Return the text of a string value, or `None` for another type.
+pub(crate) fn text_if_string<N: AuthoredNode>(value: &N) -> Option<String> {
     if value.kind() == NodeKind::Str {
-        value.text().ok_or(Rejected)
+        value.text()
     } else {
-        Err(Rejected)
+        None
     }
-}
-
-/// Return the text of a string value, `None` for another type, or reject unreadable text.
-pub(crate) fn text_if_string<N: AuthoredNode>(value: &N) -> Result<Option<String>, Rejected> {
-    if value.kind() == NodeKind::Str {
-        value.text().map(Some).ok_or(Rejected)
-    } else {
-        Ok(None)
-    }
-}
-
-/// Return Python's `str(value)` for strings, integers, booleans and `None`, or reject.
-pub(crate) fn python_str<N: AuthoredNode>(value: &N) -> Result<String, Rejected> {
-    match value.kind() {
-        NodeKind::Str => value.text().ok_or(Rejected),
-        NodeKind::Int { .. } => value
-            .integer()
-            .map(|number| number.to_string())
-            .ok_or(Rejected),
-        NodeKind::Bool(flag) => Ok(if flag { "True" } else { "False" }.to_owned()),
-        NodeKind::Null => Ok("None".to_owned()),
-        _ => Err(Rejected),
-    }
-}
-
-/// Return Python's `repr(value)` for printable ASCII strings and scalars, or reject.
-pub(crate) fn python_repr<N: AuthoredNode>(value: &N) -> Result<String, Rejected> {
-    if value.kind() != NodeKind::Str {
-        return python_str(value);
-    }
-    let text = value.text().ok_or(Rejected)?;
-    python_text_repr(&text)
-}
-
-/// Return Python's `repr(text)` for printable ASCII text, or reject.
-pub(crate) fn python_text_repr(text: &str) -> Result<String, Rejected> {
-    if !text.bytes().all(|byte| (b' '..=b'~').contains(&byte)) {
-        return Err(Rejected);
-    }
-    let quote = if text.contains('\'') && !text.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut repr = String::with_capacity(text.len() + 2);
-    repr.push(quote);
-    for character in text.chars() {
-        if character == '\\' || character == quote {
-            repr.push('\\');
-        }
-        repr.push(character);
-    }
-    repr.push(quote);
-    Ok(repr)
 }
 
 /// Return whether `text in vocabulary`.
@@ -149,17 +164,14 @@ pub(crate) fn sorted_values(vocabulary: &[&str]) -> String {
     values.join(", ")
 }
 
-/// Read `_string_sequence`: a string, or the strings of a list or tuple; reject unreadable text.
-pub(crate) fn string_sequence<N: AuthoredNode>(value: Option<&N>) -> Result<Vec<String>, Rejected> {
+/// Read `_string_sequence`: a string, or the strings of a list or tuple.
+pub(crate) fn string_sequence<N: AuthoredNode>(value: Option<&N>) -> Vec<String> {
     match value.map(|node| (node.kind(), node)) {
-        Some((NodeKind::Str, node)) => string_value(node).map(|text| vec![text]),
-        Some((NodeKind::List | NodeKind::Tuple, node)) => node
-            .items()
-            .iter()
-            .filter(|item| item.kind() == NodeKind::Str)
-            .map(string_value)
-            .collect(),
-        _ => Ok(Vec::new()),
+        Some((NodeKind::Str, node)) => node.text().into_iter().collect(),
+        Some((NodeKind::List | NodeKind::Tuple, node)) => {
+            node.items().iter().filter_map(text_if_string).collect()
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -170,15 +182,26 @@ pub(crate) fn has_config_value<N: AuthoredNode>(value: Option<&N>) -> bool {
     })
 }
 
-/// Check that a value is a string whose Python `strip()` is non-empty, or reject.
-pub(crate) fn non_blank_string_check<N: AuthoredNode>(value: &N) -> Result<bool, Rejected> {
-    match text_if_string(value)? {
-        Some(text) => Ok(!python_strip(&text)?.is_empty()),
-        None => Ok(false),
-    }
+/// Check that a value is a string whose Python `strip()` is non-empty.
+pub(crate) fn non_blank_string_check<N: AuthoredNode>(value: &N) -> bool {
+    text_if_string(value).is_some_and(|text| !python_strip(&text).is_empty())
 }
 
-/// Return whether two names are equal under Python's `str.lower()`, or reject.
-pub(crate) fn same_lowered(left: &str, right: &str) -> Result<bool, Rejected> {
-    Ok(python_lower(left)? == python_lower(right)?)
+/// Return whether two names are equal under Python's `str.lower()`.
+pub(crate) fn same_lowered(left: &str, right: &str) -> bool {
+    python_lower(left) == python_lower(right)
+}
+
+/// Return Python's `text.lower()`.
+pub(crate) fn python_lower(text: &str) -> String {
+    text.to_lowercase()
+}
+
+/// Return `model_header_help`: the purpose, then the exact MODEL header entry to add.
+pub(crate) fn model_header_help(purpose: &str, entry: &str) -> String {
+    let indent = SETTING_SNIPPET_INDENT;
+    format!(
+        "{purpose}, add this to the MODEL header:\n{indent}MODEL (\n{indent}  {entry},\n\
+         {indent}  ...\n{indent});"
+    )
 }

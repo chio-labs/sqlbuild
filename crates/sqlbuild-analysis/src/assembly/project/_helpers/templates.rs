@@ -9,7 +9,8 @@ use sqlbuild_model_config::templates::models::{
 use sqlbuild_model_config::templates::types::TemplateHost;
 
 use crate::assembly::project::constants::{
-    PYTHON_FALSE, PYTHON_NONE, PYTHON_TRUE, TEMPLATE_DEFERRAL, TEMPLATE_OPEN_TOKEN,
+    PROJECT_VAR_FALSE, PROJECT_VAR_TRUE, PYTHON_FALSE, PYTHON_NONE, PYTHON_TRUE, TEMPLATE_DEFERRAL,
+    TEMPLATE_LABEL, TEMPLATE_OPEN_TOKEN,
 };
 use crate::assembly::project::models::{InputRead, Variable};
 use crate::assembly::project::types::Fact;
@@ -43,7 +44,7 @@ impl TemplateHost for ScalarHost<'_> {
         {
             None => Ok(None),
             Some((_, Variable::Scalar(value))) => Ok(Some(value.clone())),
-            Some((_, Variable::Unsupported)) => Err(TemplateFailure::Unsupported),
+            Some((_, Variable::Unsupported)) => Err(TemplateFailure::Host),
         }
     }
 
@@ -58,7 +59,7 @@ impl TemplateHost for ScalarHost<'_> {
             .iter()
             .find(|(variable, _)| variable == name)
         {
-            None => Err(TemplateFailure::Unsupported),
+            None => Err(TemplateFailure::Host),
             Some((_, value)) => Ok(value.clone().map(Scalar::Text)),
         }
     }
@@ -87,8 +88,21 @@ impl TemplateHost for ScalarHost<'_> {
         Scalar::Null
     }
 
-    fn scalar(&self, value: &Self::Value) -> Option<Scalar> {
-        Some(value.clone())
+    fn scalar(&self, value: &Self::Value) -> Result<Scalar, TemplateFailure> {
+        Ok(value.clone())
+    }
+
+    fn render(&self, value: &Self::Value, _label: &str) -> Result<String, TemplateFailure> {
+        Ok(match value {
+            Scalar::Null => String::new(),
+            Scalar::Bool(true) => PROJECT_VAR_TRUE.to_owned(),
+            Scalar::Bool(false) => PROJECT_VAR_FALSE.to_owned(),
+            Scalar::Text(text) => text.clone(),
+        })
+    }
+
+    fn label(&self) -> &str {
+        TEMPLATE_LABEL
     }
 }
 

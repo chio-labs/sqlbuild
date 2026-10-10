@@ -21,13 +21,6 @@ pub(crate) fn backslash_hash_comments() -> LexicalSyntax {
     }
 }
 
-pub(crate) fn unsupported_comments() -> LexicalSyntax {
-    LexicalSyntax {
-        line_comment_prefixes: vec!["--".to_string(), "%".to_string()],
-        ..LexicalSyntax::default()
-    }
-}
-
 pub(crate) fn reference(kind: &'static str, name: &str) -> SqlReference {
     SqlReference {
         kind,

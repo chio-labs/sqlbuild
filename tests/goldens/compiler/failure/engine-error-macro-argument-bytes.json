@@ -1,0 +1,27 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' use a bytes literal at line 5, column 28",
+     "path": "models/marts/customer_totals.sql",
+     "line": 5,
+     "column": 28,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 5,
+      "column": 28
+     },
+     "help": "Pass text as a string without the b prefix, for example 'orders' instead of b'orders'"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

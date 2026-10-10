@@ -4,9 +4,6 @@ from datetime import date, datetime
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.config.model_validation import (
-    validate_incremental_config,
-)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
@@ -25,6 +22,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     MicrobatchRedesignBehaviorTestCase,
     WatermarkLimitValidationTestCase,
 )
+from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import validate_natively
 
 
 @pytest.mark.parametrize(
@@ -85,7 +83,7 @@ def test_given_consumer_and_producer_grains_when_resolving_then_strategy_owns_co
 def test_given_watermark_strategy_when_inputs_have_explicit_roles_then_config_is_valid(
     test_case: MicrobatchRedesignBehaviorTestCase,
 ) -> None:
-    validate_incremental_config(
+    validate_natively(
         config=CompileModelConfig(
             values={
                 "materialized": "incremental",
@@ -109,7 +107,7 @@ def test_given_watermark_strategy_when_inputs_have_explicit_roles_then_config_is
         ),
         model_name="events",
         ref_count=2,
-        known_input_names=frozenset({"archive", "live"}),
+        input_names=frozenset({"archive", "live"}),
     )
     assert test_case.expected_outcome is None
 
@@ -126,7 +124,7 @@ def test_given_watermark_strategy_when_inputs_have_explicit_roles_then_config_is
 def test_given_watermark_strategy_when_nested_limit_caps_from_end_then_config_is_valid(
     test_case: MicrobatchRedesignBehaviorTestCase,
 ) -> None:
-    validate_incremental_config(
+    validate_natively(
         config=CompileModelConfig(
             values={
                 "materialized": "incremental",
@@ -146,7 +144,7 @@ def test_given_watermark_strategy_when_nested_limit_caps_from_end_then_config_is
         ),
         model_name="events",
         ref_count=1,
-        known_input_names=frozenset({"events"}),
+        input_names=frozenset({"events"}),
     )
     assert test_case.expected_outcome is None
 
@@ -164,7 +162,7 @@ def test_given_watermark_strategy_when_cursor_inputs_use_shorthand_then_compilat
     test_case: MicrobatchRedesignBehaviorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=str(test_case.expected_outcome)):
-        validate_incremental_config(
+        validate_natively(
             config=CompileModelConfig(
                 values={
                     "materialized": "incremental",
@@ -181,7 +179,7 @@ def test_given_watermark_strategy_when_cursor_inputs_use_shorthand_then_compilat
             ),
             model_name="events",
             ref_count=1,
-            known_input_names=frozenset({"events"}),
+            input_names=frozenset({"events"}),
         )
 
 
@@ -199,7 +197,7 @@ def test_given_model_limit_below_lookback_when_validating_then_compilation_fails
     test_case: MicrobatchRedesignBehaviorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=str(test_case.expected_outcome)):
-        validate_incremental_config(
+        validate_natively(
             config=CompileModelConfig(
                 values={
                     "materialized": "incremental",
@@ -223,7 +221,7 @@ def test_given_model_limit_below_lookback_when_validating_then_compilation_fails
             ),
             model_name="events",
             ref_count=1,
-            known_input_names=frozenset({"events"}),
+            input_names=frozenset({"events"}),
         )
 
 
@@ -308,11 +306,11 @@ def test_given_insufficient_capped_watermark_limit_when_validating_then_error_ex
 
     assert test_case.expected_error_fragment is not None
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_incremental_config(
+        validate_natively(
             config=config,
             model_name="events",
             ref_count=1,
-            known_input_names=frozenset({"events"}),
+            input_names=frozenset({"events"}),
         )
 
 
@@ -335,7 +333,7 @@ def test_given_sufficient_cap_from_end_limit_when_validating_then_config_is_acce
     test_case: WatermarkLimitValidationTestCase,
 ) -> None:
     assert test_case.expected_error_fragment is None
-    validate_incremental_config(
+    validate_natively(
         config=CompileModelConfig(
             values={
                 "materialized": "incremental",
@@ -362,7 +360,7 @@ def test_given_sufficient_cap_from_end_limit_when_validating_then_config_is_acce
         ),
         model_name="events",
         ref_count=1,
-        known_input_names=frozenset({"events"}),
+        input_names=frozenset({"events"}),
     )
 
 

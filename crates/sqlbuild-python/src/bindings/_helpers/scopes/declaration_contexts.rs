@@ -6,7 +6,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, intern, pyclass, pymethods};
 
-use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::boundary::panics::{compiler_error, compiler_guard};
 use sqlbuild_scopes::scope_index::main::classify_resource::classify_resource;
 use sqlbuild_scopes::scope_index::models::{
     ConsumerResource, GrantEntry, VisibilityReason, VisibilityTable, VisibleEntry,
@@ -89,13 +89,13 @@ impl NativeDeclarationContexts {
         }
     }
 
-    /// Return the context Python's resolver builds for these matching resources, or None.
+    /// Return the declaration context of these matching resources.
     fn context<'py>(
         &self,
         py: Python<'py>,
         matches: Vec<Bound<'py, PyAny>>,
         consumer: Bound<'py, PyAny>,
-    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         compiler_guard(|| self.classified_context(py, matches, consumer))
     }
 }
@@ -106,7 +106,7 @@ impl NativeDeclarationContexts {
         py: Python<'py>,
         matches: Vec<Bound<'py, PyAny>>,
         consumer: Bound<'py, PyAny>,
-    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let mut visible: Vec<VisibleRow<'py>> = Vec::new();
         let mut inaccessible: Vec<usize> = Vec::new();
         for record in matches {
@@ -122,19 +122,20 @@ impl NativeDeclarationContexts {
                 .iter()
                 .any(|position| *position >= self.positions.len())
             {
-                return Ok(None);
+                return Err(compiler_error(
+                    "private declaration outside the scope lookup",
+                ));
             }
             let (grants, throughs) = self.grants(py, &identity)?;
-            let Ok(classified) = classify_resource(
+            let classified = classify_resource(
                 &self.table,
                 &ConsumerResource {
                     private,
                     path,
                     grants,
                 },
-            ) else {
-                return Ok(None);
-            };
+            )
+            .map_err(|deferral| compiler_error(deferral.reason))?;
             for entry in classified.visible {
                 let through: Option<Bound<'py, PyAny>> =
                     entry.through.map(|slot| throughs[slot].clone());
@@ -143,7 +144,6 @@ impl NativeDeclarationContexts {
             inaccessible.extend(classified.inaccessible);
         }
         self.assemble(py, &visible, &inaccessible, consumer)
-            .map(Some)
     }
 
     /// The resource's grants of indexed declarations, with each grant's `through` value.

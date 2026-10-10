@@ -1,4 +1,4 @@
-"""Direct wrapper for generating the native `str.isalnum()` table of the running Python."""
+"""Direct wrapper for generating the native `str` character tables of the running Python."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from scripts.python_char_table.main.generate import generate_python_char_table
 
 
 def main() -> int:
-    """Regenerate the native Python character table."""
+    """Regenerate the native Python character tables."""
 
     return generate_python_char_table()
 

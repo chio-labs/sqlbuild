@@ -15,11 +15,11 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 type ReferenceRow = (&'static str, String, Option<String>, Option<usize>);
 /// `(kind, call, start, message, help, corrected_call)` for one rejected call.
 type InvalidCallRow = (&'static str, String, usize, String, String, String);
-/// The references and rejected calls, or Python's error and its start; `None` defers.
-type ExtractionRow = Option<(
+/// The references and rejected calls, or the scan error and its start.
+type ExtractionRow = (
     Option<(Vec<ReferenceRow>, Vec<InvalidCallRow>)>,
     Option<(String, usize)>,
-)>;
+);
 
 /// Extracts references under one adapter's lexical rules, read once per syntax.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -36,11 +36,11 @@ impl SqlReferenceScanner {
         }
     }
 
-    /// Return `((references, rejected calls), None)`, `(None, (message, start))`, or `None`.
+    /// Return `((references, rejected calls), None)` or `(None, (message, start))`.
     fn extract(&self, sql: &str) -> PyResult<ExtractionRow> {
         compiler_guard(|| {
             Ok(match extract_sql_references(sql, &self.syntax) {
-                ReferenceExtraction::Extracted(scan) => Some((
+                ReferenceExtraction::Extracted(scan) => (
                     Some((
                         scan.references.into_iter().map(reference_row).collect(),
                         scan.invalid_calls
@@ -49,11 +49,10 @@ impl SqlReferenceScanner {
                             .collect(),
                     )),
                     None,
-                )),
+                ),
                 ReferenceExtraction::Failed(failure) => {
-                    Some((None, Some((failure.message, failure.start))))
+                    (None, Some((failure.message, failure.start)))
                 }
-                ReferenceExtraction::Deferred => None,
             })
         })
     }

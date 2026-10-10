@@ -1,6 +1,6 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypedDict
 
 from sqlbuild.compiler.sql_test_glue.models import (
@@ -171,27 +171,26 @@ class NativeConfigError:
     key: str | None
 
 def parse_model_header_metadata(
-    requests: list[tuple[object, object, dict[str, Any], str]], classes: dict[str, object]
-) -> list[
-    tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None] | str
-]: ...
-def config_contains_template(value: object) -> bool | None: ...
-def config_contains_macro_call(value: object) -> bool | None: ...
+    header: tuple[object, object],
+    source: tuple[dict[str, Any], str],
+    classes: dict[str, object],
+) -> tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None]: ...
 def expand_config_templates(
     value: object,
     sources: tuple[dict[str, object], object, dict[str, str | None]],
     flags: tuple[bool, bool, bool, str],
-) -> (
-    tuple[object, list[tuple[str, str]]] | tuple[NativeConfigError, list[tuple[str, str]]] | str
-): ...
+) -> tuple[object, list[tuple[str, str]]]: ...
+def expand_effective_vars(
+    raw_values: dict[str, object], environment: object
+) -> tuple[object, list[tuple[str, str]]]: ...
 
 class NativeModelConfigBuilder:
     def __init__(
         self,
         layers: tuple[dict[str, object], dict[str, dict[str, object]], tuple[type, ...]],
         sources: tuple[dict[str, object], object],
-        run: tuple[str | None, str],
-        target_namespace: tuple[str | None, str | None] | None,
+        target: tuple[tuple[str | None, str], tuple[str | None, str | None] | None],
+        python: tuple[tuple[int, int], str],
     ) -> None: ...
     def path_default(self, model_path: str) -> str | NativeConfigError | None: ...
     def build(
@@ -205,7 +204,6 @@ class NativeModelConfigBuilder:
             list[tuple[str, str]],
         ]
         | NativeConfigError
-        | None
     ): ...
 
 class NativeModelValidator:
@@ -214,13 +212,17 @@ class NativeModelValidator:
         names: tuple[set[str], set[str], set[str], set[str], set[str]],
         custom_materializations: set[str],
         microbatch_concurrency: bool,
+        python: tuple[tuple[int, int], str],
     ) -> None: ...
     def validate(
         self,
         values: dict[str, object],
         model: tuple[str, str, str],
-        facts: tuple[tuple[object, ...], list[str] | None, bool, bool],
-    ) -> bool | NativeConfigError: ...
+        facts: tuple[list[tuple[str, str, bool]], Sequence[str] | None, bool, bool],
+    ) -> int | NativeConfigError | None: ...
+    def references(
+        self, model: tuple[str, str], references: list[tuple[str, str, bool]]
+    ) -> int | NativeConfigError | None: ...
 
 class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...
@@ -235,18 +237,15 @@ class SqlReferenceScanner:
             None,
         ]
         | tuple[None, tuple[str, int]]
-        | None
     ): ...
 
 def scope_expected_model_names(
     texts: list[tuple[str, str]], scenario: bool, syntax: dict[str, object]
-) -> list[tuple[str | None, list[str]] | None]: ...
+) -> list[tuple[str | None, list[str]]]: ...
 def scope_test_ctes(
     texts: list[tuple[str, str]], syntax: dict[str, object]
-) -> list[tuple[str | None, list[tuple[str, str]]] | None]: ...
-def extract_sql_scenario_json(
-    sql: str, file_label: str, syntax: dict[str, object]
-) -> str | None: ...
+) -> list[tuple[str | None, list[tuple[str, str]]]]: ...
+def extract_sql_scenario_json(sql: str, file_label: str, syntax: dict[str, object]) -> str: ...
 
 class SqlTestTargetCatalog:
     def __init__(
@@ -265,29 +264,35 @@ class SqlTestTargetCatalog:
         self, file_label: str, ctes: list[tuple[str, bool, list[str]]]
     ) -> str | None: ...
 
-def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> tuple[bool, int | None]: ...
+def omitted_ceremonial_select(sql: str, syntax: dict[str, object]) -> int | None: ...
 def scan_test_parameter_references(
     sql: str, declared: list[str], owner: str
 ) -> tuple[list[tuple[int, int, str]], str | None]: ...
-def sql_free_of_cursor_intrinsics(
-    sql: str, reserved_markers: list[str], context: str
-) -> tuple[bool, str | None]: ...
+def cursor_intrinsics_rejection(
+    sql: str, reserved_markers: list[str], context: str, python: tuple[tuple[int, int], str]
+) -> str | None: ...
+def validated_model_cursor_intrinsics(
+    sql: str,
+    reserved_markers: list[str],
+    model: tuple[str, object, object],
+    python: tuple[tuple[int, int], str],
+) -> tuple[str | None, str | None]: ...
+def replace_cursor_intrinsics(
+    sql: str, context: str, replacements: tuple[str, str], python: tuple[tuple[int, int], str]
+) -> tuple[str, bool, str | None]: ...
 def parse_function_header_values(
     header_values: dict[str, object], python: bool, relative_path: str
-) -> (
-    tuple[
-        list[tuple[str, str, str]],
-        str | None,
-        list[tuple[str, str, str]] | None,
-        list[str],
-        str | None,
-        str | None,
-        str | None,
-        list[str],
-        tuple[str, str] | None,
-    ]
-    | None
-): ...
+) -> tuple[
+    list[tuple[str, str, str]],
+    str | None,
+    list[tuple[str, str, str]] | None,
+    list[str],
+    str | None,
+    str | None,
+    str | None,
+    list[str],
+    tuple[str, str] | None,
+]: ...
 def resolve_function_namespace_values(inputs: dict[str, object]) -> list[str | None]: ...
 def pair_seed_files(
     declarations: list[str], stems: list[str]
@@ -295,18 +300,26 @@ def pair_seed_files(
 def render_attached_generic_audit(
     labels: tuple[str, str],
     sql: tuple[str, str | None],
-    arguments: tuple[dict[str, object], dict[str, object]],
+    arguments: tuple[list[tuple[str, str]], dict[str, object]],
     policies: dict[str, object],
-) -> tuple[str | None, str, str | None, str, str, str | None] | None: ...
+) -> tuple[str | None, str, str | None, str, str, str | None]: ...
+def parse_macro_arguments(text: str, nested: list[tuple[int, int]]) -> tuple[object, ...]: ...
 def scan_sql_declaration_references(
-    sqls: list[str],
-) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None] | None]: ...
-def substitute_static_project_vars(
-    sqls: list[str], variables: list[tuple[str, str]]
-) -> list[tuple[int, str | None]]: ...
-def extract_static_sql_references(
-    sql: str,
-) -> list[tuple[str, str, str | None, int | None]] | None: ...
+    sqls: list[str], python_version: tuple[int, int], unicode_version: str
+) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
+def interpolate_sql_batch(
+    sqls: list[tuple[str, str]],
+    sources: tuple[
+        Mapping[str, object],
+        Mapping[str, str],
+        Mapping[str, str | None] | None,
+        Callable[..., str],
+    ],
+    python_version: tuple[int, int],
+    unicode_version: str,
+) -> list[
+    tuple[str | None, list[tuple[int, int, int, int]], list[tuple[str, str]], str | None]
+]: ...
 def scan_macro_call_sites(
     sql: str, python_version: tuple[int, int], unicode_version: str
 ) -> list[tuple[int, int, str, list[str], bool]] | None: ...
@@ -695,3 +708,4 @@ def _oracle_cleandoc(
 def _oracle_close_matches(
     word: str, possibilities: list[str], count: int, cutoff: float
 ) -> list[str]: ...
+def function_type_error(type_sql: str, adapter_name: str, context: str) -> str | None: ...

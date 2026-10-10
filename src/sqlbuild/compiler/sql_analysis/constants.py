@@ -17,6 +17,7 @@ SQL_STRING_PREFIX_CHARACTERS: frozenset[str] = frozenset("bBeErR")
 SQL_STRING_PREFIX_MAX_LENGTH: int = 2
 SQL_TRIPLE_QUOTE_LENGTH: int = 3
 SQL_LINE_COMMENT_PREFIX: str = "--"
+SUPPORTED_SQL_LINE_COMMENT_PREFIXES: frozenset[str] = frozenset({"--", "//", "#"})
 SQL_BLOCK_COMMENT_OPEN: str = "/*"
 SQL_BLOCK_COMMENT_CLOSE: str = "*/"
 SQL_DOLLAR_QUOTE_DELIMITER: str = "$$"

@@ -16,6 +16,7 @@ _FRESH_AUDIT: str = (
     'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE ordered_at >= __cursor_start()\n'
 )
 _ORDER_LABEL_PATH: str = "functions/sql/order_label.sql"
+_ORDER_FLAG_PATH: str = "functions/python/order_flag.py"
 _SCENARIO_PATH: str = "tests/scenarios/orders.sql"
 _SCENARIO_HEADER: str = 'SCENARIO (\n  description "Order flow"\n);\n\n'
 _SOURCE_FIXTURE: str = (
@@ -35,6 +36,18 @@ def _staging_audits(audits: str) -> dict[str, str]:
     return {
         FAILURE_STAGING_PATH: FAILURE_BASE_STAGING.replace(
             _STAGING_HEADER, f"{_STAGING_HEADER}\n  audits [{audits}],"
+        )
+    }
+
+
+def _order_flag(decorator_lines: str) -> dict[str, str]:
+    return {
+        _ORDER_FLAG_PATH: (
+            "from sqlbuild.functions import udf\n\n\n@udf(\n"
+            '    arguments={"order_status": "STRING"},\n    returns="BOOLEAN",\n'
+            f"{decorator_lines})\n"
+            "def main(order_status: str | None) -> bool:\n"
+            '    """Flag completed orders."""\n    return order_status == "completed"\n'
         )
     }
 
@@ -108,6 +121,56 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
                 '  description "Order label",\n  arguments (p_status VARCHAR),\n'
                 '  returns "${VAR:label_type}",\n'
             ),
+        ),
+        failure_case(
+            name="sql-function-invalid-return-type",
+            expected_code="P001",
+            expected_message=(
+                "type 'DECIMAL(10,' is not valid for adapter 'duckdb' SQL analysis dialect "
+                "'duckdb': Parse error at line 1, column 12: Expected number"
+            ),
+            files=_order_label(
+                '  description "Order label",\n  arguments (p_status VARCHAR),\n'
+                '  returns "DECIMAL(10,",\n'
+            ),
+        ),
+        failure_case(
+            name="sql-function-arguments-not-a-map",
+            expected_code="P001",
+            expected_message="functions/sql/order_label.sql arguments must be a map",
+            files=_order_label(
+                '  description "Order label",\n  arguments [p_status],\n  returns VARCHAR\n'
+            ),
+        ),
+        failure_case(
+            name="sql-function-blank-tag",
+            expected_code="P001",
+            expected_message="order_label.sql tags entries must be non-empty strings",
+            files=_order_label(
+                '  description "Order label",\n  arguments (p_status VARCHAR),\n'
+                '  returns VARCHAR,\n  tags [""]\n'
+            ),
+        ),
+        failure_case(
+            name="sql-function-returns-list",
+            expected_code="P001",
+            expected_message="returns must be a type string or table column declaration",
+            files=_order_label(
+                '  description "Order label",\n  arguments (p_status VARCHAR),\n'
+                "  returns [VARCHAR]\n"
+            ),
+        ),
+        failure_case(
+            name="python-function-missing-runtime-version",
+            expected_code="P001",
+            expected_message="functions/python/order_flag.py must declare runtime_version",
+            files=_order_flag(""),
+        ),
+        failure_case(
+            name="python-function-packages-not-a-list",
+            expected_code="P001",
+            expected_message="functions/python/order_flag.py packages must be a list",
+            files=_order_flag('    runtime_version="3.11",\n    packages="numpy",\n'),
         ),
         failure_case(
             name="source-description-unknown-variable",

@@ -49,7 +49,7 @@ def expand_test_parameters(
             case_name=case_name,
         )
         if error is not None:
-            raise CompileInputError(error, bridge_independent=True)
+            raise CompileInputError(error)
         return expanded
     used_names: set[str] = set()
     parts: list[str] = []

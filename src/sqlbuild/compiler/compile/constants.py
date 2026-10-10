@@ -60,15 +60,11 @@ HOOK_DIRECTORY_NAME: str = "hooks"
 MODEL_DIRECTORY_NAME: str = "models"
 NOT_NULL_AUDIT_NAME: str = "not_null"
 MODEL_AUDIT_OVERRIDE_KEYS: frozenset[str] = frozenset({"by_type", "by_column"})
-MODEL_FULL_REFRESH_CONFIG_KEY: str = "full_refresh"
 CURSOR_INPUTS_CONFIG_KEY: str = "cursor_inputs"
 MIGRATE_FROM_CONFIG_KEY: str = "migrate_from"
 MIGRATE_FORCE_CONFIG_KEY: str = "migrate_force"
 COLUMN_MIGRATE_FROM_KEY: str = "migrate_from"
 MAX_MICROBATCHES_CONFIG_KEY: str = "max_microbatches"
-MICROBATCH_LIMIT_MAX_BATCHES_KEY: str = "max_batches"
-MICROBATCH_LIMIT_ACTION_KEY: str = "action"
-WATERMARK_CURSOR_INPUT_BLOCK_KEYS: frozenset[str] = frozenset({"column", "roles"})
 MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
     {
         "description",
@@ -84,14 +80,11 @@ MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
 
 SQL_WILDCARD_TOKEN: str = "*"
 SQL_OPEN_PAREN_TOKEN: str = "("
-SQL_CLOSE_PAREN_TOKEN: str = ")"
 SQL_ARGUMENT_SEPARATOR_TOKEN: str = ","
 SQL_STATEMENT_TERMINATOR_TOKEN: str = ";"
 SQL_SINGLE_QUOTE_TOKEN: str = "'"
 SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
 SQL_QUALIFIER_SEPARATOR_TOKEN: str = "."
-SQL_REFERENCE_NAME_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"'})
-SQL_IDENTIFIER_EXTRA_TOKEN: str = "_"
 SQL_WITH_KEYWORD: str = "WITH"
 SQL_CEREMONIAL_SELECT_VALUE: str = "1"
 OMITTED_CEREMONIAL_SELECT_SQL: str = f"\nSELECT {SQL_CEREMONIAL_SELECT_VALUE}"
@@ -111,36 +104,16 @@ TABLE_FUNCTION_RETURN_KEYS: frozenset[str] = frozenset({"table"})
 MACRO_TOKEN: str = "@"
 DECLARATION_REFERENCE_NAMES: frozenset[str] = frozenset({"enum", "const"})
 MACRO_CONTEXT_PARAMETER_NAME: str = "ctx"
-PYTHON_LITERAL_NAMES: frozenset[str] = frozenset({"True", "False", "None"})
+MACRO_ARGUMENT_ERROR_TAG: str = "error"
+MACRO_ARGUMENT_NESTED_CALL_TAG: str = "c"
 SQL_INTERPOLATION_TOKEN: str = "@@"
-SQL_CONTEXT_NAME_EXTRA_TOKENS: frozenset[str] = frozenset({"_", "."})
 
-TEMPLATE_TRUE_LITERAL: str = "true"
-TEMPLATE_FALSE_LITERAL: str = "false"
-TEMPLATE_NULL_LITERAL: str = "null"
-TEMPLATE_NAMESPACE_SEPARATOR: str = ":"
-TEMPLATE_IF_FUNCTION_NAME: str = "if"
-TEMPLATE_EQ_FUNCTION_NAME: str = "eq"
-TEMPLATE_NE_FUNCTION_NAME: str = "ne"
-TEMPLATE_COALESCE_FUNCTION_NAME: str = "coalesce"
-TEMPLATE_ESCAPE_TOKEN: str = "\\"
 TEMPLATE_OPEN_TOKEN: str = "${"
-TEMPLATE_FALSE_VALUES: frozenset[str] = frozenset({"", "0", "false"})
 POLYGLOT_LITERAL_KIND: str = "literal"
 POLYGLOT_ARRAY_KIND: str = "array_func"
 POLYGLOT_STRUCTURED_KINDS: frozenset[str] = frozenset({"parse_json", "struct"})
 POLYGLOT_FUNCTION_KIND: str = "function"
-MISSING_TEMPLATE_VALUE_MESSAGE_PARTS: frozenset[str] = frozenset(
-    {
-        "references missing ENV variable",
-        "references unknown variable",
-        "references unknown CTX key",
-    }
-)
-MISSING_TEMPLATE_CONTEXT_MESSAGE_PART: str = "references CTX key"
-MISSING_TEMPLATE_CONTEXT_VALUE_MESSAGE_PART: str = "no value is available"
 
-TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^{}]+)\}")
 MACRO_CALL_PATTERN: re.Pattern[str] = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(")
 SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
     r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
@@ -163,7 +136,6 @@ UDF_EXPECTED_TEST_CTE_NAME: str = "__udf_expected__"
 TABLE_FN_ACTUAL_TEST_CTE_NAME: str = "__table_fn_actual__"
 TABLE_FN_EXPECTED_TEST_CTE_NAME: str = "__table_fn_expected__"
 DEFAULT_SQL_TEST_MODE: SqlTestMode = SqlTestMode.MODEL
-ASSERT_SCENARIO_CTE_PREFIX: str = ASSERT_TEST_CTE_PREFIX
 RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
     {
         "__actual",
@@ -186,7 +158,6 @@ MIN_SHARED_BINDING_QUERY_MEMBERS: int = 2
 COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH: int = 3
 COMPACT_ANALYSIS_FACT_LENGTH: int = 6
 COMPACT_ANALYSIS_SOURCE_LENGTH: int = 3
-MODEL_SCHEMA_CONFIG_KEY: str = "schema"
 SQL_TEST_SCAN_STORE_FILE_NAME: str = "sql-test-scans.bin"
 RETIRED_FACT_CACHE_DIRECTORY_NAME: str = "facts-v1"
 SQL_TEST_SCAN_STORE_VERSION: str = "sql-test-scan-store-v1"
