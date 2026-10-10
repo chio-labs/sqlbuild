@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import threading
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -28,14 +29,18 @@ from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCom
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
+from sqlbuild.compiler.compile.main import expand_sql_with_spans as expand_sql_module
 from sqlbuild.compiler.compile.models import PolyglotAnalysisResult
 from sqlbuild.compiler.discovery._helpers.native import (
     model_files as native_model_files_module,
 )
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.lint._helpers import fixes as lint_fixes
 from sqlbuild.lint.main import run_format as run_format_module
+from sqlbuild.rule_engine._helpers.run import rules as rules_run_module
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )
@@ -828,4 +833,64 @@ def write_default_connection_sql_test(*, project_dir: Path) -> None:
         "__expected__order_totals AS (SELECT 1 AS order_id)\n"
         "SELECT 1\n",
         encoding="utf-8",
+    )
+
+
+def write_project_files(*, project_dir: Path, files: dict[str, str]) -> None:
+    """Write project files at their project-relative paths."""
+
+    for relative, contents in files.items():
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+
+
+EARLY_LINT_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[vars]\nfloor = "2"\n\n'
+        '[rules]\nselect = ["SQBRSQL005"]\n'
+    ),
+    "models/_macros/cents.py": (
+        'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
+        '    return f"({expression} * 100)"\n'
+    ),
+    "models/orders.sql": (
+        'MODEL (description "Orders");\nSELECT 1 AS order_id, CAST(5 AS DOUBLE) AS amount\n'
+    ),
+    "models/order_cents.sql": (
+        'MODEL (description "Order amounts in cents");\n'
+        'WITH floored AS (SELECT order_id, @cents("amount") AS amount_cents, '
+        '@@floor AS floor_amount FROM __ref("orders")), spare AS (SELECT 1 AS one)\n'
+        "SELECT order_id, amount_cents FROM floored WHERE amount_cents > floor_amount\n"
+    ),
+}
+
+
+def record_early_lint_expansions(*, monkeypatch: pytest.MonkeyPatch, engine: str) -> Counter[str]:
+    """Count model expansions early lint took from the compile and expanded again in Python."""
+
+    counts: Counter[str] = Counter()
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
+
+    def handed_over(*, stage: NativeStage, kind: str, units: int = 1) -> None:
+        counts[f"{stage.value}:{kind}"] += units
+
+    def expanded_again(*, site: NativeFallbackSite, kind: str = "deferred") -> None:
+        counts[f"{site.value}:{kind}"] += 1
+
+    monkeypatch.setattr(rules_run_module, "report_native_answer", handed_over)
+    monkeypatch.setattr(expand_sql_module, "report_native_fallback", expanded_again)
+    return counts
+
+
+def compile_findings(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[tuple[str, str, int | None, int | None], ...]:
+    """Compile through the CLI with no cache and return each finding's code and location."""
+
+    _ = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, Any]] = cast(list[dict[str, Any]], payload["diagnostics"])
+    return tuple(
+        (item["code"], item["path"], item.get("line"), item.get("column")) for item in diagnostics
     )

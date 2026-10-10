@@ -326,7 +326,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
     "test_case",
     [
         DefaultEngineStageTestCase(
-            description="discovery_rendering_and_analysis_native",
+            description="discovery_rendering_and_analysis_native_compile_outputs_preview",
             expected_enabled=frozenset(
                 {
                     NativeStage.DISCOVERY,
@@ -347,7 +347,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.PROJECT_ASSEMBLY,
                 }
             ),
-            expected_disabled=frozenset(),
+            expected_disabled=frozenset({NativeStage.COMPILE_LINT_INPUTS}),
         )
     ],
     ids=lambda case: case.description,

@@ -30,6 +30,7 @@ class NativeStage(StrEnum):
     LINEAGE_FACTS = "lineage_facts"
     SQL_TEST_GLUE = "sql_test_glue"
     PROJECT_ASSEMBLY = "project_assembly"
+    COMPILE_LINT_INPUTS = "compile_lint_inputs"
 
 
 class NativeStageTier(StrEnum):

@@ -814,6 +814,11 @@ def _build_model_input(
         )
     )
     _reject_legacy_schema_match(model_file=model_file, schema_files=legacy_schema_files)
+    lint_expansion: CompiledSqlExpansion | None = _lint_expansion(
+        model_file=model_file,
+        expanded_sql=macro_expansion.sql,
+        passes=(interpolation.spans, declaration_expansion.spans, macro_expansion.spans),
+    )
     if header_schema_entry is None:
         return CompileModelInput(
             sql_expansion=(
@@ -838,6 +843,7 @@ def _build_model_input(
             macro_deps=tuple(item.name for item in macro_expansion.dependencies),
             macro_usages=macro_expansion.usages,
             declaration_usages=model_declaration_usages,
+            lint_expansion=lint_expansion,
         )
 
     return CompileModelInput(
@@ -864,6 +870,22 @@ def _build_model_input(
         macro_deps=tuple(item.name for item in macro_expansion.dependencies),
         macro_usages=macro_expansion.usages,
         declaration_usages=model_declaration_usages,
+        lint_expansion=lint_expansion,
+    )
+
+
+def _lint_expansion(
+    *,
+    model_file: DiscoveredSqlModelFile,
+    expanded_sql: str,
+    passes: tuple[tuple[ExpansionSpan, ...], ...],
+) -> CompiledSqlExpansion | None:
+    """The compile's expansion for early SQL lint, when the native stage hands it over."""
+
+    if not native_stage_enabled(NativeStage.COMPILE_LINT_INPUTS):
+        return None
+    return CompiledSqlExpansion(
+        authored_sql=model_file.query_sql, expanded_sql=expanded_sql, passes=passes
     )
 
 
