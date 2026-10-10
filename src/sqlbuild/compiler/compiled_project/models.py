@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.compile.models import CompileModelConfig, ExpansionSpan
+from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn
 
 
@@ -18,3 +19,6 @@ class PlainModelFacts:
     query_sql: str
     description: str | None
     schema: tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...], bool] | None
+    declaration_sql: str
+    declaration_spans: tuple[ExpansionSpan, ...]
+    declaration_usages: tuple[UsageRecord, ...]

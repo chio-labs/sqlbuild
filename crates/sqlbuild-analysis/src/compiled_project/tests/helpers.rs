@@ -41,3 +41,15 @@ pub(super) fn column(
         migrates,
     }
 }
+
+pub(super) fn splice(
+    start: usize,
+    end: usize,
+    replacement: &str,
+) -> crate::compiled_project::models::DeclarationSplice {
+    crate::compiled_project::models::DeclarationSplice {
+        start,
+        end,
+        replacement: replacement.to_owned(),
+    }
+}

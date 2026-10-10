@@ -1,3 +1,5 @@
+pub mod calls_macros;
+pub mod enum_member_literal;
 pub mod header_column_blocker;
 pub mod header_metadata_keys;
 pub mod model_facts;
@@ -6,3 +8,4 @@ pub mod plain_model_facts;
 pub mod project_models;
 pub mod record_model;
 pub mod record_model_analysis;
+pub mod splice_declarations;

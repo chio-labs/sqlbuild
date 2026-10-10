@@ -114,7 +114,8 @@ pub struct PlainModelCheck {
     pub analysis_override: AnalysisOverride,
     /// The variable-interpolated query, absent when interpolation failed.
     pub interpolated_sql: Option<String>,
-    pub has_declaration_references: bool,
+    /// The declaration scan stopped on an error the attachment reports.
+    pub declaration_scan_failed: bool,
     pub settings: ModelLoopSettings,
 }
 
@@ -152,8 +153,7 @@ pub enum AnalysisOverride {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlainModelBlocker {
     Interpolation,
-    Declarations,
-    Macros,
+    DeclarationScan,
     CallbackConfig,
     HeaderMetadata,
     HeaderParse,
@@ -162,6 +162,30 @@ pub enum PlainModelBlocker {
     SqlAnalysisDisabled,
     ImmediateSqlValidation,
     LegacySchemaFiles,
+}
+
+/// One scanned declaration reference's character range and the text that replaces it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeclarationSplice {
+    pub start: usize,
+    pub end: usize,
+    pub replacement: String,
+}
+
+/// A substituted region: its source and output character ranges.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SplicedSpan {
+    pub source_start: usize,
+    pub source_end: usize,
+    pub output_start: usize,
+    pub output_end: usize,
+}
+
+/// SQL with declaration references replaced, and where each replacement landed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SplicedSql {
+    pub sql: String,
+    pub spans: Vec<SplicedSpan>,
 }
 
 /// One parsed header column as the plain-model check reads it.

@@ -9,9 +9,9 @@ use crate::compiled_project::models::{
 };
 
 pub(crate) fn plain_model_blocker(check: &PlainModelCheck) -> Option<PlainModelBlocker> {
-    let Some(sql) = &check.interpolated_sql else {
+    if check.interpolated_sql.is_none() {
         return Some(PlainModelBlocker::Interpolation);
-    };
+    }
     if check.settings.legacy_schema_files {
         return Some(PlainModelBlocker::LegacySchemaFiles);
     }
@@ -21,11 +21,8 @@ pub(crate) fn plain_model_blocker(check: &PlainModelCheck) -> Option<PlainModelB
     if !analysis_enabled(check) {
         return Some(PlainModelBlocker::SqlAnalysisDisabled);
     }
-    if check.has_declaration_references {
-        return Some(PlainModelBlocker::Declarations);
-    }
-    if sql.contains(MACRO_TOKEN) {
-        return Some(PlainModelBlocker::Macros);
+    if check.declaration_scan_failed {
+        return Some(PlainModelBlocker::DeclarationScan);
     }
     if check
         .config_keys
@@ -52,6 +49,11 @@ fn analysis_enabled(check: &PlainModelCheck) -> bool {
         AnalysisOverride::Disabled | AnalysisOverride::Ambiguous => false,
     };
     settings.sql_analysis && !settings.no_sql_validation && enabled
+}
+
+/// Whether declaration-expanded SQL still calls macros.
+pub(crate) fn calls_macros(sql: &str) -> bool {
+    sql.contains(MACRO_TOKEN)
 }
 
 /// Enum-typed columns and column migrations still need the attachment's checks.

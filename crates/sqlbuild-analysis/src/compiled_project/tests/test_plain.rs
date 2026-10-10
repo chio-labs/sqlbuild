@@ -26,11 +26,6 @@ fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
             expected_blocker: Some(PlainModelBlocker::Interpolation),
         },
         PlainBlockerTestCase {
-            description: "macro call",
-            check: plain_check("SELECT @cents(amount)", &[]),
-            expected_blocker: Some(PlainModelBlocker::Macros),
-        },
-        PlainBlockerTestCase {
             description: "hooks",
             check: plain_check("SELECT 1", &["post_hooks"]),
             expected_blocker: Some(PlainModelBlocker::CallbackConfig),
@@ -62,12 +57,12 @@ fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
             expected_blocker: Some(PlainModelBlocker::SqlAnalysisDisabled),
         },
         PlainBlockerTestCase {
-            description: "enum or constant reference",
+            description: "declaration scan stopped",
             check: PlainModelCheck {
-                has_declaration_references: true,
+                declaration_scan_failed: true,
                 ..plain_check("SELECT 1", &[])
             },
-            expected_blocker: Some(PlainModelBlocker::Declarations),
+            expected_blocker: Some(PlainModelBlocker::DeclarationScan),
         },
     ];
 

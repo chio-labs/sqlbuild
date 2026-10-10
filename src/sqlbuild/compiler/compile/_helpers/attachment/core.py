@@ -62,6 +62,7 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
     expand_scanned_declaration_references,
+    render_constant_declaration,
     resolve_declaration_context,
     resolve_enum_contract_columns,
 )
@@ -404,15 +405,28 @@ class _ModelLoopHost:
     declarations: dict[int, _VisibleModelDeclarations] = field(default_factory=dict)
     configs: dict[int, CompileModelConfig] = field(default_factory=dict)
 
-    def config(self, *, index: int) -> tuple[CompileModelConfig, list[str]]:
+    current_file: Path = Path()
+
+    def config(
+        self, *, index: int
+    ) -> tuple[CompileModelConfig, _VisibleModelDeclarations, ResourceIdentity]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
+        consumer: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem)
+        self.current_file = model_file.file_path
         self.declarations[index] = self.loop.declaration_cache.for_model(
-            model_file=model_file,
-            consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
+            model_file=model_file, consumer=consumer
         )
         config: CompileModelConfig = _effective_model_config(loop=self.loop, model_file=model_file)
         self.configs[index] = config
-        return config, list(self.declarations[index].enums)
+        return config, self.declarations[index], consumer
+
+    def constant_text(self, *, declaration: ConstantDeclaration) -> str:
+        return render_constant_declaration(
+            declaration=declaration,
+            value_renderer=self.loop.context.value_renderer,
+            collection_rendering=self.loop.context.collection_rendering,
+            file_path=self.current_file,
+        )
 
     def fallback(self, *, index: int) -> CompileModelInput:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
@@ -433,9 +447,10 @@ class _ModelLoopHost:
         query_sql: str,
         description: str | None,
         schema: tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...], bool] | None,
+        declarations: tuple[str, list[tuple[int, int, int, int]], list[UsageRecord]],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        declarations: _VisibleModelDeclarations = self.declarations.pop(index)
+        visible: _VisibleModelDeclarations = self.declarations.pop(index)
         return plain_model_input(
             model_file=model_file,
             interpolation=self.interpolations[model_file.file_path],
@@ -446,8 +461,19 @@ class _ModelLoopHost:
                 query_sql=query_sql,
                 description=description,
                 schema=schema,
+                declaration_sql=declarations[0],
+                declaration_spans=tuple(
+                    ExpansionSpan(
+                        source_start=source_start,
+                        source_end=source_end,
+                        output_start=output_start,
+                        output_end=output_end,
+                    )
+                    for source_start, source_end, output_start, output_end in declarations[1]
+                ),
+                declaration_usages=tuple(dict.fromkeys(declarations[2])),
             ),
-            declarations=(declarations.local_enums, declarations.local_constants),
+            declarations=(visible.local_enums, visible.local_constants),
         )
 
     def model_row(self, *, model_input: CompileModelInput) -> tuple[object, ...]:
@@ -641,7 +667,11 @@ def _run_native_model_loop(
     files: tuple[DiscoveredSqlModelFile, ...] = loop.discovered_inputs.model_files
     settings: SettingsConfig = loop.validation_context.effective_settings
     native_loop: _native.NativeModelLoop = _native.NativeModelLoop(
-        (loop.validation_context.validators.native_config.validator, native_contract_classes()),
+        (
+            loop.validation_context.validators.native_config.validator,
+            native_contract_classes(),
+            UsageRecord,
+        ),
         loop.context.sql_lexical_syntax.native_mapping,
         cursor_intrinsic_semantics(),
         (
@@ -666,7 +696,7 @@ def _run_native_model_loop(
                 model_file.query_sql,
                 model_file.contents,
                 interpolations[model_file.file_path].sql,
-                _scans_declarations(loop=loop, model_file=model_file),
+                loop.native_declaration_references.get(model_file.file_path),
             )
             for model_file in files
         ],
@@ -675,13 +705,6 @@ def _run_native_model_loop(
         stage=NativeStage.MODEL_LOOP, kind="native_model_inputs", units=finished_natively
     )
     return list(inputs)
-
-
-def _scans_declarations(*, loop: _ModelInputLoop, model_file: DiscoveredSqlModelFile) -> bool:
-    scan: NativeDeclarationScan | None = loop.native_declaration_references.get(
-        model_file.file_path
-    )
-    return scan is not None and (bool(scan[0]) or scan[1] is not None)
 
 
 def _effective_model_config(

@@ -127,6 +127,15 @@ PARITY_FILES: dict[str, str] = {
         ");\n"
         "SELECT 1 AS order_id, 'x' AS note\n"
     ),
+    "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+    "constants/limits.sql": (
+        "CONSTANT (name order_cap, value 3);\nCONSTANT (name held_codes, value [30, 31]);\n"
+    ),
+    "models/marts/statuses.sql": (
+        "MODEL (columns (status (type VARCHAR)));\n"
+        'SELECT @enum("order_status").PLACED AS status, @const("order_cap") AS cap\n'
+        'WHERE 30 NOT IN @const("held_codes")\n'
+    ),
     "models/marts/migrated.sql": (
         "MODEL (materialized incremental, incremental_strategy append,"
         " columns (order_id (migrate_from id)));\nSELECT 1 AS order_id\n"
@@ -143,7 +152,7 @@ def build_inputs_with_native_loop(
     native_loop_type: type = _native.NativeModelLoop
 
     def loop(
-        checks: tuple[object, dict[str, object]],
+        checks: tuple[object, dict[str, object], object],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
         settings: tuple[bool, ...],

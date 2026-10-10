@@ -39,7 +39,9 @@ def plain_model_input_impl(
     model_input: CompileModelInput = CompileModelInput(
         sql_expansion=(
             CompiledSqlExpansion(
-                authored_sql=model_file.query_sql, expanded_sql=interpolated_sql, passes=((), ())
+                authored_sql=model_file.query_sql,
+                expanded_sql=facts.declaration_sql,
+                passes=(facts.declaration_spans, ()),
             )
             if interpolated_sql == model_file.query_sql
             else None
@@ -47,7 +49,7 @@ def plain_model_input_impl(
         model_file=model_file,
         config=replace(facts.config, values=facts.values),
         query_sql=facts.query_sql,
-        macro_source_sql=interpolated_sql,
+        macro_source_sql=facts.declaration_sql,
         references=tuple(
             CompileSqlReference(
                 ref_kind=SqlReferenceKind(kind),
@@ -61,10 +63,11 @@ def plain_model_input_impl(
         sql_validation_enabled=True,
         enum_declarations=local_enums,
         constant_declarations=local_constants,
+        declaration_usages=facts.declaration_usages,
         lint_expansion=CompiledSqlExpansion(
             authored_sql=model_file.query_sql,
-            expanded_sql=interpolated_sql,
-            passes=(interpolation.spans, (), ()),
+            expanded_sql=facts.declaration_sql,
+            passes=(interpolation.spans, facts.declaration_spans, ()),
         ),
     )
     return model_input, declaration_rows(enums=local_enums, constants=local_constants)

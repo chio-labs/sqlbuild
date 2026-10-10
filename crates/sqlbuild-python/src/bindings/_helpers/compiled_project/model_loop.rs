@@ -4,17 +4,20 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
 };
 use pyo3::types::{
-    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple,
+    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyInt, PyString, PyStringMethods, PyTuple,
 };
 use pyo3::{IntoPyObject, pyclass, pymethods};
+use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
+use sqlbuild_analysis::compiled_project::main::enum_member_literal::enum_member_literal;
 use sqlbuild_analysis::compiled_project::main::header_column_blocker::header_column_blocker;
 use sqlbuild_analysis::compiled_project::main::header_metadata_keys::is_header_metadata_key;
 use sqlbuild_analysis::compiled_project::main::plain_model_blocker::plain_model_blocker;
 use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
+use sqlbuild_analysis::compiled_project::main::splice_declarations::splice_declarations;
 use sqlbuild_analysis::compiled_project::models::{
-    AnalysisOverride, CompiledModelFacts, DescriptionShape, HeaderColumnShape, ModelConfigFacts,
-    ModelLoopSettings, ModelReferenceFact, ModelSchemaFact, PlainModel, PlainModelCheck,
-    SchemaColumnFact,
+    AnalysisOverride, CompiledModelFacts, DeclarationSplice, DescriptionShape, HeaderColumnShape,
+    ModelConfigFacts, ModelLoopSettings, ModelReferenceFact, ModelSchemaFact, PlainModel,
+    PlainModelCheck, SchemaColumnFact, SplicedSql,
 };
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
@@ -64,6 +67,21 @@ const REFERENCES_ARGUMENT: &str = "references";
 const QUERY_SQL_ARGUMENT: &str = "query_sql";
 const DESCRIPTION_ARGUMENT: &str = "description";
 const SCHEMA_ARGUMENT: &str = "schema";
+const DECLARATIONS_ARGUMENT: &str = "declarations";
+const DECLARATION_ARGUMENT: &str = "declaration";
+const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
+const ENUMS_ATTRIBUTE: &str = "enums";
+const CONSTANTS_ATTRIBUTE: &str = "constants";
+const ENUM_VISIBILITY_ATTRIBUTE: &str = "enum_visibility";
+const CONSTANT_VISIBILITY_ATTRIBUTE: &str = "constant_visibility";
+const MEMBERS_ATTRIBUTE: &str = "members";
+const NAME_ATTRIBUTE: &str = "name";
+const VALUE_ATTRIBUTE: &str = "value";
+const DECLARATION_FIELD: &str = "declaration";
+const THROUGH_FIELD: &str = "through";
+const CONSUMER_FIELD: &str = "consumer";
+const ENUM_MEMBER_FIELD: &str = "enum_member";
+const ENUM_REFERENCE_KIND: u8 = 0;
 
 /// Identity, header column locations, authored query, contents, interpolation, declaration refs.
 #[derive(pyo3::FromPyObject)]
@@ -73,8 +91,12 @@ struct ModelLoopRow(
     String,
     String,
     Option<String>,
-    bool,
+    Option<DeclarationScan>,
 );
+/// `(kind, name, member, start, end)` per scanned reference, and the code the scan stopped on.
+type DeclarationScan = (Vec<(u8, String, Option<String>, usize, usize)>, Option<u8>);
+/// `(source start, source end, output start, output end)`.
+type SpanRow = (usize, usize, usize, usize);
 /// `(kind, name, package, call argument count)`.
 type ReferenceRow = (String, String, Option<String>, Option<usize>);
 /// The Python view of the model and its visible local enum and constant declarations.
@@ -92,14 +114,29 @@ pub(crate) struct NativeModelLoop {
     python: PythonText,
     settings: ModelLoopSettings,
     contract_classes: Py<PyDict>,
+    usage_record: Py<PyAny>,
 }
 
 /// One model as the loop finishes it: its row, effective config and visible enum names.
 struct LoopModel<'a, 'py> {
     row: &'a ModelLoopRow,
     config: Bound<'py, PyAny>,
-    enum_names: &'a [String],
+    visible: &'a VisibleDeclarations<'py>,
     classes: &'a ContractClasses<'py>,
+}
+
+/// The declarations a model sees, the identity its usages are recorded for, and the host.
+struct VisibleDeclarations<'py> {
+    declarations: Bound<'py, PyAny>,
+    consumer: Bound<'py, PyAny>,
+    enum_names: Vec<String>,
+    host: Bound<'py, PyAny>,
+}
+
+/// The declaration-expanded query, its spans and the usage records it adds.
+struct ExpandedDeclarations<'py> {
+    spliced: SplicedSql,
+    usages: Vec<Bound<'py, PyAny>>,
 }
 
 /// What a model's header schema entry is attached from.
@@ -136,6 +173,7 @@ struct FinishedModel<'py> {
     description: Option<String>,
     schema: Option<HeaderSchema<'py>>,
     references: Vec<SqlReference>,
+    declarations: ExpandedDeclarations<'py>,
 }
 
 /// Where the header attachment stands for one model.
@@ -148,12 +186,12 @@ enum HeaderOutcome<'py> {
 impl NativeModelLoop {
     #[new]
     fn new(
-        checks: (Py<PyAny>, Py<PyDict>),
+        checks: (Py<PyAny>, Py<PyDict>, Py<PyAny>),
         syntax: LexicalSyntaxInput,
         cursor: (Vec<String>, ((u8, u8), String)),
         settings: (bool, bool, bool, bool),
     ) -> PyResult<Self> {
-        let (validator, contract_classes) = checks;
+        let (validator, contract_classes, usage_record) = checks;
         let (reserved_markers, (python_version, unicode_version)) = cursor;
         let (sql_analysis, no_sql_validation, defer_sql_validation, legacy_schema_files) = settings;
         Ok(Self {
@@ -168,6 +206,7 @@ impl NativeModelLoop {
                 legacy_schema_files,
             },
             contract_classes,
+            usage_record,
         })
     }
 
@@ -184,12 +223,25 @@ impl NativeModelLoop {
         let mut finished_natively: usize = 0;
         for (index, row) in models.into_iter().enumerate() {
             let index_argument = [(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())];
-            let (config, enum_names): (Bound<'py, PyAny>, Vec<String>) =
-                callback(&host, CONFIG_CALLBACK, &index_argument)?.extract()?;
+            let (config, declarations, consumer): (
+                Bound<'py, PyAny>,
+                Bound<'py, PyAny>,
+                Bound<'py, PyAny>,
+            ) = callback(&host, CONFIG_CALLBACK, &index_argument)?.extract()?;
+            let visible: VisibleDeclarations<'py> = VisibleDeclarations {
+                enum_names: declarations
+                    .getattr(ENUMS_ATTRIBUTE)?
+                    .downcast_into::<PyDict>()?
+                    .keys()
+                    .extract()?,
+                declarations,
+                consumer,
+                host: host.clone(),
+            };
             let model: LoopModel<'_, 'py> = LoopModel {
                 row: &row,
                 config,
-                enum_names: &enum_names,
+                visible: &visible,
                 classes: &classes,
             };
             let (input, facts) = match self.finish(py, model)? {
@@ -216,7 +268,7 @@ impl NativeModelLoop {
         let LoopModel {
             row,
             config,
-            enum_names,
+            visible,
             classes,
         } = model;
         let ModelLoopRow(
@@ -225,7 +277,7 @@ impl NativeModelLoop {
             _,
             _,
             interpolated_sql,
-            has_declaration_references,
+            declaration_scan,
         ) = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         let check: PlainModelCheck = PlainModelCheck {
@@ -233,13 +285,24 @@ impl NativeModelLoop {
             description: description_shape(&values)?,
             analysis_override: analysis_override(&values)?,
             interpolated_sql: interpolated_sql.clone(),
-            has_declaration_references: *has_declaration_references,
+            declaration_scan_failed: declaration_scan
+                .as_ref()
+                .is_some_and(|(_, stop)| stop.is_some()),
             settings: self.settings,
         };
         let (None, Some(sql)) = (plain_model_blocker(&check), interpolated_sql) else {
             return Ok(None);
         };
-        let Ok(query_sql) = self.canonical_query(name, sql, &values)? else {
+        let references = declaration_scan
+            .as_ref()
+            .map_or(&[][..], |(refs, _)| refs.as_slice());
+        let Some(declarations) = self.expand_declarations(py, visible, sql, references)? else {
+            return Ok(None);
+        };
+        if calls_macros(&declarations.spliced.sql) {
+            return Ok(None);
+        }
+        let Ok(query_sql) = self.canonical_query(name, &declarations.spliced.sql, &values)? else {
             return Ok(None);
         };
         let ReferenceExtraction::Extracted(scan) = extract_sql_references(&query_sql, &self.syntax)
@@ -272,7 +335,7 @@ impl NativeModelLoop {
             locations: locations.bind(py),
             relative_path,
             classes,
-            enum_names,
+            enum_names: &visible.enum_names,
             described: description.is_some(),
         };
         let HeaderOutcome::Attached(schema) = header_schema(py, &header)? else {
@@ -285,7 +348,58 @@ impl NativeModelLoop {
             description,
             schema,
             references: scan.references,
+            declarations,
         }))
+    }
+
+    /// Splice the scanned enum and constant references; `None` when the attachment reports one.
+    fn expand_declarations<'py>(
+        &self,
+        py: Python<'py>,
+        visible: &VisibleDeclarations<'py>,
+        sql: &str,
+        references: &[(u8, String, Option<String>, usize, usize)],
+    ) -> PyResult<Option<ExpandedDeclarations<'py>>> {
+        let mut splices: Vec<DeclarationSplice> = Vec::with_capacity(references.len());
+        let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
+        for (kind, name, member, start, end) in references {
+            let resolved: Option<(String, Bound<'py, PyAny>)> = if *kind == ENUM_REFERENCE_KIND {
+                enum_text(visible, name, member.as_deref())?
+            } else {
+                constant_text(visible, name)?
+            };
+            let Some((replacement, visibility)) = resolved else {
+                return Ok(None);
+            };
+            for record in visibility.try_iter()? {
+                usages.push(self.usage(py, visible, &record?, member.as_deref())?);
+            }
+            splices.push(DeclarationSplice {
+                start: *start,
+                end: *end,
+                replacement,
+            });
+        }
+        Ok(Some(ExpandedDeclarations {
+            spliced: splice_declarations(sql, &splices),
+            usages,
+        }))
+    }
+
+    /// The usage a resolved reference records for one visibility record of the declaration.
+    fn usage<'py>(
+        &self,
+        py: Python<'py>,
+        visible: &VisibleDeclarations<'py>,
+        record: &Bound<'py, PyAny>,
+        member: Option<&str>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let fields: Bound<'py, PyDict> = PyDict::new(py);
+        fields.set_item(CONSUMER_FIELD, &visible.consumer)?;
+        fields.set_item(DECLARATION_FIELD, record.getattr(DECLARATION_FIELD)?)?;
+        fields.set_item(THROUGH_FIELD, record.getattr(THROUGH_FIELD)?)?;
+        fields.set_item(ENUM_MEMBER_FIELD, member)?;
+        self.usage_record.bind(py).call((), Some(&fields))
     }
 
     /// The query with canonical cursor intrinsics, or the message the attachment raises.
@@ -343,6 +457,70 @@ impl NativeModelLoop {
         )?;
         Ok(outcome.is_none())
     }
+}
+
+/// An enum member's literal and the enum's visibility, or `None` for an unknown enum or member.
+fn enum_text<'py>(
+    visible: &VisibleDeclarations<'py>,
+    name: &str,
+    member: Option<&str>,
+) -> PyResult<Option<(String, Bound<'py, PyAny>)>> {
+    let enums: Bound<'py, PyDict> = visible
+        .declarations
+        .getattr(ENUMS_ATTRIBUTE)?
+        .downcast_into()?;
+    let (Some(declaration), Some(member)) = (enums.get_item(name)?, member) else {
+        return Ok(None);
+    };
+    for candidate in declaration.getattr(MEMBERS_ATTRIBUTE)?.try_iter()? {
+        let candidate: Bound<'py, PyAny> = candidate?;
+        if candidate.getattr(NAME_ATTRIBUTE)?.extract::<String>()? != member {
+            continue;
+        }
+        let value: Bound<'py, PyAny> = candidate.getattr(VALUE_ATTRIBUTE)?;
+        let literal: String =
+            enum_member_literal(&value.str()?.to_string(), value.is_instance_of::<PyInt>());
+        return Ok(Some((
+            literal,
+            visibility(visible, ENUM_VISIBILITY_ATTRIBUTE, name)?,
+        )));
+    }
+    Ok(None)
+}
+
+/// A constant rendered by the adapter and its visibility, or `None` for an unknown constant.
+fn constant_text<'py>(
+    visible: &VisibleDeclarations<'py>,
+    name: &str,
+) -> PyResult<Option<(String, Bound<'py, PyAny>)>> {
+    let constants: Bound<'py, PyDict> = visible
+        .declarations
+        .getattr(CONSTANTS_ATTRIBUTE)?
+        .downcast_into()?;
+    let Some(declaration) = constants.get_item(name)? else {
+        return Ok(None);
+    };
+    let rendered: String = callback(
+        &visible.host,
+        CONSTANT_TEXT_CALLBACK,
+        &[(DECLARATION_ARGUMENT, declaration)],
+    )?
+    .extract()?;
+    Ok(Some((
+        rendered,
+        visibility(visible, CONSTANT_VISIBILITY_ATTRIBUTE, name)?,
+    )))
+}
+
+fn visibility<'py>(
+    visible: &VisibleDeclarations<'py>,
+    attribute: &str,
+    name: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let records: Bound<'py, PyDict> = visible.declarations.getattr(attribute)?.downcast_into()?;
+    Ok(records
+        .get_item(name)?
+        .unwrap_or_else(|| PyTuple::empty(records.py()).into_any()))
 }
 
 /// The header's schema entry, parsed by the native header parser the attachment uses.
@@ -461,6 +639,16 @@ fn plain_input<'py>(
             SCHEMA_ARGUMENT,
             schema_argument(py, finished.schema.as_ref())?,
         ),
+        (
+            DECLARATIONS_ARGUMENT,
+            (
+                finished.declarations.spliced.sql.as_str(),
+                span_rows(&finished.declarations.spliced),
+                finished.declarations.usages,
+            )
+                .into_pyobject(py)?
+                .into_any(),
+        ),
     ];
     let (input, (enums, constants)): PlainInputPy<'py> =
         callback(host, PLAIN_INPUT_CALLBACK, &arguments)?.extract()?;
@@ -515,6 +703,21 @@ fn callback<'py>(
         keywords.set_item(*key, value)?;
     }
     host.call_method(name, (), Some(&keywords))
+}
+
+fn span_rows(spliced: &SplicedSql) -> Vec<SpanRow> {
+    spliced
+        .spans
+        .iter()
+        .map(|span| {
+            (
+                span.source_start,
+                span.source_end,
+                span.output_start,
+                span.output_end,
+            )
+        })
+        .collect()
 }
 
 fn reference_row(reference: &SqlReference) -> ReferenceRow {
