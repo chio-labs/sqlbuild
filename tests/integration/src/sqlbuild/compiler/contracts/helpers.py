@@ -284,6 +284,26 @@ def contract_diagnostics(*, project: CompiledProject, dialect: str | None) -> Co
     return evaluate_model_contracts(project=project, dialect=dialect).diagnostics
 
 
+def diagnostic_view(*, diagnostics: ContractView, project_dir: Path) -> str:
+    """Every field of the diagnostics, in order, with the project directory masked."""
+
+    return repr(
+        [
+            (
+                diagnostic.code,
+                diagnostic.severity,
+                diagnostic.resource_name,
+                diagnostic.column_name,
+                diagnostic.message,
+                diagnostic.location,
+                diagnostic.related_locations,
+                diagnostic.help,
+            )
+            for diagnostic in diagnostics
+        ]
+    ).replace(str(project_dir), "<project>")
+
+
 class NativeContractRecord(NamedTuple):
     """Native contract outcomes: `native` (evaluated natively), `typed_comparisons` and
     `native_diagnostics` in `statuses`; codes of natively built diagnostics in `codes`."""

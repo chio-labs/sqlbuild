@@ -1,14 +1,12 @@
 """Real compiler regressions for binding boundary review findings."""
 
 import json
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile._helpers.assembly import project
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     IdentifierBindingCase,
@@ -134,6 +132,18 @@ def test_given_nested_function_calls_when_compiling_then_native_normalization_do
             "Postgres quoted mismatch", "postgres", '"Customer"', '"customer"', ("B002",)
         ),
         IdentifierBindingCase("Postgres unquoted lowercase", "postgres", "Customer", '"customer"'),
+        IdentifierBindingCase(
+            "Postgres unknown column", "postgres", "customer", "missing", ("B002",)
+        ),
+        IdentifierBindingCase(
+            "MotherDuck quoted insensitive", "motherduck", '"Customer"', '"CUSTOMER"'
+        ),
+        IdentifierBindingCase(
+            "MotherDuck unknown column", "motherduck", "customer", "missing", ("B002",)
+        ),
+        IdentifierBindingCase(
+            "SQL Server unknown column", "sqlserver", "customer", "missing", ("B002",)
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -141,15 +151,7 @@ def test_given_inferred_output_when_binding_downstream_then_preserves_dialect_id
     test_case: IdentifierBindingCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original: Callable[..., Any] = project.get_schema_validations
-
-    def without_deferred_requests(**kwargs: Any) -> Any:
-        assert kwargs["requests"] == ()
-        return original(**kwargs)
-
-    monkeypatch.setattr(project, "get_schema_validations", without_deferred_requests)
     (tmp_path / "sqlbuild_project.toml").write_text(
         f'name = "orders"\nadapter = "{test_case.dialect}"\n[rules]\nselect = []\n'
     )

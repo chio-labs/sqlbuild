@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
@@ -32,7 +32,7 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
 
     if not request.model_inputs:
         return NativeModelAnalyses(analyses={}, session=None)
-    catalog: Any = request.inference_profile.binding_catalog
+    catalog: Any = cast(Any, request.inference_profile.binding_catalog)
     python: PythonModelAnalysis = PythonModelAnalysis(
         model_inputs=request.model_inputs,
         inference_profile=request.inference_profile,

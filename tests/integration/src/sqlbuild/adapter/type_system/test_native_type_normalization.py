@@ -23,12 +23,20 @@ from tests.integration.src.sqlbuild.adapter.type_system._test_types import (
     UnknownDialectTypeTestCase,
 )
 from tests.integration.src.sqlbuild.adapter.type_system.helpers import (
+    DIALECTS,
     TypeOutcome,
     generated_type,
     is_normalized,
     logged_parse_error,
     type_outcome,
     type_outcomes,
+)
+from tests.integration.src.sqlbuild.compiler.golden_views import (
+    GoldenEntry,
+    golden_differences,
+    golden_entry,
+    golden_name,
+    read_golden,
 )
 
 
@@ -53,7 +61,23 @@ def test_given_generated_types_when_normalizing_then_every_known_dialect_answers
     type_strings: list[str] = [generated_type(rng=rng) for _ in range(test_case.count)]
     outcomes: list[TypeOutcome] = type_outcomes(type_strings=type_strings)
     normalized: list[TypeOutcome] = list(filter(is_normalized, outcomes))
+    golden: list[GoldenEntry] = [
+        golden_entry(
+            "type",
+            {
+                str(outcome.dialect): (outcome.normalized, bool(outcome.logged_errors))
+                for outcome in outcomes[index * len(DIALECTS) : (index + 1) * len(DIALECTS)]
+            },
+        )
+        for index in range(len(type_strings))
+    ]
 
+    assert (
+        golden_differences(
+            read_golden(golden_name("types_generated", test_case.description)), golden
+        )
+        == []
+    )
     assert (
         len(normalized) >= test_case.expected_minimum_normalized,
         sum(map(logged_parse_error, normalized)) >= test_case.expected_minimum_parse_errors,

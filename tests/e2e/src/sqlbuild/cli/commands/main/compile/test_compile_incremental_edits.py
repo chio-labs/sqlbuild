@@ -47,7 +47,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     fact_quantity_type_declared,
     fact_quantity_type_removed,
     ignore_project_changes,
-    ignore_query_in_analysis_key,
     ignore_test_text_in_scan_key,
     in_process_reuse_run,
     keep_invalidation,
@@ -371,12 +370,6 @@ def test_given_random_edit_chain_when_compiling_with_caches_then_each_step_match
             edit=fact_error_introduced,
             sabotage=keep_invalidation,
             expected_matches_uncached=True,
-        ),
-        BrokenEditInvalidationTestCase(
-            description="stale_python_analysis_despite_query_edit",
-            edit=fact_error_introduced,
-            sabotage=ignore_query_in_analysis_key,
-            expected_matches_uncached=False,
         ),
         BrokenEditInvalidationTestCase(
             description="intact_invalidation_after_test_edit",

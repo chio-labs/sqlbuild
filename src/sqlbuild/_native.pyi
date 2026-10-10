@@ -12,6 +12,9 @@ from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, Nati
 
 BUILD_IDENTITY: str
 
+class NativeCompilerError(RuntimeError):
+    """An internal native compiler failure: a panic or a broken native invariant."""
+
 class LintPreparationRequest(TypedDict):
     expanded: str
     before_expansion: str
@@ -381,79 +384,43 @@ class NativeModelAnalysisSession:
     def fact_models(self) -> list[str]: ...
     def run(
         self,
-    ) -> (
-        tuple[
-            list[tuple[str, list[tuple[str, str]]]],
-            list[
-                tuple[
-                    str,
-                    int,
-                    str | None,
-                    list[tuple[str, list[tuple[str, str]]]],
-                    list[_AnalysisDiagnosticRow],
-                    list[tuple[str, int, int, list[tuple[str, str, str]]]] | None,
-                ]
-            ],
-            list[str],
-        ]
-        | None
-    ): ...
-    def provide(
+    ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str]]: ...
+    def finish(
         self,
-        results: list[
+    ) -> tuple[
+        list[
             tuple[
-                int,
                 bool,
                 list[tuple[str, str | None, str]] | None,
+                str,
+                list[tuple[str, int, int, list[tuple[str, str, str]]]],
                 bool,
                 bool,
                 list[_AnalysisDiagnosticRow],
                 bool,
+                str,
             ]
         ],
-        /,
-    ) -> bool: ...
-    def finish(
-        self,
-    ) -> (
-        tuple[
-            list[
+        list[tuple[str, list[tuple[str, str]]]],
+        list[str],
+        list[
+            tuple[
+                str,
                 tuple[
                     bool,
-                    list[tuple[str, str | None, str]] | None,
-                    str,
-                    list[tuple[str, int, int, list[tuple[str, str, str]]]],
+                    list[tuple[str, str | None, str]],
+                    list[tuple[str, str | None]],
+                    list[str],
+                    str | None,
                     bool,
-                    bool,
-                    list[_AnalysisDiagnosticRow],
-                    bool,
-                    str,
                 ]
-            ],
-            list[tuple[str, list[tuple[str, str]]]],
-            list[str],
-            list[
-                tuple[
-                    str,
-                    tuple[
-                        bool,
-                        list[tuple[str, str | None, str]],
-                        list[tuple[str, str | None]],
-                        list[str],
-                        str | None,
-                        bool,
-                    ]
-                    | None,
-                ]
-            ],
-        ]
-        | None
-    ): ...
+                | None,
+            ]
+        ],
+    ]: ...
     def prove_dynamic_contracts(
         self, models: list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]], /
-    ) -> list[_PivotContractRow] | None: ...
-    @property
-    def failure(self) -> str | None: ...
+    ) -> list[_PivotContractRow]: ...
     @property
     def sharing(self) -> tuple[int, int]: ...
     @property
@@ -463,8 +430,8 @@ def start_model_analysis_session(
     catalog: object,
     request: tuple[object, ...],
     cache: tuple[str, str] | None = None,
-    adapter_rules: tuple[dict[str, Callable[..., object]], type] | None = None,
-) -> NativeModelAnalysisSession | None: ...
+    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+) -> NativeModelAnalysisSession: ...
 def prove_dynamic_column_contracts(
     request: tuple[
         str,
@@ -475,7 +442,7 @@ def prove_dynamic_column_contracts(
         list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
     ],
     /,
-) -> list[_PivotContractRow] | None: ...
+) -> list[_PivotContractRow]: ...
 def infer_expression_source_shapes(
     catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
 ) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...

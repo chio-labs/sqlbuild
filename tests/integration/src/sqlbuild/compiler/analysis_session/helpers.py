@@ -53,6 +53,7 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompileAdapterContext,
     CompiledLineageColumnFact,
+    CompiledModel,
     CompileProjectInputs,
     DynamicColumnContractProof,
     InferredColumn,
@@ -62,6 +63,7 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from sqlbuild.sql_values.types import CollectionRendering
+from tests.integration.src.sqlbuild.compiler.golden_views import GoldenEntry, golden_entry
 
 _PROJECT_TOML: str = (
     'name = "orders_analysis"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
@@ -501,7 +503,7 @@ def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     started: list[Any] = []
     original: Callable[..., Any] = native_module.start_model_analysis_session
 
-    def start(catalog: object, request: tuple[object, ...], *options: object) -> Any:
+    def start(catalog: object, request: tuple[object, ...], *options: Any) -> Any:
         started.append(original(catalog, request, *options))
         return started[-1]
 
@@ -571,6 +573,7 @@ class NativeAnalysisRuns:
     native_enrichments: int = 0
     native_column_objects: int = 0
     native_column_values: int = 0
+    golden: list[GoldenEntry] = field(default_factory=list)
 
 
 def analyse_natively(
@@ -586,6 +589,7 @@ def analyse_natively(
 
     Every analysis, catalog change, session and standalone dynamic pivot proof, and expression
     shape must not depend on the analysis store, on the session, or on Python's shape inference.
+    `runs.golden` gathers the entries the Python oracle recorded for the same seam calls.
     """
 
     original_analysis: Callable[..., tuple[dict[str, ModelSqlAnalysis], Any]] = (
@@ -601,7 +605,7 @@ def analyse_natively(
         )
         cached_views: list[object] = []
         for _ in range(2):
-            catalog: Any = profile.binding_catalog.with_relations({})
+            catalog: Any = cast(Any, profile.binding_catalog).with_relations({})
             cached: NativeModelAnalyses = analyze_native_model_sql(
                 request=replace(
                     request,
@@ -618,6 +622,8 @@ def analyse_natively(
         runs.native_column_objects += len(set(map(id, columns)))
         runs.native_column_values += len(set(columns))
         runs.analysed_models += len(analyses)
+        runs.golden.append(golden_entry("models", _analysis_views(analyses)))
+        runs.golden.append(golden_entry("catalog", _catalog_view(profile.binding_catalog)))
         for index, view in enumerate(cached_views):
             _append(runs, f"model analyses, cached run {index}", uncached_view, view)
         _compare_proofs(request=request, analyses=analyses, session=session, runs=runs)
@@ -635,6 +641,7 @@ def analyse_natively(
             expressions=expressions, profile=profile
         )
         runs.expression_shapes += sum(shape is not None for shape in python)
+        runs.golden.append(golden_entry("shapes", (native, native_catalog.expression_shapes)))
         _append(
             runs,
             "expression shapes",
@@ -651,8 +658,16 @@ def analyse_natively(
         runs.native_enrichments += 1
         return native_lineage_facts(rows)
 
+    assembled_model: Callable[..., CompiledModel] = project_assembly._assemble_compiled_model
+
+    def recorded_model(*arguments: Any, **keywords: Any) -> CompiledModel:
+        model: CompiledModel = assembled_model(*arguments, **keywords)
+        runs.golden.append(golden_entry("proof", model.dynamic_column_contract))
+        return model
+
     with monkeypatch.context() as patch:
         patch.setattr(native_model_analysis, "lineage_facts", counted_native_enrichment)
+        patch.setattr(project_assembly, "_assemble_compiled_model", recorded_model)
         patch.setattr(project_assembly, "analyze_model_sql", analysed_three_ways)
         patch.setattr(project_assembly, "expression_source_shapes_by_engine", shapes_by_both)
         with suppress(CompileInputError):

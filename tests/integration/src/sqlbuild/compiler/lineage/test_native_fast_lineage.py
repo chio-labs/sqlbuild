@@ -1,4 +1,4 @@
-"""Native fast column lineage equals Python's on generated projects, model by model."""
+"""Native fast column lineage: Python-oracle goldens, restored projects and internal failures."""
 
 from __future__ import annotations
 
@@ -17,6 +17,13 @@ from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
 )
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
+from tests.integration.src.sqlbuild.compiler.golden_views import (
+    GoldenEntry,
+    golden_differences,
+    golden_entry,
+    golden_name,
+    read_golden,
+)
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 from tests.integration.src.sqlbuild.compiler.lineage._test_types import (
     FormerlyDeferredLineageTestCase,
@@ -60,6 +67,7 @@ def test_given_generated_projects_when_building_fast_lineage_then_restored_proje
     rng: random.Random = random.Random(test_case.seed)
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
     differences: list[tuple[object, object, object]] = []
+    golden: list[GoldenEntry] = []
     for index in range(test_case.count):
         project: CompiledProject = compiled_project(
             project_dir=tmp_path / f"project_{index}",
@@ -74,6 +82,17 @@ def test_given_generated_projects_when_building_fast_lineage_then_restored_proje
                     names, with_catalog = lineage_views(
                         project=variant, dialect=dialect, model_names=model_names
                     )
+                    golden.append(
+                        golden_entry(
+                            "lineage",
+                            {
+                                f"{position}:{name}": view
+                                for position, (name, view) in enumerate(
+                                    zip(names, with_catalog, strict=True)
+                                )
+                            },
+                        )
+                    )
                     _, restored = lineage_views(
                         project=replace(variant, binding_catalog=None),
                         dialect=dialect,
@@ -83,6 +102,12 @@ def test_given_generated_projects_when_building_fast_lineage_then_restored_proje
                         mismatches(inputs=names, expected=with_catalog, actual=restored)
                     )
 
+    assert (
+        golden_differences(
+            read_golden(golden_name("fast_lineage_generated", test_case.description)), golden
+        )
+        == []
+    )
     assert differences == []
     assert statuses["deferred"] == 0
     assert sum(statuses.values()) >= test_case.expected_minimum_native

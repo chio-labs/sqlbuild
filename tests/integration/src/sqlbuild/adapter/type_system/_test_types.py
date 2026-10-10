@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.models import NormalizedType
+from sqlbuild.adapter.contract.types import TypeFamily
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ class DeepTypeTestCase:
 
     description: str
     type_sql: str
-    expected_family: str
+    expected_family: TypeFamily
 
 
 @dataclass(frozen=True)
