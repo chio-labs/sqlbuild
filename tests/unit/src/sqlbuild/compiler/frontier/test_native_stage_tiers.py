@@ -347,7 +347,9 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.PROJECT_ASSEMBLY,
                 }
             ),
-            expected_disabled=frozenset({NativeStage.COMPILE_LINT_INPUTS}),
+            expected_disabled=frozenset(
+                {NativeStage.COMPILE_LINT_INPUTS, NativeStage.RULES_REQUEST}
+            ),
         )
     ],
     ids=lambda case: case.description,

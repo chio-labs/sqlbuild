@@ -865,3 +865,92 @@ pub struct CatalogueResponse {
     pub version: u32,
     pub rules: Vec<RuleMetadata>,
 }
+
+/// One compiled model's facts as the rules request builder receives them.
+#[derive(Clone, Debug, Default)]
+pub struct ModelRow {
+    pub name: String,
+    pub relative_path: String,
+    pub query_sql: String,
+    pub authored_sql: String,
+    pub config: BTreeMap<String, Value>,
+    pub authored_config_keys: Vec<String>,
+    pub logical_schema: Option<String>,
+    pub references: Vec<Reference>,
+    pub schema: Option<SchemaRow>,
+    /// Each inferred output column's name and type, in output order.
+    pub inferred_columns: Vec<(String, Option<String>)>,
+    pub dynamic_proof: Option<DynamicProofRow>,
+    pub enum_columns: Vec<String>,
+    pub enum_declarations: Vec<Declaration>,
+    pub constant_declarations: Vec<Declaration>,
+}
+
+/// A model's declared schema entry.
+#[derive(Clone, Debug, Default)]
+pub struct SchemaRow {
+    /// Audits declared on the entry itself, not on its columns.
+    pub audit_count: u32,
+    pub columns: Vec<SchemaColumnRow>,
+    pub dynamic_columns: Vec<DynamicFamilyRow>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SchemaColumnRow {
+    pub name: String,
+    pub data_type: Option<String>,
+    pub nullable: Option<bool>,
+    pub audit_count: u32,
+}
+
+/// One declared dynamic-column family; `key` is its name casefolded.
+#[derive(Clone, Debug, Default)]
+pub struct DynamicFamilyRow {
+    pub key: String,
+    pub name: String,
+    pub pivot_column: String,
+    pub value_column: String,
+    pub aggregate: String,
+    pub data_type: String,
+    pub name_pattern: Option<String>,
+}
+
+/// A model's dynamic-column contract proof; each family is keyed by its casefolded name.
+#[derive(Clone, Debug, Default)]
+pub struct DynamicProofRow {
+    pub output_proven: bool,
+    pub bare_dynamic_pivot: bool,
+    pub families: Vec<(String, Option<String>)>,
+}
+
+/// Project facts the model builder needs beyond each model's own row.
+#[derive(Clone, Copy, Debug)]
+pub struct ModelRowsContext<'a> {
+    pub sql_analysis_enabled: bool,
+    pub include_type_proof: bool,
+    pub dialect: &'a str,
+    /// The target model of every compiled audit attached to one.
+    pub attached_audit_targets: &'a [String],
+    pub sql_tests: &'a [SqlTestFact],
+}
+
+/// A natively built rules request and the response memo it may be answered from.
+#[derive(Debug)]
+pub struct RowsRequest {
+    pub request: EvaluateRequest,
+    /// The compiled-code identity and memo path, when the rules cache is enabled.
+    pub memo: Option<(String, std::path::PathBuf)>,
+}
+
+/// A rows request's decoded response.
+#[derive(Debug, Deserialize)]
+pub struct RowsEvaluation {
+    pub faults: Vec<Fault>,
+    pub selected_codes: Vec<String>,
+    pub evaluated_models: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub built_in_ms: u64,
+    #[serde(skip)]
+    pub reused: bool,
+}

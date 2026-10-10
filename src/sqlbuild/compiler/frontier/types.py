@@ -31,6 +31,7 @@ class NativeStage(StrEnum):
     SQL_TEST_GLUE = "sql_test_glue"
     PROJECT_ASSEMBLY = "project_assembly"
     COMPILE_LINT_INPUTS = "compile_lint_inputs"
+    RULES_REQUEST = "rules_request"
 
 
 class NativeStageTier(StrEnum):

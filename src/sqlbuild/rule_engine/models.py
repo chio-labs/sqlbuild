@@ -426,6 +426,19 @@ class CustomRuleRun:
 
 
 @dataclass(frozen=True)
+class NativeRulesEvaluation:
+    """The built-in rules response, decoded natively."""
+
+    findings: tuple[Finding, ...]
+    selected_codes: tuple[str, ...]
+    evaluated_models: int
+    cache_hits: int
+    cache_misses: int
+    built_in_ms: int
+    reused: bool
+
+
+@dataclass(frozen=True)
 class CustomRulesOutcome:
     """Custom-rule finding payloads in canonical order and their cache accounting."""
 
