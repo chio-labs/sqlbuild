@@ -356,6 +356,7 @@ def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_s
     ],
     ids=lambda case: case.description,
 )
+@pytest.mark.usefixtures("python_compiler_engine")
 def test_given_python_engine_twice_when_capturing_stages_then_captures_are_identical(
     test_case: SharedAnalysisSeedTestCase,
     tmp_path: Path,
