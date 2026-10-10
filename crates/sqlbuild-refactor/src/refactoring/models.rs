@@ -271,6 +271,8 @@ pub enum RefactorErrorKind {
     Deferred,
     /// A `ValueError` the Python planner does not handle, such as a header the tokenizer rejects.
     Value,
+    /// An `OSError` reading or writing project files, which Python does not handle either.
+    Io,
 }
 
 /// An expected refactoring failure with Python's code, message and help.

@@ -311,6 +311,24 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             stage=NativeStage.PROJECT_ASSEMBLY,
             expected_enabled=True,
         ),
+        NativeStageTierTestCase(
+            description="python_refactoring",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.REFACTORING,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_refactoring",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.REFACTORING,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_refactoring",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.REFACTORING,
+            expected_enabled=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -349,6 +367,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.LINEAGE_FACTS,
                     NativeStage.SQL_TEST_GLUE,
                     NativeStage.PROJECT_ASSEMBLY,
+                    NativeStage.REFACTORING,
                 }
             ),
         )

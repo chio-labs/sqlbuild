@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands._helpers.refactor.compile_facts import compile_for_refactor
+from sqlbuild.cli.commands._helpers.refactor.engine import (
+    commit_plan,
+    migrate_plan,
+    plan_refactor,
+    stage_plan,
+)
 from sqlbuild.cli.commands._helpers.refactor.layer_move import layer_move_suggestion
 from sqlbuild.cli.commands._helpers.refactor.output import (
     render_refactor_json,
@@ -20,11 +26,6 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import RefactorCommandRequest, RefactorCompile
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.refactoring.exceptions import RefactorInputError
-from sqlbuild.compiler.refactoring.main.commit_refactor_plan import commit_refactor_plan
-from sqlbuild.compiler.refactoring.main.plan_column_rename import plan_column_rename
-from sqlbuild.compiler.refactoring.main.plan_model_refactor import plan_model_refactor
-from sqlbuild.compiler.refactoring.main.stage_refactor_plan import stage_refactor_plan
-from sqlbuild.compiler.refactoring.main.with_model_migration import with_model_migration
 from sqlbuild.compiler.refactoring.models import RefactorPlan, RefactorRequest
 from sqlbuild.compiler.refactoring.types import RefactorOperation, RefactorStatus
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -69,11 +70,9 @@ def _run(
         request=request, all_keys=before.project.graph.all_keys
     )
     status.start("Planning edits...")
-    plan: RefactorPlan = (
-        plan_column_rename(project=before.project, request=refactor_request)
-        if refactor_request.operation == RefactorOperation.RENAME_COLUMN
-        else plan_model_refactor(project=before.project, request=refactor_request)
-    )
+    plan: RefactorPlan
+    plan_json: str | None
+    plan, plan_json = plan_refactor(project=before.project, request=refactor_request)
     status.complete(message=f"Planned edits to {_files(plan)}.")
     if plan.blocking or plan.manual:
         status.error("Refused: some references cannot be rewritten safely.")
@@ -87,15 +86,18 @@ def _run(
     with tempfile.TemporaryDirectory(prefix=_STAGING_PREFIX) as staging:
         staging_dir: Path = Path(staging)
         status.start("Verifying the edited project compiles...")
-        originals: dict[str, str] = stage_refactor_plan(
-            project_dir=project_dir, staging_dir=staging_dir, plan=plan
+        originals: dict[str, str] = stage_plan(
+            project_dir=project_dir, staging_dir=staging_dir, plan=plan, plan_json=plan_json
         )
         after: RefactorCompile = compile_for_refactor(project_dir=staging_dir, no_cache=True)
         if refactor_request.operation != RefactorOperation.RENAME_COLUMN:
-            migrated: RefactorPlan = with_model_migration(
+            migrated: RefactorPlan
+            migrated_json: str | None
+            migrated, migrated_json = migrate_plan(
                 plan=plan,
-                before=before.project.graph.project,
-                after=after.project.graph.project if after.project is not None else None,
+                plan_json=plan_json,
+                before=before.project,
+                after=after.project,
                 originals=originals,
             )
             if migrated.blocking:
@@ -108,9 +110,13 @@ def _run(
                     use_color=use_color,
                 )
             if migrated.migrations != plan.migrations:
-                plan = migrated
-                originals = stage_refactor_plan(
-                    project_dir=project_dir, staging_dir=staging_dir, plan=plan, copy_inputs=False
+                plan, plan_json = migrated, migrated_json
+                originals = stage_plan(
+                    project_dir=project_dir,
+                    staging_dir=staging_dir,
+                    plan=plan,
+                    plan_json=plan_json,
+                    copy_inputs=False,
                 )
                 after = compile_for_refactor(project_dir=staging_dir, no_cache=True)
         diagnostics: tuple[CompilerDiagnostic, ...] = _relative(
@@ -135,7 +141,7 @@ def _run(
             use_color=use_color,
         )
     status.start(f"Writing {_files(plan)}...")
-    commit_refactor_plan(project_dir=project_dir, originals=originals, plan=plan)
+    commit_plan(project_dir=project_dir, originals=originals, plan=plan, plan_json=plan_json)
     status.complete(message=f"Wrote {_files(plan)}.")
     return _finish(
         request=request,

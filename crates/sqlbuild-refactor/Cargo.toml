@@ -17,6 +17,4 @@ sqlbuild-analysis.workspace = true
 sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
 sqlbuild-sqltext.workspace = true
-
-[dev-dependencies]
 tempfile.workspace = true

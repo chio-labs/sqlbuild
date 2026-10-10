@@ -1,7 +1,14 @@
 pub(crate) mod chars;
+pub(crate) mod column_planning;
+pub(crate) mod column_references;
 pub(crate) mod header_edits;
 pub(crate) mod interpolation;
+pub(crate) mod model_planning;
+pub(crate) mod model_references;
+pub(crate) mod paths;
+pub(crate) mod project_files;
 pub(crate) mod scan_context;
 pub(crate) mod sql_sites;
 pub(crate) mod text_edits;
+pub(crate) mod workspace;
 pub(crate) mod yaml_edits;

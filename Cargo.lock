@@ -767,6 +767,7 @@ dependencies = [
  "fensu-policy",
  "mimalloc",
  "pyo3",
+ "serde",
  "serde_json",
  "sqlbuild-analysis",
  "sqlbuild-attachments",

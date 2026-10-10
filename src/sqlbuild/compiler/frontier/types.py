@@ -30,6 +30,7 @@ class NativeStage(StrEnum):
     LINEAGE_FACTS = "lineage_facts"
     SQL_TEST_GLUE = "sql_test_glue"
     PROJECT_ASSEMBLY = "project_assembly"
+    REFACTORING = "refactoring"
 
 
 class NativeStageTier(StrEnum):
@@ -60,3 +61,5 @@ class NativeFallbackSite(StrEnum):
     PROJECT_ASSEMBLY = "project_assembly.assembly"
     TYPE_NORMALIZATION = "type_system.normalization"
     SQL_TEST_ASSEMBLY = "sql_test_glue.assembly"
+    REFACTOR_DECLARATION_MOVES = "refactoring.declaration_moves"
+    REFACTOR_PLAN = "refactoring.plan"

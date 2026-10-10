@@ -122,7 +122,12 @@ def model_parts(*, project: RefactorProject, target: ModelTarget) -> RefactorPar
     new: str = target.request.new_name
     moves: tuple[tuple[str, str], ...]
     move_blockers: tuple[ManualLocation, ...]
-    moves, move_blockers = _declaration_moves(project=project, target=target)
+    moves, move_blockers = declaration_moves(
+        project=project,
+        model_name=target.model.name,
+        source_path=target.source_path,
+        destination=target.destination,
+    )
     return RefactorParts(
         edits=(
             *model_reference_edits(files=files, old=old, new=new, dialect=dialect),
@@ -190,37 +195,37 @@ def _collisions(*, project: RefactorProject, target: ModelTarget) -> tuple[Manua
     return tuple(found)
 
 
-def _declaration_moves(
-    *, project: RefactorProject, target: ModelTarget
+def declaration_moves(
+    *, project: RefactorProject, model_name: str, source_path: str, destination: str
 ) -> tuple[tuple[tuple[str, str], ...], tuple[ManualLocation, ...]]:
     """Move the declarations the model uses to where placement requires them afterwards."""
 
-    if PurePosixPath(target.destination).parent == PurePosixPath(target.source_path).parent:
+    if PurePosixPath(destination).parent == PurePosixPath(source_path).parent:
         return (), ()
     index: ScopeIndex = project.graph.project.scope_index
     move: MovePreview | None
     diagnostics: tuple[ScopeDiagnostic, ...]
     move, diagnostics = preview_scope_move(
         lookup=build_scope_lookup(index=index),
-        resource=f"{MODEL_KIND_PREFIX}{target.model.name}",
-        destination=target.destination,
+        resource=f"{MODEL_KIND_PREFIX}{model_name}",
+        destination=destination,
     )
     relocated: tuple[DeclarationRecord, ...] | None = (
         None
         if move is None
         else relocate_declarations_for_move(
             index=index,
-            resource=ResourceIdentity(kind=ResourceKind.MODEL, name=target.model.name),
-            destination=target.destination,
+            resource=ResourceIdentity(kind=ResourceKind.MODEL, name=model_name),
+            destination=destination,
         )
     )
     if move is None or relocated is None:
         return (), tuple(
-            ManualLocation(path=target.destination, line=None, column=None, reason=item.message)
+            ManualLocation(path=destination, line=None, column=None, reason=item.message)
             for item in diagnostics
         ) or (
             ManualLocation(
-                path=target.destination,
+                path=destination,
                 line=None,
                 column=None,
                 reason="declaration placement at the destination could not be worked out",
