@@ -35,3 +35,13 @@ class UnparsedLineageTestCase:
     query_sql: str
     expected_status: str
     expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParserPanicLineageTestCase:
+    """A model whose SQL panics the native parser, failing lineage as an internal error."""
+
+    description: str
+    dialect: str
+    query_sql: str
+    expected_message: str

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
@@ -20,6 +21,7 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 from tests.integration.src.sqlbuild.compiler.lineage._test_types import (
     FormerlyDeferredLineageTestCase,
     GeneratedLineageParityTestCase,
+    ParserPanicLineageTestCase,
     UnparsedLineageTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import (
@@ -190,6 +192,42 @@ def test_given_formerly_deferred_models_when_building_fast_lineage_then_native_a
 
     assert statuses == Counter(test_case.expected_native_statuses), test_case.description
     assert deferral_records(record_dir) == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParserPanicLineageTestCase(
+            description="truncated T-SQL the parser panics on, which crashes the wheel's process",
+            dialect="tsql",
+            query_sql="SELECT IF(region > 1, re",
+            expected_message=(
+                "NativeCompilerError: native SQL compilation panicked "
+                "(native fast lineage of request model 0)"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parser_panic_when_building_fast_lineage_then_raises_native_compiler_error(
+    test_case: ParserPanicLineageTestCase, tmp_path: Path
+) -> None:
+    project: CompiledProject = compiled_project(
+        project_dir=tmp_path / "project",
+        files=generated_lineage_files(rng=random.Random(11), model_count=_MODEL_COUNT),
+    )
+    broken: CompiledProject = replace(
+        project,
+        models=(
+            replace(project.models[0], query_sql=test_case.query_sql, fast_lineage_columns=None),
+            *project.models[1:],
+        ),
+    )
+
+    with pytest.raises(native_module.NativeCompilerError) as raised:
+        _ = build_native_column_lineage(project=broken, dialect=test_case.dialect, model_names=None)
+
+    assert str(raised.value) == test_case.expected_message
 
 
 if __name__ == "__main__":

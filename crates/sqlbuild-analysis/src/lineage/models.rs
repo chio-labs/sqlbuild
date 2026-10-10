@@ -118,21 +118,6 @@ pub struct LineageColumn {
     pub upstream_columns: Vec<LineageSource>,
 }
 
-/// Why a model is handed back to Python, which builds its lineage exactly as before.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LineageDeferral {
-    /// The parsed SQL could not be read as Python reads it.
-    NativeFailure,
-}
-
-impl LineageDeferral {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::NativeFailure => "native_failure",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FastLineageOutcome {
     /// Star columns to append to the model's compact facts.
@@ -148,11 +133,10 @@ pub enum FastLineageOutcome {
     Unparsed(String),
     /// Polyglot does not know the dialect name, so Python's parse raises `ValueError`.
     UnknownDialect(String),
-    Deferred(LineageDeferral),
 }
 
 impl FastLineageOutcome {
-    /// `(status, columns, has_star, detail)`: detail is the parse error or the deferral kind.
+    /// `(status, columns, has_star, detail)`: detail is the parse error or the unknown dialect.
     pub fn into_parts(self) -> (&'static str, Vec<LineageColumn>, bool, Option<String>) {
         match self {
             Self::StarColumns(columns) => ("star", columns, true, None),
@@ -160,12 +144,6 @@ impl FastLineageOutcome {
             Self::Omitted => ("omitted", Vec::new(), false, None),
             Self::Unparsed(message) => ("unparsed", Vec::new(), false, Some(message)),
             Self::UnknownDialect(name) => ("unknown_dialect", Vec::new(), false, Some(name)),
-            Self::Deferred(kind) => (
-                "deferred",
-                Vec::new(),
-                false,
-                Some(kind.as_str().to_owned()),
-            ),
         }
     }
 }

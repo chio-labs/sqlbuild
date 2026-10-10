@@ -299,20 +299,21 @@ fn given_models_when_starting_then_only_duplicate_names_fail_as_an_internal_erro
 }
 
 #[test]
-fn given_enrichment_dialect_when_running_then_answers_or_raises_python_value_error() {
+fn given_enrichment_dialect_when_running_then_answers_natively_or_fails_internally() {
     let test_cases = [
         SessionFailureTestCase {
-            description: "an analysis dialect name the query analysis reads",
-            dialect: "duckdb",
+            description: "the dialect compile passes for the postgres adapter",
+            dialect: "postgresql",
             models: &[UNTYPED_ORDERS],
             expected_error: None,
         },
         SessionFailureTestCase {
-            description: "an adapter dialect alias Python's analyze_query options reject",
+            description: "an adapter alias compile maps before analysis never reaches the session",
             dialect: "postgres",
             models: &[UNTYPED_ORDERS],
             expected_error: Some(
-                "ValueError: Invalid analyze_query options object: unknown variant `postgres`",
+                "NativeCompilerError: native model analysis of model 'orders_untyped' enrichment: \
+                 query analysis options: unknown variant `postgres`",
             ),
         },
     ];

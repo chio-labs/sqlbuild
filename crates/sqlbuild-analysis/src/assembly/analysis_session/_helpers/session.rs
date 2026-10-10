@@ -7,7 +7,6 @@ use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::errors::StoreDecodeError;
-use sqlbuild_core::constants::PYTHON_VALUE_ERROR;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::panics::main::native_failure::native_failure;
 
@@ -363,9 +362,6 @@ impl AnalysisSession {
             .zip(&inputs)
             .map(|(enrichment, input)| {
                 enrichment.map_err(|reason| {
-                    if reason.starts_with(PYTHON_VALUE_ERROR) {
-                        return reason;
-                    }
                     native_failure(
                         &format!("{} enrichment", model_context(input.model)),
                         &reason,

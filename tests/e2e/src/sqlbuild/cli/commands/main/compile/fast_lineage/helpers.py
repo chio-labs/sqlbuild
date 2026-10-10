@@ -3,31 +3,24 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from collections import Counter
 from itertools import product
 from pathlib import Path
 from typing import NamedTuple, cast
 
 from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
-from sqlbuild.compiler.lineage.constants import NATIVE_LINEAGE_DEFERRAL_SITE
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import run_installed_sqb
 
 _TIMING: re.Pattern[str] = re.compile(r" \(\d+\.\d+s\)")
 _DIRECTIONS: tuple[str, ...] = ("upstream", "downstream")
-FALLBACK_SITE: str = (
-    "compiler/lineage/_helpers/fast_columns.py:_build_polyglot_fast_model_column_lineage"
-)
 
 
 class EngineLineageRun(NamedTuple):
-    """One engine's compile report, lineage traces, wheel fallback parses and lineage deferrals."""
+    """One engine's compile report and lineage traces."""
 
     compile_report: str
     compile_returncode: int
     traces: list[tuple[int, str, str]]
-    fallback_parses: int
-    lineage_deferrals: int
 
 
 def engine_lineage_run(
@@ -75,11 +68,6 @@ def engine_lineage_run(
         compile_report=json.dumps(report, indent=2),
         compile_returncode=compiled.returncode,
         traces=traces,
-        fallback_parses=_site_calls(record_dir)[FALLBACK_SITE],
-        lineage_deferrals=sum(
-            path.read_text("utf-8").count(f'"site": "{NATIVE_LINEAGE_DEFERRAL_SITE}"')
-            for path in record_dir.glob("analysis-deferrals-*.jsonl")
-        ),
     )
 
 
@@ -91,11 +79,3 @@ def model_lineage_summaries(compile_report: str) -> dict[str, object]:
         list[dict[str, object]], cast(dict[str, object], payload["resources"])["models"]
     )
     return {str(model["name"]): model["lineage"] for model in models}
-
-
-def _site_calls(record_dir: Path) -> Counter[str]:
-    calls: Counter[str] = Counter()
-    for path in record_dir.glob("polyglot-sites-*.json"):
-        for site, _, count in json.loads(path.read_text("utf-8"))["calls"]:
-            calls[site] += count
-    return calls
