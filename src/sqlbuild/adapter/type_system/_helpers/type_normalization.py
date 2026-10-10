@@ -42,10 +42,8 @@ from sqlbuild.adapters.snowflake.constants import (
     TEXT_TYPE_NAME,
     UNBOUNDED_TEXT_TYPE_NAMES,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.sql_analysis.main.import_polyglot import import_polyglot
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
@@ -56,14 +54,12 @@ _DEBUG_LOGGER: logging.Logger = logging.getLogger(TYPE_NORMALIZATION_LOGGER_NAME
 def normalize_type(*, type_sql: str, dialect: TypeDialect | str | None) -> NormalizedType:
     """Normalize one warehouse type string into a semantic comparison shape."""
 
-    if native_stage_enabled(NativeStage.TYPE_SYSTEM):
-        native_normalized: NormalizedType | None = normalize_native_type(
-            type_sql=type_sql, dialect=dialect
-        )
-        if native_normalized is not None:
-            report_native_answer(stage=NativeStage.TYPE_SYSTEM, kind="type_normalizations")
-            return native_normalized
-        report_native_fallback(site=NativeFallbackSite.TYPE_NORMALIZATION)
+    native_normalized: NormalizedType | None = normalize_native_type(
+        type_sql=type_sql, dialect=dialect
+    )
+    if native_normalized is not None:
+        return native_normalized
+    report_native_fallback(site=NativeFallbackSite.TYPE_NORMALIZATION)
     polyglot_normalized: NormalizedType | None = _normalize_with_polyglot(
         type_sql=type_sql,
         dialect=dialect,

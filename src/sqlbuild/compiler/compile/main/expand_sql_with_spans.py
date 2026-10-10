@@ -11,9 +11,8 @@ from sqlbuild.compiler.compile.models import (
     ExpansionSpan,
     SqlExpansionContext,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 
 
 def expand_sql_with_spans(
@@ -39,8 +38,7 @@ def expand_sql_with_spans(
             inaccessible_enums=declarations.inaccessible_enums,
             inaccessible_constants=declarations.inaccessible_constants,
         )
-    if native_stage_enabled(NativeStage.MODEL_LOOP):
-        report_native_fallback(site=NativeFallbackSite.LINT_EXPANSION)
+    report_native_fallback(site=NativeFallbackSite.LINT_EXPANSION)
     return expand_authored_sql_with_spans(
         sql=sql,
         file_path=file_path,

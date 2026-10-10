@@ -48,8 +48,6 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.discovery.types import NativeFileScope, NativeLocation, NativeScopeFields
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 type _NativeDeclarationFile = tuple[str, NativeFileScope | None, tuple[object, ...]]
@@ -178,7 +176,6 @@ def native_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]:
         DiscoveredSeedFile(file_path=project_dir / relative_path, relative_path=Path(relative_path))
         for relative_path, _scope, _payload in _native_files(project_dir=project_dir, kind="seed")
     )
-    report_native_answer(stage=NativeStage.DECLARATION_FILES, kind="seed_files", units=len(seeds))
     return seeds
 
 
@@ -259,12 +256,10 @@ def _record[RecordT](
     scope, payload = item
     tag: object = payload[0]
     if tag == NATIVE_PARSED_TAG:
-        report_native_answer(stage=NativeStage.DECLARATION_FILES, kind="parsed_files")
         return build(
             project_dir=project_dir, relative_path=relative_path, scope=scope, payload=payload
         )
     if tag == NATIVE_FAILED_TAG:
-        report_native_answer(stage=NativeStage.DECLARATION_FILES, kind="failed_files")
         raise native_failure(payload)
     raise native_read_error(payload=payload, file_path=project_dir / relative_path)
 

@@ -3,31 +3,22 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.contracts._helpers.native_deferrals import record_contract_deferral
-from sqlbuild.compiler.contracts.constants import (
-    NATIVE_CONTRACTS_UNSUPPORTED_INPUT,
-    NATIVE_PROMOTION_DEFERRAL_SITE,
-)
 from sqlbuild.compiler.planner.types import MaterializationType
 
 
 def native_promotion_conflicts(
-    *, project: CompiledProject, adapter_default: object, settings_file: str
-) -> tuple[CompilerDiagnostic, ...] | None:
-    """Return `promotion_conflict_diagnostics`'s result, or None where Python must build it."""
+    *, project: CompiledProject, adapter_default: TablePromotionMode, settings_file: str
+) -> tuple[CompilerDiagnostic, ...]:
+    """Return one K011 error per enforced-contract table model under immediate promotion."""
 
-    explicit_mode: object = project.settings.table_promotion_mode
-    if not isinstance(adapter_default, str) or not isinstance(explicit_mode, str | None):
-        record_contract_deferral(
-            kind=NATIVE_CONTRACTS_UNSUPPORTED_INPUT, site=NATIVE_PROMOTION_DEFERRAL_SITE
-        )
-        return None
+    explicit_mode: str | None = project.settings.table_promotion_mode
     conflicts: list[tuple[int, str, str, str]] = _native.native_promotion_conflicts(
         (
             explicit_mode,

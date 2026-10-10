@@ -32,10 +32,8 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
     ModelSchemaDeclaration,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.model_loop.constants import (
     ENUM_REFERENCE_KIND_CODE,
     INVALID_CONSTANT_REFERENCE_STOP_CODE,
@@ -165,7 +163,7 @@ def build_declaration_scope_resolver(
     if loaded_macros is not None:
         for macro in loaded_macros.values():
             declarations[DeclarationIdentity(DeclarationKind.MACRO, macro.name)] = macro
-    if lookup is None and native_stage_enabled(NativeStage.DECLARATION_SCOPES):
+    if lookup is None:
         report_native_fallback(site=NativeFallbackSite.SCOPE_REBIND_LOOKUP)
     scope_lookup: ScopeLookup = build_scope_lookup(index=scope_index) if lookup is None else lookup
     return DeclarationScopeResolver(
@@ -229,7 +227,6 @@ def resolve_declaration_context(
     context: DeclarationResolutionContext = resolver.native_contexts.context(
         list(matches), consumer
     )
-    report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_contexts")
     if cache_key is not None:
         resolver.cache_context(key=cache_key, context=context)
     return context

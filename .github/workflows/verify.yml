@@ -303,7 +303,7 @@ jobs:
         run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
-      - name: Compare fixtures, examples, generated seeds and the failure corpus (python vs native-preview)
+      - name: Compare fixtures, examples, generated seeds and the failure corpus (native vs native-preview, goldens)
         run: >-
           make compiler-differential
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
@@ -318,12 +318,6 @@ jobs:
           path: ${{ runner.temp }}/compiler-differential-wheel-sites.json
           if-no-files-found: warn
           retention-days: 30
-      - name: Compare fixtures, examples, generated seeds and the failure corpus (python vs shipped native)
-        run: >-
-          make compiler-differential-shipped
-          COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
-          --require-render-coverage --require-analysis-coverage
-          --evidence-dir ${{ runner.temp }}/compiler-differential-evidence/shipped"
       - name: Upload differing projects' targets, stderr and compiled-test stats
         if: failure()
         uses: actions/upload-artifact@v4
@@ -370,19 +364,13 @@ jobs:
           uv run --no-sync pytest
           tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
           -n auto --dist loadfile
-      - name: Compare python with native-preview on fixtures, examples, the failure corpus and a few seeds
+      - name: Compare native with native-preview and the goldens on fixtures, examples, the failure corpus and a few seeds
         env:
           PYTHONUNBUFFERED: "1"
         run: >-
           uv run --no-sync python -m scripts.run_compiler_differential
-          --engines python native-preview
+          --engines native native-preview --goldens check
           --corpus fixtures examples failures seeds --seeds 4 --jobs 4
-      - name: Compare python with shipped native on the failure corpus and a few seeds
-        env:
-          PYTHONUNBUFFERED: "1"
-        run: >-
-          uv run --no-sync python -m scripts.run_compiler_differential
-          --engines python native --corpus failures seeds --seeds 4 --jobs 4
 
   native_discovery_windows:
     name: Native compiler on Windows
@@ -420,14 +408,14 @@ jobs:
           tests/integration/src/sqlbuild/compiler/discovery/test_native_yaml_oracle.py
           tests/integration/src/sqlbuild/compiler/discovery/test_native_toml_oracle.py
           -n auto --dist loadfile
-      - name: Compile playground projects on the default and Python engines, and build
+      - name: Compile playground projects on the default and preview engines, and build
         run: |
           project="${RUNNER_TEMP}/waffle-shop"
-          oracle="${RUNNER_TEMP}/waffle-shop-python"
+          oracle="${RUNNER_TEMP}/waffle-shop-preview"
           uv run --no-sync sqb playground "${project}"
           cp -r "${project}" "${oracle}"
           uv run --no-sync sqb --project-dir "${project}" --no-color compile
-          SQLBUILD_COMPILER_ENGINE=python uv run --no-sync sqb --project-dir "${oracle}" --no-color compile
+          SQLBUILD_COMPILER_ENGINE=native-preview uv run --no-sync sqb --project-dir "${oracle}" --no-color compile
           diff -r "${oracle}/target/compiled" "${project}/target/compiled"
           if ! test -f "${project}/target/cache/compiler-native-v1/macro-calls.bin"; then
             echo "The default compile did not write the macro-call store; macro bridge debug log:"
@@ -609,24 +597,18 @@ jobs:
           - kind: fresh
             max_ratio: "1.10"
           - kind: dense
-            label: native contracts vs python
-            base_engine: python
-            head_engine: native
+            label: contracts CPU vs base
             gate_phase: contracts_cpu_ms
-            max_ratio: "1.00"
+            max_ratio: "1.10"
           - kind: dense
-            label: native model analysis vs python
-            base_engine: python
-            head_engine: native
+            label: model analysis CPU vs base
             gate_phase: model_analysis_cpu_ms
             compile_args: --compile-arg=--select=*
-            max_ratio: "1.50"
+            max_ratio: "1.10"
           - kind: dense
-            label: native custom rules vs python
-            base_engine: python
-            head_engine: native
+            label: custom rules CPU vs base
             gate_phase: custom_rules_cpu_ms
-            max_ratio: "1.25"
+            max_ratio: "1.10"
     steps:
       - uses: actions/checkout@v4
       - name: Check out the comparison base
@@ -653,13 +635,11 @@ jobs:
       - name: Install base dependencies
         working-directory: base
         run: uv sync --locked --all-groups --all-extras
-      - name: Compare python and native phase CPU on head
+      - name: Compare base and head phase CPU
         if: matrix.gate_phase
         env:
           KIND: ${{ matrix.kind }}
           MAX_RATIO: ${{ matrix.max_ratio }}
-          BASE_ENGINE: ${{ matrix.base_engine }}
-          HEAD_ENGINE: ${{ matrix.head_engine }}
           GATE_PHASE: ${{ matrix.gate_phase }}
           COMPILE_ARGS: ${{ matrix.compile_args }}
         run: |
@@ -668,10 +648,9 @@ jobs:
             --modes cold \
             --max-ratio "${MAX_RATIO}" \
             --models 3000 \
-            --base-python .venv/bin/python \
+            --base-root base \
+            --base-python base/.venv/bin/python \
             --head-python .venv/bin/python \
-            --base-engine "${BASE_ENGINE}" \
-            --head-engine "${HEAD_ENGINE}" \
             --gate-phase "${GATE_PHASE}" \
             ${COMPILE_ARGS:+"${COMPILE_ARGS}"}
       - name: Compare base and head cold, warm and one-model edit compiles

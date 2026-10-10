@@ -30,10 +30,8 @@ from sqlbuild.compiler.compile.models import (
     DynamicColumnContractProof,
     ModelSqlAnalysis,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
     assemble_native_project_resources,
@@ -60,8 +58,6 @@ def project_facts_by_engine(
 ) -> NativeProjectFacts | None:
     """Return the native project facts, or None where Python must derive all of them."""
 
-    if not native_stage_enabled(NativeStage.PROJECT_ASSEMBLY):
-        return None
     resources: NativeProjectResources | None = assemble_native_project_resources(
         inputs=inputs,
         dialect=dialect,
@@ -75,14 +71,10 @@ def project_facts_by_engine(
             ),
         ),
     )
-    if resources is not None:
-        report_native_answer(stage=NativeStage.PROJECT_ASSEMBLY, kind="project_assemblies")
-    else:
+    if resources is None:
         report_native_fallback(site=NativeFallbackSite.PROJECT_ASSEMBLY)
-    pivots: dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]] = (
-        standalone_pivot_models(model_inputs=inputs.model_inputs, analyses=analyses)
-        if native_stage_enabled(NativeStage.MODEL_ANALYSIS)
-        else {}
+    pivots: dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]] = standalone_pivot_models(
+        model_inputs=inputs.model_inputs, analyses=analyses
     )
     proofs: dict[int, DynamicColumnContractProof | None] = dict(
         zip(
@@ -101,10 +93,6 @@ def project_facts_by_engine(
             strict=True,
         )
     )
-    proven: int = len([proof for proof in proofs.values() if proof is not None])
-    report_native_answer(
-        stage=NativeStage.MODEL_ANALYSIS, kind="dynamic_contract_proofs", units=proven
-    )
     return NativeProjectFacts(
         models=tuple(
             NativeModelFacts(
@@ -122,15 +110,11 @@ def expression_source_shapes_by_engine(
 ) -> tuple[dict[str, str] | None, ...]:
     """Infer one shape per expression source natively, or with Python where native defers."""
 
-    if native_stage_enabled(NativeStage.MODEL_ANALYSIS):
-        native_shapes: tuple[dict[str, str] | None, ...] | None = (
-            infer_native_expression_source_shapes(expressions=expressions, profile=profile)
-        )
-        if native_shapes is not None:
-            report_native_answer(
-                stage=NativeStage.MODEL_ANALYSIS, kind="expression_shapes", units=len(native_shapes)
-            )
-            return native_shapes
+    native_shapes: tuple[dict[str, str] | None, ...] | None = infer_native_expression_source_shapes(
+        expressions=expressions, profile=profile
+    )
+    if native_shapes is not None:
+        return native_shapes
     return get_expression_source_shapes(expressions=expressions, profile=profile)
 
 
@@ -141,17 +125,13 @@ def analyze_model_sql_by_engine(
 ) -> tuple[dict[str, ModelSqlAnalysis], Any | None]:
     """Analyze models natively, or with Python; also return the finished native session."""
 
-    if native_stage_enabled(NativeStage.MODEL_ANALYSIS):
-        native: NativeModelAnalyses | None = analyze_native_model_sql(
-            request=NativeModelAnalysisRequest(
-                **python_analysis.keywords, dynamic_families_by_table=dynamic_families_by_table
-            )
+    native: NativeModelAnalyses | None = analyze_native_model_sql(
+        request=NativeModelAnalysisRequest(
+            **python_analysis.keywords, dynamic_families_by_table=dynamic_families_by_table
         )
-        if native is not None:
-            report_native_answer(
-                stage=NativeStage.MODEL_ANALYSIS, kind="model_analyses", units=len(native.analyses)
-            )
-            return native.analyses, native.session
+    )
+    if native is not None:
+        return native.analyses, native.session
     return python_analysis(), None
 
 

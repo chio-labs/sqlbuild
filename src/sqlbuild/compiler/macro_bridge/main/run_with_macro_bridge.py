@@ -9,9 +9,8 @@ from collections.abc import Callable
 from contextvars import Token
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE, STORE_MODULE_PATHS
 
@@ -35,7 +34,6 @@ def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
     STORE_MODULE_PATHS.update(bridge.store_module_paths())
     hits, misses, recorded = bridge.stats()
     store_hits, store_records = bridge.store_stats()
-    report_native_answer(stage=NativeStage.MACRO_CALL_STORE, kind="served_calls", units=store_hits)
     logging.getLogger(__name__).debug(
         "Native macro bridge: %d memo hits, %d store hits, %d misses, %d recorded calls, "
         "%d stored calls",
