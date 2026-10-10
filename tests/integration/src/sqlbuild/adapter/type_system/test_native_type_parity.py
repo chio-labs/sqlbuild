@@ -51,11 +51,11 @@ _NATIVE_DIALECTS: frozenset[str | None] = frozenset(
     ids=lambda case: case.description,
 )
 def test_given_generated_types_when_normalizing_natively_then_python_normalization_matches(
-    test_case: GeneratedTypeParityTestCase, monkeypatch: pytest.MonkeyPatch
+    test_case: GeneratedTypeParityTestCase,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     type_strings: list[str] = [generated_type(rng=rng) for _ in range(test_case.count)]
-    parities: list[TypeParity] = type_parities(type_strings=type_strings, monkeypatch=monkeypatch)
+    parities: list[TypeParity] = type_parities(type_strings=type_strings)
 
     answered: list[TypeParity] = list(filter(is_native, parities))
     assert (
@@ -142,11 +142,9 @@ def test_given_generated_types_when_normalizing_natively_then_python_normalizati
     ids=lambda case: case.description,
 )
 def test_given_type_when_normalizing_under_each_dialect_then_native_answers_match_python(
-    test_case: TypeParityTestCase, monkeypatch: pytest.MonkeyPatch
+    test_case: TypeParityTestCase,
 ) -> None:
-    parities: list[TypeParity] = type_parities(
-        type_strings=[test_case.type_sql], monkeypatch=monkeypatch
-    )
+    parities: list[TypeParity] = type_parities(type_strings=[test_case.type_sql])
 
     answered: list[TypeParity] = list(filter(is_native, parities))
     assert (

@@ -25,8 +25,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
@@ -46,9 +44,8 @@ def compile_with_config_build_count(
     project_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[CompileProjectInputs, int]:
-    """Compile a project on the Python engine while counting its native model config builds."""
+    """Compile a project while counting its native model config builds."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.PYTHON.value)
     build_counts: list[int] = [0]
     original_build_model_config: Callable[..., CompileModelConfig] = (
         attachment_core.build_native_model_config

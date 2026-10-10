@@ -27,11 +27,6 @@ _CANONICAL_REF: str = '__ref("stg_orders")'
     "test_case",
     [
         ReplaceableReferenceCallTestCase(
-            description="python engine builds double quoted references",
-            engine="python",
-            expected_total_cents="2850",
-        ),
-        ReplaceableReferenceCallTestCase(
             description="native engine builds double quoted references",
             engine="native",
             expected_total_cents="2850",
@@ -62,78 +57,6 @@ def test_given_double_quoted_reference_calls_when_building_then_relations_resolv
 @pytest.mark.parametrize(
     "test_case",
     [
-        RejectedReferenceCallTestCase(
-            description="python engine rejects unquoted ref name",
-            engine="python",
-            staging_from=_CANONICAL_SOURCE,
-            mart_from="__ref(stg_orders)",
-            expected_diagnostics=(
-                (
-                    "P012",
-                    "__ref(stg_orders) is not a valid __ref() call",
-                    "models/marts/order_totals.sql",
-                    4,
-                    6,
-                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
-                ),
-            ),
-        ),
-        RejectedReferenceCallTestCase(
-            description="python engine rejects comment inside ref call",
-            engine="python",
-            staging_from=_CANONICAL_SOURCE,
-            mart_from="__ref( /* upstream */ 'stg_orders')",
-            expected_diagnostics=(
-                (
-                    "P012",
-                    "__ref( /* upstream */ 'stg_orders') is not a valid __ref() call",
-                    "models/marts/order_totals.sql",
-                    4,
-                    6,
-                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
-                ),
-            ),
-        ),
-        RejectedReferenceCallTestCase(
-            description="python engine rejects single quoted source name",
-            engine="python",
-            staging_from="__source('raw_orders')",
-            mart_from=_CANONICAL_REF,
-            expected_diagnostics=(
-                (
-                    "P012",
-                    "__source('raw_orders') is not a valid __source() call",
-                    "models/staging/stg_orders.sql",
-                    3,
-                    36,
-                    '__source() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __source("raw_orders")',
-                ),
-            ),
-        ),
-        RejectedReferenceCallTestCase(
-            description="python engine rejects invalid calls in two files",
-            engine="python",
-            staging_from="__source('raw_orders')",
-            mart_from="__ref(stg_orders)",
-            expected_diagnostics=(
-                (
-                    "P012",
-                    "__ref(stg_orders) is not a valid __ref() call",
-                    "models/marts/order_totals.sql",
-                    4,
-                    6,
-                    '__ref() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __ref("stg_orders")',
-                ),
-                (
-                    "P012",
-                    "__source('raw_orders') is not a valid __source() call",
-                    "models/staging/stg_orders.sql",
-                    3,
-                    36,
-                    '__source() takes exactly one double-quoted name, with no comments or extra spaces inside the parentheses: __source("raw_orders")',
-                ),
-            ),
-        ),
         RejectedReferenceCallTestCase(
             description="native engine rejects unquoted ref name",
             engine="native",

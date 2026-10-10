@@ -1,4 +1,4 @@
-"""The native engines build fast column lineage natively with Python's exact CLI output."""
+"""Both native engines build fast column lineage natively with the expected CLI output."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage.helpers impor
     model_lineage_summaries,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "orders_lineage"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
@@ -86,7 +86,6 @@ _DEEP_UNION_FILES: dict[str, str] = {
                     "has_star": True,
                 }
             },
-            expected_minimum_python_fallback_parses=2,
             expected_minimum_traced_edges=4,
         ),
         NativeFastLineageCliTestCase(
@@ -107,7 +106,6 @@ _DEEP_UNION_FILES: dict[str, str] = {
                     "has_star": False,
                 },
             },
-            expected_minimum_python_fallback_parses=2,
             expected_minimum_traced_edges=2,
         ),
     ],
@@ -125,21 +123,19 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
         )
         for engine in _ENGINES
     }
-    python: EngineLineageRun = runs["python"]
-    summaries: dict[str, object] = model_lineage_summaries(python.compile_report)
+    native: EngineLineageRun = runs["native"]
+    summaries: dict[str, object] = model_lineage_summaries(native.compile_report)
 
-    assert python.compile_returncode == 0, python.compile_report
-    assert [code for code, _, _ in python.traces] == [0] * len(python.traces)
+    assert native.compile_returncode == 0, native.compile_report
+    assert [code for code, _, _ in native.traces] == [0] * len(native.traces)
     assert {name: summaries[name] for name in test_case.expected_lineage} == (
         test_case.expected_lineage
     )
-    assert sum('"source"' in stdout for _, stdout, _ in python.traces) >= (
+    assert sum('"source"' in stdout for _, stdout, _ in native.traces) >= (
         test_case.expected_minimum_traced_edges
     )
-    assert python.fallback_parses >= test_case.expected_minimum_python_fallback_parses
-    assert runs["native"]._replace(fallback_parses=python.fallback_parses) == python
-    assert runs["native-preview"]._replace(fallback_parses=python.fallback_parses) == python
-    assert (runs["native"].fallback_parses, runs["native-preview"].fallback_parses) == (0, 0)
+    assert runs["native-preview"] == native
+    assert native.fallback_parses == 0
 
 
 if __name__ == "__main__":

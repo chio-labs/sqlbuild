@@ -15,12 +15,8 @@ from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
-    EngineSwitchParityTestCase,
     NativeRuntimeTestCase,
     SharedSnapshotTestCase,
     UnsupportedPythonCommandTestCase,
@@ -31,35 +27,6 @@ from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
 )
 
 _VALID_MODEL: bytes = b"MODEL (materialized table);\nSELECT order_id, total AS amount FROM orders"
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        EngineSwitchParityTestCase(
-            description="models, model-local declarations and a macro",
-            files=(
-                ("models/orders.sql", _VALID_MODEL),
-                (
-                    "models/marts/customers.sql",
-                    b"MODEL (enums (_tier [GOLD, SILVER]));\nSELECT 1 AS id",
-                ),
-                ("macros/money.py", b"def cents(value):\n    return f'{value} * 100'\n"),
-            ),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_project_when_discovering_through_the_engine_switch_then_inputs_match(
-    test_case: EngineSwitchParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    write_project(project_dir=tmp_path, files=test_case.files)
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
-    python: str = render_stage_capture(discover_project_inputs(project_dir=tmp_path))
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "native")
-    native: str = render_stage_capture(discover_project_inputs(project_dir=tmp_path))
-
-    assert (native == python) is test_case.expected_identical
 
 
 @pytest.mark.parametrize(

@@ -15,7 +15,7 @@ from scripts.compiler_differential._helpers.corpus.failure_cases import engine_e
 from scripts.compiler_differential.models import DifferentialOptions, EmittedCodes
 from tests.e2e.scripts.compiler_differential._test_types import EngineErrorCaseTestCase
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 
 
 @pytest.mark.parametrize(

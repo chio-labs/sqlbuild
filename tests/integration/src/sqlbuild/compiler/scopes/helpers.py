@@ -311,7 +311,7 @@ _TEST_WRITERS: dict[str, Callable[..., str]] = {
 def scope_engine_outcomes(
     *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[ScopeOutcome, ScopeOutcome, bool]:
-    """Return the Python and native scope outcomes and whether the native index was built."""
+    """Return the shipped and preview scope outcomes and whether the native index was built."""
 
     try:
         discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
@@ -320,11 +320,11 @@ def scope_engine_outcomes(
         failure: ScopeOutcome = ScopeOutcome(kind="discovery", value=(), error=str(error))
         return failure, failure, True
     syntax: SqlLexicalSyntax = DuckDbAdapter().sql_lexical_syntax
-    python: ScopeOutcome = _scope_outcome(
+    shipped: ScopeOutcome = _scope_outcome(
         discovered=discovered,
         macros=macros,
         syntax=syntax,
-        engine="python",
+        engine=CompilerEngine.NATIVE.value,
         monkeypatch=monkeypatch,
     )
     native: ScopeOutcome = _scope_outcome(
@@ -335,19 +335,19 @@ def scope_engine_outcomes(
         monkeypatch=monkeypatch,
     )
     _ = open_native_scope_index(discovered_inputs=discovered, loaded_macros=macros)
-    return python, native, True
+    return shipped, native, True
 
 
 def scope_command_indexes(
     *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[ScopeIndex, ScopeIndex]:
-    """Return the offline `sqb scope` index under the Python and native engines."""
+    """Return the offline `sqb scope` index under the shipped and preview engines."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
-    python: ScopeIndex = load_or_build_scope_index(project_dir=project_dir, no_cache=True)
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
+    shipped: ScopeIndex = load_or_build_scope_index(project_dir=project_dir, no_cache=True)
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
     native: ScopeIndex = load_or_build_scope_index(project_dir=project_dir, no_cache=True)
-    return python, native
+    return shipped, native
 
 
 def native_scope_attempts(

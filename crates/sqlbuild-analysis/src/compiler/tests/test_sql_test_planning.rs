@@ -1,10 +1,10 @@
 use serde_json::{Value, json};
 
-use crate::compiler::main::sql_test_chain_resolution::resolve_chains_json;
+use crate::compiler::_helpers::sql_tests::planning::plan_and_render_json;
+use crate::compiler::_helpers::sql_tests::planning::resolve_chains_json;
 use crate::compiler::main::sql_test_chains::resolve_sql_test_chains;
 use crate::compiler::main::sql_test_glue::plan_sql_test_batch;
 use crate::compiler::main::sql_test_plan_errors::sql_test_plan_error_messages;
-use crate::compiler::main::sql_test_planning::plan_and_render_json;
 use crate::compiler::models::{SqlTestPlan, SqlTestPlanWarning};
 use crate::compiler::tests::helpers::{
     chain_resolution_orders_unmocked_models, concurrent_requests_initialize_shared_template_once,

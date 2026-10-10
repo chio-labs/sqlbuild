@@ -9,14 +9,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import product
 
-import pytest
-
 from sqlbuild.adapter.contract.models import NormalizedType
 from sqlbuild.adapter.type_system._helpers import type_normalization
 from sqlbuild.adapter.type_system.constants import TYPE_NORMALIZATION_LOGGER_NAME
 from sqlbuild.adapter.type_system.main._native_normalize_type import normalize_native_type
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 
 DIALECTS: tuple[str | None, ...] = (
     None,
@@ -151,21 +147,18 @@ def generated_type(*, rng: random.Random, depth: int = 0) -> str:
     return template.format(*children, scalar=_generated_scalar(rng=rng))
 
 
-def type_parities(*, type_strings: list[str], monkeypatch: pytest.MonkeyPatch) -> list[TypeParity]:
+def type_parities(*, type_strings: list[str]) -> list[TypeParity]:
     """Normalize every type string under every dialect with Python and natively."""
 
     parities: list[TypeParity] = []
     for type_sql, dialect in product(type_strings, DIALECTS):
-        parities.append(type_parity(type_sql=type_sql, dialect=dialect, monkeypatch=monkeypatch))
+        parities.append(type_parity(type_sql=type_sql, dialect=dialect))
     return parities
 
 
-def type_parity(
-    *, type_sql: str, dialect: str | None, monkeypatch: pytest.MonkeyPatch
-) -> TypeParity:
-    """Normalize one type with the Python engine and with the native type system."""
+def type_parity(*, type_sql: str, dialect: str | None) -> TypeParity:
+    """Normalize one type with the Python fallback native defers to and natively."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.PYTHON.value)
     with _logged_errors() as python_errors:
         python: NormalizedType | str = _python_normalized(type_sql=type_sql, dialect=dialect)
     with _logged_errors() as native_errors:
@@ -199,7 +192,11 @@ def _generated_scalar(*, rng: random.Random) -> str:
 
 def _python_normalized(*, type_sql: str, dialect: str | None) -> NormalizedType | str:
     try:
-        return type_normalization.normalize_type.__wrapped__(type_sql=type_sql, dialect=dialect)
+        return type_normalization._normalize_with_polyglot(  # noqa: SLF001
+            type_sql=type_sql, dialect=dialect
+        ) or type_normalization._normalize_with_fallback(  # noqa: SLF001
+            type_sql=type_sql, dialect=dialect
+        )
     except ValueError as error:
         return f"{type(error).__name__}: {error}"
 

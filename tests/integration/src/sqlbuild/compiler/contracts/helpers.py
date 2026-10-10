@@ -14,7 +14,6 @@ from typing import Any, NamedTuple
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapter.type_system._helpers.type_normalization import normalize_type
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
@@ -25,7 +24,10 @@ from sqlbuild.compiler.compile.models import (
     DynamicColumnFamilyProof,
     InferredColumn,
 )
-from sqlbuild.compiler.contracts.main.promotion_conflicts import promotion_conflict_diagnostics
+from sqlbuild.compiler.contracts._helpers.evaluation import (
+    python_model_contract_diagnostics,
+    requires_contract_evaluation,
+)
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
@@ -163,7 +165,6 @@ _INCREMENTAL_MODES: tuple[object, ...] = (
     None,
 )
 _PROMOTION_MODES: tuple[str | None, ...] = (None, "immediate", "staged", "IMMEDIATE", "")
-_SETTINGS_FILES: tuple[str, ...] = ("sqlbuild_project.toml", "sqlbuild_local.toml")
 
 type ContractView = tuple[CompilerDiagnostic, ...]
 type NativeContractRequest = tuple[str, bool, list[Any]]
@@ -290,13 +291,13 @@ def contract_views(
     dialect: str | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[ContractView, ContractView]:
-    """Python's and the native engine's contract diagnostics for the same project."""
+    """The Python contract diagnostics native defers to, and native's, for the same project."""
 
     return (
         _on_engine(
-            engine="python",
+            engine="native",
             monkeypatch=monkeypatch,
-            run=lambda: evaluate_model_contracts(project=project, dialect=dialect).diagnostics,
+            run=lambda: _python_contract_diagnostics(project=project, dialect=dialect),
         ),
         _on_engine(
             engine="native-preview",
@@ -306,30 +307,19 @@ def contract_views(
     )
 
 
-def promotion_views(
-    *,
-    project: CompiledProject,
-    adapter_default: TablePromotionMode,
-    settings_file: str,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[ContractView, ContractView]:
-    """Python's and the native engine's K011 promotion conflicts for the same project."""
-
-    def run() -> ContractView:
-        return promotion_conflict_diagnostics(
-            project=project, adapter_default=adapter_default, settings_file=settings_file
-        )
-
-    return (
-        _on_engine(engine="python", monkeypatch=monkeypatch, run=run),
-        _on_engine(engine="native-preview", monkeypatch=monkeypatch, run=run),
+def _python_contract_diagnostics(
+    *, project: CompiledProject, dialect: str | None
+) -> tuple[CompilerDiagnostic, ...]:
+    mode: ColumnContractMode = project.settings.column_contract_mode
+    evaluated: list[CompiledModel] = list(
+        filter(lambda model: requires_contract_evaluation(model=model, mode=mode), project.models)
     )
-
-
-def promotion_settings(*, rng: random.Random) -> tuple[TablePromotionMode, str]:
-    """A generated adapter default promotion mode and settings file."""
-
-    return rng.choice(tuple(TablePromotionMode)), rng.choice(_SETTINGS_FILES)
+    diagnostics: list[CompilerDiagnostic] = []
+    for model in evaluated:
+        diagnostics.extend(
+            python_model_contract_diagnostics(model=model, mode=mode, dialect=dialect)
+        )
+    return tuple(diagnostics)
 
 
 def _on_engine(
@@ -428,24 +418,6 @@ def _compares_typed_column(*, model: Sequence[Any], implicit: bool) -> bool:
         )
         and model[3] is not None
     )
-
-
-def record_native_promotion_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count native promotion conflict calls and the conflicts they return."""
-
-    statuses: Counter[str] = Counter()
-    conflicts: Callable[..., list[tuple[int, str, str, str]]] = (
-        native_module.native_promotion_conflicts
-    )
-
-    def counted(*arguments: Any) -> list[tuple[int, str, str, str]]:
-        found: list[tuple[int, str, str, str]] = conflicts(*arguments)
-        statuses["calls"] += 1
-        statuses["conflicts"] += len(found)
-        return found
-
-    monkeypatch.setattr(native_module, "native_promotion_conflicts", counted)
-    return statuses
 
 
 def deferral_records(directory: Path) -> list[dict[str, str]]:

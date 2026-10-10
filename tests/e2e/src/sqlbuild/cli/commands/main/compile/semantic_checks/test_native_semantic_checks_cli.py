@@ -1,4 +1,4 @@
-"""The native engines complete semantic diagnostics natively with Python's exact CLI output."""
+"""Both native engines complete semantic diagnostics natively with the expected CLI output."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.semantic_checks.helpers im
     engine_semantic_run,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _CONFIG: str = (
     'name = "orders_semantics"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
 )
@@ -124,16 +124,13 @@ def test_given_failing_project_when_compiling_with_each_engine_then_diagnostics_
         )
         for engine in _ENGINES
     }
-    python: EngineSemanticRun = runs["python"]
     native: EngineSemanticRun = runs["native"]
     preview: EngineSemanticRun = runs["native-preview"]
 
-    assert python.returncode == 1
-    assert diagnostic_codes(python.report) == test_case.expected_codes
-    assert set(test_case.expected_notes) <= diagnostic_notes(python.report)
-    assert python.semantic_wheel_calls > 0
-    assert (native.report, native.returncode) == (python.report, python.returncode)
-    assert (preview.report, preview.returncode) == (python.report, python.returncode)
+    assert native.returncode == 1
+    assert diagnostic_codes(native.report) == test_case.expected_codes
+    assert set(test_case.expected_notes) <= diagnostic_notes(native.report)
+    assert (preview.report, preview.returncode) == (native.report, native.returncode)
     assert (native.semantic_wheel_calls, preview.semantic_wheel_calls) == (0, 0)
     assert native.deferrals == preview.deferrals == test_case.expected_native_deferrals
 

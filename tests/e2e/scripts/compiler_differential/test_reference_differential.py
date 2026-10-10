@@ -42,7 +42,7 @@ _REFERENCE_FILES: dict[str, str] = {
             expected_exit_code=0,
             expected_lines=(
                 "OK   project/table_function_orders",
-                "Compiler differential passed: 1 projects identical (python vs native-preview)",
+                "Compiler differential passed: 1 projects identical (native vs native-preview)",
             ),
             expected_patterns=(),
             expected_absent=("DIFF",),
