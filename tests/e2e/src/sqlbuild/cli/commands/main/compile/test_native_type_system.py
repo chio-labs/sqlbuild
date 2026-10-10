@@ -1,4 +1,4 @@
-"""Every engine reports contract types and failures alike; preview compares types natively."""
+"""Both engines report contract types and failures alike and compare types natively."""
 
 from __future__ import annotations
 
@@ -45,9 +45,6 @@ _ORDER_TOTALS_MODEL: str = """MODEL (
 
 SELECT order_id, amount AS total FROM __ref("orders")
 """
-_NO_NATIVE_ANSWERS: NativeTypeAnswers = NativeTypeAnswers(
-    normalized=[], typed_comparisons=0, handbacks=0
-)
 _IMMEDIATE_PROMOTION_TOML: str = (
     _PROJECT_TOML + '\n[settings]\ntable_promotion_mode = "immediate"\n'
 )
@@ -148,7 +145,7 @@ GROUP BY customer_id
     ],
     ids=lambda case: case.description,
 )
-def test_given_contract_types_when_compiling_with_each_engine_then_reports_match_python(
+def test_given_contract_types_when_compiling_with_each_engine_then_reports_are_expected(
     test_case: NativeTypeSystemTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -163,21 +160,17 @@ def test_given_contract_types_when_compiling_with_each_engine_then_reports_match
             monkeypatch=monkeypatch,
             capsys=capsys,
         )
-        for engine in ("python", "native", "native-preview")
+        for engine in ("native", "native-preview")
     }
-    python_run, python_answers = outcomes["python"]
     native_run, native_answers = outcomes["native"]
     preview_run, preview_answers = outcomes["native-preview"]
 
-    assert (python_run.returncode, native_run.returncode, preview_run.returncode) == (
-        (test_case.expected_exit_code,) * 3
-    )
-    assert test_case.expected_report_text in python_run.report
-    assert report_without_engine(native_run) == report_without_engine(python_run)
-    assert report_without_engine(preview_run) == report_without_engine(python_run)
-    assert (native_run.compiled, preview_run.compiled) == (python_run.compiled,) * 2
-    assert (python_answers, native_answers) == (_NO_NATIVE_ANSWERS, _NO_NATIVE_ANSWERS)
-    assert (preview_answers.typed_comparisons >= 1, preview_answers.handbacks) == (True, 0)
+    assert (native_run.returncode, preview_run.returncode) == (test_case.expected_exit_code,) * 2
+    assert test_case.expected_report_text in native_run.report
+    assert report_without_engine(preview_run) == report_without_engine(native_run)
+    assert preview_run.compiled == native_run.compiled
+    assert native_answers == preview_answers
+    assert (native_answers.typed_comparisons >= 1, native_answers.handbacks) == (True, 0)
 
 
 if __name__ == "__main__":

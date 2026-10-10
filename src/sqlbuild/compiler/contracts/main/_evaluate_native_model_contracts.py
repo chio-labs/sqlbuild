@@ -1,4 +1,4 @@
-"""Evaluate model contracts natively for the preview compiler engine."""
+"""Evaluate model contracts natively."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from sqlbuild.compiler.contracts.models import ContractValidationResult
 
 def evaluate_native_model_contracts(
     *, project: CompiledProject, dialect: TypeDialect | str | None
-) -> ContractValidationResult | None:
-    """Return the contract diagnostics, or None where Python must evaluate the contracts."""
+) -> ContractValidationResult:
+    """Return the contract diagnostics; Python evaluates only the models native defers."""
 
     return native_model_contracts(project=project, dialect=dialect)

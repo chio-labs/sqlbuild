@@ -32,8 +32,6 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_ANALYSIS_CONFIG_KEY,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.project_assembly.main._check_native_sql_syntax import (
     check_native_sql_syntax,
 )
@@ -80,16 +78,15 @@ def rejected_sql_analysis_opt_out(request: SqlAnalysisOptOutRequest) -> SourceLo
 def _parses(request: SqlAnalysisOptOutRequest) -> bool:
     """Whether the model query and every hook pass Python's syntax validation."""
 
-    if native_stage_enabled(NativeStage.PROJECT_ASSEMBLY):
-        statements: list[str] = [request.query_sql]
-        for hook_name in _HOOK_KEYS:
-            statements.extend(hook_sql_statements(request.config.values.get(hook_name)))
-        native: bool | None = check_native_sql_syntax(
-            checks=tuple((statement, request.placeholders) for statement in statements),
-            dialect=None,
-        )
-        if native is not None:
-            return native
+    statements: list[str] = [request.query_sql]
+    for hook_name in _HOOK_KEYS:
+        statements.extend(hook_sql_statements(request.config.values.get(hook_name)))
+    native: bool | None = check_native_sql_syntax(
+        checks=tuple((statement, request.placeholders) for statement in statements),
+        dialect=None,
+    )
+    if native is not None:
+        return native
     model_name: str = request.model_file.file_path.stem
     try:
         validate_sql_syntax(

@@ -1864,7 +1864,7 @@ pub(crate) fn plan_helper_reference_response(
     case: &HelperReferenceTestCase,
     sends_compiler_reads: bool,
 ) -> Result<String, String> {
-    crate::compiler::main::sql_test_planning::plan_and_render_json(
+    crate::compiler::_helpers::sql_tests::planning::plan_and_render_json(
         &json!({
             "lexicalSyntax": generic_lexical_syntax(),
             "models": helper_reference_models(),
@@ -1889,7 +1889,7 @@ pub(crate) fn plan_helper_reference_case(case: &HelperReferenceTestCase) -> Valu
 /// Resolve one helper-reference case's model chain without planning SQL.
 pub(crate) fn chain_helper_reference_case(case: &HelperReferenceTestCase) -> Value {
     let response: Value = serde_json::from_str(
-        &crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
+        &crate::compiler::_helpers::sql_tests::planning::resolve_chains_json(
             &json!({
                 "lexicalSyntax": generic_lexical_syntax(),
                 "models": helper_reference_models(),
@@ -1910,16 +1910,16 @@ pub(crate) fn defined_before(sql: &str, first: &str, second: &str) -> bool {
 
 /// Plan a request whose model tests predate the compiler's reads, sending empty reads for them.
 pub(crate) fn plan_json(request_json: &str) -> Result<String, String> {
-    crate::compiler::main::sql_test_planning::plan_and_render_json(&with_empty_compiler_reads(
-        request_json,
-    ))
+    crate::compiler::_helpers::sql_tests::planning::plan_and_render_json(
+        &with_empty_compiler_reads(request_json),
+    )
 }
 
 /// Resolve chains for a request whose model tests predate the compiler's reads.
 pub(crate) fn chain_json(request_json: &str) -> Result<String, String> {
-    crate::compiler::main::sql_test_chain_resolution::resolve_chains_json(
-        &with_empty_compiler_reads(request_json),
-    )
+    crate::compiler::_helpers::sql_tests::planning::resolve_chains_json(&with_empty_compiler_reads(
+        request_json,
+    ))
 }
 
 fn with_empty_compiler_reads(request_json: &str) -> String {

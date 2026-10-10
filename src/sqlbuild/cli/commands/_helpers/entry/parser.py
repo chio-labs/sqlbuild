@@ -29,7 +29,7 @@ from sqlbuild.cli.commands.constants import (
 )
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
 from sqlbuild.compiler.contract_adoption.types import ContractAction
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_OPTION, COMPILER_ENGINE_VALUES
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_OPTION
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.scopes.types import DeclarationKind
 
@@ -102,7 +102,6 @@ def _add_global_args(*, parser: argparse.ArgumentParser, suppress_defaults: bool
     parser.add_argument(
         COMPILER_ENGINE_OPTION,
         dest="compiler_engine",
-        choices=COMPILER_ENGINE_VALUES,
         default=argparse.SUPPRESS if suppress_defaults else None,
         help=argparse.SUPPRESS,
     )

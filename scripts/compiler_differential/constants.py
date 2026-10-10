@@ -32,15 +32,14 @@ NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
     "recovery.py": "semantic_checks",
     "metadata_validation.py": "semantic_checks",
     "contracts/columns.py": "contracts",
-    "contracts/promotion.py": "contracts",
 }
 NATIVE_FALLBACK_DEFERRAL_UNKNOWN_STAGE: str = "analysis"
 NATIVE_FALLBACK_LIST_HEADER: str = (
-    "# Every native-to-Python fallback and preview analysis deferral the CI corpus may still\n"
+    "# Every native-to-Python fallback and analysis deferral the CI corpus may still\n"
     "# reach, with its exact count per corpus. `--native-fallbacks check` fails on anything new,\n"
     "# changed or gone. Ports delete their entries; see scripts/compiler_differential/README.md.\n"
     "# The corpus does not reach type normalization (type_system): its callers are the planner,\n"
-    "# the executor and the preview fallbacks, so test_native_type_parity.py covers that stage."
+    "# the executor and the analysis fallbacks, so test_native_type_parity.py covers that stage."
 )
 RECORDS_DIRECTORY: str = "records"
 GOLDEN_DIRECTORY: str = "tests/goldens/compiler"
@@ -63,8 +62,8 @@ GOLDEN_PATH_MASK: str = "<project>"
 GOLDEN_WORK_MASK: str = "<work>"
 GOLDEN_VERSION_MASK: str = "<sqlbuild-version>"
 GOLDEN_MISSING_HINT: str = "no golden; record it with `make compiler-baselines`"
-ENGINE_NAMES: tuple[str, ...] = ("python", "native", "native-preview")
-DEFAULT_ENGINES: tuple[str, str] = ("python", "native-preview")
+ENGINE_NAMES: tuple[str, ...] = ("native", "native-preview")
+DEFAULT_ENGINES: tuple[str, str] = ("native", "native-preview")
 SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset(
     {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR, ANALYSIS_RECORD_ENV_VAR}

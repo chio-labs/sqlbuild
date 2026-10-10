@@ -34,9 +34,8 @@ pub(crate) const PROJECT_VAR_FALSE: &str = "false";
 /// The label template errors would name; assembly defers every template error.
 pub(crate) const TEMPLATE_LABEL: &str = "project assembly template";
 pub(crate) const PRESERVED_NAMESPACE_DEFERRAL: &str = "preserved_namespace";
-pub(crate) const SYNTAX_DEFERRAL: &str = "syntax_error";
-pub(crate) const PLACEHOLDER_DEFERRAL: &str = "placeholder_word";
 pub(crate) const NORMALIZATION_DEFERRAL: &str = "normalization";
-pub(crate) const DIALECT_DEFERRAL: &str = "dialect";
+/// Python's message when `validate` rejects SQL without naming an error.
+pub(crate) const INVALID_SQL: &str = "invalid SQL";
 pub(crate) const UNSUPPORTED_DIALECT_DEFERRAL: &str = "unsupported_dialect";
 pub(crate) const PANIC_DEFERRAL: &str = "panic";

@@ -18,7 +18,7 @@ from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
     write_project,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _MODEL: tuple[str, bytes] = ("models/orders.sql", b"MODEL ();\nSELECT 1 AS order_id")
 _HOOK: tuple[str, bytes] = ("hooks/sql/refresh.sql", b"HOOK (descri\x00ption 'x');\nSELECT 1")
 _CONSTANT: tuple[str, bytes] = ("constants/limits.sql", b"CONSTANT (name cap, valu\x00e 1);")
@@ -101,12 +101,12 @@ def test_given_failing_project_when_discovering_then_every_engine_shows_authored
     ],
     ids=lambda case: case.description,
 )
-def test_given_nul_header_keys_when_discovering_tolerantly_then_faults_match_python(
+def test_given_nul_header_keys_when_discovering_tolerantly_then_faults_match(
     test_case: TolerantFailureTextTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
-    python: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
-        tolerant_declaration_outcome(project_dir=tmp_path, engine="python", monkeypatch=monkeypatch)
+    shipped: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
+        tolerant_declaration_outcome(project_dir=tmp_path, engine="native", monkeypatch=monkeypatch)
     )
 
     native: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
@@ -115,7 +115,7 @@ def test_given_nul_header_keys_when_discovering_tolerantly_then_faults_match_pyt
         )
     )
 
-    assert native == python
+    assert native == shipped
     assert (
         tuple(sorted(fault.message.rsplit("keys: ", 1)[1] for fault in (*native[1], *native[2])))
         == test_case.expected_fault_keys

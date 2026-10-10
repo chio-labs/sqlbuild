@@ -73,3 +73,9 @@ pub(crate) struct UnavailableWalkTestCase {
     pub(crate) failure: fn() -> StageFailure,
     pub(crate) expected_status: &'static str,
 }
+
+pub(crate) struct RichDialectTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) names: &'static [&'static str],
+    pub(crate) expected_known: bool,
+}

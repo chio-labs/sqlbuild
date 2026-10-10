@@ -9,11 +9,7 @@ from pathlib import Path
 from typing import NamedTuple, cast
 
 from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
-from sqlbuild.compiler.frontier.constants import NATIVE_FALLBACK_RECORD_PREFIX
-from sqlbuild.compiler.lineage.constants import (
-    NATIVE_LINEAGE_DEFERRAL_SITE,
-    NATIVE_RICH_LINEAGE_ANSWER_KIND,
-)
+from sqlbuild.compiler.lineage.constants import NATIVE_LINEAGE_DEFERRAL_SITE
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import run_installed_sqb
 
@@ -22,22 +18,17 @@ _DIRECTIONS: tuple[str, ...] = ("upstream", "downstream")
 FALLBACK_SITE: str = (
     "compiler/lineage/_helpers/fast_columns.py:_build_polyglot_fast_model_column_lineage"
 )
-RICH_WHEEL_SITE: str = (
-    "compiler/lineage/_helpers/rich_columns.py:_build_polyglot_model_column_lineage"
-)
-_RICH_ANSWER_SITE: str = "rich_lineage.native"
 
 
 class EngineLineageRun(NamedTuple):
-    """One engine's compile report, lineage traces, wheel calls, deferrals and native answers."""
+    """One engine's compile report, lineage traces, wheel calls and deferrals."""
 
     compile_report: str
     compile_returncode: int
     traces: list[tuple[int, str, str]]
     fallback_parses: int
     lineage_deferrals: int
-    rich_wheel_analyses: int
-    rich_native_models: int
+    wheel_calls: int
 
 
 def engine_lineage_run(
@@ -96,20 +87,16 @@ def engine_lineage_run(
             path.read_text("utf-8").count(f'"site": "{NATIVE_LINEAGE_DEFERRAL_SITE}"')
             for path in record_dir.glob("analysis-deferrals-*.jsonl")
         ),
-        rich_wheel_analyses=wheel_calls[RICH_WHEEL_SITE],
-        rich_native_models=_native_answers(record_dir)[
-            (_RICH_ANSWER_SITE, NATIVE_RICH_LINEAGE_ANSWER_KIND)
-        ],
+        wheel_calls=wheel_calls.total(),
     )
 
 
 class FailedLineageRun(NamedTuple):
-    """A failed command's return code, last stderr line, wheel calls and native answers."""
+    """A failed command's return code, last stderr line and polyglot wheel calls."""
 
     returncode: int
     last_error_line: str
-    rich_wheel_analyses: int
-    rich_native_models: int
+    wheel_calls: int
 
 
 def failed_rich_lineage_run(
@@ -138,10 +125,7 @@ def failed_rich_lineage_run(
     return FailedLineageRun(
         returncode=result.returncode,
         last_error_line=(result.stderr.strip().splitlines() or [""])[-1],
-        rich_wheel_analyses=_site_calls(record_dir)[RICH_WHEEL_SITE],
-        rich_native_models=_native_answers(record_dir)[
-            (_RICH_ANSWER_SITE, NATIVE_RICH_LINEAGE_ANSWER_KIND)
-        ],
+        wheel_calls=_site_calls(record_dir).total(),
     )
 
 
@@ -153,14 +137,6 @@ def model_lineage_summaries(compile_report: str) -> dict[str, object]:
         list[dict[str, object]], cast(dict[str, object], payload["resources"])["models"]
     )
     return {str(model["name"]): model["lineage"] for model in models}
-
-
-def _native_answers(record_dir: Path) -> Counter[tuple[str, str]]:
-    answers: Counter[tuple[str, str]] = Counter()
-    for path in record_dir.glob(f"{NATIVE_FALLBACK_RECORD_PREFIX}*.json"):
-        for site, kind, count in json.loads(path.read_text("utf-8"))["fallbacks"]:
-            answers[(site, kind)] += count
-    return answers
 
 
 def _site_calls(record_dir: Path) -> Counter[str]:

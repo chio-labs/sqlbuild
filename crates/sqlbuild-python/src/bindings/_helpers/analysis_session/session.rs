@@ -1,7 +1,9 @@
 //! The native model analysis session and expression-source shapes for the preview engine.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyRef, PyResult, Python};
+use pyo3::types::PyDict;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_analysis::assembly::analysis_session::main::attach_analysis_cache::attach_analysis_cache;
 use sqlbuild_analysis::assembly::analysis_session::main::expression_shapes::expression_shapes;
 use sqlbuild_analysis::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
@@ -11,18 +13,25 @@ use sqlbuild_analysis::assembly::analysis_session::main::provide_deferred_analys
 use sqlbuild_analysis::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::main::session_sharing::session_sharing;
 use sqlbuild_analysis::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
+use sqlbuild_analysis::assembly::analysis_session::main::take_analysis_cache::take_analysis_cache;
 use sqlbuild_analysis::assembly::analysis_session::models::{
-    AnalysisSession, ColumnFact, Deferral, DeferredAnalysis, DynamicFamily, ExpressionShape,
-    ExpressionShapeRequest, FinishedSession, LineageFacts, LineageRow, ModelOutcome,
-    ModelReference, ModelRequest, PivotBatchRequest, PivotModel, PivotOutcome, PivotTables,
-    SessionOutcome, SessionRequest, SessionStep,
+    AnalysisCacheStats, AnalysisSession, ColumnFact, Deferral, DeferredAnalysis, DynamicFamily,
+    ExpressionShape, ExpressionShapeRequest, FinishedSession, LineageFacts, LineageRow,
+    ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest, PivotModel, PivotOutcome,
+    PivotTables, SessionOutcome, SessionRequest, SessionStep,
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::semantic_validation::types::DiagnosticRow;
 
+use sqlbuild_cache::store::models::NativeStore;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+use std::path::PathBuf;
 
+use crate::bindings::_helpers::analysis_session::nullability_rules::{
+    RuleFailure, nullability_callback, raised,
+};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
@@ -115,6 +124,8 @@ type PivotRequestRow = (
 );
 /// `("absent" | "deferred" | "proof", proof)`.
 type ContractRow = (&'static str, Option<ProofRow>);
+/// `(hits, misses, stored, why the store was not read or saved)`.
+type CacheStatsRow = (usize, usize, usize, Option<String>);
 /// `(models, catalog schema additions, analysis-shape names, dynamic pivot proofs)`.
 type FinishRow = (Vec<OutcomeRow>, Shapes, Vec<String>, Vec<ContractRow>);
 
@@ -125,7 +136,13 @@ pub(crate) struct NativeModelAnalysisSession {
     finished: Option<FinishedSession>,
     failure: Option<String>,
     sharing: (usize, usize),
+    cache_path: Option<PathBuf>,
+    cache_stats: Option<CacheStatsRow>,
+    rule_failure: RuleFailure,
 }
+
+/// The native store kind holding finished model analyses.
+const MODEL_ANALYSIS_STORE_KIND: &str = "model-analyses";
 
 impl NativeModelAnalysisSession {
     /// The finished session later compile stages read, once `finish` has succeeded.
@@ -158,16 +175,23 @@ impl NativeModelAnalysisSession {
     }
 
     /// Advance; None means Python must analyse every model, no deferrals means done.
-    fn run(&mut self, py: Python<'_>) -> Option<StepRow> {
-        let mut session: AnalysisSession = self.inner.take()?;
+    fn run(&mut self, py: Python<'_>) -> PyResult<Option<StepRow>> {
+        let Some(mut session) = self.inner.take() else {
+            return Ok(None);
+        };
         let result: Result<(AnalysisSession, SessionStep), String> =
             py.compiler_detach(move || {
                 run_analysis_session(&mut session).map(|step| (session, step))
             });
-        let (session, step) = self.kept(result)?;
+        if let Some(error) = raised(&self.rule_failure) {
+            return Err(error);
+        }
+        let Some((session, step)) = self.kept(result) else {
+            return Ok(None);
+        };
         self.sharing = session_sharing(&session);
         self.inner = Some(session);
-        Some(step_row(step))
+        Ok(Some(step_row(step)))
     }
 
     /// Answer the last step's deferrals; False means Python must analyse every model.
@@ -182,13 +206,26 @@ impl NativeModelAnalysisSession {
         self.kept(provided).is_some()
     }
 
-    /// Every model's outcome once the session is done, or None to analyse in Python.
-    fn finish(&mut self) -> Option<FinishRow> {
-        let session: AnalysisSession = self.inner.take()?;
+    /// Every model's outcome once done, or None for Python; saves the cache best-effort.
+    fn finish(&mut self, py: Python<'_>) -> Option<FinishRow> {
+        let mut session: AnalysisSession = self.inner.take()?;
+        let cache: Option<(NativeStore, AnalysisCacheStats)> = take_analysis_cache(&mut session);
         let outcome = catch_compiler_panic(|| finish_analysis_session(session));
         let (outcome, finished) = self.kept(outcome)?;
         self.finished = Some(finished);
+        if let (Some((store, stats)), Some(path)) = (cache, self.cache_path.as_ref()) {
+            let saved: Option<String> = save_store(py, &store, path, &[])
+                .err()
+                .map(|error| error.to_string());
+            self.cache_stats = Some((stats.hits, stats.misses, stats.stored, saved));
+        }
         Some(finish_row(outcome))
+    }
+
+    /// The analysis cache's `(hits, misses, stored, failure)`; None without a cache.
+    #[getter]
+    fn cache_stats(&self) -> Option<CacheStatsRow> {
+        self.cache_stats.clone()
     }
 
     /// Each model's dynamic pivot proof from the finished session's tables, or None for Python.
@@ -219,22 +256,48 @@ impl NativeModelAnalysisSession {
 }
 
 /// Start a session on `catalog`, or None where Python must analyse.
+///
+/// `adapter_rules` holds the adapter's own nullability rules by name, with the
+/// `InferredNullability` type they take and return; the request names them `python`.
 #[pyfunction]
+#[pyo3(signature = (catalog, request, cache=None, adapter_rules=None))]
 fn start_model_analysis_session(
     py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
     request: RequestRow,
+    cache: Option<(PathBuf, String)>,
+    adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
 ) -> PyResult<Option<NativeModelAnalysisSession>> {
-    let request: SessionRequest = session_request(request);
+    let mut request: SessionRequest = session_request(request);
+    let rule_failure: RuleFailure = RuleFailure::default();
+    request.nullability_callback = adapter_rules
+        .map(|(rules, nullability)| nullability_callback(rules, nullability, rule_failure.clone()));
     let catalog = &catalog.inner;
     let session: Option<AnalysisSession> = py
         .compiler_detach(|| Ok(start_analysis_session(request, catalog)))
         .map_err(compiler_error)?;
-    Ok(session.map(|session| NativeModelAnalysisSession {
+    let Some(mut session) = session else {
+        return Ok(None);
+    };
+    let mut cache_path: Option<PathBuf> = None;
+    let mut cache_stats: Option<CacheStatsRow> = None;
+    if let Some((path, environment)) = cache {
+        match open_store(py, &path, MODEL_ANALYSIS_STORE_KIND, &environment) {
+            Ok(store) => {
+                attach_analysis_cache(&mut session, store);
+                cache_path = Some(path);
+            }
+            Err(error) => cache_stats = Some((0, 0, 0, Some(error.to_string()))),
+        }
+    }
+    Ok(Some(NativeModelAnalysisSession {
         inner: Some(session),
         finished: None,
         failure: None,
         sharing: (0, 0),
+        cache_path,
+        cache_stats,
+        rule_failure,
     }))
 }
 
@@ -286,6 +349,7 @@ fn session_request(request: RequestRow) -> SessionRequest {
         case_sensitive_shapes,
         function_return_types,
         nullability_rules,
+        nullability_callback: None,
         rich_type_inference,
         column_types,
         column_nullability,
@@ -456,7 +520,7 @@ fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
         LineageFacts::Native(rows) => ("native", lineage_items(rows)),
         LineageFacts::PythonAnalysis => ("analysis", Vec::new()),
         LineageFacts::PythonEnrichment => ("enrichment", Vec::new()),
-        LineageFacts::NativeEnrichment(rows) => ("facts", lineage_items(rows)),
+        LineageFacts::NativeFacts(rows) => ("facts", lineage_items(rows)),
     };
     (
         analysis.analysis_succeeded,

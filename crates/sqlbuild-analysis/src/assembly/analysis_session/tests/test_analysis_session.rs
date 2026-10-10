@@ -3,11 +3,12 @@ use crate::assembly::analysis_session::main::prove_finished_dynamic_contracts::p
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
-    catalog, expected_facts, fact_lines, failed, finished_session, model_requests, orders_request,
-    pivot_request, proven, recovered_facts, session_lines,
+    catalog, expected_facts, fact_lines, failed, finished_session, legacy_lines, model_requests,
+    orders_request, pivot_request, proven, recovered_facts, session_lines,
 };
 use crate::assembly::analysis_session::tests::test_types::{
-    CteRecoveryTestCase, PivotTestCase, SessionFactsTestCase, SessionTestCase, UnscheduledTestCase,
+    CteRecoveryTestCase, LegacyAnalysisTestCase, PivotTestCase, SessionFactsTestCase,
+    SessionTestCase, UnscheduledTestCase,
 };
 
 #[test]
@@ -73,7 +74,7 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
             ]],
         },
         SessionTestCase {
-            description: "an open source's consumers defer to Python",
+            description: "an open source's consumers take the legacy analysis natively",
             models: &[
                 (
                     "events",
@@ -88,16 +89,52 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
                     &["events"],
                 ),
             ],
-            expected_steps: &[
-                &["publish events event_id:UNKNOWN", "defer analysis 1"],
-                &[],
-            ],
+            expected_steps: &[&[
+                "publish events event_id:UNKNOWN",
+                "publish events_mart event_id:UNKNOWN one:INT",
+            ]],
             expected_outcomes: &[
                 &[
                     "event_id - unknown",
                     "succeeded=true star=false/false diagnostics=[]",
                 ],
-                &["succeeded=true star=false/false diagnostics=[]"],
+                &[
+                    "event_id - unknown",
+                    "one INT non_null",
+                    "succeeded=true star=false/false diagnostics=[]",
+                ],
+            ],
+        },
+        SessionTestCase {
+            description: "a non-ASCII filter column is analysed natively",
+            models: &[
+                (
+                    "events",
+                    "SELECT event_id AS \"gr\u{f6}\u{df}e\" FROM __source(\"raw_events\")",
+                    &["raw_events"],
+                    &[],
+                ),
+                (
+                    "events_mart",
+                    "SELECT \"gr\u{f6}\u{df}e\" FROM __ref(\"events\") \
+                     WHERE \"gr\u{f6}\u{df}e\" IS NOT NULL",
+                    &[],
+                    &["events"],
+                ),
+            ],
+            expected_steps: &[&[
+                "publish events gr\u{f6}\u{df}e:UNKNOWN",
+                "publish events_mart gr\u{f6}\u{df}e:UNKNOWN",
+            ]],
+            expected_outcomes: &[
+                &[
+                    "gr\u{f6}\u{df}e - unknown",
+                    "succeeded=true star=false/false diagnostics=[]",
+                ],
+                &[
+                    "gr\u{f6}\u{df}e - non_null",
+                    "succeeded=true star=false/false diagnostics=[]",
+                ],
             ],
         },
         SessionTestCase {
@@ -154,7 +191,7 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
             ],
         },
         SessionFactsTestCase {
-            description: "a model Python analysed keeps no session facts",
+            description: "a native legacy analysis keeps its output names and sources",
             models: &[
                 (
                     "events",
@@ -171,7 +208,29 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
             ],
             expected_facts: &[
                 "Some([\"event_id\"]) event_id<-[(\"raw_events\", \"event_id\")]",
-                "none",
+                "Some([\"event_id\", \"one\"]) event_id<-[(\"events\", \"event_id\")] one<-[]",
+            ],
+        },
+        SessionFactsTestCase {
+            description: "a non-ASCII model analysed natively keeps its session facts",
+            models: &[
+                (
+                    "events",
+                    "SELECT event_id AS \"gr\u{f6}\u{df}e\" FROM __source(\"raw_events\")",
+                    &["raw_events"],
+                    &[],
+                ),
+                (
+                    "events_mart",
+                    "SELECT \"gr\u{f6}\u{df}e\" FROM __ref(\"events\") \
+                     WHERE \"gr\u{f6}\u{df}e\" IS NOT NULL",
+                    &[],
+                    &["events"],
+                ),
+            ],
+            expected_facts: &[
+                "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"raw_events\", \"event_id\")]",
+                "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"events\", \"gr\u{f6}\u{df}e\")]",
             ],
         },
     ];
@@ -186,10 +245,10 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
 }
 
 #[test]
-fn given_unschedulable_models_when_starting_then_python_analyses() {
+fn given_models_when_starting_then_only_duplicate_names_leave_analysis_to_python() {
     let test_cases = [
         UnscheduledTestCase {
-            description: "models that reference each other",
+            description: "models that reference each other analyse in one unordered wave",
             models: &[
                 (
                     "orders",
@@ -204,7 +263,7 @@ fn given_unschedulable_models_when_starting_then_python_analyses() {
                     &["orders"],
                 ),
             ],
-            expected_started: false,
+            expected_started: true,
         },
         UnscheduledTestCase {
             description: "two models with one name",
@@ -322,14 +381,20 @@ fn given_dynamic_pivots_when_proving_then_matches_python_or_defers() {
             dialect: "duckdb",
             sql: "PIVOT FROM WHERE",
             family: Some(("status", "amount", "MAX")),
-            expected_outcome: PivotOutcome::Deferred,
+            expected_outcome: failed(
+                "dynamic pivot SQL could not be parsed: Parse error at line 1, column 11: \
+                 Unexpected token: From",
+            ),
         },
         PivotTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             dialect: "duckdb",
             sql: "SELECT * FROM __ref(\"stra\u{df}e\")",
             family: Some(("status", "amount", "MAX")),
-            expected_outcome: PivotOutcome::Deferred,
+            expected_outcome: failed(
+                "dynamic-family passthrough from 'stra\u{df}e' must redeclare the upstream \
+                 families exactly",
+            ),
         },
         PivotTestCase {
             description: "no declared families",
@@ -410,9 +475,9 @@ fn given_cte_reads_when_recovering_facts_then_matches_python_or_defers() {
             expected_facts: Some((&[], &[], &[], &["order_id"])),
         },
         CteRecoveryTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             sql: "WITH b\u{e4}se AS (SELECT order_id FROM orders) SELECT order_id FROM b\u{e4}se",
-            expected_facts: None,
+            expected_facts: Some((&[("order_id", "INTEGER")], &[], &["order_id"], &[])),
         },
     ];
     for test_case in test_cases {
@@ -421,6 +486,105 @@ fn given_cte_reads_when_recovering_facts_then_matches_python_or_defers() {
         assert_eq!(
             facts,
             expected_facts(test_case.expected_facts),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_handed_back_models_when_analysing_legacy_then_matches_python_or_defers() {
+    let test_cases = [
+        LegacyAnalysisTestCase {
+            description: "a qualified join keeps casts, aggregates and joined nullability",
+            sql: "SELECT o.order_id, CAST(o.amount AS DECIMAL(10, 2)) AS amount, COUNT(*) AS n, \
+                  UPPER(o.status) AS up, c.customer_id FROM orders AS o LEFT JOIN customers AS c \
+                  ON o.order_id = c.customer_id GROUP BY 1, 2, 4, 5",
+            expected_lines: Some(&[
+                "succeeded=true star=false",
+                "order_id - non_null",
+                "amount DECIMAL(10, 2) unknown",
+                "n - non_null",
+                "up - unknown",
+                "customer_id - nullable",
+                "order_id direct high [model:orders:order_id]",
+                "amount cast high [model:orders:amount]",
+                "n aggregation unknown []",
+                "up expression high [model:orders:status]",
+                "customer_id direct high [source:customers:customer_id]",
+            ]),
+        },
+        LegacyAnalysisTestCase {
+            description: "unqualified columns of one resource are medium confidence",
+            sql: "SELECT order_id, 'x' AS tag, status IS NULL AS missing, amount + 1 AS bumped \
+                  FROM orders WHERE status IS NOT NULL",
+            expected_lines: Some(&[
+                "succeeded=true star=false",
+                "order_id - non_null",
+                "tag - non_null",
+                "missing BOOLEAN non_null",
+                "bumped - unknown",
+                "order_id direct medium [model:orders:order_id]",
+                "tag constant high []",
+                "missing expression medium [model:orders:status]",
+                "bumped expression medium [model:orders:amount]",
+            ]),
+        },
+        LegacyAnalysisTestCase {
+            description: "CTE pass-through outputs take the recovered facts beside a star",
+            sql: "WITH base AS (SELECT order_id, CAST(amount AS DOUBLE) AS amount FROM orders) \
+                  SELECT order_id, amount, * FROM base",
+            expected_lines: Some(&[
+                "succeeded=true star=true",
+                "order_id INTEGER non_null",
+                "amount DOUBLE unknown",
+                "order_id direct medium [model:orders:order_id]",
+                "amount direct medium [model:orders:amount]",
+            ]),
+        },
+        LegacyAnalysisTestCase {
+            description: "a set operation reads its first select without nullability",
+            sql: "SELECT order_id FROM orders UNION ALL SELECT customer_id FROM customers",
+            expected_lines: Some(&[
+                "succeeded=true star=false",
+                "order_id - unknown",
+                "order_id direct medium [model:orders:order_id]",
+            ]),
+        },
+        LegacyAnalysisTestCase {
+            description: "a parse error fails the analysis as Python's PolyglotError does",
+            sql: "SELECT FROM WHERE (",
+            expected_lines: Some(&["succeeded=false star=false"]),
+        },
+        LegacyAnalysisTestCase {
+            description: "a non-ASCII literal names no function Python declares a type for",
+            sql: "SELECT 'na\u{ef}ve r\u{e9}sum\u{e9}' AS label, '\u{6771}' AS city FROM orders",
+            expected_lines: Some(&[
+                "succeeded=true star=false",
+                "label - non_null",
+                "city - non_null",
+                "label constant high []",
+                "city constant high []",
+            ]),
+        },
+        LegacyAnalysisTestCase {
+            description: "non-ASCII names fold as Python casefolds them",
+            sql: "SELECT \"gr\u{f6}\u{df}e\" FROM orders WHERE \"gr\u{f6}\u{df}e\" IS NOT NULL",
+            expected_lines: Some(&[
+                "succeeded=true star=false",
+                "gr\u{f6}\u{df}e - unknown",
+                "gr\u{f6}\u{df}e direct medium [model:orders:gr\u{f6}\u{df}e]",
+            ]),
+        },
+    ];
+    for test_case in test_cases {
+        let lines = legacy_lines(test_case.sql);
+
+        assert_eq!(
+            lines,
+            test_case
+                .expected_lines
+                .map(|lines| lines.iter().map(|line| (*line).to_owned()).collect()),
             "{}",
             test_case.description
         );

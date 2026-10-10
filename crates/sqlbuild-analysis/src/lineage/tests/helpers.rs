@@ -24,7 +24,7 @@ pub(crate) fn outcome_lines(
         models: vec![model],
     };
     let outcomes: Vec<FastLineageOutcome> =
-        build_fast_lineage(&request, &catalog()).expect("the analysis pool builds");
+        build_fast_lineage(&request, Some(&catalog())).expect("the analysis pool builds");
     outcomes.into_iter().map(described_outcome).collect()
 }
 

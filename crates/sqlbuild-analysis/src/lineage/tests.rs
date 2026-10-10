@@ -10,6 +10,8 @@ mod helpers;
 mod interrupted_listing_policy;
 #[path = "tests/test_references.rs"]
 mod references;
+#[path = "tests/test_rich_dialects.rs"]
+mod rich_dialects;
 #[path = "tests/test_rich_lineage_panics.rs"]
 mod rich_lineage_panics;
 #[path = "tests/test_types.rs"]

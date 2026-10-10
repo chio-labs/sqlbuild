@@ -1,47 +1,59 @@
-"""Test case types for native type normalization parity."""
+"""Test case types for native type normalization."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.models import NormalizedType
+
 
 @dataclass(frozen=True)
-class GeneratedTypeParityTestCase:
+class GeneratedTypeTestCase:
     """Seeded generated type strings normalized under every dialect."""
 
     description: str
     seed: int
     count: int
-    expected_minimum_native: int
+    expected_minimum_normalized: int
     expected_minimum_parse_errors: int
-    expected_minimum_deferred: int
+    expected_unknown_dialect_errors: int
 
 
 @dataclass(frozen=True)
-class TypeParityTestCase:
-    """One type string normalized natively and by Python under every dialect."""
+class TypeNormalizationTestCase:
+    """One type string under one dialect, its normalization and whether a parse error is logged."""
 
     description: str
     type_sql: str
-    expected_native_dialects: frozenset[str | None]
+    dialect: str | None
+    expected_type: NormalizedType
+    expected_parse_error_logged: bool
+
+
+@dataclass(frozen=True)
+class UnknownDialectTypeTestCase:
+    """A dialect Polyglot does not know, and the error Python's wheel raised for it."""
+
+    description: str
+    dialect: str
+    expected_error: str
 
 
 @dataclass(frozen=True)
 class DeepTypeTestCase:
-    """A type deeper than the wheel can parse, which only native sees."""
+    """A deeply nested type the Python wheel normalized."""
 
     description: str
     type_sql: str
-    expected_native: None
+    expected_family: str
 
 
 @dataclass(frozen=True)
 class PublicNativeTypeTestCase:
-    """Types normalized through the public entry point under the preview engine."""
+    """Types normalized through the public entry point under each engine."""
 
     description: str
     engine: str
     dialect: str
     type_strings: tuple[str, ...]
     expected_native_calls: tuple[tuple[str, str], ...]
-    expected_answered: int

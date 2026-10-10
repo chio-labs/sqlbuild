@@ -1,4 +1,4 @@
-"""The preview engine builds fast column lineage natively with Python's exact CLI output."""
+"""Both native engines build fast column lineage natively with the expected CLI output."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage.helpers impor
     model_lineage_summaries,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "orders_lineage"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
@@ -71,7 +71,6 @@ _DEEP_UNION_FILES: dict[str, str] = {
 }
 
 
-_RICH_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _RICH_FILES: dict[str, str] = {
     "sqlbuild_project.toml": _PROJECT_FILES["sqlbuild_project.toml"],
     "sources/raw.yml": _PROJECT_FILES["sources/raw.yml"],
@@ -118,9 +117,9 @@ def _panicked(request):
 
 native.build_rich_column_lineage = _panicked
 """
-_PREVIEW_RICH_COMPILE: tuple[str, ...] = (
+_RICH_COMPILE: tuple[str, ...] = (
     "--compiler-engine",
-    "native-preview",
+    "native",
     "compile",
     "--json",
     "--no-cache",
@@ -148,7 +147,6 @@ _PREVIEW_RICH_COMPILE: tuple[str, ...] = (
                     "has_star": True,
                 }
             },
-            expected_minimum_python_fallback_parses=2,
             expected_minimum_traced_edges=4,
         ),
         NativeFastLineageCliTestCase(
@@ -169,7 +167,6 @@ _PREVIEW_RICH_COMPILE: tuple[str, ...] = (
                     "has_star": False,
                 },
             },
-            expected_minimum_python_fallback_parses=2,
             expected_minimum_traced_edges=2,
         ),
     ],
@@ -187,21 +184,19 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
         )
         for engine in _ENGINES
     }
-    python: EngineLineageRun = runs["python"]
-    summaries: dict[str, object] = model_lineage_summaries(python.compile_report)
+    native: EngineLineageRun = runs["native"]
+    summaries: dict[str, object] = model_lineage_summaries(native.compile_report)
 
-    assert python.compile_returncode == 0, python.compile_report
-    assert [code for code, _, _ in python.traces] == [0] * len(python.traces)
+    assert native.compile_returncode == 0, native.compile_report
+    assert [code for code, _, _ in native.traces] == [0] * len(native.traces)
     assert {name: summaries[name] for name in test_case.expected_lineage} == (
         test_case.expected_lineage
     )
-    assert sum('"source"' in stdout for _, stdout, _ in python.traces) >= (
+    assert sum('"source"' in stdout for _, stdout, _ in native.traces) >= (
         test_case.expected_minimum_traced_edges
     )
-    assert python.fallback_parses >= test_case.expected_minimum_python_fallback_parses
-    assert runs["native"] == python
-    assert runs["native-preview"]._replace(fallback_parses=python.fallback_parses) == python
-    assert runs["native-preview"].fallback_parses == 0
+    assert runs["native-preview"] == native
+    assert native.fallback_parses == 0
 
 
 @pytest.mark.parametrize(
@@ -215,14 +210,39 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
                 "order_facts.whole_amount",
                 "stg_orders.amount",
             ),
-            expected_wheel_analyses=19,
-            expected_native_models=19,
+            expected_lineage={
+                "customer_copies": {
+                    "available": True,
+                    "column_count": 5,
+                    "edge_count": 8,
+                    "has_star": True,
+                },
+                "customer_totals": {
+                    "available": True,
+                    "column_count": 4,
+                    "edge_count": 5,
+                    "has_star": False,
+                },
+                "order_facts": {
+                    "available": True,
+                    "column_count": 6,
+                    "edge_count": 5,
+                    "has_star": False,
+                },
+                "stg_orders": {
+                    "available": True,
+                    "column_count": 3,
+                    "edge_count": 3,
+                    "has_star": True,
+                },
+            },
+            expected_wheel_calls=0,
             expected_minimum_traced_edges=4,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_project_when_tracing_rich_lineage_with_each_engine_then_native_matches_the_wheel(
+def test_given_project_when_tracing_rich_lineage_with_each_engine_then_output_matches(
     test_case: NativeRichLineageCliTestCase, tmp_path: Path
 ) -> None:
     runs: dict[str, EngineLineageRun] = {
@@ -233,28 +253,18 @@ def test_given_project_when_tracing_rich_lineage_with_each_engine_then_native_ma
             targets=test_case.lineage_targets,
             mode="rich",
         )
-        for engine in _RICH_ENGINES
+        for engine in _ENGINES
     }
-    wheel: EngineLineageRun = runs["native"]
-    preview: EngineLineageRun = runs["native-preview"]
+    native: EngineLineageRun = runs["native"]
 
-    assert wheel.compile_returncode == 0, wheel.compile_report
-    assert [code for code, _, _ in wheel.traces] == [0] * len(wheel.traces)
-    assert sum('"source"' in stdout for _, stdout, _ in wheel.traces) >= (
+    assert native.compile_returncode == 0, native.compile_report
+    assert model_lineage_summaries(native.compile_report) == test_case.expected_lineage
+    assert [code for code, _, _ in native.traces] == [0] * len(native.traces)
+    assert sum('"source"' in stdout for _, stdout, _ in native.traces) >= (
         test_case.expected_minimum_traced_edges
     )
-    assert (wheel.rich_wheel_analyses, wheel.rich_native_models) == (
-        test_case.expected_wheel_analyses,
-        0,
-    )
-    assert (preview.rich_wheel_analyses, preview.rich_native_models) == (
-        0,
-        test_case.expected_native_models,
-    )
-    assert (
-        preview._replace(rich_wheel_analyses=wheel.rich_wheel_analyses, rich_native_models=0)
-        == wheel
-    )
+    assert native.wheel_calls == test_case.expected_wheel_calls
+    assert runs["native-preview"] == native
 
 
 @pytest.mark.parametrize(
@@ -263,18 +273,17 @@ def test_given_project_when_tracing_rich_lineage_with_each_engine_then_native_ma
         NativeRichLineageFailureCliTestCase(
             description="compile --lineage-mode rich",
             files=_RICH_FILES,
-            command=_PREVIEW_RICH_COMPILE,
+            command=_RICH_COMPILE,
             expected_returncode=1,
             expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
-            expected_wheel_analyses=0,
-            expected_native_models=0,
+            expected_wheel_calls=0,
         ),
         NativeRichLineageFailureCliTestCase(
             description="lineage --mode rich",
             files=_RICH_FILES,
             command=(
                 "--compiler-engine",
-                "native-preview",
+                "native",
                 "lineage",
                 "order_facts.whole_amount",
                 "--mode",
@@ -283,8 +292,7 @@ def test_given_project_when_tracing_rich_lineage_with_each_engine_then_native_ma
             ),
             expected_returncode=1,
             expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
-            expected_wheel_analyses=0,
-            expected_native_models=0,
+            expected_wheel_calls=0,
         ),
     ],
     ids=lambda case: case.description,
@@ -302,8 +310,7 @@ def test_given_native_rich_lineage_panic_when_running_then_command_fails_without
     assert run == FailedLineageRun(
         returncode=test_case.expected_returncode,
         last_error_line=test_case.expected_error_line,
-        rich_wheel_analyses=test_case.expected_wheel_analyses,
-        rich_native_models=test_case.expected_native_models,
+        wheel_calls=test_case.expected_wheel_calls,
     )
 
 

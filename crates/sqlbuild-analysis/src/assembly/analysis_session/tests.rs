@@ -1,3 +1,5 @@
+#[path = "tests/test_analysis_cache.rs"]
+mod analysis_cache;
 #[path = "tests/test_analysis_session.rs"]
 mod analysis_session;
 #[path = "tests/test_expression_shapes.rs"]

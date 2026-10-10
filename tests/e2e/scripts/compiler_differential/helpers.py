@@ -111,33 +111,6 @@ import sqlbuild._native as native
 native.start_model_analysis_session = lambda *_args: None
 """
 
-RICH_LINEAGE_SABOTAGE: str = """
-import sqlbuild._native as native
-
-native.build_rich_column_lineage = lambda request: [
-    ("deferred", [], False, "unsupported_dialect") for _ in request[2]
-]
-"""
-RICH_LINEAGE_SEED: int = 6
-
-_STAGE_DISABLE_SABOTAGE: str = """
-import sqlbuild.compiler.frontier.main.native_stage_enabled as enabled
-from sqlbuild.compiler.frontier.types import NativeStage
-
-_original = enabled.native_stage_enabled
-_disabled = {{{stages}}}
-enabled.native_stage_enabled = lambda stage: stage not in _disabled and _original(stage)
-"""
-
-
-def stage_disable_sabotage(stages: tuple[str, ...]) -> str:
-    """A perturbation switching these native stages off, so their work runs in Python."""
-
-    return _STAGE_DISABLE_SABOTAGE.format(
-        stages=", ".join(f"NativeStage({stage!r})" for stage in stages)
-    )
-
-
 _BROKEN_REF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "broken_orders"\nadapter = "duckdb"\n\n'
@@ -223,7 +196,7 @@ def shared_analysis_seed_arguments(*, work_dir: Path, seed: int) -> list[str]:
         "--seeds",
         "1",
         "--engines",
-        "python",
-        "python",
+        "native",
+        "native",
         "--stage-captures",
     ]

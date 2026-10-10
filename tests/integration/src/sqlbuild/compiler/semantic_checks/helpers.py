@@ -13,6 +13,7 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.assembly.project as assembly_project
+import sqlbuild.compiler.compile._helpers.diagnostics.recovery as recovery
 import sqlbuild.compiler.semantic_checks._helpers.stage as semantic_stage
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -183,7 +184,7 @@ def captured_semantic_inputs(
     project_dir: Path,
     files: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
-    engine: str = "python",
+    engine: str = "native",
 ) -> SemanticInputs:
     """Compile with `engine` and keep the semantic completion stage's inputs."""
 
@@ -220,10 +221,10 @@ def with_dialect(inputs: SemanticInputs, dialect: str) -> SemanticInputs:
 def python_completion(
     *, inputs: SemanticInputs, monkeypatch: pytest.MonkeyPatch
 ) -> CompiledProject:
-    """The Python engine's completed project."""
+    """The project Python completes when native semantic completion defers."""
 
     with monkeypatch.context() as patch:
-        patch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
+        patch.setattr(recovery, "complete_native_semantic_diagnostics", lambda **_kwargs: None)
         return complete_semantic_diagnostics(
             project=inputs.project,
             profile=inputs.profile,
@@ -506,18 +507,14 @@ def generated_metadata_files(*, rng: random.Random, model_count: int) -> dict[st
     return files
 
 
-def python_metadata(
-    *, inputs: SemanticInputs, monkeypatch: pytest.MonkeyPatch
-) -> tuple[CompilerDiagnostic, ...]:
-    """The Python engine's metadata diagnostics."""
+def python_metadata(*, inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...]:
+    """Python's metadata diagnostics, which native semantic completion defers to."""
 
-    with monkeypatch.context() as patch:
-        patch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
-        return get_semantic_metadata_diagnostics(
-            project=inputs.project,
-            profile=inputs.profile,
-            resource_sql_analysis=inputs.resource_sql_analysis,
-        )
+    return get_semantic_metadata_diagnostics(
+        project=inputs.project,
+        profile=inputs.profile,
+        resource_sql_analysis=inputs.resource_sql_analysis,
+    )
 
 
 def native_metadata(inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...] | None:

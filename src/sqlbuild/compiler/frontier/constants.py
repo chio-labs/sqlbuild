@@ -10,32 +10,14 @@ DEFAULT_COMPILER_ENGINE: CompilerEngine = CompilerEngine.NATIVE
 COMPILER_ENGINE_VALUES: tuple[str, ...] = tuple(engine.value for engine in CompilerEngine)
 NATIVE_CACHE_NAMESPACE_SUFFIX: str = "-native-v1"
 NATIVE_PREVIEW_CACHE_NAMESPACE_SUFFIX: str = "-native-preview-v1"
+REMOVED_PYTHON_ENGINE: str = "python"
 ENGINE_CACHE_NAMESPACE_SUFFIXES: dict[CompilerEngine, str] = {
-    CompilerEngine.PYTHON: "",
     CompilerEngine.NATIVE: NATIVE_CACHE_NAMESPACE_SUFFIX,
     CompilerEngine.NATIVE_PREVIEW: NATIVE_PREVIEW_CACHE_NAMESPACE_SUFFIX,
 }
-NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
-    NativeStage.DISCOVERY: NativeStageTier.SHIPPED,
-    NativeStage.DECLARATION_SCOPES: NativeStageTier.SHIPPED,
-    NativeStage.MODEL_CONFIG: NativeStageTier.SHIPPED,
-    NativeStage.REFERENCE_EXTRACTION: NativeStageTier.SHIPPED,
-    NativeStage.DECLARATION_FILES: NativeStageTier.SHIPPED,
-    NativeStage.MODEL_LOOP: NativeStageTier.SHIPPED,
-    NativeStage.MACRO_CALLS: NativeStageTier.SHIPPED,
-    NativeStage.MACRO_CALL_STORE: NativeStageTier.SHIPPED,
-    NativeStage.ATTACHMENTS: NativeStageTier.SHIPPED,
-    NativeStage.TYPE_SYSTEM: NativeStageTier.PREVIEW,
-    NativeStage.MODEL_ANALYSIS: NativeStageTier.PREVIEW,
-    NativeStage.SEMANTIC_CHECKS: NativeStageTier.PREVIEW,
-    NativeStage.CONTRACTS: NativeStageTier.PREVIEW,
-    NativeStage.LINEAGE_FACTS: NativeStageTier.PREVIEW,
-    NativeStage.RICH_LINEAGE: NativeStageTier.PREVIEW,
-    NativeStage.SQL_TEST_GLUE: NativeStageTier.PREVIEW,
-    NativeStage.PROJECT_ASSEMBLY: NativeStageTier.PREVIEW,
-}
+RETIRED_CACHE_NAMESPACE_SUFFIXES: tuple[str, ...] = ("", *ENGINE_CACHE_NAMESPACE_SUFFIXES.values())
+NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {}
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
-    CompilerEngine.PYTHON: frozenset(),
     CompilerEngine.NATIVE: frozenset({NativeStageTier.SHIPPED}),
     CompilerEngine.NATIVE_PREVIEW: frozenset({NativeStageTier.SHIPPED, NativeStageTier.PREVIEW}),
 }

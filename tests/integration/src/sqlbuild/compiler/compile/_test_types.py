@@ -18,7 +18,6 @@ class MacroBridgeMemoTestCase:
 
     description: str
     files: dict[str, str]
-    expected_python_executions: int
     expected_native_executions: int
 
 

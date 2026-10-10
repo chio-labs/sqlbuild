@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
+
 
 @dataclass(frozen=True)
 class GeneratedAnalysisParityTestCase:
@@ -11,11 +14,15 @@ class GeneratedAnalysisParityTestCase:
     seed: int
     count: int
     model_count: int
-    dialects: tuple[str | None, ...]
+    inference_profiles: tuple[ExpressionInferenceProfile, ...]
+    extra_files: dict[str, str]
+    lineage_mode: ColumnLineageMode
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
     expected_minimum_pivot_proofs: int
     expected_minimum_python_cte_recoveries: int
+    expected_minimum_legacy_analyses: int
+    expected_legacy_analysis_deferrals: int
     expected_minimum_proven_pivots: int
     expected_maximum_enrichment_deferrals: int
     expected_minimum_native_enrichments: int
@@ -33,13 +40,24 @@ class AnalysisFallbackTestCase:
 
 
 @dataclass(frozen=True)
-class SessionFailureTestCase:
-    """A session that fails after Python answered deferrals, so Python analyses everything."""
+class CyclicAnalysisTestCase:
+    """Models that `ref` each other, which the native session analyses in one unordered wave."""
 
     description: str
-    seed: int
-    model_count: int
-    expected_kinds: dict[str, int]
+    files: dict[str, str]
+    dialects: tuple[str, ...]
+    lineage_modes: tuple[ColumnLineageMode, ...]
+    expected_analysed: int
+
+
+@dataclass(frozen=True)
+class CyclicCompileTestCase:
+    """A project whose models `ref` each other, compiled through the CLI."""
+
+    description: str
+    files: dict[str, str]
+    expected_exit_code: int
+    expected_compiled: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -77,3 +95,14 @@ class CteFactRecoveryParityTestCase:
     count: int
     expected_minimum_compared: int
     expected_minimum_recovered: dict[str, int]
+
+
+@dataclass(frozen=True)
+class AdapterRuleCallbackTestCase:
+    """A project-local adapter rule the native session calls back into, and what it raises."""
+
+    description: str
+    seed: int
+    model_count: int
+    raised: type[Exception] | None
+    expected_minimum_calls: int

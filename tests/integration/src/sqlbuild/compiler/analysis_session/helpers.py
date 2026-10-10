@@ -20,6 +20,7 @@ import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
     analyze_native_model_sql,
 )
@@ -49,6 +50,7 @@ from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -102,6 +104,9 @@ _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     python_functions_inherit_default_namespace=True,
     sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
 )
+_DUCKDB_PROFILE: ExpressionInferenceProfile = ExpressionInferenceProfile(
+    sql_analysis_dialect="duckdb"
+)
 _PIVOT_HEADER: str = """MODEL (
   description "Order amounts pivoted by status",
   contract enforced,
@@ -142,6 +147,54 @@ _TYPED_PIVOT_PASSTHROUGH: str = (
     _PIVOT_HEADER.format(pivot="status", value="amount", aggregate="MAX")
     + 'SELECT * FROM __ref("status_amounts")\n'
 )
+_ADAPTER_RULE_SQL: dict[str, tuple[str, str]] = {
+    "adapter_rules_cte": (
+        "  contract enforced,\n",
+        "WITH base AS (\n  SELECT customer_id, IFF(region IS NULL, 'a', NULL) AS maybe_label,\n"
+        "    IFF(region IS NULL, 'a', 'b') AS label, UPPER(region) AS upper_region,\n"
+        "    LOWER('X') AS lower_constant, SPLIT_PART(region, '_', 1) AS region_prefix,\n"
+        "    REPLACE(region, '_', '-') AS dashed_region\n"
+        '  FROM __source("raw_payments")\n)\n'
+        "SELECT customer_id, maybe_label, label, upper_region, lower_constant, region_prefix,\n"
+        "  dashed_region\nFROM base",
+    ),
+    "adapter_rules_untyped_cte": (
+        "  contract enforced,\n",
+        'WITH base AS (SELECT event_id, kind FROM __source("raw_events"))\n'
+        "SELECT event_id, IFF(kind IS NULL, 'a', NULL) AS maybe_label, UPPER(kind) AS upper_kind,\n"
+        "  LOWER('X') AS lower_constant, SPLIT_PART(kind, '_', 1) AS kind_prefix\nFROM base",
+    ),
+    "adapter_rules_staging": (
+        "",
+        "SELECT event_id, IFF(kind IS NULL, 'a', NULL) AS maybe_label, UPPER(kind) AS upper_kind,\n"
+        "  LISTAGG(kind) AS kinds, TO_DATE('2026-01-01') AS start_date\n"
+        'FROM __source("raw_events")\nGROUP BY event_id, kind',
+    ),
+    "long_s_cte": (
+        "  contract enforced,\n",
+        "WITH base AS (SELECT event_id, 'ſplit_part' AS label FROM __source(\"raw_events\"))\n"
+        "SELECT event_id, label FROM base",
+    ),
+    "long_s_staging": (
+        "",
+        "SELECT event_id, 'ſplit_part' AS label, kind FROM __source(\"raw_events\")",
+    ),
+    "dotless_i_staging": (
+        "",
+        "SELECT event_id, 'lıstagg' AS label FROM __source(\"raw_events\")",
+    ),
+    "umlaut_cte": (
+        "  contract enforced,\n",
+        "WITH base AS (SELECT event_id, 'grüße' AS label FROM __source(\"raw_events\"))\n"
+        "SELECT event_id, label FROM base",
+    ),
+}
+ADAPTER_RULE_MODELS: dict[str, str] = {
+    f"models/adapter_rules/{name}.sql": (
+        f'MODEL (\n  description "Adapter rule model {name}",\n{header});\n\n{sql}\n'
+    )
+    for name, (header, sql) in _ADAPTER_RULE_SQL.items()
+}
 _CONTRACT_CTE_MODELS: dict[str, str] = {
     "models/marts/payments_by_customer.sql": (
         'MODEL (\n  description "Payments passed through a CTE",\n  contract enforced,\n'
@@ -178,6 +231,9 @@ def _pivot_models(rng: random.Random) -> dict[str, str]:
 
 
 _PYTHON_CTE_RECOVERY: Callable[..., Any] = compact_analysis._polyglot_cte_passthrough_facts
+_PYTHON_LEGACY_ANALYSIS: Callable[..., Any] = (
+    compact_analysis._analyze_columns_and_lineage_from_polyglot_ast
+)
 
 type _Relation = tuple[str, tuple[str, ...]]
 type _Template = Callable[[random.Random, list[_Relation]], tuple[str, str, tuple[str, ...]]]
@@ -303,6 +359,13 @@ def _unknown_column(
     return "", sql, (columns[0], "missing_column")
 
 
+def _cast_constant(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tuple[str, ...]]:
+    relation, columns = inputs[0]
+    column: str = rng.choice(columns)
+    sql: str = f"SELECT {column}, CAST(NULL AS INT) AS missing_id\nFROM {relation}"
+    return "", sql, (column, "missing_id")
+
+
 def _subquery(rng: random.Random, inputs: list[_Relation]) -> tuple[str, str, tuple[str, ...]]:
     relation, columns = inputs[0]
     column: str = rng.choice(columns)
@@ -322,6 +385,7 @@ _TEMPLATES: tuple[_Template, ...] = (
     _cte_contract,
     _unknown_column,
     _subquery,
+    _cast_constant,
 )
 
 
@@ -442,8 +506,8 @@ def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     started: list[Any] = []
     original: Callable[..., Any] = native_module.start_model_analysis_session
 
-    def start(catalog: object, request: tuple[object, ...]) -> Any:
-        started.append(original(catalog, request))
+    def start(catalog: object, request: tuple[object, ...], *options: object) -> Any:
+        started.append(original(catalog, request, *options))
         return started[-1]
 
     monkeypatch.setattr(native_module, "start_model_analysis_session", start)
@@ -464,6 +528,52 @@ def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjec
     )
 
 
+def compiled_project_view(
+    *,
+    project_dir: Path,
+    files: dict[str, str],
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[int, object, object, dict[str, str]]:
+    """Compile a written project through the CLI: exit code, report, manifest nodes, SQL files."""
+
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    _ = capsys.readouterr()
+    code: int = main(["--project-dir", str(project_dir), "compile", "--json", "--manifest"])
+    report: dict[str, object] = json.loads(capsys.readouterr().out)
+    manifest: dict[str, object] = json.loads(
+        (project_dir / "target" / "manifest.json").read_text(encoding="utf-8")
+    )
+    compiled: Path = project_dir / "target" / "compiled"
+    _ = report.pop("compile_timings")
+    _ = manifest.pop("metadata")
+    return (
+        code,
+        report,
+        manifest,
+        {
+            path.relative_to(compiled).as_posix(): path.read_text(encoding="utf-8")
+            for path in sorted(compiled.rglob("*.sql"))
+        },
+    )
+
+
+def python_compiled_project_view(
+    *,
+    project_dir: Path,
+    files: dict[str, str],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[int, object, object, dict[str, str]]:
+    """`compiled_project_view` with native model analysis deferred, so Python analyses all."""
+
+    with monkeypatch.context() as patch:
+        patch.setattr(native_stage_assembly, "analyze_native_model_sql", lambda **_kwargs: None)
+        return compiled_project_view(project_dir=project_dir, files=files, capsys=capsys)
+
+
 @dataclass
 class AnalysisParity:
     """Python's and the native session's views of every analysis seam call."""
@@ -475,6 +585,7 @@ class AnalysisParity:
     expression_shapes: int = 0
     pivot_proofs: int = 0
     python_cte_recoveries: int = 0
+    legacy_analyses: int = 0
     standalone_proofs: int = 0
     session_proofs: int = 0
     proven_pivots: int = 0
@@ -486,11 +597,12 @@ class AnalysisParity:
 def compare_analyses(
     *,
     inputs: CompileProjectInputs,
-    dialect: str | None,
+    inference_profile: ExpressionInferenceProfile,
+    lineage_mode: ColumnLineageMode,
     parity: AnalysisParity,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Assemble `inputs`, analysing every seam call with both engines into `parity`."""
+    """Assemble `inputs` under `inference_profile`, analysing every seam call with both engines."""
 
     sessions: list[Any] = []
 
@@ -518,6 +630,11 @@ def compare_analyses(
                 compact_analysis,
                 "_polyglot_cte_passthrough_facts",
                 partial(_counted_cte_recovery, parity=parity),
+            )
+            patch.setattr(
+                compact_analysis,
+                "_analyze_columns_and_lineage_from_polyglot_ast",
+                partial(_counted_legacy_analysis, parity=parity),
             )
             python: dict[str, ModelSqlAnalysis] = python_analysis.func(**keywords)
         columns: list[InferredColumn] = list(
@@ -597,12 +714,22 @@ def compare_analyses(
         with suppress(CompileInputError):
             _ = project_assembly.assemble_compiled_project(
                 inputs=inputs,
-                inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
+                inference_profile=replace(inference_profile),
+                column_lineage_mode=lineage_mode,
             )
 
 
+def custom_nullability_rule(arguments: tuple[InferredNullability, ...]) -> InferredNullability:
+    """An adapter rule SQLBuild does not ship, so native analysis leaves it to Python."""
+
+    return InferredNullability.NULLABLE
+
+
 def analysis_request(
-    *, inputs: CompileProjectInputs, monkeypatch: pytest.MonkeyPatch
+    *,
+    inputs: CompileProjectInputs,
+    monkeypatch: pytest.MonkeyPatch,
+    inference_profile: ExpressionInferenceProfile = _DUCKDB_PROFILE,
 ) -> NativeModelAnalysisRequest:
     """The native request the model analysis seam builds while assembling `inputs`."""
 
@@ -624,7 +751,7 @@ def analysis_request(
         patch.setattr(project_assembly, "analyze_model_sql_by_engine", captured)
         _ = project_assembly.assemble_compiled_project(
             inputs=inputs,
-            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+            inference_profile=inference_profile,
         )
     return requests[0]
 
@@ -644,6 +771,11 @@ def deferral_kinds(record_dir: Path) -> Counter[str]:
 
 def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:
     return analysis.polyglot_analysis.columns or ()
+
+
+def _counted_legacy_analysis(*, parity: AnalysisParity, **arguments: Any) -> Any:
+    parity.legacy_analyses += 1
+    return _PYTHON_LEGACY_ANALYSIS(**arguments)
 
 
 def _counted_cte_recovery(*, parity: AnalysisParity, **arguments: Any) -> Any:
@@ -695,36 +827,3 @@ def _analysis_views(analyses: dict[str, ModelSqlAnalysis] | None) -> object:
 
 def _catalog_view(catalog: Any) -> tuple[object, ...]:
     return (dict(catalog.schemas), dict(catalog.analysis_shapes))
-
-
-class FailingProvideSession:
-    """A native session whose answers to deferrals are refused, as a failed session refuses."""
-
-    def __init__(self, session: Any) -> None:
-        self._session: Any = session
-        self.answered: int = 0
-        self.failure: str = "injected session failure"
-
-    def run(self) -> object:
-        return self._session.run()
-
-    def provide(self, answers: list[object]) -> bool:
-        self.answered += len(answers)
-        return False
-
-    def finish(self) -> object:
-        return self._session.finish()
-
-
-def failing_provide_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[FailingProvideSession]:
-    """Make every native session refuse Python's answers; return the sessions started."""
-
-    started: list[FailingProvideSession] = []
-    original: Callable[..., Any] = native_module.start_model_analysis_session
-
-    def start(catalog: object, request: tuple[object, ...]) -> FailingProvideSession:
-        started.append(FailingProvideSession(original(catalog, request)))
-        return started[-1]
-
-    monkeypatch.setattr(native_module, "start_model_analysis_session", start)
-    return started

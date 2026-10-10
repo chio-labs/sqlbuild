@@ -47,7 +47,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
             expected_exit_code=0,
             expected_lines=(
                 "OK   project/waffle_shop",
-                "Compiler differential passed: 1 projects identical (python vs native-preview)",
+                "Compiler differential passed: 1 projects identical (native vs native-preview)",
             ),
             expected_patterns=(),
             expected_absent=("DIFF",),
@@ -346,9 +346,9 @@ def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_s
             seed=SHARED_ANALYSIS_SEED,
             expected_lines=(
                 f"OK   seed/{SHARED_ANALYSIS_SEED}",
-                "Compiler differential passed: 3 projects identical (python vs python)",
+                "Compiler differential passed: 3 projects identical (native vs native)",
             ),
-            expected_capture_sides=("left-python-captures", "right-python-captures"),
+            expected_capture_sides=("left-native-captures", "right-native-captures"),
             expected_compile_exit_code=0,
             expected_minimum_shareable_members=1,
             expected_minimum_shared_reuse=1,
@@ -356,7 +356,8 @@ def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_s
     ],
     ids=lambda case: case.description,
 )
-def test_given_python_engine_twice_when_capturing_stages_then_captures_are_identical(
+@pytest.mark.usefixtures("deferred_native_analysis")
+def test_given_native_engine_twice_when_capturing_stages_then_captures_are_identical(
     test_case: SharedAnalysisSeedTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -436,12 +437,12 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
     "test_case",
     [
         WheelSiteReportTestCase(
-            description="python_and_preview_wheel_calls_without_preview_deferrals",
+            description="native_and_preview_wheel_calls_without_preview_deferrals",
             perturbation="",
             expected_lines=(
-                "Polyglot wheel calls (python):",
+                "Polyglot wheel calls (native):",
                 "Polyglot wheel calls (native-preview):",
-                "Analysis deferrals (python): none recorded",
+                "Analysis deferrals (native): none recorded",
                 "Analysis deferrals (native-preview): none recorded",
                 "Compiler differential passed: 1 projects identical",
             ),
@@ -457,7 +458,7 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
             description="preview_deferrals_are_counted_per_kind_and_site",
             perturbation=DEFERRAL_PERTURBATION,
             expected_lines=(
-                "Analysis deferrals (python): none recorded",
+                "Analysis deferrals (native): none recorded",
                 "Analysis deferrals (native-preview):",
                 " legacy_fallback orders.sql (project ",
             ),
@@ -489,10 +490,10 @@ def test_given_wheel_site_report_when_comparing_then_sites_and_deferrals_are_rep
     preview: dict[str, dict[str, dict[str, int]]] = report["native-preview"]
     assert exit_code == 0, output
     assert all(line in output for line in test_case.expected_lines), output
-    assert test_case.expected_sites <= set(report["python"]["wheel_sites"]), report
+    assert test_case.expected_sites <= set(report["native"]["wheel_sites"]), report
     assert set(preview["deferrals"]) == test_case.expected_deferrals
     assert all(sum(by_corpus.values()) > 0 for by_corpus in preview["deferrals"].values())
-    assert report["python"]["deferrals"] == {}
+    assert report["native"]["deferrals"] == {}
 
 
 if __name__ == "__main__":

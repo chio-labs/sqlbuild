@@ -1,4 +1,4 @@
-"""The native macro bridge renders compile inputs byte-identically to the Python engine."""
+"""The native macro bridge renders compile inputs as expected, running each call class once."""
 
 from __future__ import annotations
 
@@ -73,22 +73,22 @@ _FAILURE_BASE_FILES: dict[str, str] = {
     ],
     ids=lambda case: case.description,
 )
-def test_given_macro_heavy_project_when_rendering_with_each_engine_then_inputs_are_identical(
+def test_given_macro_heavy_project_when_rendering_with_each_engine_then_inputs_are_expected(
     test_case: MacroBridgeParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_dir: Path = write_project(root=tmp_path / "project", files=test_case.files)
 
-    python_capture: str = comparable_capture(
-        render_compile_inputs(project_dir=project_dir, engine="python", monkeypatch=monkeypatch)
-    )
     native_capture: str = comparable_capture(
+        render_compile_inputs(project_dir=project_dir, engine="native", monkeypatch=monkeypatch)
+    )
+    preview_capture: str = comparable_capture(
         render_compile_inputs(
             project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
         )
     )
 
-    assert native_capture == python_capture
-    assert all(map(python_capture.__contains__, test_case.expected_fragments))
+    assert preview_capture == native_capture
+    assert all(map(native_capture.__contains__, test_case.expected_fragments))
 
 
 @pytest.mark.parametrize(
@@ -97,7 +97,6 @@ def test_given_macro_heavy_project_when_rendering_with_each_engine_then_inputs_a
         MacroBridgeMemoTestCase(
             description="one global call text in three models",
             files=MACRO_BRIDGE_PROJECT_FILES,
-            expected_python_executions=3,
             expected_native_executions=1,
         ),
     ],
@@ -108,14 +107,14 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
 ) -> None:
     project_dir: Path = write_project(root=tmp_path / "project", files=test_case.files)
     executions: dict[str, int] = {}
-    for engine in ("python", "native-preview"):
+    for engine in ("native", "native-preview"):
         log_path: Path = tmp_path / f"{engine}.log"
         monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
         _ = render_compile_inputs(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
         executions[engine] = len(log_path.read_text(encoding="utf-8").splitlines())
 
     assert executions == {
-        "python": test_case.expected_python_executions,
+        "native": test_case.expected_native_executions,
         "native-preview": test_case.expected_native_executions,
     }
 
@@ -168,20 +167,20 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
     ],
     ids=lambda case: case.description,
 )
-def test_given_failing_render_when_rendering_natively_then_raises_the_python_error(
+def test_given_failing_render_when_rendering_natively_then_raises_the_expected_error(
     test_case: MacroBridgeFailureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_dir: Path = write_project(root=tmp_path / "project", files=test_case.files)
 
-    python_error: tuple[type[BaseException], str, type[object]] = render_error(
-        project_dir=project_dir, engine="python", monkeypatch=monkeypatch
-    )
     native_error: tuple[type[BaseException], str, type[object]] = render_error(
+        project_dir=project_dir, engine="native", monkeypatch=monkeypatch
+    )
+    preview_error: tuple[type[BaseException], str, type[object]] = render_error(
         project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
     )
 
-    assert native_error == python_error
-    assert test_case.expected_message_fragment in python_error[1]
+    assert preview_error == native_error
+    assert test_case.expected_message_fragment in native_error[1]
 
 
 @pytest.mark.parametrize(
@@ -235,7 +234,7 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
             description="seeded projects with raising, mistyped, unparsable and unreachable macros",
             seed=1043,
             projects=150,
-            engines=("python", "native", "native-preview"),
+            engines=("native", "native-preview"),
             expected_minimum_failures=100,
             expected_minimum_successes=10,
             expected_minimum_errors_after_macro_runs=80,
@@ -245,7 +244,7 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
     ],
     ids=lambda case: case.description,
 )
-def test_given_failing_macro_projects_when_rendering_then_every_engine_raises_python_error_once(
+def test_given_failing_macro_projects_when_rendering_then_every_engine_raises_one_error(
     test_case: FailingMacroProjectParityTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

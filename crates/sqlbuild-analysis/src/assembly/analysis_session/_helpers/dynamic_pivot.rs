@@ -10,7 +10,7 @@ use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
     casefold, column_name, dict_list, identifier_name, is_single_wildcard, nested, node_key,
-    parse_one, payload, relation_name, render_type, to_dict, truthy,
+    parse_one_or_error, payload, relation_name, render_type, to_dict, truthy, upper,
 };
 use crate::assembly::analysis_session::constants::{
     ALIAS_AST_KIND, CAST_AST_KIND, CTE_AST_KIND, DUCKDB_DIALECT, DYNAMIC_VALUE_SOURCE_KINDS,
@@ -21,7 +21,7 @@ use crate::assembly::analysis_session::constants::{
 use crate::assembly::analysis_session::models::{
     ColumnFact, ContractProof, DynamicFamily, PivotModel, PivotOutcome, PivotTables,
 };
-use crate::assembly::analysis_session::types::{Pairs, Shapes};
+use crate::assembly::analysis_session::types::Shapes;
 
 /// Stands in for Python's `{}`: neither has a node key.
 static MISSING_EXPRESSION: Value = Value::Null;
@@ -101,9 +101,6 @@ pub(crate) fn pivot_outcome(
             facts.dialect
         ));
     }
-    if !ascii_inputs(sql, families, facts) {
-        return PivotOutcome::Deferred;
-    }
     let parse_dialect: &str = if folded_dialect == MOTHERDUCK_DIALECT {
         DUCKDB_DIALECT
     } else {
@@ -111,8 +108,8 @@ pub(crate) fn pivot_outcome(
     };
     let outcome: Result<PivotOutcome, String> = catch_compiler_panic(|| {
         Ok(match parsed(sql, parse_dialect)? {
-            Some(root) => proof(&root, &folded_dialect, families, facts),
-            None => PivotOutcome::Deferred,
+            Ok(root) => proof(&root, &folded_dialect, families, facts),
+            Err(error) => failure(format!("dynamic pivot SQL could not be parsed: {error}")),
         })
     });
     match outcome {
@@ -121,32 +118,11 @@ pub(crate) fn pivot_outcome(
     }
 }
 
-/// Python's `parse_one(...).to_dict()`, or None where Python reports a parse error.
-fn parsed(sql: &str, dialect: &str) -> Result<Option<Value>, String> {
-    parse_one(sql, dialect)?
+/// Python's `parse_one(...).to_dict()`, or the parse error Python reports.
+fn parsed(sql: &str, dialect: &str) -> Result<Result<Value, String>, String> {
+    parse_one_or_error(sql, dialect)?
         .map(|expression| to_dict(&expression))
-        .transpose()
-}
-
-/// Casefolding equals Python's only for ASCII text.
-fn ascii_inputs(sql: &str, families: &[DynamicFamily], facts: &PivotFacts<'_>) -> bool {
-    let shapes = [
-        facts.column_types,
-        facts.authoritative_types,
-        facts.column_nullability,
-    ];
-    sql.is_ascii()
-        && families.iter().all(ascii_family)
-        && facts.families_by_table.iter().all(ascii_families)
-        && shapes.into_iter().flatten().all(ascii_shape)
-}
-
-fn ascii_families((name, families): &(String, Vec<DynamicFamily>)) -> bool {
-    name.is_ascii() && families.iter().all(ascii_family)
-}
-
-fn ascii_shape((name, shape): &(String, Pairs)) -> bool {
-    name.is_ascii() && shape.iter().all(|(column, _)| column.is_ascii())
+        .map_or_else(|error| Ok(Err(error)), |value| value.map(Ok))
 }
 
 fn proof(
@@ -378,7 +354,7 @@ fn aggregate_fact<'a>(
     source_columns: &[ColumnFact],
 ) -> (String, Option<&'a str>, Option<String>) {
     let key: &str = node_key(Some(aggregate));
-    let mut name: String = key.to_ascii_uppercase();
+    let mut name: String = upper(key);
     let Some(payload) = aggregate.get(key).and_then(Value::as_object) else {
         return (name, None, None);
     };
@@ -387,7 +363,7 @@ fn aggregate_fact<'a>(
         .and_then(Value::as_str)
         .filter(|authored| !authored.is_empty())
     {
-        name = authored.to_ascii_uppercase();
+        name = upper(authored);
     }
     let preserving: bool = TYPE_PRESERVING_AGGREGATES.contains(&name.as_str());
     let value: Option<&Value> = payload.get("this");
@@ -675,18 +651,6 @@ fn failure(reason: String) -> PivotOutcome {
         failure_reason: Some(reason),
         bare_dynamic_pivot: false,
     })
-}
-
-fn ascii_family(family: &DynamicFamily) -> bool {
-    [
-        &family.name,
-        &family.pivot_column,
-        &family.value_column,
-        &family.aggregate,
-        &family.data_type,
-    ]
-    .iter()
-    .all(|text| text.is_ascii())
 }
 
 /// Python's `_families_equal` key for one family.

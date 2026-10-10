@@ -14,7 +14,6 @@ import sqlbuild._native as native_module
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.lineage._helpers.fast_columns import build_fast_project_column_lineage
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
 )
@@ -236,24 +235,14 @@ def lineage_views(
     project: CompiledProject,
     dialect: str | None,
     model_names: frozenset[str] | None,
-) -> tuple[list[object], list[object], list[object]]:
-    """Each public lineage view's name, Python's value and the native stage's value."""
+) -> tuple[list[object], list[object]]:
+    """Each public view of the native fast lineage: its name and value."""
 
-    python: ProjectColumnLineage = cast(
+    lineage: ProjectColumnLineage = cast(
         ProjectColumnLineage,
-        build_fast_project_column_lineage(
-            project=project, dialect=dialect, model_names=model_names
-        ),
+        build_native_column_lineage(project=project, dialect=dialect, model_names=model_names),
     )
-    native: ProjectColumnLineage = cast(
-        ProjectColumnLineage,
-        build_native_column_lineage(project=project, dialect=dialect, model_names=model_names)
-        or build_fast_project_column_lineage(
-            project=project, dialect=dialect, model_names=model_names
-        ),
-    )
-    names, python_values = _public_views(project=project, lineage=python)
-    return names, python_values, _public_views(project=project, lineage=native)[1]
+    return _public_views(project=project, lineage=lineage)
 
 
 def _public_views(

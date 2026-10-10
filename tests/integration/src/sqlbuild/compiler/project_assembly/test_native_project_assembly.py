@@ -23,6 +23,8 @@ from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import
     WindowsEnvironmentTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
+    DEFERRED_PROJECT_FACTS,
+    DEFERRED_SYNTAX_CHECK,
     assemble_with,
     assembly_deferrals,
     assembly_view,
@@ -83,7 +85,12 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
         for index in range(test_case.count)
     ]
     python: list[tuple[object, tuple[tuple[str, ...], bool]]] = [
-        recorded_assembly(inputs=item, engine=CompilerEngine.PYTHON, monkeypatch=monkeypatch)
+        recorded_assembly(
+            inputs=item,
+            engine=CompilerEngine.NATIVE,
+            monkeypatch=monkeypatch,
+            deferred=DEFERRED_PROJECT_FACTS,
+        )
         for item in inputs
     ]
     python_calls: int = calls.total()
@@ -117,7 +124,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "models/orders.sql": 'MODEL (description "Orders");\n\nSELECT FROM WHERE (\n',
             },
-            expected_kind="syntax_error",
+            expected_kind=None,
             expected_error="SQL syntax error in model 'orders'",
         ),
         AssemblyDeferralTestCase(
@@ -129,7 +136,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
                     ");\n\nSELECT 1 AS n\n"
                 ),
             },
-            expected_kind="syntax_error",
+            expected_kind=None,
             expected_error="Polyglot could not parse model 'orders' pre_hooks[0]",
         ),
         AssemblyDeferralTestCase(
@@ -164,7 +171,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
     ],
     ids=lambda case: case.description,
 )
-def test_given_projects_python_rejects_when_assembling_natively_then_defers_with_python_error(
+def test_given_projects_python_rejects_when_assembling_natively_then_raises_python_error(
     test_case: AssemblyDeferralTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -174,7 +181,12 @@ def test_given_projects_python_rejects_when_assembling_natively_then_defers_with
     inputs: CompileProjectInputs = project_inputs(project_dir=tmp_path, files=test_case.files)
 
     with pytest.raises(CompileInputError) as python_error:
-        _ = assemble_with(inputs=inputs, engine=CompilerEngine.PYTHON, monkeypatch=monkeypatch)
+        _ = assemble_with(
+            inputs=inputs,
+            engine=CompilerEngine.NATIVE,
+            monkeypatch=monkeypatch,
+            deferred=DEFERRED_PROJECT_FACTS,
+        )
     with pytest.raises(CompileInputError) as native_error:
         _ = assemble_with(
             inputs=inputs, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
@@ -182,8 +194,10 @@ def test_given_projects_python_rejects_when_assembling_natively_then_defers_with
 
     assert test_case.expected_error in str(python_error.value)
     assert str(native_error.value) == str(python_error.value)
-    assert assembly_deferrals(record_dir) == Counter(
-        {f"project_assembly:{test_case.expected_kind}": 1}
+    assert assembly_deferrals(record_dir) == (
+        Counter({f"project_assembly:{test_case.expected_kind}": 1})
+        if test_case.expected_kind is not None
+        else Counter()
     )
 
 
@@ -218,7 +232,10 @@ def test_given_a_variable_only_python_renders_when_assembling_natively_then_pyth
     )
 
     python: CompiledProject = assemble_with(
-        inputs=inputs, engine=CompilerEngine.PYTHON, monkeypatch=monkeypatch
+        inputs=inputs,
+        engine=CompilerEngine.NATIVE,
+        monkeypatch=monkeypatch,
+        deferred=DEFERRED_PROJECT_FACTS,
     )
     native: CompiledProject = assemble_with(
         inputs=inputs, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
@@ -226,8 +243,10 @@ def test_given_a_variable_only_python_renders_when_assembling_natively_then_pyth
 
     assert assembly_view(native) == assembly_view(python)
     assert native.seeds[0].destination.schema == test_case.expected_schema
-    assert assembly_deferrals(record_dir) == Counter(
-        {f"project_assembly:{test_case.expected_kind}": 1}
+    assert assembly_deferrals(record_dir) == (
+        Counter({f"project_assembly:{test_case.expected_kind}": 1})
+        if test_case.expected_kind is not None
+        else Counter()
     )
 
 
@@ -259,7 +278,10 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
     )
 
     python: CompiledProject = assemble_with(
-        inputs=inputs, engine=CompilerEngine.PYTHON, monkeypatch=monkeypatch
+        inputs=inputs,
+        engine=CompilerEngine.NATIVE,
+        monkeypatch=monkeypatch,
+        deferred=DEFERRED_PROJECT_FACTS,
     )
     native: CompiledProject = assemble_with(
         inputs=inputs, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
@@ -299,8 +321,9 @@ def test_given_sql_analysis_opt_outs_when_attaching_natively_then_python_rejecti
     python: tuple[dict[str, bool], int] = rejected_opt_outs(
         project_dir=tmp_path / "python",
         files=files,
-        engine=CompilerEngine.PYTHON,
+        engine=CompilerEngine.NATIVE,
         monkeypatch=monkeypatch,
+        deferred=DEFERRED_SYNTAX_CHECK,
     )
     native: tuple[dict[str, bool], int] = rejected_opt_outs(
         project_dir=tmp_path / "native",

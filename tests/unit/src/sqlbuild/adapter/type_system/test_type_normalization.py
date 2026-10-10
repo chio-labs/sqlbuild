@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from polyglot_sql import PolyglotError
 
-import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 from sqlbuild.adapter.contract.models import NormalizedType
 from sqlbuild.adapter.contract.types import TypeFamily
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
@@ -14,15 +12,6 @@ from tests.unit.src.sqlbuild.adapter.type_system._test_types import (
     TypeEqualityTestCase,
     TypeNormalizationTestCase,
 )
-
-
-class _UnsupportedTypePolyglot:
-    PolyglotError: type[PolyglotError] = PolyglotError
-
-    @staticmethod
-    def parse_data_type(*args: object, **kwargs: object) -> object:
-        del args, kwargs
-        raise PolyglotError("unsupported test type")
 
 
 @pytest.mark.parametrize(
@@ -57,40 +46,6 @@ class _UnsupportedTypePolyglot:
 def test_given_type_string_when_normalizing_then_it_returns_expected_shape(
     test_case: TypeNormalizationTestCase,
 ) -> None:
-    result: NormalizedType = normalize_type(type_sql=test_case.raw_type, dialect=test_case.dialect)
-
-    assert result == test_case.expected_type
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TypeNormalizationTestCase(
-            description="fallback normalizes bigquery integer alias",
-            dialect="bigquery",
-            raw_type="INTEGER",
-            expected_type=NormalizedType(normalized_name="INT64", family=TypeFamily.INTEGER),
-        ),
-        TypeNormalizationTestCase(
-            description="fallback preserves decimal precision and scale",
-            dialect="snowflake",
-            raw_type="NUMBER(10,2)",
-            expected_type=NormalizedType(
-                normalized_name="DECIMAL(10,2)",
-                family=TypeFamily.DECIMAL,
-                precision=10,
-                scale=2,
-            ),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_type_string_when_normalizing_without_polyglot_then_it_returns_expected_shape(
-    test_case: TypeNormalizationTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(type_normalization, "import_polyglot", _UnsupportedTypePolyglot)
-
     result: NormalizedType = normalize_type(type_sql=test_case.raw_type, dialect=test_case.dialect)
 
     assert result == test_case.expected_type
@@ -173,69 +128,6 @@ def test_given_type_strings_when_comparing_then_it_returns_expected_equality(
 @pytest.mark.parametrize(
     "test_case",
     [
-        TypeEqualityTestCase(
-            description="fallback treats bigquery string aliases as equal",
-            dialect="bigquery",
-            left_type="STRING",
-            right_type="TEXT",
-            expected_equal=True,
-        ),
-        TypeEqualityTestCase(
-            description="fallback keeps decimal scale differences distinct",
-            dialect="snowflake",
-            left_type="NUMBER(10,2)",
-            right_type="NUMBER(10,3)",
-            expected_equal=False,
-        ),
-        TypeEqualityTestCase(
-            description="fallback treats snowflake timestamp alias as timestamp_ntz",
-            dialect="snowflake",
-            left_type="TIMESTAMP",
-            right_type="TIMESTAMP_NTZ",
-            expected_equal=True,
-        ),
-        TypeEqualityTestCase(
-            description="fallback treats snowflake integer as number 38 scale 0",
-            dialect="snowflake",
-            left_type="INTEGER",
-            right_type="NUMBER(38,0)",
-            expected_equal=True,
-        ),
-        TypeEqualityTestCase(
-            description="fallback treats snowflake text as default varchar",
-            dialect="snowflake",
-            left_type="TEXT",
-            right_type="VARCHAR(16777216)",
-            expected_equal=True,
-        ),
-        TypeEqualityTestCase(
-            description="fallback treats bare snowflake number as number 38 scale 0",
-            dialect="snowflake",
-            left_type="NUMBER",
-            right_type="NUMBER(38,0)",
-            expected_equal=True,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_type_strings_when_comparing_without_polyglot_then_it_returns_expected_equality(
-    test_case: TypeEqualityTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(type_normalization, "import_polyglot", _UnsupportedTypePolyglot)
-
-    result: bool = types_equal(
-        left=test_case.left_type,
-        right=test_case.right_type,
-        dialect=test_case.dialect,
-    )
-
-    assert result is test_case.expected_equal
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         NumericFamilyTestCase(
             description="classifies bigquery integer alias as integer family",
             dialect="bigquery",
@@ -260,32 +152,6 @@ def test_given_type_strings_when_comparing_without_polyglot_then_it_returns_expe
 def test_given_type_string_when_resolving_numeric_family_then_it_returns_expected_family(
     test_case: NumericFamilyTestCase,
 ) -> None:
-    result: str | None = normalize_numeric_family(
-        type_sql=test_case.raw_type,
-        dialect=test_case.dialect,
-    )
-
-    assert result == test_case.expected_family
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        NumericFamilyTestCase(
-            description="fallback classifies float64 as float family",
-            dialect="bigquery",
-            raw_type="FLOAT64",
-            expected_family="float",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_type_string_without_polyglot_when_resolving_numeric_family_then_it_returns_expected(
-    test_case: NumericFamilyTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(type_normalization, "import_polyglot", _UnsupportedTypePolyglot)
-
     result: str | None = normalize_numeric_family(
         type_sql=test_case.raw_type,
         dialect=test_case.dialect,

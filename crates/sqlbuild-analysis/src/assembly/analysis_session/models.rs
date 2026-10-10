@@ -4,10 +4,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rayon::ThreadPool;
+use sqlbuild_cache::digest::types::ContentDigest;
+use sqlbuild_cache::store::models::NativeStore;
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
-use crate::assembly::analysis_session::types::{OutputSources, Pairs, Shapes};
+use crate::assembly::analysis_session::types::{NullabilityCallback, OutputSources, Pairs, Shapes};
 use crate::semantic_validation::types::DiagnosticRow;
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
@@ -119,8 +121,10 @@ pub struct SessionRequest {
     /// Whether published shapes keep authored quoting, Python's `inferred_binding_shape` test.
     pub case_sensitive_shapes: bool,
     pub function_return_types: Pairs,
-    /// Adapter nullability rules as `(function name, rule id)`; None where one is not Python's.
+    /// Adapter nullability rules as `(function name, rule id)`.
     pub nullability_rules: Option<Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub nullability_callback: Option<NullabilityCallback>,
     pub rich_type_inference: bool,
     pub column_types: Shapes,
     pub column_nullability: Shapes,
@@ -158,8 +162,8 @@ pub enum LineageFacts {
     PythonAnalysis,
     /// The lineage of the analysis Python returned for this model's enrichment deferral.
     PythonEnrichment,
-    /// Plain lineage facts of the native re-analysis with known inputs.
-    NativeEnrichment(Vec<LineageRow>),
+    /// Plain lineage facts of a native re-analysis or legacy analysis.
+    NativeFacts(Vec<LineageRow>),
 }
 
 /// Python's `PolyglotAnalysisResult` for one model.
@@ -273,12 +277,37 @@ pub(crate) enum Phase {
     Done,
 }
 
+/// How many analysed models a session took from its cache, analysed itself, and stored.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AnalysisCacheStats {
+    pub hits: usize,
+    pub misses: usize,
+    pub stored: usize,
+}
+
+/// A session's per-model analysis cache of finished native outcomes in a store.
+#[derive(Debug)]
+pub struct AnalysisCache {
+    pub(crate) store: NativeStore,
+    /// Digest of the session-wide request facts every model key starts with.
+    pub(crate) session_digest: ContentDigest,
+    pub(crate) keys: Vec<Option<ContentDigest>>,
+    pub(crate) hits: Vec<bool>,
+    /// Models whose outcome must not be stored: a logged failure or Python's answer.
+    pub(crate) uncacheable: Vec<bool>,
+    /// The whole-table digest each legacy analysis read; its entry also requires it.
+    pub(crate) legacy_tables: Vec<Option<ContentDigest>>,
+    pub(crate) stats: AnalysisCacheStats,
+}
+
 /// One compile's model analysis, advanced phase by phase and resumed with Python's answers.
 #[derive(Debug)]
 pub struct AnalysisSession {
     pub(crate) request: SessionRequest,
     pub(crate) catalog: SessionCatalog,
     pub(crate) dependency_ordered: bool,
+    /// Whether models `ref` each other in a cycle, so Python's completion pass is skipped.
+    pub(crate) cyclic: bool,
     pub(crate) waves: Vec<Vec<usize>>,
     pub(crate) next_wave: usize,
     pub(crate) available_types: ShapeTable,
@@ -288,6 +317,7 @@ pub struct AnalysisSession {
     pub(crate) phase: Phase,
     pub(crate) publications: Shapes,
     pub(crate) failures: Vec<String>,
+    pub(crate) cache: Option<AnalysisCache>,
 }
 
 /// One query's CTE fact recovery, as Python's compact enrichment runs it.

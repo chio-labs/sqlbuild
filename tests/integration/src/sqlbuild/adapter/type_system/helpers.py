@@ -1,4 +1,4 @@
-"""Generated type strings and Python-versus-native normalization outcomes."""
+"""Generated type strings and their native normalization outcomes."""
 
 from __future__ import annotations
 
@@ -9,14 +9,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import product
 
-import pytest
-
 from sqlbuild.adapter.contract.models import NormalizedType
-from sqlbuild.adapter.type_system._helpers import type_normalization
 from sqlbuild.adapter.type_system.constants import TYPE_NORMALIZATION_LOGGER_NAME
 from sqlbuild.adapter.type_system.main._native_normalize_type import normalize_native_type
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 
 DIALECTS: tuple[str | None, ...] = (
     None,
@@ -125,20 +120,12 @@ _SPACINGS: tuple[str, ...] = (" ", "  ")
 
 @dataclass(frozen=True)
 class TypeOutcome:
-    """A normalized type, Python's error, or None where native defers, and the errors logged."""
-
-    normalized: NormalizedType | str | None
-    logged_errors: tuple[tuple[str, object, object, object], ...]
-
-
-@dataclass(frozen=True)
-class TypeParity:
-    """One type string and dialect, normalized by Python and natively."""
+    """One type string and dialect: its normalization or Python's error, and the errors logged."""
 
     type_sql: str
     dialect: str | None
-    python: TypeOutcome
-    native: TypeOutcome
+    normalized: NormalizedType | str
+    logged_errors: tuple[tuple[str, object, object, object], ...]
 
 
 def generated_type(*, rng: random.Random, depth: int = 0) -> str:
@@ -151,43 +138,39 @@ def generated_type(*, rng: random.Random, depth: int = 0) -> str:
     return template.format(*children, scalar=_generated_scalar(rng=rng))
 
 
-def type_parities(*, type_strings: list[str], monkeypatch: pytest.MonkeyPatch) -> list[TypeParity]:
-    """Normalize every type string under every dialect with Python and natively."""
+def type_outcomes(*, type_strings: list[str]) -> list[TypeOutcome]:
+    """Normalize every type string under every dialect."""
 
-    parities: list[TypeParity] = []
-    for type_sql, dialect in product(type_strings, DIALECTS):
-        parities.append(type_parity(type_sql=type_sql, dialect=dialect, monkeypatch=monkeypatch))
-    return parities
+    return [
+        type_outcome(type_sql=type_sql, dialect=dialect)
+        for type_sql, dialect in product(type_strings, DIALECTS)
+    ]
 
 
-def type_parity(
-    *, type_sql: str, dialect: str | None, monkeypatch: pytest.MonkeyPatch
-) -> TypeParity:
-    """Normalize one type with the Python engine and with the native type system."""
+def type_outcome(*, type_sql: str, dialect: str | None) -> TypeOutcome:
+    """Normalize one type natively, recording the parse errors it logs."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.PYTHON.value)
-    with _logged_errors() as python_errors:
-        python: NormalizedType | str = _python_normalized(type_sql=type_sql, dialect=dialect)
-    with _logged_errors() as native_errors:
-        native: NormalizedType | None = normalize_native_type(type_sql=type_sql, dialect=dialect)
-    return TypeParity(
-        type_sql=type_sql,
-        dialect=dialect,
-        python=TypeOutcome(normalized=python, logged_errors=tuple(python_errors)),
-        native=TypeOutcome(normalized=native, logged_errors=tuple(native_errors)),
+    with _logged_errors() as errors:
+        normalized: NormalizedType | str
+        try:
+            normalized = normalize_native_type(type_sql=type_sql, dialect=dialect)
+        except ValueError as error:
+            normalized = f"{type(error).__name__}: {error}"
+    return TypeOutcome(
+        type_sql=type_sql, dialect=dialect, normalized=normalized, logged_errors=tuple(errors)
     )
 
 
-def is_native(parity: TypeParity) -> bool:
-    """Return whether the native type system answered."""
+def is_normalized(outcome: TypeOutcome) -> bool:
+    """Return whether the type normalized rather than raising."""
 
-    return parity.native.normalized is not None
+    return isinstance(outcome.normalized, NormalizedType)
 
 
-def logged_parse_error(parity: TypeParity) -> bool:
-    """Return whether Python logged a Polyglot parse failure for this type."""
+def logged_parse_error(outcome: TypeOutcome) -> bool:
+    """Return whether a Polyglot parse failure was logged for this type."""
 
-    return bool(parity.python.logged_errors)
+    return bool(outcome.logged_errors)
 
 
 def _generated_scalar(*, rng: random.Random) -> str:
@@ -195,13 +178,6 @@ def _generated_scalar(*, rng: random.Random) -> str:
     return (
         rng.choice(_PADDING) + type_sql.replace(" ", rng.choice(_SPACINGS)) + rng.choice(_PADDING)
     )
-
-
-def _python_normalized(*, type_sql: str, dialect: str | None) -> NormalizedType | str:
-    try:
-        return type_normalization.normalize_type.__wrapped__(type_sql=type_sql, dialect=dialect)
-    except ValueError as error:
-        return f"{type(error).__name__}: {error}"
 
 
 @contextmanager

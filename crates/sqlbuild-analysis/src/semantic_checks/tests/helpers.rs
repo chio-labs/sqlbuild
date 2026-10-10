@@ -585,11 +585,10 @@ pub(crate) fn metadata_request(test_case: &MetadataTestCase) -> MetadataRequest 
         sources: vec![MetadataSource {
             name: "raw_orders".to_owned(),
             cursor_column: Some("loaded_at".to_owned()),
-            contents: "sources:\n  - name: raw_orders\n    cursor_column: loaded_at\n".to_owned(),
+            contents: "sources:\n  - name: raw_orders\n    cursor_column: loaded_at\n".into(),
         }],
         sql_tests: vec![MetadataSqlTest {
-            contents: "-- test\nWITH __ref__stg AS (SELECT 1 AS order_id, 2 AS refund)\n"
-                .to_owned(),
+            contents: "-- test\nWITH __ref__stg AS (SELECT 1 AS order_id, 2 AS refund)\n".into(),
             ctes: vec![
                 ("__ref__stg".to_owned(), strings(&["order_id", "refund"])),
                 ("__expected__mart".to_owned(), strings(&["scaled", "LABEL"])),

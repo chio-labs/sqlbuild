@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from itertools import chain, compress
 from pathlib import Path
 from typing import cast
@@ -13,30 +13,20 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
 from sqlbuild.compiler.compile.models import (
-    CompiledModelSqlTestPayload,
     CompiledProject,
-    CompiledSqlTest,
     CompileProjectInputs,
-    CompileSqlTestCte,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
-from sqlbuild.compiler.planner._helpers.sql_tests import native_planning
-from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssembly,
     NativeSqlTestAssemblyRequest,
-    NativeSqlTestChainRequest,
-    NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import (
     NativeSqlTestAssemblyRow,
-    NativeSqlTestPlanRow,
 )
 
 
@@ -185,12 +175,7 @@ _DIRECT_TEST_SHARE: float = 0.8
 _MOCK_SHARE: float = 0.85
 _MACRO_MOCK_SHARE: float = 0.5
 _HELPER_SHARE: float = 0.4
-_UNMOCKED_ASSERTION: CompileSqlTestCte = CompileSqlTestCte(
-    name="__assert__no_returns", sql_body='SELECT order_id FROM __source("raw_returns") WHERE 1 = 0'
-)
 _REGIONS_ASSERTION: str = 'SELECT * FROM __ref("fct_regions") WHERE 1 = 0'
-_NATIVE_ERROR_KIND_SEPARATOR: str = ":"
-_NATIVE_RAISED_PREFIX: str = "native_raised:"
 NO_WINDOW: str = ""
 VALID_WINDOW: str = ', cursor_start "2026-02-01", cursor_end "2026-02-03"'
 INVERTED_WINDOW: str = ', cursor_start "2026-02-03", cursor_end "2026-02-01"'
@@ -402,60 +387,25 @@ def write_project(*, project_dir: Path, files: dict[str, str]) -> None:
         _ = path.write_text(contents, encoding="utf-8")
 
 
-def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledProject:
-    """Write and compile a project, keeping any compile diagnostics on it."""
+def assembly_outcome(*, project_dir: Path) -> PlanningCallOutcome:
+    """The compiled SQL tests and diagnostics with native assembly, or what it raises."""
 
-    write_project(project_dir=project_dir, files=files)
-    return build_project_graph(
-        discovered_inputs=discover_project_inputs(project_dir=project_dir),
-        adapter=DuckDbAdapter(),
-    ).project
-
-
-def with_unmocked_assertion(*, project: CompiledProject) -> CompiledSqlTest:
-    """The first model test with an assertion calling a source nothing mocks.
-
-    The compiler reports such a call itself, so this stands in for a reference it missed and
-    reaches the planner's own unresolved-reference error.
-    """
-
-    test: CompiledSqlTest = next(
-        filter(
-            lambda test: isinstance(test.payload, CompiledModelSqlTestPayload), project.sql_tests
-        )
-    )
-    payload: CompiledModelSqlTestPayload = cast(CompiledModelSqlTestPayload, test.payload)
-    return replace(
-        test,
-        payload=replace(
-            payload,
-            assertion_ctes=(*payload.assertion_ctes, _UNMOCKED_ASSERTION),
-            authored_ctes=(*payload.authored_ctes, _UNMOCKED_ASSERTION),
-        ),
-    )
-
-
-def use_sql_test_glue(*, monkeypatch: pytest.MonkeyPatch, enabled: bool) -> None:
-    """Route SQL-test planning through the native glue, or through the JSON request."""
-
-    monkeypatch.setattr(
-        native_planning,
-        "native_stage_enabled",
-        lambda stage: enabled and stage is NativeStage.SQL_TEST_GLUE,
-    )
-
-
-def assembly_outcome(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, native: bool
-) -> PlanningCallOutcome:
-    """The compiled SQL tests and diagnostics with native or Python assembly, or what it raises."""
-
-    monkeypatch.setattr(
-        sql_test_stage,
-        "native_stage_enabled",
-        lambda stage: native and stage is NativeStage.SQL_TEST_GLUE,
-    )
     return _outcome(lambda: _compiled_tests_and_diagnostics(project_dir=project_dir))
+
+
+def python_assembly_outcome(
+    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> PlanningCallOutcome:
+    """The compiled SQL tests and diagnostics with every test deferred to Python's assembly, or
+    what it raises."""
+
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            sql_test_stage,
+            "assemble_native_sql_tests",
+            lambda *, inputs: (None,) * len(inputs.test_inputs),
+        )
+        return _outcome(lambda: _compiled_tests_and_diagnostics(project_dir=project_dir))
 
 
 def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, object]:
@@ -504,121 +454,11 @@ def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]
     return answers
 
 
-def planning_outcome(
-    *,
-    project: CompiledProject,
-    tests: tuple[CompiledSqlTest, ...],
-    adapter: BaseAdapter,
-    render_sql: bool,
-) -> PlanningCallOutcome:
-    """The plans `plan_sql_tests_natively` returns, or what it raises."""
-
-    return _outcome(
-        lambda: native_planning.plan_sql_tests_natively(
-            project=project,
-            tests=tests,
-            adapter=adapter,
-            sql_analysis_enabled=project.settings.sql_analysis,
-            render_sql=render_sql,
-            include_plan=not render_sql,
-        )
-    )
-
-
-def artifact_outcome(
-    *,
-    project: CompiledProject,
-    tests: tuple[CompiledSqlTest, ...],
-    adapter: BaseAdapter,
-    glue: bool,
-) -> PlanningCallOutcome:
-    """Rendered artifacts from the glue or from the JSON request, or what planning raises."""
-
-    plan: Callable[..., tuple[NativeSqlTestArtifact, ...]] = (
-        native_planning.plan_and_render_sql_test_artifacts,
-        native_planning.plan_compiled_sql_test_artifacts,
-    )[glue]
-    return _outcome(
-        lambda: plan(
-            project=project,
-            tests=tests,
-            adapter=adapter,
-            sql_analysis_enabled=project.settings.sql_analysis,
-        )
-    )
-
-
-def chain_outcome(
-    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...]
-) -> PlanningCallOutcome:
-    """Each test's model chain, or what chain resolution raises."""
-
-    return _outcome(
-        lambda: native_planning.resolve_sql_test_model_chains(project=project, tests=tests)
-    )
-
-
 def outcome_kind(outcome: object) -> str:
     """`raised` when the call raised, else `answered`; only native rows count as native work."""
 
     called: PlanningCallOutcome = cast(PlanningCallOutcome, outcome)
     return ("answered", "raised")[called.raised is not None]
-
-
-def record_native_answers(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count the plans, chains and errors the native glue itself returns for the rest of the test.
-
-    A plan with native error messages counts as `native_with_errors`, any other as
-    `native_planned`; an error a glue binding raises counts as `native_raised` and under
-    `native_raised:<kind>`. JSON-path planning never reaches these bindings, and errors Python
-    raises before calling them are never counted.
-    """
-
-    answers: Counter[str] = Counter()
-    plan: Callable[[NativeSqlTestPlanningRequest], tuple[list[NativeSqlTestPlanRow], int, int]] = (
-        native_module.plan_compiled_sql_tests
-    )
-    resolve: Callable[[NativeSqlTestChainRequest], list[list[str]]] = (
-        native_module.resolve_compiled_sql_test_chains
-    )
-
-    def counted_plans(
-        request: NativeSqlTestPlanningRequest,
-    ) -> tuple[list[NativeSqlTestPlanRow], int, int]:
-        response: tuple[list[NativeSqlTestPlanRow], int, int] = _counting_raises(
-            call=lambda: plan(request), answers=answers
-        )
-        answers.update(
-            ("native_planned", "native_with_errors")[bool(row[5])] for row in response[0]
-        )
-        return response
-
-    def counted_chains(request: NativeSqlTestChainRequest) -> list[list[str]]:
-        chains: list[list[str]] = _counting_raises(call=lambda: resolve(request), answers=answers)
-        answers["native_chains"] += len(chains)
-        return chains
-
-    monkeypatch.setattr(native_module, "plan_compiled_sql_tests", counted_plans)
-    monkeypatch.setattr(native_module, "resolve_compiled_sql_test_chains", counted_chains)
-    return answers
-
-
-def native_raised_kinds(*, answers: Counter[str]) -> frozenset[str]:
-    """The kinds (message prefixes) of the errors the native glue bindings raised."""
-
-    return frozenset(
-        kind.removeprefix(_NATIVE_RAISED_PREFIX)
-        for kind in filter(lambda kind: kind.startswith(_NATIVE_RAISED_PREFIX), answers)
-    )
-
-
-def _counting_raises[T](*, call: Callable[[], T], answers: Counter[str]) -> T:
-    try:
-        return call()
-    except ValueError as error:
-        answers["native_raised"] += 1
-        answers[_NATIVE_RAISED_PREFIX + str(error).partition(_NATIVE_ERROR_KIND_SEPARATOR)[0]] += 1
-        raise
 
 
 def _outcome(call: Callable[[], object]) -> PlanningCallOutcome:

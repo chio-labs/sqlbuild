@@ -9,7 +9,7 @@ use crate::assembly::project::_helpers::deps::{audit_deps, reference_deps};
 use crate::assembly::project::_helpers::syntax::syntax_valid;
 use crate::assembly::project::_helpers::targets::{managed_source, seed_target};
 use crate::assembly::project::_helpers::templates::TemplateInputs;
-use crate::assembly::project::constants::{PANIC_DEFERRAL, SYNTAX_DEFERRAL};
+use crate::assembly::project::constants::PANIC_DEFERRAL;
 use crate::assembly::project::models::{ModelFacts, ProjectRequest, ProjectResources};
 use crate::assembly::project::types::Fact;
 
@@ -25,9 +25,11 @@ pub fn assemble_project_resources(request: &ProjectRequest) -> Result<ProjectRes
 }
 
 fn resources(request: &ProjectRequest) -> Fact<ProjectResources> {
-    for model in &request.models {
-        valid_syntax(model, &request.dialect)?;
-    }
+    let model_syntax_valid: Vec<bool> = request
+        .models
+        .iter()
+        .map(|model| valid_syntax(model, &request.dialect))
+        .collect();
     let target = request.target.as_ref();
     let inputs = TemplateInputs {
         variables: &request.variables,
@@ -45,6 +47,7 @@ fn resources(request: &ProjectRequest) -> Fact<ProjectResources> {
         .map(|seed| seed_target(seed, &request.defaults, target, &inputs))
         .collect::<Fact<_>>()?;
     Ok(ProjectResources {
+        model_syntax_valid,
         model_deps: request
             .models
             .iter()
@@ -62,12 +65,11 @@ fn resources(request: &ProjectRequest) -> Fact<ProjectResources> {
     })
 }
 
-/// Python's model and hook syntax validation, which raises for the first SQL it rejects.
-fn valid_syntax(model: &ModelFacts, dialect: &str) -> Fact<()> {
-    for check in &model.syntax_checks {
-        if !syntax_valid(check, dialect)? {
-            return Err(SYNTAX_DEFERRAL.to_owned());
-        }
-    }
-    Ok(())
+/// Whether Python's model and hook syntax validation passes; where it raises, Python's
+/// validation runs for that model and reports the failure.
+fn valid_syntax(model: &ModelFacts, dialect: &str) -> bool {
+    model
+        .syntax_checks
+        .iter()
+        .all(|check| syntax_valid(check, dialect) == Ok(true))
 }

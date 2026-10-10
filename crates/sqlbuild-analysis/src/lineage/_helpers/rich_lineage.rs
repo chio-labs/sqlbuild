@@ -17,14 +17,14 @@ use crate::lineage::_helpers::references::{
 use crate::lineage::_helpers::stars::star_lineage;
 use crate::lineage::constants::{MAX_FUNCTION_CALL_DEPTH, STAR_COLUMN_NAME, UNKNOWN_COLUMN_TYPE};
 use crate::lineage::models::{
-    LineageColumn, LineageConfidence, LineageDeferral, LineageNullability, LineageResourceType,
+    LineageColumn, LineageConfidence, LineageNullability, LineageResourceType,
     LineageSchemaResource, LineageSource, LineageTransformKind, RichLineageColumn,
     RichLineageOutcome, RichSchemaResource,
 };
 
 /// What every model of one request shares: the dialect, the guard and the known tables.
 pub(crate) struct RichContext {
-    dialect: Option<DialectType>,
+    dialect: DialectType,
     guard: ComplexityGuardOptions,
     /// `_polyglot_schema_tables`: each physical name's columns, sorted by name.
     tables: HashMap<String, SchemaTable>,
@@ -35,7 +35,7 @@ pub(crate) struct RichContext {
 impl RichContext {
     /// Only tables some model references are built: the wheel is only ever sent those.
     pub(crate) fn new(
-        dialect: Option<DialectType>,
+        dialect: DialectType,
         schema: &[RichSchemaResource],
         referenced: &HashSet<String>,
         names: HashMap<String, Vec<String>>,
@@ -135,9 +135,7 @@ fn python_type(column_type: Option<&str>) -> &str {
 }
 
 pub(crate) fn rich_model_lineage(query_sql: &str, context: &RichContext) -> RichLineageOutcome {
-    let Some(dialect) = context.dialect else {
-        return RichLineageOutcome::Deferred(LineageDeferral::UnsupportedDialect);
-    };
+    let dialect = context.dialect;
     let physical = physical_resources(query_sql);
     let referenced: BTreeSet<&str> = physical
         .iter()

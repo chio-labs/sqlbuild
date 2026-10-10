@@ -39,6 +39,7 @@ import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_wave
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
+import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
 import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
@@ -67,6 +68,7 @@ from sqlbuild.cli.compile_reuse.models import (
     StoredCompileHeader,
     StoredCompileInputs,
 )
+from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
@@ -75,7 +77,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
     COMPILER_ENGINE_ENV_VAR,
-    ENGINE_CACHE_NAMESPACE_SUFFIXES,
+    RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
@@ -3546,6 +3548,31 @@ def compare_incremental_compile(*, project_dir: Path) -> IncrementalEditComparis
     return IncrementalEditComparison(incremental=incremental, reference=reference)
 
 
+def record_metadata_text_characters(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record the file-text characters each native semantic metadata request carries."""
+
+    sizes: list[int] = []
+    check: Callable[..., object] = cast(
+        Callable[..., object], native_module.check_semantic_metadata_rows
+    )
+
+    def recorded(catalog: object, request: tuple[object, ...]) -> object:
+        sizes.append(sum(len(text) for text in cast(list[str], request[5])))
+        return check(catalog, request)
+
+    monkeypatch.setattr(native_module, "check_semantic_metadata_rows", recorded)
+    return sizes
+
+
+def project_text_characters(project_dir: Path) -> int:
+    """Characters in every file of a project that has not compiled yet."""
+
+    return sum(
+        len(path.read_text(encoding="utf-8"))
+        for path in filter(Path.is_file, project_dir.rglob("*"))
+    )
+
+
 def in_process_reuse_run(
     *, project_dir: Path, capsys: pytest.CaptureFixture[str], args: tuple[str, ...] = ()
 ) -> CompileReuseRun:
@@ -4107,6 +4134,30 @@ def sql_test_scan_counts(run: CompileReuseRun) -> tuple[int, int]:
     return run.timings["sql_test_scan_cache_hits"], run.timings["sql_test_scan_cache_misses"]
 
 
+def native_analysis_counts(run: CompileReuseRun) -> tuple[int, int, int]:
+    """Return the analysis cache entry hits, misses and bypasses of one compile."""
+
+    return (
+        run.timings["analysis_entry_cache_hits"],
+        run.timings["analysis_cache_misses"],
+        run.timings["analysis_cache_bypasses"],
+    )
+
+
+def edit_staging_type(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Change one staging output type, which reaches the staging model's consumers."""
+
+    staging_type_change(root)
+
+
+def corrupt_native_analysis_store(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overwrite the stored native model analyses with bytes that are not a store file."""
+
+    path: Path = compiler_cache_directory(root) / NATIVE_ANALYSIS_STORE_FILE_NAME
+    assert path.is_file()
+    _ = path.write_bytes(b"not a native store")
+
+
 def edit_sql_test_scan_input(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
     """Edit one SQL test file between compiles."""
 
@@ -4165,7 +4216,7 @@ def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
         / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
         / RETIRED_FACT_CACHE_DIRECTORY_NAME
         / "sql-tests.sqlite3"
-        for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values()
+        for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES
     ]
     written.extend(
         compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME / name
@@ -4244,8 +4295,10 @@ def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def ignore_query_in_analysis_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Key cached model analyses without their query, so an edited query reads a stale analysis."""
+    """Key Python's cached model analyses without their query, so an edited query reads a stale
+    analysis; native analysis defers to that Python analysis, since it keys its own cache."""
 
+    monkeypatch.setattr(native_assembly, "analyze_native_model_sql", lambda **_: None)
     analysis_key: Callable[..., str] = project_assembly.model_analysis_cache_key
 
     def query_blind_key(**kwargs: Any) -> str:
@@ -4352,23 +4405,6 @@ def engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
     """Compile with reuse enabled under one engine selected by the hidden flag."""
 
     return run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
-
-
-def environment_engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
-    """Compile with reuse enabled under the engine the environment selects; empty means default."""
-
-    return run_reuse_compile(project_dir=project_dir, env={COMPILER_ENGINE_ENV_VAR: engine})
-
-
-def engine_compile_and_rules(*, project_dir: Path, engine: str, rules_selector: str) -> int:
-    """Compile and run Rules under one engine; return the Rules exit code."""
-
-    _ = engine_reuse_compile(project_dir=project_dir, engine=engine)
-    return run_installed_sqb(
-        project_dir=project_dir,
-        args=("--compiler-engine", engine, "rules", "run", rules_selector),
-        env=COMPILE_REUSE_ENV,
-    ).returncode
 
 
 def report_engine(run: CompileReuseRun) -> str:
@@ -5033,20 +5069,6 @@ def fallback_free_preview_compile(
             patch.setenv(variable, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     return run, called
-
-
-def python_engine_compile(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> CompileReuseRun:
-    """Compile under the Python engine in this process."""
-
-    with monkeypatch.context() as patch:
-        for variable, value in {
-            COMPILER_ENGINE_ENV_VAR: "python",
-            REUSE_DISABLE_ENV_VAR: "1",
-        }.items():
-            patch.setenv(variable, value)
-        return in_process_reuse_run(project_dir=project_dir, capsys=capsys)
 
 
 def write_counted_error_project(*, project_dir: Path, files: dict[str, str]) -> None:

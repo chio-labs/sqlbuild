@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.lineage._helpers.fast_columns import build_fast_project_column_lineage
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
 )
@@ -19,7 +18,7 @@ from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 from tests.integration.src.sqlbuild.compiler.lineage._test_types import (
-    DeferredLineageTestCase,
+    FormerlyDeferredLineageTestCase,
     GeneratedLineageParityTestCase,
     UnparsedLineageTestCase,
 )
@@ -51,7 +50,7 @@ _MODEL_COUNT: int = 16
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_projects_when_building_fast_lineage_natively_then_matches_python(
+def test_given_generated_projects_when_building_fast_lineage_then_restored_projects_agree(
     test_case: GeneratedLineageParityTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -70,11 +69,16 @@ def test_given_generated_projects_when_building_fast_lineage_natively_then_match
         for variant in (project, without_compact_facts(project)):
             for dialect in test_case.dialects:
                 for model_names in (None, selected):
-                    names, python_views, native_views = lineage_views(
+                    names, with_catalog = lineage_views(
                         project=variant, dialect=dialect, model_names=model_names
                     )
+                    _, restored = lineage_views(
+                        project=replace(variant, binding_catalog=None),
+                        dialect=dialect,
+                        model_names=model_names,
+                    )
                     differences.extend(
-                        mismatches(inputs=names, expected=python_views, actual=native_views)
+                        mismatches(inputs=names, expected=with_catalog, actual=restored)
                     )
 
     assert differences == []
@@ -102,7 +106,7 @@ def test_given_generated_projects_when_building_fast_lineage_natively_then_match
     ],
     ids=lambda case: case.description,
 )
-def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_like_python(
+def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_it(
     test_case: UnparsedLineageTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -122,44 +126,46 @@ def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_l
     )
 
     with caplog.at_level(logging.DEBUG, logger="sqlbuild.lineage"):
-        python: ProjectColumnLineage | None = build_fast_project_column_lineage(project=broken)
-        python_records: list[tuple[str, str, object]] = lineage_log_records(caplog)
-        caplog.clear()
         native: ProjectColumnLineage | None = build_native_column_lineage(
             project=broken, dialect=None, model_names=None
         )
         native_records: list[tuple[str, str, object]] = lineage_log_records(caplog)
 
-    assert native == python
     assert native is not None
     assert not native.has_model(project.models[0].name)
     assert statuses[test_case.expected_status] == 1
-    assert native_records == python_records
     assert tuple(message for _, message, _ in native_records) == test_case.expected_messages
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeferredLineageTestCase(
-            description="a dialect outside the native parser build",
+        FormerlyDeferredLineageTestCase(
+            description="a dialect outside the old native parser build",
             dialect="mysql",
             keeps_catalog=True,
-            expected_native_statuses={"deferred": _MODEL_COUNT},
-            expected_kind="unsupported_dialect",
+            expected_native_statuses={"built": _MODEL_COUNT},
+            expected_error=None,
         ),
-        DeferredLineageTestCase(
-            description="a project without an analysis catalog to run on",
+        FormerlyDeferredLineageTestCase(
+            description="a project restored without its analysis catalog",
             dialect="duckdb",
             keeps_catalog=False,
-            expected_native_statuses={},
-            expected_kind="no_analysis_catalog",
+            expected_native_statuses={"built": _MODEL_COUNT},
+            expected_error=None,
+        ),
+        FormerlyDeferredLineageTestCase(
+            description="a dialect name Polyglot does not know raises Python's error",
+            dialect="nonsense",
+            keeps_catalog=True,
+            expected_native_statuses={"unknown_dialect": _MODEL_COUNT},
+            expected_error="Unknown dialect: nonsense",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_deferred_models_when_building_fast_lineage_then_python_builds_and_records(
-    test_case: DeferredLineageTestCase,
+def test_given_formerly_deferred_models_when_building_fast_lineage_then_native_answers(
+    test_case: FormerlyDeferredLineageTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -176,15 +182,14 @@ def test_given_deferred_models_when_building_fast_lineage_then_python_builds_and
         compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
     )
 
-    names, python_views, native_views = lineage_views(
-        project=project, dialect=test_case.dialect, model_names=None
-    )
+    if test_case.expected_error is None:
+        _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
+    else:
+        with pytest.raises(ValueError, match=test_case.expected_error):
+            _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
 
-    assert mismatches(inputs=names, expected=python_views, actual=native_views) == []
-    assert statuses == Counter(test_case.expected_native_statuses)
-    assert deferral_records(record_dir) == (
-        [{"kind": test_case.expected_kind, "site": "fast_columns.py"}] * _MODEL_COUNT
-    )
+    assert statuses == Counter(test_case.expected_native_statuses), test_case.description
+    assert deferral_records(record_dir) == []
 
 
 if __name__ == "__main__":

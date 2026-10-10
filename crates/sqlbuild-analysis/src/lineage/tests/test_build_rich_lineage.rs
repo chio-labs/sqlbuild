@@ -101,13 +101,13 @@ fn given_models_when_building_rich_lineage_then_matches_the_wheel_path() {
             ),
         },
         RichLineageTestCase {
-            description: "a dialect this build does not carry is deferred",
+            description: "a dialect outside the old seven-dialect build is answered natively",
             dialect: "mysql",
             sql: "SELECT order_id FROM __ref('orders')",
-            expected_status: "deferred",
-            expected_lines: &[],
+            expected_status: "built",
+            expected_lines: &["order_id direct high unknown [model:orders.order_id]"],
             expected_has_star: false,
-            expected_detail: Some("unsupported_dialect"),
+            expected_detail: None,
         },
     ];
     for test_case in test_cases {

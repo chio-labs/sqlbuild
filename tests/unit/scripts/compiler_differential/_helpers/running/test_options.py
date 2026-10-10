@@ -25,10 +25,14 @@ from tests.unit.scripts.compiler_differential._helpers.running._test_types impor
     [
         EngineEnvironmentTestCase(
             description="grouped_by_engine",
-            values=("native:PYTHONPATH=/tmp/hook", "native:ORDERS_REGION=a=b", "python:EMPTY="),
+            values=(
+                "native:PYTHONPATH=/tmp/hook",
+                "native:ORDERS_REGION=a=b",
+                "native-preview:EMPTY=",
+            ),
             expected_environment={
                 "native": {"PYTHONPATH": "/tmp/hook", "ORDERS_REGION": "a=b"},
-                "python": {"EMPTY": ""},
+                "native-preview": {"EMPTY": ""},
             },
         )
     ],

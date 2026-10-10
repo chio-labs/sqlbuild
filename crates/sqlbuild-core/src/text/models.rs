@@ -109,6 +109,10 @@ pub struct PythonText {
     pub(crate) alpha_ranges: &'static [(u32, u32)],
     /// Inclusive code point ranges where `str.isdecimal()` (regex `\d`) is true, in order.
     pub(crate) decimal_ranges: &'static [(u32, u32)],
+    /// Every character `str.casefold()` changes, with its folding, in code point order.
+    pub(crate) casefold_mappings: &'static [(u32, &'static str)],
+    /// Every character `str.upper()` changes, with its upper case, in code point order.
+    pub(crate) upper_mappings: &'static [(u32, &'static str)],
     pub(crate) cleandoc_margin: CleandocMargin,
     /// The CPython minor version, for library behaviour that changed between 3.x releases.
     pub(crate) minor_version: u8,

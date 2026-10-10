@@ -88,30 +88,6 @@ _SNAPSHOT_WITHOUT_KEY_FRAGMENTS: tuple[str, ...] = (
     "test_case",
     [
         ModelConfigEnginesBuildE2ETestCase(
-            description="layered and templated config builds on python",
-            engine="python",
-            overrides={},
-            expected_exit_code=0,
-            expected_output_fragments=_PASSING_FRAGMENTS,
-            expected_relations=_BUILT_RELATIONS,
-        ),
-        ModelConfigEnginesBuildE2ETestCase(
-            description="reversed cursor bounds are the Python error on python",
-            engine="python",
-            overrides=_REVERSED_CURSOR_BOUNDS,
-            expected_exit_code=1,
-            expected_output_fragments=_REVERSED_BOUNDS_FRAGMENTS,
-            expected_relations=(),
-        ),
-        ModelConfigEnginesBuildE2ETestCase(
-            description="a snapshot without a unique key is the Python error on python",
-            engine="python",
-            overrides=_SNAPSHOT_WITHOUT_KEY,
-            expected_exit_code=1,
-            expected_output_fragments=_SNAPSHOT_WITHOUT_KEY_FRAGMENTS,
-            expected_relations=(),
-        ),
-        ModelConfigEnginesBuildE2ETestCase(
             description="layered and templated config builds on native",
             engine="native",
             overrides={},
@@ -120,7 +96,7 @@ _SNAPSHOT_WITHOUT_KEY_FRAGMENTS: tuple[str, ...] = (
             expected_relations=_BUILT_RELATIONS,
         ),
         ModelConfigEnginesBuildE2ETestCase(
-            description="reversed cursor bounds are the Python error on native",
+            description="reversed cursor bounds are the expected error on native",
             engine="native",
             overrides=_REVERSED_CURSOR_BOUNDS,
             expected_exit_code=1,
@@ -144,7 +120,7 @@ _SNAPSHOT_WITHOUT_KEY_FRAGMENTS: tuple[str, ...] = (
             expected_relations=_BUILT_RELATIONS,
         ),
         ModelConfigEnginesBuildE2ETestCase(
-            description="reversed cursor bounds are the Python error on native-preview",
+            description="reversed cursor bounds are the expected error on native-preview",
             engine="native-preview",
             overrides=_REVERSED_CURSOR_BOUNDS,
             expected_exit_code=1,

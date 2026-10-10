@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::assembly::analysis_session::_helpers::compact_batch::{MemoKey, SharedResult};
 use crate::assembly::analysis_session::_helpers::mappings::{
     ShapeTable, catalog_columns, catalog_relations, same_mapping,
 };
@@ -21,6 +22,8 @@ pub(crate) struct SessionCatalog {
     analysis_shapes: HashMap<String, (Pairs, Pairs)>,
     pub(crate) shared_members: usize,
     pub(crate) reanalysed_members: usize,
+    /// Python's `shared_analyses`: exact shared results by their complete native input.
+    pub(crate) shared_results: HashMap<MemoKey, SharedResult>,
 }
 
 impl SessionCatalog {
@@ -35,6 +38,7 @@ impl SessionCatalog {
             analysis_shapes: HashMap::new(),
             shared_members: 0,
             reanalysed_members: 0,
+            shared_results: HashMap::new(),
         }
     }
 
@@ -102,6 +106,11 @@ impl SessionCatalog {
         if !updates.is_empty() {
             self.native.update_analysis(updates);
         }
+    }
+
+    /// The closed shape Python's catalog `schemas` holds for `name`.
+    pub(crate) fn known_schema(&self, name: &str) -> Option<&Pairs> {
+        self.schemas.get(name)
     }
 
     /// `(shared members, shared members re-analysed alone)` so far.

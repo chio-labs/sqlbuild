@@ -130,7 +130,7 @@ def test_given_results_and_coverage_when_summarizing_then_failures_never_read_as
 ) -> None:
     summary: str = format_summary(
         comparisons=test_case.comparisons,
-        engines=("python", "native"),
+        engines=("native", "native-preview"),
         seconds=2.0,
         missing_coverage=test_case.missing_coverage,
         gate_failures=test_case.gate_failures,

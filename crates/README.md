@@ -58,18 +58,18 @@ stages run natively:
 
 | Engine | Runs |
 |---|---|
-| `python` | The Python compiler only. It is the oracle every native stage must match byte for byte. |
-| `native` | The default: native stages that passed their flip gate (`shipped` tier). |
+| `native` | The default: discovery, rendering and analysis, and every native stage that passed its flip gate (`shipped` tier). |
 | `native-preview` | Opt-in: shipped stages plus stages still in development (`preview` tier). |
 
-The shipped tier covers discovery and rendering: declaration files and scopes, model config,
-reference extraction, the model loop, macro calls and the macro-call store, and attachments. SQL
-analysis, contracts, lineage, SQL-test glue and project assembly are still `preview`. A failing
-render raises its first error directly, as the Python stage would, and runs each macro call at
-most once; a divergence the bridge detects is reported as a native stage mismatch. Because the
-macro-call store is shipped, the
+The Python compiler and its `python` engine were removed once discovery, rendering and analysis
+shipped natively; setting `python` is an error that says so. Native stages still hand inputs they
+cannot reproduce exactly back to Python helpers (the allow-list in
+`scripts/compiler_differential/native_fallbacks.toml` lists every such deferral the corpus
+reaches). A failing render raises its first error directly and runs each macro call at most
+once; a divergence the bridge detects is reported as a native stage mismatch. Because the
+macro-call store is always on, the
 [macro determinism contract](../website/src/content/docs/docs/concepts/macros.mdx) applies to
-every default compile; `SQLBUILD_COMPILER_ENGINE=python` runs every macro call each time.
+every compile.
 
 Each native stage declares its tier once, in `NATIVE_STAGE_TIERS` in
 `src/sqlbuild/compiler/frontier/constants.py`. A stage moves from `preview` to `shipped` by
@@ -77,12 +77,10 @@ changing that line, after its flip gate passes: a byte-identical real project, a
 differential, and no measured slowdown on cold, edit and no-change compiles. Every engine keeps
 its own compiler, Rules and compile-reuse stores, so preview output is never reused by `native`.
 
-`make compiler-differential` compares `python` with `native-preview` on the full per-PR corpus.
-`make compiler-differential-shipped` compares `python` with `native` on the generated seeds and
-the failure corpus, so the shipped default stays covered on its own; CI runs it with stage
-captures and requires full discovery and render coverage. CI runs both, compares `python` with
-`native` and `native-preview` on Python 3.13 and 3.14 as well, and on Windows checks that the
-default compiles a playground project to the same files as `python`.
+`make compiler-differential` compares `native` with `native-preview` on the full per-PR corpus
+and checks both against the goldens in `tests/goldens/compiler`, with stage captures and full
+discovery, render and analysis coverage required. CI also runs it on Python 3.13 and 3.14, and
+on Windows checks that both engines compile a playground project to the same files.
 
 ## Working on the crates
 

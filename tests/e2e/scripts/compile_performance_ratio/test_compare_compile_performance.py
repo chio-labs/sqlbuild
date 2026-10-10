@@ -106,9 +106,10 @@ def test_given_two_builds_when_comparing_compile_performance_then_enforces_ratio
             base_generator=MARKER_GENERATOR,
             expected_return_code=0,
             expected_fragments=("Projects generated per side",),
-            # Cold warm-up and run, warm cache priming and run, then one edit run per side.
-            expected_base_projects=("base",) * 5,
-            expected_head_projects=("head",) * 5,
+            # Cold warm-up and run, then cache priming and a run for warm and for edit per
+            # side; head also compiles uncached after warm and edit to check equality.
+            expected_base_projects=("base",) * 6,
+            expected_head_projects=("head",) * 8,
         ),
         PerSideCompilePerformanceRatioTestCase(
             description="a failing base generator stops before any compile",
@@ -172,12 +173,12 @@ def test_given_base_root_when_comparing_compile_performance_then_each_side_uses_
     "test_case",
     (
         EnginePhaseRatioTestCase(
-            description="native-preview contracts within a generous limit of python's",
+            description="native-preview contracts within a generous limit of native's",
             max_ratio="1000",
             phase_noise_floor_ms="1000",
             expected_return_code=0,
             expected_fragments=(
-                "Engines: base `python`, head `native-preview`.",
+                "Engines: base `native`, head `native-preview`.",
                 "Gated phases: contracts_cpu_ms.",
                 "| contracts_cpu_ms |",
                 "**Result: passed.**",
@@ -244,7 +245,7 @@ def test_given_two_engines_when_gating_a_phase_then_enforces_only_that_phase(
             "--head-python",
             sys.executable,
             "--base-engine",
-            "python",
+            "native",
             "--head-engine",
             "native-preview",
             "--gate-phase",

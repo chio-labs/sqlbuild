@@ -7,21 +7,12 @@ import logging
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
-from sqlbuild.compiler.lineage._helpers.columns import _build_schema_mapping
-from sqlbuild.compiler.lineage._helpers.native_deferrals import record_lineage_deferral
 from sqlbuild.compiler.lineage._helpers.rich_columns import (
-    _build_polyglot_model_column_lineage,
     _polyglot_dialect,
-    _polyglot_schema_tables,
     assemble_rich_project_column_lineage,
 )
 from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_BUILT,
-    NATIVE_LINEAGE_DEFERRED,
-    NATIVE_RICH_LINEAGE_ANSWER_KIND,
-    NATIVE_RICH_LINEAGE_DEFERRAL_SITE,
     NATIVE_RICH_LINEAGE_SKIPPED,
 )
 from sqlbuild.compiler.lineage.models import (
@@ -50,7 +41,7 @@ def build_native_rich_project_column_lineage(
     dialect: str | None,
     model_names: frozenset[str] | None,
 ) -> ProjectColumnLineage | None:
-    """Build `build_rich_project_column_lineage`'s graph with native query analysis."""
+    """Build the rich project column lineage graph with native query analysis."""
 
     if not project.settings.sql_analysis:
         return None
@@ -68,14 +59,10 @@ def build_native_rich_project_column_lineage(
         if models
         else []
     )
-    python_tables: tuple[dict[str, dict[str, str]], dict[str, dict[str, object]]] | None = None
     model_results: dict[str, ModelColumnLineage] = {}
-    answered: int = 0
     for model, (status, columns, has_star, detail) in zip(models, outcomes, strict=True):
-        result: ModelColumnLineage | None = None
         if status == NATIVE_LINEAGE_BUILT:
-            answered += 1
-            result = ModelColumnLineage(
+            model_results[model.name] = ModelColumnLineage(
                 model_name=model.name,
                 columns=tuple(_column_lineage(column) for column in columns),
                 has_star=has_star,
@@ -87,22 +74,6 @@ def build_native_rich_project_column_lineage(
                 sqlbuild_model=model.name,
                 sqlbuild_error=detail,
             )
-        elif status == NATIVE_LINEAGE_DEFERRED:
-            record_lineage_deferral(kind=str(detail), site=NATIVE_RICH_LINEAGE_DEFERRAL_SITE)
-            if python_tables is None:
-                schema: dict[str, dict[str, str]] = _build_schema_mapping(project)
-                python_tables = (schema, _polyglot_schema_tables(schema))
-            result = _build_polyglot_model_column_lineage(
-                model=model,
-                schema=python_tables[0],
-                polyglot_tables=python_tables[1],
-                dialect=dialect,
-            )
-        if result is not None:
-            model_results[model.name] = result
-    report_native_answer(
-        stage=NativeStage.RICH_LINEAGE, kind=NATIVE_RICH_LINEAGE_ANSWER_KIND, units=answered
-    )
     return assemble_rich_project_column_lineage(model_results)
 
 

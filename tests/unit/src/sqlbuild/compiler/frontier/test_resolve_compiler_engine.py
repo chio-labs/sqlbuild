@@ -25,9 +25,6 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="empty", raw_value="", expected_engine=CompilerEngine.NATIVE
         ),
         EngineResolutionTestCase(
-            description="python", raw_value="python", expected_engine=CompilerEngine.PYTHON
-        ),
-        EngineResolutionTestCase(
             description="native", raw_value="native", expected_engine=CompilerEngine.NATIVE
         ),
         EngineResolutionTestCase(
@@ -70,32 +67,39 @@ def test_given_no_engine_variable_when_resolving_then_native_is_the_default(
             description="unknown",
             raw_value="rust",
             expected_message=(
-                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
-                "(got 'rust')"
+                "SQLBUILD_COMPILER_ENGINE must be one of native, native-preview (got 'rust')"
             ),
         ),
         EngineErrorTestCase(
             description="wrong_case",
             raw_value="Native",
             expected_message=(
-                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
-                "(got 'Native')"
+                "SQLBUILD_COMPILER_ENGINE must be one of native, native-preview (got 'Native')"
             ),
         ),
         EngineErrorTestCase(
             description="underscored_preview",
             raw_value="native_preview",
             expected_message=(
-                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
+                "SQLBUILD_COMPILER_ENGINE must be one of native, native-preview "
                 "(got 'native_preview')"
+            ),
+        ),
+        EngineErrorTestCase(
+            description="removed_python",
+            raw_value="python",
+            expected_message=(
+                "SQLBUILD_COMPILER_ENGINE 'python' is no longer supported: SQLBuild removed its "
+                "Python compiler, and the native compiler is the default. Unset "
+                "SQLBUILD_COMPILER_ENGINE and drop --compiler-engine to use it; to run the "
+                "Python compiler for comparison, pin an earlier SQLBuild release."
             ),
         ),
         EngineErrorTestCase(
             description="padded",
             raw_value=" python",
             expected_message=(
-                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
-                "(got ' python')"
+                "SQLBUILD_COMPILER_ENGINE must be one of native, native-preview (got ' python')"
             ),
         ),
     ],
@@ -116,11 +120,11 @@ def test_given_unknown_engine_when_resolving_then_error_names_accepted_and_curre
     "test_case",
     [
         EngineOverrideTestCase(
-            description="python_restored",
-            previous="python",
+            description="preview_restored",
+            previous="native-preview",
             override=CompilerEngine.NATIVE,
             expected_inside=CompilerEngine.NATIVE,
-            expected_after="python",
+            expected_after="native-preview",
         ),
         EngineOverrideTestCase(
             description="empty_restored",

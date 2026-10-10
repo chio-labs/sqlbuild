@@ -5,20 +5,29 @@ from __future__ import annotations
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.compiler.analysis_session._helpers.deferral_records import record_analysis_deferral
-from sqlbuild.compiler.analysis_session._helpers.session_rows import session_request
+from sqlbuild.compiler.analysis_session._helpers.session_rows import (
+    adapter_nullability_rules,
+    session_request,
+)
 from sqlbuild.compiler.analysis_session.classes.native_model_analysis import NativeModelAnalysis
 from sqlbuild.compiler.analysis_session.constants import (
+    ADAPTER_NULLABILITY_CALLBACK,
     DEFERRAL_NO_CATALOG,
     DEFERRAL_NO_COMPACT_ANALYSIS,
     DEFERRAL_SESSION,
+    NATIVE_ANALYSIS_STORE_FILE_NAME,
+    NATIVE_ANALYSIS_STORE_VERSION,
 )
 from sqlbuild.compiler.analysis_session.models import (
     NativeModelAnalyses,
     NativeModelAnalysisRequest,
 )
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
-from sqlbuild.compiler.compile.models import ModelSqlAnalysis
+from sqlbuild.compiler.compile.models import AnalysisCacheContext, ModelSqlAnalysis
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
+from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModelAnalyses | None:
@@ -41,8 +50,20 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
     row: tuple[object, ...] | None = session_request(
         request=request, python=python, schemas=catalog.schemas
     )
+    adapter_rules: dict[str, FunctionNullabilityRule] = adapter_nullability_rules(
+        request.inference_profile
+    )
+    if adapter_rules:
+        record_analysis_deferral(kind=ADAPTER_NULLABILITY_CALLBACK)
     session: _native.NativeModelAnalysisSession | None = (
-        _native.start_model_analysis_session(catalog.native, row) if row is not None else None
+        _native.start_model_analysis_session(
+            catalog.native,
+            row,
+            None if adapter_rules else _analysis_store(request),
+            (adapter_rules, InferredNullability) if adapter_rules else None,
+        )
+        if row is not None
+        else None
     )
     if session is None:
         record_analysis_deferral(kind=DEFERRAL_SESSION)
@@ -51,3 +72,22 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
         request=request, python=python, catalog=catalog
     ).analyses(session)
     return None if analyses is None else NativeModelAnalyses(analyses=analyses, session=session)
+
+
+def _analysis_store(request: NativeModelAnalysisRequest) -> tuple[str, str] | None:
+    """The analysis store's path and environment, or None where Python bypasses its cache."""
+
+    context: AnalysisCacheContext | None = request.analysis_cache
+    if context is None:
+        return None
+    return (
+        str(context.root / NATIVE_ANALYSIS_STORE_FILE_NAME),
+        _native.content_digest(
+            [
+                NATIVE_ANALYSIS_STORE_VERSION,
+                compiled_code_identity(),
+                context.shared_fingerprint,
+                context.signature_namespace,
+            ]
+        ),
+    )

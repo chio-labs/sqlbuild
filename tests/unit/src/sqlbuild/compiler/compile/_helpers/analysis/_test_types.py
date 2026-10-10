@@ -22,3 +22,11 @@ class CompactAnalysisWorkersTestCase:
     model_count: int
     sql_bytes_per_model: int
     expected_workers: int
+
+
+@dataclass(frozen=True)
+class SetOperationSearchTestCase:
+    description: str
+    seed: int
+    count: int
+    expected_minimum_matches: int

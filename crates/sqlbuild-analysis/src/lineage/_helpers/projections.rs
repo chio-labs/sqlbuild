@@ -15,9 +15,6 @@ use crate::lineage::models::{
     LineageConfidence, LineageResourceType, LineageSource, LineageTransformKind,
 };
 
-/// Payload nesting past which Python's recursive `to_dict` walk may exceed its recursion limit.
-const MAX_PAYLOAD_DEPTH: usize = 400;
-
 /// A read Python would make differently, or fail on, so the model is deferred to Python.
 #[derive(Debug)]
 pub(crate) struct UnreadableExpression;
@@ -265,41 +262,35 @@ fn column_refs(expression: &Expression) -> Result<Vec<(String, String)>, Unreada
         };
         return Ok(vec![(expression.get_name().to_owned(), table_name)]);
     }
-    payload_column_refs(&payload, 0)
+    Ok(payload_column_refs(&payload))
 }
 
-/// Python's recursive `visit`: a `column` dict ends its branch; tuples are never entered.
-fn payload_column_refs(
-    node: &PythonValue,
-    depth: usize,
-) -> Result<Vec<(String, String)>, UnreadableExpression> {
-    if depth > MAX_PAYLOAD_DEPTH {
-        return Err(UnreadableExpression);
-    }
-    let children: Vec<&PythonValue> = match node {
-        PythonValue::Dict(entries) => {
-            if let Some(column @ PythonValue::Dict(_)) = node.get(PAYLOAD_COLUMN) {
-                let table_name = match column.get(PAYLOAD_TABLE) {
-                    Some(table @ PythonValue::Dict(_)) => {
-                        name_payload_value(table.get(PAYLOAD_NAME))
-                    }
-                    _ => String::new(),
-                };
-                return Ok(vec![(
-                    name_payload_value(column.get(PAYLOAD_NAME)),
-                    table_name,
-                )]);
-            }
-            entries.iter().map(|(_, value)| value).collect()
-        }
-        PythonValue::List(values) => values.iter().collect(),
-        _ => Vec::new(),
-    };
+/// Python's recursive `visit`, depth first in payload order: a `column` dict ends its branch;
+/// tuples are never entered.
+fn payload_column_refs(root: &PythonValue) -> Vec<(String, String)> {
     let mut refs: Vec<(String, String)> = Vec::new();
-    for child in children {
-        refs.extend(payload_column_refs(child, depth + 1)?);
+    let mut pending: Vec<&PythonValue> = vec![root];
+    while let Some(node) = pending.pop() {
+        let children: Vec<&PythonValue> = match node {
+            PythonValue::Dict(entries) => {
+                if let Some(column @ PythonValue::Dict(_)) = node.get(PAYLOAD_COLUMN) {
+                    let table_name = match column.get(PAYLOAD_TABLE) {
+                        Some(table @ PythonValue::Dict(_)) => {
+                            name_payload_value(table.get(PAYLOAD_NAME))
+                        }
+                        _ => String::new(),
+                    };
+                    refs.push((name_payload_value(column.get(PAYLOAD_NAME)), table_name));
+                    continue;
+                }
+                entries.iter().map(|(_, value)| value).collect()
+            }
+            PythonValue::List(values) => values.iter().collect(),
+            _ => Vec::new(),
+        };
+        pending.extend(children.into_iter().rev());
     }
-    Ok(refs)
+    refs
 }
 
 /// Python's `_polyglot_name_payload_value`.

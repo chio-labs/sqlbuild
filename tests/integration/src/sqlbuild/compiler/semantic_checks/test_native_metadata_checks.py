@@ -62,7 +62,7 @@ def test_given_generated_projects_when_checking_metadata_natively_then_matches_p
         )
         for dialect in test_case.dialects:
             inputs: SemanticInputs = with_dialect(captured, dialect)
-            expected.append(python_metadata(inputs=inputs, monkeypatch=monkeypatch))
+            expected.append(python_metadata(inputs=inputs))
             actual.append(native_metadata(inputs))
 
     assert actual == expected

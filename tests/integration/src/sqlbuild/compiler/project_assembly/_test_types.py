@@ -18,11 +18,11 @@ class GeneratedAssemblyParityTestCase:
 
 @dataclass(frozen=True)
 class AssemblyDeferralTestCase:
-    """A project native hands back to Python, recording why, with Python's exact outcome."""
+    """A project Python rejects: native raises the same error, deferring only where recorded."""
 
     description: str
     files: dict[str, str]
-    expected_kind: str
+    expected_kind: str | None
     expected_error: str
 
 

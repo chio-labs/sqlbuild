@@ -1,5 +1,4 @@
 pub(crate) mod authored_files;
-pub(crate) mod dialects;
 pub(crate) mod environment_markers;
 pub(crate) mod fingerprint_digest;
 pub(crate) mod parsed_lineage;

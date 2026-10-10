@@ -5,12 +5,15 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::contracts::main::evaluate_model_contracts::evaluate_model_contracts;
 use sqlbuild_analysis::contracts::main::promotion_conflicts::promotion_conflicts;
 use sqlbuild_analysis::contracts::models::{
-    ContractDeferral, ContractDiagnostic, ContractModel, ContractOutcome, ContractRequest,
-    ContractSchema, ContractSeverity, DeclaredColumn, DeclaredColumnFamily, DynamicContractProof,
-    InferredOutputColumn, PromotionConflict, PromotionModel, PromotionRequest,
+    ContractDiagnostic, ContractModel, ContractRequest, ContractSchema, ContractSeverity,
+    DeclaredColumn, DeclaredColumnFamily, DynamicContractProof, InferredOutputColumn,
+    PromotionConflict, PromotionModel, PromotionRequest,
 };
 
+use sqlbuild_analysis::type_system::models::TypeNormalizationError;
+
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::type_system::normalization::normalization_error;
 use crate::bindings::types::CompilerDetach;
 
 /// `(name, type, not_null, declared_in_named_schema)`.
@@ -40,27 +43,29 @@ type DiagnosticRow = (
     Option<(String, String)>,
     String,
 );
-/// `(deferral_kind, diagnostics)`.
-type OutcomeRow = (Option<&'static str>, Vec<DiagnosticRow>);
 /// `(name, contract, materialized, incremental_mode)`.
 type PromotionModelRow = (String, Option<String>, Option<String>, Option<String>);
 
-/// Evaluate every model's column contract; deferred models carry their deferral kind.
+/// Evaluate every model's column contract, raising Python's type normalization error.
 #[pyfunction]
 fn evaluate_native_model_contracts(
     py: Python<'_>,
     request: (String, bool, Vec<ModelRow>),
-) -> PyResult<Vec<OutcomeRow>> {
+) -> PyResult<Vec<Vec<DiagnosticRow>>> {
     let (dialect, implicit_column_contracts, models) = request;
     let request = ContractRequest {
         dialect,
         implicit_column_contracts,
         models: models.into_iter().map(contract_model).collect(),
     };
-    let outcomes: Vec<ContractOutcome> = py
+    let outcomes: Result<Vec<Vec<ContractDiagnostic>>, TypeNormalizationError> = py
         .compiler_detach(|| Ok(evaluate_model_contracts(&request)))
         .map_err(compiler_error)?;
-    Ok(outcomes.into_iter().map(outcome_row).collect())
+    Ok(outcomes
+        .map_err(|error| normalization_error(py, &error))?
+        .into_iter()
+        .map(|diagnostics| diagnostics.into_iter().map(diagnostic_row).collect())
+        .collect())
 }
 
 /// The K011 conflicts of enforced contracts under immediate table promotion.
@@ -158,14 +163,6 @@ fn contract_schema(
         type_enforcement,
         named_schema,
     }
-}
-
-fn outcome_row(outcome: ContractOutcome) -> OutcomeRow {
-    let (deferral, diagnostics) = outcome.into_parts();
-    (
-        deferral.map(ContractDeferral::as_str),
-        diagnostics.into_iter().map(diagnostic_row).collect(),
-    )
 }
 
 fn diagnostic_row(diagnostic: ContractDiagnostic) -> DiagnosticRow {

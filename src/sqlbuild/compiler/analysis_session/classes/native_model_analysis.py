@@ -26,6 +26,7 @@ from sqlbuild.compiler.analysis_session.constants import (
     LINEAGE_FACTS,
     LINEAGE_NATIVE,
     NATIVE_ANALYSIS_FAILURE_MESSAGE,
+    NATIVE_ANALYSIS_STORE_FAILURE_MESSAGE,
     NATIVE_SESSION_FAILURE_MESSAGE,
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
@@ -96,7 +97,7 @@ class NativeModelAnalysis:
         )
         for kind, count in self._deferrals.items():
             record_analysis_deferral(kind=kind, count=count)
-        self._python.record_uncached()
+        self._record_cache(session)
         return {
             request.model_input.model_file.file_path.stem: self._model_analysis(
                 index=index, request=request, outcome=outcome, contract=contract
@@ -105,6 +106,23 @@ class NativeModelAnalysis:
                 zip(self._python.requests, outcomes, contracts, strict=True)
             )
         }
+
+    def _record_cache(self, session: _native.NativeModelAnalysisSession) -> None:
+        stats: tuple[int, int, int, str | None] | None = session.cache_stats
+        if stats is None:
+            self._python.record_uncached()
+            return
+        hits, misses, _, failure = stats
+        if failure is not None:
+            log_debug_event(
+                logger=_DEBUG_LOGGER,
+                message=NATIVE_ANALYSIS_STORE_FAILURE_MESSAGE,
+                sqlbuild_error=failure,
+            )
+        if hits + misses == 0:
+            self._python.record_uncached()
+            return
+        self._python.record_cached(hits=hits, misses=misses)
 
     def _finished(self, session: _native.NativeModelAnalysisSession) -> FinishRow | None:
         step: StepRow | None = session.run()

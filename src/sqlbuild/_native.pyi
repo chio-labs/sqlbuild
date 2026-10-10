@@ -359,7 +359,7 @@ def digest_files(paths: list[str]) -> list[str | None]: ...
 # Native analysis: type system.
 def normalize_type(
     type_sql: str, dialect: str
-) -> tuple[tuple[str, str, int | None, int | None, int | None], str | None] | None: ...
+) -> tuple[tuple[str, str, str | None, str | None, str | None], str | None]: ...
 
 # Native analysis: model analysis session.
 type _AnalysisDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
@@ -457,9 +457,14 @@ class NativeModelAnalysisSession:
     def failure(self) -> str | None: ...
     @property
     def sharing(self) -> tuple[int, int]: ...
+    @property
+    def cache_stats(self) -> tuple[int, int, int, str | None] | None: ...
 
 def start_model_analysis_session(
-    catalog: object, request: tuple[object, ...], /
+    catalog: object,
+    request: tuple[object, ...],
+    cache: tuple[str, str] | None = None,
+    adapter_rules: tuple[dict[str, Callable[..., object]], type] | None = None,
 ) -> NativeModelAnalysisSession | None: ...
 def prove_dynamic_column_contracts(
     request: tuple[
@@ -542,8 +547,9 @@ def check_semantic_metadata_rows(
                 str | None,
             ]
         ],
-        list[tuple[str, str | None, str]],
-        list[tuple[str, list[tuple[str, list[str]]]]],
+        list[str],
+        list[tuple[str, str | None, int]],
+        list[tuple[int, list[tuple[str, list[str]]]]],
     ],
     /,
 ) -> tuple[
@@ -624,20 +630,17 @@ def evaluate_native_model_contracts(
     ],
     /,
 ) -> list[
-    tuple[
-        str | None,
-        list[
-            tuple[
-                str,
-                bool,
-                str,
-                str | None,
-                int | None,
-                str | None,
-                tuple[str, str] | None,
-                str,
-            ]
-        ],
+    list[
+        tuple[
+            str,
+            bool,
+            str,
+            str | None,
+            int | None,
+            str | None,
+            tuple[str, str] | None,
+            str,
+        ]
     ]
 ]: ...
 def native_promotion_conflicts(
@@ -647,7 +650,7 @@ def native_promotion_conflicts(
 
 # Native analysis: column lineage facts.
 def build_fast_column_lineage(
-    catalog: object,
+    catalog: object | None,
     request: tuple[str | None, list[tuple[str, str, list[str]]], list[tuple[bool, str, list[str]]]],
     /,
 ) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
@@ -675,6 +678,12 @@ def assemble_compiled_sql_tests(
 ) -> list[NativeSqlTestAssemblyRow]: ...
 
 # Native analysis: compiled project assembly.
+def sql_syntax_error(
+    sql: str,
+    placeholders: Mapping[str, str] | None,
+    dialect: str | None,
+    parse_one: bool = False,
+) -> str | None: ...
 def check_native_sql_syntax(
     request: tuple[str, list[tuple[str, list[tuple[str, str]]]]], /
 ) -> tuple[bool | None, str | None]: ...
@@ -700,6 +709,7 @@ def assemble_project_resource_facts(
         list[list[tuple[str, str]]],
         list[list[tuple[str, str]]],
         list[tuple[str, str]],
+        list[bool],
     ]
     | None,
     str | None,

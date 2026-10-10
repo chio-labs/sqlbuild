@@ -13,9 +13,10 @@ use crate::contracts::constants::{
     UNPROVEN_TYPE_OUTPUT_MESSAGE,
 };
 use crate::contracts::models::{
-    ContractDeferral, ContractDiagnostic, ContractLocation, ContractModel, ContractSchema,
-    ContractSeverity, DeclaredColumn, InferredOutputColumn, RelatedOutput,
+    ContractDiagnostic, ContractLocation, ContractModel, ContractSchema, ContractSeverity,
+    DeclaredColumn, InferredOutputColumn, RelatedOutput,
 };
+use crate::type_system::models::TypeNormalizationError;
 
 /// Python's `_requires_contract_evaluation`.
 pub(crate) fn requires_contract_evaluation(model: &ContractModel, implicit: bool) -> bool {
@@ -46,7 +47,7 @@ pub(crate) fn model_contract_diagnostics(
     model: &ContractModel,
     validate_declared_shape: bool,
     types: &TypeComparer<'_>,
-) -> Result<Vec<ContractDiagnostic>, ContractDeferral> {
+) -> Result<Vec<ContractDiagnostic>, TypeNormalizationError> {
     let contract_enforced: bool = model.contract.as_deref() == Some(CONTRACT_ENFORCED);
     let Some(schema) = model
         .schema
@@ -249,7 +250,7 @@ fn missing_column(
 fn column_type(
     column: &TypedColumn<'_>,
     check: &TypeCheck<'_>,
-) -> Result<Option<ContractDiagnostic>, ContractDeferral> {
+) -> Result<Option<ContractDiagnostic>, TypeNormalizationError> {
     let name: &str = &column.declared.name;
     let declared_type: &str = column.declared_type;
     let Some(inferred_type) = column.inferred.inferred_type.as_deref() else {

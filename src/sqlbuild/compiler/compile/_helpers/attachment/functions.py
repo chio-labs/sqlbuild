@@ -72,8 +72,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -317,7 +315,6 @@ def _sql_function_header(
         python=False,
         relative_path=function_file.relative_path,
     )
-    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="function_headers")
     _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
     arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
         header=native_header,
@@ -435,7 +432,6 @@ def _build_python_function_input(
         python=True,
         relative_path=python_function_file.relative_path,
     )
-    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="function_headers")
     _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
     arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
         header=native_header,
