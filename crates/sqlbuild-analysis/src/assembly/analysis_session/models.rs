@@ -104,6 +104,8 @@ pub struct FinishedSession {
 /// The session's typed result for one compiled model, borrowed from the finished session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SessionModelAnalysis<'a> {
+    /// Whether the session's analysis of the model succeeded; false also for unanalysed names.
+    pub succeeded: bool,
     /// A proven pivot's fixed columns, else a successful analysis's; None where later decided.
     pub columns: Option<&'a [ColumnFact]>,
     /// The session's dynamic pivot proof, for a model declaring dynamic families.
@@ -118,11 +120,10 @@ impl FinishedSession {
         let proven: Option<&[ColumnFact]> = dynamic_proof
             .filter(|proof| proof.output_proven)
             .map(|proof| proof.fixed_columns.as_slice());
-        let analysed: Option<&[ColumnFact]> = self
-            .models
-            .get(name)
-            .and_then(|facts| facts.columns.as_deref());
+        let facts: Option<&SessionModelFacts> = self.models.get(name);
+        let analysed: Option<&[ColumnFact]> = facts.and_then(|facts| facts.columns.as_deref());
         SessionModelAnalysis {
+            succeeded: facts.is_some(),
             columns: proven.or(analysed),
             dynamic_proof,
         }
@@ -399,4 +400,67 @@ pub struct ProjectionFacts {
     pub types: Vec<(String, String)>,
     pub null_literal_names: Vec<String>,
     pub quoted_names: Vec<String>,
+}
+
+/// One model's analysis results, which `model_columns` applies in `_assemble_model`'s order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelColumnsInput<'a> {
+    /// The model's analysis is enabled (`sql_analysis_enabled` for this model).
+    pub analysis_enabled: bool,
+    /// The finished session's result for the model.
+    pub session: SessionModelAnalysis<'a>,
+    /// The `Parse` mode `query_columns` result, required when enabled and the session failed.
+    pub fallback: Option<&'a QueryColumns>,
+    /// A standalone pivot proof, for a model with families the session did not analyse.
+    pub standalone_proof: Option<&'a ContractProof>,
+    /// Output columns type recovery poisoned for this model (`TypeRecoveryPlan::poisoned`).
+    pub poisoned: &'a [String],
+}
+
+/// A model's final output columns, as `CompiledModel` carries them after type recovery.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ModelColumns {
+    /// `inferred_columns`; a poisoned column has no type.
+    pub columns: Option<Vec<ColumnFact>>,
+    /// A proven pivot forces `fast_lineage_has_star`.
+    pub proven_star: bool,
+    /// `unchecked_output_columns`: every poisoned name, in plan order.
+    pub unchecked: Vec<String>,
+}
+
+impl ModelColumnsInput<'_> {
+    /// `_assemble_model`'s columns, then `_recovered_model`'s; Err where the fallback is missing.
+    pub fn model_columns(&self) -> Result<ModelColumns, String> {
+        let analysed: Option<Vec<ColumnFact>> = if !self.analysis_enabled {
+            None
+        } else if self.session.succeeded {
+            self.session.columns.map(<[ColumnFact]>::to_vec)
+        } else {
+            self.fallback
+                .ok_or("a failed session analysis without its parse fallback")?
+                .columns
+                .clone()
+        };
+        let proven: Option<&ContractProof> = self
+            .session
+            .dynamic_proof
+            .or(self.standalone_proof)
+            .filter(|proof| proof.output_proven);
+        let columns: Option<Vec<ColumnFact>> = proven
+            .map(|proof| proof.fixed_columns.clone())
+            .or(analysed)
+            .map(|mut columns| {
+                for column in &mut columns {
+                    if self.poisoned.contains(&column.name) {
+                        column.data_type = None;
+                    }
+                }
+                columns
+            });
+        Ok(ModelColumns {
+            columns,
+            proven_star: proven.is_some(),
+            unchecked: self.poisoned.to_vec(),
+        })
+    }
 }

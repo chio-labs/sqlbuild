@@ -17,11 +17,13 @@ use crate::assembly::analysis_session::main::start_analysis_session::start_analy
 use crate::assembly::analysis_session::main::take_analysis_cache::take_analysis_cache;
 use crate::assembly::analysis_session::models::{
     AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, DynamicFamily, FinishedSession,
-    LineageRow, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest, PivotModel,
-    PivotOutcome, PivotTables, SessionModelAnalysis, SessionModelFacts, SessionOutcome,
+    LineageRow, ModelColumns, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest,
+    PivotModel, PivotOutcome, PivotTables, SessionModelAnalysis, SessionModelFacts, SessionOutcome,
     SessionRequest, SessionStep,
 };
-use crate::assembly::analysis_session::tests::test_types::{CachedRun, ModelSpec, RecoveredFacts};
+use crate::assembly::analysis_session::tests::test_types::{
+    CachedRun, ColumnView, ModelSpec, RecoveredFacts,
+};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::{CatalogInput, ProjectCatalog};
 
@@ -614,4 +616,41 @@ pub(crate) fn current_model_key(session: &AnalysisSession, name: &str) -> Conten
 /// Owned copies of expected lines.
 pub(crate) fn lines(expected: &[&str]) -> Vec<String> {
     expected.iter().map(|line| (*line).to_owned()).collect()
+}
+
+/// `(name, type)` pairs as typed columns of unknown nullability.
+pub(crate) fn fact_columns(pairs: &[(&str, &str)]) -> Vec<ColumnFact> {
+    pairs
+        .iter()
+        .map(|(name, data_type)| ColumnFact {
+            name: (*name).to_owned(),
+            data_type: Some((*data_type).to_owned()),
+            nullability: "unknown".to_owned(),
+        })
+        .collect()
+}
+
+/// A pivot proof with these fixed columns.
+pub(crate) fn contract_proof((output_proven, fixed): (bool, &[(&str, &str)])) -> ContractProof {
+    ContractProof {
+        output_proven,
+        fixed_columns: fact_columns(fixed),
+        families: Vec::new(),
+        input_relations: Vec::new(),
+        failure_reason: None,
+        bare_dynamic_pivot: false,
+    }
+}
+
+/// Final columns as `(name, type)` pairs and the forced star, for comparison with expectations.
+pub(crate) fn column_view(finished: &ModelColumns) -> ColumnView<'_> {
+    (
+        finished.columns.as_ref().map(|columns| {
+            columns
+                .iter()
+                .map(|column| (column.name.as_str(), column.data_type.as_deref()))
+                .collect()
+        }),
+        finished.proven_star,
+    )
 }
