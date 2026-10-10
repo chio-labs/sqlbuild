@@ -1,4 +1,4 @@
-"""The preview engine builds fast column lineage natively with Python's exact CLI output."""
+"""The native engines build fast column lineage natively with Python's exact CLI output."""
 
 from __future__ import annotations
 
@@ -137,9 +137,9 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
         test_case.expected_minimum_traced_edges
     )
     assert python.fallback_parses >= test_case.expected_minimum_python_fallback_parses
-    assert runs["native"] == python
+    assert runs["native"]._replace(fallback_parses=python.fallback_parses) == python
     assert runs["native-preview"]._replace(fallback_parses=python.fallback_parses) == python
-    assert runs["native-preview"].fallback_parses == 0
+    assert (runs["native"].fallback_parses, runs["native-preview"].fallback_parses) == (0, 0)
 
 
 if __name__ == "__main__":

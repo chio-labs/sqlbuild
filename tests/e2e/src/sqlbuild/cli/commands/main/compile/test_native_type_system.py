@@ -1,4 +1,4 @@
-"""Every engine reports contract types and failures alike; preview compares types natively."""
+"""Every engine reports contract types and failures alike; native engines compare types natively."""
 
 from __future__ import annotations
 
@@ -176,8 +176,9 @@ def test_given_contract_types_when_compiling_with_each_engine_then_reports_match
     assert report_without_engine(native_run) == report_without_engine(python_run)
     assert report_without_engine(preview_run) == report_without_engine(python_run)
     assert (native_run.compiled, preview_run.compiled) == (python_run.compiled,) * 2
-    assert (python_answers, native_answers) == (_NO_NATIVE_ANSWERS, _NO_NATIVE_ANSWERS)
-    assert (preview_answers.typed_comparisons >= 1, preview_answers.handbacks) == (True, 0)
+    assert python_answers == _NO_NATIVE_ANSWERS
+    assert native_answers == preview_answers
+    assert (native_answers.typed_comparisons >= 1, native_answers.handbacks) == (True, 0)
 
 
 if __name__ == "__main__":

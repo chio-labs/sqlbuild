@@ -11,4 +11,4 @@ class NativeSemanticChecksCliTestCase:
     files: dict[str, str]
     expected_codes: tuple[str, ...]
     expected_notes: tuple[str, ...]
-    expected_preview_deferrals: tuple[tuple[str, str], ...]
+    expected_native_deferrals: tuple[tuple[str, str], ...]

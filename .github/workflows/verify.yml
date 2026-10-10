@@ -322,7 +322,7 @@ jobs:
         run: >-
           make compiler-differential-shipped
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
-          --require-render-coverage
+          --require-render-coverage --require-analysis-coverage
           --evidence-dir ${{ runner.temp }}/compiler-differential-evidence/shipped"
       - name: Upload differing projects' targets, stderr and compiled-test stats
         if: failure()

@@ -195,7 +195,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_type_system",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.TYPE_SYSTEM,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_type_system",
@@ -213,7 +213,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_model_analysis",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.MODEL_ANALYSIS,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_model_analysis",
@@ -231,7 +231,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_semantic_checks",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.SEMANTIC_CHECKS,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_semantic_checks",
@@ -249,7 +249,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_contracts",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.CONTRACTS,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_contracts",
@@ -267,7 +267,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_lineage_facts",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.LINEAGE_FACTS,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_lineage_facts",
@@ -285,7 +285,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_sql_test_glue",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.SQL_TEST_GLUE,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_sql_test_glue",
@@ -303,7 +303,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_project_assembly",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.PROJECT_ASSEMBLY,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_project_assembly",
@@ -326,7 +326,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
     "test_case",
     [
         DefaultEngineStageTestCase(
-            description="discovery_and_rendering_native_analysis_python",
+            description="discovery_rendering_and_analysis_native",
             expected_enabled=frozenset(
                 {
                     NativeStage.DISCOVERY,
@@ -338,10 +338,6 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.MACRO_CALLS,
                     NativeStage.MACRO_CALL_STORE,
                     NativeStage.ATTACHMENTS,
-                }
-            ),
-            expected_disabled=frozenset(
-                {
                     NativeStage.TYPE_SYSTEM,
                     NativeStage.MODEL_ANALYSIS,
                     NativeStage.SEMANTIC_CHECKS,
@@ -351,11 +347,12 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.PROJECT_ASSEMBLY,
                 }
             ),
+            expected_disabled=frozenset(),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_no_engine_selection_when_checking_native_stages_then_rendering_runs_natively(
+def test_given_no_engine_selection_when_checking_native_stages_then_every_stage_runs_natively(
     test_case: DefaultEngineStageTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv(COMPILER_ENGINE_ENV_VAR, raising=False)

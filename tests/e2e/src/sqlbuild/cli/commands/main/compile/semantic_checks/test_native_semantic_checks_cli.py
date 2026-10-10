@@ -1,4 +1,4 @@
-"""The preview engine completes semantic diagnostics natively with Python's exact CLI output."""
+"""The native engines complete semantic diagnostics natively with Python's exact CLI output."""
 
 from __future__ import annotations
 
@@ -103,14 +103,14 @@ _METADATA_FILES: dict[str, str] = {
                 "o.ordered_at is TIMESTAMP, 5 is INTEGER",
                 "raw_orders has: amount, status, ordered_at, customer_id, order_id",
             ),
-            expected_preview_deferrals=(),
+            expected_native_deferrals=(),
         ),
         NativeSemanticChecksCliTestCase(
             description="UDF calls, config and cursor references, a source cursor and a SQL test",
             files=_METADATA_FILES,
             expected_codes=("B301", "B102", "B300", "B300", "B301", "B300", "B302"),
             expected_notes=(),
-            expected_preview_deferrals=(),
+            expected_native_deferrals=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -125,16 +125,17 @@ def test_given_failing_project_when_compiling_with_each_engine_then_diagnostics_
         for engine in _ENGINES
     }
     python: EngineSemanticRun = runs["python"]
+    native: EngineSemanticRun = runs["native"]
     preview: EngineSemanticRun = runs["native-preview"]
 
     assert python.returncode == 1
     assert diagnostic_codes(python.report) == test_case.expected_codes
     assert set(test_case.expected_notes) <= diagnostic_notes(python.report)
     assert python.semantic_wheel_calls > 0
-    assert runs["native"] == python
+    assert (native.report, native.returncode) == (python.report, python.returncode)
     assert (preview.report, preview.returncode) == (python.report, python.returncode)
-    assert preview.semantic_wheel_calls == 0
-    assert preview.deferrals == test_case.expected_preview_deferrals
+    assert (native.semantic_wheel_calls, preview.semantic_wheel_calls) == (0, 0)
+    assert native.deferrals == preview.deferrals == test_case.expected_native_deferrals
 
 
 if __name__ == "__main__":
