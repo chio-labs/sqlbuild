@@ -14,6 +14,13 @@ class ExpressionMemoCase:
 
 
 @dataclass(frozen=True)
+class RestoredShapeCase:
+    description: str
+    expressions: dict[str, str]
+    expected_shapes: dict[str, dict[str, str]]
+
+
+@dataclass(frozen=True)
 class ExpressionBatchCase:
     description: str
     orders_expression: str

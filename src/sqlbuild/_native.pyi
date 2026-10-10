@@ -444,8 +444,10 @@ def prove_dynamic_column_contracts(
     /,
 ) -> list[_PivotContractRow]: ...
 def infer_expression_source_shapes(
-    catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
-) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...
+    catalog: object,
+    request: tuple[str, bool, list[tuple[str, str]], list[tuple[str, str]], list[str]],
+    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+) -> list[list[tuple[str, str]] | None]: ...
 def _oracle_cte_fact_recovery(
     request: tuple[
         str,

@@ -7,10 +7,8 @@ from typing import Any, cast
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.compiler.analysis_session._helpers.deferral_records import record_analysis_deferral
-from sqlbuild.compiler.analysis_session._helpers.session_rows import (
-    adapter_nullability_rules,
-    session_request,
-)
+from sqlbuild.compiler.analysis_session._helpers.profile_rows import adapter_nullability_rules
+from sqlbuild.compiler.analysis_session._helpers.session_rows import session_request
 from sqlbuild.compiler.analysis_session.classes.native_model_analysis import NativeModelAnalysis
 from sqlbuild.compiler.analysis_session.constants import (
     ADAPTER_NULLABILITY_CALLBACK,

@@ -125,6 +125,7 @@ pub(crate) struct NativeModelAnalysisSession {
 
 /// What an internal native failure of the session names.
 const SESSION_CONTEXT: &str = "native model analysis";
+const SHAPES_CONTEXT: &str = "native expression-source shapes";
 /// The native store kind holding finished model analyses.
 const MODEL_ANALYSIS_STORE_KIND: &str = "model-analyses";
 
@@ -266,33 +267,41 @@ fn start_model_analysis_session(
     })
 }
 
-/// Each expression's shape, with `False` where Python must infer it.
+/// Each expression's shape, `None` where it has none; adapter rules run as in the session.
 #[pyfunction]
+#[pyo3(signature = (catalog, request, adapter_rules=None))]
 fn infer_expression_source_shapes(
     py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
-    request: (String, bool, Pairs, Vec<String>),
-) -> (Vec<(bool, Option<Pairs>)>, Option<String>) {
-    let (dialect, case_sensitive_shapes, function_return_types, expressions) = request;
+    request: (String, bool, Pairs, Option<Pairs>, Vec<String>),
+    adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
+) -> PyResult<Vec<Option<Pairs>>> {
+    let (dialect, case_sensitive_shapes, function_return_types, nullability_rules, expressions) =
+        request;
+    let rule_failure: RuleFailure = RuleFailure::default();
     let request = ExpressionShapeRequest {
         dialect,
         case_sensitive_shapes,
         function_return_types,
+        nullability_rules,
+        nullability_callback: adapter_rules.map(|(rules, nullability)| {
+            nullability_callback(rules, nullability, rule_failure.clone())
+        }),
         expressions,
     };
     let catalog = &catalog.inner;
-    match py.compiler_detach(|| expression_shapes(catalog, &request)) {
-        Ok(shapes) => (shapes.into_iter().map(expression_shape_row).collect(), None),
-        Err(error) => (Vec::new(), Some(error)),
+    let shapes = py.compiler_detach(|| expression_shapes(catalog, &request));
+    if let Some(error) = raised(&rule_failure) {
+        return Err(error);
     }
-}
-
-fn expression_shape_row(shape: ExpressionShape) -> (bool, Option<Pairs>) {
-    match shape {
-        ExpressionShape::Inferred(shape) => (true, Some(shape)),
-        ExpressionShape::Absent => (true, None),
-        ExpressionShape::Deferred => (false, None),
-    }
+    Ok(shapes
+        .map_err(|reason| compiler_error(native_failure(SHAPES_CONTEXT, &reason)))?
+        .into_iter()
+        .map(|shape| match shape {
+            ExpressionShape::Inferred(pairs) => Some(pairs),
+            ExpressionShape::Absent => None,
+        })
+        .collect())
 }
 
 fn session_request(request: RequestRow) -> SessionRequest {

@@ -22,7 +22,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.analysis_session._helpers.session_rows import nullability_rule_rows
+from sqlbuild.compiler.analysis_session._helpers.profile_rows import nullability_rule_rows
 from sqlbuild.compiler.compile._helpers.analysis.cte_facts import (
     _polyglot_cte_passthrough_facts,
     _polyglot_filtered_non_null_outputs,

@@ -2,19 +2,36 @@
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile._helpers.assembly import semantic_shapes
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
+from sqlbuild.compiler.compile.models import CompiledProject
+from tests.integration.src.sqlbuild.compiler.lineage.helpers import compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ExpressionBatchCase,
     ExpressionMemoCase,
+    RestoredShapeCase,
 )
 
-pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("deferred_native_expression_shapes")
+
+def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
+    """Record the expressions of every native expression-source shape batch."""
+
+    original: Callable[..., Any] = native_module.infer_expression_source_shapes
+    batches: list[tuple[str, ...]] = []
+
+    def traced(catalog: object, request: tuple[Any, ...], *rules: Any) -> Any:
+        batches.append(tuple(request[4]))
+        return original(catalog, request, *rules)
+
+    monkeypatch.setattr(native_module, "infer_expression_source_shapes", traced)
+    return batches
 
 
 @pytest.mark.parametrize(
@@ -40,14 +57,7 @@ def test_given_equal_source_expressions_when_compiling_then_infers_once_and_inva
     source.write_text(
         f"sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n    expression: {test_case.expression}\n  - name: raw_customers\n    description: Test source raw_customers.\n    expression: {test_case.expression}\n"
     )
-    original: Callable[..., Any] = semantic_shapes.analyze_queries_with_compact_polyglot_batch
-    calls: list[object] = []
-
-    def traced(**kwargs: Any) -> Any:
-        calls.append(kwargs["query_sqls"])
-        return original(**kwargs)
-
-    monkeypatch.setattr(semantic_shapes, "analyze_queries_with_compact_polyglot_batch", traced)
+    calls: list[tuple[str, ...]] = traced_shape_batches(monkeypatch)
     args: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
     assert main(args) == 0
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
@@ -91,18 +101,55 @@ def test_given_distinct_source_expressions_when_compiling_then_infers_them_in_on
         f"  - name: raw_orders\n    description: Test source raw_orders.\n    expression: {test_case.orders_expression}\n"
         f"  - name: raw_customers\n    description: Test source raw_customers.\n    expression: {test_case.customers_expression}\n"
     )
-    original: Callable[..., Any] = semantic_shapes.analyze_queries_with_compact_polyglot_batch
-    batches: list[tuple[str, ...]] = []
-
-    def traced(**kwargs: Any) -> Any:
-        batches.append(kwargs["query_sqls"])
-        return original(**kwargs)
-
-    monkeypatch.setattr(semantic_shapes, "analyze_queries_with_compact_polyglot_batch", traced)
+    batches: list[tuple[str, ...]] = traced_shape_batches(monkeypatch)
     assert main(["--project-dir", str(tmp_path), "compile", "--json"]) == 0
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert payload["diagnostics"] == []
     assert tuple(batches) == test_case.expected_batches
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RestoredShapeCase(
+            description="closed and open expression sources",
+            expressions={
+                "raw_orders": "SELECT 1 AS id, 'placed' AS status",
+                "raw_events": "SELECT mystery_fn(1) AS event_id, NULL AS note",
+                "raw_open": "SELECT * FROM somewhere",
+            },
+            expected_shapes={
+                "raw_orders": {"id": "INT", "status": "TEXT"},
+                "raw_events": {"event_id": "UNKNOWN", "note": "UNKNOWN"},
+            },
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_restored_project_without_catalog_when_reading_shapes_then_infers_natively(
+    test_case: RestoredShapeCase, tmp_path: Path
+) -> None:
+    sources: str = "sources:\n" + "".join(
+        f"  - name: {name}\n    description: Test source {name}.\n    expression: {expression}\n"
+        for name, expression in test_case.expressions.items()
+    )
+    project: CompiledProject = compiled_project(
+        project_dir=tmp_path,
+        files={
+            "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+            "sources/sources.yml": sources,
+        },
+    )
+
+    restored: dict[str, dict[str, str]] = semantic_shapes(
+        project=replace(project, binding_catalog=None)
+    )
+
+    assert {name: restored.get(name) for name in test_case.expected_shapes} == (
+        test_case.expected_shapes
+    )
+    assert "raw_open" not in restored
+    assert restored == semantic_shapes(project=project)
 
 
 if __name__ == "__main__":

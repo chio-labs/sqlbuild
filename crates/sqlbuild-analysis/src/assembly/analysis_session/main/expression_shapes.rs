@@ -1,8 +1,13 @@
 //! Python's `get_expression_source_shapes` for expressions its catalog has not inferred.
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+
 use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
+};
+use crate::assembly::analysis_session::_helpers::cte_facts::{
+    LegacyAnalysis, LegacyInput, RecoveryProfile, legacy_analysis,
 };
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::_helpers::publication::{ShapeOptions, ShapeSource};
@@ -47,7 +52,37 @@ pub fn expression_shapes(
     let mut shapes: Vec<ExpressionShape> = Vec::with_capacity(results.len());
     for (expression, result) in request.expressions.iter().zip(results) {
         shapes.push(match result.analysis {
-            MemberAnalysis::Legacy { .. } => ExpressionShape::Deferred,
+            MemberAnalysis::Legacy { .. } => {
+                let legacy: LegacyAnalysis = catch_compiler_panic(|| {
+                    legacy_analysis(&LegacyInput {
+                        cleaned_sql: &result.cleaned_sql,
+                        lineage_references: &[],
+                        recover: true,
+                        types: &empty,
+                        nullability: &empty,
+                        profile: RecoveryProfile {
+                            dialect: &request.dialect,
+                            function_return_types: &request.function_return_types,
+                            rules: request.nullability_rules.as_ref(),
+                            callback: request.nullability_callback.as_ref(),
+                        },
+                    })
+                })?;
+                match legacy.columns {
+                    Some(columns) if !columns.is_empty() && !legacy.has_star => {
+                        ExpressionShape::Inferred(session_catalog.inferred_binding_shape(
+                            &options,
+                            ShapeSource {
+                                sql: expression,
+                                columns: shape_columns(&columns),
+                                inputs: &no_inputs,
+                                snapshot_columns: None,
+                            },
+                        )?)
+                    }
+                    _ => ExpressionShape::Absent,
+                }
+            }
             MemberAnalysis::Projected {
                 columns, has_star, ..
             } if !columns.is_empty() && !has_star => {

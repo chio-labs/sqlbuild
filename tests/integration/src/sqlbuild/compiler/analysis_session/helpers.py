@@ -39,9 +39,6 @@ from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import (
     model_pivot_sql,
 )
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_placeholders
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    get_expression_source_shapes,
-)
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
@@ -629,26 +626,16 @@ def analyse_natively(
         _compare_proofs(request=request, analyses=analyses, session=session, runs=runs)
         return analyses, session
 
-    def shapes_by_both(
+    def recorded_shapes(
         *, expressions: tuple[str, ...], profile: ExpressionInferenceProfile
     ) -> tuple[dict[str, str] | None, ...]:
         catalog: Any = cast(Any, profile.binding_catalog)
-        native_catalog: Any = catalog.with_relations({})
-        native: tuple[dict[str, str] | None, ...] | None = infer_native_expression_source_shapes(
-            expressions=expressions, profile=replace(profile, binding_catalog=native_catalog)
-        )
-        python: tuple[dict[str, str] | None, ...] = get_expression_source_shapes(
+        native: tuple[dict[str, str] | None, ...] = infer_native_expression_source_shapes(
             expressions=expressions, profile=profile
         )
-        runs.expression_shapes += sum(shape is not None for shape in python)
-        runs.golden.append(golden_entry("shapes", (native, native_catalog.expression_shapes)))
-        _append(
-            runs,
-            "expression shapes",
-            (python, catalog.expression_shapes),
-            (native, native_catalog.expression_shapes),
-        )
-        return python
+        runs.expression_shapes += sum(shape is not None for shape in native)
+        runs.golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
+        return native
 
     native_lineage_facts: Callable[..., tuple[CompiledLineageColumnFact, ...]] = (
         native_model_analysis.lineage_facts
@@ -669,7 +656,7 @@ def analyse_natively(
         patch.setattr(native_model_analysis, "lineage_facts", counted_native_enrichment)
         patch.setattr(project_assembly, "_assemble_compiled_model", recorded_model)
         patch.setattr(project_assembly, "analyze_model_sql", analysed_three_ways)
-        patch.setattr(project_assembly, "expression_source_shapes_by_engine", shapes_by_both)
+        patch.setattr(project_assembly, "expression_source_shapes_by_engine", recorded_shapes)
         with suppress(CompileInputError):
             _ = project_assembly.assemble_compiled_project(
                 inputs=inputs,
