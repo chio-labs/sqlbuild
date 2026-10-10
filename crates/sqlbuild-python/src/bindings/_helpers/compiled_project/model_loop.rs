@@ -8,9 +8,10 @@ use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
 use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
 use sqlbuild_analysis::compiled_project::main::header_attachment_feature::header_attachment_feature;
+use sqlbuild_analysis::compiled_project::main::legacy_schema_error::legacy_schema_error;
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_analysis::compiled_project::models::{
-    AnalysisGate, AttachmentFeature, ModelLoopSettings,
+    AnalysisGate, AttachmentFeature, LegacySchemaFile, ModelLoopSettings,
 };
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
@@ -28,6 +29,9 @@ use crate::bindings::_helpers::compiled_project::model_loop_host::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     analysis_override, config_keys, hook_presence, reference_row,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
+    OptOut, OptOutModel, rejected_opt_out,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::discovery::project_files::python_semantics;
@@ -64,6 +68,12 @@ const ANALYSIS_CONFLICT_CODE: &str = "P003";
 
 /// The native validator, header contract classes, and the loop's Python classes.
 type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
+/// `(analysis switches, native syntax, (project config path, legacy schema files))`.
+type LoopSettingsInput = (
+    (bool, bool, bool, bool),
+    bool,
+    (String, Vec<(String, Vec<String>)>),
+);
 
 /// The Python classes and error factory the loop builds usages, hooks and errors with.
 #[derive(FromPyObject)]
@@ -89,7 +99,11 @@ pub(crate) struct NativeModelLoop {
     syntax: LexicalSyntax,
     pub(crate) reserved_markers: Vec<String>,
     pub(crate) python: PythonText,
-    settings: ModelLoopSettings,
+    pub(crate) settings: ModelLoopSettings,
+    /// Whether project assembly answers SQL syntax natively in this compile.
+    pub(crate) native_syntax: bool,
+    pub(crate) project_config_path: String,
+    legacy_schema_files: Vec<LegacySchemaFile>,
     contract_classes: Py<PyDict>,
     loop_classes: Py<PyDict>,
 }
@@ -122,11 +136,15 @@ impl NativeModelLoop {
         checks: LoopChecks,
         syntax: LexicalSyntaxInput,
         cursor: (Vec<String>, ((u8, u8), String)),
-        settings: (bool, bool, bool, bool),
+        settings: LoopSettingsInput,
     ) -> PyResult<Self> {
         let (validator, contract_classes, loop_classes) = checks;
         let (reserved_markers, (python_version, unicode_version)) = cursor;
-        let (sql_analysis, no_sql_validation, defer_sql_validation, legacy_schema_files) = settings;
+        let (
+            (sql_analysis, no_sql_validation, defer_sql_validation, require_sql_analysis),
+            native_syntax,
+            (project_config_path, legacy_schema_files),
+        ) = settings;
         Ok(Self {
             validator,
             syntax: syntax.into(),
@@ -136,8 +154,17 @@ impl NativeModelLoop {
                 sql_analysis,
                 no_sql_validation,
                 defer_sql_validation,
-                legacy_schema_files,
+                require_sql_analysis,
             },
+            native_syntax,
+            project_config_path,
+            legacy_schema_files: legacy_schema_files
+                .into_iter()
+                .map(|(relative_path, model_names)| LegacySchemaFile {
+                    relative_path,
+                    model_names,
+                })
+                .collect(),
             contract_classes,
             loop_classes,
         })
@@ -205,7 +232,7 @@ impl NativeModelLoop {
             config,
             visible,
         } = model;
-        let ModelLoopRow((name, _, relative_path, file_path), locations, _, _, scan) = row;
+        let ModelLoopRow((name, _, relative_path, file_path), locations, _, contents, scan) = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         if header_attachment_feature(&config_keys(&values)?) == Some(AttachmentFeature::ModelSchema)
         {
@@ -266,31 +293,32 @@ impl NativeModelLoop {
         let query_sql: String = self
             .canonical_query(name, &macro_sql, &values)?
             .map_err(|message| compile_error(context.classes, &message, None))?;
-        match analysis_gate(self.settings, analysis_override(&values)?) {
-            AnalysisGate::Conflict => {
-                return Err(compile_error(
-                    context.classes,
-                    ANALYSIS_CONFLICT,
-                    Some(ANALYSIS_CONFLICT_CODE),
-                ));
-            }
-            AnalysisGate::Disabled => return Ok(None),
-            AnalysisGate::Enabled if !self.settings.defer_sql_validation => return Ok(None),
-            AnalysisGate::Enabled => {}
-        }
+        let opt_out_model: OptOutModel<'_, 'py> = OptOutModel {
+            config: &config,
+            values: &values,
+            query_sql: &query_sql,
+            relative_path,
+            contents,
+        };
+        let Some((analysed, rejected_opt_out)) = self.analysis(context, &opt_out_model)? else {
+            return Ok(None);
+        };
         let ReferenceExtraction::Extracted(scanned) =
             extract_sql_references(&query_sql, &self.syntax)
         else {
             return Ok(None);
         };
-        if !scanned.invalid_calls.is_empty()
-            || scanned
-                .references
-                .iter()
-                .any(|reference| reference.kind == DBT_REF_KIND)
+        if scanned
+            .references
+            .iter()
+            .any(|reference| reference.kind == DBT_REF_KIND)
         {
             return Ok(None);
         }
+        let analysis: (bool, Option<Bound<'py, PyAny>>) = (
+            analysed && scanned.invalid_calls.is_empty(),
+            rejected_opt_out,
+        );
         let references: Vec<ReferenceRow> = merge_call_site_references(
             scanned.references.iter().map(reference_row).collect(),
             argument_references,
@@ -318,8 +346,9 @@ impl NativeModelLoop {
             visible: (&visible.declarations, &visible.consumer),
         };
         let header: AttachedHeader<'py> = header_schema(py, context, &source)?;
-        if self.settings.legacy_schema_files {
-            return Ok(None);
+        if let Some(message) = legacy_schema_error((name, relative_path), &self.legacy_schema_files)
+        {
+            return Err(compile_error(context.classes, &message, None));
         }
         Ok(Some(FinishedModel {
             config,
@@ -329,7 +358,36 @@ impl NativeModelLoop {
             references,
             declarations,
             hook_statements,
+            analysis,
         }))
+    }
+
+    /// Whether the model's SQL is analysed and its rejected opt-out; `None` hands it over.
+    fn analysis<'py>(
+        &self,
+        context: &LoopContext<'_, 'py>,
+        model: &OptOutModel<'_, 'py>,
+    ) -> PyResult<Option<(bool, Option<Bound<'py, PyAny>>)>> {
+        let (analysed, rejected) =
+            match analysis_gate(self.settings, analysis_override(model.values)?) {
+                AnalysisGate::Conflict => {
+                    return Err(compile_error(
+                        context.classes,
+                        ANALYSIS_CONFLICT,
+                        Some(ANALYSIS_CONFLICT_CODE),
+                    ));
+                }
+                AnalysisGate::Enabled => (true, None),
+                AnalysisGate::Disabled => match rejected_opt_out(self, context, model)? {
+                    OptOut::Accepted => (false, None),
+                    OptOut::Rejected(location) => (true, Some(location)),
+                    OptOut::Deferred => return Ok(None),
+                },
+            };
+        if analysed && !self.settings.defer_sql_validation {
+            return Ok(None);
+        }
+        Ok(Some((analysed, rejected)))
     }
 
     /// The query with canonical cursor intrinsics, or the message the attachment raises.

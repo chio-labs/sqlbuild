@@ -19,6 +19,7 @@ from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     HEADER_CONTRACT_FILES,
     LEGACY_PROJECT_TYPES,
+    OPT_OUT_FILES,
     PARITY_FILES,
     TYPE_PROOF_FILES,
     WAFFLE_SHOP_NATIVE_MODELS,
@@ -96,13 +97,19 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
             description="plain, interpolated, seeded, incremental, column-contract, enum, constant, macro and hooked models",
             fixtures=(),
             files=PARITY_FILES,
-            expected_native_models=8,
+            expected_native_models=9,
         ),
         ModelLoopParityTestCase(
             description="dynamic columns, audit factories and enforced enum columns",
             fixtures=(),
             files=HEADER_CONTRACT_FILES,
             expected_native_models=3,
+        ),
+        ModelLoopParityTestCase(
+            description="accepted and rejected analysis opt-outs and invalid reference calls",
+            fixtures=(),
+            files=OPT_OUT_FILES,
+            expected_native_models=4,
         ),
         ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",

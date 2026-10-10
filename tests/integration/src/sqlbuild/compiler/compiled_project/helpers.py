@@ -189,29 +189,33 @@ HEADER_CONTRACT_FILES: dict[str, str] = {
 }
 
 
+OPT_OUT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[settings]\nrequire_sql_analysis = true\n\n'
+        "[path_defaults.legacy]\nsql_analysis = false\n"
+    ),
+    "models/header_opt_out.sql": "MODEL (\n  sql_analysis false\n);\nSELECT 1 AS order_id\n",
+    "models/legacy/path_opt_out.sql": "MODEL ();\nSELECT 1 AS order_id\n",
+    "models/unparsed.sql": "MODEL (sql_analysis false);\nSELECT FROM WHERE (\n",
+    "models/invalid_call.sql": "MODEL ();\nSELECT * FROM __ref(order_name)\n",
+}
+
+
 def build_inputs_with_native_loop(
     *, project_dir: Path, native: bool, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[CompileProjectInputs, list[int]]:
-    """Build compile inputs; without `native`, every model goes to the attachment callback."""
+    """Build compile inputs; without `native`, the attachment builds every model itself."""
 
     finished: list[int] = []
     native_loop_type: type = _native.NativeModelLoop
 
-    def loop(
-        checks: tuple[object, dict[str, object], dict[str, object]],
-        syntax: dict[str, object],
-        cursor: tuple[list[str], tuple[tuple[int, int], str]],
-        settings: tuple[bool, ...],
-    ) -> object:
-        return _CountingLoop(
-            native_loop_type(
-                checks, syntax, cursor, (settings[0], settings[1], native, settings[3])
-            ),
-            finished,
-        )
+    loops: dict[bool, Callable[..., object]] = {
+        True: lambda *arguments: _CountingLoop(native_loop_type(*arguments), finished),
+        False: lambda *_: _AttachmentLoop(finished),
+    }
 
     with monkeypatch.context() as patch:
-        patch.setattr(_native, "NativeModelLoop", loop)
+        patch.setattr(_native, "NativeModelLoop", loops[native])
         inputs: CompileProjectInputs = build_compile_inputs(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),
             adapter_context=CompileAdapterContext(
@@ -235,6 +239,25 @@ class _CountingLoop:
         inputs, count = self.native_loop.run(*arguments)
         self.finished.append(count)
         return inputs, count
+
+
+@dataclass(frozen=True)
+class _AttachmentLoop:
+    """The model loop as the attachment alone runs it, retaining facts from each model input."""
+
+    finished: list[int]
+
+    def run(
+        self, project: _native.NativeCompiledProject, host: Any, models: list[object]
+    ) -> tuple[list[object], int]:
+        inputs: list[object] = []
+        for index in range(len(models)):
+            _ = host.config(index=index)
+            model_input: object = host.fallback(index=index)
+            project.record_model(host.model_row(model_input=model_input))
+            inputs.append(model_input)
+        self.finished.append(0)
+        return inputs, 0
 
 
 def expansions(inputs: CompileProjectInputs) -> list[tuple[object, object]]:

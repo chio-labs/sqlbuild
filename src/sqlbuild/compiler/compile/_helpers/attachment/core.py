@@ -20,6 +20,7 @@ from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     build_model_header_schema_entry,
     build_native_model_config,
     find_schema_model_match,
+    legacy_schema_rows,
     native_model_config_session,
     native_path_default,
     strip_model_header_metadata_from_config,
@@ -115,6 +116,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceExtractor
 from sqlbuild.compiler.compiled_project.main._model_input_row import model_input_row
+from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
 from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
 from sqlbuild.compiler.compiled_project.models import PlainModelFacts
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
@@ -136,13 +138,11 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
-from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.main._native_contract_classes import native_contract_classes
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
 from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
-from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -512,6 +512,7 @@ class _ModelLoopHost:
             | None
         ),
         enum_columns: dict[str, EnumDeclaration],
+        analysis: tuple[bool, SourceLocation | None],
         hook_statements: int,
         declarations: tuple[str, list[tuple[int, int, int, int]], list[UsageRecord]],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
@@ -531,6 +532,8 @@ class _ModelLoopHost:
                 description=description,
                 schema=schema,
                 enum_columns=enum_columns,
+                sql_validation_enabled=analysis[0],
+                rejected_sql_analysis_opt_out=analysis[1],
                 declaration_sql=declarations[0],
                 declaration_spans=_expansion_spans(declarations[1]),
                 macro_expansion=self.macros.pop(index, None),
@@ -747,25 +750,22 @@ def _run_native_model_loop(
         (
             loop.validation_context.validators.native_config.validator,
             native_contract_classes(),
-            {
-                "usage_record": UsageRecord,
-                "compile_error": CompileInputError,
-                "sql_hook_entry": SqlHookEntry,
-                "config_error": native_config_error,
-                "audit_factories": {
-                    factory.name: factory for factory in loop.discovered_inputs.audit_factories
-                },
-                "generated_usage": UsageKind.GENERATED,
-                "contract_enforced": ContractPolicy.ENFORCED,
-            },
+            model_loop_classes(audit_factories=loop.discovered_inputs.audit_factories),
         ),
         loop.context.sql_lexical_syntax.native_mapping,
         cursor_intrinsic_semantics(),
         (
-            settings.sql_analysis,
-            loop.validation_context.no_sql_validation,
-            loop.validation_context.defer_model_sql_validation,
-            bool(loop.legacy_schema_files),
+            (
+                settings.sql_analysis,
+                loop.validation_context.no_sql_validation,
+                loop.validation_context.defer_model_sql_validation,
+                settings.require_sql_analysis,
+            ),
+            native_stage_enabled(NativeStage.PROJECT_ASSEMBLY),
+            (
+                str(loop.validation_context.project_config_path),
+                legacy_schema_rows(loop.legacy_schema_files),
+            ),
         ),
     )
     host: _ModelLoopHost = _ModelLoopHost(loop=loop, interpolations=interpolations)

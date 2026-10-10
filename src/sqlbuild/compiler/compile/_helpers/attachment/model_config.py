@@ -520,6 +520,19 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
     return values
 
 
+def legacy_schema_rows(
+    schema_files: tuple[DiscoveredSchemaFile, ...],
+) -> list[tuple[str, list[str]]]:
+    """Each legacy schema file's relative path and the model names it declares."""
+
+    rows: list[tuple[str, list[str]]] = []
+    for schema_file in schema_files:
+        rows.append(
+            (str(schema_file.relative_path), [entry.name for entry in schema_file.model_entries])
+        )
+    return rows
+
+
 def find_schema_model_match(
     *,
     model_file: DiscoveredSqlModelFile,

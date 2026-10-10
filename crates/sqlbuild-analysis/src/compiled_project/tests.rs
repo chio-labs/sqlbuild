@@ -4,6 +4,8 @@ mod helpers;
 mod test_declaration_errors;
 #[path = "tests/test_plain.rs"]
 mod test_plain;
+#[path = "tests/test_sources.rs"]
+mod test_sources;
 #[path = "tests/test_splice.rs"]
 mod test_splice;
 #[path = "tests/test_store.rs"]

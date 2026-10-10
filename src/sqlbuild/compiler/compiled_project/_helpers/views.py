@@ -67,7 +67,8 @@ def plain_model_input_impl(
             for kind, name, package, call_argument_count in facts.references
         ),
         schema_entry=_schema_entry(model_file=model_file, facts=facts),
-        sql_validation_enabled=True,
+        sql_validation_enabled=facts.sql_validation_enabled,
+        rejected_sql_analysis_opt_out=facts.rejected_sql_analysis_opt_out,
         enum_declarations=local_enums,
         constant_declarations=local_constants,
         enum_columns=facts.enum_columns,

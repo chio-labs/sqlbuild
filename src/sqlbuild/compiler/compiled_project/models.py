@@ -15,6 +15,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
     SchemaColumn,
     SchemaDynamicColumnFamily,
+    SourceLocation,
 )
 
 
@@ -37,6 +38,8 @@ class PlainModelFacts:
         | None
     )
     enum_columns: dict[str, EnumDeclaration]
+    sql_validation_enabled: bool
+    rejected_sql_analysis_opt_out: SourceLocation | None
     declaration_sql: str
     declaration_spans: tuple[ExpansionSpan, ...]
     declaration_usages: tuple[UsageRecord, ...]

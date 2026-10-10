@@ -49,3 +49,17 @@ pub(super) struct DeclarationErrorTestCase {
     pub(super) error: crate::compiled_project::errors::DeclarationError,
     pub(super) expected_message: &'static str,
 }
+
+pub(super) struct OptOutPositionTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) start: usize,
+    pub(super) expected_position: crate::compiled_project::models::TextPosition,
+}
+
+pub(super) struct LegacySchemaTestCase {
+    pub(super) description: &'static str,
+    /// `(schema file, model names)` per legacy schema file.
+    pub(super) schema_files: &'static [(&'static str, &'static [&'static str])],
+    pub(super) expected_error: Option<&'static str>,
+}

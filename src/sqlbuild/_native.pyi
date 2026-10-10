@@ -69,7 +69,9 @@ class NativeModelLoop:
         checks: tuple[object, dict[str, object], dict[str, object]],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
-        settings: tuple[bool, bool, bool, bool],
+        settings: tuple[
+            tuple[bool, bool, bool, bool], bool, tuple[str, list[tuple[str, list[str]]]]
+        ],
     ) -> None: ...
     def run(
         self,

@@ -36,6 +36,7 @@ const SCHEMA_ARGUMENT: &str = "schema";
 const HOOK_STATEMENTS_ARGUMENT: &str = "hook_statements";
 const DECLARATIONS_ARGUMENT: &str = "declarations";
 const ENUM_COLUMNS_ARGUMENT: &str = "enum_columns";
+const ANALYSIS_ARGUMENT: &str = "analysis";
 
 /// `((name, POSIX path, relative path, file path), column locations, query, contents, scan)`.
 #[derive(FromPyObject)]
@@ -64,6 +65,8 @@ pub(crate) struct FinishedModel<'py> {
     pub(crate) references: Vec<ReferenceRow>,
     pub(crate) declarations: ExpandedDeclarations<'py>,
     pub(crate) hook_statements: usize,
+    /// Whether the SQL is analysed, and where a rejected `sql_analysis false` was authored.
+    pub(crate) analysis: (bool, Option<Bound<'py, PyAny>>),
 }
 
 /// Call a host callback with keyword arguments, as its keyword-only signature requires.
@@ -115,6 +118,10 @@ pub(crate) fn plain_input<'py>(
         (
             SCHEMA_ARGUMENT,
             schema_argument(py, finished.header.schema.as_ref())?,
+        ),
+        (
+            ANALYSIS_ARGUMENT,
+            finished.analysis.clone().into_pyobject(py)?.into_any(),
         ),
         (
             HOOK_STATEMENTS_ARGUMENT,

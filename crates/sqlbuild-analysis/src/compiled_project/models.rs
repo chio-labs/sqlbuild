@@ -111,7 +111,7 @@ pub struct ModelLoopSettings {
     pub sql_analysis: bool,
     pub no_sql_validation: bool,
     pub defer_sql_validation: bool,
-    pub legacy_schema_files: bool,
+    pub require_sql_analysis: bool,
 }
 
 /// The `description` config value's shape.
@@ -207,4 +207,18 @@ pub struct PlainModel {
     pub enum_columns: Vec<String>,
     pub enum_declarations: Vec<DeclarationFact>,
     pub constant_declarations: Vec<DeclarationFact>,
+}
+
+/// A one-based line and column, counted in characters.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TextPosition {
+    pub line: usize,
+    pub column: usize,
+}
+
+/// A legacy schema file that declares model entries, by its relative path.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LegacySchemaFile {
+    pub relative_path: String,
+    pub model_names: Vec<String>,
 }
