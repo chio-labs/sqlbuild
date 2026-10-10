@@ -20,12 +20,15 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlExpansion,
+    CompileModelInput,
     CompileProjectInputs,
     DeclarationScopeBuild,
     SqlExpansionContext,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
@@ -333,14 +336,28 @@ def prepare_sql_rules(
             ),
             discovered_inputs=inputs.discovered_inputs,
             static_declaration_scope=inputs.declaration_scope,
-            compiled_expansions={
-                model.model_file.file_path: model.sql_expansion
-                for model in inputs.model_inputs
-                if model.sql_expansion is not None
-            },
+            compiled_expansions=early_lint_expansions(inputs.model_inputs),
             stop=stop,
         ),
     )
+
+
+def early_lint_expansions(
+    model_inputs: tuple[CompileModelInput, ...],
+) -> dict[Path, CompiledSqlExpansion]:
+    """Each model's compile expansion for early lint, whole when the compile handed one over."""
+
+    expansions: dict[Path, CompiledSqlExpansion] = {}
+    for model in model_inputs:
+        expansion: CompiledSqlExpansion | None = model.lint_expansion or model.sql_expansion
+        if expansion is not None:
+            expansions[model.model_file.file_path] = expansion
+    report_native_answer(
+        stage=NativeStage.COMPILE_LINT_INPUTS,
+        kind="lint_expansions",
+        units=sum(model.lint_expansion is not None for model in model_inputs),
+    )
+    return expansions
 
 
 def _prepare_sql_lint(

@@ -827,6 +827,8 @@ class CompileModelInput:
     macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     sql_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
+    lint_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
+    """The compile's whole expansion, variables included, which early SQL lint reuses."""
 
 
 @dataclass(frozen=True)

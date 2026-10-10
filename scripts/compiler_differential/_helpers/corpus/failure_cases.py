@@ -407,6 +407,22 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="rule-unused-cte-after-variable-and-macro",
+            expected_code="SQBRSQL005",
+            files={
+                FAILURE_CONFIG_PATH: FAILURE_BASE_CONFIG
+                + '\n[vars]\nfloor = "2"\n'
+                + _RULES_CONFIG.format(codes="SQBRSQL005"),
+                "models/marts/_macros/cents.py": _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    'WITH totals AS (SELECT customer_id, @cents("amount") AS cents, '
+                    '@@floor AS floor_cents FROM __ref("stg_orders")), spare AS (SELECT 1 AS one)\n'
+                    "SELECT customer_id, SUM(cents) AS total_amount\n"
+                    "FROM totals WHERE cents > floor_cents\nGROUP BY customer_id\n"
+                ),
+            },
+        ),
+        failure_case(
             name="rule-unused-cte",
             expected_code="SQBRSQL005",
             files={

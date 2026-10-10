@@ -148,6 +148,17 @@ class CombinedCompilationTestCase:
 
 
 @dataclass(frozen=True)
+class EarlyLintInputsTestCase:
+    """Early SQL lint under one engine: the expansions it took from the compile and redid."""
+
+    description: str
+    engine: str
+    expected_findings: tuple[tuple[str, str, int | None, int | None], ...]
+    expected_compile_expansions: int
+    expected_python_expansions: int
+
+
+@dataclass(frozen=True)
 class RulesIntegrationTestCase:
     """One compiler-integrated Rules command expectation."""
 
