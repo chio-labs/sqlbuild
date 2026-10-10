@@ -20,3 +20,12 @@ class UnretainedRulesRowsTestCase:
 
     description: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class ZeroMaterializationTestCase:
+    """An ordinary compile that must not construct the legacy Python project representation."""
+
+    description: str
+    arguments: tuple[str, ...]
+    expected_constructions: dict[str, int]
