@@ -44,27 +44,31 @@ use crate::semantic_validation::types::DiagnosticRow;
 type Enrichments = (Vec<Deferral>, HashMap<usize, bool>);
 
 impl AnalysisSession {
-    /// A session over `request`, or None where Python's cycle handling must analyse.
+    /// A session over `request`, or None where two models share a name; a `ref` cycle is one wave.
     pub(crate) fn start(request: SessionRequest, catalog: &ProjectCatalog) -> Option<Self> {
-        let waves: Vec<Vec<usize>> = waves(&producers(&request.models)?)?;
+        let scheduled: Option<Vec<Vec<usize>>> = waves(&producers(&request.models)?);
         let complete_shapes: ShapeTable = ShapeTable::from_shapes(&request.complete_schemas);
-        let dependency_ordered: bool = request
-            .models
-            .iter()
-            .flat_map(|model| model.required_names.iter())
-            .any(|name| complete_shapes.get(name).is_none_or(Vec::is_empty));
+        let dependency_ordered: bool = scheduled.is_some()
+            && request
+                .models
+                .iter()
+                .flat_map(|model| model.required_names.iter())
+                .any(|name| complete_shapes.get(name).is_none_or(Vec::is_empty));
+        let cyclic: bool = scheduled.is_none();
+        let waves: Vec<Vec<usize>> = scheduled.unwrap_or_default();
         Some(Self {
             catalog: SessionCatalog::new(catalog, &request.catalog_schemas),
             available_types: ShapeTable::from_shapes(&request.column_types),
             available_nullability: ShapeTable::from_shapes(&request.column_nullability),
             complete_shapes,
             outcomes: vec![None; request.models.len()],
-            waves: if dependency_ordered || waves.is_empty() {
+            waves: if dependency_ordered || request.models.is_empty() {
                 waves
             } else {
                 vec![(0..request.models.len()).collect()]
             },
             dependency_ordered,
+            cyclic,
             next_wave: 0,
             phase: Phase::Analyze,
             publications: Vec::new(),
@@ -355,6 +359,9 @@ impl AnalysisSession {
     /// Python's `_complete_inferred_bindings` star and type pass for one wave.
     fn complete_wave(&mut self, wave: usize) -> Result<Enrichments, String> {
         let mut deferrals: Vec<Deferral> = Vec::new();
+        if self.cyclic {
+            return Ok((deferrals, HashMap::new()));
+        }
         let mut star_pending_by_model: HashMap<usize, bool> = HashMap::new();
         let mut candidates: Vec<(usize, Shapes, bool)> = Vec::new();
         for model in self.waves[wave].clone() {
@@ -460,7 +467,8 @@ impl AnalysisSession {
     fn finish_wave(&mut self, wave: usize) -> Result<(), String> {
         let models: Vec<usize> = self.waves[wave].clone();
         let mut validations: Vec<(usize, String, Shapes)> = Vec::new();
-        for model in &models {
+        let validated: &[usize] = if self.cyclic { &[] } else { &models };
+        for model in validated {
             let schema: Shapes = self.binding_schema(&self.request.models[*model]);
             let outcome: &ModelOutcome = self.outcomes[*model]
                 .as_ref()

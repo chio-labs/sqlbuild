@@ -20,6 +20,7 @@ import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
     analyze_native_model_sql,
 )
@@ -527,6 +528,52 @@ def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjec
         adapter_context=_ADAPTER_CONTEXT,
         run_id="integration_run",
     )
+
+
+def compiled_project_view(
+    *,
+    project_dir: Path,
+    files: dict[str, str],
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[int, object, object, dict[str, str]]:
+    """Compile a written project through the CLI: exit code, report, manifest nodes, SQL files."""
+
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    _ = capsys.readouterr()
+    code: int = main(["--project-dir", str(project_dir), "compile", "--json", "--manifest"])
+    report: dict[str, object] = json.loads(capsys.readouterr().out)
+    manifest: dict[str, object] = json.loads(
+        (project_dir / "target" / "manifest.json").read_text(encoding="utf-8")
+    )
+    compiled: Path = project_dir / "target" / "compiled"
+    _ = report.pop("compile_timings")
+    _ = manifest.pop("metadata")
+    return (
+        code,
+        report,
+        manifest,
+        {
+            path.relative_to(compiled).as_posix(): path.read_text(encoding="utf-8")
+            for path in sorted(compiled.rglob("*.sql"))
+        },
+    )
+
+
+def python_compiled_project_view(
+    *,
+    project_dir: Path,
+    files: dict[str, str],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[int, object, object, dict[str, str]]:
+    """`compiled_project_view` with native model analysis deferred, so Python analyses all."""
+
+    with monkeypatch.context() as patch:
+        patch.setattr(native_stage_assembly, "analyze_native_model_sql", lambda **_kwargs: None)
+        return compiled_project_view(project_dir=project_dir, files=files, capsys=capsys)
 
 
 @dataclass

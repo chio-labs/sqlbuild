@@ -40,6 +40,27 @@ class AnalysisFallbackTestCase:
 
 
 @dataclass(frozen=True)
+class CyclicAnalysisTestCase:
+    """Models that `ref` each other, which the native session analyses in one unordered wave."""
+
+    description: str
+    files: dict[str, str]
+    dialects: tuple[str, ...]
+    lineage_modes: tuple[ColumnLineageMode, ...]
+    expected_analysed: int
+
+
+@dataclass(frozen=True)
+class CyclicCompileTestCase:
+    """A project whose models `ref` each other, compiled through the CLI."""
+
+    description: str
+    files: dict[str, str]
+    expected_exit_code: int
+    expected_compiled: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SessionFailureTestCase:
     """A session that fails after Python answered deferrals, so Python analyses everything."""
 

@@ -100,6 +100,7 @@ impl AnalysisSession {
             }
         }
         key.flag(self.dependency_ordered);
+        key.flag(self.cyclic);
         key.finish()
     }
 
