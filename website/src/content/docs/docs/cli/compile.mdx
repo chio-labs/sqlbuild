@@ -123,8 +123,10 @@ contracts and semantic validation run for the whole project. No render is carrie
 previous compile; rendering runs natively and does not run unchanged macro calls again. A few
 caches under `target/cache/` shorten the rest:
 
-- An unchanged model takes its column analysis from the analysis cache when its query and the
-  analyses of its upstream models are unchanged.
+- An unchanged model takes its column analysis from `model-analyses.bin`. Entries are keyed by
+  the model's query and settings, the inferred columns, types and nullability of every relation
+  it reads, the project's analysis settings, and the SQLBuild build, so a model whose upstream
+  output changed is analysed again; a damaged or unreadable entry is analysed again too.
 - An unchanged SQL test file reuses its stored test scan, the CTEs and expected models read from
   it, from `sql-test-scans.bin`. Entries are keyed by the file's expanded text, the adapter's SQL
   lexical rules, and the SQLBuild build; a damaged or unreadable entry is scanned again.
