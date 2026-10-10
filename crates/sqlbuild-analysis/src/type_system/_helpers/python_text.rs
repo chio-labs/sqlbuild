@@ -1,100 +1,81 @@
-//! Python string and integer semantics the type normalization relies on, for ASCII text.
+//! Python string and integer semantics the type normalization relies on.
 
-use crate::type_system::constants::PYTHON_ASCII_WHITESPACE;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::is_python_space::is_python_space;
+use sqlbuild_core::text::main::python_decimal_value::python_decimal_value;
+use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_core::text::main::python_upper::python_upper;
+use sqlbuild_core::text::models::PythonText;
 
-/// The result of Python's `int(text)` on one parameter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PythonInt {
-    Value(i64),
-    Invalid,
-    /// A valid integer outside `i64`; Python keeps it, so the caller defers.
-    TooLarge,
-}
+use crate::type_system::models::PythonInteger;
 
-pub(crate) fn is_python_space(byte: u8) -> bool {
-    PYTHON_ASCII_WHITESPACE.contains(&byte)
-}
-
-/// Python's `str.strip()`.
-pub(crate) fn python_strip(text: &str) -> &str {
-    text.trim_matches(|character: char| character.is_ascii() && is_python_space(character as u8))
+/// Python's `text.upper()` under the running Python's Unicode version.
+pub(crate) fn upper(text: &str) -> String {
+    python_upper(active_python_text(), text)
 }
 
 /// Python's `re.sub(r"\s+", "", text)`.
 pub(crate) fn remove_python_space(text: &str) -> String {
     text.chars()
-        .filter(|character| !(character.is_ascii() && is_python_space(*character as u8)))
+        .filter(|character| !is_python_space(*character))
         .collect()
 }
 
-/// Python's base-10 `int(text)`: whitespace, a sign, and single underscores between digits.
-pub(crate) fn python_int(text: &str) -> PythonInt {
+/// Python's base-10 `int(text)`: whitespace, a sign, Unicode decimal digits and single
+/// underscores between digits; None where Python raises `ValueError`.
+pub(crate) fn python_int(text: &str) -> Option<PythonInteger> {
+    let python: PythonText = active_python_text();
     let stripped: &str = python_strip(text);
-    let (negative, digits) = match stripped.as_bytes().first() {
-        Some(b'-') => (true, &stripped[1..]),
-        Some(b'+') => (false, &stripped[1..]),
+    let (negative, digits) = match stripped.chars().next() {
+        Some('-') => (true, &stripped[1..]),
+        Some('+') => (false, &stripped[1..]),
         _ => (false, stripped),
     };
-    let bytes: &[u8] = digits.as_bytes();
-    let valid: bool = !bytes.is_empty()
-        && bytes.first().is_some_and(u8::is_ascii_digit)
-        && bytes.last().is_some_and(u8::is_ascii_digit)
-        && bytes
-            .iter()
-            .all(|byte| byte.is_ascii_digit() || *byte == b'_')
-        && !digits.contains("__");
-    if !valid {
-        return PythonInt::Invalid;
-    }
-    let mut value: i64 = 0;
-    for byte in bytes.iter().filter(|byte| byte.is_ascii_digit()) {
-        let digit: i64 = i64::from(byte - b'0');
-        let next: Option<i64> = value.checked_mul(10).and_then(|scaled| {
-            if negative {
-                scaled.checked_sub(digit)
-            } else {
-                scaled.checked_add(digit)
+    let mut value: String = String::with_capacity(digits.len() + 1);
+    let mut previous_underscore: bool = true;
+    for character in digits.chars() {
+        if character == '_' {
+            if previous_underscore {
+                return None;
             }
-        });
-        let Some(next) = next else {
-            return PythonInt::TooLarge;
-        };
-        value = next;
+            previous_underscore = true;
+            continue;
+        }
+        let digit: u32 = python_decimal_value(python, character)?;
+        value.push(char::from_digit(digit, 10)?);
+        previous_underscore = false;
     }
-    PythonInt::Value(value)
+    if value.is_empty() || previous_underscore {
+        return None;
+    }
+    Some(PythonInteger::from_digits(negative, &value))
 }
 
-/// Python's `_split_type_and_params`; None for a parameter beyond `i64`.
-pub(crate) fn split_type_and_params(type_sql: &str) -> Option<(&str, Vec<i64>)> {
+/// Python's `_split_type_and_params`: the regex `^([A-Z0-9_]+)(?:\(([^)]*)\))?$`, then
+/// `int(part.strip())` for each comma-separated parameter, skipping what `int` rejects.
+pub(crate) fn split_type_and_params(type_sql: &str) -> (&str, Vec<PythonInteger>) {
     let candidate: &str = type_sql.strip_suffix('\n').unwrap_or(type_sql);
     let name_end: usize = candidate
         .bytes()
         .position(|byte| !(byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_'))
         .unwrap_or(candidate.len());
     if name_end == 0 {
-        return Some((type_sql, Vec::new()));
+        return (type_sql, Vec::new());
     }
     let (name, rest) = candidate.split_at(name_end);
     if rest.is_empty() {
-        return Some((name, Vec::new()));
+        return (name, Vec::new());
     }
     let Some(raw_params) = rest
         .strip_prefix('(')
         .and_then(|inner| inner.strip_suffix(')'))
         .filter(|inner| !inner.contains(')'))
     else {
-        return Some((type_sql, Vec::new()));
+        return (type_sql, Vec::new());
     };
-    let mut params: Vec<i64> = Vec::new();
     if raw_params.is_empty() {
-        return Some((name, params));
+        return (name, Vec::new());
     }
-    for raw_part in raw_params.split(',') {
-        match python_int(raw_part) {
-            PythonInt::Value(value) => params.push(value),
-            PythonInt::Invalid => {}
-            PythonInt::TooLarge => return None,
-        }
-    }
-    Some((name, params))
+    let params: Vec<PythonInteger> = raw_params.split(',').filter_map(python_int).collect();
+    (name, params)
 }

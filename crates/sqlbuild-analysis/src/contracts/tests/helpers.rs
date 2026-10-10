@@ -1,5 +1,5 @@
 use crate::contracts::models::{
-    ContractDiagnostic, ContractModel, ContractOutcome, ContractSchema, DeclaredColumn,
+    ContractDiagnostic, ContractModel, ContractSchema, DeclaredColumn,
     DeclaredColumnFamily, DynamicContractProof, InferredOutputColumn, PromotionModel,
     PromotionRequest,
 };
@@ -99,12 +99,8 @@ pub(crate) fn promotion_model(
     }
 }
 
-pub(crate) fn outcome_lines(outcome: &ContractOutcome) -> Vec<String> {
-    let (deferral, diagnostics) = outcome.clone().into_parts();
-    deferral.map_or_else(
-        || diagnostics.iter().map(diagnostic_line).collect(),
-        |deferral| vec![format!("deferred:{}", deferral.as_str())],
-    )
+pub(crate) fn outcome_lines(diagnostics: &[ContractDiagnostic]) -> Vec<String> {
+    diagnostics.iter().map(diagnostic_line).collect()
 }
 
 fn diagnostic_line(diagnostic: &ContractDiagnostic) -> String {

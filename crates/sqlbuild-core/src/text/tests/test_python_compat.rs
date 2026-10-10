@@ -4,11 +4,14 @@ use crate::text::main::is_python_alpha::is_python_alpha;
 use crate::text::main::is_python_decimal::is_python_decimal;
 use crate::text::main::is_python_space::is_python_space;
 use crate::text::main::is_python_word::is_python_word;
+use crate::text::main::python_casefold::python_casefold;
 use crate::text::main::python_cleandoc::python_cleandoc;
 use crate::text::main::python_text::python_text;
+use crate::text::main::python_upper::python_upper;
 use crate::text::models::PythonText;
 use crate::text::tests::test_types::{
-    CharacterClassTestCase, CleandocTestCase, CloseMatchesTestCase, PythonTextTestCase,
+    CaseMappingTestCase, CharacterClassTestCase, CleandocTestCase, CloseMatchesTestCase,
+    PythonTextTestCase,
 };
 
 const KEYS: &[&str] = &[
@@ -280,6 +283,50 @@ fn given_python_versions_when_cleaning_bodies_then_cleandoc_matches_that_version
         assert_eq!(
             python_cleandoc(python, test_case.text),
             test_case.expected_text,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_unicode_versions_when_folding_and_upper_casing_then_python_str_methods_agree() {
+    let test_cases = [
+        CaseMappingTestCase {
+            description: "ASCII, final sigma, sharp s, dotted I and a ligature",
+            unicode_version: "15.0.0",
+            text: "Orders \u{3a3}\u{391}\u{3a3} \u{df} \u{130} \u{fb01}",
+            expected_casefold: "orders \u{3c3}\u{3b1}\u{3c3} ss i\u{307} fi",
+            expected_upper: "ORDERS \u{3a3}\u{391}\u{3a3} SS \u{130} FI",
+        },
+        CaseMappingTestCase {
+            description: "a capital Unicode 16.0 added folds only there",
+            unicode_version: "15.1.0",
+            text: "\u{a7cb}",
+            expected_casefold: "\u{a7cb}",
+            expected_upper: "\u{a7cb}",
+        },
+        CaseMappingTestCase {
+            description: "the same capital under Unicode 16.0",
+            unicode_version: "16.0.0",
+            text: "\u{a7cb}",
+            expected_casefold: "\u{264}",
+            expected_upper: "\u{a7cb}",
+        },
+    ];
+    for test_case in test_cases {
+        let python: PythonText =
+            python_text((3, 13), test_case.unicode_version).expect("the version is supported");
+
+        assert_eq!(
+            (
+                python_casefold(python, test_case.text),
+                python_upper(python, test_case.text)
+            ),
+            (
+                test_case.expected_casefold.to_owned(),
+                test_case.expected_upper.to_owned()
+            ),
             "{}",
             test_case.description
         );

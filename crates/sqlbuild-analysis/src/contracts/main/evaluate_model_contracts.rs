@@ -4,11 +4,17 @@ use crate::contracts::_helpers::columns::{
     declared_shape_validation_is_active, model_contract_diagnostics, requires_contract_evaluation,
 };
 use crate::contracts::_helpers::type_comparison::TypeComparer;
-use crate::contracts::models::{ContractOutcome, ContractRequest};
+use crate::contracts::models::{ContractDiagnostic, ContractRequest};
+use crate::type_system::models::TypeNormalizationError;
 
-/// One outcome per requested model; models that need no evaluation have no diagnostics.
-#[must_use]
-pub fn evaluate_model_contracts(request: &ContractRequest) -> Vec<ContractOutcome> {
+/// Each requested model's diagnostics; models that need no evaluation have none.
+///
+/// # Errors
+///
+/// The type normalization error Python raises while comparing a model's types.
+pub fn evaluate_model_contracts(
+    request: &ContractRequest,
+) -> Result<Vec<Vec<ContractDiagnostic>>, TypeNormalizationError> {
     let implicit: bool = request.implicit_column_contracts;
     let types = TypeComparer::new(&request.dialect);
     request
@@ -16,16 +22,13 @@ pub fn evaluate_model_contracts(request: &ContractRequest) -> Vec<ContractOutcom
         .iter()
         .map(|model| {
             if !requires_contract_evaluation(model, implicit) {
-                return ContractOutcome::Diagnostics(Vec::new());
+                return Ok(Vec::new());
             }
-            match model_contract_diagnostics(
+            model_contract_diagnostics(
                 model,
                 declared_shape_validation_is_active(model, implicit),
                 &types,
-            ) {
-                Ok(diagnostics) => ContractOutcome::Diagnostics(diagnostics),
-                Err(deferral) => ContractOutcome::Deferred(deferral),
-            }
+            )
         })
         .collect()
 }

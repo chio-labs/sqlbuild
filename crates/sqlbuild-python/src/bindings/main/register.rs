@@ -12,6 +12,7 @@ use crate::bindings::models;
 
 #[pymodule]
 pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    boundary::python_runtime::record_python_text(module.py())?;
     rules::evaluation::register(module)?;
     rules::lint::register(module)?;
     rules::skills::register(module)?;

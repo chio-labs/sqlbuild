@@ -15,25 +15,11 @@ use crate::semantic_checks::models::SemanticDeferral;
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
 use crate::semantic_validation::models::NormalizationInput;
 
-/// The Polyglot dialect the wheel resolves `name` to, when this build includes it.
+/// The Polyglot dialect the wheel resolves `name` to, when Polyglot knows the name.
 pub(crate) fn polyglot_dialect(name: &str) -> Result<Dialect, SemanticDeferral> {
-    let Ok(dialect_type) = name.parse::<DialectType>() else {
-        return Err(SemanticDeferral::UnsupportedDialect);
-    };
-    if matches!(
-        dialect_type,
-        DialectType::Generic
-            | DialectType::PostgreSQL
-            | DialectType::BigQuery
-            | DialectType::Snowflake
-            | DialectType::DuckDB
-            | DialectType::TSQL
-            | DialectType::Databricks
-    ) {
-        Ok(Dialect::get(dialect_type))
-    } else {
-        Err(SemanticDeferral::UnsupportedDialect)
-    }
+    name.parse::<DialectType>()
+        .map(Dialect::get)
+        .map_err(|_| SemanticDeferral::UnsupportedDialect)
 }
 
 /// Python's `get_complete_schema_binding_request(...).sql` without placeholders.

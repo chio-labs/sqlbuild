@@ -40,5 +40,4 @@ class NativeFallbackSite(StrEnum):
     MACRO_BRIDGE_UNAVAILABLE = "macro_calls.bridge_unavailable"
     MACRO_CALL_MOCKED = "macro_calls.mocked_evaluation"
     PROJECT_ASSEMBLY = "project_assembly.assembly"
-    TYPE_NORMALIZATION = "type_system.normalization"
     SQL_TEST_ASSEMBLY = "sql_test_glue.assembly"

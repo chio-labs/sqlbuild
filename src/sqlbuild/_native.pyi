@@ -358,7 +358,7 @@ def digest_files(paths: list[str]) -> list[str | None]: ...
 # Native analysis: type system.
 def normalize_type(
     type_sql: str, dialect: str
-) -> tuple[tuple[str, str, int | None, int | None, int | None], str | None] | None: ...
+) -> tuple[tuple[str, str, str | None, str | None, str | None], str | None]: ...
 
 # Native analysis: model analysis session.
 type _AnalysisDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
@@ -626,20 +626,17 @@ def evaluate_native_model_contracts(
     ],
     /,
 ) -> list[
-    tuple[
-        str | None,
-        list[
-            tuple[
-                str,
-                bool,
-                str,
-                str | None,
-                int | None,
-                str | None,
-                tuple[str, str] | None,
-                str,
-            ]
-        ],
+    list[
+        tuple[
+            str,
+            bool,
+            str,
+            str | None,
+            int | None,
+            str | None,
+            tuple[str, str] | None,
+            str,
+        ]
     ]
 ]: ...
 def native_promotion_conflicts(

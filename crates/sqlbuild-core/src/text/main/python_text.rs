@@ -1,6 +1,7 @@
 //! Select the Python string semantics of one CPython release.
 
 use crate::text::_helpers::alnum_tables::{ALNUM_TABLES, ALPHA_TABLES, DECIMAL_TABLES};
+use crate::text::_helpers::case_tables::{CASEFOLD_TABLES, UPPER_TABLES};
 use crate::text::models::{CleandocMargin, PythonText};
 
 /// The semantics of one Python and its `unicodedata.unidata_version`, or `None` if unknown.
@@ -22,8 +23,18 @@ pub fn python_text(python_version: (u8, u8), unicode_version: &str) -> Option<Py
         .iter()
         .find(|(version, _)| *version == unicode_version)
         .map(|(_, ranges)| *ranges)?;
+    let casefold_mappings: &'static [(u32, &'static str)] = CASEFOLD_TABLES
+        .iter()
+        .find(|(version, _)| *version == unicode_version)
+        .map(|(_, mappings)| *mappings)?;
+    let upper_mappings: &'static [(u32, &'static str)] = UPPER_TABLES
+        .iter()
+        .find(|(version, _)| *version == unicode_version)
+        .map(|(_, mappings)| *mappings)?;
     Some(PythonText {
         alnum_ranges,
+        casefold_mappings,
+        upper_mappings,
         alpha_ranges,
         decimal_ranges,
         cleandoc_margin,
