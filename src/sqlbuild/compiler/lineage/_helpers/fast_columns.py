@@ -1,20 +1,15 @@
-"""Fast Polyglot-backed column lineage analyzer."""
+"""Python fast lineage of one model, for models the native engine hands back."""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.models import (
-    CompiledLineageColumnFact,
-    CompiledLineageSourceFact,
     CompiledModel,
-    CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage._helpers.columns import (
-    _build_schema_mapping,
     _build_star_lineage,
     _normalize_sqlbuild_refs,
 )
@@ -24,7 +19,6 @@ from sqlbuild.compiler.lineage.models import (
     ColumnLineageSource,
     ModelColumnLineage,
     PhysicalResource,
-    ProjectColumnLineage,
 )
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
@@ -45,78 +39,6 @@ from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyg
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.lineage")
-
-
-def build_fast_project_column_lineage(
-    *,
-    project: CompiledProject,
-    dialect: str | None = None,
-    model_names: frozenset[str] | None = None,
-) -> ProjectColumnLineage | None:
-    """Build a fast, partial project column lineage graph for compiled models."""
-
-    if not project.settings.sql_analysis:
-        return None
-
-    schema: dict[str, dict[str, str]] = _build_schema_mapping(project)
-    model_results: dict[str, ModelColumnLineage] = {}
-    compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]] = {}
-    model_order: list[str] = []
-
-    for model in project.models:
-        if model_names is not None and model.name not in model_names:
-            continue
-        if model.fast_lineage_columns is not None:
-            columns: Sequence[CompiledLineageColumnFact] = model.fast_lineage_columns
-            if model.fast_lineage_has_star and not model.fast_lineage_star_resolved:
-                normalized_sql: str
-                physical_resources: tuple[PhysicalResource, ...]
-                normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
-                del normalized_sql
-                star_columns: tuple[ColumnLineage, ...] = _build_star_lineage(
-                    model=model,
-                    schema=schema,
-                    physical_resources=physical_resources,
-                    existing_columns={column.output_column for column in columns},
-                )
-                columns = (
-                    *columns,
-                    *(_compiled_lineage_fact(column) for column in star_columns),
-                )
-            compact_models[model.name] = (columns, model.fast_lineage_has_star)
-            model_order.append(model.name)
-            continue
-        result: ModelColumnLineage | None = _build_polyglot_fast_model_column_lineage(
-            model=model,
-            schema=schema,
-            dialect=dialect,
-        )
-        if result is None:
-            continue
-        model_results[model.name] = result
-        model_order.append(model.name)
-
-    return ProjectColumnLineage.from_fast_facts(
-        models=model_results,
-        compact_models=compact_models,
-        model_order=tuple(model_order),
-    )
-
-
-def _compiled_lineage_fact(column: ColumnLineage) -> CompiledLineageColumnFact:
-    return CompiledLineageColumnFact(
-        output_column=column.output_column,
-        upstream_columns=tuple(
-            CompiledLineageSourceFact(
-                resource_type=source.resource_type,
-                resource_name=source.resource_name,
-                column_name=source.column_name,
-            )
-            for source in column.upstream_columns
-        ),
-        transform_kind=column.transform_kind,
-        confidence=column.confidence,
-    )
 
 
 def _build_polyglot_fast_model_column_lineage(

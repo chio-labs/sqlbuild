@@ -121,8 +121,6 @@ pub struct LineageColumn {
 /// Why a model is handed back to Python, which builds its lineage exactly as before.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineageDeferral {
-    /// The dialect is not compiled into the native parser.
-    UnsupportedDialect,
     /// The parsed SQL could not be read as Python reads it.
     NativeFailure,
 }
@@ -130,7 +128,6 @@ pub enum LineageDeferral {
 impl LineageDeferral {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::UnsupportedDialect => "unsupported_dialect",
             Self::NativeFailure => "native_failure",
         }
     }
@@ -149,6 +146,8 @@ pub enum FastLineageOutcome {
     Omitted,
     /// The SQL did not parse; Python logs this message and records no lineage.
     Unparsed(String),
+    /// Polyglot does not know the dialect name, so Python's parse raises `ValueError`.
+    UnknownDialect(String),
     Deferred(LineageDeferral),
 }
 
@@ -160,6 +159,7 @@ impl FastLineageOutcome {
             Self::Built { columns, has_star } => ("built", columns, has_star, None),
             Self::Omitted => ("omitted", Vec::new(), false, None),
             Self::Unparsed(message) => ("unparsed", Vec::new(), false, Some(message)),
+            Self::UnknownDialect(name) => ("unknown_dialect", Vec::new(), false, Some(name)),
             Self::Deferred(kind) => (
                 "deferred",
                 Vec::new(),

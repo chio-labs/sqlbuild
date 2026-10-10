@@ -16,21 +16,31 @@ use crate::lineage::main::parser_dialect::parser_dialect;
 use crate::lineage::models::{
     FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageDeferral,
 };
+use crate::semantic_validation::_helpers::catalog::new_analysis_pool;
 use crate::semantic_validation::models::ProjectCatalog;
 
-/// One outcome per model, in request order, run on the compile's deep-stack analysis pool.
+/// One outcome per model, in request order, run on the compile's deep-stack analysis pool, or
+/// on a fresh one for a project restored without its catalog.
 pub fn build_fast_lineage(
     request: &FastLineageRequest,
-    catalog: &ProjectCatalog,
+    catalog: Option<&ProjectCatalog>,
 ) -> Result<Vec<FastLineageOutcome>, String> {
-    let pool: Arc<ThreadPool> = catalog.analysis_pool()?;
+    let pool: Arc<ThreadPool> = match catalog {
+        Some(catalog) => catalog.analysis_pool()?,
+        None => Arc::new(new_analysis_pool()?),
+    };
     Ok(pool.install(|| model_outcomes(request)))
 }
 
 /// A parser panic defers only its own model.
 fn model_outcomes(request: &FastLineageRequest) -> Vec<FastLineageOutcome> {
     let schema = schema_mapping(&request.schema);
-    let dialect = parser_dialect(request.dialect.as_deref());
+    let name: &str = request
+        .dialect
+        .as_deref()
+        .filter(|name| !name.is_empty())
+        .unwrap_or("generic");
+    let dialect = parser_dialect(Some(name)).ok_or(name);
     let options: Result<ParseOptions, serde_json::Error> = proxy_parse_options();
     request
         .models
