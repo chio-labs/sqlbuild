@@ -276,6 +276,24 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             expected_enabled=True,
         ),
         NativeStageTierTestCase(
+            description="python_rich_lineage",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.RICH_LINEAGE,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_rich_lineage",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.RICH_LINEAGE,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_rich_lineage",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.RICH_LINEAGE,
+            expected_enabled=True,
+        ),
+        NativeStageTierTestCase(
             description="python_sql_test_glue",
             engine=CompilerEngine.PYTHON,
             stage=NativeStage.SQL_TEST_GLUE,
@@ -347,6 +365,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.SEMANTIC_CHECKS,
                     NativeStage.CONTRACTS,
                     NativeStage.LINEAGE_FACTS,
+                    NativeStage.RICH_LINEAGE,
                     NativeStage.SQL_TEST_GLUE,
                     NativeStage.PROJECT_ASSEMBLY,
                 }

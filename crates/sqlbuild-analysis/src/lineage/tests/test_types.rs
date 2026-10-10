@@ -32,3 +32,14 @@ pub(crate) struct DeepUnionTestCase {
     pub(crate) expected_lines: &'static [&'static str],
     pub(crate) expected_detail: Option<&'static str>,
 }
+
+pub(crate) struct RichLineageTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_status: &'static str,
+    /// One `output transform confidence nullability [type:resource.column ...]` line per column.
+    pub(crate) expected_lines: &'static [&'static str],
+    pub(crate) expected_has_star: bool,
+    pub(crate) expected_detail: Option<&'static str>,
+}
