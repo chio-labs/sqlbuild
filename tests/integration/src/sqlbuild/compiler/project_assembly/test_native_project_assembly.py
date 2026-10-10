@@ -13,12 +13,14 @@ import pytest
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
 from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import (
     AssemblyDeferralTestCase,
     DeferredAssemblyTestCase,
     GeneratedAssemblyParityTestCase,
+    GraphFactsTestCase,
     OptOutTestCase,
     WindowsEnvironmentTestCase,
 )
@@ -31,6 +33,7 @@ from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
     generated_assembly_files,
     project_inputs,
     python_resource_calls,
+    record_assembly_requests,
     recorded_assembly,
     rejected_opt_outs,
     seed_yml,
@@ -335,3 +338,66 @@ def test_given_sql_analysis_opt_outs_when_attaching_natively_then_python_rejecti
     assert python == (test_case.expected_rejected, test_case.expected_python_validations)
     assert native == (test_case.expected_rejected, 0)
     assert assembly_deferrals(record_dir) == Counter()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        GraphFactsTestCase(
+            description="tagged models in folders, tagged seeds and both function kinds",
+            files={
+                "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+                "models/staging/orders.sql": (
+                    "MODEL (description 'Orders.', tags [daily, finance]);\n\nSELECT 1 AS id\n"
+                ),
+                "models/customers.sql": (
+                    "MODEL (description 'Customers.');\n\nSELECT id FROM __ref(\"orders\")\n"
+                ),
+                "seeds/regions.yml": (
+                    "seeds:\n  - name: regions\n    description: Regions.\n"
+                    "    tags: [lookup]\n    columns:\n      - name: n\n        type: INTEGER\n"
+                ),
+                "seeds/regions.csv": "n\n1\n",
+                "functions/sql/is_big.sql": (
+                    "FUNCTION (description 'Big.', arguments (x INTEGER), returns BOOLEAN,"
+                    " tags [math]);\n\nx > 100\n"
+                ),
+                "functions/sql/order_ids.sql": (
+                    "FUNCTION (description 'Ids.', arguments (x INTEGER),"
+                    ' returns table (id INTEGER));\n\nSELECT id FROM __ref("orders")\n'
+                ),
+            },
+            expected_model_tags=([], ["daily", "finance"]),
+            expected_seeds=[("regions", ["lookup"])],
+            expected_function_kinds=("udf", "table_fn"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_when_assembling_natively_then_request_carries_graph_facts(
+    test_case: GraphFactsTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requests: list[ProjectRequestRow] = record_assembly_requests(monkeypatch=monkeypatch)
+    project: CompiledProject = assemble_with(
+        inputs=project_inputs(project_dir=tmp_path / "project", files=test_case.files),
+        engine=CompilerEngine.NATIVE,
+        monkeypatch=monkeypatch,
+    )
+    request: ProjectRequestRow = requests[0]
+
+    assert (
+        [(name, directory, tags) for name, directory, tags, _, _ in request[5]],
+        [(name, tags) for name, tags, _, _ in request[7]],
+        [(kind, name, tags) for kind, name, tags, _ in request[8]],
+    ) == (
+        [
+            (model.key.name, str(model.relative_path.parent)) + (tags,)
+            for model, tags in zip(project.models, test_case.expected_model_tags, strict=True)
+        ],
+        test_case.expected_seeds,
+        [
+            (str(function.key.resource_type), function.key.name, list(function.tags))
+            for function in project.functions
+        ],
+    )
+    assert [kind for kind, _, _, _ in request[8]] == list(test_case.expected_function_kinds)

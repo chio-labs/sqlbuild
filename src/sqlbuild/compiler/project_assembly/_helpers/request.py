@@ -25,6 +25,7 @@ from sqlbuild.compiler.project_assembly.types import (
     SyntaxCheckRow,
     VariableRow,
 )
+from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.spec.contracts.models import DefaultsConfig, TargetConfig
 
 
@@ -57,7 +58,13 @@ def project_request(
         [_variable_row(name=name, value=value) for name, value in inputs.effective_vars.items()],
         _environment_rows((*target_values, *default_values, *seed_values)),
         [
-            (_reference_rows(model_input.references), _syntax_check_rows(checks))
+            (
+                model_input.model_file.file_path.stem,
+                str(model_input.model_file.relative_path.parent),
+                _tag_rows(model_input.config.values.get("tags")),
+                _reference_rows(model_input.references),
+                _syntax_check_rows(checks),
+            )
             for model_input, checks in zip(inputs.model_inputs, syntax_checks, strict=True)
         ],
         [
@@ -72,13 +79,19 @@ def project_request(
         [
             (
                 seed_input.schema_entry.name,
+                list(seed_input.schema_entry.tags),
                 seed_input.schema_entry.database,
                 seed_input.schema_entry.schema,
             )
             for seed_input in inputs.seed_inputs
         ],
         [
-            _reference_rows(function_input.references)
+            (
+                function_node_type(return_columns=function_input.return_columns),
+                function_input.name,
+                list(function_input.tags),
+                _reference_rows(function_input.references),
+            )
             for function_input in inputs.sql_function_inputs
         ],
         [
@@ -90,6 +103,14 @@ def project_request(
             for audit_input in inputs.audit_inputs
         ],
     )
+
+
+def _tag_rows(value: object) -> list[str]:
+    """Model config tags as the project graph indexes them."""
+
+    if isinstance(value, list | tuple):
+        return [str(item) for item in value]
+    return []
 
 
 def _environment_rows(values: Iterable[str | None]) -> list[tuple[str, str | None]]:

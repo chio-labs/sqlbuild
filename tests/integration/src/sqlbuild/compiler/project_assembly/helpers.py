@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly import project as project_module
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
@@ -27,6 +28,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
+from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import deferral_kinds
 
@@ -275,6 +277,20 @@ def python_resource_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
         for name in _PYTHON_RESOURCE_FUNCTIONS
     ]
     return calls
+
+
+def record_assembly_requests(*, monkeypatch: pytest.MonkeyPatch) -> list[ProjectRequestRow]:
+    """Record every request the native project assembly receives."""
+
+    requests: list[ProjectRequestRow] = []
+    original: Callable[..., Any] = _native.assemble_project_resource_facts
+
+    def recording(request: ProjectRequestRow) -> Any:
+        requests.append(request)
+        return original(request)
+
+    monkeypatch.setattr(_native, "assemble_project_resource_facts", recording)
+    return requests
 
 
 def _write(*, path: Path, contents: str) -> int:
