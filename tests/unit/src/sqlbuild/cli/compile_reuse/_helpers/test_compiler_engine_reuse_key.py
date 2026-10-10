@@ -9,7 +9,7 @@ import pytest
 from sqlbuild.cli.compile_reuse._helpers.attempt import attempt_reuse
 from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.unit.src.sqlbuild.cli.compile_reuse._helpers._test_types import (
     EngineReuseDigestTestCase,
     EngineReuseStoreTestCase,
@@ -48,22 +48,16 @@ from tests.unit.src.sqlbuild.cli.compile_reuse._helpers.helpers import (
             second_environment={COMPILER_ENGINE_ENV_VAR: "native"},
             expected_same_digest=True,
         ),
-        EngineReuseDigestTestCase(
-            description="stage_capture_directory_is_not_a_compile_input",
-            first_environment={},
-            second_environment={STAGE_CAPTURE_DIR_ENV_VAR: "/tmp/captures"},
-            expected_same_digest=True,
-        ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_same_invocation_when_engine_environment_changes_then_reuse_key_follows_engine(
     test_case: EngineReuseDigestTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    first: tuple[str, str] = engine_reuse_key(
+    first: bytes = engine_reuse_key(
         environment=test_case.first_environment, project_dir=tmp_path, monkeypatch=monkeypatch
     )
-    second: tuple[str, str] = engine_reuse_key(
+    second: bytes = engine_reuse_key(
         environment=test_case.second_environment, project_dir=tmp_path, monkeypatch=monkeypatch
     )
 
@@ -76,12 +70,12 @@ def test_given_same_invocation_when_engine_environment_changes_then_reuse_key_fo
         EngineReuseStoreTestCase(
             description="python",
             engine="python",
-            expected_entry_directory="target/cache/compiler/project-reuse-v1",
+            expected_entry_directory="target/cache/compiler/project-reuse-v2",
         ),
         EngineReuseStoreTestCase(
             description="native",
             engine="native",
-            expected_entry_directory="target/cache/compiler-native-v1/project-reuse-v1",
+            expected_entry_directory="target/cache/compiler-native-v1/project-reuse-v2",
         ),
     ],
     ids=lambda case: case.description,

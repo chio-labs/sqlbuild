@@ -230,12 +230,9 @@ fn recorded_artifact(artifact: ArtifactRow) -> RecordedArtifact {
     }
 }
 
-/// Check the stored compile for this invocation, or `None` when Python must check it.
+/// Check the stored compile for this invocation, replaying it on a hit.
 #[pyfunction]
-fn check_compile_reuse(
-    py: Python<'_>,
-    check: ReuseCheckPy,
-) -> PyResult<Option<NativeReuseAttempt>> {
+fn check_compile_reuse(py: Python<'_>, check: ReuseCheckPy) -> PyResult<NativeReuseAttempt> {
     compiler_guard(|| {
         let rules: ReuseRules = check.rules.into();
         let request: ReuseCheck<'_> = ReuseCheck {
@@ -250,11 +247,10 @@ fn check_compile_reuse(
             json_output: check.json_output,
             rules: &rules,
         };
-        Ok(py
-            .detach(|| check_reuse(request))
-            .map(|attempt| NativeReuseAttempt {
-                attempt: Mutex::new(attempt),
-            }))
+        let attempt: ReuseAttempt = py.detach(|| check_reuse(request));
+        Ok(NativeReuseAttempt {
+            attempt: Mutex::new(attempt),
+        })
     })
 }
 

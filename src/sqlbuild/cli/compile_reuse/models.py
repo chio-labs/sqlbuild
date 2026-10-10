@@ -1,4 +1,4 @@
-"""Compile reuse requests, stored compile results, and per-invocation reuse state."""
+"""Compile reuse requests, provider settings inputs, and per-invocation reuse state."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlbuild._native import NativeReuseAttempt
-from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome, FileStamp
+from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome
 
 
 @dataclass(frozen=True)
@@ -59,60 +59,6 @@ class RecordedArtifact:
 
 
 @dataclass(frozen=True)
-class StoredProjectFile:
-    """One project path recorded before the stored compile ran."""
-
-    stamp: FileStamp
-    digest: str | None
-    racy: bool
-
-
-@dataclass(frozen=True)
-class StoredCompileInputs:
-    """Every compile input identity recorded with one stored compile result."""
-
-    invocation_digest: str
-    runtime: dict[str, str]
-    environment_names: tuple[str, ...]
-    environment_digest: str
-    search_path: tuple[tuple[str, int], ...]
-    modules: tuple[tuple[str, int, int], ...]
-    project_files: dict[str, StoredProjectFile]
-    target_files: dict[str, FileStamp]
-    target_tree: bool
-    settings_inputs: tuple[SettingsEnvironmentInputs, ...]
-    settings_digest: str
-
-
-@dataclass(frozen=True)
-class StoredCompileOutput:
-    """The command output of one stored compile, in emission order."""
-
-    stderr_lines: tuple[str, ...]
-    exit_code: int
-    timings_span: tuple[int, int] | None
-    stdout_length: int
-    stdout_checksum: int
-    stdout_file: str
-
-
-@dataclass(frozen=True)
-class StoredCompileHeader:
-    """Inputs and output description read without loading the stored stdout."""
-
-    inputs: StoredCompileInputs
-    output: StoredCompileOutput
-
-
-@dataclass(frozen=True)
-class ProjectFilesComparison:
-    """Whether project files are unchanged, with digests verified while comparing."""
-
-    unchanged: bool
-    verified: dict[str, str]
-
-
-@dataclass(frozen=True)
 class CompileReuseAttempt:
     """Result of checking for a reusable compile, carried into a full compile on a miss."""
 
@@ -122,12 +68,5 @@ class CompileReuseAttempt:
     check_ms: int = 0
     exit_code: int | None = None
     entry_path: Path | None = None
-    invocation_digest: str = ""
-    runtime: dict[str, str] = field(default_factory=dict)
-    search_path: tuple[tuple[str, int], ...] = ()
-    snapshot: dict[str, FileStamp] = field(default_factory=dict)
-    snapshot_ns: int = 0
-    digests: dict[str, str] = field(default_factory=dict)
-    restamped: frozenset[str] = frozenset()
     native: NativeReuseAttempt | None = field(default=None, compare=False, repr=False)
     """The natively checked attempt, recorded natively after a miss."""

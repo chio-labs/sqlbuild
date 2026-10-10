@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 use crate::constants::NATIVE_BUILD_IDENTITY;
-use crate::engine::main::evaluate::evaluate_json;
+use crate::engine::_helpers::evaluation::evaluate_json;
 use crate::engine::tests::helpers;
 use crate::engine::tests::test_types;
 use crate::rules::_helpers::evaluation::normalize_rules_sql;

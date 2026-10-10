@@ -39,7 +39,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
@@ -259,10 +258,8 @@ def format_compile_error_json(
 
 
 def _native_json_report(result: dict[str, object]) -> str | None:
-    """Emit the report natively when the preview stage is on and every value is encodable."""
+    """Emit the report natively; `None` for lone surrogates or non-JSON objects it defers."""
 
-    if not native_stage_enabled(NativeStage.COMPILE_OUTPUTS):
-        return None
     emitted: str | None = _native.emit_json_report(result)
     if emitted is None:
         report_native_fallback(site=NativeFallbackSite.COMPILE_JSON_REPORT)

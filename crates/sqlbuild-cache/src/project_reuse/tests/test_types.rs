@@ -21,3 +21,10 @@ pub(crate) struct TimingsSpanTestCase {
     pub(crate) stdout: &'static str,
     pub(crate) expected_replayed: Option<&'static str>,
 }
+
+/// A project file name and whether the walk keeps its exact bytes.
+pub(crate) struct NonUnicodeNameTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) name: &'static [u8],
+    pub(crate) expected_escaped: bool,
+}

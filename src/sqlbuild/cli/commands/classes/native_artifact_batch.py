@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import sqlbuild._native as _native
@@ -9,6 +10,8 @@ from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
+
+_POSIX_LINE_SEPARATOR: str = "\n"
 
 
 class NativeArtifactBatch:
@@ -19,8 +22,10 @@ class NativeArtifactBatch:
         self._files: list[tuple[Path, bytes]] = []
 
     def queue(self, *, path: Path, contents: bytes) -> None:
-        """Queue one artifact, noting the bytes it will hold for compile reuse."""
+        """Queue one artifact with platform line endings, noting its bytes for compile reuse."""
 
+        if os.linesep != _POSIX_LINE_SEPARATOR:
+            contents = contents.replace(b"\n", os.linesep.encode())
         COMPILE_ARTIFACT_WRITES.written(path=path, contents=contents)
         self._files.append((path, contents))
 

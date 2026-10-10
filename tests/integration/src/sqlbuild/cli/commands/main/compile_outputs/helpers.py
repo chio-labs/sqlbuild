@@ -16,19 +16,14 @@ from sqlbuild.cli.commands._helpers.compile import target_writer as target_write
 from sqlbuild.cli.commands.classes import native_artifact_batch as artifact_batch_module
 from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.cli.compile_reuse._helpers import attempt as attempt_module
 from sqlbuild.cli.compile_reuse._helpers import native_reuse as native_reuse_module
-from sqlbuild.cli.compile_reuse._helpers import project_files as project_files_module
-from sqlbuild.cli.compile_reuse._helpers import store as store_module
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import runtime_identity
 from sqlbuild.cli.compile_reuse.constants import (
     NATIVE_REUSE_DIRECTORY_NAME,
     NATIVE_REUSE_SUFFIX,
     REUSE_DISABLE_ENV_VAR,
-    REUSE_ENTRY_DIRECTORY_NAME,
-    REUSE_ENTRY_SUFFIX,
 )
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.frontier.types import NativeStage
 
@@ -54,6 +49,7 @@ TOUCH_BACK_NS: int = 3_600_000_000_000
 BLOCKED_ARTIFACT: str = "target/compiled/models/orders_north.sql"
 HELPER_MODULE_DIRECTORY: str = "site_packages"
 HELPER_MODULE: str = "orders_reuse_helper"
+TRACKED_VARIABLE: str = "SQLBUILD_ORDERS_REGION"
 
 type CompileOutcome = tuple[int, dict[str, Any], dict[str, bytes]]
 
@@ -76,7 +72,6 @@ def record_output_work(
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, reuse_disabled)
     monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
-    monkeypatch.setattr(project_files_module, "RACY_WINDOW_NS", 0)
     monkeypatch.setattr(native_reuse_module, "RACY_WINDOW_NS", 0)
 
     def counted(*, stage: NativeStage, kind: str, units: int = 1) -> None:
@@ -143,14 +138,12 @@ def reuse_against_uncached(
 
 
 def stored_compile_files(*, project_dir: Path) -> list[Path]:
-    """Every stored compile slot of either engine."""
+    """Every stored compile slot."""
 
-    cache_directory: Path = compiler_cache_directory(project_dir)
     return sorted(
-        [
-            *(cache_directory / REUSE_ENTRY_DIRECTORY_NAME).glob(f"*{REUSE_ENTRY_SUFFIX}"),
-            *(cache_directory / NATIVE_REUSE_DIRECTORY_NAME).glob(f"*{NATIVE_REUSE_SUFFIX}"),
-        ]
+        (compiler_cache_directory(project_dir) / NATIVE_REUSE_DIRECTORY_NAME).glob(
+            f"*{NATIVE_REUSE_SUFFIX}"
+        )
     )
 
 
@@ -179,7 +172,6 @@ def change_runtime(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def changed() -> dict[str, str]:
         return {**runtime_identity(), "python": "3.0.0 (simulated)"}
 
-    monkeypatch.setattr(attempt_module, "runtime_identity", changed)
     monkeypatch.setattr(native_reuse_module, "runtime_identity", changed)
 
 
@@ -198,8 +190,20 @@ def edit_then_fail_store(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> 
         raise RuntimeError("settings went away")
 
     _edit(project_dir=project_dir)
-    monkeypatch.setattr(store_module, "provider_settings_inputs", raise_error)
     monkeypatch.setattr(native_reuse_module, "provider_settings_inputs", raise_error)
+
+
+def set_tracked_variable(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set a SQLBuild environment variable no template reads."""
+
+    del project_dir
+    monkeypatch.setenv(TRACKED_VARIABLE, "north")
+
+
+def set_untracked_variable(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point stage captures somewhere; capture settings are not compile inputs."""
+
+    monkeypatch.setenv(STAGE_CAPTURE_DIR_ENV_VAR, str(project_dir.parent / "captures"))
 
 
 def block_stored_compiles(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:

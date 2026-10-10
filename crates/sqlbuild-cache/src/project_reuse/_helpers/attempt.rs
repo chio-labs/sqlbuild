@@ -23,6 +23,7 @@ use crate::project_reuse::models::{
     SettingsInputs, StoredInputs, StoredOutput,
 };
 use crate::project_snapshot::main::snapshot_project_files::snapshot_project_files;
+use crate::project_snapshot::main::text_path::text_path;
 use crate::project_snapshot::models::PathStamp;
 
 fn now_ns() -> i64 {
@@ -45,12 +46,11 @@ fn bypassed(check: &ReuseCheck<'_>) -> bool {
             .any(|name| check.project_dir.join(name).is_file())
 }
 
-fn snapshot(project_dir: &Path, rules: &ReuseRules) -> Option<Vec<PathStamp>> {
+fn snapshot(project_dir: &Path, rules: &ReuseRules) -> Vec<PathStamp> {
     snapshot_project_files(project_dir, &rules.snapshot)
 }
 
-/// The attempt, or `None` when the project cannot be walked natively and Python must check.
-pub(crate) fn check(check: ReuseCheck<'_>) -> Option<ReuseAttempt> {
+pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
     let rules: &ReuseRules = check.rules;
     let mut attempt: ReuseAttempt = ReuseAttempt {
         outcome: ReuseOutcome::Bypass,
@@ -67,13 +67,13 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> Option<ReuseAttempt> {
         digested_files: 0,
     };
     if bypassed(&check) {
-        return Some(attempt);
+        return attempt;
     }
     attempt.outcome = ReuseOutcome::Miss;
     attempt.snapshot_ns = now_ns();
     attempt.search_path =
         search_path_stamps(&check.identity.search_path, &check.project_dir, rules);
-    attempt.snapshot = snapshot(&check.project_dir, rules)?;
+    attempt.snapshot = snapshot(&check.project_dir, rules);
     if let Some((inputs, output)) = read_entry(&check.store_path) {
         let comparison: Comparison = checked(&attempt, &inputs, rules);
         attempt.digested_files += comparison.digested_files;
@@ -81,7 +81,7 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> Option<ReuseAttempt> {
         if comparison.unchanged {
             if check.json_output && output.timings_span.is_none() {
                 attempt.replay_failed = true;
-                return Some(attempt);
+                return attempt;
             }
             attempt.outcome = ReuseOutcome::Hit;
             if needs_refresh(&inputs.project_files, &attempt.snapshot) {
@@ -97,14 +97,14 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> Option<ReuseAttempt> {
                 rewrite_inputs(&check.store_path, &refreshed);
             }
             attempt.replay = Some(output);
-            return Some(attempt);
+            return attempt;
         }
         attempt.restamped = restamped_paths(&inputs.project_files, &attempt.snapshot);
     }
     let known: usize = attempt.digests.len();
     attempt.digests = with_missing_digests(&attempt, &HashSet::new(), rules.racy_window_ns);
     attempt.digested_files += attempt.digests.len() - known;
-    Some(attempt)
+    attempt
 }
 
 /// Whether a stored compile still matches, with the digests still valid either way.
@@ -189,8 +189,7 @@ fn store(
     let digests: HashMap<String, String> =
         with_missing_digests(attempt, &attempt.restamped, rules.racy_window_ns);
     let digested_files: usize = digests.len() - attempt.digests.len();
-    let unchanged_project: bool = snapshot(project_dir, rules)
-        .is_some_and(|current| same_snapshot(&current, &attempt.snapshot));
+    let unchanged_project: bool = same_snapshot(&snapshot(project_dir, rules), &attempt.snapshot);
     let target_files: Option<Vec<PathStamp>> = if unchanged_project {
         verified_target_files(project_dir, record, attempt.snapshot_ns, rules)
     } else {
@@ -262,7 +261,7 @@ fn stored_inputs(
         .map(|stamp| {
             attempt
                 .project_dir
-                .join(&stamp.relative_path)
+                .join(text_path(&stamp.relative_path))
                 .to_string_lossy()
                 .into_owned()
         })

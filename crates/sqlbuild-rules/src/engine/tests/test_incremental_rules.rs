@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
-use crate::engine::main::parse_parts::parse_parts;
+use crate::engine::_helpers::evaluation::parse_parts;
 use crate::engine::tests::helpers::{
     cached_paths, evaluate_split, evaluate_whole, orders_models, split_request, uncached,
     write_model_files,

@@ -2,9 +2,10 @@
 
 use std::collections::HashSet;
 use std::fs::Metadata;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
+use crate::project_snapshot::_helpers::path_text::path_text;
+use crate::project_snapshot::_helpers::stat::{file_identity, stat_times};
 use crate::project_snapshot::models::{PathStamp, SnapshotRules};
 
 const FILE: &str = "f";
@@ -14,10 +15,9 @@ const DIRECTORY_LINK: &str = "dl";
 const BROKEN_LINK: &str = "bl";
 const SPECIAL: &str = "s";
 const PRESENCE: &str = "p";
-const NANOS: i64 = 1_000_000_000;
 
-/// Every stamped path in walk order, or `None` when a name is not UTF-8 and Python must walk.
-pub(crate) fn snapshot(project_dir: &Path, rules: &SnapshotRules) -> Option<Vec<PathStamp>> {
+/// Every stamped path in walk order; names that are not UTF-8 keep their exact bytes escaped.
+pub(crate) fn snapshot(project_dir: &Path, rules: &SnapshotRules) -> Vec<PathStamp> {
     let mut stamps: Vec<PathStamp> = Vec::new();
     let mut visited: HashSet<PathBuf> = HashSet::from([real_path(project_dir)]);
     let mut pending: Vec<(PathBuf, bool)> = vec![(project_dir.to_path_buf(), true)];
@@ -28,12 +28,12 @@ pub(crate) fn snapshot(project_dir: &Path, rules: &SnapshotRules) -> Option<Vec<
         for entry in entries.flatten() {
             let path: PathBuf = entry.path();
             let file_name = entry.file_name();
-            let name: &str = file_name.to_str()?;
-            let relative_path: String = match path.strip_prefix(project_dir) {
-                Ok(relative) => relative.to_str()?.to_owned(),
-                Err(_) => return None,
+            let name: String = path_text(&file_name);
+            let Ok(relative) = path.strip_prefix(project_dir) else {
+                continue;
             };
-            let Some(stamp) = entry_stamp(&path, name, is_root, rules)? else {
+            let relative_path: String = path_text(relative.as_os_str());
+            let Some(stamp) = entry_stamp(&path, &name, is_root, rules) else {
                 continue;
             };
             if stamp.kind == DIRECTORY
@@ -47,65 +47,52 @@ pub(crate) fn snapshot(project_dir: &Path, rules: &SnapshotRules) -> Option<Vec<
             });
         }
     }
-    Some(stamps)
+    stamps
 }
 
 fn real_path(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-/// `Some(None)` skips the entry; `None` defers the whole walk to Python.
-fn entry_stamp(
-    path: &Path,
-    name: &str,
-    is_root: bool,
-    rules: &SnapshotRules,
-) -> Option<Option<PathStamp>> {
+/// The entry's stamp, or `None` to skip it.
+fn entry_stamp(path: &Path, name: &str, is_root: bool, rules: &SnapshotRules) -> Option<PathStamp> {
     let Ok(metadata) = std::fs::symlink_metadata(path) else {
-        return Some(None);
+        return None;
     };
     if metadata.file_type().is_symlink() {
         return link_stamp(path, name, is_root, rules);
     }
     if metadata.is_dir() {
-        return Some((!excluded(name, is_root, rules)).then(|| marker(DIRECTORY, None)));
+        return (!excluded(name, is_root, rules)).then(|| marker(DIRECTORY, None));
     }
     if rules
         .presence_suffixes
         .iter()
         .any(|suffix| name.ends_with(suffix.as_str()))
     {
-        return Some(Some(marker(PRESENCE, None)));
+        return Some(marker(PRESENCE, None));
     }
-    if rules
-        .output_files
-        .contains(&(metadata.dev(), metadata.ino()))
-    {
-        return Some(Some(marker(PRESENCE, None)));
+    if file_identity(&metadata).is_some_and(|identity| rules.output_files.contains(&identity)) {
+        return Some(marker(PRESENCE, None));
     }
-    Some(Some(file_stamp(&metadata, None)))
+    Some(file_stamp(&metadata, None))
 }
 
-fn link_stamp(
-    path: &Path,
-    name: &str,
-    is_root: bool,
-    rules: &SnapshotRules,
-) -> Option<Option<PathStamp>> {
+fn link_stamp(path: &Path, name: &str, is_root: bool, rules: &SnapshotRules) -> Option<PathStamp> {
     let Ok(target) = std::fs::read_link(path) else {
-        return Some(None);
+        return None;
     };
-    let link: String = target.to_str()?.to_owned();
+    let link: String = path_text(target.as_os_str());
     let Ok(metadata) = std::fs::metadata(path) else {
-        return Some(Some(marker(BROKEN_LINK, Some(link))));
+        return Some(marker(BROKEN_LINK, Some(link)));
     };
     if !metadata.is_dir() {
-        return Some(Some(file_stamp(&metadata, Some(link))));
+        return Some(file_stamp(&metadata, Some(link)));
     }
     if excluded(name, is_root, rules) {
-        return Some(None);
+        return None;
     }
-    Some(Some(marker(DIRECTORY_LINK, Some(link))))
+    Some(marker(DIRECTORY_LINK, Some(link)))
 }
 
 fn excluded(name: &str, is_root: bool, rules: &SnapshotRules) -> bool {
@@ -131,13 +118,14 @@ fn file_stamp(metadata: &Metadata, link: Option<String>) -> PathStamp {
         (true, true) => FILE_LINK,
         (false, _) => SPECIAL,
     };
+    let (mtime_ns, ctime_ns) = stat_times(metadata);
     PathStamp {
         relative_path: String::new(),
         kind,
-        size: metadata.size(),
-        mtime_ns: metadata.mtime() * NANOS + metadata.mtime_nsec(),
-        ctime_ns: metadata.ctime() * NANOS + metadata.ctime_nsec(),
-        inode: metadata.ino(),
+        size: metadata.len(),
+        mtime_ns,
+        ctime_ns,
+        inode: file_identity(metadata).map_or(0, |(_, inode)| inode),
         link,
     }
 }

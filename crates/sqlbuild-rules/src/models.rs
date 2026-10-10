@@ -771,16 +771,6 @@ impl Default for EvaluateRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct FinalizeFindingsRequest {
-    pub version: u32,
-    pub project_dir: String,
-    pub config: RulesConfig,
-    pub evaluated_codes: Vec<String>,
-    pub findings: Vec<Fault>,
-}
-
 #[derive(Debug, Serialize)]
 pub(crate) struct EvaluateResponse {
     pub version: u32,

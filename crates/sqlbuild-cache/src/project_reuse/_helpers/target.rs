@@ -5,32 +5,15 @@ use std::path::{Path, PathBuf};
 
 use crate::project_reuse::_helpers::files::file_digest;
 use crate::project_reuse::models::{CompileRecord, RecordedArtifact, ReuseRules};
+use crate::project_snapshot::main::stamp_path::stamp_path;
 use crate::project_snapshot::models::PathStamp;
 
 type Stamps = BTreeMap<String, PathStamp>;
 
-#[cfg(unix)]
 fn path_stamp(path: &str) -> Option<PathStamp> {
-    use std::os::unix::fs::MetadataExt;
-    let metadata: std::fs::Metadata = match std::fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(_) => return None,
-    };
-    Some(PathStamp {
-        relative_path: path.to_owned(),
-        kind: "f",
-        size: metadata.size(),
-        mtime_ns: metadata.mtime() * 1_000_000_000 + metadata.mtime_nsec(),
-        ctime_ns: metadata.ctime() * 1_000_000_000 + metadata.ctime_nsec(),
-        inode: metadata.ino(),
-        link: None,
-    })
-}
-
-#[cfg(not(unix))]
-fn path_stamp(path: &str) -> Option<PathStamp> {
-    let _ = path;
-    None
+    let mut stamp: PathStamp = stamp_path(Path::new(path))?;
+    path.clone_into(&mut stamp.relative_path);
+    Some(stamp)
 }
 
 fn compiled_root(project_dir: &Path, rules: &ReuseRules) -> PathBuf {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 from dataclasses import replace
 from functools import partial
@@ -23,13 +22,13 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
     write_static_compile_target,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.classes.native_artifact_batch import NativeArtifactBatch
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileWriteResult,
 )
-from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.cli.output.models import (
     WrittenTarget,
@@ -323,16 +322,14 @@ def write_compile_dag_artifact(
         project_dir=project_dir,
         dag_path=dag_path,
     )
-    resolved_dag_path.parent.mkdir(parents=True, exist_ok=True)
     dag_json: str = build_dag_json(
         graph=analysis.graph,
         project_name=analysis.discovered_inputs.project_config.name,
         python_graph=python_graph,
     )
-    _ = resolved_dag_path.write_text(dag_json, encoding="utf-8")
-    COMPILE_ARTIFACT_WRITES.written(
-        path=resolved_dag_path, contents=dag_json.replace("\n", os.linesep).encode("utf-8")
-    )
+    dag_batch: NativeArtifactBatch = NativeArtifactBatch(check_existing=False)
+    dag_batch.queue(path=resolved_dag_path, contents=dag_json.encode("utf-8"))
+    dag_batch.flush()
     _ = complete_compile_phase(
         status=status, message=f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)"
     )

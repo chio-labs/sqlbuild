@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.discovery.models import ConstantDeclaration
-from sqlbuild.rule_engine._helpers.engine.native import (
-    _constant_payload,  # noqa: FFL102 - verifies the native protocol payload boundary
+from sqlbuild.rule_engine._helpers.run.native_rows import (
+    _constant_row,  # noqa: FFL102 - verifies the native protocol row boundary
 )
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
@@ -25,7 +25,7 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     ],
     ids=lambda case: case.description,
 )
-def test_given_typed_constant_when_building_native_payload_then_value_and_type_are_preserved(
+def test_given_typed_constant_when_building_native_row_then_value_and_type_are_preserved(
     test_case: TypedConstantPayloadTestCase,
 ) -> None:
     declaration: ConstantDeclaration = ConstantDeclaration(
@@ -34,11 +34,12 @@ def test_given_typed_constant_when_building_native_payload_then_value_and_type_a
         relative_path=Path("constants/rules.sql"),
     )
 
-    payload: dict[str, object] = _constant_payload(declaration)
+    _, _, members, value, value_type, render_as = _constant_row(declaration)
 
-    assert payload["value"] == test_case.expected_value
-    assert payload["value_type"] == test_case.expected_type
-    assert payload["render_as"] is None
+    assert members == []
+    assert value == test_case.expected_value
+    assert value_type == test_case.expected_type
+    assert render_as is None
 
 
 if __name__ == "__main__":

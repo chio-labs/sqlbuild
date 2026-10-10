@@ -3,18 +3,9 @@ from collections.abc import Callable
 import pytest
 
 from sqlbuild._native import NativeRulesRequest
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine._helpers.run import native_rows
 from sqlbuild.rule_engine.models import NativeRulesEvaluation
-
-PREVIEW_ENGINE: str = "native-preview"
-
-
-def use_preview_engine(*, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Select the engine that builds the built-in rules request natively."""
-
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, PREVIEW_ENGINE)
 
 
 def record_custom_starts(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
