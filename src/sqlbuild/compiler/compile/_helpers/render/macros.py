@@ -6,7 +6,6 @@ import ast
 import hashlib
 import heapq
 import inspect
-import re
 import sys
 import threading
 from collections.abc import Callable, Iterator, Mapping
@@ -14,7 +13,7 @@ from contextvars import Token
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import cast
+from typing import NoReturn, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
@@ -29,8 +28,6 @@ from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansi
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
     MACRO_CONTEXT_PARAMETER_NAME,
-    SQL_OPEN_PAREN_TOKEN,
-    SQL_QUOTE_TOKENS,
 )
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
@@ -62,7 +59,9 @@ from sqlbuild.compiler.macro_bridge.constants import (
     GENERATED_SQL_EVENT,
     MACRO_USE_EVENT,
 )
+from sqlbuild.compiler.macro_bridge.main._scan_macro_calls import scan_macro_calls
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
+from sqlbuild.compiler.macro_bridge.models import MacroCallScan, MacroCallSite, MacroScanFailure
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -74,25 +73,11 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind, UsageKind
-from sqlbuild.compiler.sql_analysis.main._find_matching_paren import find_matching_paren
-from sqlbuild.compiler.sql_analysis.main._is_identifier_character import (
-    is_identifier_character as _is_identifier_continue,
-)
-from sqlbuild.compiler.sql_analysis.main._is_identifier_start import (
-    is_identifier_start as _is_identifier_start,
-)
-from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.python_nodes.models import RELATION_RENDERER, SqlResourceRef
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
-_CONTEXT: str = "Macro expansion"
-_LINE_COMMENT_TOKEN: str = "--"
-_BLOCK_COMMENT_TOKEN: str = "/*"
 _STAR_IMPORT_NAME: str = "*"
-_MACRO_SCAN_PATTERN: re.Pattern[str] = re.compile(r"@|--|/\*|'|\"|`|\$")
 _SYNTHETIC_PACKAGE_PREFIX: str = "_sqlbuild_project_macros_"
 _OBJECT_ENTRY_LENGTH: int = 2
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()
@@ -1288,23 +1273,37 @@ def _native_macro_call_names(*, sql: str, nested: bool) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _evaluate_macro_call(
+def raise_failed_macro_call(
     *,
-    sql: str,
-    call_start_index: int,
+    failure: MacroScanFailure,
     file_path: Path,
     state: MacroExpansionState,
     declarations: DeclarationResolutionContext | None,
-    stack: tuple[DeclarationIdentity, ...],
-    top_level: bool,
-) -> tuple[object, int]:
-    macro_name: str = _parse_macro_name(sql=sql, call_start_index=call_start_index)
+) -> NoReturn:
+    """Raise where Python's scan raises: the failing call's macro lookup error, else the scan's."""
+
+    if failure.call_name is not None:
+        _ = _resolved_macro(
+            macro_name=failure.call_name,
+            file_path=file_path,
+            state=state,
+            declarations=declarations,
+        )
+    raise CompileInputError(failure.message)
+
+
+def _resolved_macro(
+    *,
+    macro_name: str,
+    file_path: Path,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+) -> LoadedMacro:
     loaded_macro: LoadedMacro | None = (
         declarations.macros.get(macro_name)
         if declarations is not None
         else state.loaded_macros.get(macro_name)
     )
-    override_value: str | None = state.macro_overrides.get(macro_name)
     if declarations is not None and macro_name in declarations.inaccessible_macros:
         record: DeclarationRecord = declarations.inaccessible_macros[macro_name]
         suggestions: str = ", ".join(sorted(declarations.macros)) or "none"
@@ -1321,17 +1320,31 @@ def _evaluate_macro_call(
             f"Unknown macro '@{macro_name}' in '{file_path}'. Available macros: "
             f"{available_macro_names}"
         )
-    opening_paren_index: int = _skip_whitespace(
-        sql=sql, start_index=call_start_index + 1 + len(macro_name)
+    return loaded_macro
+
+
+def evaluate_macro_call(
+    *,
+    sql: str,
+    site: MacroCallSite,
+    file_path: Path,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    stack: tuple[DeclarationIdentity, ...],
+    top_level: bool,
+) -> object:
+    """Run one natively scanned call: its nested calls, then the macro, in Python's order."""
+
+    macro_name: str = site.name
+    loaded_macro: LoadedMacro = _resolved_macro(
+        macro_name=macro_name, file_path=file_path, state=state, declarations=declarations
     )
-    closing_paren_index: int = _find_matching_paren(
-        sql=sql, opening_paren_index=opening_paren_index
-    )
+    override_value: str | None = state.macro_overrides.get(macro_name)
     if override_value is not None:
         _validate_final_macro_sql(
             macro_name=macro_name, file_path=file_path, macro_result=override_value
         )
-        return override_value, closing_paren_index + 1
+        return override_value
     identity: DeclarationIdentity = (
         declarations.macro_records[macro_name].identity
         if declarations is not None
@@ -1353,7 +1366,7 @@ def _evaluate_macro_call(
         declarations=declarations,
         stack=stack,
     )
-    args_source: str = sql[opening_paren_index + 1 : closing_paren_index]
+    args_source: str = sql[site.args_start : site.end - 1]
     args: tuple[object, ...]
     kwargs: dict[str, object]
     _ = state.facts.open_call_site()
@@ -1367,7 +1380,7 @@ def _evaluate_macro_call(
             stack=stack,
         )
     except MacroArgumentError as error:
-        raise error.shifted(opening_paren_index + 1) from None
+        raise error.shifted(site.args_start) from None
     finally:
         approved: frozenset[SqlResourceRef] = state.facts.close_call_site()
     try:
@@ -1416,7 +1429,7 @@ def _evaluate_macro_call(
             file_path=file_path,
             state=state,
         )
-    return macro_result, closing_paren_index + 1
+    return macro_result
 
 
 def _record_macro_use(
@@ -1696,22 +1709,24 @@ def _parse_macro_arguments(
 ) -> tuple[tuple[object, ...], dict[str, object]]:
     if not args_source.strip():
         return (), {}
-    nested: list[tuple[int, int]] = []
-    nested_values: list[object] = []
-    cursor: int = 0
-    while (start := _find_next_macro_start(sql=args_source, start_index=cursor)) is not None:
-        nested_value: object
-        nested_value, cursor = _evaluate_macro_call(
+    scan: MacroCallScan = scan_macro_calls(sql=args_source)
+    nested: list[tuple[int, int]] = [(site.start, site.end) for site in scan.sites]
+    nested_values: list[object] = [
+        evaluate_macro_call(
             sql=args_source,
-            call_start_index=start,
+            site=site,
             file_path=file_path,
             state=state,
             declarations=declarations,
             stack=stack,
             top_level=False,
         )
-        nested.append((start, cursor))
-        nested_values.append(nested_value)
+        for site in scan.sites
+    ]
+    if scan.failure is not None:
+        raise_failed_macro_call(
+            failure=scan.failure, file_path=file_path, state=state, declarations=declarations
+        )
     parsed: ParsedMacroArguments = parse_macro_call_arguments(
         args_source=args_source,
         nested=tuple(nested),
@@ -1721,55 +1736,3 @@ def _parse_macro_arguments(
     )
     state.facts.record_call_site_refs(parsed.typed_references)
     return parsed.args, parsed.kwargs
-
-
-def _find_next_macro_start(*, sql: str, start_index: int) -> int | None:
-    index: int = start_index
-    while True:
-        match: re.Match[str] | None = _MACRO_SCAN_PATTERN.search(sql, index)
-        if match is None:
-            return None
-        index = match.start()
-        token: str = match.group()
-        if token in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if token == _LINE_COMMENT_TOKEN:
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if token == _BLOCK_COMMENT_TOKEN:
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if _is_macro_call_start(sql=sql, at_index=index):
-            return index
-        index += 1
-
-
-def _is_macro_call_start(*, sql: str, at_index: int) -> bool:
-    if at_index + 1 >= len(sql) or not _is_identifier_start(sql[at_index + 1]):
-        return False
-    cursor: int = at_index + 2
-    while cursor < len(sql) and _is_identifier_continue(sql[cursor]):
-        cursor += 1
-        cursor = _skip_whitespace(sql=sql, start_index=cursor)
-    return cursor < len(sql) and sql[cursor] == SQL_OPEN_PAREN_TOKEN
-
-
-def _parse_macro_name(*, sql: str, call_start_index: int) -> str:
-    cursor: int = call_start_index + 1
-    while cursor < len(sql) and _is_identifier_continue(sql[cursor]):
-        cursor += 1
-    return sql[call_start_index + 1 : cursor]
-
-
-def _find_matching_paren(*, sql: str, opening_paren_index: int) -> int:
-    if opening_paren_index >= len(sql) or sql[opening_paren_index] != SQL_OPEN_PAREN_TOKEN:
-        raise CompileInputError("expected opening parenthesis")
-    return find_matching_paren(sql=sql, open_paren_index=opening_paren_index, context=_CONTEXT)
-
-
-def _skip_whitespace(*, sql: str, start_index: int) -> int:
-    index: int = start_index
-    while index < len(sql) and sql[index].isspace():
-        index += 1
-    return index

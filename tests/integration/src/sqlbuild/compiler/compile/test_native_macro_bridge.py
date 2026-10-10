@@ -16,6 +16,7 @@ from tests.integration.src.sqlbuild.compiler.compile._test_types import (
     MacroBridgeMemoTestCase,
     MacroBridgeParityTestCase,
     MacroExpansionDifferentialTestCase,
+    MacroExpansionEdgeTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     MACRO_BRIDGE_PROJECT_FILES,
@@ -221,6 +222,57 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
     ) == (test_case.expected_mismatches, test_case.expected_mismatches)
     assert sum(len(outcome) == 5 for outcome in bridged) >= test_case.expected_minimum_successes
     assert bridge.stats()[0] > 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MacroExpansionEdgeTestCase(
+            description="nested argument scan edges",
+            texts=(
+                "@n(@nope(1))",
+                "@n(@m(1)",
+                "@n(@ab c(1))",
+                "@n(@m('x), 1)",
+                "@n(@m(1), 'oops)",
+                "@n(@mm (2), @m('é'))",
+                "@n(@é(1))",
+                "@n(/* @m( */ @m(1))",
+                "@n(@nope(1), @m(')",
+                "@n(@m(1) @xy z(2))",
+                "@n(@m(1) @mm z(2))",
+                "@mm z(2)",
+                "@n($$ ) $$, @m(1))",
+                '@n("@m(1)")',
+                "@n(@n(@n(@nope())))",
+                "@n(@m(1), -- )\n @m(2))",
+                "@n(@m(1), /* open)",
+                "@n(@m(@n(@m('é'))))",
+            ),
+            expected_mismatches=[],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_nested_macro_arguments_when_expanding_then_matches_python_golden(
+    test_case: MacroExpansionEdgeTestCase,
+) -> None:
+    bridge: MacroBridge = MacroBridge(
+        python_version=(sys.version_info[0], sys.version_info[1]),
+        unicode_version=unicodedata.unidata_version,
+    )
+    unbridged: list[tuple[object, ...]] = [
+        expansion_outcome(sql=sql, bridge=None) for sql in test_case.texts
+    ]
+    bridged: list[tuple[object, ...]] = [
+        expansion_outcome(sql=sql, bridge=bridge) for sql in test_case.texts
+    ]
+    expected: list[GoldenEntry] = read_golden(golden_name("macro_expansion", test_case.description))
+
+    assert (
+        golden_differences(expected, [golden_entry("macro_expansion", item) for item in bridged]),
+        golden_differences(expected, [golden_entry("macro_expansion", item) for item in unbridged]),
+    ) == (test_case.expected_mismatches, test_case.expected_mismatches)
 
 
 @pytest.mark.parametrize(

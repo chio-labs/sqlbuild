@@ -58,3 +58,10 @@ pub(crate) struct MacroCallNamesTestCase {
     pub(crate) expected_top_level: ExpectedNames,
     pub(crate) expected_nested: ExpectedNames,
 }
+
+pub(crate) struct CallBoundsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_args_starts: &'static [usize],
+    pub(crate) expected_failure: Option<(Option<usize>, Option<&'static str>, ScanError)>,
+}

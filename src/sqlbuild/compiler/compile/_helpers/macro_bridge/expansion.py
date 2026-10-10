@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from sqlbuild.compiler.compile._helpers.render.macros import (
-    _evaluate_macro_call,
     _expansion_declarations,
     _record_macro_declaration_usage,
     _record_macro_use,
     _report_generated_references,
+    evaluate_macro_call,
+    raise_failed_macro_call,
 )
 from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     ExpansionSpan,
@@ -35,7 +36,6 @@ from sqlbuild.compiler.macro_bridge.models import (
     MacroCallClass,
     MacroCallScan,
     MacroCallSite,
-    MacroScanFailure,
 )
 from sqlbuild.compiler.macro_bridge.types import MacroCallEvent, MacroCallRecord
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
@@ -130,29 +130,15 @@ def _bridged_call_output(  # noqa: PLR0913
     known_relations: int = len(facts.relations)
     _ = facts.begin_event_log()
     try:
-        macro_result: object
-        next_index: int
-        macro_result, next_index = _evaluate_macro_call(
+        macro_result: str = _top_level_output(
             sql=sql,
-            call_start_index=site.start,
-            file_path=consumer_path,
+            consumer_path=consumer_path,
             state=state,
             declarations=declarations,
-            stack=(),
-            top_level=True,
+            site=site,
         )
     finally:
         events, replayable = facts.end_event_log()
-    if not isinstance(macro_result, str):
-        raise CompileInputError(
-            f"Macro '@{site.name}' in '{consumer_path}' must return a SQL string when used "
-            "directly in SQL"
-        )
-    if next_index != site.end:
-        raise NativeStageMismatchError(
-            f"Native macro call scan of '{consumer_path}' ended at {site.end}, Python at "
-            f"{next_index}"
-        )
     added_relations: tuple[SqlResourceRef, ...] = tuple(facts.relations)[known_relations:]
     if replayable and (prior_relations is not None or not added_relations):
         bridge.record(
@@ -202,41 +188,13 @@ def _unmemoised_sql_macros(
         for site in scan.sites
     ]
     if scan.failure is not None:
-        _raise_scan_failure(
-            sql=sql,
-            consumer_path=consumer_path,
+        raise_failed_macro_call(
+            failure=scan.failure,
+            file_path=consumer_path,
             state=state,
             declarations=declarations,
-            failure=scan.failure,
         )
     return splice_macro_calls(sql=sql, sites=scan.sites, outputs=outputs)
-
-
-def _raise_scan_failure(
-    *,
-    sql: str,
-    consumer_path: Path,
-    state: MacroExpansionState,
-    declarations: DeclarationResolutionContext | None,
-    failure: MacroScanFailure,
-) -> None:
-    """Raise where Python's scan raises: from the failing call's evaluation, or between calls."""
-
-    if failure.call_start is None:
-        raise CompileInputError(failure.message)
-    _ = _evaluate_macro_call(
-        sql=sql,
-        call_start_index=failure.call_start,
-        file_path=consumer_path,
-        state=state,
-        declarations=declarations,
-        stack=(),
-        top_level=True,
-    )
-    raise NativeStageMismatchError(
-        f"Native macro call scan of '{consumer_path}' found no complete call at "
-        f"{failure.call_start}; Python evaluated one"
-    )
 
 
 def _mocked_call_output(
@@ -264,28 +222,36 @@ def _evaluated_call_output(
 ) -> str:
     """Evaluate one natively scanned call in Python without the memo."""
 
-    macro_result: object
-    next_index: int
-    macro_result, next_index = _evaluate_macro_call(
+    macro_result: str = _top_level_output(
         sql=sql,
-        call_start_index=site.start,
+        consumer_path=consumer_path,
+        state=state,
+        declarations=declarations,
+        site=site,
+    )
+    return state.facts.render_relation_placeholders(macro_result)
+
+
+def _top_level_output(
+    *,
+    sql: str,
+    consumer_path: Path,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    site: MacroCallSite,
+) -> str:
+    """One top-level call's SQL; a non-string result raises as Python's top-level check does."""
+
+    macro_result: object = evaluate_macro_call(
+        sql=sql,
+        site=site,
         file_path=consumer_path,
         state=state,
         declarations=declarations,
         stack=(),
         top_level=True,
     )
-    if not isinstance(macro_result, str):
-        raise CompileInputError(
-            f"Macro '@{site.name}' in '{consumer_path}' must return a SQL string when used "
-            "directly in SQL"
-        )
-    if next_index != site.end:
-        raise NativeStageMismatchError(
-            f"Native macro call scan of '{consumer_path}' ended at {site.end}, Python at "
-            f"{next_index}"
-        )
-    return state.facts.render_relation_placeholders(macro_result)
+    return cast(str, macro_result)
 
 
 def _replay_macro_call_event(

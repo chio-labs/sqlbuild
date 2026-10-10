@@ -4,7 +4,7 @@ use crate::macro_calls::tests::helpers::python_312;
 use std::time::Instant;
 
 use crate::macro_calls::tests::test_types::{
-    DeepNestingTestCase, ExpectedSite, ScanMacroCallSitesTestCase,
+    CallBoundsTestCase, DeepNestingTestCase, ExpectedSite, ScanMacroCallSitesTestCase,
 };
 
 #[test]
@@ -229,6 +229,60 @@ fn given_deeply_nested_calls_when_scanning_then_time_is_linear_and_nothing_overf
                         .collect()
                 )],
                 None
+            ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_calls_when_scanning_then_argument_starts_and_failing_call_names_match_python() {
+    let test_cases = [
+        CallBoundsTestCase {
+            description: "argument starts skip the whitespace before the parenthesis",
+            sql: "x @ab  (1) @\u{e9}(@b())",
+            expected_args_starts: &[8, 14],
+            expected_failure: None,
+        },
+        CallBoundsTestCase {
+            description: "a call without its parenthesis names the failing call",
+            sql: "@a() @bb c(1)",
+            expected_args_starts: &[3],
+            expected_failure: Some((Some(5), Some("bb"), ScanError::MissingParenthesis)),
+        },
+        CallBoundsTestCase {
+            description: "an unclosed call after non-ASCII text names the failing call",
+            sql: "'\u{e9}' @c\u{e9}(1",
+            expected_args_starts: &[],
+            expected_failure: Some((Some(4), Some("c\u{e9}"), ScanError::UnclosedParenthesis)),
+        },
+        CallBoundsTestCase {
+            description: "a failure between calls names none",
+            sql: "@a(1) 'open",
+            expected_args_starts: &[3],
+            expected_failure: Some((None, None, ScanError::UnclosedQuote)),
+        },
+    ];
+    for test_case in test_cases {
+        let scan = scan_macro_call_sites(python_312(), test_case.sql);
+
+        assert_eq!(
+            (
+                scan.sites
+                    .iter()
+                    .map(|site| site.args_start)
+                    .collect::<Vec<_>>(),
+                scan.failure
+                    .map(|failure| (failure.call_start, failure.call_name, failure.error)),
+            ),
+            (
+                test_case.expected_args_starts.to_vec(),
+                test_case.expected_failure.map(|(start, name, error)| (
+                    start,
+                    name.map(str::to_owned),
+                    error
+                )),
             ),
             "{}",
             test_case.description

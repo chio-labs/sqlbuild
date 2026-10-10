@@ -11,6 +11,7 @@ class MacroCallSite:
     """One top-level macro call in an authored string, in Python string offsets."""
 
     start: int
+    args_start: int
     end: int
     name: str
     tree_names: tuple[str, ...] | None
@@ -23,6 +24,7 @@ class MacroScanFailure:
     """Where Python's scan of a string raises: in the call at `call_start`, or between calls."""
 
     call_start: int | None
+    call_name: str | None
     message: str
 
 

@@ -59,6 +59,11 @@ pub(crate) fn top_level_calls(
     (calls, None)
 }
 
+/// Python's `_parse_macro_name`: the identifier after the `@` at byte `start`.
+pub(crate) fn call_name(python: PythonText, text: &str, start: usize) -> String {
+    text[start + 1..identifier_end(python, text, start + 1)].to_owned()
+}
+
 /// Python's `_scan_sqlbuild_call_names(include_nested=True)`: every call start's name in order.
 pub(crate) fn every_call_name(python: PythonText, text: &str) -> Result<Vec<String>, ScanError> {
     let mut names: Vec<String> = Vec::new();

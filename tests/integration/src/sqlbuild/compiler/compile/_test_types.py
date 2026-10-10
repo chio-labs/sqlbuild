@@ -31,6 +31,15 @@ class MacroBridgeFailureTestCase:
 
 
 @dataclass(frozen=True)
+class MacroExpansionEdgeTestCase:
+    """Hand-picked SQL texts whose expansion must match Python's expansion recorded in a golden."""
+
+    description: str
+    texts: tuple[str, ...]
+    expected_mismatches: list[tuple[object, object, object]]
+
+
+@dataclass(frozen=True)
 class MacroExpansionDifferentialTestCase:
     """Seeded random SQL text that must expand, with and without the bridge, as Python's
     expansion recorded in its golden did."""

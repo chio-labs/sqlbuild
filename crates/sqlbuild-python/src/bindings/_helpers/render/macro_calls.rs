@@ -18,8 +18,8 @@ use crate::bindings::types::CompilerDetach;
 
 const MACRO_SCAN_CONTEXT: &str = "native macro call scan";
 
-/// `(call start or None, message)` of the error Python's scan raises.
-type FailureRow = (Option<usize>, &'static str);
+/// `(call start or None, call name or None, message)` of the error Python's scan raises.
+type FailureRow = (Option<usize>, Option<String>, &'static str);
 
 /// Every complete top-level macro call site of `sql`, and where Python's scan raises, if it does.
 #[pyfunction]
@@ -40,7 +40,13 @@ pub(crate) fn scan_macro_call_sites(
         .map_err(compiler_error)?;
     Ok((
         sites.into_iter().map(site_row).collect(),
-        failure.map(|MacroScanFailure { call_start, error }| (call_start, error.message())),
+        failure.map(
+            |MacroScanFailure {
+                 call_start,
+                 call_name,
+                 error,
+             }| (call_start, call_name, error.message()),
+        ),
     ))
 }
 

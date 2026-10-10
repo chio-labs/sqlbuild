@@ -17,8 +17,8 @@ def scan_macro_calls(
 ) -> MacroCallScan:
     """The complete top-level call sites of `sql`, and where its scan raises, if it does."""
 
-    rows: list[tuple[int, int, str, list[str] | None, bool]]
-    failure: tuple[int | None, str] | None
+    rows: list[tuple[int, int, int, str, list[str] | None, bool]]
+    failure: tuple[int | None, str | None, str] | None
     rows, failure = _native.scan_macro_call_sites(
         sql,
         python_version or (sys.version_info[0], sys.version_info[1]),
@@ -28,14 +28,15 @@ def scan_macro_calls(
         sites=tuple(
             MacroCallSite(
                 start=start,
+                args_start=args_start,
                 end=end,
                 name=name,
                 tree_names=None if tree_names is None else tuple(tree_names),
                 typed_reference_text=typed_reference_text,
             )
-            for start, end, name, tree_names, typed_reference_text in rows
+            for start, args_start, end, name, tree_names, typed_reference_text in rows
         ),
         failure=None
         if failure is None
-        else MacroScanFailure(call_start=failure[0], message=failure[1]),
+        else MacroScanFailure(call_start=failure[0], call_name=failure[1], message=failure[2]),
     )

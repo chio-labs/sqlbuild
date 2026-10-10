@@ -16,6 +16,8 @@ use crate::macro_calls::_helpers::entry_codec::{decode_entry, encode_entry};
 pub struct MacroCallSite {
     /// Offset of the `@` that starts the call.
     pub start: usize,
+    /// Offset just past the call's opening parenthesis, where its arguments start.
+    pub args_start: usize,
     /// Offset just past the call's closing parenthesis.
     pub end: usize,
     /// The called macro's name.
@@ -31,6 +33,8 @@ pub struct MacroCallSite {
 pub struct MacroScanFailure {
     /// Offset of the `@` of the call Python's evaluation raises in, if any.
     pub call_start: Option<usize>,
+    /// The name of the call Python's evaluation raises in, if any.
+    pub call_name: Option<String>,
     pub error: ScanError,
 }
 
