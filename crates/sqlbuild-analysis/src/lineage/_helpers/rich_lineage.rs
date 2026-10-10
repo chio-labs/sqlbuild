@@ -161,8 +161,7 @@ pub(crate) fn rich_model_lineage(query_sql: &str, context: &RichContext) -> Rich
         if projection.is_star {
             continue;
         }
-        let Some(output_column) = projection.name.as_deref().filter(|name| !name.is_empty())
-        else {
+        let Some(output_column) = projection.name.as_deref().filter(|name| !name.is_empty()) else {
             continue;
         };
         if star_expanded.contains(output_column) {
@@ -170,7 +169,8 @@ pub(crate) fn rich_model_lineage(query_sql: &str, context: &RichContext) -> Rich
         }
         let (upstream_columns, confidence) =
             projection_upstreams(&projection.upstream, &resource_by_physical_name);
-        let transform_kind = transform_kind(projection.transform_kind, !upstream_columns.is_empty());
+        let transform_kind =
+            transform_kind(projection.transform_kind, !upstream_columns.is_empty());
         let confidence =
             if !upstream_columns.is_empty() || transform_kind == LineageTransformKind::Constant {
                 confidence

@@ -9,7 +9,10 @@ pub(crate) fn environment_names(contents: &[u8]) -> Option<Vec<&str>> {
         let Some(end) = match_end(contents, start) else {
             continue;
         };
-        if contents.get(end).is_some_and(|byte| *byte >= NON_ASCII_BYTE_START) {
+        if contents
+            .get(end)
+            .is_some_and(|byte| *byte >= NON_ASCII_BYTE_START)
+        {
             return None;
         }
         let name = &contents[start + ENVIRONMENT_MARKER.len()..end];

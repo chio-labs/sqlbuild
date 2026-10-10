@@ -248,7 +248,7 @@ pub enum RelationFingerprint {
     Digest(String),
     /// Python returns `None`: dynamic context, malformed environment markers or unreadable input.
     Uncacheable,
-    /// Python computes it: a directory listing failed, a name is not UTF-8, or Windows paths.
+    /// Discovery's snapshot could not be read (its walk reports no such failure today).
     Deferred,
 }
 

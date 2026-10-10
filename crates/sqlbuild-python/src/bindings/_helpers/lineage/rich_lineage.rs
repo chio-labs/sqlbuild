@@ -14,7 +14,13 @@ use crate::bindings::types::CompilerDetach;
 
 type TypedColumns = Vec<(String, Option<String>)>;
 type SourceRow = (&'static str, String, String);
-type ColumnRow = (String, &'static str, &'static str, &'static str, Vec<SourceRow>);
+type ColumnRow = (
+    String,
+    &'static str,
+    &'static str,
+    &'static str,
+    Vec<SourceRow>,
+);
 /// `(dialect, [(resource_type, name, assigned, defaulted)], [query_sql])`.
 type RichRequestInput = (
     String,
@@ -26,7 +32,10 @@ type OutcomeRow = (&'static str, Vec<ColumnRow>, bool, Option<String>);
 
 /// Build rich lineage for the requested models' SQL, in request order.
 #[pyfunction]
-fn build_rich_column_lineage(py: Python<'_>, request: RichRequestInput) -> PyResult<Vec<OutcomeRow>> {
+fn build_rich_column_lineage(
+    py: Python<'_>,
+    request: RichRequestInput,
+) -> PyResult<Vec<OutcomeRow>> {
     let (dialect, schema, models) = request;
     let schema: Vec<RichSchemaResource> = schema
         .into_iter()

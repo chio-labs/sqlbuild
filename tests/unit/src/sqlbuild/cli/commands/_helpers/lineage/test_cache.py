@@ -126,6 +126,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             description="sorting, suffixes, exclusions, links and environment values",
             files=_LAYOUT_FILES,
             links=_LAYOUT_LINKS,
+            unreadable_directories=(),
             environment={"ORDERS_SCHEMA": "orders_dev"},
             cli_vars={"region": "north", "limits": [1, 2.5, None], "label": "café"},
             expected_available=True,
@@ -134,6 +135,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             description="an environment marker without a name",
             files={**_LAYOUT_FILES, "models/bad.sql": "SELECT 'ENV: ' AS broken\n"},
             links={},
+            unreadable_directories=(),
             environment={},
             cli_vars=None,
             expected_available=False,
@@ -142,6 +144,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             description="an environment name followed by a non-ASCII byte",
             files={"models/bad.sql": "SELECT '${ENV:ORDERSÉ}' AS broken\n"},
             links={},
+            unreadable_directories=(),
             environment={},
             cli_vars=None,
             expected_available=False,
@@ -150,6 +153,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             description="overlapping markers inside one matched name",
             files={"models/bad.sql": "SELECT 'ENV: ENV:X' AS broken\n"},
             links={},
+            unreadable_directories=(),
             environment={},
             cli_vars=None,
             expected_available=False,
@@ -158,9 +162,59 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             description="dynamic context in Python source",
             files={"macros/run.py": "RUN = 'CTX:run_id'\n", "models/a.sql": "SELECT 1\n"},
             links={},
+            unreadable_directories=(),
             environment={},
             cli_vars=None,
             expected_available=False,
+        ),
+        NativeFingerprintParityTestCase(
+            description="an unreadable directory is skipped as rglob skips it",
+            files={**_LAYOUT_FILES, "models/locked/hidden.sql": "SELECT 5 AS order_id\n"},
+            links={},
+            unreadable_directories=("models/locked",),
+            environment={"ORDERS_SCHEMA": "orders_dev"},
+            cli_vars=None,
+            expected_available=True,
+        ),
+        NativeFingerprintParityTestCase(
+            description="undecodable names that are never hashed",
+            files={
+                **_LAYOUT_FILES,
+                "models/notes_\udcff.md": "ENV:\n",
+                "models/\udcfe_dir/readme.txt": "ENV:\n",
+            },
+            links={},
+            unreadable_directories=(),
+            environment={"ORDERS_SCHEMA": "orders_dev"},
+            cli_vars=None,
+            expected_available=True,
+        ),
+        NativeFingerprintParityTestCase(
+            description="an undecodable hashed file name",
+            files={**_LAYOUT_FILES, "models/orders_\udcff.sql": "SELECT 6 AS order_id\n"},
+            links={},
+            unreadable_directories=(),
+            environment={},
+            cli_vars=None,
+            expected_available=False,
+        ),
+        NativeFingerprintParityTestCase(
+            description="a hashed file below an undecodable directory",
+            files={**_LAYOUT_FILES, "models/\udcfe_dir/orders.sql": "SELECT 7 AS order_id\n"},
+            links={},
+            unreadable_directories=(),
+            environment={},
+            cli_vars=None,
+            expected_available=False,
+        ),
+        NativeFingerprintParityTestCase(
+            description="an undecodable hashed file inside an excluded directory",
+            files={**_LAYOUT_FILES, "target/orders_\udcff.sql": "SELECT 8 AS order_id\n"},
+            links={},
+            unreadable_directories=(),
+            environment={"ORDERS_SCHEMA": "orders_dev"},
+            cli_vars=None,
+            expected_available=True,
         ),
     ),
     ids=lambda case: case.description,
@@ -176,6 +230,8 @@ def test_given_authored_files_when_fingerprinting_natively_then_matches_python(
         _ = path.write_text(contents, encoding="utf-8")
     for relative_path, target in test_case.links.items():
         (tmp_path / relative_path).symlink_to(tmp_path / target)
+    for relative_path in test_case.unreadable_directories:
+        (tmp_path / relative_path).chmod(0)
     for name, value in test_case.environment.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("ORDERS_REGION", raising=False)
@@ -189,6 +245,10 @@ def test_given_authored_files_when_fingerprinting_natively_then_matches_python(
         project_dir=tmp_path, cli_vars=test_case.cli_vars
     )
 
+    native_status: str = _native.relation_lineage_fingerprint(tmp_path, b"")[0]
+    for relative_path in test_case.unreadable_directories:
+        (tmp_path / relative_path).chmod(0o755)
+
     assert native_digest == python_digest
     assert (native_digest is not None) is test_case.expected_available
-    assert _native.relation_lineage_fingerprint(tmp_path, b"")[0] != "deferred"
+    assert native_status != "deferred"

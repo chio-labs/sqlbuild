@@ -4,8 +4,7 @@ use crate::lineage::main::build_fast_lineage::build_fast_lineage;
 use crate::lineage::main::build_rich_lineage::build_rich_lineage;
 use crate::lineage::models::{
     FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageColumn, LineageResourceType,
-    LineageSchemaResource, RichLineageColumn, RichLineageRequest,
-    RichSchemaResource,
+    LineageSchemaResource, RichLineageColumn, RichLineageRequest, RichSchemaResource,
 };
 use crate::semantic_validation::models::ProjectCatalog;
 

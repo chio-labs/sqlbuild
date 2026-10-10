@@ -26,9 +26,8 @@ pub(crate) fn fingerprint_digest(files: &[AuthoredFile], prefix: &[u8]) -> Optio
     for (file, scanned) in files.iter().zip(scanned) {
         let scanned = scanned?;
         environment.extend(scanned.environment);
-        let relative_path = file.relative_path();
-        digest.update((relative_path.chars().count() as u64).to_be_bytes());
-        digest.update(relative_path.as_bytes());
+        digest.update((file.relative_path.chars().count() as u64).to_be_bytes());
+        digest.update(file.relative_path.as_bytes());
         digest.update((scanned.contents.len() as u64).to_be_bytes());
         digest.update(&scanned.contents);
     }
@@ -36,10 +35,15 @@ pub(crate) fn fingerprint_digest(files: &[AuthoredFile], prefix: &[u8]) -> Optio
         digest.update(name.as_bytes());
         digest.update(environment_value(name)?.as_bytes());
     }
-    Some(digest.finalize().iter().fold(String::new(), |mut hex, byte| {
-        let _ = write!(hex, "{byte:02x}");
-        hex
-    }))
+    Some(
+        digest
+            .finalize()
+            .iter()
+            .fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            }),
+    )
 }
 
 /// `os.environ.get(name, "<missing>")`; `None` where its UTF-8 encoding fails.
@@ -74,5 +78,7 @@ fn scanned_file(file: &AuthoredFile) -> Option<ScannedFile> {
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack.windows(needle.len()).any(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
 }

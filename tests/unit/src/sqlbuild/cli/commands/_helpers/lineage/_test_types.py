@@ -143,6 +143,7 @@ class NativeFingerprintParityTestCase:
     description: str
     files: dict[str, str]
     links: dict[str, str]
+    unreadable_directories: tuple[str, ...]
     environment: dict[str, str]
     cli_vars: dict[str, object] | None
     expected_available: bool

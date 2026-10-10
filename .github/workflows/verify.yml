@@ -413,12 +413,13 @@ jobs:
         run: |
           uv sync --locked --no-dev --python 3.12
           uv pip install "pytest>=8.4.2" "pytest-xdist>=3.8.0"
-      - name: Compare native text, YAML and TOML readers with this Python
+      - name: Compare native text, YAML and TOML readers and the lineage fingerprint with this Python
         run: >-
           uv run --no-sync pytest
           tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
           tests/integration/src/sqlbuild/compiler/discovery/test_native_yaml_oracle.py
           tests/integration/src/sqlbuild/compiler/discovery/test_native_toml_oracle.py
+          tests/unit/src/sqlbuild/cli/commands/_helpers/lineage/test_cache.py
           -n auto --dist loadfile
       - name: Compile playground projects on the default and Python engines, and build
         run: |

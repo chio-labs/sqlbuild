@@ -112,7 +112,11 @@ fn given_models_when_building_rich_lineage_then_matches_the_wheel_path() {
     ];
     for test_case in test_cases {
         let (status, lines, has_star, detail) = rich_outcome(test_case.dialect, test_case.sql);
-        assert_eq!(status, test_case.expected_status, "{}", test_case.description);
+        assert_eq!(
+            status, test_case.expected_status,
+            "{}",
+            test_case.description
+        );
         assert_eq!(lines, test_case.expected_lines, "{}", test_case.description);
         assert_eq!(
             has_star, test_case.expected_has_star,
