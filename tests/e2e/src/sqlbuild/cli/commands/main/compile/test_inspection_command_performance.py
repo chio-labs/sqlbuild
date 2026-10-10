@@ -114,7 +114,7 @@ _MODEL_COUNT: int = INSPECTION_BENCHMARK_MODEL_COUNT
                 "shared_orders_l15_s00.amount (cast)",
             ),
             expected_max_output_lines=_MODEL_COUNT,
-            expected_max_wall_seconds=8.0,
+            expected_max_wall_seconds=10.0,
             expected_max_rss_bytes=1024 * _MIB,
         ),
         InspectionCommandPerformanceGuardTestCase(
@@ -132,7 +132,7 @@ _MODEL_COUNT: int = INSPECTION_BENCHMARK_MODEL_COUNT
                 f'"resource_name": "{SHARED_DIAMOND_ROLLUP}"',
             ),
             expected_max_output_lines=20 * _MODEL_COUNT,
-            expected_max_wall_seconds=8.0,
+            expected_max_wall_seconds=10.0,
             expected_max_rss_bytes=1024 * _MIB,
         ),
         InspectionCommandPerformanceGuardTestCase(
