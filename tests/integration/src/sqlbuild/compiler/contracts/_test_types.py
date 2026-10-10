@@ -20,16 +20,6 @@ class GeneratedContractParityTestCase:
 
 
 @dataclass(frozen=True)
-class GeneratedPromotionParityTestCase:
-    """Generated lifecycle configs and promotion settings compared with Python."""
-
-    description: str
-    seed: int
-    variants: int
-    expected_minimum_conflicts: int
-
-
-@dataclass(frozen=True)
 class DeferredContractTestCase:
     """A contract input native validation hands back to Python, and the deferral it records."""
 

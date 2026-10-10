@@ -38,15 +38,15 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.entry._test_types import (
         ),
         CompilerEngineOptionTestCase(
             description="flag_after_subcommand",
-            argv=("plan", "--compiler-engine", "python"),
+            argv=("plan", "--compiler-engine", "native"),
             environment_value="",
-            expected_engine="python",
+            expected_engine="native",
         ),
         CompilerEngineOptionTestCase(
             description="flag_overrides_invalid_environment",
-            argv=("compile", "--compiler-engine", "python"),
+            argv=("compile", "--compiler-engine", "native-preview"),
             environment_value="rust",
-            expected_engine="python",
+            expected_engine="native-preview",
         ),
     ],
     ids=lambda case: case.description,
@@ -72,7 +72,21 @@ def test_given_engine_selection_when_parsing_then_flag_value_is_recorded(
             argv=("compile", "--compiler-engine", "rust"),
             environment_value="",
             expected_exit_code=2,
-            expected_error="argument --compiler-engine: invalid choice: 'rust'",
+            expected_error="--compiler-engine must be one of native, native-preview (got 'rust')",
+        ),
+        RejectedCompilerEngineTestCase(
+            description="removed_python_flag_value",
+            argv=("compile", "--compiler-engine", "python"),
+            environment_value="",
+            expected_exit_code=2,
+            expected_error="--compiler-engine 'python' is no longer supported",
+        ),
+        RejectedCompilerEngineTestCase(
+            description="removed_python_environment_value",
+            argv=("compile",),
+            environment_value="python",
+            expected_exit_code=2,
+            expected_error="SQLBUILD_COMPILER_ENGINE 'python' is no longer supported",
         ),
         RejectedCompilerEngineTestCase(
             description="unknown_environment_value",
@@ -80,8 +94,7 @@ def test_given_engine_selection_when_parsing_then_flag_value_is_recorded(
             environment_value="rust",
             expected_exit_code=2,
             expected_error=(
-                "SQLBUILD_COMPILER_ENGINE must be one of python, native, native-preview "
-                "(got 'rust')"
+                "SQLBUILD_COMPILER_ENGINE must be one of native, native-preview (got 'rust')"
             ),
         ),
     ],

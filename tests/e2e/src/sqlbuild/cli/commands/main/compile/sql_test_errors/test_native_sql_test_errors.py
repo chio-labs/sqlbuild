@@ -25,7 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_test_errors._test_type
     NativeSqlTestErrorTestCase,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _CALL_LOG: str = "macro_calls.log"
 _COUNTED_MACRO: str = (
     "from pathlib import Path\n\n\n"
@@ -154,7 +154,7 @@ def test_given_sql_test_error_when_compiling_with_each_engine_then_errors_and_ty
         len(set(macro_calls)),
         tuple(error_types),
     ) == (
-        (1, 1, 1),
+        (1, 1),
         True,
         True,
         True,
@@ -162,11 +162,11 @@ def test_given_sql_test_error_when_compiling_with_each_engine_then_errors_and_ty
         True,
         True,
         test_case.expected_distinct_macro_call_counts,
-        ("CompileInputError", "CompileInputError", "CompileInputError"),
+        ("CompileInputError", "CompileInputError"),
     ), (
         runs[0].report,
         runs[0].stderr,
-        runs[2].report,
+        runs[1].report,
         macro_calls,
     )
 

@@ -11,5 +11,4 @@ class NativeFastLineageCliTestCase:
     files: dict[str, str]
     lineage_targets: tuple[str, ...]
     expected_lineage: dict[str, dict[str, object]]
-    expected_minimum_python_fallback_parses: int
     expected_minimum_traced_edges: int

@@ -35,7 +35,7 @@ _AT_LIMIT_HEADER: str = (
             description="every container kind at the limit beneath 300 extra frames",
             header=_AT_LIMIT_HEADER,
             stack_frames=300,
-            expected_engines=("python", "native", "native-preview"),
+            expected_engines=("native", "native-preview"),
             expected_max_depth=769,
         )
     ],

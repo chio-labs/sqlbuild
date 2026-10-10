@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
 
 import pytest
 
+from scripts.compiler_differential._helpers.running import native_fallbacks
 from scripts.compiler_differential._helpers.running.native_fallbacks import (
     fallback_problems,
     observed_fallbacks,
@@ -49,9 +51,27 @@ _LOOP_ANSWER_ENTRY: str = (
 )
 _SESSION: FallbackKey = ("native-preview", "model_analysis", "analysis_session", "session")
 _SHIPPED_RUN: RecordedRun = RecordedRun(
-    engines=("python", "native"), corpora=("seeds", "failures"), seed_start=0, seeds=12
+    engines=("native",), corpora=("seeds", "failures"), seed_start=0, seeds=12
 )
 _LIST_HEAD: str = "seed_start = 0\nseeds = 12\n"
+_REFERENCES: FallbackKey = (
+    "native",
+    "reference_extraction",
+    "reference_extraction.sql_scan",
+    "deferred",
+)
+_REFERENCES_ENTRY: str = (
+    '\n[[entry]]\nengine = "native"\nstage = "reference_extraction"\n'
+    'site = "reference_extraction.sql_scan"\nkind = "deferred"\n'
+)
+
+
+class _SwitchableStage(StrEnum):
+    """Stand-in preview stages: `model_loop` can be switched off, `reference_extraction` cannot."""
+
+    MODEL_LOOP = "model_loop"
+
+
 _VARIABLES_ENTRY: str = (
     '\n[[entry]]\nengine = "native"\nstage = "model_loop"\n'
     'site = "model_loop.sql_variables"\nkind = "deferred"\n'
@@ -89,7 +109,7 @@ def test_given_engine_records_when_observing_then_entries_are_summed_per_corpus(
     )
 
     observed: dict[FallbackKey, dict[str, int]] = observed_fallbacks(
-        comparisons=[comparison], engines=("python", "native-preview")
+        comparisons=[comparison], engines=("native", "native-preview")
     )
 
     assert observed == test_case.expected_observed
@@ -144,6 +164,16 @@ def test_given_engine_records_when_observing_then_entries_are_summed_per_corpus(
                 "native model_loop model_loop.sql_variables deferred (seed): fallback disappeared "
                 "but native answers did not appear; the stage may be switched off. A port that "
                 "removes a fallback must report native answers for the work it now does"
+            ],
+        ),
+        FallbackGateTestCase(
+            description="vanished_entry_of_a_shipped_stage_only_asks_for_removal",
+            allow_list=_LIST_HEAD + _REFERENCES_ENTRY + "counts = { seed = 3 }\n",
+            observed={},
+            run=_SHIPPED_RUN,
+            expected_problems=[
+                "native reference_extraction reference_extraction.sql_scan deferred (seed): "
+                "listed but no longer occurs; remove it from the allow-list"
             ],
         ),
         FallbackGateTestCase(
@@ -202,9 +232,7 @@ def test_given_engine_records_when_observing_then_entries_are_summed_per_corpus(
             description="other_seed_range_is_refused",
             allow_list=_LIST_HEAD,
             observed={},
-            run=RecordedRun(
-                engines=("python", "native"), corpora=("seeds",), seed_start=0, seeds=60
-            ),
+            run=RecordedRun(engines=("native",), corpora=("seeds",), seed_start=0, seeds=60),
             expected_problems=[
                 "the allow-list holds counts for --seed-start 0 --seeds 12; this run used "
                 "--seed-start 0 --seeds 60"
@@ -214,8 +242,9 @@ def test_given_engine_records_when_observing_then_entries_are_summed_per_corpus(
     ids=lambda case: case.description,
 )
 def test_given_allow_list_when_checking_a_run_then_every_difference_is_a_problem(
-    test_case: FallbackGateTestCase, tmp_path: Path
+    test_case: FallbackGateTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(native_fallbacks, "NativeStage", _SwitchableStage)
     path: Path = tmp_path / "native_fallbacks.toml"
     _ = path.write_text(test_case.allow_list, encoding="utf-8")
 

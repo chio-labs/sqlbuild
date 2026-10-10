@@ -1,4 +1,4 @@
-"""On-disk compiler stores are namespaced by engine; Python keeps its existing paths."""
+"""On-disk compiler stores are namespaced by engine."""
 
 from __future__ import annotations
 
@@ -19,12 +19,6 @@ from tests.unit.src.sqlbuild.compiler.frontier.helpers import store_paths
 @pytest.mark.parametrize(
     "test_case",
     [
-        EngineCacheNameTestCase(
-            description="python_keeps_name",
-            engine=CompilerEngine.PYTHON,
-            base="compiler",
-            expected_name="compiler",
-        ),
         EngineCacheNameTestCase(
             description="native_gets_versioned_suffix",
             engine=CompilerEngine.NATIVE,
@@ -57,16 +51,6 @@ def test_given_engine_when_naming_store_then_only_native_engines_are_suffixed(
 @pytest.mark.parametrize(
     "test_case",
     [
-        EngineStorePathsTestCase(
-            description="python_paths_unchanged",
-            engine=CompilerEngine.PYTHON,
-            expected_paths=(
-                "target/cache/compiler",
-                "target/cache/compiler",
-                "target/cache/compiler/declaration-scopes-v2",
-                "target/rules-cache/bulk/sql.json",
-            ),
-        ),
         EngineStorePathsTestCase(
             description="native_paths_separate",
             engine=CompilerEngine.NATIVE,

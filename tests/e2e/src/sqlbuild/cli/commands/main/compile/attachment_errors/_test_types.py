@@ -9,5 +9,5 @@ class NativeAttachmentErrorTestCase:
 
     description: str
     case_name: str
-    expected_macro_calls: tuple[int, int, int]
-    expected_error_types: tuple[str, str, str]
+    expected_macro_calls: tuple[int, int]
+    expected_error_types: tuple[str, str]

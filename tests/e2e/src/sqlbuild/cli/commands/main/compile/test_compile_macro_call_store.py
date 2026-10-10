@@ -290,12 +290,6 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
             expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         ),
         EngineMacroCallGateTestCase(
-            description="python",
-            engine="python",
-            expected_logged_calls=(3, 3),
-            expected_store_files=(),
-        ),
-        EngineMacroCallGateTestCase(
             description="native",
             engine="native",
             expected_logged_calls=(1, 0),
@@ -310,7 +304,7 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_compiling_repeatedly_then_only_native_engines_batch_and_store_macro_calls(
+def test_given_engine_when_compiling_repeatedly_then_macro_calls_are_batched_and_stored(
     tmp_path: Path, test_case: EngineMacroCallGateTestCase
 ) -> None:
     project_dir: Path = tmp_path / "project"
@@ -334,11 +328,6 @@ def test_given_engine_when_compiling_repeatedly_then_only_native_engines_batch_a
     "test_case",
     [
         MacroReferenceCallStoreTestCase(
-            description="python",
-            engine="python",
-            expected_logged_calls=(2, 2),
-        ),
-        MacroReferenceCallStoreTestCase(
             description="native_memo_then_store",
             engine="native",
             expected_logged_calls=(1, 0),
@@ -346,13 +335,13 @@ def test_given_engine_when_compiling_repeatedly_then_only_native_engines_batch_a
     ],
     ids=lambda case: case.description,
 )
-def test_given_macro_returning_rejected_reference_call_when_replaying_then_reports_match_python(
+def test_given_macro_returning_rejected_reference_call_when_replaying_then_reports_match_first(
     tmp_path: Path, test_case: MacroReferenceCallStoreTestCase
 ) -> None:
     oracle: MacroReferenceCallRuns = macro_reference_call_runs(
-        project_dir=prepare_macro_reference_call_project(tmp_path=tmp_path / "python"),
-        log_path=tmp_path / "python.log",
-        engine="python",
+        project_dir=prepare_macro_reference_call_project(tmp_path=tmp_path / "oracle"),
+        log_path=tmp_path / "oracle.log",
+        engine="native",
         runs=1,
     )
 
@@ -518,7 +507,7 @@ def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still
             description="a lone surrogate var is rejected before any macro runs",
             project_files=_TAGGED_STAGING,
             compile_args=("--vars", '{"regions": ["\\udcff"]}'),
-            expected_returncodes=(1, 1, 1),
+            expected_returncodes=(1, 1),
             expected_report_fragment=(
                 "Variable 'regions' holds a lone surrogate in its value[0] at UTF-8 byte 0, "
                 "which is not valid Unicode text"
@@ -532,7 +521,7 @@ def test_given_unencodable_var_when_compiling_then_every_engine_rejects_it(
 ) -> None:
     project_dir: Path = tmp_path / "orders"
     runs: list[CompileReuseRun] = []
-    for engine in ("python", "native", "native-preview"):
+    for engine in ("native", "native-preview"):
         shutil.rmtree(project_dir, ignore_errors=True)
         for relative_path, contents in {**FAILURE_BASE_FILES, **test_case.project_files}.items():
             write_project_file(project_dir, relative_path, contents)

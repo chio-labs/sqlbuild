@@ -49,7 +49,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     stored_analysis_contents,
 )
 
-pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("python_compiler_engine")
+pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("deferred_native_analysis")
 
 _CACHE_REPO_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "cache_demo"\nadapter = "duckdb"\n',

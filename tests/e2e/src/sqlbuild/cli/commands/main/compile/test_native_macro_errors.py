@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_project_file,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _CALL_LOG: str = "macro_calls.log"
 _MACROS: str = (
     "from pathlib import Path\n\n\n"
@@ -180,12 +180,12 @@ def test_given_macro_error_when_compiling_with_each_engine_then_error_matches_py
         MacroErrorLifecycleTestCase(
             description="macro_raises_after_a_side_effect",
             project_files={_STAGING_PATH: _STAGING_PREFIX + "@explode('amount')" + _STAGING_SUFFIX},
-            expected_error_types=("CompileInputError",) * 3,
+            expected_error_types=("CompileInputError",) * 2,
         ),
         MacroErrorLifecycleTestCase(
             description="unknown_macro",
             project_files={_STAGING_PATH: _STAGING_PREFIX + "@missing('amount')" + _STAGING_SUFFIX},
-            expected_error_types=("CompileInputError",) * 3,
+            expected_error_types=("CompileInputError",) * 2,
         ),
     ],
     ids=lambda case: case.description,

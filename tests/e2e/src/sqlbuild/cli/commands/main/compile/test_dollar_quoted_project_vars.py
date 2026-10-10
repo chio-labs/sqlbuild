@@ -12,7 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "north"\n'
 _MODEL_HEADER: str = "MODEL (description 'Order region labels.', materialized view);\n\n"
 _COMPILED_MODEL: Path = Path("target/compiled/models/order_labels.sql")

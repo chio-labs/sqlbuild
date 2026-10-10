@@ -48,15 +48,6 @@ class LargeDocumentOracleTestCase:
 
 
 @dataclass(frozen=True)
-class EngineSwitchParityTestCase:
-    """A project discovered through `discover_project_inputs` under each engine."""
-
-    description: str
-    files: tuple[tuple[str, bytes], ...]
-    expected_identical: bool = True
-
-
-@dataclass(frozen=True)
 class NativeRuntimeTestCase:
     """A project and runtime under which native model discovery runs or fails clearly."""
 

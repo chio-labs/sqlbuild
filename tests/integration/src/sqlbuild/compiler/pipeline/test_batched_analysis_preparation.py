@@ -23,7 +23,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     use_wave_analysis,
 )
 
-pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("python_compiler_engine")
+pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("deferred_native_analysis")
 
 
 @pytest.mark.parametrize(

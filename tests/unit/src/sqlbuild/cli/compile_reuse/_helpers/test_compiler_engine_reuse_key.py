@@ -25,15 +25,15 @@ from tests.unit.src.sqlbuild.cli.compile_reuse._helpers.helpers import (
     "test_case",
     [
         EngineReuseDigestTestCase(
-            description="python_then_native",
-            first_environment={COMPILER_ENGINE_ENV_VAR: "python"},
+            description="preview_then_native",
+            first_environment={COMPILER_ENGINE_ENV_VAR: "native-preview"},
             second_environment={COMPILER_ENGINE_ENV_VAR: "native"},
             expected_same_digest=False,
         ),
         EngineReuseDigestTestCase(
-            description="unset_then_python",
+            description="unset_then_preview",
             first_environment={},
-            second_environment={COMPILER_ENGINE_ENV_VAR: "python"},
+            second_environment={COMPILER_ENGINE_ENV_VAR: "native-preview"},
             expected_same_digest=False,
         ),
         EngineReuseDigestTestCase(
@@ -74,9 +74,9 @@ def test_given_same_invocation_when_engine_environment_changes_then_reuse_key_fo
     "test_case",
     [
         EngineReuseStoreTestCase(
-            description="python",
-            engine="python",
-            expected_entry_directory="target/cache/compiler/project-reuse-v1",
+            description="native_preview",
+            engine="native-preview",
+            expected_entry_directory="target/cache/compiler-native-preview-v1/project-reuse-v1",
         ),
         EngineReuseStoreTestCase(
             description="native",

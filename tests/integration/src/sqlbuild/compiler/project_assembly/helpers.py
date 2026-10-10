@@ -8,6 +8,7 @@ from collections import Counter
 from collections.abc import Callable
 from operator import methodcaller
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -40,6 +41,9 @@ _PYTHON_RESOURCE_FUNCTIONS: tuple[str, ...] = (
 )
 _ASSEMBLY_RECORD_PREFIX: str = "project_assembly:"
 _OPT_OUT_VALIDATORS: tuple[str, ...] = ("validate_sql_syntax", "validate_hook_sql_syntax")
+type NativeDeferrals = tuple[tuple[ModuleType, str], ...]
+DEFERRED_PROJECT_FACTS: NativeDeferrals = ((project_module, "project_facts_by_engine"),)
+DEFERRED_SYNTAX_CHECK: NativeDeferrals = ((sql_analysis_opt_outs, "check_native_sql_syntax"),)
 _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),
     collection_rendering=CollectionRendering.VALUE_LIST,
@@ -168,22 +172,32 @@ def project_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjec
 
 
 def assemble_with(
-    *, inputs: CompileProjectInputs, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+    *,
+    inputs: CompileProjectInputs,
+    engine: CompilerEngine,
+    monkeypatch: pytest.MonkeyPatch,
+    deferred: NativeDeferrals = (),
 ) -> CompiledProject:
-    """Assemble `inputs` with `engine`."""
+    """Assemble `inputs` with `engine`, making each native entry in `deferred` defer to Python."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    return assemble_compiled_project(inputs=inputs)
+    with monkeypatch.context() as patch:
+        _ = [patch.setattr(module, name, _deferral) for module, name in deferred]
+        return assemble_compiled_project(inputs=inputs)
 
 
 def recorded_assembly(
-    *, inputs: CompileProjectInputs, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+    *,
+    inputs: CompileProjectInputs,
+    engine: CompilerEngine,
+    monkeypatch: pytest.MonkeyPatch,
+    deferred: NativeDeferrals = (),
 ) -> tuple[object, tuple[tuple[str, ...], bool]]:
     """Assemble `inputs` with `engine`; return its assembly view and the input reads recorded."""
 
     with COMPILE_INPUT_READS.recording() as reads:
         project: CompiledProject = assemble_with(
-            inputs=inputs, engine=engine, monkeypatch=monkeypatch
+            inputs=inputs, engine=engine, monkeypatch=monkeypatch, deferred=deferred
         )
     return assembly_view(project), (reads.environment_names, reads.read_run_id)
 
@@ -207,12 +221,16 @@ def rejected_opt_outs(
     files: dict[str, str],
     engine: CompilerEngine,
     monkeypatch: pytest.MonkeyPatch,
+    deferred: NativeDeferrals = (),
 ) -> tuple[dict[str, bool], int]:
-    """Attach `files` with `engine`; return each opt-out's rejection and Python validations."""
+    """Attach `files` with `engine`; return each opt-out's rejection and Python validations.
+
+    Each native entry in `deferred` defers, so Python answers its work."""
 
     calls: Counter[str] = Counter()
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
     with monkeypatch.context() as patch:
+        _ = [patch.setattr(module, name, _deferral) for module, name in deferred]
         _ = [
             patch.setattr(
                 sql_analysis_opt_outs,
@@ -270,3 +288,7 @@ def _counted(*, name: str, function: Callable[..., Any], calls: Counter[str]) ->
         return function(*args, **kwargs)
 
     return counted
+
+
+def _deferral(**_kwargs: object) -> None:
+    return None

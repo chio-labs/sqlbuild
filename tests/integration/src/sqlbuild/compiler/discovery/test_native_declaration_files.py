@@ -269,15 +269,15 @@ def test_given_declaration_files_when_discovering_through_the_engine_switch_then
     test_case: DeclarationFilesParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
-    python: tuple[object, ...] = stage_outcome(
-        project_dir=tmp_path, engine="python", monkeypatch=monkeypatch
+    shipped: tuple[object, ...] = stage_outcome(
+        project_dir=tmp_path, engine="native", monkeypatch=monkeypatch
     )
 
     native: tuple[object, ...] = stage_outcome(
         project_dir=tmp_path, engine=_PREVIEW, monkeypatch=monkeypatch
     )
 
-    assert native == python
+    assert native == shipped
     assert native[1] == test_case.expected_failure_type
     assert test_case.expected_message_fragment in str(native[2])
 
@@ -334,15 +334,15 @@ def test_given_deeply_nested_declaration_header_when_discovering_then_engines_re
     nested: str = "[" * test_case.depth + "1" + "]" * test_case.depth
     contents: str = test_case.prefix + nested + test_case.suffix
     write_project(project_dir=tmp_path, files=((test_case.relative_path, contents.encode()),))
-    python: tuple[object, ...] = declaration_files_outcome(
-        project_dir=tmp_path, kind=test_case.kind, engine="python", monkeypatch=monkeypatch
+    shipped: tuple[object, ...] = declaration_files_outcome(
+        project_dir=tmp_path, kind=test_case.kind, engine="native", monkeypatch=monkeypatch
     )
 
     native: tuple[object, ...] = declaration_files_outcome(
         project_dir=tmp_path, kind=test_case.kind, engine=_PREVIEW, monkeypatch=monkeypatch
     )
 
-    assert native == python
+    assert native == shipped
     assert native[0] == test_case.expected_failure_type
     assert str(native[1]).endswith(test_case.expected_message_suffix), native[1]
     assert native[2] == test_case.expected_help
@@ -376,15 +376,15 @@ def test_given_broken_declaration_files_when_discovering_tolerantly_then_faults_
     test_case: TolerantDeclarationFilesTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
-    python: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
-        tolerant_declaration_outcome(project_dir=tmp_path, engine="python", monkeypatch=monkeypatch)
+    shipped: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
+        tolerant_declaration_outcome(project_dir=tmp_path, engine="native", monkeypatch=monkeypatch)
     )
 
     native: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
         tolerant_declaration_outcome(project_dir=tmp_path, engine=_PREVIEW, monkeypatch=monkeypatch)
     )
 
-    assert native == python
+    assert native == shipped
     assert len(native[1]) == test_case.expected_resource_faults
     assert len(native[2]) == test_case.expected_declaration_faults
 
@@ -400,11 +400,6 @@ def test_given_broken_declaration_files_when_discovering_tolerantly_then_faults_
         NativeSessionTestCase(
             description="the shipped engine keeps its declaration session",
             engine="native",
-            expected_session=True,
-        ),
-        NativeSessionTestCase(
-            description="the Python engine keeps it too, since declaration files are native-only",
-            engine="python",
             expected_session=True,
         ),
     ],

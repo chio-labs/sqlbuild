@@ -15,7 +15,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
     write_shared_binding_project,
 )
 
-pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("python_compiler_engine")
+pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("deferred_native_analysis")
 
 
 @pytest.mark.parametrize(

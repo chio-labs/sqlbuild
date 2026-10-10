@@ -42,7 +42,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.planner._helpers.sql_tests.assembly import plan_sql_tests
 from sqlbuild.compiler.planner._helpers.sql_tests.comments import uncommented_pattern_matches
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
-    plan_and_render_sql_test_artifacts,
+    plan_compiled_sql_test_artifacts,
     plan_sql_tests_natively,
     sql_test_plan_error_messages,
 )
@@ -142,7 +142,7 @@ def assert_native_artifact_matches_runtime_plan(
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
     )
-    (artifact,) = plan_and_render_sql_test_artifacts(
+    (artifact,) = plan_compiled_sql_test_artifacts(
         project=project,
         tests=(sql_test,),
         adapter=adapter,

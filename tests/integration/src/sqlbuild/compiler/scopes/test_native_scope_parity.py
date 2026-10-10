@@ -135,13 +135,13 @@ def test_given_scoped_project_when_building_scope_under_each_engine_then_outcome
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
 
-    python, native, built = scope_engine_outcomes(project_dir=tmp_path, monkeypatch=monkeypatch)
+    shipped, native, built = scope_engine_outcomes(project_dir=tmp_path, monkeypatch=monkeypatch)
 
     assert (
-        native == python,
+        native == shipped,
         built,
-        (python.kind == "error") == bool(test_case.expected_error),
-        test_case.expected_error in python.error,
+        (shipped.kind == "error") == bool(test_case.expected_error),
+        test_case.expected_error in shipped.error,
         native.grants >= test_case.expected_minimum_grants,
     ) == (True, True, True, True, True), test_case.description
 
@@ -173,18 +173,18 @@ def test_given_generated_scoped_projects_when_building_scope_then_engines_match(
         for project_dir in project_dirs
     ]
 
-    python: list[ScopeOutcome] = [outcome[0] for outcome in outcomes]
+    shipped: list[ScopeOutcome] = [outcome[0] for outcome in outcomes]
     native: list[ScopeOutcome] = [outcome[1] for outcome in outcomes]
     assert (
         mismatches(
             inputs=[path.name for path in project_dirs],
-            expected=[*python],
+            expected=[*shipped],
             actual=[*native],
         ),
         all(outcome[2] for outcome in outcomes),
-        sum(item.kind == "ok" for item in python) >= test_case.expected_minimum_valid,
-        sum(item.kind == "error" for item in python) >= test_case.expected_minimum_invalid,
-        sum(item.grants > 0 for item in python) >= test_case.expected_minimum_granting,
+        sum(item.kind == "ok" for item in shipped) >= test_case.expected_minimum_valid,
+        sum(item.kind == "error" for item in shipped) >= test_case.expected_minimum_invalid,
+        sum(item.grants > 0 for item in shipped) >= test_case.expected_minimum_granting,
     ) == (list(test_case.expected_mismatches), True, True, True, True), test_case.description
 
 
@@ -204,9 +204,9 @@ def test_given_scoped_project_when_scope_command_builds_index_then_engines_match
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
 
-    python, native = scope_command_indexes(project_dir=tmp_path, monkeypatch=monkeypatch)
+    shipped, native = scope_command_indexes(project_dir=tmp_path, monkeypatch=monkeypatch)
 
-    assert (native == python, len(native.grants) >= test_case.expected_minimum_grants) == (
+    assert (native == shipped, len(native.grants) >= test_case.expected_minimum_grants) == (
         True,
         True,
     ), test_case.description
@@ -215,11 +215,6 @@ def test_given_scoped_project_when_scope_command_builds_index_then_engines_match
 @pytest.mark.parametrize(
     "test_case",
     [
-        ScopeEngineTierTestCase(
-            description="python engine, since the compile scope index is native-only",
-            engine="python",
-            expected_native_attempts=1,
-        ),
         ScopeEngineTierTestCase(
             description="shipped native stages", engine="native", expected_native_attempts=1
         ),

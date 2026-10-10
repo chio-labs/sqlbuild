@@ -1,4 +1,4 @@
-"""The preview engine reports model config, template and header errors as Python does."""
+"""Both engines report model config, template and header errors alike, without fallbacks."""
 
 from __future__ import annotations
 
@@ -16,14 +16,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     fallback_free_preview_compile,
-    python_engine_compile,
     report_without_engine,
     run_reuse_compile,
     stderr_without_durations,
     write_counted_error_project,
 )
 
-_ENGINES: tuple[str, str] = ("python", "native-preview")
+_ENGINES: tuple[str, str] = ("native", "native-preview")
 _CALL_LOG: str = "macro_calls.log"
 _COUNTED_MACRO: str = (
     "from pathlib import Path\n\n\n"
@@ -119,7 +118,7 @@ _PROJECT_FILES: dict[str, str] = {
     ],
     ids=lambda case: case.description,
 )
-def test_given_config_error_when_compiling_with_preview_then_error_matches_python(
+def test_given_config_error_when_compiling_with_each_engine_then_errors_match(
     test_case: NativeConfigErrorTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -136,12 +135,8 @@ def test_given_config_error_when_compiling_with_preview_then_error_matches_pytho
             run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
         )
         macro_calls.append(len((project_dir / _CALL_LOG).read_text(encoding="utf-8").splitlines()))
-    for name in ("python", "preview"):
-        write_counted_error_project(
-            project_dir=tmp_path / name, files={**_PROJECT_FILES, **test_case.project_files}
-        )
-    python_run: CompileReuseRun = python_engine_compile(
-        project_dir=tmp_path / "python", monkeypatch=monkeypatch, capsys=capsys
+    write_counted_error_project(
+        project_dir=tmp_path / "preview", files={**_PROJECT_FILES, **test_case.project_files}
     )
     preview_run, fallbacks = fallback_free_preview_compile(
         project_dir=tmp_path / "preview",
@@ -158,7 +153,7 @@ def test_given_config_error_when_compiling_with_preview_then_error_matches_pytho
         test_case.expected_report_text in runs[0].report + runs[0].stderr,
         macro_calls,
         preview_run.returncode,
-        report_without_engine(preview_run).replace("preview", "python"),
+        report_without_engine(preview_run).replace("preview", "orders"),
         fallbacks,
     ) == (
         (1, 1),
@@ -166,8 +161,8 @@ def test_given_config_error_when_compiling_with_preview_then_error_matches_pytho
         True,
         True,
         test_case.expected_macro_calls,
-        python_run.returncode,
-        report_without_engine(python_run).replace("preview", "python"),
+        1,
+        report_without_engine(runs[1]),
         test_case.expected_python_fallbacks,
     ), (runs[0].report, runs[1].report, runs[1].stderr)
 
@@ -185,9 +180,9 @@ def test_given_config_error_when_compiling_with_preview_then_error_matches_pytho
                 ),
                 _CALL_LOG: "",
             },
-            engines=("python", "native-preview", "native"),
+            engines=("native-preview", "native"),
             expected_report_text="references unknown model 'ghost'",
-            expected_macro_calls=[1, 1, 1],
+            expected_macro_calls=[1, 1],
         )
     ],
     ids=lambda case: case.description,

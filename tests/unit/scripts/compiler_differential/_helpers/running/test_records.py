@@ -44,11 +44,11 @@ _SITE: str = "compiler/compile/_helpers/analysis/columns.py:_infer_columns_with_
             expected_deferrals={("legacy_fallback", "compact.py"): 1},
             expected_fallbacks={("model_loop.sql_variables", "deferred"): 3},
             expected_lines=(
-                "Polyglot wheel calls (python):",
+                "Polyglot wheel calls (native):",
                 f"        5 {_SITE} parse_one (seed 5)",
-                "Analysis deferrals (python):",
+                "Analysis deferrals (native):",
                 "        1 legacy_fallback compact.py (seed 1)",
-                "Native-to-Python fallbacks (python):",
+                "Native-to-Python fallbacks (native):",
                 "        3 model_loop.sql_variables deferred (seed 3)",
                 "Polyglot wheel calls (native-preview): none recorded",
                 "Analysis deferrals (native-preview): none recorded",
@@ -77,7 +77,7 @@ def test_given_record_files_when_reporting_then_counts_are_summed_per_engine_and
                     records=(records, read_analysis_records(tmp_path / "missing")),
                 )
             ],
-            engines=("python", "native-preview"),
+            engines=("native", "native-preview"),
         )
     )
 
