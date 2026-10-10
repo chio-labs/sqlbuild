@@ -19,3 +19,10 @@ pub(super) struct IntegerParseTestCase {
     pub(super) text: &'static str,
     pub(super) expected_decimal: Option<&'static str>,
 }
+
+pub(super) struct NestingTestCase {
+    pub(super) description: &'static str,
+    pub(super) value: JsonValue,
+    pub(super) dialect: JsonDialect,
+    pub(super) expected_written: bool,
+}

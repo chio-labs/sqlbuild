@@ -8,14 +8,17 @@ import pytest
 from tests.integration.src.sqlbuild.rule_engine.native_rows._test_types import (
     NativeRulesRequestTestCase,
     NativeTypeProofTestCase,
+    StructPassthroughTestCase,
 )
 from tests.integration.src.sqlbuild.rule_engine.native_rows.helpers import (
     TYPE_PROOF_FILES,
     FindingKey,
     built_rows,
+    compile_codes,
     compile_rules,
     edit_model,
     record_built_rows,
+    struct_passthrough_files,
     write_files,
     write_rules_fixture,
 )
@@ -132,3 +135,47 @@ def test_given_matching_and_mismatched_passthroughs_when_compiling_then_only_mis
 
     assert findings == test_case.expected_findings
     assert built_rows(built) == test_case.expected_built_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StructPassthroughTestCase(
+            description="default engine: declared STRUCT equals the passthrough",
+            engine="native",
+            declared_type='STRUCT("café" INTEGER)',
+            expected_exit_code=0,
+            expected_codes=(),
+        ),
+        StructPassthroughTestCase(
+            description="default engine: declared STRUCT differs from the passthrough",
+            engine="native",
+            declared_type='STRUCT("café" BIGINT)',
+            expected_exit_code=1,
+            expected_codes=("K002", "SQBRCONTRACT105"),
+        ),
+        StructPassthroughTestCase(
+            description="python engine: declared STRUCT equals the passthrough",
+            engine="python",
+            declared_type='STRUCT("café" INTEGER)',
+            expected_exit_code=0,
+            expected_codes=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_struct_passthrough_when_proving_types_then_adapter_callback_decides(
+    test_case: StructPassthroughTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_files(
+        project_dir=tmp_path,
+        files=struct_passthrough_files(declared_type=test_case.declared_type),
+    )
+    _ = record_built_rows(monkeypatch=monkeypatch, engine=test_case.engine)
+
+    outcome: tuple[int, tuple[str, ...]] = compile_codes(project_dir=tmp_path, capsys=capsys)
+
+    assert outcome == (test_case.expected_exit_code, test_case.expected_codes)

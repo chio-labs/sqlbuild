@@ -67,6 +67,41 @@ def compile_rules(
     )
 
 
+def struct_passthrough_files(*, declared_type: str) -> dict[str, str]:
+    """An enforced passthrough of a STRUCT column whose contract declares `declared_type`."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRCONTRACT105"]\n\n'
+            '[defaults]\ncontract = "enforced"\n'
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (description 'Staged orders.',\n"
+            "  columns (order_id (type INTEGER), detail (type 'STRUCT(\"café\" INTEGER)')),\n"
+            ");\n\n"
+            "SELECT CAST(1 AS INTEGER) AS order_id,\n"
+            "  CAST({'café': 1} AS STRUCT(\"café\" INTEGER)) AS detail\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Typed orders.',\n"
+            f"  columns (order_id (type INTEGER), detail (type '{declared_type}')),\n"
+            ");\n\n"
+            'SELECT order_id, detail\nFROM __ref("stg_orders")\n'
+        ),
+    }
+
+
+def compile_codes(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, tuple[str, ...]]:
+    """Compile to JSON; return the exit code and every diagnostic code in order."""
+
+    exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json"])
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, Any]] = cast(list[dict[str, Any]], payload["diagnostics"])
+    return exit_code, tuple(item["code"] for item in diagnostics)
+
+
 def edit_model(*, project_dir: Path) -> None:
     """Change one model's SQL so only its rules facts change."""
 
