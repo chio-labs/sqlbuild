@@ -18,6 +18,7 @@ MODE_TITLES: dict[str, str] = {
     EDIT_MODE: "one-model edit on a warm cache",
 }
 ANALYSIS_CACHE_MISSES: str = "analysis_cache_misses"
+ANALYSIS_CACHE_BYPASSES: str = "analysis_cache_bypasses"
 MODELS_DIRECTORY: str = "models"
 MODEL_FILE_PATTERN: str = "*.sql"
 EDIT_COMMENT: str = "-- Benchmark edit {revision}.\n"

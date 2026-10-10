@@ -20,7 +20,7 @@ does not add its own parity harness, property suite or E2E file.
 and of the work each native stage answers itself. It covers three kinds of record:
 - fallbacks, from `report_native_fallback(site=NativeFallbackSite.<SITE>, kind=...)` on every
   path where a native stage hands work to Python, or runs Python with no native path yet;
-- preview analysis-stage deferrals: every `analysis-deferrals-*.jsonl` record (analysis session,
+- analysis-stage deferrals: every `analysis-deferrals-*.jsonl` record (analysis session,
   lineage, semantic checks, contracts);
 - native answers, from `report_native_answer(stage=NativeStage.<STAGE>, kind=...)` where a
   stage's native path produced the result: files, models, scans or calls. Their site is
@@ -50,9 +50,9 @@ The counts hold for the make targets' corpus (`--seeds 12`); other seed ranges a
 
 Two stages the list cannot watch:
 - `type_system`: the compile corpus never reaches type normalization. Its callers are the planner
-  and executor and the preview stages' Python fallbacks. `tests/integration/.../type_system/
+  and executor and the analysis stages' Python fallbacks. `tests/integration/.../type_system/
   test_native_type_parity.py` proves instead that the public `normalize_type` asks native first
-  under `native-preview`.
+  under `native` and `native-preview`.
 - `discovery.native model_file_listings`: it is reported unconditionally inside the native model
   file discovery, which has no fallback to Python, so this count cannot detect anything. It stays
   only as a record that native discovery ran.

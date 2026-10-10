@@ -35,11 +35,11 @@ NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
 }
 NATIVE_FALLBACK_DEFERRAL_UNKNOWN_STAGE: str = "analysis"
 NATIVE_FALLBACK_LIST_HEADER: str = (
-    "# Every native-to-Python fallback and preview analysis deferral the CI corpus may still\n"
+    "# Every native-to-Python fallback and analysis deferral the CI corpus may still\n"
     "# reach, with its exact count per corpus. `--native-fallbacks check` fails on anything new,\n"
     "# changed or gone. Ports delete their entries; see scripts/compiler_differential/README.md.\n"
     "# The corpus does not reach type normalization (type_system): its callers are the planner,\n"
-    "# the executor and the preview fallbacks, so test_native_type_parity.py covers that stage."
+    "# the executor and the analysis fallbacks, so test_native_type_parity.py covers that stage."
 )
 RECORDS_DIRECTORY: str = "records"
 GOLDEN_DIRECTORY: str = "tests/goldens/compiler"

@@ -15,6 +15,7 @@ from pathlib import Path
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
 from scripts.compile_performance_ratio._helpers.edit import apply_one_model_edit
 from scripts.compile_performance_ratio.constants import (
+    ANALYSIS_CACHE_BYPASSES,
     ANALYSIS_CACHE_MISSES,
     BASE_GENERATOR_ENTRY,
     BASE_LABEL,
@@ -166,7 +167,7 @@ def compare_builds(
                     engine=engine,
                     compile_args=compile_args,
                 )
-                _check_cache_use(run=run, mode=mode)
+                check_cache_use(run=run, mode=mode)
                 results[label].append(run)
         comparisons.append(
             _comparison(
@@ -196,7 +197,13 @@ def _comparison(
     )
 
 
-def _check_cache_use(*, run: CompileRun, mode: str) -> None:
+def check_cache_use(*, run: CompileRun, mode: str) -> None:
+    """Fail a warm run that missed the analysis cache, or an edit run that analysed nothing.
+
+    Native model analysis bypasses the analysis cache, so an edit counts as observed when the
+    compile missed or bypassed the cache for at least one model.
+    """
+
     misses: int | None = run.analysis_cache_misses
     if misses is None or mode == COLD_MODE:
         return
@@ -205,10 +212,10 @@ def _check_cache_use(*, run: CompileRun, mode: str) -> None:
             f"{run.label} warm compile missed the analysis cache for {misses} models, so it "
             "did not measure an unchanged warm compile"
         )
-    if mode == EDIT_MODE and misses == 0:
+    if mode == EDIT_MODE and misses + (run.analysis_cache_bypasses or 0) == 0:
         raise CompileComparisonError(
-            f"{run.label} one-model edit compile reported no analysis cache miss, so the edit "
-            "did not invalidate the edited model"
+            f"{run.label} one-model edit compile reported no analysis cache miss or bypass, so "
+            "the edit did not invalidate the edited model"
         )
 
 
@@ -268,6 +275,7 @@ def _compile_once(
         cpu_seconds=(after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime),
         timings_ms={name: value for name, value in numeric.items() if name in REPORTED_PHASES},
         analysis_cache_misses=numeric.get(ANALYSIS_CACHE_MISSES),
+        analysis_cache_bypasses=numeric.get(ANALYSIS_CACHE_BYPASSES),
     )
 
 

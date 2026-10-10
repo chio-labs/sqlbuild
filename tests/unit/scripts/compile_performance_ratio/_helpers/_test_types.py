@@ -44,3 +44,18 @@ class MedianPhasesTestCase:
     description: str
     runs: tuple[CompileRun, ...]
     expected_phases: dict[str, float]
+
+
+@dataclass(frozen=True)
+class CacheUseTestCase:
+    description: str
+    run: CompileRun
+    mode: str
+
+
+@dataclass(frozen=True)
+class CacheUseErrorTestCase:
+    description: str
+    run: CompileRun
+    mode: str
+    expected_message: str

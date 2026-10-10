@@ -107,5 +107,6 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
     assert native_run.compiled == python_run.compiled
     assert preview_run.compiled == python_run.compiled
 
+
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])

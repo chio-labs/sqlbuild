@@ -12,6 +12,7 @@ class CompileRun:
     cpu_seconds: float
     timings_ms: dict[str, int]
     analysis_cache_misses: int | None = None
+    analysis_cache_bypasses: int | None = None
 
 
 @dataclass(frozen=True)
