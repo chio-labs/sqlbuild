@@ -9,7 +9,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
     infer_native_expression_source_shapes,
 )
-from sqlbuild.compiler.compile._helpers.analysis.columns import table_function_analysis_name
+from sqlbuild.compiler.compile._helpers.analysis.reference_names import table_function_analysis_name
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.models import (
     CompiledModel,

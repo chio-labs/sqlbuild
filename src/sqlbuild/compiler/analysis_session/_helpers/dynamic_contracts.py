@@ -5,11 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.analysis_session._helpers.session_rows import (
-    contract_proof,
-    family_rows,
-    shape_rows,
-)
+from sqlbuild.compiler.analysis_session._helpers.profile_rows import shape_rows
+from sqlbuild.compiler.analysis_session._helpers.session_rows import contract_proof, family_rows
 from sqlbuild.compiler.analysis_session.models import NativePivotTables
 from sqlbuild.compiler.analysis_session.types import ContractRow
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis

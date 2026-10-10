@@ -8,6 +8,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session._helpers.profile_rows import (
     case_sensitive_shapes,
     nullability_rule_rows,
+    shape_rows,
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.analysis_session.types import (
@@ -30,15 +31,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
-
-
-def shape_rows(shapes: Mapping[str, Mapping[str, str]]) -> ShapeRows:
-    """`{relation: {column: value}}` as ordered rows; discovery rejects non-text names and types."""
-
-    return [
-        (name, [(column, str(value)) for column, value in shape.items()])
-        for name, shape in shapes.items()
-    ]
 
 
 def session_request(

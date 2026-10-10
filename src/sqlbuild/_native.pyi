@@ -443,6 +443,18 @@ def prove_dynamic_column_contracts(
     ],
     /,
 ) -> list[_PivotContractRow]: ...
+def infer_query_columns(
+    catalog: object | None,
+    request: tuple[
+        str,
+        list[tuple[str, str]],
+        list[tuple[str, str]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[object, ...]],
+    ],
+    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+) -> list[tuple[bool, list[tuple[str, str | None, str]] | None, bool]]: ...
 def infer_expression_source_shapes(
     catalog: object,
     request: tuple[str, bool, list[tuple[str, str]], list[tuple[str, str]], list[str]],

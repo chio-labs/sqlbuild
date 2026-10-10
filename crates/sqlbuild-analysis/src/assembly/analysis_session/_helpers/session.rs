@@ -264,6 +264,7 @@ impl AnalysisSession {
                 cleaned_sql,
                 lineage_references: &model.lineage_references,
                 recover: model.recover_cte_facts,
+                full_nullability: false,
                 types: &self.available_types,
                 nullability: &self.available_nullability,
                 profile: RecoveryProfile {

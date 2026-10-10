@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 type ShapeRows = list[tuple[str, list[tuple[str, str]]]]
 type ColumnRow = tuple[str, str | None, str]
 type DiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
@@ -24,3 +26,5 @@ type ProofRow = tuple[
 ]
 type ContractRow = tuple[str, ProofRow | None]
 type FinishRow = tuple[list[OutcomeRow], ShapeRows, list[str], list[ContractRow]]
+
+type QueryColumnsMode = Literal["batch", "reanalysis", "parse", "legacy"]

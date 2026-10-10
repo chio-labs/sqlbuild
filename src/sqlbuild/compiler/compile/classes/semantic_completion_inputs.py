@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.analysis.compact import get_complete_schema_binding_request
+from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
+    get_complete_schema_binding_request,
+)
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
     _audit_errors,
     _names,

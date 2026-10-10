@@ -22,7 +22,7 @@ pub struct ModelReference {
 }
 
 /// One analysed model, with the facts Python derives from its compile input.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ModelRequest {
     pub name: String,
     /// Cursor-intrinsic analysis SQL.
@@ -272,6 +272,56 @@ pub struct AnalysisSession {
     pub(crate) publications: Shapes,
     pub(crate) failures: Vec<String>,
     pub(crate) cache: Option<AnalysisCache>,
+}
+
+/// Which of Python's column analyses one query outside the session takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryColumnsMode {
+    /// The precomputed compact batch: a failed analysis has no columns.
+    Batch,
+    /// Compact re-analysis over the input types, then the parsed tree where it declines.
+    Reanalysis,
+    /// `infer_columns_with_sql_analysis`: the parsed tree only.
+    Parse,
+    /// `analyze_columns_and_lineage_with_polyglot` with compact analysis off: the parsed tree,
+    /// nullability shallow where no input nullability is known.
+    Legacy,
+}
+
+/// One query outside the session whose columns Python inferred.
+#[derive(Debug, Clone)]
+pub struct QueryColumnsInput {
+    /// The model SQL; in `Parse` and `Legacy` modes, already through Python's normalization.
+    pub sql: String,
+    pub placeholders: Pairs,
+    /// Every reference's analysis name, in reference order.
+    pub analysis_names: Vec<String>,
+    /// Python's `lineage_reference_map` items.
+    pub lineage_references: Vec<(String, String, String)>,
+    pub recover_cte_facts: bool,
+    pub mode: QueryColumnsMode,
+}
+
+/// The queries, with the profile settings and relation facts their analysis reads.
+#[derive(Debug, Clone, Default)]
+pub struct QueryColumnsRequest {
+    pub dialect: String,
+    pub function_return_types: Pairs,
+    /// Adapter nullability rules as `(function name, rule id)`.
+    pub nullability_rules: Option<Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub nullability_callback: Option<NullabilityCallback>,
+    pub types: Shapes,
+    pub nullability: Shapes,
+    pub queries: Vec<QueryColumnsInput>,
+}
+
+/// One query's analysis: whether it succeeded, its columns and whether it projects a star.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct QueryColumns {
+    pub succeeded: bool,
+    pub columns: Option<Vec<ColumnFact>>,
+    pub has_star: bool,
 }
 
 /// One query's CTE fact recovery, as Python's compact enrichment runs it.

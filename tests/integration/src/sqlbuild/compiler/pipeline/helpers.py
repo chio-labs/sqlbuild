@@ -3,13 +3,10 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.analysis import compact
-from sqlbuild.compiler.compile._helpers.sharing import binding as binding_sharing
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -24,12 +21,10 @@ from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
-from sqlbuild.compiler.sql_analysis.main import _normalize_analysis_batch as normalize_batch
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.sql_values.types import CollectionRendering
 
 _REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
-_NORMALIZATION_MODULES: tuple[ModuleType, ...] = (normalize_batch, binding_sharing, compact)
 _ANALYSIS_CACHE_METRICS: tuple[str, ...] = (
     "analysis_batch_cache_hits",
     "analysis_entry_cache_hits",

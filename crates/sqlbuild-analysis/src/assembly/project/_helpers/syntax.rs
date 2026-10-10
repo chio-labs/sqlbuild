@@ -86,7 +86,7 @@ pub(crate) fn syntax_error(
 }
 
 /// `substitute_placeholder_defaults`: `@@@name` becomes its default; unknown names stay.
-fn placeholder_defaults(sql: &str, placeholders: &[(String, String)]) -> String {
+pub(crate) fn placeholder_defaults(sql: &str, placeholders: &[(String, String)]) -> String {
     let mut result: String = String::with_capacity(sql.len());
     let mut rest: &str = sql;
     while let Some(start) = rest.find(PLACEHOLDER_PREFIX) {

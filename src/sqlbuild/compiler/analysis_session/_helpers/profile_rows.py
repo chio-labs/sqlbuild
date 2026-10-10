@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapter.type_system.main._safe_cast_nullability import safe_cast_nullability
@@ -15,6 +17,7 @@ from sqlbuild.compiler.analysis_session.constants import (
     NULLABILITY_RULE_FIRST_ARG,
     NULLABILITY_RULE_SAFE_CAST,
 )
+from sqlbuild.compiler.analysis_session.types import ShapeRows
 from sqlbuild.compiler.sql_analysis.constants import CASE_SENSITIVE_BINDING_DIALECTS
 
 _NULLABILITY_RULE_IDS: dict[FunctionNullabilityRule, str] = {
@@ -49,3 +52,12 @@ def case_sensitive_shapes(*, profile: ExpressionInferenceProfile, dialect: str |
     """Python's `inferred_binding_shape` test for keeping authored identifier quoting."""
 
     return not profile.quoted_identifiers_ignore_case and dialect in CASE_SENSITIVE_BINDING_DIALECTS
+
+
+def shape_rows(shapes: Mapping[str, Mapping[str, str]]) -> ShapeRows:
+    """`{relation: {column: value}}` as ordered rows; discovery rejects non-text names and types."""
+
+    return [
+        (name, [(column, str(value)) for column, value in shape.items()])
+        for name, shape in shapes.items()
+    ]

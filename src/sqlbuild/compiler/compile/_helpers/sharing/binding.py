@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any, cast
 
-from sqlbuild.compiler.compile._helpers.analysis.columns import (
+from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
     _analysis_reference_name,
     _lineage_resource_type,
     _qualified_reference_names,

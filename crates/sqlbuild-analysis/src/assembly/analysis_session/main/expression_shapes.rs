@@ -58,6 +58,7 @@ pub fn expression_shapes(
                         cleaned_sql: &result.cleaned_sql,
                         lineage_references: &[],
                         recover: true,
+                        full_nullability: false,
                         types: &empty,
                         nullability: &empty,
                         profile: RecoveryProfile {

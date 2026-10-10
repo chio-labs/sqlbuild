@@ -6,10 +6,10 @@ import re
 from functools import lru_cache
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.analysis.compact import (
-    analyze_columns_and_lineage_with_polyglot,
-    analyze_queries_with_compact_polyglot_batch,
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
 )
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
@@ -19,8 +19,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompilerDiagnostic,
-    NativeCompactAnalysis,
-    PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
@@ -199,25 +197,16 @@ def _sql_test_columns(
     queries: tuple[str, ...] = tuple(bodies)
     if not queries:
         return {}
-    prepared: tuple[NativeCompactAnalysis, ...] = analyze_queries_with_compact_polyglot_batch(
-        query_sqls=queries,
-        references=((),) * len(queries),
-        placeholders=(None,) * len(queries),
-        column_nullability_by_table={},
-        column_types_by_table={},
-        inference_profile=profile,
-        recover_cte_facts=(False,) * len(queries),
+    analyses: tuple[NativeQueryColumns, ...] = infer_native_query_columns(
+        queries=tuple(
+            NativeColumnQuery(sql=sql, mode="batch", recover_cte_facts=False) for sql in queries
+        ),
+        profile=profile,
     )
-    result: dict[str, tuple[str, ...]] = {}
-    for sql, native in zip(queries, prepared, strict=True):
-        analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-            query_sql=sql,
-            references=(),
-            inference_profile=profile,
-            allow_compact_analysis=True,
-            precomputed=native,
-        )
-        result[sql] = tuple(column.name for column in analysis.columns or ())
+    result: dict[str, tuple[str, ...]] = {
+        sql: tuple(column.name for column in analysis.columns or ())
+        for sql, analysis in zip(queries, analyses, strict=True)
+    }
     return result
 
 

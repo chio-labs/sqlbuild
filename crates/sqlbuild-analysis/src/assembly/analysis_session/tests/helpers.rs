@@ -473,6 +473,7 @@ pub(crate) fn legacy_lines(sql: &str) -> Option<Vec<String>> {
         cleaned_sql: sql,
         lineage_references: &references,
         recover: true,
+        full_nullability: false,
         types: &types,
         nullability: &nullability,
         profile: RecoveryProfile {

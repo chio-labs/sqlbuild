@@ -665,20 +665,6 @@ def analyse_natively(
             )
 
 
-def record_python_model_analyses(*, monkeypatch: pytest.MonkeyPatch) -> list[object]:
-    """Record every Python model analysis assembly runs; return the list they are appended to."""
-
-    calls: list[object] = []
-    original: Callable[..., Any] = project_assembly.analyze_columns_and_lineage_with_polyglot
-
-    def recorded(**keywords: Any) -> Any:
-        calls.append(keywords.get("query_sql"))
-        return original(**keywords)
-
-    monkeypatch.setattr(project_assembly, "analyze_columns_and_lineage_with_polyglot", recorded)
-    return calls
-
-
 def duplicate_analysed_model_names(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Name every analysed model after the first, an invariant discovery guarantees (D007)."""
 
@@ -713,7 +699,10 @@ def analysis_request(
         requests.append(request)
         return {}, None
 
-    with monkeypatch.context() as patch, suppress(CompileInputError):
+    with (
+        monkeypatch.context() as patch,
+        suppress(CompileInputError, native_module.NativeCompilerError),
+    ):
         patch.setattr(project_assembly, "analyze_model_sql", captured)
         _ = project_assembly.assemble_compiled_project(
             inputs=inputs,
