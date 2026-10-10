@@ -405,6 +405,8 @@ class _ModelLoopHost:
     declarations: dict[int, _VisibleModelDeclarations] = field(default_factory=dict)
     configs: dict[int, CompileModelConfig] = field(default_factory=dict)
     macros: dict[int, MacroExpansionResult] = field(default_factory=dict)
+    python_hooks: dict[int, tuple[UsageRecord, ...]] = field(default_factory=dict)
+    hooks: dict[int, HookExpansionResult] = field(default_factory=dict)
 
     current_file: Path = Path()
 
@@ -438,7 +440,30 @@ class _ModelLoopHost:
             declarations=self.declarations.pop(index),
             effective_config=self.configs.pop(index),
             expanded_macros=self.macros.pop(index, None),
+            checked_hooks=self.python_hooks.pop(index, None),
+            expanded_hooks=self.hooks.pop(index, None),
         )
+
+    def check_hooks(self, *, index: int) -> None:
+        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
+        self.python_hooks[index] = _checked_python_hooks(
+            loop=self.loop, model_file=model_file, values=self.configs[index].values
+        )
+
+    def expand_hooks(
+        self, *, index: int
+    ) -> tuple[dict[str, object], list[tuple[str, str, str | None, int | None]]]:
+        expansion: HookExpansionResult = _model_hook_expansion(
+            loop=self.loop,
+            model_file=self.loop.discovered_inputs.model_files[index],
+            declarations=self.declarations[index],
+            config=self.configs[index],
+        )
+        self.hooks[index] = expansion
+        return expansion.values, [
+            (str(item.ref_kind), item.ref_name, item.ref_package, item.call_argument_count)
+            for item in expansion.references
+        ]
 
     def expand_macros(
         self, *, index: int, sql: str, spans: list[tuple[int, int, int, int]]
@@ -471,10 +496,14 @@ class _ModelLoopHost:
         query_sql: str,
         description: str | None,
         schema: tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...], bool] | None,
+        hook_statements: int,
         declarations: tuple[str, list[tuple[int, int, int, int]], list[UsageRecord]],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         visible: _VisibleModelDeclarations = self.declarations.pop(index)
+        report_native_answer(
+            stage=NativeStage.ATTACHMENTS, kind="cursor_intrinsic_rejections", units=hook_statements
+        )
         return plain_model_input(
             model_file=model_file,
             interpolation=self.interpolations[model_file.file_path],
@@ -488,9 +517,23 @@ class _ModelLoopHost:
                 declaration_sql=declarations[0],
                 declaration_spans=_expansion_spans(declarations[1]),
                 macro_expansion=self.macros.pop(index, None),
-                declaration_usages=tuple(dict.fromkeys(declarations[2])),
+                declaration_usages=tuple(
+                    dict.fromkeys(
+                        (
+                            *dict.fromkeys(declarations[2]),
+                            *self._hook_usages(index=index),
+                        )
+                    )
+                ),
             ),
             declarations=(visible.local_enums, visible.local_constants),
+        )
+
+    def _hook_usages(self, *, index: int) -> tuple[UsageRecord, ...]:
+        expansion: HookExpansionResult | None = self.hooks.pop(index, None)
+        return (
+            *(() if expansion is None else expansion.usages),
+            *self.python_hooks.pop(index, ()),
         )
 
     def model_row(self, *, model_input: CompileModelInput) -> tuple[object, ...]:
@@ -687,7 +730,7 @@ def _run_native_model_loop(
         (
             loop.validation_context.validators.native_config.validator,
             native_contract_classes(),
-            UsageRecord,
+            (UsageRecord, SqlHookEntry),
         ),
         loop.context.sql_lexical_syntax.native_mapping,
         cursor_intrinsic_semantics(),
@@ -733,6 +776,66 @@ def _expansion_spans(rows: list[tuple[int, int, int, int]]) -> tuple[ExpansionSp
             output_end=output_end,
         )
         for source_start, source_end, output_start, output_end in rows
+    )
+
+
+def _checked_python_hooks(
+    *, loop: _ModelInputLoop, model_file: DiscoveredSqlModelFile, values: dict[str, object]
+) -> tuple[UsageRecord, ...]:
+    """Check the model's Python hooks against their functions and return their usages."""
+
+    discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
+    validate_python_hook_config(
+        values=values,
+        model_name=model_file.file_path.stem,
+        hook_functions=discovered_inputs.hook_functions,
+        provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
+    )
+    return _python_hook_usages(
+        values=values,
+        resolver=loop.context.declaration_resolver,
+        consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
+        consumer_path=model_file.relative_path,
+    )
+
+
+def _model_hook_expansion(
+    *,
+    loop: _ModelInputLoop,
+    model_file: DiscoveredSqlModelFile,
+    declarations: _VisibleModelDeclarations,
+    config: CompileModelConfig,
+) -> HookExpansionResult:
+    """Expand the model's hook macros and declarations, as the project's macros render them."""
+
+    context: ModelInputBuildContext = loop.context
+    return expand_model_hook_macros_result(
+        values=config.values,
+        model_file=_model_reference_origin(model_file=model_file),
+        effective_vars=context.effective_vars,
+        context_values=build_model_context_values(
+            values=config.values,
+            model_name=model_file.file_path.stem,
+            effective_target_name=context.effective_target_name,
+            run_id=context.run_id,
+            include_target_values=True,
+        ),
+        loaded_macros=context.loaded_macros,
+        macro_context=context.macro_context,
+        declaration_expansion=DeclarationExpansionContext(
+            declarations=DeclarationResolutionContext(
+                enums=declarations.enums,
+                constants=declarations.constants,
+                inaccessible_enums=declarations.inaccessible_enums,
+                inaccessible_constants=declarations.inaccessible_constants,
+            ),
+            value_renderer=context.value_renderer,
+            collection_rendering=context.collection_rendering,
+            resolver=context.declaration_resolver,
+        ),
+        sql_lexical_syntax=context.sql_lexical_syntax,
+        sql_hook_definitions=loop.sql_hook_definitions,
+        consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
     )
 
 
@@ -824,17 +927,13 @@ def _build_model_input(
     declarations: _VisibleModelDeclarations,
     effective_config: CompileModelConfig,
     expanded_macros: MacroExpansionResult | None,
+    checked_hooks: tuple[UsageRecord, ...] | None,
+    expanded_hooks: HookExpansionResult | None,
 ) -> CompileModelInput:
     discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
     context: ModelInputBuildContext = loop.context
     validation_context: _ModelValidationContext = loop.validation_context
-    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = loop.sql_hook_definitions
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = loop.legacy_schema_files
-    effective_vars: dict[str, object] = context.effective_vars
-    effective_target_name: str | None = context.effective_target_name
-    run_id: str = context.run_id
-    macro_context: MacroContext = context.macro_context
-    loaded_macros: dict[str, LoadedMacro] = context.loaded_macros
     model_identity: ResourceIdentity = ResourceIdentity(
         ResourceKind.MODEL, model_file.file_path.stem
     )
@@ -846,11 +945,10 @@ def _build_model_input(
     model_schema_columns: tuple[SchemaColumn, ...] | None = (
         model_schema.columns if model_schema is not None else None
     )
-    validate_python_hook_config(
-        values=effective_config.values,
-        model_name=model_file.file_path.stem,
-        hook_functions=discovered_inputs.hook_functions,
-        provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
+    python_hook_usages: tuple[UsageRecord, ...] = (
+        _checked_python_hooks(loop=loop, model_file=model_file, values=effective_config.values)
+        if checked_hooks is None
+        else checked_hooks
     )
     named_usages: tuple[UsageRecord, ...] = (
         *(
@@ -864,12 +962,7 @@ def _build_model_input(
             if model_schema is not None
             else ()
         ),
-        *_python_hook_usages(
-            values=effective_config.values,
-            resolver=context.declaration_resolver,
-            consumer=model_identity,
-            consumer_path=model_file.relative_path,
-        ),
+        *python_hook_usages,
     )
     var_substituted_sql: str = applied_interpolation(interpolation)
     declaration_context: DeclarationResolutionContext = _declaration_context(
@@ -930,33 +1023,12 @@ def _build_model_input(
             else None
         ),
     )
-    hook_expansion: HookExpansionResult = expand_model_hook_macros_result(
-        values=effective_config.values,
-        model_file=_model_reference_origin(model_file=model_file),
-        effective_vars=effective_vars,
-        context_values=build_model_context_values(
-            values=effective_config.values,
-            model_name=model_file.file_path.stem,
-            effective_target_name=effective_target_name,
-            run_id=run_id,
-            include_target_values=True,
-        ),
-        loaded_macros=loaded_macros,
-        macro_context=macro_context,
-        declaration_expansion=DeclarationExpansionContext(
-            declarations=DeclarationResolutionContext(
-                enums=declarations.enums,
-                constants=declarations.constants,
-                inaccessible_enums=declarations.inaccessible_enums,
-                inaccessible_constants=declarations.inaccessible_constants,
-            ),
-            value_renderer=context.value_renderer,
-            collection_rendering=context.collection_rendering,
-            resolver=context.declaration_resolver,
-        ),
-        sql_lexical_syntax=context.sql_lexical_syntax,
-        sql_hook_definitions=sql_hook_definitions,
-        consumer=model_identity,
+    hook_expansion: HookExpansionResult = (
+        _model_hook_expansion(
+            loop=loop, model_file=model_file, declarations=declarations, config=effective_config
+        )
+        if expanded_hooks is None
+        else expanded_hooks
     )
     expanded_config: CompileModelConfig = _hook_expanded_config(
         config=effective_config,

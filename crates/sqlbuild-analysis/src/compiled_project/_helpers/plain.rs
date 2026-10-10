@@ -1,8 +1,6 @@
 //! Deciding whether the native loop finishes a model, and finishing it.
 
-use crate::compiled_project::constants::{
-    CALLBACK_CONFIG_KEYS, HEADER_METADATA_KEYS, MACRO_TOKEN, NATIVE_HEADER_KEYS,
-};
+use crate::compiled_project::constants::{HEADER_METADATA_KEYS, MACRO_TOKEN, NATIVE_HEADER_KEYS};
 use crate::compiled_project::models::{
     AnalysisOverride, CompiledModelFacts, DescriptionShape, HeaderColumnShape, PlainModel,
     PlainModelBlocker, PlainModelCheck,
@@ -23,13 +21,6 @@ pub(crate) fn plain_model_blocker(check: &PlainModelCheck) -> Option<PlainModelB
     }
     if check.declaration_scan_failed {
         return Some(PlainModelBlocker::DeclarationScan);
-    }
-    if check
-        .config_keys
-        .iter()
-        .any(|key| CALLBACK_CONFIG_KEYS.contains(&key.as_str()))
-    {
-        return Some(PlainModelBlocker::CallbackConfig);
     }
     let attachment_metadata: bool = check.config_keys.iter().any(|key| {
         HEADER_METADATA_KEYS.contains(&key.as_str()) && !NATIVE_HEADER_KEYS.contains(&key.as_str())

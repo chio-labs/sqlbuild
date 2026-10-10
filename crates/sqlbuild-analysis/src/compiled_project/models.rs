@@ -154,7 +154,6 @@ pub enum AnalysisOverride {
 pub enum PlainModelBlocker {
     Interpolation,
     DeclarationScan,
-    CallbackConfig,
     HeaderMetadata,
     HeaderParse,
     EnumColumns,

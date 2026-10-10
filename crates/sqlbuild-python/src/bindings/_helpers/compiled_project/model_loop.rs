@@ -4,7 +4,7 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
 };
 use pyo3::types::{
-    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyInt, PyString, PyStringMethods, PyTuple,
+    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple,
 };
 use pyo3::{IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
@@ -20,8 +20,9 @@ use sqlbuild_analysis::compiled_project::models::{
     ModelConfigFacts, ModelLoopSettings, ModelReferenceFact, ModelSchemaFact, PlainModel,
     PlainModelCheck, SchemaColumnFact, SplicedSql,
 };
+use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
-use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
+use sqlbuild_attachments::cursor_intrinsics::models::{IntrinsicCheck, IntrinsicModel};
 use sqlbuild_core::text::models::PythonText;
 use sqlbuild_model_config::header_metadata::main::parse_header_metadata::parse_header_metadata;
 use sqlbuild_model_config::header_metadata::models::{ParsedAudit, ParsedColumn};
@@ -57,6 +58,7 @@ const TABLE_TYPE_ATTRIBUTE: &str = "table_type";
 const DECLARED_ATTRIBUTE: &str = "declared";
 const STRIP_METHOD: &str = "strip";
 const VALIDATE_METHOD: &str = "validate";
+const REFERENCES_METHOD: &str = "references";
 const CONFIG_CALLBACK: &str = "config";
 const PLAIN_INPUT_CALLBACK: &str = "plain_input";
 const FALLBACK_CALLBACK: &str = "fallback";
@@ -70,6 +72,11 @@ const DESCRIPTION_ARGUMENT: &str = "description";
 const SCHEMA_ARGUMENT: &str = "schema";
 const DECLARATIONS_ARGUMENT: &str = "declarations";
 const EXPAND_MACROS_CALLBACK: &str = "expand_macros";
+const CHECK_HOOKS_CALLBACK: &str = "check_hooks";
+const EXPAND_HOOKS_CALLBACK: &str = "expand_hooks";
+const HOOK_STATEMENTS_ARGUMENT: &str = "hook_statements";
+const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
+const STATEMENT_ATTRIBUTE: &str = "statement";
 const SQL_ARGUMENT: &str = "sql";
 const SPANS_ARGUMENT: &str = "spans";
 const DECLARATION_ARGUMENT: &str = "declaration";
@@ -101,6 +108,8 @@ struct ModelLoopRow(
 type DeclarationScan = (Vec<(u8, String, Option<String>, usize, usize)>, Option<u8>);
 /// `(source start, source end, output start, output end)`.
 type SpanRow = (usize, usize, usize, usize);
+/// The native validator, header contract classes, and the usage-record and SQL-hook classes.
+type LoopChecks = (Py<PyAny>, Py<PyDict>, (Py<PyAny>, Py<PyAny>));
 /// `(kind, name, package, call argument count)`.
 type ReferenceRow = (String, String, Option<String>, Option<usize>);
 /// The Python view of the model and its visible local enum and constant declarations.
@@ -119,6 +128,7 @@ pub(crate) struct NativeModelLoop {
     settings: ModelLoopSettings,
     contract_classes: Py<PyDict>,
     usage_record: Py<PyAny>,
+    sql_hook_entry: Py<PyAny>,
 }
 
 /// One model as the loop finishes it: its row, effective config and visible enum names.
@@ -179,6 +189,7 @@ struct FinishedModel<'py> {
     schema: Option<HeaderSchema<'py>>,
     references: Vec<ReferenceRow>,
     declarations: ExpandedDeclarations<'py>,
+    hook_statements: usize,
 }
 
 /// Where the header attachment stands for one model.
@@ -191,12 +202,12 @@ enum HeaderOutcome<'py> {
 impl NativeModelLoop {
     #[new]
     fn new(
-        checks: (Py<PyAny>, Py<PyDict>, Py<PyAny>),
+        checks: LoopChecks,
         syntax: LexicalSyntaxInput,
         cursor: (Vec<String>, ((u8, u8), String)),
         settings: (bool, bool, bool, bool),
     ) -> PyResult<Self> {
-        let (validator, contract_classes, usage_record) = checks;
+        let (validator, contract_classes, (usage_record, sql_hook_entry)) = checks;
         let (reserved_markers, (python_version, unicode_version)) = cursor;
         let (sql_analysis, no_sql_validation, defer_sql_validation, legacy_schema_files) = settings;
         Ok(Self {
@@ -212,6 +223,7 @@ impl NativeModelLoop {
             },
             contract_classes,
             usage_record,
+            sql_hook_entry,
         })
     }
 
@@ -300,6 +312,14 @@ impl NativeModelLoop {
         let (None, Some(sql)) = (plain_model_blocker(&check), interpolated_sql) else {
             return Ok(None);
         };
+        let hooked: bool = hook_presence(&values)?;
+        if hooked {
+            callback(
+                &visible.host,
+                CHECK_HOOKS_CALLBACK,
+                &[(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())],
+            )?;
+        }
         let references = declaration_scan
             .as_ref()
             .map_or(&[][..], |(refs, _)| refs.as_slice());
@@ -340,6 +360,15 @@ impl NativeModelLoop {
         if !self.validates(py, &validation)? {
             return Ok(None);
         }
+        let (values, hook_statements): (Bound<'py, PyDict>, usize) = if hooked {
+            let Some(expanded) = self.expanded_hooks(py, visible, index, (name, relative_path))?
+            else {
+                return Ok(None);
+            };
+            expanded
+        } else {
+            (values, 0)
+        };
         let description: Option<String> = match check.description {
             DescriptionShape::Text(description) => Some(description),
             DescriptionShape::Absent | DescriptionShape::Invalid => None,
@@ -363,7 +392,65 @@ impl NativeModelLoop {
             schema,
             references,
             declarations,
+            hook_statements,
         }))
+    }
+
+    /// Hook-expanded config values and SQL hook count; `None` when the attachment reports a hook.
+    fn expanded_hooks<'py>(
+        &self,
+        py: Python<'py>,
+        visible: &VisibleDeclarations<'py>,
+        index: usize,
+        model: (&str, &str),
+    ) -> PyResult<Option<(Bound<'py, PyDict>, usize)>> {
+        let (values, references): (Bound<'py, PyDict>, Vec<ReferenceRow>) = callback(
+            &visible.host,
+            EXPAND_HOOKS_CALLBACK,
+            &[(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())],
+        )?
+        .extract()?;
+        if references
+            .iter()
+            .any(|(kind, _, _, _)| kind == DBT_REF_KIND)
+        {
+            return Ok(None);
+        }
+        let rows: Vec<(&str, &str, bool)> = references
+            .iter()
+            .map(|(kind, name, _, _)| (kind.as_str(), name.as_str(), false))
+            .collect();
+        if !self
+            .validator
+            .bind(py)
+            .call_method1(REFERENCES_METHOD, (model, rows))?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        let mut statements: usize = 0;
+        for key in HOOK_KEYS {
+            let Some(hooks) = present(&values, key)? else {
+                continue;
+            };
+            if !(hooks.is_instance_of::<PyList>() || hooks.is_instance_of::<PyTuple>()) {
+                continue;
+            }
+            for entry in hooks.try_iter()? {
+                let entry: Bound<'py, PyAny> = entry?;
+                if !entry.is_instance(self.sql_hook_entry.bind(py))? {
+                    continue;
+                }
+                statements += 1;
+                let statement: String = entry.getattr(STATEMENT_ATTRIBUTE)?.extract()?;
+                if let IntrinsicCheck::Rejected(_message) =
+                    intrinsic_free(self.python, &statement, &self.reserved_markers, key)
+                {
+                    return Ok(None);
+                }
+            }
+        }
+        Ok(Some((values, statements)))
     }
 
     /// Splice the scanned enum and constant references; `None` when the attachment reports one.
@@ -656,6 +743,10 @@ fn plain_input<'py>(
             schema_argument(py, finished.schema.as_ref())?,
         ),
         (
+            HOOK_STATEMENTS_ARGUMENT,
+            finished.hook_statements.into_pyobject(py)?.into_any(),
+        ),
+        (
             DECLARATIONS_ARGUMENT,
             (
                 finished.declarations.spliced.sql.as_str(),
@@ -773,6 +864,15 @@ fn expand_macros(
         ],
     )?
     .extract()
+}
+
+fn hook_presence(values: &Bound<'_, PyDict>) -> PyResult<bool> {
+    for key in HOOK_KEYS {
+        if present(values, key)?.is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn config_keys(values: &Bound<'_, PyDict>) -> PyResult<Vec<String>> {

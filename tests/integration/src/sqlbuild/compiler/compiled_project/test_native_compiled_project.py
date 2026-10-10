@@ -90,10 +90,10 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
     "test_case",
     [
         ModelLoopParityTestCase(
-            description="plain, interpolated, seeded, incremental, column-contract, enum, constant and macro models",
+            description="plain, interpolated, seeded, incremental, column-contract, enum, constant, macro and hooked models",
             fixtures=(),
             files=PARITY_FILES,
-            expected_native_models=6,
+            expected_native_models=7,
         ),
         ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",

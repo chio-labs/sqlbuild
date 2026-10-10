@@ -26,9 +26,9 @@ fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
             expected_blocker: Some(PlainModelBlocker::Interpolation),
         },
         PlainBlockerTestCase {
-            description: "hooks",
-            check: plain_check("SELECT 1", &["post_hooks"]),
-            expected_blocker: Some(PlainModelBlocker::CallbackConfig),
+            description: "hooks are finished natively",
+            check: plain_check("SELECT 1", &["pre_hooks", "post_hooks"]),
+            expected_blocker: None,
         },
         PlainBlockerTestCase {
             description: "declared columns and audits are attached natively",

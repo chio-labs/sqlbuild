@@ -141,6 +141,12 @@ PARITY_FILES: dict[str, str] = {
         "MODEL (description 'Priced orders.');\n"
         "SELECT @cents('3') AS cents, order_id FROM __ref(\"stg_orders\")\n"
     ),
+    "models/marts/hooked.sql": (
+        "MODEL (\n  description 'Hooked orders.',\n"
+        "  pre_hooks [inline_sql('SELECT @@region AS region')],\n"
+        "  post_hooks [inline_sql('SELECT @cents(2) AS cents')],\n);\n"
+        "SELECT 1 AS order_id\n"
+    ),
     "models/marts/migrated.sql": (
         "MODEL (materialized incremental, incremental_strategy append,"
         " columns (order_id (migrate_from id)));\nSELECT 1 AS order_id\n"
@@ -157,7 +163,7 @@ def build_inputs_with_native_loop(
     native_loop_type: type = _native.NativeModelLoop
 
     def loop(
-        checks: tuple[object, dict[str, object], object],
+        checks: tuple[object, dict[str, object], tuple[object, object]],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
         settings: tuple[bool, ...],

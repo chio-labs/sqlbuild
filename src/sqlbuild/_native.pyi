@@ -66,7 +66,7 @@ class NativeCompiledProject:
 class NativeModelLoop:
     def __init__(
         self,
-        checks: tuple[object, dict[str, object], object],
+        checks: tuple[object, dict[str, object], tuple[object, object]],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
         settings: tuple[bool, bool, bool, bool],
