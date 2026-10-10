@@ -8,8 +8,10 @@ import os
 import stat
 import uuid
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.compile.sql_test_artifact_cache import (
     artifact_matches_cache_record,
@@ -20,6 +22,7 @@ from sqlbuild.cli.commands._helpers.compile.sql_test_artifact_cache import (
     sql_test_artifact_record_key,
     write_sql_test_artifact_cache,
 )
+from sqlbuild.cli.commands.classes.native_artifact_batch import NativeArtifactBatch
 from sqlbuild.cli.commands.exceptions import StagedArtifactsChangedError
 from sqlbuild.cli.compile.models import (
     PendingStaticSqlTest,
@@ -49,7 +52,8 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_artifacts import (
     plan_and_render_sql_test_artifacts,
@@ -76,6 +80,8 @@ _MANIFEST_FILE: str = "manifest.json"
 _SQL_FILE_SUFFIX: str = ".sql"
 _POSIX_LINE_SEPARATOR: str = "\n"
 _SQL_TEST_PLANNING_ERROR_CODE: str = PlannerInputError.code
+_PUBLISHED_STAGING_CHANGED: str = "changed"
+_PUBLISHED_TREE: str = "tree"
 
 
 def write_compile_target(
@@ -141,35 +147,29 @@ def write_static_compile_target(
 
     remove_stale_files: bool = (target_dir / _COMPILED_DIR).is_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
-    managed_paths: set[Path] = set().union(
-        _write_static_models(
-            target_dir=target_dir,
-            project=project,
-            check_existing=remove_stale_files,
-        ),
-        _write_static_functions(
-            target_dir=target_dir,
-            adapter=adapter,
-            project=project,
-            check_existing=remove_stale_files,
-        ),
-        _write_static_audits(
-            target_dir=target_dir,
-            project=project,
-            check_existing=remove_stale_files,
-        ),
-    )
+    batch: NativeArtifactBatch | None = _native_artifact_batch(check_existing=remove_stale_files)
+    managed_paths: set[Path] = set()
+    for write_group in (
+        partial(_write_static_models, target_dir=target_dir, project=project),
+        partial(_write_static_functions, target_dir=target_dir, adapter=adapter, project=project),
+        partial(_write_static_audits, target_dir=target_dir, project=project),
+    ):
+        managed_paths.update(write_group(check_existing=remove_stale_files, batch=batch))
+        _flush_artifacts(batch)
     test_paths, test_diagnostics = _write_static_tests(
         target_dir=target_dir,
         adapter=adapter,
         project=project,
         check_existing=remove_stale_files,
         planned_tests=planned_tests,
+        batch=batch,
     )
     managed_paths.update(test_paths)
     if remove_stale_files:
         with record_compile_timing("stale_traversal_ms"):
-            _remove_stale_compiled_files(target_dir=target_dir, managed_paths=managed_paths)
+            _remove_stale_compiled_files(
+                target_dir=target_dir, managed_paths=managed_paths, native=batch is not None
+            )
     if manifest is not None:
         _write_manifest(target_dir=target_dir, manifest=manifest)
 
@@ -210,9 +210,15 @@ def publish_static_compile_target(
             help="Rerun the compile; avoid deleting target/ while a compile is running.",
         )
     target_dir.mkdir(parents=True, exist_ok=True)
-    moved: bool = not compiled_dir.is_dir() and _move_staged_tree(
-        staged_dir=staged_dir, path=compiled_dir
-    )
+    if _native_artifact_batch(check_existing=False) is not None:
+        _publish_staged_natively(
+            staged_dir=staged_dir, target_dir=target_dir, expected_files=expected_files
+        )
+        moved: bool = True
+    else:
+        moved = not compiled_dir.is_dir() and _move_staged_tree(
+            staged_dir=staged_dir, path=compiled_dir
+        )
     if not moved:
         check_existing: bool = compiled_dir.is_dir()
         managed_paths: set[Path] = set()
@@ -234,6 +240,40 @@ def publish_static_compile_target(
         target_dir=target_dir,
         diagnostics=prepared.diagnostics,
     )
+
+
+def _publish_staged_natively(
+    *, staged_dir: Path, target_dir: Path, expected_files: frozenset[str]
+) -> None:
+    compiled_dir: Path = target_dir / _COMPILED_DIR
+    existed: bool = compiled_dir.is_dir()
+    with record_compile_timing("physical_write_ms"):
+        kind, published = _native.publish_staged_artifacts(
+            staged_dir, compiled_dir, sorted(expected_files)
+        )
+    if kind == _PUBLISHED_STAGING_CHANGED:
+        raise StagedArtifactsChangedError(
+            "staged compile artifacts changed before publication; no artifact was published",
+            help="Rerun the compile; avoid deleting target/ while a compile is running.",
+        )
+    if kind == _PUBLISHED_TREE:
+        COMPILE_ARTIFACT_WRITES.moved_tree(source=staged_dir, destination=compiled_dir)
+        report_native_answer(
+            stage=NativeStage.COMPILE_OUTPUTS, kind="published_files", units=len(expected_files)
+        )
+        return
+    for source, path in published:
+        COMPILE_ARTIFACT_WRITES.moved(source=source, destination=path)
+    report_native_answer(
+        stage=NativeStage.COMPILE_OUTPUTS, kind="published_files", units=len(published)
+    )
+    if existed:
+        with record_compile_timing("stale_traversal_ms"):
+            _remove_stale_compiled_files(
+                target_dir=target_dir,
+                managed_paths={Path(path) for _, path in published},
+                native=True,
+            )
 
 
 def _move_staged_tree(*, staged_dir: Path, path: Path) -> bool:
@@ -311,14 +351,20 @@ def _write_models(*, target_dir: Path, plan_output: PlanOutput, check_existing: 
 
 
 def _write_static_models(
-    *, target_dir: Path, project: CompiledProject, check_existing: bool
+    *,
+    target_dir: Path,
+    project: CompiledProject,
+    check_existing: bool,
+    batch: NativeArtifactBatch | None = None,
 ) -> set[Path]:
     """Write offline model query SQL."""
 
     managed_paths: set[Path] = set()
     for model in project.models:
         compiled_path: Path = target_dir / _COMPILED_DIR / _model_output_path(model.relative_path)
-        _write_sql(path=compiled_path, sql=model.query_sql, check_existing=check_existing)
+        _write_sql(
+            path=compiled_path, sql=model.query_sql, check_existing=check_existing, batch=batch
+        )
         managed_paths.add(compiled_path)
     return managed_paths
 
@@ -367,6 +413,7 @@ def _write_static_functions(
     adapter: BaseAdapter,
     project: CompiledProject,
     check_existing: bool,
+    batch: NativeArtifactBatch | None = None,
 ) -> set[Path]:
     """Write offline rendered SQL function DDL."""
 
@@ -396,6 +443,7 @@ def _write_static_functions(
             path=function_path,
             sql=";\n\n".join(statements),
             check_existing=check_existing,
+            batch=batch,
         )
         managed_paths.add(function_path)
     return managed_paths
@@ -415,7 +463,11 @@ def _write_audits(*, target_dir: Path, plan_output: PlanOutput, check_existing: 
 
 
 def _write_static_audits(
-    *, target_dir: Path, project: CompiledProject, check_existing: bool
+    *,
+    target_dir: Path,
+    project: CompiledProject,
+    check_existing: bool,
+    batch: NativeArtifactBatch | None = None,
 ) -> set[Path]:
     """Write offline resolved audit SQL."""
 
@@ -428,7 +480,7 @@ def _write_static_audits(
             attached_column_name=audit.attached_column_name,
         )
         audit_path: Path = target_dir / _COMPILED_DIR / _AUDITS_DIR / folder / file_name
-        _write_sql(path=audit_path, sql=audit.sql_body, check_existing=check_existing)
+        _write_sql(path=audit_path, sql=audit.sql_body, check_existing=check_existing, batch=batch)
         managed_paths.add(audit_path)
     return managed_paths
 
@@ -601,6 +653,7 @@ def _write_static_tests(
     project: CompiledProject,
     check_existing: bool,
     planned_tests: Callable[[], PlannedStaticSqlTests] | None,
+    batch: NativeArtifactBatch | None = None,
 ) -> tuple[set[Path], tuple[CompilerDiagnostic, ...]]:
     """Write offline SQL-native test SQL and report uncached planning errors."""
 
@@ -611,16 +664,22 @@ def _write_static_tests(
     tests_root: Path = planned.tests_root
     managed_paths: set[Path] = set(planned.cached_paths)
     current_records: dict[str, SqlTestArtifactCacheRecord] = dict(planned.cached_records)
+    test_paths: list[Path] = []
     for pending, artifact in zip(planned.pending, planned.artifacts, strict=True):
+        test_path: Path = tests_root / compiled_sql_test_output_path(
+            test=pending.test,
+            model_names=artifact.model_names,
+        )
+        _write_sql(path=test_path, sql=artifact.sql, check_existing=check_existing, batch=batch)
+        managed_paths.add(test_path)
+        test_paths.append(test_path)
+    _flush_artifacts(batch)
+    for pending, artifact, test_path in zip(
+        planned.pending, planned.artifacts, test_paths, strict=True
+    ):
         test: CompiledSqlTest = pending.test
         record_key: str | None = pending.record_key
         artifact_identity: str | None = pending.artifact_identity
-        test_path: Path = tests_root / compiled_sql_test_output_path(
-            test=test,
-            model_names=artifact.model_names,
-        )
-        _write_sql(path=test_path, sql=artifact.sql, check_existing=check_existing)
-        managed_paths.add(test_path)
         artifact_diagnostics: tuple[CompilerDiagnostic, ...] = _sql_test_artifact_diagnostics(
             test=test, artifact=artifact
         )
@@ -667,10 +726,15 @@ def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
     _write_text_if_changed(path=manifest_path, contents=json.dumps(manifest, indent=2) + "\n")
 
 
-def _write_sql(*, path: Path, sql: str, check_existing: bool = True) -> None:
-    """Write one SQL file."""
+def _write_sql(
+    *, path: Path, sql: str, check_existing: bool = True, batch: NativeArtifactBatch | None = None
+) -> None:
+    """Write one SQL file, or queue it for the native writer when a batch is given."""
 
     contents: str = sql.rstrip() + "\n"
+    if batch is not None:
+        batch.queue(path=path, contents=contents.encode("utf-8"))
+        return
     if os.linesep != _POSIX_LINE_SEPARATOR:
         _write_text_if_changed(
             path=path,
@@ -749,8 +813,18 @@ def _write_all(*, descriptor: int, path: Path, contents: bytes) -> None:
         offset += written
 
 
-def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:
+def _remove_stale_compiled_files(
+    *, target_dir: Path, managed_paths: set[Path], native: bool = False
+) -> None:
     compiled_dir: Path = target_dir / _COMPILED_DIR
+    if native:
+        removed: int = _native.remove_stale_artifacts(
+            compiled_dir, [os.fspath(path) for path in managed_paths]
+        )
+        report_native_answer(
+            stage=NativeStage.COMPILE_OUTPUTS, kind="stale_files_removed", units=removed
+        )
+        return
     if not compiled_dir.is_dir():
         return
     managed_names: set[str] = {os.fspath(path) for path in managed_paths}
@@ -770,6 +844,22 @@ def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) 
                 removed_directories.add(root)
     if os.fspath(compiled_dir) in removed_directories:
         _remove_empty_directory(compiled_dir)
+
+
+def _native_artifact_batch(*, check_existing: bool) -> NativeArtifactBatch | None:
+    """A batch for the native writer when the preview stage is on and files use POSIX newlines."""
+
+    if not native_stage_enabled(NativeStage.COMPILE_OUTPUTS):
+        return None
+    if os.linesep != _POSIX_LINE_SEPARATOR:
+        report_native_fallback(site=NativeFallbackSite.COMPILE_ARTIFACT_WRITES)
+        return None
+    return NativeArtifactBatch(check_existing=check_existing)
+
+
+def _flush_artifacts(batch: NativeArtifactBatch | None) -> None:
+    if batch is not None:
+        batch.flush()
 
 
 def _remove_empty_directory(directory: str | Path) -> bool:

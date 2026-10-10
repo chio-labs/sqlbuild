@@ -1,6 +1,7 @@
 """Private SQLBuild native engine bindings."""
 
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, TypedDict
 
 from sqlbuild.compiler.sql_test_glue.models import (
@@ -44,6 +45,17 @@ def evaluate_rules_request(
 ) -> tuple[
     list[tuple[bool, str, str, int, int, str, str]], list[str], int, int, int, int, bool
 ]: ...
+def emit_json_report(report: object) -> str | None: ...
+def snapshot_project_paths(
+    project_dir: str, rules: dict[str, object]
+) -> list[tuple[str, str, int, int, int, int, str | None]] | None: ...
+def write_compiled_artifacts(
+    files: list[tuple[Path, bytes]], check_existing: bool
+) -> tuple[int, int]: ...
+def remove_stale_artifacts(compiled_dir: Path, managed: list[str]) -> int: ...
+def publish_staged_artifacts(
+    staged_dir: Path, compiled_dir: Path, expected: list[str]
+) -> tuple[str, list[tuple[str, str]]]: ...
 def finalize_rule_findings_rows(
     request: dict[str, object],
 ) -> list[tuple[bool, str, str, int, int, str, str]]: ...
