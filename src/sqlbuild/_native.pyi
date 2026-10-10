@@ -456,9 +456,11 @@ class NativeModelAnalysisSession:
     def failure(self) -> str | None: ...
     @property
     def sharing(self) -> tuple[int, int]: ...
+    @property
+    def cache_stats(self) -> tuple[int, int, int, str | None] | None: ...
 
 def start_model_analysis_session(
-    catalog: object, request: tuple[object, ...], /
+    catalog: object, request: tuple[object, ...], cache: tuple[str, str] | None = None
 ) -> NativeModelAnalysisSession | None: ...
 def prove_dynamic_column_contracts(
     request: tuple[
@@ -541,8 +543,9 @@ def check_semantic_metadata_rows(
                 str | None,
             ]
         ],
-        list[tuple[str, str | None, str]],
-        list[tuple[str, list[tuple[str, list[str]]]]],
+        list[str],
+        list[tuple[str, str | None, int]],
+        list[tuple[int, list[tuple[str, list[str]]]]],
     ],
     /,
 ) -> tuple[

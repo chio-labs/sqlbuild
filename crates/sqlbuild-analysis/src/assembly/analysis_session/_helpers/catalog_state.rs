@@ -104,6 +104,11 @@ impl SessionCatalog {
         }
     }
 
+    /// The closed shape Python's catalog `schemas` holds for `name`.
+    pub(crate) fn known_schema(&self, name: &str) -> Option<&Pairs> {
+        self.schemas.get(name)
+    }
+
     /// `(shared members, shared members re-analysed alone)` so far.
     pub(crate) fn sharing(&self) -> (usize, usize) {
         (self.shared_members, self.reanalysed_members)

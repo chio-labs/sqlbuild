@@ -80,3 +80,24 @@ pub(crate) struct LegacyAnalysisTestCase {
     /// The outcome, columns and lineage rows; None where the analysis defers to Python.
     pub(crate) expected_lines: Option<&'static [&'static str]>,
 }
+
+pub(crate) struct CacheReuseTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) models: &'static [ModelSpec],
+    /// `(hits, misses, stored)` of the cold run, then of the warm run.
+    pub(crate) expected_stats: [(usize, usize, usize); 2],
+}
+
+pub(crate) struct CacheEditTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) models: &'static [ModelSpec],
+    pub(crate) edited: &'static [ModelSpec],
+    /// Which models the run after the edit takes from the cache, in request order.
+    pub(crate) expected_hits: &'static [bool],
+}
+
+pub(crate) struct CacheKeyTestCase {
+    pub(crate) description: &'static str,
+    /// Changes one input of the request the key must cover.
+    pub(crate) change: fn(&mut crate::assembly::analysis_session::models::SessionRequest),
+}

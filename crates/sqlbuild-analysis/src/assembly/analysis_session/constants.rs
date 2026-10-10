@@ -27,6 +27,10 @@ pub(crate) const BINDING_SEVERITIES: [&str; 2] = ["error", "warning"];
 pub(crate) const DEFAULT_BINDING_MESSAGE: &str = "SQL binding failed";
 /// Analysis workers per compact batch, as Python requests.
 pub(crate) const COMPACT_WORKERS: usize = 4;
+/// Chunks a large batch is split into, so each chunk is prepared while the previous one runs.
+pub(crate) const PIPELINE_CHUNKS: usize = 4;
+/// The smallest batch worth splitting into pipelined chunks.
+pub(crate) const PIPELINE_MIN_MEMBERS: usize = 128;
 /// Python's `NATIVE_DIALECT_ALIASES`.
 pub(crate) const DIALECT_ALIASES: [(&str, &str); 3] = [
     ("postgres", "postgresql"),
@@ -193,3 +197,5 @@ pub(crate) const FIRST_ARG_RULE: &str = "first_arg";
 pub(crate) const CONDITIONAL_RESULT_RULE: &str = "conditional_result";
 pub(crate) const NON_NULL_NULLABILITY: &str = "non_null";
 pub(crate) const NULLABLE_NULLABILITY: &str = "nullable";
+/// Bumped whenever the stored outcome or a key's fields change; older entries never match.
+pub(crate) const ANALYSIS_CACHE_FORMAT: &str = "native-model-analysis-v1";

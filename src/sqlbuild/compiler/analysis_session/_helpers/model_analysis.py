@@ -12,13 +12,16 @@ from sqlbuild.compiler.analysis_session.constants import (
     DEFERRAL_NO_CATALOG,
     DEFERRAL_NO_COMPACT_ANALYSIS,
     DEFERRAL_SESSION,
+    NATIVE_ANALYSIS_STORE_FILE_NAME,
+    NATIVE_ANALYSIS_STORE_VERSION,
 )
 from sqlbuild.compiler.analysis_session.models import (
     NativeModelAnalyses,
     NativeModelAnalysisRequest,
 )
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
-from sqlbuild.compiler.compile.models import ModelSqlAnalysis
+from sqlbuild.compiler.compile.models import AnalysisCacheContext, ModelSqlAnalysis
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 
 
 def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModelAnalyses | None:
@@ -42,7 +45,9 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
         request=request, python=python, schemas=catalog.schemas
     )
     session: _native.NativeModelAnalysisSession | None = (
-        _native.start_model_analysis_session(catalog.native, row) if row is not None else None
+        _native.start_model_analysis_session(catalog.native, row, _analysis_store(request))
+        if row is not None
+        else None
     )
     if session is None:
         record_analysis_deferral(kind=DEFERRAL_SESSION)
@@ -51,3 +56,27 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
         request=request, python=python, catalog=catalog
     ).analyses(session)
     return None if analyses is None else NativeModelAnalyses(analyses=analyses, session=session)
+
+
+def _analysis_store(request: NativeModelAnalysisRequest) -> tuple[str, str] | None:
+    """The store path and environment for the analysis cache, or None where Python bypasses it.
+
+    The environment adds the installed build and Python's own cache identity, which digests the
+    inference profile, versions and the target, vars and known declarations, to the session
+    request each model key covers.
+    """
+
+    context: AnalysisCacheContext | None = request.analysis_cache
+    if context is None:
+        return None
+    return (
+        str(context.root / NATIVE_ANALYSIS_STORE_FILE_NAME),
+        _native.content_digest(
+            [
+                NATIVE_ANALYSIS_STORE_VERSION,
+                compiled_code_identity(),
+                context.shared_fingerprint,
+                context.signature_namespace,
+            ]
+        ),
+    )

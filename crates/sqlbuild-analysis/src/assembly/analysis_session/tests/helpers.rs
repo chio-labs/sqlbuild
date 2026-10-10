@@ -5,15 +5,22 @@ use crate::assembly::analysis_session::_helpers::cte_facts::{
     recovery,
 };
 use crate::assembly::analysis_session::_helpers::mappings::{ShapeTable, catalog_relations};
+use sqlbuild_cache::digest::types::ContentDigest;
+use sqlbuild_cache::store::models::NativeStore;
+
+use crate::assembly::analysis_session::main::attach_analysis_cache::attach_analysis_cache;
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
+use crate::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
 use crate::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
 use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
+use crate::assembly::analysis_session::main::take_analysis_cache::take_analysis_cache;
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis, DynamicFamily,
-    FinishedSession, LineageRow, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest,
-    PivotModel, PivotOutcome, PivotTables, SessionModelFacts, SessionRequest, SessionStep,
+    AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis,
+    DynamicFamily, FinishedSession, LineageRow, ModelOutcome, ModelReference, ModelRequest,
+    PivotBatchRequest, PivotModel, PivotOutcome, PivotTables, SessionModelFacts, SessionOutcome,
+    SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::tests::test_types::{ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -133,9 +140,19 @@ pub(crate) fn started(request: SessionRequest) -> AnalysisSession {
 
 /// Run to completion, answering every deferral with `answer`: the steps, outcomes and session.
 pub(crate) fn completed(
-    mut session: AnalysisSession,
+    session: AnalysisSession,
     answer: fn(&Deferral) -> DeferredAnalysis,
 ) -> (Vec<SessionStep>, Vec<ModelOutcome>, FinishedSession) {
+    let (steps, outcome, finished, ()) = completed_with(session, answer, |_| ());
+    (steps, outcome.models, finished)
+}
+
+/// [`completed`], reading the session with `before_finish` once every wave has run.
+pub(crate) fn completed_with<T>(
+    mut session: AnalysisSession,
+    answer: fn(&Deferral) -> DeferredAnalysis,
+    before_finish: impl FnOnce(&mut AnalysisSession) -> T,
+) -> (Vec<SessionStep>, SessionOutcome, FinishedSession, T) {
     let mut done: bool = false;
     let steps: Vec<SessionStep> = std::iter::from_fn(|| {
         (!done).then(|| {
@@ -149,8 +166,77 @@ pub(crate) fn completed(
         })
     })
     .collect();
+    let read: T = before_finish(&mut session);
     let (outcome, finished) = finish_analysis_session(session).expect("the session finished");
-    (steps, outcome.models, finished)
+    (steps, outcome, finished, read)
+}
+
+/// One run of a session with an analysis cache attached.
+pub(crate) struct CachedRun {
+    /// `step_lines` of each step, then `described` of each model's outcome.
+    pub(crate) lines: (Vec<Vec<String>>, Vec<Vec<String>>),
+    pub(crate) store: NativeStore,
+    pub(crate) stats: AnalysisCacheStats,
+    pub(crate) keys: Vec<Option<ContentDigest>>,
+    /// Whether each model's outcome came from the cache.
+    pub(crate) hits: Vec<bool>,
+    /// The catalog's schema additions and analysis names, then the sorted fact models.
+    pub(crate) catalog: (Shapes, Vec<String>, Vec<String>),
+}
+
+/// Run `request` reading and filling `store`, answering deferrals as [`session_lines`] does.
+pub(crate) fn cached_run(request: SessionRequest, store: NativeStore) -> CachedRun {
+    let mut session: AnalysisSession = started(request);
+    attach_analysis_cache(&mut session, store);
+    let (steps, outcome, finished, (keys, hits, (store, stats))) =
+        completed_with(session, empty_answer, |session| {
+            let (keys, hits) = session
+                .cache
+                .as_ref()
+                .map(|cache| (cache.keys.clone(), cache.hits.clone()))
+                .unwrap_or_default();
+            let taken = take_analysis_cache(session).expect("the cache stays attached");
+            (keys, hits, taken)
+        });
+    CachedRun {
+        lines: (
+            steps.iter().map(step_lines).collect(),
+            outcome.models.iter().map(described).collect(),
+        ),
+        catalog: catalog_changes(outcome, &finished),
+        store,
+        stats,
+        keys,
+        hits,
+    }
+}
+
+/// The catalog changes and fact models of `request` run without a cache.
+pub(crate) fn uncached_catalog(request: SessionRequest) -> (Shapes, Vec<String>, Vec<String>) {
+    let (_, outcome, finished, ()) = completed_with(started(request), empty_answer, |_| ());
+    catalog_changes(outcome, &finished)
+}
+
+fn catalog_changes(
+    outcome: SessionOutcome,
+    finished: &FinishedSession,
+) -> (Shapes, Vec<String>, Vec<String>) {
+    let mut facts: Vec<String> = finished_fact_models(finished);
+    facts.sort_unstable();
+    (outcome.schema_additions, outcome.analysis_names, facts)
+}
+
+/// The models' keys from a cold cached run of `request`.
+pub(crate) fn model_keys(request: SessionRequest) -> Vec<Option<ContentDigest>> {
+    cached_run(request, NativeStore::default()).keys
+}
+
+/// `store` with every key in `keys` holding bytes no outcome encodes to.
+pub(crate) fn damaged(mut store: NativeStore, keys: &[Option<ContentDigest>]) -> NativeStore {
+    for key in keys.iter().flatten() {
+        store.put(*key, b"not an outcome".to_vec());
+    }
+    store
 }
 
 /// `name type nullability` per column, or `failed` when analysis did not succeed.

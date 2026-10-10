@@ -1,3 +1,4 @@
+pub(crate) mod analysis_cache;
 pub(crate) mod catalog_state;
 pub(crate) mod compact_batch;
 pub(crate) mod cte_facts;

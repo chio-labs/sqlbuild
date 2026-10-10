@@ -1,8 +1,13 @@
 //! One compact analysis batch built, shared, run and projected exactly as Python's batch.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
+use std::thread::ScopedJoinHandle;
 
+use rayon::ThreadPool;
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use regex::{Captures, Regex};
 use serde_json::{Map, Value, json};
 
@@ -11,13 +16,14 @@ use crate::assembly::analysis_session::_helpers::mappings::{ShapeTable, native_d
 use crate::assembly::analysis_session::constants::{
     BINDING_SEVERITIES, COMPACT_WORKERS, CONFIDENCE_CODES, DEFAULT_BINDING_MESSAGE, FACT_LENGTH,
     INVALID_NATIVE_RESPONSE, LEGACY_FALLBACK, LEGACY_RESPONSE_LENGTH, MIN_SHARED_MEMBERS,
-    NULLABILITY_BY_CODE, PYTHON_ASCII_SPACES, QUALIFIED_SCAN_TOKENS, REFERENCE_MARKER_PATTERN,
-    RELATION_STUB_PREFIX, RESPONSE_LENGTH, SOURCE_LENGTH, TRANSFORM_CODES,
-    UNSTUBBED_REFERENCE_KIND,
+    NULLABILITY_BY_CODE, PIPELINE_CHUNKS, PIPELINE_MIN_MEMBERS, PYTHON_ASCII_SPACES,
+    QUALIFIED_SCAN_TOKENS, REFERENCE_MARKER_PATTERN, RELATION_STUB_PREFIX, RESPONSE_LENGTH,
+    SOURCE_LENGTH, TRANSFORM_CODES, UNSTUBBED_REFERENCE_KIND,
 };
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::main::diagnostics::binding_diagnostics;
+use crate::semantic_validation::models::CompactAnalysisJob;
 use crate::semantic_validation::types::{DiagnosticRow, NormalizationRequest, Relations};
 
 const INVALID_BATCH: &str = "native compact query analysis returned an invalid batch response";
@@ -88,6 +94,7 @@ struct BatchPayload {
 }
 
 /// Python's `SharedBindingQuery`: one member's relation-stubbed query and its identity.
+#[derive(Clone)]
 struct SharedQuery {
     sql: String,
     /// Each lineage reference's stub, in reference order.
@@ -130,7 +137,7 @@ impl SessionCatalog {
         let BatchRun {
             mut results,
             inexact,
-        } = self.run_batch(batch, cleaned, &shared)?;
+        } = self.run_pipelined(batch, cleaned, &shared)?;
         self.shared_members += shared.iter().flatten().count();
         self.reanalysed_members += inexact.len();
         if !inexact.is_empty() {
@@ -154,6 +161,80 @@ impl SessionCatalog {
         self.with_separate_validation(&batch.members, results)
     }
 
+    /// [`Self::run_batch`] over chunks that keep shared members together, preparing each chunk
+    /// while the previous one is analysed; results and catalog changes are the single run's.
+    fn run_pipelined(
+        &mut self,
+        batch: &Batch<'_>,
+        cleaned: Vec<String>,
+        shared: &[Option<SharedQuery>],
+    ) -> Result<BatchRun, String> {
+        let chunks: Vec<Vec<usize>> = pipeline_chunks(shared);
+        if chunks.len() < 2 {
+            return self.run_batch(batch, cleaned, shared);
+        }
+        for (member, sql) in batch.members.iter().zip(&cleaned) {
+            if let Some(schema) = member.binding_schema {
+                let _ = self.prepare(&[(sql.as_str(), schema)]);
+            }
+        }
+        let mut results: Vec<Option<MemberResult>> = batch.members.iter().map(|_| None).collect();
+        let mut inexact: Vec<usize> = Vec::new();
+        let pool: Arc<ThreadPool> = self.native.analysis_pool()?;
+        std::thread::scope(|scope| -> Result<(), String> {
+            let mut pending: Option<PendingChunk<'_>> = None;
+            for members in chunks {
+                let chunk = Batch {
+                    members: members
+                        .iter()
+                        .map(|index| batch.members[*index].clone())
+                        .collect(),
+                    ..*batch
+                };
+                let chunk_cleaned: Vec<String> = members
+                    .iter()
+                    .map(|index| cleaned[*index].clone())
+                    .collect();
+                let chunk_shared: Vec<Option<SharedQuery>> =
+                    members.iter().map(|index| shared[*index].clone()).collect();
+                let started: Result<(BatchPayload, CompactAnalysisJob), String> = self
+                    .batch_payload(&chunk, &chunk_cleaned, &chunk_shared)
+                    .and_then(|payload| {
+                        let job: CompactAnalysisJob =
+                            self.native.prepare_compact(&payload.request.to_string())?;
+                        Ok((payload, job))
+                    });
+                let (payload, job) = started?;
+                let previous: Option<PendingChunk<'_>> = pending.replace(PendingChunk {
+                    members,
+                    cleaned: chunk_cleaned,
+                    payload,
+                    run: scope.spawn(move || {
+                        let analysis = job
+                            .take_analysis()
+                            .ok_or("compact analysis job already ran")?;
+                        job.run(analysis)
+                    }),
+                });
+                if let Some(previous) = previous {
+                    previous.finish(&pool, batch.dialect, &mut results, &mut inexact)?;
+                }
+            }
+            match pending {
+                Some(last) => last.finish(&pool, batch.dialect, &mut results, &mut inexact),
+                None => Ok(()),
+            }
+        })?;
+        inexact.sort_unstable();
+        Ok(BatchRun {
+            results: results
+                .into_iter()
+                .collect::<Option<_>>()
+                .ok_or(INVALID_BATCH)?,
+            inexact,
+        })
+    }
+
     /// Python's `_analyze_compact_inputs` run: prepare, analyse, project and find inexact sharing.
     fn run_batch(
         &mut self,
@@ -170,6 +251,7 @@ impl SessionCatalog {
             serde_json::from_str(&job.run(analysis)?).map_err(|error| error.to_string())?;
         let inexact: Vec<usize> = inexact_shared_members(&response, &payload);
         let results: Vec<MemberResult> = attach_validations(
+            &*self.native.analysis_pool()?,
             &response,
             &payload.query_indexes,
             batch.dialect,
@@ -184,32 +266,43 @@ impl SessionCatalog {
         batch: &Batch<'_>,
         cleaned: &[String],
     ) -> Result<Vec<Option<SharedQuery>>, String> {
-        let prekeys: Vec<Option<String>> = batch
-            .members
-            .iter()
-            .map(member_prekey)
-            .collect::<Result<_, _>>()?;
+        let pool = self.native.analysis_pool()?;
+        let prekeys: Vec<Option<String>> = pool.install(|| {
+            batch
+                .members
+                .par_iter()
+                .map(member_prekey)
+                .collect::<Result<_, _>>()
+        })?;
         let mut prekey_counts: HashMap<&str, usize> = HashMap::new();
         for prekey in prekeys.iter().flatten() {
             *prekey_counts.entry(prekey.as_str()).or_default() += 1;
         }
-        let mut candidates: Vec<(usize, Vec<(String, String)>)> = Vec::new();
-        for (index, (member, prekey)) in batch.members.iter().zip(&prekeys).enumerate() {
-            let (Some(schema), Some(prekey)) = (member.binding_schema, prekey) else {
-                continue;
-            };
-            if prekey_counts.get(prekey.as_str()).copied().unwrap_or(0) < MIN_SHARED_MEMBERS {
-                continue;
-            }
-            if let Some(names) = self.shared_reference_names(&cleaned[index], member, schema) {
-                let stubs: Vec<(String, String)> = names
-                    .into_iter()
-                    .enumerate()
-                    .map(|(position, name)| (name, format!("{RELATION_STUB_PREFIX}{position}")))
-                    .collect();
-                candidates.push((index, stubs));
-            }
-        }
+        let candidates: Vec<(usize, Vec<(String, String)>)> = pool.install(|| {
+            batch
+                .members
+                .par_iter()
+                .zip(&prekeys)
+                .enumerate()
+                .filter_map(|(index, (member, prekey))| {
+                    let (Some(schema), Some(prekey)) = (member.binding_schema, prekey) else {
+                        return None;
+                    };
+                    if prekey_counts.get(prekey.as_str()).copied().unwrap_or(0) < MIN_SHARED_MEMBERS
+                    {
+                        return None;
+                    }
+                    let names: Vec<String> =
+                        self.shared_reference_names(&cleaned[index], member, schema)?;
+                    let stubs: Vec<(String, String)> = names
+                        .into_iter()
+                        .enumerate()
+                        .map(|(position, name)| (name, format!("{RELATION_STUB_PREFIX}{position}")))
+                        .collect();
+                    Some((index, stubs))
+                })
+                .collect()
+        });
         let requests: Vec<NormalizationRequest> = candidates
             .iter()
             .map(|(index, stubs)| {
@@ -228,17 +321,26 @@ impl SessionCatalog {
                 .normalize_analysis_sqls(batch.dialect, requests)?
         };
         let mut shared: Vec<Option<SharedQuery>> = batch.members.iter().map(|_| None).collect();
-        for ((index, stubs), sql) in candidates.into_iter().zip(stubbed) {
-            let (Ok(sql), Some(schema)) = (sql, batch.members[index].binding_schema) else {
-                continue;
-            };
-            let key: String = self.shared_key(
-                batch.dialect,
-                &sql,
-                &stubs,
-                (schema, batch.members[index].recover_cte_facts),
-            );
-            shared[index] = Some(SharedQuery { sql, stubs, key });
+        let keyed: Vec<(usize, SharedQuery)> = pool.install(|| {
+            candidates
+                .into_par_iter()
+                .zip(stubbed)
+                .filter_map(|((index, stubs), sql)| {
+                    let (Ok(sql), Some(schema)) = (sql, batch.members[index].binding_schema) else {
+                        return None;
+                    };
+                    let key: String = self.shared_key(
+                        batch.dialect,
+                        &sql,
+                        &stubs,
+                        (schema, batch.members[index].recover_cte_facts),
+                    );
+                    Some((index, SharedQuery { sql, stubs, key }))
+                })
+                .collect()
+        });
+        for (index, query) in keyed {
+            shared[index] = Some(query);
         }
         let mut key_counts: HashMap<String, usize> = HashMap::new();
         for query in shared.iter().flatten() {
@@ -326,8 +428,18 @@ impl SessionCatalog {
     }
 
     fn normalize_members(&self, batch: &Batch<'_>) -> Result<Vec<String>, String> {
-        let requests: Vec<NormalizationRequest> = batch
-            .members
+        self.normalize_each(batch.dialect, &batch.members)?
+            .into_iter()
+            .collect()
+    }
+
+    /// Each member's cleaned analysis SQL, or why it cannot be cleaned.
+    pub(crate) fn normalize_each(
+        &self,
+        dialect: &str,
+        members: &[BatchMember<'_>],
+    ) -> Result<Vec<Result<String, String>>, String> {
+        let requests: Vec<NormalizationRequest> = members
             .iter()
             .map(|member| {
                 (
@@ -337,10 +449,7 @@ impl SessionCatalog {
                 )
             })
             .collect();
-        self.native
-            .normalize_analysis_sqls(batch.dialect, requests)?
-            .into_iter()
-            .collect()
+        self.native.normalize_analysis_sqls(dialect, requests)
     }
 
     /// Python's `_prepare_compact_analysis_batch` request and each member's query index.
@@ -550,6 +659,83 @@ impl SessionCatalog {
         }
         Ok(results)
     }
+}
+
+/// One chunk whose analysis runs on its own thread while the next chunk is prepared.
+struct PendingChunk<'scope> {
+    members: Vec<usize>,
+    cleaned: Vec<String>,
+    payload: BatchPayload,
+    run: ScopedJoinHandle<'scope, Result<String, String>>,
+}
+
+impl PendingChunk<'_> {
+    /// Wait for the chunk's analysis, then place its projected members at their batch indexes.
+    fn finish(
+        self,
+        pool: &ThreadPool,
+        dialect: &str,
+        results: &mut [Option<MemberResult>],
+        inexact: &mut Vec<usize>,
+    ) -> Result<(), String> {
+        let text: String = match self.run.join() {
+            Ok(text) => text?,
+            Err(panic) => std::panic::resume_unwind(panic),
+        };
+        let response: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
+        inexact.extend(
+            inexact_shared_members(&response, &self.payload)
+                .into_iter()
+                .map(|index| self.members[index]),
+        );
+        let projected: Vec<MemberResult> = attach_validations(
+            pool,
+            &response,
+            &self.payload.query_indexes,
+            dialect,
+            project_response(&response, self.cleaned)?,
+        )?;
+        for (index, result) in self.members.into_iter().zip(projected) {
+            results[index] = Some(result);
+        }
+        Ok(())
+    }
+}
+
+/// Up to [`PIPELINE_CHUNKS`] member groups of similar size, members sharing a query together,
+/// in batch order; one group where the batch is too small to gain from pipelining.
+fn pipeline_chunks(shared: &[Option<SharedQuery>]) -> Vec<Vec<usize>> {
+    if shared.len() < PIPELINE_MIN_MEMBERS {
+        return vec![(0..shared.len()).collect()];
+    }
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut group_by_key: HashMap<&str, usize> = HashMap::new();
+    for (index, query) in shared.iter().enumerate() {
+        match query {
+            Some(query) => match group_by_key.get(query.key.as_str()) {
+                Some(group) => groups[*group].push(index),
+                None => {
+                    group_by_key.insert(query.key.as_str(), groups.len());
+                    groups.push(vec![index]);
+                }
+            },
+            None => groups.push(vec![index]),
+        }
+    }
+    let target: usize = shared.len().div_ceil(PIPELINE_CHUNKS);
+    let mut chunks: Vec<Vec<usize>> = vec![Vec::new()];
+    for group in groups {
+        if chunks.last().is_some_and(|chunk| chunk.len() >= target) {
+            chunks.push(Vec::new());
+        }
+        if let Some(chunk) = chunks.last_mut() {
+            chunk.extend(group);
+        }
+    }
+    for chunk in &mut chunks {
+        chunk.sort_unstable();
+    }
+    chunks
 }
 
 fn lineage_resources(member: &BatchMember<'_>, share: Option<&SharedQuery>) -> Map<String, Value> {
@@ -987,6 +1173,7 @@ fn project_source(
 
 /// Python's `_attach_compiled_bindings`: decode the batch's fused binding validations.
 fn attach_validations(
+    pool: &ThreadPool,
     response: &Value,
     query_indexes: &[usize],
     dialect: &str,
@@ -1000,11 +1187,20 @@ fn attach_validations(
         .as_array()
         .filter(|validations| validations.len() == query_count)
         .ok_or("native compilation returned an invalid binding batch")?;
-    for (result, query_index) in results.iter_mut().zip(query_indexes) {
-        let validation: &Value = &validations[*query_index];
-        if !validation.is_null() {
-            result.binding_diagnostics =
-                Some(decode_validation(&result.cleaned_sql, dialect, validation)?);
+    let decoded: Vec<Option<Result<Vec<DiagnosticRow>, String>>> = pool.install(|| {
+        results
+            .par_iter()
+            .zip(query_indexes)
+            .map(|(result, query_index)| {
+                let validation: &Value = &validations[*query_index];
+                (!validation.is_null())
+                    .then(|| decode_validation(&result.cleaned_sql, dialect, validation))
+            })
+            .collect()
+    });
+    for (result, diagnostics) in results.iter_mut().zip(decoded) {
+        if let Some(diagnostics) = diagnostics {
+            result.binding_diagnostics = Some(diagnostics?);
         }
     }
     Ok(results)

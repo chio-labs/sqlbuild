@@ -505,8 +505,10 @@ def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     started: list[Any] = []
     original: Callable[..., Any] = native_module.start_model_analysis_session
 
-    def start(catalog: object, request: tuple[object, ...]) -> Any:
-        started.append(original(catalog, request))
+    def start(
+        catalog: object, request: tuple[object, ...], cache: tuple[str, str] | None = None
+    ) -> Any:
+        started.append(original(catalog, request, cache))
         return started[-1]
 
     monkeypatch.setattr(native_module, "start_model_analysis_session", start)
@@ -807,8 +809,10 @@ def failing_provide_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Failing
     started: list[FailingProvideSession] = []
     original: Callable[..., Any] = native_module.start_model_analysis_session
 
-    def start(catalog: object, request: tuple[object, ...]) -> FailingProvideSession:
-        started.append(FailingProvideSession(original(catalog, request)))
+    def start(
+        catalog: object, request: tuple[object, ...], cache: tuple[str, str] | None = None
+    ) -> FailingProvideSession:
+        started.append(FailingProvideSession(original(catalog, request, cache)))
         return started[-1]
 
     monkeypatch.setattr(native_module, "start_model_analysis_session", start)
