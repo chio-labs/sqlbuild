@@ -61,6 +61,10 @@
   a 2.0 peak RSS ratio and `dag --json` a 1.5 ratio instead of 1.25. Smaller cache cases,
   cold-only guards, all other commands, and all speed/correctness limits retain their budgets.
   The prohibition above applies to every other budget or tolerance increase.
+- Additional temporary user-approved exception (2026-10-10): the dense 3,000-model
+  base/head edit comparison may use 1.20x wall and 1.75x CPU; release-performance
+  `compile (one-model edit)` may use 1.35x peak RSS. Remove after post-conversion
+  optimisation. Cold/warm modes, other workloads and correctness gates remain unchanged.
 
 ## Native SQL (Polyglot) Changes
 

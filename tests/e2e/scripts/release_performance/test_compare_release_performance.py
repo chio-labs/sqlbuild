@@ -123,6 +123,7 @@ def test_given_two_installations_when_comparing_release_performance_then_reports
         assert command["max_rss_ratio"] == {
             "lineage column trace": 2.0,
             "dag --json": 1.5,
+            "compile (one-model edit)": 1.35,
         }.get(command["name"])
 
 

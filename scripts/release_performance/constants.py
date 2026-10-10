@@ -118,6 +118,7 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
     ),
     BenchmarkCommand(
         name="compile (one-model edit)",
+        max_rss_ratio=1.35,
         project=INSPECTION_PROJECT,
         sqb_args=("compile", "--json"),
         edits_model=True,

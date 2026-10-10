@@ -606,6 +606,8 @@ jobs:
         include:
           - kind: dense
             max_ratio: "1.10"
+            edit_max_ratio: "1.20"
+            edit_max_cpu_ratio: "1.75"
           - kind: fresh
             max_ratio: "1.10"
           - kind: dense
@@ -679,10 +681,14 @@ jobs:
         env:
           KIND: ${{ matrix.kind }}
           MAX_RATIO: ${{ matrix.max_ratio }}
+          EDIT_MAX_RATIO: ${{ matrix.edit_max_ratio }}
+          EDIT_MAX_CPU_RATIO: ${{ matrix.edit_max_cpu_ratio }}
         run: |
           uv run python -m scripts.compare_compile_performance \
             --kind "${KIND}" \
             --modes cold warm edit \
+            ${EDIT_MAX_RATIO:+--edit-max-ratio "$EDIT_MAX_RATIO"} \
+            ${EDIT_MAX_CPU_RATIO:+--edit-max-cpu-ratio "$EDIT_MAX_CPU_RATIO"} \
             --max-ratio "${MAX_RATIO}" \
             --models 3000 \
             --base-root base \

@@ -12,6 +12,53 @@ from tests.unit.scripts.compile_performance_ratio._helpers.helpers import compar
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        RatioFailuresTestCase(
+            description="edit allowances leave cold and warm limits intact",
+            comparisons=(),
+            modes=COMPILE_MODES,
+            max_ratio=1.10,
+            expected_failures=(
+                "dense 3000 cold: wall ratio 1.200 exceeds 1.10",
+                "dense 3000 cold: CPU ratio 1.200 exceeds 1.10",
+                "dense 3000 warm: wall ratio 1.200 exceeds 1.10",
+                "dense 3000 warm: CPU ratio 1.200 exceeds 1.10",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_edit_cpu_override_when_judging_then_other_metrics_remain_gated(
+    test_case: RatioFailuresTestCase,
+) -> None:
+    failures: tuple[str, ...] = ratio_failures(
+        comparisons=(
+            comparison(mode="cold", wall=(10.0, 12.0), cpu=(10.0, 12.0)),
+            comparison(mode="warm", wall=(10.0, 12.0), cpu=(10.0, 12.0)),
+            comparison(mode="edit", wall=(10.0, 12.0), cpu=(10.0, 17.5)),
+        ),
+        modes=COMPILE_MODES,
+        max_ratio=1.10,
+        noise_floor_seconds=0.0,
+        mode_max_ratios={"edit": 1.20},
+        mode_cpu_max_ratios={"edit": 1.75},
+    )
+    assert failures == test_case.expected_failures
+    assert ratio_failures(
+        comparisons=(comparison(mode="edit", wall=(10.0, 12.1), cpu=(10.0, 17.6)),),
+        modes=("edit",),
+        max_ratio=1.10,
+        noise_floor_seconds=0.0,
+        mode_max_ratios={"edit": 1.20},
+        mode_cpu_max_ratios={"edit": 1.75},
+    ) == (
+        "dense 3000 edit: wall ratio 1.210 exceeds 1.20",
+        "dense 3000 edit: CPU ratio 1.760 exceeds 1.75",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (
         RatioFailuresTestCase(
             description="every mode at parity passes",
