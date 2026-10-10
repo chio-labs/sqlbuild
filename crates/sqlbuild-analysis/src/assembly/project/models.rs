@@ -70,9 +70,15 @@ pub enum SyntaxFailure {
     UnknownDialect(String),
 }
 
-/// One model's references and the SQL strings its assembly validates.
+/// One model's identity, graph facts, references and the SQL strings its assembly validates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelFacts {
+    /// The model's name: its file stem, the name of its `("model", name)` key.
+    pub name: String,
+    /// `str(model_file.relative_path.parent)`, the folder project selectors match.
+    pub directory: String,
+    /// `config.values["tags"]` items as `str()` where a list or tuple, else empty.
+    pub tags: Vec<String>,
     pub references: Vec<Reference>,
     pub syntax_checks: Vec<SyntaxCheck>,
 }
@@ -86,12 +92,24 @@ pub struct SourceFacts {
     pub schema: Option<String>,
 }
 
-/// One seed's name and authored namespace.
+/// One seed's name, tags and authored namespace.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeedFacts {
     pub name: String,
+    /// `schema_entry.tags`.
+    pub tags: Vec<String>,
     pub database: Option<String>,
     pub schema: Option<String>,
+}
+
+/// One SQL function's key, tags and references.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionFacts {
+    /// `function_node_type(return_columns)`: `udf` or `table_fn`, its key's resource type.
+    pub kind: String,
+    pub name: String,
+    pub tags: Vec<String>,
+    pub references: Vec<Reference>,
 }
 
 /// One audit's references and the resource it is attached to.
@@ -115,7 +133,7 @@ pub struct ProjectRequest {
     pub models: Vec<ModelFacts>,
     pub sources: Vec<SourceFacts>,
     pub seeds: Vec<SeedFacts>,
-    pub functions: Vec<Vec<Reference>>,
+    pub functions: Vec<FunctionFacts>,
     pub audits: Vec<AuditFacts>,
 }
 

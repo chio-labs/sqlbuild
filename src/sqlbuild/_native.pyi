@@ -657,10 +657,18 @@ def assemble_project_resource_facts(
         tuple[str | None, str | None, str | None, str | None],
         list[tuple[str, str, str]],
         list[tuple[str, str | None]],
-        list[tuple[list[tuple[str, str, str | None]], list[tuple[str, list[tuple[str, str]]]]]],
+        list[
+            tuple[
+                str,
+                str,
+                list[str],
+                list[tuple[str, str, str | None]],
+                list[tuple[str, list[tuple[str, str]]]],
+            ]
+        ],
         list[tuple[str, bool, str | None, str | None]],
-        list[tuple[str, str | None, str | None]],
-        list[list[tuple[str, str, str | None]]],
+        list[tuple[str, list[str], str | None, str | None]],
+        list[tuple[str, str, list[str], list[tuple[str, str, str | None]]]],
         list[tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]],
     ],
     /,

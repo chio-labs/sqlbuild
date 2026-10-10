@@ -58,7 +58,7 @@ fn resources(request: &ProjectRequest) -> Fact<ProjectResources> {
         function_deps: request
             .functions
             .iter()
-            .map(|references| reference_deps(references))
+            .map(|function| reference_deps(&function.references))
             .collect(),
         audit_deps: request.audits.iter().map(audit_deps).collect::<Fact<_>>()?,
         reads: inputs.reads.into_inner(),

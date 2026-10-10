@@ -42,6 +42,7 @@ pub(crate) fn seed(
     seed_target(
         &SeedFacts {
             name: name.to_owned(),
+            tags: Vec::new(),
             database: database.map(str::to_owned),
             schema: schema.map(str::to_owned),
         },
@@ -72,6 +73,7 @@ pub(crate) fn seed_reads(
     let resolved = seed_target(
         &SeedFacts {
             name: name.to_owned(),
+            tags: Vec::new(),
             database: database.map(str::to_owned),
             schema: schema.map(str::to_owned),
         },

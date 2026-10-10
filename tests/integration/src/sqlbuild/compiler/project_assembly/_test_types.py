@@ -55,3 +55,14 @@ class OptOutTestCase:
     models: dict[str, str]
     expected_rejected: dict[str, bool]
     expected_python_validations: int
+
+
+@dataclass(frozen=True)
+class GraphFactsTestCase:
+    """A project whose assembly request carries each resource's project-graph facts."""
+
+    description: str
+    files: dict[str, str]
+    expected_model_tags: tuple[list[str], ...]
+    expected_seeds: list[tuple[str, list[str]]]
+    expected_function_kinds: tuple[str, ...]

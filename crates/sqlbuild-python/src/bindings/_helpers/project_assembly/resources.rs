@@ -10,9 +10,9 @@ use sqlbuild_analysis::assembly::project::main::assemble_project_resources::asse
 use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
 use sqlbuild_analysis::assembly::project::main::sql_syntax_error::sql_syntax_error as check_syntax_error;
 use sqlbuild_analysis::assembly::project::models::{
-    AuditFacts, InputRead, ModelFacts, Namespace, ProjectRequest, ProjectResources, Reference,
-    SeedDefaults, SeedFacts, SourceFacts, SyntaxCheck, SyntaxFailure, SyntaxMode, TargetNamespace,
-    Variable,
+    AuditFacts, FunctionFacts, InputRead, ModelFacts, Namespace, ProjectRequest, ProjectResources,
+    Reference, SeedDefaults, SeedFacts, SourceFacts, SyntaxCheck, SyntaxFailure, SyntaxMode,
+    TargetNamespace, Variable,
 };
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
 use sqlbuild_model_config::templates::models::Scalar;
@@ -40,12 +40,20 @@ type DefaultsRow = (
 );
 /// `(name, kind, text)`; kind `text` (also exact ints), `bool`, `none` or anything else.
 type VariableRow = (String, String, String);
-/// `(references, [(sql, placeholders)])`.
-type ModelRow = (Vec<ReferenceRow>, Vec<(String, Pairs)>);
+/// `(name, directory, tags, references, [(sql, placeholders)])`.
+type ModelRow = (
+    String,
+    String,
+    Vec<String>,
+    Vec<ReferenceRow>,
+    Vec<(String, Pairs)>,
+);
 /// `(name, managed, database, schema)`.
 type SourceRow = (String, bool, Option<String>, Option<String>);
-/// `(name, database, schema)`.
-type SeedRow = (String, Option<String>, Option<String>);
+/// `(name, tags, database, schema)`.
+type SeedRow = (String, Vec<String>, Option<String>, Option<String>);
+/// `(kind, name, tags, references)`.
+type FunctionRow = (String, String, Vec<String>, Vec<ReferenceRow>);
 /// `(references, attached (kind, name))`.
 type AuditRow = (Vec<ReferenceRow>, Option<(String, String)>);
 /// The dialect, target, defaults, variables, environment and resources one project assembles.
@@ -58,7 +66,7 @@ type RequestRow = (
     Vec<ModelRow>,
     Vec<SourceRow>,
     Vec<SeedRow>,
-    Vec<Vec<ReferenceRow>>,
+    Vec<FunctionRow>,
     Vec<AuditRow>,
 );
 /// `(database, schema, logical database, logical schema)`.
@@ -183,13 +191,22 @@ fn project_request(request: RequestRow) -> ProjectRequest {
             .collect(),
         seeds: seeds
             .into_iter()
-            .map(|(name, database, schema)| SeedFacts {
+            .map(|(name, tags, database, schema)| SeedFacts {
                 name,
+                tags,
                 database,
                 schema,
             })
             .collect(),
-        functions: functions.into_iter().map(references).collect(),
+        functions: functions
+            .into_iter()
+            .map(|(kind, name, tags, rows)| FunctionFacts {
+                kind,
+                name,
+                tags,
+                references: references(rows),
+            })
+            .collect(),
         audits: audits
             .into_iter()
             .map(|(rows, attached)| AuditFacts {
@@ -212,8 +229,11 @@ fn variable(row: VariableRow) -> (String, Variable) {
 }
 
 fn model(row: ModelRow) -> ModelFacts {
-    let (rows, checks) = row;
+    let (name, directory, tags, rows, checks) = row;
     ModelFacts {
+        name,
+        directory,
+        tags,
         references: references(rows),
         syntax_checks: checks
             .into_iter()
