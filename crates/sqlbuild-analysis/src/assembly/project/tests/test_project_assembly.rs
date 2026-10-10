@@ -213,10 +213,10 @@ fn given_model_sql_when_validating_syntax_then_matches_python_or_defers() {
         },
         SyntaxTestCase {
             dialect: "trino",
-            description: "a dialect this parser build does not carry",
+            description: "a dialect outside the old parser build reads as the wheel does",
             sql: "SELECT 1 AS a FROM t QUALIFY a = 1",
             placeholders: &[],
-            expected_valid: None,
+            expected_valid: Some(false),
         },
     ];
     for test_case in test_cases {

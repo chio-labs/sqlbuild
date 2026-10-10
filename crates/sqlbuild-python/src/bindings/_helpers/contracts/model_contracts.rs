@@ -5,9 +5,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::contracts::main::evaluate_model_contracts::evaluate_model_contracts;
 use sqlbuild_analysis::contracts::main::promotion_conflicts::promotion_conflicts;
 use sqlbuild_analysis::contracts::models::{
-    ContractDiagnostic, ContractModel, ContractRequest,
-    ContractSchema, ContractSeverity, DeclaredColumn, DeclaredColumnFamily, DynamicContractProof,
-    InferredOutputColumn, PromotionConflict, PromotionModel, PromotionRequest,
+    ContractDiagnostic, ContractModel, ContractRequest, ContractSchema, ContractSeverity,
+    DeclaredColumn, DeclaredColumnFamily, DynamicContractProof, InferredOutputColumn,
+    PromotionConflict, PromotionModel, PromotionRequest,
 };
 
 use sqlbuild_analysis::type_system::models::TypeNormalizationError;

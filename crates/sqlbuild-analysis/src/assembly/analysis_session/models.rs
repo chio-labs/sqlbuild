@@ -9,7 +9,7 @@ use sqlbuild_cache::store::models::NativeStore;
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
-use crate::assembly::analysis_session::types::{OutputSources, Pairs, Shapes};
+use crate::assembly::analysis_session::types::{NullabilityCallback, OutputSources, Pairs, Shapes};
 use crate::semantic_validation::types::DiagnosticRow;
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
@@ -121,8 +121,10 @@ pub struct SessionRequest {
     /// Whether published shapes keep authored quoting, Python's `inferred_binding_shape` test.
     pub case_sensitive_shapes: bool,
     pub function_return_types: Pairs,
-    /// Adapter nullability rules as `(function name, rule id)`; None where one is not Python's.
+    /// Adapter nullability rules as `(function name, rule id)`.
     pub nullability_rules: Option<Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub nullability_callback: Option<NullabilityCallback>,
     pub rich_type_inference: bool,
     pub column_types: Shapes,
     pub column_nullability: Shapes,

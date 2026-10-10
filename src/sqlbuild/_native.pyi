@@ -460,7 +460,10 @@ class NativeModelAnalysisSession:
     def cache_stats(self) -> tuple[int, int, int, str | None] | None: ...
 
 def start_model_analysis_session(
-    catalog: object, request: tuple[object, ...], cache: tuple[str, str] | None = None
+    catalog: object,
+    request: tuple[object, ...],
+    cache: tuple[str, str] | None = None,
+    adapter_rules: tuple[dict[str, Callable[..., object]], type] | None = None,
 ) -> NativeModelAnalysisSession | None: ...
 def prove_dynamic_column_contracts(
     request: tuple[

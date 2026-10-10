@@ -4,6 +4,9 @@ use polyglot_sql::expressions::Cte;
 use polyglot_sql::traversal::ExpressionWalk;
 use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions, ast_json};
 use serde_json::{Map, Value, json};
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_core::text::main::python_upper::python_upper;
 
 use crate::assembly::analysis_session::constants::{
     ALIAS_AST_KIND, ANNOTATED_AST_KIND, COLUMN_AST_KIND, DEPENDENCY_FUNCTION_NAMES,
@@ -130,7 +133,7 @@ pub(crate) fn render_type(node: Option<&Value>) -> Option<String> {
         .iter()
         .find(|(name, _)| *name == folded)
         .map_or_else(
-            || raw_type.replace('_', " ").to_ascii_uppercase(),
+            || upper(&raw_type.replace('_', " ")),
             |(_, rendered)| (*rendered).to_owned(),
         );
     if let Some(length) = python_int(node.get("length")) {
@@ -154,9 +157,14 @@ pub(crate) fn python_int(value: Option<&Value>) -> Option<String> {
     }
 }
 
-/// Python's `str.casefold` for the ASCII text a pivot proof compares.
+/// Python's `str.casefold`.
 pub(crate) fn casefold(text: &str) -> String {
-    text.to_ascii_lowercase()
+    python_casefold(active_python_text(), text)
+}
+
+/// Python's `str.upper`.
+pub(crate) fn upper(text: &str) -> String {
+    python_upper(active_python_text(), text)
 }
 
 /// A value the wheel hands Python for one payload key: an expression, a list of them, or data.
@@ -169,6 +177,14 @@ pub(crate) enum PyValue {
 
 /// The wheel's guarded `parse_one`; Ok(None) is the `PolyglotError` Python catches.
 pub(crate) fn parse_one(sql: &str, dialect: &str) -> Result<Option<Expression>, String> {
+    Ok(parse_one_or_error(sql, dialect)?.ok())
+}
+
+/// The wheel's guarded `parse_one`, with the message of the `PolyglotError` it raises.
+pub(crate) fn parse_one_or_error(
+    sql: &str,
+    dialect: &str,
+) -> Result<Result<Expression, String>, String> {
     let guard: ComplexityGuardOptions =
         serde_json::from_value(json!({"maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH}))
             .map_err(|error| error.to_string())?;
@@ -180,12 +196,15 @@ pub(crate) fn parse_one(sql: &str, dialect: &str) -> Result<Option<Expression>, 
         .parse_with_options(sql, &options);
     let mut expressions: Vec<Expression> = match parsed {
         Ok(expressions) => expressions,
-        Err(_) => return Ok(None),
+        Err(error) => return Ok(Err(error.to_string())),
     };
     if expressions.len() != 1 {
-        return Ok(None);
+        return Ok(Err(format!(
+            "Expected 1 statement, found {}",
+            expressions.len()
+        )));
     }
-    Ok(expressions.pop())
+    Ok(expressions.pop().ok_or_else(|| "no statement".to_owned()))
 }
 
 /// `str(getattr(node, "kind", ""))`.

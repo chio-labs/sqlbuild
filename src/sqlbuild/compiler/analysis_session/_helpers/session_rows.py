@@ -6,13 +6,16 @@ from collections.abc import Mapping
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
+from sqlbuild.adapter.type_system.main._safe_cast_nullability import safe_cast_nullability
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.compiler.analysis_session.constants import (
+    NULLABILITY_RULE_ADAPTER,
     NULLABILITY_RULE_CONDITIONAL_RESULT,
     NULLABILITY_RULE_FIRST_ARG,
+    NULLABILITY_RULE_SAFE_CAST,
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.analysis_session.types import (
@@ -42,6 +45,7 @@ from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 _NULLABILITY_RULE_IDS: dict[FunctionNullabilityRule, str] = {
     first_arg_nullability: NULLABILITY_RULE_FIRST_ARG,
     conditional_result_nullability: NULLABILITY_RULE_CONDITIONAL_RESULT,
+    safe_cast_nullability: NULLABILITY_RULE_SAFE_CAST,
 }
 
 
@@ -88,16 +92,25 @@ def session_request(
     )
 
 
-def nullability_rule_rows(profile: ExpressionInferenceProfile) -> list[tuple[str, str]] | None:
-    """Adapter nullability rules as `(name, rule id)`, or None for a rule SQLBuild lacks."""
+def nullability_rule_rows(profile: ExpressionInferenceProfile) -> list[tuple[str, str]]:
+    """Adapter nullability rules as `(name, rule id)`; an adapter's own rule is `python`."""
 
-    rows: list[tuple[str, str]] = []
-    for name, rule in profile.function_nullability_rules.items():
-        rule_id: str | None = _NULLABILITY_RULE_IDS.get(rule)
-        if rule_id is None:
-            return None
-        rows.append((name, rule_id))
-    return rows
+    return [
+        (name, _NULLABILITY_RULE_IDS.get(rule, NULLABILITY_RULE_ADAPTER))
+        for name, rule in profile.function_nullability_rules.items()
+    ]
+
+
+def adapter_nullability_rules(
+    profile: ExpressionInferenceProfile,
+) -> dict[str, FunctionNullabilityRule]:
+    """The adapter's own nullability rules, which the native session calls back into."""
+
+    return {
+        name: rule
+        for name, rule in profile.function_nullability_rules.items()
+        if rule not in _NULLABILITY_RULE_IDS
+    }
 
 
 def contract_proof(row: ProofRow | None) -> DynamicColumnContractProof | None:

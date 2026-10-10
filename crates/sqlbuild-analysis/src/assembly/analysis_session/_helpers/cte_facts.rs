@@ -1,12 +1,14 @@
 //! Python's CTE fact recovery and filtered non-null outputs, over the wheel's expression view.
 
-use std::cell::Cell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
 use polyglot_sql::Expression;
 use polyglot_sql::traversal::ExpressionWalk;
 use serde_json::{Map, Value};
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_core::text::main::python_upper::python_upper;
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
     PyValue, alias_or_name, arg, children, column_table_name, direct_tables, expression_args,
@@ -21,17 +23,17 @@ use crate::assembly::analysis_session::constants::{
     CONCAT_AST_KIND, CONDITIONAL_RESULT_RULE, COUNT_AST_KIND, CUSTOM_TYPE_NAME, DECIMAL_TYPE,
     FIRST_ARG_RULE, FUNCTION_AST_KIND, IF_FUNC_AST_KIND, IS_NULL_AST_KIND, JOIN_FULL, JOIN_LEFT,
     JOIN_RIGHT, LITERAL_AST_KIND, NON_NULL_NULLABILITY, NULL_AST_KIND, NULL_SET_OPERATION_TYPE,
-    NULLABLE_NULLABILITY, NULLIF_FUNCTION_NAME, POLYGLOT_TYPE_NAMES, SELECT_AST_KIND,
-    SET_OPERATION_AST_KINDS, STRING_LITERAL_TYPE, SUBSTRING_AST_KIND, TABLE_AST_KIND, TEXT_TYPE,
-    TIMESTAMP_TYPE_NAME, TIMESTAMP_TZ_TYPE, TRY_CAST_AST_KIND, TYPE_PASSTHROUGH_AST_KINDS,
-    UNKNOWN_NULLABILITY, VARCHAR_DATA_TYPES, WILDCARD,
+    NULLABLE_NULLABILITY, NULLIF_FUNCTION_NAME, POLYGLOT_TYPE_NAMES, PYTHON_RULE, SAFE_CAST_RULE,
+    SELECT_AST_KIND, SET_OPERATION_AST_KINDS, STRING_LITERAL_TYPE, SUBSTRING_AST_KIND,
+    TABLE_AST_KIND, TEXT_TYPE, TIMESTAMP_TYPE_NAME, TIMESTAMP_TZ_TYPE, TRY_CAST_AST_KIND,
+    TYPE_PASSTHROUGH_AST_KINDS, UNKNOWN_NULLABILITY, VARCHAR_DATA_TYPES, WILDCARD,
 };
 use crate::assembly::analysis_session::constants::{
     CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_UNKNOWN, TRANSFORM_AGGREGATION, TRANSFORM_CAST,
     TRANSFORM_CONSTANT, TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR,
 };
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
-use crate::assembly::analysis_session::types::{Pairs, Shapes};
+use crate::assembly::analysis_session::types::{NullabilityCallback, Pairs, Shapes};
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeFamily};
 
@@ -51,8 +53,10 @@ type Fact<T> = Result<T, String>;
 pub(crate) struct RecoveryProfile<'a> {
     pub(crate) dialect: &'a str,
     pub(crate) function_return_types: &'a Pairs,
-    /// Adapter nullability rules by function name; None where a rule is not one Python ships.
+    /// Adapter nullability rules by function name.
     pub(crate) rules: Option<&'a Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub(crate) callback: Option<&'a NullabilityCallback>,
 }
 
 /// One enrichment's recovery request.
@@ -77,20 +81,6 @@ pub(crate) struct Recovery {
 
 /// Python's CTE pass-through facts and filtered non-null outputs, or why they defer.
 pub(crate) fn recovery(input: &RecoveryInput<'_>) -> Fact<Recovery> {
-    NON_ASCII_FOLDED.set(false);
-    let recovered: Fact<Recovery> = recovered(input);
-    if NON_ASCII_FOLDED.replace(false) {
-        return Err("non-ASCII text Python casefolds or upper-cases differently".to_owned());
-    }
-    recovered
-}
-
-thread_local! {
-    /// Whether this recovery folded non-ASCII text, where Python's `casefold`/`upper` may differ.
-    static NON_ASCII_FOLDED: Cell<bool> = const { Cell::new(false) };
-}
-
-fn recovered(input: &RecoveryInput<'_>) -> Fact<Recovery> {
     let mut recovery: Recovery = Recovery::default();
     let mut parsed: Option<Option<Expression>> = None;
     if input.recover {
@@ -138,15 +128,6 @@ pub(crate) struct LegacyAnalysis {
 
 /// Python's legacy analysis of a model the native engine handed back, or why it defers.
 pub(crate) fn legacy_analysis(input: &LegacyInput<'_>) -> Fact<LegacyAnalysis> {
-    NON_ASCII_FOLDED.set(false);
-    let analysed: Fact<LegacyAnalysis> = legacy_analysed(input);
-    if NON_ASCII_FOLDED.replace(false) {
-        return Err("non-ASCII text Python casefolds or upper-cases differently".to_owned());
-    }
-    analysed
-}
-
-fn legacy_analysed(input: &LegacyInput<'_>) -> Fact<LegacyAnalysis> {
     let Some(parsed) = parse_one(input.cleaned_sql, input.profile.dialect)? else {
         return Ok(LegacyAnalysis {
             succeeded: false,
@@ -449,9 +430,6 @@ fn passthrough_facts(
     let ctes: Vec<(&str, bool, &Expression)> = top_level_ctes(root);
     if ctes.is_empty() {
         return Ok(recovery);
-    }
-    if input.profile.rules.is_none() {
-        return Err("an adapter nullability rule Python does not ship".to_owned());
     }
     let context = Context {
         profile: &input.profile,
@@ -850,14 +828,6 @@ impl Context<'_, '_> {
 
     /// Python's `ExpressionInferenceProfile.function_return_type`.
     fn function_return_type(&self, function_name: &str) -> Fact<Option<String>> {
-        let ascii_keys: bool = self
-            .profile
-            .function_return_types
-            .iter()
-            .all(|(declared, _)| declared.is_ascii());
-        if ascii_keys && keeps_non_ascii_upper(function_name) {
-            return Ok(None);
-        }
         let upper: String = upper(function_name);
         Ok(self
             .profile
@@ -964,7 +934,7 @@ impl Context<'_, '_> {
                 None => Ok(UNKNOWN_NULLABILITY),
             };
         }
-        let rule: Option<&str> = self.rule(node_kind)?;
+        let rule: Option<(&str, &str)> = self.rule(node_kind)?;
         if node_kind != COALESCE_AST_KIND && rule.is_none() {
             return Ok(UNKNOWN_NULLABILITY);
         }
@@ -972,7 +942,7 @@ impl Context<'_, '_> {
         for child in expression_args(expression) {
             arguments.push(self.nullability(Some(child), aliases, scoped)?);
         }
-        Ok(combined(node_kind, rule, &arguments))
+        self.combined(node_kind, rule, &arguments)
     }
 
     /// Python's `_infer_polyglot_shallow_nullability`.
@@ -992,7 +962,7 @@ impl Context<'_, '_> {
                 None => Ok(UNKNOWN_NULLABILITY),
             };
         }
-        let rule: Option<&str> = self.rule(node_kind)?;
+        let rule: Option<(&str, &str)> = self.rule(node_kind)?;
         if node_kind != COALESCE_AST_KIND && rule.is_none() {
             return Ok(UNKNOWN_NULLABILITY);
         }
@@ -1000,20 +970,38 @@ impl Context<'_, '_> {
         for child in expression_args(expression) {
             arguments.push(self.shallow_nullability(Some(child))?);
         }
-        Ok(combined(node_kind, rule, &arguments))
+        self.combined(node_kind, rule, &arguments)
     }
 
     /// `inference_profile.function_nullability_rule(kind)`.
-    fn rule(&self, node_kind: &str) -> Fact<Option<&str>> {
-        let rules: &Pairs = self
+    fn rule(&self, node_kind: &str) -> Fact<Option<(&str, &str)>> {
+        let upper: String = upper(node_kind);
+        Ok(self
             .profile
             .rules
-            .ok_or("an adapter nullability rule Python does not ship")?;
-        let upper: String = upper(node_kind);
-        Ok(rules
-            .iter()
+            .into_iter()
+            .flatten()
             .find(|(declared, _)| *declared == upper)
-            .map(|(_, rule)| rule.as_str()))
+            .map(|(declared, rule)| (declared.as_str(), rule.as_str())))
+    }
+
+    /// COALESCE's or an adapter rule's nullability over the argument nullabilities.
+    fn combined(
+        &self,
+        node_kind: &str,
+        rule: Option<(&str, &str)>,
+        arguments: &[&'static str],
+    ) -> Fact<&'static str> {
+        match rule {
+            Some((declared, PYTHON_RULE)) if node_kind != COALESCE_AST_KIND => {
+                let callback: &NullabilityCallback = self
+                    .profile
+                    .callback
+                    .ok_or("an adapter nullability rule without its callback")?;
+                (callback.0)(declared, arguments)
+            }
+            _ => Ok(combined(node_kind, rule.map(|(_, rule)| rule), arguments)),
+        }
     }
 }
 
@@ -1034,7 +1022,17 @@ fn combined(node_kind: &str, rule: Option<&str>, arguments: &[&'static str]) -> 
     match rule {
         Some(FIRST_ARG_RULE) => arguments.first().copied().unwrap_or(UNKNOWN_NULLABILITY),
         Some(CONDITIONAL_RESULT_RULE) => conditional_result(arguments),
+        Some(SAFE_CAST_RULE) => safe_cast(arguments),
         _ => UNKNOWN_NULLABILITY,
+    }
+}
+
+/// Python's `safe_cast_nullability`.
+fn safe_cast(arguments: &[&'static str]) -> &'static str {
+    if arguments.first() == Some(&NULLABLE_NULLABILITY) {
+        NULLABLE_NULLABILITY
+    } else {
+        UNKNOWN_NULLABILITY
     }
 }
 
@@ -1534,31 +1532,14 @@ fn cast_target_type(target: &Map<String, Value>) -> Option<String> {
     Some(type_name)
 }
 
-/// Python's `str.casefold`, exact for ASCII; non-ASCII text marks the recovery deferred.
+/// Python's `str.casefold`.
 fn casefold(text: &str) -> String {
-    flag_non_ascii(text);
-    text.to_ascii_lowercase()
+    python_casefold(active_python_text(), text)
 }
 
-/// Python's `str.upper`, exact for ASCII; non-ASCII text marks the recovery deferred.
+/// Python's `str.upper`.
 fn upper(text: &str) -> String {
-    flag_non_ascii(text);
-    text.to_ascii_uppercase()
-}
-
-/// Whether `text.upper()` keeps a non-ASCII character, so it can equal no ASCII key.
-fn keeps_non_ascii_upper(text: &str) -> bool {
-    text.chars().any(upper_is_non_ascii)
-}
-
-fn upper_is_non_ascii(character: char) -> bool {
-    !character.to_uppercase().all(|upper| upper.is_ascii())
-}
-
-fn flag_non_ascii(text: &str) {
-    if !text.is_ascii() {
-        NON_ASCII_FOLDED.set(true);
-    }
+    python_upper(active_python_text(), text)
 }
 
 fn dict_get<'a, V>(dict: &'a [(String, V)], key: &str) -> Option<&'a V> {

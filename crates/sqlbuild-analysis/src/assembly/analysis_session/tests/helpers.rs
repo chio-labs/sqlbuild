@@ -120,6 +120,7 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
         case_sensitive_shapes: false,
         function_return_types: Vec::new(),
         nullability_rules: Some(Vec::new()),
+        nullability_callback: None,
         rich_type_inference: true,
         column_types: raw_orders.clone(),
         column_nullability: shapes(&[(
@@ -439,6 +440,7 @@ pub(crate) fn recovered_facts(sql: &str) -> Option<(Pairs, Pairs, Vec<String>, V
             dialect: "duckdb",
             function_return_types: &Vec::new(),
             rules: Some(&rules),
+            callback: None,
         },
     })
     .ok()?;
@@ -516,6 +518,7 @@ pub(crate) fn legacy_lines(sql: &str) -> Option<Vec<String>> {
             dialect: "duckdb",
             function_return_types: &Vec::new(),
             rules: Some(&rules),
+            callback: None,
         },
     })
     .ok()?;

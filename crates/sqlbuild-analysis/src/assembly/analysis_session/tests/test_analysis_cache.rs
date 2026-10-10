@@ -87,7 +87,7 @@ fn given_a_filled_cache_when_rerunning_then_hits_match_the_uncached_session() {
             expected_stats: [(0, 2, 2), (2, 0, 0)],
         },
         CacheReuseTestCase {
-            description: "a model Python analyses is never stored",
+            description: "non-ASCII models analysed natively are stored",
             models: &[
                 (
                     "events",
@@ -103,7 +103,7 @@ fn given_a_filled_cache_when_rerunning_then_hits_match_the_uncached_session() {
                     &["events"],
                 ),
             ],
-            expected_stats: [(0, 2, 1), (1, 1, 0)],
+            expected_stats: [(0, 2, 2), (2, 0, 0)],
         },
         CacheReuseTestCase {
             description: "a natively answered legacy fallback and a failed analysis are stored",
