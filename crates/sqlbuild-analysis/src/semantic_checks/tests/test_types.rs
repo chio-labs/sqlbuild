@@ -1,4 +1,4 @@
-use crate::semantic_checks::models::{MetadataOutcome, SemanticDeferral};
+use crate::semantic_checks::models::{MetadataOutcome, SemanticFailure};
 
 /// One located `(code, message, help, notes, location)` diagnostic of a completed project.
 pub(crate) type DescribedDiagnostic = (
@@ -13,7 +13,7 @@ pub(crate) struct ProjectionSpanTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,
     pub(crate) dialect: Option<&'static str>,
-    pub(crate) expected_spans: Result<&'static [(usize, usize)], SemanticDeferral>,
+    pub(crate) expected_spans: Result<&'static [(usize, usize)], SemanticFailure>,
 }
 
 pub(crate) struct ParsedFactsTestCase {
@@ -27,16 +27,16 @@ pub(crate) struct ClosestColumnTestCase {
     pub(crate) description: &'static str,
     pub(crate) name: &'static str,
     pub(crate) columns: &'static [(&'static str, &'static str)],
-    pub(crate) expected_closest: Result<Option<&'static str>, SemanticDeferral>,
-    pub(crate) expected_order: Result<&'static [&'static str], SemanticDeferral>,
+    pub(crate) expected_closest: Result<Option<&'static str>, SemanticFailure>,
+    pub(crate) expected_order: Result<&'static [&'static str], SemanticFailure>,
 }
 
 pub(crate) struct SentenceMessageTestCase {
     pub(crate) description: &'static str,
     pub(crate) message: &'static str,
-    pub(crate) expected_sentence: Result<&'static str, SemanticDeferral>,
+    pub(crate) expected_sentence: Result<&'static str, SemanticFailure>,
     pub(crate) expected_missing:
-        Result<Option<(&'static str, Option<&'static str>)>, SemanticDeferral>,
+        Result<Option<(&'static str, Option<&'static str>)>, SemanticFailure>,
 }
 
 pub(crate) struct ComparisonHelpTestCase {
@@ -62,7 +62,7 @@ pub(crate) struct CompletionTestCase {
     pub(crate) description: &'static str,
     pub(crate) non_ascii_comment: bool,
     pub(crate) without_diagnostics: bool,
-    pub(crate) expected_deferral: Option<&'static str>,
+    pub(crate) expected_failure: Option<SemanticFailure>,
     pub(crate) expected_diagnostics: Vec<DescribedDiagnostic>,
     pub(crate) expected_bindings: Option<Vec<Vec<usize>>>,
 }
@@ -79,7 +79,7 @@ pub(crate) struct TextPositionTestCase {
     pub(crate) text: &'static str,
     pub(crate) name: &'static str,
     pub(crate) offset: usize,
-    pub(crate) expected_position: Result<(i64, i64), SemanticDeferral>,
+    pub(crate) expected_position: Result<(i64, i64), SemanticFailure>,
 }
 
 pub(crate) struct ArgumentTypeTestCase {
@@ -92,5 +92,5 @@ pub(crate) struct MetadataTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: &'static str,
     pub(crate) mart_shape: &'static [(&'static str, &'static str)],
-    pub(crate) expected_outcome: Result<MetadataOutcome, SemanticDeferral>,
+    pub(crate) expected_outcome: Result<MetadataOutcome, SemanticFailure>,
 }

@@ -12,6 +12,7 @@ use sqlbuild_analysis::semantic_checks::types::RevisedBinding;
 
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
 use crate::bindings::_helpers::semantic_checks::session_facts::session_model_facts;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
@@ -46,16 +47,10 @@ pub(crate) struct SemanticTypeRecovery {
 
 #[pymethods]
 impl SemanticTypeRecovery {
-    /// `unchanged`, `planned` or `deferred`.
+    /// `unchanged` or `planned`.
     #[getter]
     fn status(&self) -> &'static str {
         self.step.status()
-    }
-
-    /// The deferral kind, when the stage is handed back to Python.
-    #[getter]
-    fn deferral(&self) -> Option<&'static str> {
-        self.step.deferral()
     }
 
     /// Poisoned `(model, column)` outputs in Python's dict order.
@@ -76,13 +71,15 @@ impl SemanticTypeRecovery {
             .unwrap_or_default()
     }
 
-    /// Retained diagnostics and model binding positions, or None to defer to Python.
-    fn finish(&self, revised: Vec<Vec<RevisedBinding>>) -> Option<OutcomeRow> {
-        let plan = self.step.plan()?;
-        match finish_type_recovery(&self.request, plan, &revised) {
-            Ok(outcome) => Some((outcome.kept, outcome.model_bindings)),
-            Err(_) => None,
-        }
+    /// Retained diagnostics and model binding positions; an internal failure raises.
+    fn finish(&self, revised: Vec<Vec<RevisedBinding>>) -> PyResult<OutcomeRow> {
+        let plan = self
+            .step
+            .plan()
+            .ok_or_else(|| internal_error("finishing a type recovery that has no plan"))?;
+        finish_type_recovery(&self.request, plan, &revised)
+            .map(|outcome| (outcome.kept, outcome.model_bindings))
+            .map_err(|reason| internal_error(&reason))
     }
 }
 
@@ -98,8 +95,9 @@ fn plan_semantic_type_recovery(
     let request = recovery_request(request, session.as_deref()).map_err(compiler_error)?;
     let catalog = &catalog.inner;
     let step = py
-        .compiler_detach(|| plan_type_recovery(&request, catalog))
-        .map_err(compiler_error)?;
+        .compiler_detach(|| Ok(plan_type_recovery(&request, catalog)))
+        .map_err(compiler_error)?
+        .map_err(|failure| semantic_error(py, &failure))?;
     Ok(SemanticTypeRecovery { request, step })
 }
 

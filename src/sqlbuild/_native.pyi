@@ -464,14 +464,12 @@ class SemanticTypeRecovery:
     @property
     def status(self) -> str: ...
     @property
-    def deferral(self) -> str | None: ...
-    @property
     def poisoned(self) -> list[tuple[str, str]]: ...
     @property
     def revalidated(self) -> list[int]: ...
     def finish(
         self, revised: list[list[tuple[str, int | None, int | None]]], /
-    ) -> tuple[list[tuple[int, str | None]], list[list[int]]] | None: ...
+    ) -> tuple[list[tuple[int, str | None]], list[list[int]]]: ...
 
 def plan_semantic_type_recovery(
     catalog: object,
@@ -519,7 +517,6 @@ def check_semantic_metadata_rows(
     ],
     /,
 ) -> tuple[
-    str | None,
     list[tuple[list[tuple[str, str, int, int]], list[tuple[str, str, int, int]]]],
     list[tuple[int, tuple[str, str, int, int]]],
     list[tuple[int, tuple[str, str, int, int], int]],
@@ -559,7 +556,6 @@ def complete_semantic_checks(
     session: NativeModelAnalysisSession | None = None,
     /,
 ) -> tuple[
-    str | None,
     list[
         tuple[
             int,

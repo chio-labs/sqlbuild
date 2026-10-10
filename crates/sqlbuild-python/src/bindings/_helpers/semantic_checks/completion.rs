@@ -10,6 +10,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::session_facts::session_model_facts;
 use crate::bindings::_helpers::semantic_checks::type_recovery::{LineageInput, lineage_outputs};
 use crate::bindings::models::ProjectCatalog;
@@ -60,13 +61,8 @@ type CompletedRow = (
 );
 /// `(completed position, (model, message, note, help))`: exactly one side is set.
 type OrderRow = (Option<usize>, Option<(usize, String, String, String)>);
-/// `(deferral, completed, model binding positions, order)`.
-type OutcomeRow = (
-    Option<&'static str>,
-    Vec<CompletedRow>,
-    Option<Vec<Vec<usize>>>,
-    Vec<OrderRow>,
-);
+/// `(completed, model binding positions, order)`.
+type OutcomeRow = (Vec<CompletedRow>, Option<Vec<Vec<usize>>>, Vec<OrderRow>);
 
 /// Recover, explain and reject opt-outs, reading facts the payload omits from `session`.
 #[pyfunction]
@@ -79,13 +75,12 @@ fn complete_semantic_checks(
 ) -> PyResult<OutcomeRow> {
     let request = completion_request(request, session.as_deref()).map_err(compiler_error)?;
     let catalog = &catalog.inner;
-    let outcome = py
-        .compiler_detach(|| complete_semantic_diagnostics(&request, catalog))
-        .map_err(compiler_error)?;
-    let (deferral, parts) = outcome.into_parts();
-    let (diagnostics, model_bindings, order) = parts.unwrap_or_default();
+    let (diagnostics, model_bindings, order) = py
+        .compiler_detach(|| Ok(complete_semantic_diagnostics(&request, catalog)))
+        .map_err(compiler_error)?
+        .map_err(|failure| semantic_error(py, &failure))?
+        .into_parts();
     Ok((
-        deferral,
         diagnostics.into_iter().map(completed_row).collect(),
         model_bindings,
         order.into_iter().map(order_row).collect(),

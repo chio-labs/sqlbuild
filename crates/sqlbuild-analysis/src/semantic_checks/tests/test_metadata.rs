@@ -1,4 +1,3 @@
-use crate::semantic_checks::models::SemanticDeferral;
 use crate::semantic_checks::tests::helpers::{expected_checked_outcome, metadata_outcome};
 use crate::semantic_checks::tests::test_types::MetadataTestCase;
 
@@ -9,7 +8,7 @@ const MART_SHAPE: &[(&str, &str)] = &[
 ];
 
 #[test]
-fn given_project_metadata_when_checking_then_reports_python_errors_or_defers() {
+fn given_project_metadata_when_checking_then_reports_python_errors() {
     let test_cases = [
         MetadataTestCase {
             description: "function arity and families, config references, cursors and SQL tests",
@@ -18,16 +17,20 @@ fn given_project_metadata_when_checking_then_reports_python_errors_or_defers() {
             expected_outcome: Ok(expected_checked_outcome()),
         },
         MetadataTestCase {
-            description: "a dialect outside the native parser build",
+            description: "a dialect the all-dialects parser build added",
             dialect: "mysql",
             mart_shape: MART_SHAPE,
-            expected_outcome: Err(SemanticDeferral::UnsupportedDialect),
+            expected_outcome: Ok(expected_checked_outcome()),
         },
         MetadataTestCase {
-            description: "a column name Python case-folds beyond ASCII",
+            description: "a column name Python case-folds beyond ASCII to a tested name",
             dialect: "duckdb",
-            mart_shape: &[("stra\u{df}e", "VARCHAR")],
-            expected_outcome: Err(SemanticDeferral::NonAsciiText),
+            mart_shape: &[
+                ("order_id", "INTEGER"),
+                ("\u{17f}caled", "DOUBLE"),
+                ("label", "VARCHAR"),
+            ],
+            expected_outcome: Ok(expected_checked_outcome()),
         },
     ];
     for test_case in test_cases {

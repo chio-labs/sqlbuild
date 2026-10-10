@@ -1,8 +1,5 @@
 """Code-owned semantic remediation; no catch-all help for unrelated diagnostics."""
 
-_TIMESTAMP: str = "TIMESTAMP"
-_DATE: str = "DATE"
-_BIGQUERY: str = "bigquery"
 _SEMANTIC_HELP: dict[str, str] = {
     "B003": "qualify this column with the intended input alias",
     "B004": "give each referenced relation a visible alias in this scope",
@@ -33,20 +30,3 @@ _SEMANTIC_HELP: dict[str, str] = {
 def semantic_help_catalogue() -> dict[str, str]:
     """Return the code-owned remediation catalogue."""
     return dict(_SEMANTIC_HELP)
-
-
-def semantic_help(code: str) -> str | None:
-    """Return help only for a code with its own remediation."""
-    return _SEMANTIC_HELP.get(code)
-
-
-def comparison_help(*, types: tuple[str, ...], dialect: str | None) -> str:
-    """Offer a concrete literal for a proven temporal comparison mismatch."""
-    if any(_TIMESTAMP in value for value in types):
-        literal: str = "TIMESTAMP '2026-04-01'"
-        if dialect == _BIGQUERY:
-            literal = "TIMESTAMP '2026-04-01 00:00:00+00'"
-        return f"compare with a timestamp, for example {literal}"
-    if _DATE in types:
-        return "compare with a date, for example DATE '2026-04-01'"
-    return _SEMANTIC_HELP["B217"]

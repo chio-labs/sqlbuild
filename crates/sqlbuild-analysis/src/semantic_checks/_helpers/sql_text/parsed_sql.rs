@@ -11,42 +11,42 @@ use crate::semantic_checks::constants::{
     CLOSE_PARENTHESIS, GENERIC_DIALECT, MAX_FUNCTION_CALL_DEPTH, OPEN_PARENTHESIS,
     PROJECTION_SEPARATOR,
 };
-use crate::semantic_checks::models::SemanticDeferral;
+use crate::semantic_checks::models::SemanticFailure;
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
 use crate::semantic_validation::models::NormalizationInput;
 
 /// The Polyglot dialect the wheel resolves `name` to, when Polyglot knows the name.
-pub(crate) fn polyglot_dialect(name: &str) -> Result<Dialect, SemanticDeferral> {
+pub(crate) fn polyglot_dialect(name: &str) -> Result<Dialect, SemanticFailure> {
     name.parse::<DialectType>()
         .map(Dialect::get)
-        .map_err(|_| SemanticDeferral::UnsupportedDialect)
+        .map_err(|_| SemanticFailure::UnknownDialect(name.to_owned()))
 }
 
 /// Python's `get_complete_schema_binding_request(...).sql` without placeholders.
 pub(crate) fn normalized_sql(
     query_sql: &str,
     dialect: Option<&str>,
-) -> Result<String, SemanticDeferral> {
+) -> Result<String, SemanticFailure> {
     normalize_analysis_sql(NormalizationInput {
         sql: query_sql.to_owned(),
         dialect: dialect.unwrap_or(GENERIC_DIALECT).to_owned(),
         stubs: HashMap::new(),
         placeholders: HashMap::new(),
     })
-    .map_err(|_| SemanticDeferral::UnreadableSql)
+    .map_err(|_| SemanticFailure::internal("model SQL does not normalize"))
 }
 
 /// Python's `_projection_spans`: top-level SELECT-list item spans in code points.
 pub(crate) fn projection_spans(
     sql: &str,
     dialect: Option<&str>,
-) -> Result<Vec<(usize, usize)>, SemanticDeferral> {
+) -> Result<Vec<(usize, usize)>, SemanticFailure> {
     let Some(name) = dialect else {
-        return Err(SemanticDeferral::UnsupportedDialect);
+        return Err(SemanticFailure::NoDialect);
     };
     let tokens = polyglot_dialect(name)?
         .tokenize(sql)
-        .map_err(|_| SemanticDeferral::UnreadableSql)?;
+        .map_err(|_| SemanticFailure::internal("model SQL does not tokenize"))?;
     let mut depth: i64 = 0;
     let mut start: Option<usize> = None;
     let mut spans: Vec<(usize, usize)> = Vec::new();
@@ -103,7 +103,7 @@ pub(crate) struct ParsedModelFacts {
 pub(crate) fn parsed_model_facts(
     query_sql: &str,
     dialect: Option<&str>,
-) -> Result<ParsedModelFacts, SemanticDeferral> {
+) -> Result<ParsedModelFacts, SemanticFailure> {
     let Some(parsed) = parsed_model(query_sql, dialect)? else {
         return Ok(ParsedModelFacts::default());
     };
@@ -117,13 +117,13 @@ pub(crate) fn parsed_model_facts(
 pub(crate) fn parsed_model(
     query_sql: &str,
     dialect: Option<&str>,
-) -> Result<Option<Expression>, SemanticDeferral> {
+) -> Result<Option<Expression>, SemanticFailure> {
     let sql = normalized_sql(query_sql, dialect)?;
     let parser = polyglot_dialect(dialect.unwrap_or(GENERIC_DIALECT))?;
     let guard: ComplexityGuardOptions = serde_json::from_value(serde_json::json!({
         "maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH,
     }))
-    .map_err(|_| SemanticDeferral::NativeFailure)?;
+    .map_err(|_| SemanticFailure::internal("the parse guard options do not build"))?;
     let options = ParseOptions {
         complexity_guard: Some(guard),
     };

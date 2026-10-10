@@ -13,8 +13,8 @@ use crate::semantic_checks::models::{
     CompletedDiagnostic, CompletionModel, CompletionRequest, DiagnosticOwner, FinalDiagnostic,
     LineageOutput, MetadataFinding, MetadataFunction, MetadataModel, MetadataOutcome,
     MetadataRequest, MetadataSource, MetadataSqlTest, ModelBinding, ModelMetadataFindings,
-    RawBinding, RecoveryModel, SemanticDeferral, SemanticDiagnostic, SemanticLocation,
-    TypeRecoveryPlan, TypeRecoveryRequest,
+    RawBinding, RecoveryModel, SemanticDiagnostic, SemanticFailure, SemanticLocation,
+    TypeRecoveryPlan, TypeRecoveryRequest, TypeRecoveryStep,
 };
 use crate::semantic_checks::tests::test_types::{
     CompletionTestCase, DescribedDiagnostic, MetadataTestCase, OperandTypeTestCase,
@@ -24,16 +24,16 @@ use crate::semantic_validation::models::ProjectCatalog;
 
 /// What type recovery decided: status, poisoned outputs, revalidated models, kept and bindings.
 pub(crate) type RecoverySummary = (
-    &'static str,
+    String,
     Vec<(String, String)>,
     Vec<usize>,
     Vec<(usize, Option<String>)>,
     Vec<Vec<usize>>,
 );
 
-/// What completion decided: deferral, final diagnostics and model binding positions.
+/// What completion decided: its failure, final diagnostics and model binding positions.
 pub(crate) type CompletionSummary = (
-    Option<&'static str>,
+    Option<SemanticFailure>,
     Vec<DescribedDiagnostic>,
     Option<Vec<Vec<usize>>>,
 );
@@ -57,21 +57,21 @@ pub(crate) fn names(values: &[&str]) -> BTreeSet<String> {
     strings(values).into_iter().collect()
 }
 
-pub(crate) fn sentence(message: &str) -> Result<String, SemanticDeferral> {
+pub(crate) fn sentence(message: &str) -> Result<String, SemanticFailure> {
     sentence_message(message)
 }
 
 /// The missing column and table Python reads from a message.
 pub(crate) fn missing_parts(
     message: &str,
-) -> Result<Option<(String, Option<String>)>, SemanticDeferral> {
+) -> Result<Option<(String, Option<String>)>, SemanticFailure> {
     missing_column(message)
 }
 
 /// An expected missing column and table as owned strings.
 pub(crate) fn owned_missing(
-    expected: Result<Option<(&str, Option<&str>)>, SemanticDeferral>,
-) -> Result<Option<(String, Option<String>)>, SemanticDeferral> {
+    expected: Result<Option<(&str, Option<&str>)>, SemanticFailure>,
+) -> Result<Option<(String, Option<String>)>, SemanticFailure> {
     expected.map(|missing| missing.map(owned_parts))
 }
 
@@ -197,7 +197,10 @@ fn poisoned_chain(dialect: Option<&str>, is_error: bool) -> TypeRecoveryRequest 
 /// Plan and finish type recovery for one case of the poisoned chain.
 pub(crate) fn recovery_summary(test_case: &TypeRecoveryTestCase) -> RecoverySummary {
     let request = poisoned_chain(test_case.dialect, test_case.errors);
-    let step = plan_type_recovery(&request, &catalog()).expect("the analysis pool runs");
+    let (status, step) = match plan_type_recovery(&request, &catalog()) {
+        Ok(step) => (step.status().to_owned(), step),
+        Err(failure) => (format!("{failure:?}"), TypeRecoveryStep::Unchanged),
+    };
     let revised = vec![
         test_case
             .revised
@@ -210,7 +213,7 @@ pub(crate) fn recovery_summary(test_case: &TypeRecoveryTestCase) -> RecoverySumm
         .map(|plan| finish_type_recovery(&request, plan, &revised).expect("finishes"))
         .unwrap_or_default();
     (
-        step.deferral().unwrap_or(step.status()),
+        status,
         step.plan()
             .map(TypeRecoveryPlan::poisoned_outputs)
             .unwrap_or_default(),
@@ -405,14 +408,16 @@ pub(crate) fn completion_summary(test_case: &CompletionTestCase) -> CompletionSu
     request.diagnostics.truncate(kept_diagnostics);
     request.models[2].rejected_opt_out_file =
         [Some("legacy.sql".to_owned()), None][usize::from(test_case.without_diagnostics)].clone();
-    let outcome = complete_semantic_diagnostics(&request, &catalog()).expect("the pool runs");
-    let (deferral, parts) = outcome.into_parts();
-    let (diagnostics, model_bindings, order) = parts.unwrap_or_default();
+    let (failure, (diagnostics, model_bindings, order)) =
+        match complete_semantic_diagnostics(&request, &catalog()) {
+            Ok(outcome) => (None, outcome.into_parts()),
+            Err(failure) => (Some(failure), Default::default()),
+        };
     let described_order: Vec<DescribedDiagnostic> = order
         .into_iter()
         .map(|entry| described_entry(&request, &diagnostics, entry))
         .collect();
-    (deferral, described_order, model_bindings)
+    (failure, described_order, model_bindings)
 }
 
 fn described_entry(
@@ -493,14 +498,16 @@ pub(crate) fn operand_type_summary(test_case: &OperandTypeTestCase) -> Completio
             .map(|(name, columns)| ((*name).to_owned(), shape(columns)))
             .collect(),
     };
-    let outcome = complete_semantic_diagnostics(&request, &catalog()).expect("the pool runs");
-    let (deferral, parts) = outcome.into_parts();
-    let (diagnostics, model_bindings, order) = parts.unwrap_or_default();
+    let (failure, (diagnostics, model_bindings, order)) =
+        match complete_semantic_diagnostics(&request, &catalog()) {
+            Ok(outcome) => (None, outcome.into_parts()),
+            Err(failure) => (Some(failure), Default::default()),
+        };
     let described_order: Vec<DescribedDiagnostic> = order
         .into_iter()
         .map(|entry| described_entry(&request, &diagnostics, entry))
         .collect();
-    (deferral, described_order, model_bindings)
+    (failure, described_order, model_bindings)
 }
 
 /// The type Python infers for the first projection of `SELECT {expression}` on DuckDB.
@@ -616,8 +623,8 @@ pub(crate) fn metadata_finding(
 /// Run the metadata checks on a fresh catalog.
 pub(crate) fn metadata_outcome(
     test_case: &MetadataTestCase,
-) -> Result<MetadataOutcome, SemanticDeferral> {
-    check_semantic_metadata(&metadata_request(test_case), &catalog()).expect("the pool runs")
+) -> Result<MetadataOutcome, SemanticFailure> {
+    check_semantic_metadata(&metadata_request(test_case), &catalog())
 }
 
 /// The findings Python reports for the checked mart of `metadata_request`.

@@ -1,4 +1,4 @@
-"""Native semantic completion equals Python's on generated failing projects."""
+"""Native semantic completion matches the outputs recorded from Python's completion."""
 
 from __future__ import annotations
 
@@ -9,11 +9,19 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
+from tests.integration.src.sqlbuild.compiler.golden_views import (
+    GoldenEntry,
+    golden_differences,
+    golden_entry,
+    golden_name,
+    read_golden,
+)
 from tests.integration.src.sqlbuild.compiler.semantic_checks._test_types import (
-    DeferredSemanticTestCase,
+    FormerlyDeferredSemanticTestCase,
     GeneratedSemanticParityTestCase,
+    MissingCatalogTestCase,
     SessionCompletionTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
@@ -21,14 +29,15 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
     captured_semantic_inputs,
     completed_natively,
     completion_view,
-    deferral_records,
     generated_semantic_files,
     native_completion,
+    non_ascii_variant,
     note_kinds,
+    outcome_label,
     proven_output_count,
-    python_completion,
     record_native_statuses,
     record_session_models,
+    semantic_outcome,
     session_corpus_files,
     with_dialect,
     without_session,
@@ -62,7 +71,7 @@ _NOTE_KINDS: tuple[str, ...] = ("downstream output uses", "downstream uses of", 
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_failing_projects_when_completing_natively_then_matches_python(
+def test_given_generated_failing_projects_when_completing_natively_then_matches_recorded_python(
     test_case: GeneratedSemanticParityTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -70,30 +79,33 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
     rng: random.Random = random.Random(test_case.seed)
     statuses: Counter[str] = record_native_statuses(monkeypatch=monkeypatch)
     codes: Counter[str] = Counter()
-    expected_views: list[tuple[object, ...]] = []
-    native_views: list[tuple[object, ...]] = []
+    golden: list[GoldenEntry] = []
     for index in range(test_case.count):
+        project_dir: Path = tmp_path / f"project_{index}"
         captured: SemanticInputs = captured_semantic_inputs(
-            project_dir=tmp_path / f"project_{index}",
+            project_dir=project_dir,
             files=generated_semantic_files(
                 rng=rng, model_count=test_case.model_count, require_analysis=index % 2 == 0
             ),
             monkeypatch=monkeypatch,
         )
+        views: dict[str, object] = {}
         for dialect in test_case.dialects:
-            inputs: SemanticInputs = with_dialect(captured, dialect)
-            python: CompiledProject = python_completion(inputs=inputs, monkeypatch=monkeypatch)
-            codes.update(item.code for item in python.diagnostics)
-            codes.update(note_kinds(python, _NOTE_KINDS))
-            expected_views.append(completion_view(python))
-            native_views.append(completion_view(completed_natively(inputs)))
+            native: CompiledProject = completed_natively(with_dialect(captured, dialect))
+            codes.update(item.code for item in native.diagnostics)
+            codes.update(note_kinds(native, _NOTE_KINDS))
+            views[dialect] = completion_view(native)
+        golden.append(golden_entry("completion", views, masked=(str(project_dir),)))
 
-    assert native_views == expected_views
-    assert statuses["completion_deferred"] == 0
-    assert statuses["type_recovery_deferred"] == 0
+    assert (
+        golden_differences(
+            read_golden(golden_name("semantic_generated", test_case.description)), golden
+        )
+        == []
+    )
+    assert statuses["type_recovery_planned"] >= test_case.expected_minimum_type_recovery_plans
     assert statuses["completion_native"] >= test_case.expected_minimum_native_completions
     assert statuses["diagnostics_native"] >= test_case.expected_minimum_native_diagnostics
-    assert statuses["type_recovery_planned"] >= test_case.expected_minimum_type_recovery_plans
     assert {
         code: min(codes[code], minimum)
         for code, minimum in test_case.expected_minimum_codes.items()
@@ -103,60 +115,105 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeferredSemanticTestCase(
-            description="a dialect outside the native parser build",
-            dialect="mysql",
-            keeps_catalog=True,
-            non_ascii_comment=False,
-            expected_kinds=(("unsupported_dialect", "type_recovery.py"),),
+        FormerlyDeferredSemanticTestCase(
+            description="non-ASCII names, comments and line separators",
+            seed=20261014,
+            count=4,
+            non_ascii=True,
+            dialects=("duckdb", "postgres", "snowflake", "bigquery"),
+            expected_outcomes=frozenset({"completed"}),
         ),
-        DeferredSemanticTestCase(
-            description="non-ASCII authored SQL in an explained model",
-            dialect="duckdb",
-            keeps_catalog=True,
-            non_ascii_comment=True,
-            expected_kinds=(("non_ascii_text", "recovery.py"),),
+        FormerlyDeferredSemanticTestCase(
+            description="dialects added to the native parser build",
+            seed=20261015,
+            count=2,
+            non_ascii=False,
+            dialects=("mysql", "tsql", "databricks", "sqlite", "oracle", "trino"),
+            expected_outcomes=frozenset({"completed"}),
         ),
-        DeferredSemanticTestCase(
-            description="a project without an analysis catalog to run on",
-            dialect="duckdb",
-            keeps_catalog=False,
-            non_ascii_comment=False,
-            expected_kinds=(("no_analysis_catalog", "recovery.py"),),
+        FormerlyDeferredSemanticTestCase(
+            description="no dialect and an unknown dialect raise the wheel's errors",
+            seed=20261016,
+            count=2,
+            non_ascii=True,
+            dialects=(None, "nonsense"),
+            expected_outcomes=frozenset(
+                {
+                    "TypeError: argument 'dialect': 'None' is not an instance of 'str'",
+                    "ValueError: Unknown dialect: nonsense",
+                }
+            ),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_deferred_projects_when_completing_then_python_completes_and_records(
-    test_case: DeferredSemanticTestCase,
+def test_given_formerly_deferred_projects_when_completing_natively_then_matches_recorded_python(
+    test_case: FormerlyDeferredSemanticTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record_dir: Path = tmp_path / "records"
+    rng: random.Random = random.Random(test_case.seed)
+    golden: list[GoldenEntry] = []
+    outcomes: set[str] = set()
+    for index in range(test_case.count):
+        project_dir: Path = tmp_path / f"project_{index}"
+        files: dict[str, str] = generated_semantic_files(
+            rng=rng, model_count=12, require_analysis=index % 2 == 0
+        )
+        captured: SemanticInputs = captured_semantic_inputs(
+            project_dir=project_dir,
+            files=non_ascii_variant(files=files, rng=rng) if test_case.non_ascii else files,
+            monkeypatch=monkeypatch,
+        )
+        views: dict[str, object] = {}
+        for dialect in test_case.dialects:
+            inputs: SemanticInputs = with_dialect(captured, dialect)
+            outcome: tuple[str, object] = semantic_outcome(
+                lambda inputs=inputs: completion_view(completed_natively(inputs))
+            )
+            outcomes.add(outcome_label(outcome))
+            views[str(dialect)] = outcome
+        golden.append(golden_entry("completion", views, masked=(str(project_dir),)))
+
+    assert (
+        golden_differences(
+            read_golden(golden_name("semantic_formerly_deferred", test_case.description)), golden
+        )
+        == []
+    )
+    assert outcomes == test_case.expected_outcomes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MissingCatalogTestCase(
+            description="a project without an analysis catalog is an internal failure",
+            expected_message=(
+                "NativeCompilerError: native semantic completion: "
+                "the project has no analysis catalog"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_without_catalog_when_completing_then_raises_native_compiler_error(
+    test_case: MissingCatalogTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: SemanticInputs = captured_semantic_inputs(
         project_dir=tmp_path / "project",
         files=generated_semantic_files(rng=random.Random(5), model_count=8, require_analysis=False),
         monkeypatch=monkeypatch,
     )
-    inputs: SemanticInputs = with_dialect(captured, test_case.dialect)
-    project: CompiledProject = replace(
-        inputs.project,
-        binding_catalog=(None, inputs.project.binding_catalog)[test_case.keeps_catalog],
-        models=tuple(
-            replace(
-                model,
-                authored_sql=model.authored_sql
-                + ("", "-- caf\u00e9\n")[test_case.non_ascii_comment],
-            )
-            for model in inputs.project.models
-        ),
-    )
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
 
-    native: CompiledProject | None = native_completion(replace(inputs, project=project))
+    with pytest.raises(native_module.NativeCompilerError) as raised:
+        _ = native_completion(
+            replace(captured, project=replace(captured.project, binding_catalog=None))
+        )
 
-    assert native is None
-    assert deferral_records(record_dir) == test_case.expected_kinds
+    assert str(raised.value) == test_case.expected_message
 
 
 @pytest.mark.parametrize(
@@ -206,22 +263,31 @@ def test_given_preview_compiles_when_completing_from_the_session_then_matches_pa
     ]
     selections: list[frozenset[str]] = record_session_models(monkeypatch=monkeypatch)
     codes: Counter[str] = Counter()
-    python_views: list[tuple[object, ...]] = []
+    golden: list[GoldenEntry] = []
     payload_views: list[tuple[object, ...]] = []
     session_views: list[tuple[object, ...]] = []
-    for inputs in captured:
-        python: CompiledProject = python_completion(inputs=inputs, monkeypatch=monkeypatch)
-        codes.update(item.code for item in python.diagnostics)
-        codes.update(note_kinds(python, _NOTE_KINDS))
-        python_views.append(completion_view(python))
+    for index, inputs in enumerate(captured):
+        completed: CompiledProject = completed_natively(inputs)
+        codes.update(item.code for item in completed.diagnostics)
+        codes.update(note_kinds(completed, _NOTE_KINDS))
+        session_views.append(completion_view(completed))
         payload_views.append(completion_view(completed_natively(without_session(inputs))))
-        session_views.append(completion_view(completed_natively(inputs)))
+        golden.append(
+            golden_entry(
+                "completion", session_views[-1], masked=(str(tmp_path / f"project_{index}"),)
+            )
+        )
     session_models: int = sum(len(selected) for selected in selections)
     model_count: int = sum(len(inputs.project.models) for inputs in captured)
 
     assert all(inputs.native_session is not None for inputs in captured)
-    assert session_views == python_views
-    assert payload_views == python_views
+    assert (
+        golden_differences(
+            read_golden(golden_name("semantic_session", test_case.description)), golden
+        )
+        == []
+    )
+    assert payload_views == session_views
     assert (
         session_models,
         model_count - session_models,

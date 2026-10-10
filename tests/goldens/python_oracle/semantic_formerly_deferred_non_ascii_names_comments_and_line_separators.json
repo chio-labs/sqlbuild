@@ -1,0 +1,38 @@
+[
+[
+"completion",
+{
+"bigquery": "72198dc725abd42004ae2f92",
+"duckdb": "72198dc725abd42004ae2f92",
+"postgres": "72198dc725abd42004ae2f92",
+"snowflake": "72198dc725abd42004ae2f92"
+}
+],
+[
+"completion",
+{
+"bigquery": "eb3b9bf0df6905ad935dadba",
+"duckdb": "2bb0db315a6b4bd580d0f1da",
+"postgres": "2bb0db315a6b4bd580d0f1da",
+"snowflake": "2bb0db315a6b4bd580d0f1da"
+}
+],
+[
+"completion",
+{
+"bigquery": "167cc5c4a5563a44e435d35a",
+"duckdb": "167cc5c4a5563a44e435d35a",
+"postgres": "167cc5c4a5563a44e435d35a",
+"snowflake": "167cc5c4a5563a44e435d35a"
+}
+],
+[
+"completion",
+{
+"bigquery": "b64b5864b0dd1efc66efe5c5",
+"duckdb": "b64b5864b0dd1efc66efe5c5",
+"postgres": "b64b5864b0dd1efc66efe5c5",
+"snowflake": "b64b5864b0dd1efc66efe5c5"
+}
+]
+]
