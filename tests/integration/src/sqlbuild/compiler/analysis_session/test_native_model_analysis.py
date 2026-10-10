@@ -54,6 +54,11 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     shared_analysis_files,
     started_sessions,
 )
+from tests.integration.src.sqlbuild.compiler.golden_views import (
+    golden_differences,
+    golden_name,
+    read_golden,
+)
 from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _DIALECT_PROFILES: tuple[ExpressionInferenceProfile, ...] = tuple(
@@ -210,6 +215,12 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
     kinds: Counter[str] = deferral_kinds(record_dir)
     kinds.pop("analysis_session:adapter_nullability_callback", None)
 
+    assert (
+        golden_differences(
+            read_golden(golden_name("analysis_generated", test_case.description)), runs.golden
+        )
+        == []
+    )
     assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
     assert kinds == Counter()
     assert runs.analysed_models >= test_case.expected_minimum_native
@@ -268,6 +279,12 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
     uncached: list[Any] = sessions[2::3]
     shared: int = sum(session.sharing[0] for session in uncached)
 
+    assert (
+        golden_differences(
+            read_golden(golden_name("analysis_shared", test_case.description)), runs.golden
+        )
+        == []
+    )
     assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
     assert (
         runs.analysed_models,
@@ -324,6 +341,12 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ca
         for dialect, lineage_mode in product(test_case.dialects, test_case.lineage_modes)
     ]
 
+    assert (
+        golden_differences(
+            read_golden(golden_name("analysis_cyclic", test_case.description)), runs.golden
+        )
+        == []
+    )
     assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
     assert (
         runs.analysed_models,

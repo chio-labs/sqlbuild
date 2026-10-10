@@ -38,7 +38,6 @@ import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
-import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
 import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
@@ -4284,20 +4283,6 @@ def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
         "compare_project_files",
         lambda **_kwargs: ProjectFilesComparison(unchanged=True, verified={}),
     )
-
-
-def ignore_query_in_analysis_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Key Python's cached model analyses without their query, so an edited query reads a stale
-    analysis; native analysis defers to that Python analysis, since it keys its own cache."""
-
-    monkeypatch.setattr(native_assembly, "analyze_native_model_sql", lambda **_: None)
-    analysis_key: Callable[..., str] = project_assembly.model_analysis_cache_key
-
-    def query_blind_key(**kwargs: Any) -> str:
-        kwargs["query_sql"] = ""
-        return analysis_key(**kwargs)
-
-    monkeypatch.setattr(project_assembly, "model_analysis_cache_key", query_blind_key)
 
 
 EXTERNAL_FLAVOR_MODULE: str = "extflavor"

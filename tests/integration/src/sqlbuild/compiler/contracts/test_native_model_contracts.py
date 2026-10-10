@@ -17,9 +17,17 @@ from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
     NativeContractRecord,
     compiled_contract_project,
     contract_diagnostics,
+    diagnostic_view,
     perturbed_project,
     record_native_outcomes,
     with_declared_type,
+)
+from tests.integration.src.sqlbuild.compiler.golden_views import (
+    GoldenEntry,
+    golden_differences,
+    golden_entry,
+    golden_name,
+    read_golden,
 )
 
 
@@ -46,12 +54,30 @@ def test_given_generated_contracts_when_validating_then_every_contract_family_is
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     record: NativeContractRecord = record_native_outcomes(monkeypatch=monkeypatch)
-    base: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
+    project_dir: Path = tmp_path / "project"
+    base: CompiledProject = compiled_contract_project(project_dir=project_dir)
+    golden: list[GoldenEntry] = []
     for _ in range(test_case.variants):
         project: CompiledProject = perturbed_project(project=base, rng=rng)
-        for dialect in test_case.dialects:
-            _ = contract_diagnostics(project=project, dialect=dialect)
+        golden.append(
+            golden_entry(
+                "contracts",
+                {
+                    str(dialect): diagnostic_view(
+                        diagnostics=contract_diagnostics(project=project, dialect=dialect),
+                        project_dir=project_dir,
+                    )
+                    for dialect in test_case.dialects
+                },
+            )
+        )
 
+    assert (
+        golden_differences(
+            read_golden(golden_name("contracts_generated", test_case.description)), golden
+        )
+        == []
+    )
     assert (
         record.statuses["native"] >= test_case.expected_minimum_native,
         record.statuses["typed_comparisons"] >= test_case.expected_minimum_typed_comparisons,

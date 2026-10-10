@@ -100,3 +100,13 @@ class AdapterRuleCallbackTestCase:
     model_count: int
     raised: type[Exception] | None
     expected_minimum_calls: int
+
+
+@dataclass(frozen=True)
+class SharedQueryOutputTestCase:
+    """Models with equal query shapes over different inputs, and each model's own outputs."""
+
+    description: str
+    models: dict[str, str]
+    expected_lineage: tuple[tuple[str, str, str], ...] = ()
+    expected_findings: tuple[tuple[str, str], ...] = ()

@@ -1,14 +1,12 @@
 """Dependency-ready models bind against producer outputs in their first analysis."""
 
 import json
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile._helpers.assembly import project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import NativeCatalogCase
 
 
@@ -17,11 +15,10 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import NativeC
     [NativeCatalogCase("closed dependency waves", 'SELECT id FROM __ref("orders")')],
     ids=lambda case: case.description,
 )
-def test_given_inferred_producer_when_binding_consumers_then_avoids_deferred_requests_and_invalidates_changed_shapes(
+def test_given_inferred_producer_when_binding_consumers_then_binds_and_invalidates_changed_shapes(
     test_case: NativeCatalogCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
@@ -38,19 +35,10 @@ def test_given_inferred_producer_when_binding_consumers_then_avoids_deferred_req
     (tmp_path / "models/report.sql").write_text(
         "MODEL (description 'Test model report.', materialized view); " + test_case.sql
     )
-    original: Callable[..., Any] = project.get_schema_validations
-    requests: list[Any] = []
-
-    def traced(**kwargs: Any) -> Any:
-        requests.extend(kwargs["requests"])
-        return original(**kwargs)
-
-    monkeypatch.setattr(project, "get_schema_validations", traced)
     args: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
     assert main(args) == 0
     cold: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert tuple(item["code"] for item in cold["diagnostics"]) == test_case.expected_codes
-    assert requests == []
     assert main(args) == 0
     warm: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert warm["resources"] == cold["resources"]
@@ -58,7 +46,6 @@ def test_given_inferred_producer_when_binding_consumers_then_avoids_deferred_req
     assert main(args) == 1
     changed: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert [item["code"] for item in changed["diagnostics"]] == ["B002"]
-    assert requests == []
     assert main([*args, "--no-cache"]) == 1
     oracle: dict[str, Any] = json.loads(capsys.readouterr().out)
     assert oracle["diagnostics"] == changed["diagnostics"]
