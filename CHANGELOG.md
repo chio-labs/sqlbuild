@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.153.0](https://github.com/chio-labs/sqlbuild/compare/v0.152.0...v0.153.0) (2026-10-10)
+
+
+### Features
+
+* **native:** land the reviewed M4 preview ports and speed fixes together ([#1075](https://github.com/chio-labs/sqlbuild/issues/1075)) ([85a10f0](https://github.com/chio-labs/sqlbuild/commit/85a10f09e67f35d0ab2f4570519ef562368bad10))
+
 ## [0.152.0](https://github.com/chio-labs/sqlbuild/compare/v0.151.0...v0.152.0) (2026-10-09)
 
 
