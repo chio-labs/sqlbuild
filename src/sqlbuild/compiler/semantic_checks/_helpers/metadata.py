@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, cast
 
 import sqlbuild._native as _native
@@ -58,14 +59,24 @@ def native_metadata_diagnostics(
     functions: dict[str, CompiledFunction] = {
         function.name.casefold(): function for function in project.functions
     }
+    file_texts: dict[Path, str] = {}
+    for source in project.sources:
+        _ = file_texts.setdefault(source.source_file.file_path, source.source_file.contents)
+    for test in tests:
+        _ = file_texts.setdefault(test.test_file.file_path, test.test_file.contents)
+    files: dict[Path, int] = {path: index for index, path in enumerate(file_texts)}
     request: Any = (
         profile.sql_analysis_dialect,
         list(profile.function_return_types.items()),
         [_function_payload(key=key, function=function) for key, function in functions.items()],
         [(name, list(columns.items())) for name, columns in shapes.items()],
         [_model_payload(model) for model in project.models],
-        [_source_payload(source) for source in project.sources],
-        [_sql_test_payload(test=test, columns_by_sql=columns_by_sql) for test in tests],
+        list(file_texts.values()),
+        [_source_payload(source=source, files=files) for source in project.sources],
+        [
+            _sql_test_payload(test=test, columns_by_sql=columns_by_sql, files=files)
+            for test in tests
+        ],
     )
     deferral, model_rows, source_rows, test_rows, fallback_types = (
         _native.check_semantic_metadata_rows(catalog, request)
@@ -160,20 +171,22 @@ def _model_payload(model: CompiledModel) -> tuple[Any, ...]:
     )
 
 
-def _source_payload(source: CompiledSource) -> tuple[str, str | None, str]:
+def _source_payload(
+    *, source: CompiledSource, files: dict[Path, int]
+) -> tuple[str, str | None, int]:
     return (
         source.name,
         source.source_entry.cursor_column or None,
-        source.source_file.contents,
+        files[source.source_file.file_path],
     )
 
 
 def _sql_test_payload(
-    *, test: CompiledSqlTest, columns_by_sql: dict[str, tuple[str, ...]]
-) -> tuple[str, list[_NamesRow]]:
+    *, test: CompiledSqlTest, columns_by_sql: dict[str, tuple[str, ...]], files: dict[Path, int]
+) -> tuple[int, list[_NamesRow]]:
     payload: CompiledModelSqlTestPayload = cast(CompiledModelSqlTestPayload, test.payload)
     return (
-        test.test_file.contents,
+        files[test.test_file.file_path],
         [
             (cte.name, list(columns_by_sql[cte.sql_body]))
             for cte in (*payload.authored_ctes, *payload.expected_ctes)

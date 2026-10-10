@@ -1,6 +1,7 @@
 //! Plain-data requests and outcomes of native semantic completion.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::semantic_checks::types::CompletedParts;
 
@@ -292,19 +293,20 @@ pub struct MetadataModel {
     pub cursor_type: Option<String>,
 }
 
-/// One source's cursor column and file text.
+/// One source's cursor column and file text, shared with the other sources of its file.
 #[derive(Clone, Debug)]
 pub struct MetadataSource {
     pub name: String,
     /// The cursor column, when it is set and non-empty.
     pub cursor_column: Option<String>,
-    pub contents: String,
+    pub contents: Arc<str>,
 }
 
-/// One model SQL test's file text and its CTEs with their inferred column names.
+/// One model SQL test's file text, shared with its file's other tests, and its CTEs with their
+/// inferred column names.
 #[derive(Clone, Debug)]
 pub struct MetadataSqlTest {
-    pub contents: String,
+    pub contents: Arc<str>,
     pub ctes: Vec<(String, Vec<String>)>,
 }
 

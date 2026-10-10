@@ -1,5 +1,6 @@
 //! Native semantic metadata checks: config references, cursors, function calls and SQL tests.
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::semantic_checks::main::check_semantic_metadata::check_semantic_metadata;
@@ -7,6 +8,7 @@ use sqlbuild_analysis::semantic_checks::models::{
     MetadataFinding, MetadataFunction, MetadataModel, MetadataRequest, MetadataSource,
     MetadataSqlTest, ModelMetadataFindings,
 };
+use std::sync::Arc;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::models::ProjectCatalog;
@@ -26,15 +28,17 @@ type ModelInput = (
     Option<String>,
     Option<String>,
 );
-/// `(dialect, return types, functions, shapes, models, sources, SQL tests)`.
+/// `(dialect, return types, functions, shapes, models, file texts, sources, SQL tests)`;
+/// sources and SQL tests name their file's text by its index, so each file crosses once.
 type RequestInput = (
     Option<String>,
     Vec<(String, String)>,
     Vec<(String, Vec<(String, String)>)>,
     Vec<(String, Vec<(String, String)>)>,
     Vec<ModelInput>,
-    Vec<(String, Option<String>, String)>,
-    Vec<(String, NamesInput)>,
+    Vec<String>,
+    Vec<(String, Option<String>, usize)>,
+    Vec<(usize, NamesInput)>,
 );
 /// `(code, message, line, column)`.
 type ErrorRow = (&'static str, String, i64, i64);
@@ -54,7 +58,7 @@ fn check_semantic_metadata_rows(
     catalog: PyRef<'_, ProjectCatalog>,
     request: RequestInput,
 ) -> PyResult<OutcomeRow> {
-    let request = metadata_request(request);
+    let request = metadata_request(request)?;
     let catalog = &catalog.inner;
     let checked = py
         .compiler_detach(|| check_semantic_metadata(&request, catalog))
@@ -97,9 +101,16 @@ fn model_rows(errors: ModelMetadataFindings) -> (Vec<ErrorRow>, Vec<ErrorRow>) {
 }
 
 fn metadata_request(
-    (dialect, return_types, functions, shapes, models, sources, sql_tests): RequestInput,
-) -> MetadataRequest {
-    MetadataRequest {
+    (dialect, return_types, functions, shapes, models, files, sources, sql_tests): RequestInput,
+) -> PyResult<MetadataRequest> {
+    let files: Vec<Arc<str>> = files.into_iter().map(Arc::from).collect();
+    let file = |index: usize| -> PyResult<Arc<str>> {
+        files
+            .get(index)
+            .cloned()
+            .ok_or_else(|| PyValueError::new_err("a metadata row names no file text"))
+    };
+    Ok(MetadataRequest {
         dialect,
         return_types,
         functions: functions
@@ -110,17 +121,24 @@ fn metadata_request(
         models: models.into_iter().map(metadata_model).collect(),
         sources: sources
             .into_iter()
-            .map(|(name, cursor_column, contents)| MetadataSource {
-                name,
-                cursor_column,
-                contents,
+            .map(|(name, cursor_column, index)| {
+                Ok(MetadataSource {
+                    name,
+                    cursor_column,
+                    contents: file(index)?,
+                })
             })
-            .collect(),
+            .collect::<PyResult<_>>()?,
         sql_tests: sql_tests
             .into_iter()
-            .map(|(contents, ctes)| MetadataSqlTest { contents, ctes })
-            .collect(),
-    }
+            .map(|(index, ctes)| {
+                Ok(MetadataSqlTest {
+                    contents: file(index)?,
+                    ctes,
+                })
+            })
+            .collect::<PyResult<_>>()?,
+    })
 }
 
 fn metadata_model(
