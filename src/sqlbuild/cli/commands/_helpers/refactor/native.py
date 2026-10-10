@@ -1,4 +1,4 @@
-"""Plan, stage, migrate and commit one refactoring with the native refactoring stage."""
+"""Plan, stage, migrate and commit one refactoring natively."""
 
 from __future__ import annotations
 
@@ -8,13 +8,12 @@ from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.refactor.facts import (
-    declaration_moves_host,
+    declaration_placement_host,
     model_facts_json,
     refactor_facts_json,
 )
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.refactoring.exceptions import (
     RefactorEditError,
     RefactorInputError,
@@ -45,19 +44,16 @@ _ERROR_KEY: str = "error"
 
 def plan_native_refactor(
     *, project: RefactorProject, request: RefactorRequest
-) -> tuple[RefactorPlan, str] | None:
-    """Plan natively and count its edits, or return None where the Python planner must run."""
+) -> tuple[RefactorPlan, str]:
+    """Plan natively, count its edits, and return the plan with its native JSON."""
 
     response: dict[str, Any] = _response(
         cast(Any, _native).plan_refactor_json(
             refactor_facts_json(project=project, request=request),
             json.dumps(_request_payload(request)),
-            declaration_moves_host(project=project),
+            declaration_placement_host(project=project),
         )
     )
-    if response.get(_ERROR_KEY, {}).get("kind") == NativeRefactorErrorKind.DEFERRED:
-        report_native_fallback(site=NativeFallbackSite.REFACTOR_PLAN)
-        return None
     payload: dict[str, Any] = _payload(response=response, key=_PLAN_KEY)
     plan: RefactorPlan = decode_plan(payload)
     report_native_answer(

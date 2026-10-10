@@ -321,7 +321,7 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             description="native_refactoring",
             engine=CompilerEngine.NATIVE,
             stage=NativeStage.REFACTORING,
-            expected_enabled=False,
+            expected_enabled=True,
         ),
         NativeStageTierTestCase(
             description="native_preview_refactoring",
@@ -356,6 +356,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.MACRO_CALLS,
                     NativeStage.MACRO_CALL_STORE,
                     NativeStage.ATTACHMENTS,
+                    NativeStage.REFACTORING,
                 }
             ),
             expected_disabled=frozenset(
@@ -367,7 +368,6 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.LINEAGE_FACTS,
                     NativeStage.SQL_TEST_GLUE,
                     NativeStage.PROJECT_ASSEMBLY,
-                    NativeStage.REFACTORING,
                 }
             ),
         )

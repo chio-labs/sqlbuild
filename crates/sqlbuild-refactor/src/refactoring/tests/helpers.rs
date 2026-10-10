@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
@@ -6,21 +7,28 @@ use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy;
 
 use crate::refactoring::_helpers::edits::header_edits::{
-    column_config_edits, column_entry_edits, header_tokens, insert_header_entry_edit,
-    model_name_header_edits, schema_column_edits, schema_model_name_edits,
+    add_column_entry_edit, column_config_edits, column_entry_edits, consumer_column_header_edits,
+    header_tokens, insert_header_entry_edit, model_name_header_edits, schema_column_edits,
+    schema_model_name_edits,
 };
 use crate::refactoring::_helpers::edits::text_edits::{apply_text_edits, file_changes, text_edit};
 use crate::refactoring::_helpers::edits::yaml_edits::{yaml_column_edits, yaml_model_edits};
 use crate::refactoring::_helpers::files::workspace::commit_changes;
+use crate::refactoring::_helpers::planning::column_references::{
+    BodyContext, BodyMapping, ColumnQuery, ResourceColumns, analyze_column, consumer_edits,
+};
+use crate::refactoring::_helpers::planning::declaration_moves::declaration_moves;
 use crate::refactoring::_helpers::planning::model_planning::{model_parts, model_target};
 use crate::refactoring::_helpers::scanning::chars::chars;
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::_helpers::scanning::sql_sites::{ModelBody, analysis_sql, resource_sites};
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::{
-    DeclarationMoves, DestinationFacts, DiscoveredFile, EditKind, ExpansionSpan, FileChange,
-    ModelFacts, RefactorFacts, RefactorOperation, RefactorRequest, TextEdit,
+    DeclarationMoves, DeclarationPlacement, DestinationFacts, DiscoveredFile, EditKind,
+    ExpansionSpan, FileChange, ModelFacts, PlacedDeclaration, RefactorFacts, RefactorOperation,
+    RefactorRequest, RelocatedDeclaration, TextEdit,
 };
+use crate::refactoring::tests::test_types::{ExpectedSpans, PlannedMoves, Spans};
 
 pub(super) fn python() -> PythonText {
     python_text((3, 12), "15.0.0").expect("Python 3.12 is supported")
@@ -228,10 +236,28 @@ pub(super) fn yaml_field_edits(contents: &'static str) -> Result<Vec<TextEdit>, 
     )?))
 }
 
-pub(super) fn yaml_model_edit_count(contents: &str) -> Result<usize, RefactorErrorKind> {
-    yaml_model_edits(&yaml_file(contents), "stg_orders", "x")
-        .map(|edits| edits.len())
-        .map_err(|error| error.kind)
+/// `(start, end, before)` of renaming model `stg_orders`, then column `order_id` of it.
+pub(super) fn yaml_spans(contents: &str) -> Result<(Spans, Spans), RefactorError> {
+    let models: Vec<(usize, usize, String)> =
+        spans(yaml_model_edits(&yaml_file(contents), "stg_orders", "x")?);
+    let columns: Vec<(usize, usize, String)> = spans(yaml_column_edits(
+        &yaml_file(contents),
+        "stg_orders",
+        "order_id",
+        "k",
+    )?);
+    Ok((models, columns))
+}
+
+fn spans(edits: Vec<(String, TextEdit)>) -> Vec<(usize, usize, String)> {
+    edits
+        .into_iter()
+        .map(|(_, edit)| (edit.start, edit.end, edit.before))
+        .collect()
+}
+
+pub(super) fn owned_span_pair(spans: (ExpectedSpans, ExpectedSpans)) -> (Spans, Spans) {
+    (owned_sites(spans.0), owned_sites(spans.1))
 }
 
 pub(super) fn model(name: &str, materialized: Option<&str>, schema: &str) -> ModelFacts {
@@ -275,7 +301,6 @@ pub(super) fn facts(project_dir: &str, models: Vec<ModelFacts>) -> RefactorFacts
         authored_files: Vec::new(),
         yaml_files: Vec::new(),
         python_locations: Vec::new(),
-        declaration_moves: None,
     }
 }
 
@@ -305,7 +330,12 @@ pub(super) fn blocking_reasons(
         backtick_identifiers: false,
         python: python(),
     };
-    let host = |_: &str, _: &str, _: &str| Ok(DeclarationMoves::default());
+    let host = |_: &str, _: &str| {
+        Ok(DeclarationPlacement {
+            relocated: Some(Vec::new()),
+            ..DeclarationPlacement::default()
+        })
+    };
     let parts = model_parts(facts, &target, &context, &host)?;
     Ok(parts
         .blocking
@@ -388,4 +418,182 @@ pub(super) fn commit_failure(
     commit_changes(root, &owned_pairs(originals), changes)
         .err()
         .map(|error| (error.kind, error.code, error.message.starts_with(prefix)))
+}
+
+/// A scope-index declaration `kind:name` at `path`, line 1.
+pub(super) fn placed(label: &str, path: &str) -> PlacedDeclaration {
+    PlacedDeclaration {
+        key: label.to_owned(),
+        label: label.to_owned(),
+        path: path.to_owned(),
+        line: Some(1),
+        column: Some(1),
+    }
+}
+
+pub(super) fn relocated(label: &str, path: &str) -> RelocatedDeclaration {
+    RelocatedDeclaration {
+        key: label.to_owned(),
+        path: path.to_owned(),
+    }
+}
+
+/// The moves and `path:line reason` blockers of moving model `orders` with a fixed placement.
+pub(super) fn planned_declaration_moves(
+    root: &Path,
+    paths: (&str, &str),
+    placement: &DeclarationPlacement,
+) -> Result<PlannedMoves, RefactorError> {
+    let host = |_: &str, _: &str| Ok(placement.clone());
+    let moves: DeclarationMoves = declaration_moves(root, "orders", paths, &host)?;
+    let blocking: Vec<String> = moves
+        .blocking
+        .iter()
+        .map(|item| {
+            format!(
+                "{}:{} {}",
+                item.path,
+                item.line.unwrap_or_default(),
+                item.reason
+            )
+        })
+        .collect();
+    Ok((moves.moves, blocking))
+}
+
+/// Rename `fact_orders.amount` in one consumer body: edited SQL, pass-through, manual reasons.
+pub(super) fn plan_consumer(
+    sql: &str,
+    cascade: bool,
+) -> Result<(String, bool, Vec<String>), RefactorError> {
+    let text: Vec<char> = chars(sql);
+    let analysis = analysis_sql(&text, &context("duckdb"));
+    let columns: ResourceColumns = vec![
+        (
+            ("ref".to_owned(), "fact_orders".to_owned()),
+            vec![
+                "order_id".to_owned(),
+                "customer_id".to_owned(),
+                "amount".to_owned(),
+            ],
+        ),
+        (
+            ("ref".to_owned(), "customers".to_owned()),
+            vec!["customer_id".to_owned(), "amount".to_owned()],
+        ),
+    ];
+    let facts = analyze_column(
+        &analysis,
+        "duckdb",
+        &columns,
+        &ColumnQuery {
+            column: "amount",
+            target_tables: analysis.placeholders("ref", "fact_orders"),
+            target_ctes: BTreeSet::new(),
+            output_scopes: BTreeSet::new(),
+        },
+    )?;
+    let body = BodyContext {
+        path: "models/consumer.sql",
+        contents: &text,
+        mapping: BodyMapping::Authored(0),
+        fallback_offset: 0,
+    };
+    let result = consumer_edits(&facts, &body, ("amount", "revenue"), (cascade, cascade));
+    let reasons: Vec<String> = result.manual.into_iter().map(|item| item.reason).collect();
+    Ok((applied(sql, &result.edits)?, result.passes_through, reasons))
+}
+
+/// Rename model `fact_orders` to `order_facts` in source and seed YAML.
+pub(super) fn yaml_fact_model_edits(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    Ok(only_edits(yaml_model_edits(
+        &yaml_file(contents),
+        "fact_orders",
+        "order_facts",
+    )?))
+}
+
+/// Rename column `fact_orders.amount` to `revenue` in source and seed YAML.
+pub(super) fn yaml_fact_column_edits(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    Ok(only_edits(yaml_column_edits(
+        &yaml_file(contents),
+        "fact_orders",
+        "amount",
+        "revenue",
+    )?))
+}
+
+pub(super) fn header_fact_model_edits(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    model_name_header_edits(contents, &chars(contents), "fact_orders", "order_facts")
+}
+
+pub(super) fn header_fact_column_edits(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    consumer_column_header_edits(
+        contents,
+        &chars(contents),
+        "fact_orders",
+        ("amount", "revenue"),
+    )
+}
+
+pub(super) fn schema_fact_model_edits(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    schema_model_name_edits(
+        contents,
+        &chars(contents),
+        ("fact_orders", "order_facts"),
+        python(),
+    )
+}
+
+pub(super) fn schema_fact_column_edits(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    schema_column_edits(
+        contents,
+        &chars(contents),
+        ("fact_orders", ("amount", "revenue")),
+        python(),
+    )
+}
+
+/// The owner header edits renaming `amount` to `revenue` with a column migration.
+pub(super) fn migrated_column_edits(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    let text: Vec<char> = chars(contents);
+    let tokens = header_tokens(contents, &text)?.unwrap_or_default();
+    let entries: Option<Vec<TextEdit>> =
+        column_entry_edits(&text, &tokens, ("amount", "revenue"), true);
+    let added: Vec<TextEdit> = entries.clone().unwrap_or_else(|| {
+        add_column_entry_edit(contents, &text, &tokens, ("amount", "revenue"))
+            .into_iter()
+            .collect()
+    });
+    let mut edits: Vec<TextEdit> = column_config_edits(&text, &tokens, "amount", "revenue");
+    edits.extend(added);
+    Ok(edits)
+}
+
+/// The header entry `migrate_from fact_orders` inserted at the top of the header.
+pub(super) fn fact_orders_migration_entry(
+    contents: &'static str,
+) -> Result<Vec<TextEdit>, RefactorError> {
+    Ok(insert_header_entry_edit(
+        contents,
+        &chars(contents),
+        "migrate_from fact_orders",
+        "migrate_from fact_orders",
+    )
+    .into_iter()
+    .collect())
 }

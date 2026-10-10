@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild.cli.commands._helpers.refactor.compile_facts import compile_for_refactor
-from sqlbuild.cli.commands._helpers.refactor.engine import (
-    commit_plan,
-    migrate_plan,
-    plan_refactor,
-    stage_plan,
-)
 from sqlbuild.cli.commands._helpers.refactor.layer_move import layer_move_suggestion
+from sqlbuild.cli.commands._helpers.refactor.native import (
+    commit_native_refactor,
+    migrate_native_refactor,
+    plan_native_refactor,
+    stage_native_refactor,
+)
 from sqlbuild.cli.commands._helpers.refactor.output import (
     render_refactor_json,
     render_refactor_text,
@@ -71,8 +71,8 @@ def _run(
     )
     status.start("Planning edits...")
     plan: RefactorPlan
-    plan_json: str | None
-    plan, plan_json = plan_refactor(project=before.project, request=refactor_request)
+    plan_json: str
+    plan, plan_json = plan_native_refactor(project=before.project, request=refactor_request)
     status.complete(message=f"Planned edits to {_files(plan)}.")
     if plan.blocking or plan.manual:
         status.error("Refused: some references cannot be rewritten safely.")
@@ -86,15 +86,14 @@ def _run(
     with tempfile.TemporaryDirectory(prefix=_STAGING_PREFIX) as staging:
         staging_dir: Path = Path(staging)
         status.start("Verifying the edited project compiles...")
-        originals: dict[str, str] = stage_plan(
-            project_dir=project_dir, staging_dir=staging_dir, plan=plan, plan_json=plan_json
+        originals: dict[str, str] = stage_native_refactor(
+            project_dir=project_dir, staging_dir=staging_dir, plan_json=plan_json, copy_inputs=True
         )
         after: RefactorCompile = compile_for_refactor(project_dir=staging_dir, no_cache=True)
         if refactor_request.operation != RefactorOperation.RENAME_COLUMN:
             migrated: RefactorPlan
-            migrated_json: str | None
-            migrated, migrated_json = migrate_plan(
-                plan=plan,
+            migrated_json: str
+            migrated, migrated_json = migrate_native_refactor(
                 plan_json=plan_json,
                 before=before.project,
                 after=after.project,
@@ -111,10 +110,9 @@ def _run(
                 )
             if migrated.migrations != plan.migrations:
                 plan, plan_json = migrated, migrated_json
-                originals = stage_plan(
+                originals = stage_native_refactor(
                     project_dir=project_dir,
                     staging_dir=staging_dir,
-                    plan=plan,
                     plan_json=plan_json,
                     copy_inputs=False,
                 )
@@ -141,7 +139,7 @@ def _run(
             use_color=use_color,
         )
     status.start(f"Writing {_files(plan)}...")
-    commit_plan(project_dir=project_dir, originals=originals, plan=plan, plan_json=plan_json)
+    commit_native_refactor(project_dir=project_dir, originals=originals, plan_json=plan_json)
     status.complete(message=f"Wrote {_files(plan)}.")
     return _finish(
         request=request,

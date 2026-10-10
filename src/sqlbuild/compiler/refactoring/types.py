@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from enum import StrEnum
-from typing import Protocol
 
 
 class RefactorOperation(StrEnum):
@@ -30,7 +28,6 @@ class NativeRefactorErrorKind(StrEnum):
     INPUT = "input"
     EDIT = "edit"
     WRITE = "write"
-    DEFERRED = "deferred"
     VALUE = "value"
     IO = "io"
 
@@ -56,23 +53,3 @@ class SqlFileRole(StrEnum):
     FUNCTION = "function"
     SCHEMA = "schema"
     YAML = "yaml"
-
-
-class HeaderTokenKind(StrEnum):
-    """MODEL header token kinds."""
-
-    END = "end"
-    WORD = "word"
-    STRING = "string"
-    SYMBOL = "symbol"
-
-
-type ResourceColumns = dict[tuple[str, str], tuple[str, ...]]
-type SpanMapper = Callable[[int, int], tuple[int, int] | None]
-type OffsetLocator = Callable[[int], int]
-
-
-class NativeColumnReferences(Protocol):
-    """Native column-reference analysis boundary."""
-
-    def analyze_column_references_json(self, request_json: str) -> str: ...

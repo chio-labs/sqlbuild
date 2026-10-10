@@ -1,8 +1,8 @@
-use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
+use crate::refactoring::errors::RefactorError;
 use crate::refactoring::tests::helpers::{
-    applied, yaml_field_edits, yaml_model_edit_count, yaml_reference_edits,
+    applied, owned_span_pair, yaml_field_edits, yaml_reference_edits, yaml_spans,
 };
-use crate::refactoring::tests::test_types::{YamlEditsTestCase, YamlFallbackTestCase};
+use crate::refactoring::tests::test_types::{YamlEditsTestCase, YamlSpansTestCase};
 
 const SOURCES: &str = "sources:\n  - name: raw_orders\n    description: \"Feeds __ref('stg_orders').\"\n    columns:\n      - name: customer_id\n        audits:\n          relationships:\n            to: stg_orders\n            field: Order_ID\n";
 
@@ -36,25 +36,38 @@ fn given_yaml_declarations_when_renaming_then_references_and_fields_are_edited()
 }
 
 #[test]
-fn given_yaml_python_cannot_plan_when_renaming_then_file_is_skipped_or_deferred() {
+fn given_yaml_edge_cases_when_renaming_then_python_edits_are_kept() -> Result<(), RefactorError> {
     let test_cases = [
-        YamlFallbackTestCase {
+        YamlSpansTestCase {
             description: "a file PyYAML rejects is skipped",
             contents: "sources: [unclosed\n",
-            expected_outcome: Ok(0),
+            expected_spans: (&[], &[]),
         },
-        YamlFallbackTestCase {
-            description: "an anchored file defers native planning",
-            contents: "a: &anchor stg_orders\nb: *anchor\n",
-            expected_outcome: Err(RefactorErrorKind::Deferred),
+        YamlSpansTestCase {
+            description: "an anchored target is renamed through its alias",
+            contents: "a: &anchor stg_orders\nb: *anchor\nsources:\n  - audits:\n      relationships:\n        to: *anchor\n",
+            expected_spans: (&[(11, 21, "stg_orders")], &[]),
+        },
+        YamlSpansTestCase {
+            description: "an aliased string is edited once per visit and an aliased relationship is followed",
+            contents: "base: &rel\n  to: stg_orders\n  field: Order_ID\nsources:\n  - d: &d \"x __ref('stg_orders')\"\n    audits:\n      relationships: *rel\n  - e: *d\n",
+            expected_spans: (
+                &[
+                    (75, 85, "stg_orders"),
+                    (75, 85, "stg_orders"),
+                    (17, 27, "stg_orders"),
+                ],
+                &[(37, 45, "Order_ID")],
+            ),
         },
     ];
     for test_case in test_cases {
         assert_eq!(
-            yaml_model_edit_count(test_case.contents),
-            test_case.expected_outcome,
+            yaml_spans(test_case.contents)?,
+            owned_span_pair(test_case.expected_spans),
             "{}",
             test_case.description
         );
     }
+    Ok(())
 }

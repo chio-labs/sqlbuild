@@ -6,11 +6,12 @@ use crate::refactoring::_helpers::edits::header_edits::{header_tokens, is_value}
 use crate::refactoring::_helpers::edits::text_edits::{RefactorParts, manual_at};
 use crate::refactoring::_helpers::edits::yaml_edits::yaml_model_edits;
 use crate::refactoring::_helpers::files::paths::{
-    join, name, parent, relative_posix, resolve, stem, suffix, with_name,
+    join, name, relative_posix, resolve, stem, suffix, with_name,
 };
 use crate::refactoring::_helpers::files::project_files::{
     ProjectSqlFile, project_sql_files, yaml_files,
 };
+use crate::refactoring::_helpers::planning::declaration_moves::declaration_moves;
 use crate::refactoring::_helpers::planning::model_references::{
     macro_reference_locations, model_reference_edits,
 };
@@ -21,8 +22,7 @@ use crate::refactoring::constants::{
 };
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{
-    DeclarationMoves, ManualLocation, ModelFacts, RefactorFacts, RefactorOperation,
-    RefactorRequest, TextEdit,
+    ManualLocation, ModelFacts, RefactorFacts, RefactorOperation, RefactorRequest, TextEdit,
 };
 use crate::refactoring::types::DeclarationMoveHost;
 
@@ -172,7 +172,12 @@ pub(crate) fn model_parts(
     let files = project_sql_files(facts);
     let old = target.model.name.as_str();
     let new = target.request.new_name.as_str();
-    let declaration = declaration_moves(target, host)?;
+    let declaration = declaration_moves(
+        Path::new(&facts.project_dir),
+        &target.model.name,
+        (&target.source_path, &target.destination()),
+        host,
+    )?;
     let mut edits: Vec<(String, TextEdit)> = Vec::new();
     if new != old {
         edits.extend(model_reference_edits(&files, (old, new), context)?);
@@ -219,17 +224,6 @@ fn collisions(facts: &RefactorFacts, target: &ModelTarget<'_>) -> Vec<ManualLoca
         });
     }
     found
-}
-
-fn declaration_moves(
-    target: &ModelTarget<'_>,
-    host: &DeclarationMoveHost<'_>,
-) -> Result<DeclarationMoves, RefactorError> {
-    let destination = target.destination();
-    if parent(&destination) == parent(&target.source_path) {
-        return Ok(DeclarationMoves::default());
-    }
-    host(&target.model.name, &target.source_path, &destination)
 }
 
 fn pending_migration(

@@ -34,7 +34,7 @@ fn compose(file: &DiscoveredFile) -> Result<Option<ComposedFile<'_>>, RefactorEr
             document,
         })),
         Ok(_) => Ok(None),
-        Err(error) if error.kind == ConfigErrorKind::Unsupported => Err(RefactorError::deferred(
+        Err(error) if error.kind == ConfigErrorKind::Unsupported => Err(RefactorError::internal(
             format!("{}: {}", file.path, error.message),
         )),
         Err(_) => Ok(None),

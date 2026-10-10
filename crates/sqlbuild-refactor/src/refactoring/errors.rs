@@ -12,8 +12,8 @@ pub enum RefactorErrorKind {
     Edit,
     /// `RefactorWriteError`: project files changed while the refactoring ran.
     Write,
-    /// Native code cannot reproduce this plan exactly; the Python planner must run instead.
-    Deferred,
+    /// An internal native failure, raised as `NativeCompilerError`.
+    Internal,
     /// A `ValueError` the Python planner does not handle, such as a header the tokenizer rejects.
     Value,
     /// An `OSError` reading or writing project files, which Python does not handle either.
@@ -50,10 +50,10 @@ impl RefactorError {
         }
     }
 
-    /// A deferral to the Python planner, with the reason native code stopped.
-    pub fn deferred(message: impl Into<String>) -> Self {
+    /// An internal native failure with the reason native code stopped.
+    pub fn internal(message: impl Into<String>) -> Self {
         Self {
-            kind: RefactorErrorKind::Deferred,
+            kind: RefactorErrorKind::Internal,
             code: String::new(),
             message: message.into(),
             help: None,

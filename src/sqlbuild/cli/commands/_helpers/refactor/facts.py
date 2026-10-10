@@ -21,13 +21,29 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
-from sqlbuild.compiler.refactoring.constants import GENERIC_DIALECT, MIGRATE_FROM_KEY
+from sqlbuild.compiler.refactoring.constants import (
+    GENERIC_DIALECT,
+    MIGRATE_FROM_KEY,
+    MODEL_KIND_PREFIX,
+)
 from sqlbuild.compiler.refactoring.main.find_python_string_locations import (
     find_python_string_locations,
 )
-from sqlbuild.compiler.refactoring.main.plan_declaration_moves import plan_declaration_moves
 from sqlbuild.compiler.refactoring.models import ManualLocation, RefactorProject, RefactorRequest
 from sqlbuild.compiler.refactoring.types import RefactorOperation, SqlFileRole
+from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
+from sqlbuild.compiler.scopes.main.preview_scope_move import preview_scope_move
+from sqlbuild.compiler.scopes.main.relocate_declarations_for_move import (
+    relocate_declarations_for_move,
+)
+from sqlbuild.compiler.scopes.models import (
+    DeclarationRecord,
+    MovePreview,
+    ResourceIdentity,
+    ScopeDiagnostic,
+    ScopeIndex,
+)
+from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 
@@ -90,28 +106,53 @@ def model_facts(*, project: CompiledProject, project_dir: Path) -> list[dict[str
     ]
 
 
-def declaration_moves_host(*, project: RefactorProject) -> Callable[[tuple[str, str, str]], str]:
-    """Return the host callback that works out declaration moves with the Python scope index."""
+def declaration_placement_host(*, project: RefactorProject) -> Callable[[tuple[str, str]], str]:
+    """Return the callback asking the shared scope placement where moved declarations go."""
 
-    def moves(move: tuple[str, str, str]) -> str:
-        model_name, source_path, destination = move
+    def placement(move: tuple[str, str]) -> str:
+        model_name, destination = move
         report_native_fallback(site=NativeFallbackSite.REFACTOR_DECLARATION_MOVES)
-        found: tuple[tuple[tuple[str, str], ...], tuple[ManualLocation, ...]] = (
-            plan_declaration_moves(
-                project=project,
-                model_name=model_name,
-                source_path=source_path,
+        index: ScopeIndex = project.graph.project.scope_index
+        preview: MovePreview | None
+        diagnostics: tuple[ScopeDiagnostic, ...]
+        preview, diagnostics = preview_scope_move(
+            lookup=build_scope_lookup(index=index),
+            resource=f"{MODEL_KIND_PREFIX}{model_name}",
+            destination=destination,
+        )
+        relocated: tuple[DeclarationRecord, ...] | None = (
+            None
+            if preview is None
+            else relocate_declarations_for_move(
+                index=index,
+                resource=ResourceIdentity(kind=ResourceKind.MODEL, name=model_name),
                 destination=destination,
             )
         )
         return json.dumps(
             {
-                "moves": [list(item) for item in found[0]],
-                "blocking": [_location(item) for item in found[1]],
+                "relocated": None
+                if preview is None or relocated is None
+                else [
+                    {"key": repr(record.identity), "path": record.path}
+                    for record in sorted(relocated, key=lambda item: item.identity)
+                ],
+                "diagnostics": [item.message for item in diagnostics],
+                "declarations": [_declaration(record) for record in index.declarations],
             }
         )
 
-    return moves
+    return placement
+
+
+def _declaration(record: DeclarationRecord) -> dict[str, object]:
+    return {
+        "key": repr(record.identity),
+        "label": f"{record.identity.kind.value}:{record.identity.name}",
+        "path": record.path,
+        "line": record.line,
+        "column": record.column,
+    }
 
 
 def _model(*, model: CompiledModel, expansion: CompiledSqlExpansion | None) -> dict[str, object]:

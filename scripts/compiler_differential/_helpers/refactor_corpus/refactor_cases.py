@@ -6,6 +6,7 @@ from scripts.compiler_differential.constants import (
     COLD_COMPILE,
     FAILURE_BASE_FILES,
     FAILURE_MART_PATH,
+    FAILURE_SOURCES_PATH,
     FAILURE_STAGING_PATH,
     GOLDEN_FULL_REPORT_LABEL_PREFIX,
 )
@@ -30,6 +31,26 @@ _TABLE_STAGING: str = """MODEL (
 
 SELECT order_id, customer_id, amount, status
 FROM __source("raw_orders")
+"""
+_ANCHORED_SOURCES: str = """sources:
+  - name: raw_orders
+    description: &feed "Feeds __ref('stg_orders')."
+    expression: &orders >-
+      (SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount,
+      'placed' AS status)
+    columns: &order_columns
+      - name: order_id
+        type: !!str INTEGER
+      - name: customer_id
+        type: INTEGER
+      - name: amount
+        type: DOUBLE
+      - name: status
+        type: VARCHAR
+  - name: raw_orders_copy
+    description: *feed
+    expression: *orders
+    columns: *order_columns
 """
 _HEADER_MART: str = """MODEL (
   description "Order totals per customer, from __ref('stg_orders')",
@@ -72,6 +93,11 @@ def refactor_cases() -> tuple[CorpusProject, ...]:
             name="rename-model",
             refactor=_refactor("rename", "stg_orders", "stg_order_lines"),
             files={FAILURE_STAGING_PATH: _TABLE_STAGING, FAILURE_MART_PATH: _HEADER_MART},
+        ),
+        _case(
+            name="rename-model-yaml-anchors",
+            refactor=_refactor("rename", "stg_orders", "stg_order_lines"),
+            files={FAILURE_SOURCES_PATH: _ANCHORED_SOURCES},
         ),
         _case(
             name="rename-model-dry-run",

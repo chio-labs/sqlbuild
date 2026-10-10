@@ -62,4 +62,3 @@ class NativeFallbackSite(StrEnum):
     TYPE_NORMALIZATION = "type_system.normalization"
     SQL_TEST_ASSEMBLY = "sql_test_glue.assembly"
     REFACTOR_DECLARATION_MOVES = "refactoring.declaration_moves"
-    REFACTOR_PLAN = "refactoring.plan"

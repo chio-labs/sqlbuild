@@ -1,3 +1,7 @@
+#[path = "tests/test_column_references.rs"]
+mod column_references;
+#[path = "tests/test_declaration_edits.rs"]
+mod declaration_edits;
 #[path = "tests/test_header_edits.rs"]
 mod header_edits;
 #[path = "tests/helpers.rs"]

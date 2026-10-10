@@ -8,17 +8,19 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use sqlbuild_refactor::refactoring::errors::RefactorError;
+use sqlbuild_refactor::refactoring::errors::{RefactorError, RefactorErrorKind};
 use sqlbuild_refactor::refactoring::main::commit_refactor_plan::commit_refactor_plan;
 use sqlbuild_refactor::refactoring::main::plan_refactor::plan_refactor;
 use sqlbuild_refactor::refactoring::main::stage_refactor_plan::stage_refactor_plan;
 use sqlbuild_refactor::refactoring::main::with_model_migration::with_model_migration;
 use sqlbuild_refactor::refactoring::models::{
-    DeclarationMoves, ModelFacts, RefactorFacts, RefactorPlan, RefactorRequest,
+    DeclarationPlacement, ModelFacts, RefactorFacts, RefactorPlan, RefactorRequest,
 };
 use sqlbuild_refactor::refactoring::types::Originals;
 
-use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
+use crate::bindings::_helpers::boundary::panics::{
+    NativeCompilerError, compiler_guard, value_error,
+};
 
 fn decode<T: DeserializeOwned>(text: &str) -> PyResult<T> {
     serde_json::from_str(text).map_err(value_error)
@@ -27,31 +29,34 @@ fn decode<T: DeserializeOwned>(text: &str) -> PyResult<T> {
 fn encode<T: Serialize>(key: &str, result: Result<T, RefactorError>) -> PyResult<String> {
     let value = match result {
         Ok(value) => json!({ key: value }),
+        Err(error) if error.kind == RefactorErrorKind::Internal => {
+            return Err(NativeCompilerError::new_err(error.message));
+        }
         Err(error) => json!({ "error": error }),
     };
     serde_json::to_string(&value).map_err(value_error)
 }
 
-/// Plan one refactoring; `declaration_moves(model, source, destination)` returns JSON moves.
+/// Plan one refactoring; `declaration_placement((model, destination))` returns JSON placement.
 #[pyfunction]
 fn plan_refactor_json(
     py: Python<'_>,
     facts_json: &str,
     request_json: &str,
-    declaration_moves: Py<PyAny>,
+    declaration_placement: Py<PyAny>,
 ) -> PyResult<String> {
     compiler_guard(|| {
         let facts: RefactorFacts = decode(facts_json)?;
         let request: RefactorRequest = decode(request_json)?;
         let host_error: RefCell<Option<PyErr>> = RefCell::new(None);
-        let host = |model: &str, source: &str, destination: &str| {
-            let moves = declaration_moves
-                .call1(py, ((model, source, destination),))
+        let host = |model: &str, destination: &str| {
+            let placement = declaration_placement
+                .call1(py, ((model, destination),))
                 .and_then(|value| value.extract::<String>(py))
-                .and_then(|text| decode::<DeclarationMoves>(&text));
-            moves.map_err(|error| {
+                .and_then(|text| decode::<DeclarationPlacement>(&text));
+            placement.map_err(|error| {
                 host_error.replace(Some(error));
-                RefactorError::deferred("the declaration-move host failed")
+                RefactorError::internal("the declaration-move host failed")
             })
         };
         let result = plan_refactor(&facts, &request, &host);

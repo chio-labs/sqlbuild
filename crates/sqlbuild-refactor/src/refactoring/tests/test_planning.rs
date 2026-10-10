@@ -1,12 +1,14 @@
 use crate::refactoring::_helpers::planning::model_planning::decide_model_migration;
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
-use crate::refactoring::models::RefactorOperation;
+use crate::refactoring::models::{DeclarationPlacement, RefactorOperation};
 use crate::refactoring::tests::helpers::{
     blocking_reasons, change, commit_failure, facts, files_on_disk, model, model_in_database,
-    owned_pairs, refused_target, replace_all, request, write_files,
+    owned_pairs, placed, planned_declaration_moves, refused_target, relocated, replace_all,
+    request, write_files,
 };
 use crate::refactoring::tests::test_types::{
-    CollisionTestCase, CommitTestCase, MigrationDecisionTestCase, RefusedTargetTestCase,
+    CollisionTestCase, CommitTestCase, DeclarationMovesTestCase, MigrationDecisionTestCase,
+    RefusedTargetTestCase,
 };
 
 #[test]
@@ -219,6 +221,103 @@ fn given_failing_commit_when_committing_then_project_files_are_unchanged()
         assert_eq!(
             files_on_disk(project.path(), test_case.on_disk),
             owned_pairs(test_case.expected_files),
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_scope_placement_when_moving_across_folders_then_declaration_files_follow_or_block()
+-> Result<(), RefactorError> {
+    let test_cases = [
+        DeclarationMovesTestCase {
+            description: "a move within one folder asks no placement",
+            on_disk: &[],
+            paths: ("models/orders.sql", "models/orders_v2.sql"),
+            placement: DeclarationPlacement::default(),
+            expected_moves: &[],
+            expected_blocking: &[],
+        },
+        DeclarationMovesTestCase {
+            description: "an unsettled placement blocks with the preview's reasons",
+            on_disk: &[],
+            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            placement: DeclarationPlacement {
+                relocated: None,
+                diagnostics: vec!["Move source model:orders is unknown".to_owned()],
+                declarations: Vec::new(),
+            },
+            expected_moves: &[],
+            expected_blocking: &["models/marts/orders.sql:0 Move source model:orders is unknown"],
+        },
+        DeclarationMovesTestCase {
+            description: "an unsettled placement without reasons blocks with the default reason",
+            on_disk: &[],
+            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            placement: DeclarationPlacement::default(),
+            expected_moves: &[],
+            expected_blocking: &[
+                "models/marts/orders.sql:0 declaration placement at the destination could not be worked out",
+            ],
+        },
+        DeclarationMovesTestCase {
+            description: "files move whole; split files, shared files, generated files and taken paths block",
+            on_disk: &[
+                ("models/_sqlbuild/_macros/cents.py", "x"),
+                ("models/_sqlbuild/_enums/both.sql", "x"),
+                ("models/marts/_sqlbuild/_enums/both.sql", "x"),
+            ],
+            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            placement: DeclarationPlacement {
+                relocated: Some(vec![
+                    relocated("enum:a", "models/marts/_sqlbuild/_enums/both.sql"),
+                    relocated("enum:b", "models/other/_sqlbuild/_enums/both.sql"),
+                    relocated("macro:cents", "models/marts/_sqlbuild/_macros/cents.py"),
+                    relocated("macro:generated", "models/marts/_sqlbuild/_macros/gen.py"),
+                ]),
+                diagnostics: Vec::new(),
+                declarations: vec![
+                    placed("enum:a", "models/_sqlbuild/_enums/both.sql"),
+                    placed("enum:b", "models/_sqlbuild/_enums/both.sql"),
+                    placed("macro:cents", "models/_sqlbuild/_macros/cents.py"),
+                    placed("macro:stays", "models/_sqlbuild/_macros/cents.py"),
+                    placed("macro:generated", "models/_sqlbuild/_macros/gen.py"),
+                ],
+            },
+            expected_moves: &[
+                (
+                    "models/_sqlbuild/_enums/both.sql",
+                    "models/marts/_sqlbuild/_enums/both.sql",
+                ),
+                (
+                    "models/_sqlbuild/_macros/cents.py",
+                    "models/marts/_sqlbuild/_macros/cents.py",
+                ),
+            ],
+            expected_blocking: &[
+                "models/_sqlbuild/_enums/both.sql:1 models/_sqlbuild/_enums/both.sql holds declarations that must move to different folders (models/marts/_sqlbuild/_enums/both.sql, models/other/_sqlbuild/_enums/both.sql); split the file first",
+                "models/_sqlbuild/_macros/gen.py:1 macro:generated must move to models/marts/_sqlbuild/_macros/gen.py, but it is not an authored project file",
+                "models/_sqlbuild/_macros/cents.py:1 models/marts/_sqlbuild/_macros/cents.py would take macro:stays along, which must stay in models/_sqlbuild/_macros/cents.py; split the file first",
+                "models/marts/_sqlbuild/_enums/both.sql:0 a declaration must move here, but the file already exists",
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        let project =
+            tempfile::tempdir().map_err(|error| RefactorError::value(error.to_string()))?;
+        write_files(project.path(), test_case.on_disk)?;
+        let (moves, blocking) =
+            planned_declaration_moves(project.path(), test_case.paths, &test_case.placement)?;
+        assert_eq!(
+            moves,
+            owned_pairs(test_case.expected_moves),
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            blocking, test_case.expected_blocking,
             "{}",
             test_case.description
         );

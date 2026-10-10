@@ -186,7 +186,7 @@ def test_given_bare_target_when_running_then_applies_refactor(
             target="model:stg_orders",
             new_name="stg_order_lines",
             expected_native_counts={
-                CompilerEngine.NATIVE.value: {"planned_edits": 0, "migration_edits": 0},
+                CompilerEngine.NATIVE.value: {"planned_edits": 1, "migration_edits": 1},
                 CompilerEngine.NATIVE_PREVIEW.value: {"planned_edits": 1, "migration_edits": 1},
             },
         ),
@@ -196,7 +196,7 @@ def test_given_bare_target_when_running_then_applies_refactor(
             target="column:stg_orders.amount",
             new_name="revenue",
             expected_native_counts={
-                CompilerEngine.NATIVE.value: {"planned_edits": 0, "migration_edits": 0},
+                CompilerEngine.NATIVE.value: {"planned_edits": 3, "migration_edits": 0},
                 CompilerEngine.NATIVE_PREVIEW.value: {"planned_edits": 3, "migration_edits": 0},
             },
         ),

@@ -239,6 +239,35 @@ pub struct DeclarationMoves {
     pub blocking: Vec<ManualLocation>,
 }
 
+/// One scope-index declaration, keyed by its identity.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlacedDeclaration {
+    pub key: String,
+    /// `kind:name`.
+    pub label: String,
+    pub path: String,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+}
+
+/// A declaration the scope placement moves, and the path it must move to.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelocatedDeclaration {
+    pub key: String,
+    pub path: String,
+}
+
+/// The scope placement answer for a model move across folders.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeclarationPlacement {
+    /// Relocated declarations in identity order, or `None` when placement is unsettled.
+    pub relocated: Option<Vec<RelocatedDeclaration>>,
+    /// Why the move preview failed, when it did.
+    pub diagnostics: Vec<String>,
+    /// Every declaration of the scope index, in index order.
+    pub declarations: Vec<PlacedDeclaration>,
+}
+
 /// Every compiler fact of one project a refactoring plan reads.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RefactorFacts {
@@ -261,7 +290,4 @@ pub struct RefactorFacts {
     pub yaml_files: Vec<DiscoveredFile>,
     /// Python strings naming the renamed model or column, found by the Python host.
     pub python_locations: Vec<ManualLocation>,
-    /// Declaration moves of a model move across folders, worked out by the Python host.
-    #[serde(default)]
-    pub declaration_moves: Option<DeclarationMoves>,
 }

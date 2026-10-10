@@ -19,7 +19,7 @@ impl ScanContext {
     pub(crate) fn for_facts(facts: &RefactorFacts) -> Result<Self, RefactorError> {
         let python =
             python_text(facts.python_version, &facts.unicode_version).ok_or_else(|| {
-                RefactorError::deferred(format!(
+                RefactorError::internal(format!(
                     "native refactoring does not support Python {}.{} with Unicode {}",
                     facts.python_version.0, facts.python_version.1, facts.unicode_version
                 ))

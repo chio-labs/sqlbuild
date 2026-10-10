@@ -17,8 +17,8 @@ pub(crate) struct Node {
     pub(crate) position: (usize, usize),
     /// The char indices where the node's token starts and ends, as the parser marks them.
     pub(crate) span: (usize, usize),
-    /// Whether the node carries an anchor or a tag, which moves PyYAML's start mark onto them.
-    pub(crate) decorated: bool,
+    /// How many properties (an anchor, a tag) precede the node; PyYAML's start mark is on the first.
+    pub(crate) properties: usize,
 }
 
 /// A composed document; `root` is `None` for an empty stream.

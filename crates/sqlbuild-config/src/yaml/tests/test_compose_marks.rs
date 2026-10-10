@@ -1,4 +1,3 @@
-use crate::errors::ConfigErrorKind;
 use crate::yaml::tests::helpers::{owned_marks, scalar_marks};
 use crate::yaml::tests::test_types::ComposeMarksTestCase;
 
@@ -35,9 +34,41 @@ fn given_yaml_documents_when_composing_then_scalar_marks_match_pyyaml() {
             expected_scalars: Ok(&[(1, 2, "k"), (4, 5, "v")]),
         },
         ComposeMarksTestCase {
-            description: "an anchored node is left to Python",
+            description: "an anchored scalar starts at its anchor and its alias is the same node",
             text: "a: &x v\nb: *x\n",
-            expected_scalars: Err(ConfigErrorKind::Unsupported),
+            expected_scalars: Ok(&[(0, 1, "a"), (3, 7, "v"), (8, 9, "b")]),
+        },
+        ComposeMarksTestCase {
+            description: "a scalar with a tag and an anchor starts at its first property",
+            text: "a: !!str 12\nb: !!str &y q\nc: &t !!str 'x'\n",
+            expected_scalars: Ok(&[
+                (0, 1, "a"),
+                (3, 11, "12"),
+                (12, 13, "b"),
+                (15, 25, "q"),
+                (26, 27, "c"),
+                (29, 41, "x"),
+            ]),
+        },
+        ComposeMarksTestCase {
+            description: "a verbatim tag with a comma and an anchored block scalar",
+            text: "x: !<tag:yaml.org,2002:str> v\nc: &c |\n  txt\n",
+            expected_scalars: Ok(&[(0, 1, "x"), (3, 29, "v"), (30, 31, "c"), (33, 44, "txt\n")]),
+        },
+        ComposeMarksTestCase {
+            description: "anchors inside flow and block collections",
+            text: "k: [&e a, *e]\nm: &n\n  - &o x\n",
+            expected_scalars: Ok(&[(0, 1, "k"), (4, 8, "a"), (14, 15, "m"), (24, 28, "x")]),
+        },
+        ComposeMarksTestCase {
+            description: "a quoted scalar ends at its closing quote, before spaces and a comment",
+            text: "k: 'it''s'   # 'x'\nd: \"a \\\" b\"  \n",
+            expected_scalars: Ok(&[
+                (0, 1, "k"),
+                (3, 10, "it's"),
+                (19, 20, "d"),
+                (22, 30, "a \" b"),
+            ]),
         },
     ];
     for test_case in test_cases {

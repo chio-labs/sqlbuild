@@ -97,13 +97,13 @@ impl<'input> Composer<'input> {
         }
     }
 
-    fn push(&mut self, tag: String, content: NodeContent, span: Span, decorated: bool) -> usize {
+    fn push(&mut self, tag: String, content: NodeContent, span: Span, properties: usize) -> usize {
         self.document.nodes.push(Node {
             tag,
             content,
             position: start_position(span),
             span: (span.start.index(), span.end.index()),
-            decorated,
+            properties,
         });
         self.document.nodes.len() - 1
     }
@@ -264,6 +264,21 @@ impl<'input> Composer<'input> {
         None
     }
 
+    /// Just past the closing quote of the quoted scalar whose opening quote is at `start`.
+    fn quoted_end(&self, start: usize) -> Option<usize> {
+        let quote = self.char_at(start)?;
+        let mut index = start + 1;
+        loop {
+            let character = self.char_at(index)?;
+            match (quote, character) {
+                ('\'', '\'') if self.char_at(index + 1) == Some('\'') => index += 2,
+                ('"', '\\') => index += 2,
+                (_, character) if character == quote => return Some(index + 1),
+                _ => index += 1,
+            }
+        }
+    }
+
     /// PyYAML's block scalar marks: indicator to just past the last consumed line break.
     fn block_marks(&self, span: Span) -> (usize, usize) {
         let start = self.block_indicator(span).unwrap_or(span.start.index());
@@ -391,6 +406,13 @@ impl<'input> Composer<'input> {
                         Cow::Owned(self.block_scalar(&value, span, placement)?),
                         self.block_marks(span),
                     ),
+                    ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => {
+                        let start = span.start.index();
+                        (
+                            value,
+                            (start, self.quoted_end(start).unwrap_or(span.end.index())),
+                        )
+                    }
                     _ => (value, (span.start.index(), span.end.index())),
                 };
                 let non_specific = full_tag(tag.as_ref()).as_deref() == Some(NON_SPECIFIC_TAG);
@@ -398,13 +420,13 @@ impl<'input> Composer<'input> {
                     return Err(unsupported("an empty scalar tagged '!'"));
                 }
                 self.open_anchor(anchor_id, span)?;
-                let decorated = anchor_id != 0 || tag.is_some();
+                let properties = usize::from(anchor_id != 0) + usize::from(tag.is_some());
                 let tag = scalar_tag(&value, style, full_tag(tag.as_ref()));
                 let node = self.push(
                     tag,
                     NodeContent::Scalar(value.into_owned()),
                     span,
-                    decorated,
+                    properties,
                 );
                 self.document.nodes[node].span = marks;
                 Ok(self.close_anchor(anchor_id, node))
@@ -436,9 +458,9 @@ impl<'input> Composer<'input> {
             }
             items.push(self.compose_node(event, item_span, item_placement)?);
         }
-        let decorated = anchor_id != 0 || tag.is_some();
+        let properties = usize::from(anchor_id != 0) + usize::from(tag.is_some());
         let tag = collection_tag(full_tag(tag.as_ref()), SEQ_TAG);
-        let node = self.push(tag, NodeContent::Sequence(items), span, decorated);
+        let node = self.push(tag, NodeContent::Sequence(items), span, properties);
         Ok(self.close_anchor(anchor_id, node))
     }
 
@@ -465,9 +487,9 @@ impl<'input> Composer<'input> {
             let value = self.compose_node(value_event, value_span, value_placement)?;
             entries.push((key, value));
         }
-        let decorated = anchor_id != 0 || tag.is_some();
+        let properties = usize::from(anchor_id != 0) + usize::from(tag.is_some());
         let tag = collection_tag(full_tag(tag.as_ref()), MAP_TAG);
-        let node = self.push(tag, NodeContent::Mapping(entries), span, decorated);
+        let node = self.push(tag, NodeContent::Mapping(entries), span, properties);
         Ok(self.close_anchor(anchor_id, node))
     }
 
