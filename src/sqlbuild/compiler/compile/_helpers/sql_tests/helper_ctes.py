@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.refs.references import (
     reference_call_location,
@@ -34,7 +34,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceLocation
 
@@ -332,45 +331,8 @@ def _references(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[CompileSqlRefere
 def _parsed_reads(*, sql: str, keys: frozenset[str]) -> tuple[str, ...] | None:
     """Return unqualified table reads of ``keys`` not shadowed by a nested CTE, or None."""
 
-    folded: str = sql.casefold()
-    if not any(key in folded for key in keys):
-        return ()
-    polyglot_module: Any = import_polyglot_sql()
-    try:
-        parsed: Any = polyglot_module.parse_one(sql, dialect="generic")
-    except polyglot_module.PolyglotError:
-        return None
-    nested: frozenset[str] = _defined_cte_keys(parsed.to_dict())
-    reads: list[str] = []
-    for table in parsed.find_all("table"):
-        if table.arg("schema") is not None or table.arg("catalog") is not None:
-            continue
-        key: str = str(getattr(table, "name", "") or "").casefold()
-        if key in keys and key not in nested and key not in reads:
-            reads.append(key)
-    return tuple(reads)
-
-
-def _defined_cte_keys(tree: Any) -> frozenset[str]:
-    """Return the case-folded names of every CTE a parsed query defines, at any depth."""
-
-    keys: set[str] = set()
-    pending: list[Any] = [tree]
-    while pending:
-        value: Any = pending.pop()
-        if isinstance(value, list):
-            pending.extend(value)
-            continue
-        if not isinstance(value, dict):
-            continue
-        ctes: Any = value.get("ctes")
-        for cte in ctes if isinstance(ctes, list) else ():
-            alias: Any = cte.get("alias") if isinstance(cte, dict) else None
-            name: Any = alias.get("name") if isinstance(alias, dict) else None
-            if isinstance(name, str):
-                keys.add(name.casefold())
-        pending.extend(value.values())
-    return frozenset(keys)
+    reads: list[str] | None = _native.sql_test_helper_reads(sql, sorted(keys))
+    return None if reads is None else tuple(reads)
 
 
 def _token_reads(*, sql: str, keys: frozenset[str]) -> tuple[str, ...]:

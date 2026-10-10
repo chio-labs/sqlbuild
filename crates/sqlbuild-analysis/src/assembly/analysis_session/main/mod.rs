@@ -10,5 +10,6 @@ pub mod query_columns;
 pub mod recover_cte_facts;
 pub mod run_analysis_session;
 pub mod session_sharing;
+pub mod sql_test_helper_reads;
 pub mod start_analysis_session;
 pub mod take_analysis_cache;

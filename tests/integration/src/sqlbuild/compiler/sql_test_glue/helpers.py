@@ -526,3 +526,10 @@ def _outcome(call: Callable[[], object]) -> PlanningCallOutcome:
         return PlanningCallOutcome(value=call(), raised=None)
     except Exception as error:  # noqa: BLE001 - both paths must raise the same error
         return PlanningCallOutcome(value=None, raised=(type(error).__name__, str(error)))
+
+
+def helper_reads_view(sql: str, keys: frozenset[str]) -> tuple[str, ...] | None:
+    """The native helper reads of `sql` as Python's `_parsed_reads` returned them."""
+
+    reads: list[str] | None = native_module.sql_test_helper_reads(sql, sorted(keys))
+    return {True: lambda: None, False: lambda: tuple(cast(list[str], reads))}[reads is None]()

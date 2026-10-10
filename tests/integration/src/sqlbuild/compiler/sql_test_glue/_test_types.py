@@ -24,3 +24,13 @@ class EdgeSqlTestAssemblyTestCase:
     description: str
     files: dict[str, str]
     expected_outcome: str
+
+
+@dataclass(frozen=True)
+class HelperReadsTestCase:
+    """CTE bodies whose helper-key reads Python's `_parsed_reads` recorded in a golden."""
+
+    description: str
+    keys: frozenset[str]
+    bodies: tuple[str, ...]
+    expected_differences: list[tuple[int, str, object, object]]

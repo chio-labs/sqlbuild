@@ -7,15 +7,17 @@ use serde_json::{Map, Value, json};
 use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 use sqlbuild_core::text::main::python_upper::python_upper;
+use sqlbuild_core::text::models::PythonText;
 
 use crate::assembly::analysis_session::models::ProjectionFacts;
 
 use crate::assembly::analysis_session::constants::{
-    ALIAS_AST_KIND, ANNOTATED_AST_KIND, ARRAY_FIXTURE_TYPE, ARRAY_PAYLOAD_KIND, COLUMN_AST_KIND,
-    DEPENDENCY_FUNCTION_NAMES, FUNCTION_AST_KIND, FUNCTION_FIXTURE_TYPES, FUNCTION_PAYLOAD_KIND,
-    LITERAL_FIXTURE_TYPES, LITERAL_PAYLOAD_KIND, MAX_FUNCTION_CALL_DEPTH, NULL_PAYLOAD_KIND,
-    RENDERED_TYPE_NAMES, SELECT_PAYLOAD_KEY, STAR_AST_KIND, STRUCTURED_PAYLOAD_KINDS,
-    TABLE_AST_KIND, VARIANT_FIXTURE_TYPE, WILDCARD,
+    ALIAS_AST_KIND, ANNOTATED_AST_KIND, ARRAY_FIXTURE_TYPE, ARRAY_PAYLOAD_KIND, CATALOG_TABLE_ARG,
+    COLUMN_AST_KIND, CTE_ALIAS_PAYLOAD_KEY, CTE_LIST_PAYLOAD_KEY, DEPENDENCY_FUNCTION_NAMES,
+    FUNCTION_AST_KIND, FUNCTION_FIXTURE_TYPES, FUNCTION_PAYLOAD_KIND, HELPER_READS_DIALECT,
+    LITERAL_FIXTURE_TYPES, LITERAL_PAYLOAD_KIND, MAX_FUNCTION_CALL_DEPTH, NAME_PAYLOAD_KEY,
+    NULL_PAYLOAD_KIND, RENDERED_TYPE_NAMES, SCHEMA_TABLE_ARG, SELECT_PAYLOAD_KEY, STAR_AST_KIND,
+    STRUCTURED_PAYLOAD_KINDS, TABLE_AST_KIND, VARIANT_FIXTURE_TYPE, WILDCARD,
 };
 
 /// Python's `bool(value)`.
@@ -544,4 +546,58 @@ fn unique(names: Vec<String>) -> Vec<String> {
         }
     }
     kept
+}
+
+/// Python's `_parsed_reads`: helper keys `sql` reads, first first; None where `parse_one` raises.
+pub(crate) fn helper_parsed_reads(
+    sql: &str,
+    keys: &[String],
+) -> Result<Option<Vec<String>>, String> {
+    let python: PythonText = active_python_text();
+    let folded: String = python_casefold(python, sql);
+    if !keys.iter().any(|key| folded.contains(key.as_str())) {
+        return Ok(Some(Vec::new()));
+    }
+    let Some(parsed) = parse_one(sql, HELPER_READS_DIALECT)? else {
+        return Ok(None);
+    };
+    let nested: Vec<String> = defined_cte_keys(python, &to_dict(&parsed)?);
+    let mut reads: Vec<String> = Vec::new();
+    for table in find_all(&parsed, TABLE_AST_KIND) {
+        if arg(Some(table), SCHEMA_TABLE_ARG)?.is_some()
+            || arg(Some(table), CATALOG_TABLE_ARG)?.is_some()
+        {
+            continue;
+        }
+        let key: String = python_casefold(python, name(Some(table)));
+        if keys.contains(&key) && !nested.contains(&key) && !reads.contains(&key) {
+            reads.push(key);
+        }
+    }
+    Ok(Some(reads))
+}
+
+/// Python's `_defined_cte_keys`: every CTE alias at any depth, casefolded.
+fn defined_cte_keys(python: PythonText, tree: &Value) -> Vec<String> {
+    let mut keys: Vec<String> = Vec::new();
+    let mut pending: Vec<&Value> = vec![tree];
+    while let Some(value) = pending.pop() {
+        match value {
+            Value::Array(items) => pending.extend(items.iter()),
+            Value::Object(map) => {
+                if let Some(Value::Array(ctes)) = map.get(CTE_LIST_PAYLOAD_KEY) {
+                    keys.extend(ctes.iter().filter_map(|cte| {
+                        let alias: &Value = cte.as_object()?.get(CTE_ALIAS_PAYLOAD_KEY)?;
+                        Some(python_casefold(
+                            python,
+                            alias.as_object()?.get(NAME_PAYLOAD_KEY)?.as_str()?,
+                        ))
+                    }));
+                }
+                pending.extend(map.values());
+            }
+            _ => {}
+        }
+    }
+    keys
 }

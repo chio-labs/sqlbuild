@@ -227,3 +227,10 @@ pub(crate) const FUNCTION_FIXTURE_TYPES: [(&str, &str); 3] = [
 ];
 pub(crate) const ARRAY_FIXTURE_TYPE: &str = "ARRAY";
 pub(crate) const VARIANT_FIXTURE_TYPE: &str = "VARIANT";
+/// Dialect, payload keys and table args Python's SQL-test `_parsed_reads` reads.
+pub(crate) const HELPER_READS_DIALECT: &str = "generic";
+pub(crate) const CTE_LIST_PAYLOAD_KEY: &str = "ctes";
+pub(crate) const CTE_ALIAS_PAYLOAD_KEY: &str = "alias";
+pub(crate) const NAME_PAYLOAD_KEY: &str = "name";
+pub(crate) const SCHEMA_TABLE_ARG: &str = "schema";
+pub(crate) const CATALOG_TABLE_ARG: &str = "catalog";
