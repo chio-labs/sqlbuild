@@ -43,3 +43,10 @@ pub(crate) struct RichLineageTestCase {
     pub(crate) expected_has_star: bool,
     pub(crate) expected_detail: Option<&'static str>,
 }
+
+pub(crate) struct EnvironmentMarkerTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static [u8],
+    /// The names read, or `None` where Python refuses to cache the graph.
+    pub(crate) expected_names: Option<&'static [&'static str]>,
+}

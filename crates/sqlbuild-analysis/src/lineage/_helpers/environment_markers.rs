@@ -1,20 +1,22 @@
 //! Python's `ENV:\s*([A-Za-z0-9_]+)` scan over bytes, with its cacheability checks.
 
-use crate::lineage::constants::ENVIRONMENT_MARKER;
+use crate::lineage::constants::{ENVIRONMENT_MARKER, NON_ASCII_BYTE_START};
 
-/// The environment names `contents` reads, or `None` where Python refuses to cache the graph:
-/// a marker without a name, or a name directly followed by a non-ASCII byte.
+/// The names `contents` reads; `None` for a nameless marker or a name before a non-ASCII byte.
 pub(crate) fn environment_names(contents: &[u8]) -> Option<Vec<&str>> {
     let mut names: Vec<&str> = Vec::new();
     for start in marker_positions(contents, true) {
         let Some(end) = match_end(contents, start) else {
             continue;
         };
-        if contents.get(end).is_some_and(|byte| *byte >= 128) {
+        if contents.get(end).is_some_and(|byte| *byte >= NON_ASCII_BYTE_START) {
             return None;
         }
         let name = &contents[start + ENVIRONMENT_MARKER.len()..end];
-        names.push(std::str::from_utf8(name).ok()?.trim_start_matches(is_python_space_char));
+        let Ok(name) = std::str::from_utf8(name) else {
+            return None;
+        };
+        names.push(name.trim_start_matches(is_python_space_char));
     }
     (names.len() == marker_positions(contents, false).len()).then_some(names)
 }

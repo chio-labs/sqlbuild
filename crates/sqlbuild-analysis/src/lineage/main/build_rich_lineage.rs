@@ -10,7 +10,7 @@ use crate::lineage::_helpers::references::{physical_resource_name, physical_reso
 use crate::lineage::_helpers::rich_lineage::{RichContext, rich_model_lineage, schema_names};
 use crate::lineage::_helpers::stars::schema_mapping;
 use crate::lineage::constants::{RICH_LINEAGE_WORKERS, RICH_LINEAGE_WORKER_STACK_BYTES};
-use crate::lineage::main::parser_dialect::is_compiled_dialect;
+use crate::lineage::_helpers::dialects::is_compiled_dialect;
 use crate::lineage::models::{
     LineageDeferral, LineageSchemaResource, RichLineageOutcome, RichLineageRequest,
 };
@@ -60,7 +60,10 @@ pub fn build_rich_lineage(request: &RichLineageRequest) -> Result<Vec<RichLineag
 
 /// The wheel decodes the options' dialect with serde; this build may not carry it.
 fn analysis_dialect(name: &str) -> Option<DialectType> {
-    serde_json::from_value::<DialectType>(serde_json::Value::String(name.to_owned()))
-        .ok()
-        .filter(|dialect| is_compiled_dialect(*dialect))
+    let Ok(dialect) =
+        serde_json::from_value::<DialectType>(serde_json::Value::String(name.to_owned()))
+    else {
+        return None;
+    };
+    is_compiled_dialect(dialect).then_some(dialect)
 }

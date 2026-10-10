@@ -37,6 +37,18 @@ _VANISHED_ENTRY: str = (
 )
 
 
+_RICH_SEED_ARGUMENTS: tuple[str, ...] = (
+    "--corpus",
+    "seeds",
+    "--seed-start",
+    str(RICH_LINEAGE_SEED),
+    "--seeds",
+    "1",
+    "--jobs",
+    "2",
+)
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -184,18 +196,6 @@ def test_given_committed_allow_list_when_fallback_only_stage_is_switched_off_the
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code, output
     assert all(line in output for line in test_case.expected_lines), output
-
-
-_RICH_SEED_ARGUMENTS: tuple[str, ...] = (
-    "--corpus",
-    "seeds",
-    "--seed-start",
-    str(RICH_LINEAGE_SEED),
-    "--seeds",
-    "1",
-    "--jobs",
-    "2",
-)
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,4 @@
-use crate::lineage::tests::rich_helpers::rich_outcome;
+use crate::lineage::tests::helpers::rich_outcome;
 use crate::lineage::tests::test_types::RichLineageTestCase;
 
 /// Expected lines are the wheel's output for the same SQL and schema (Python's rich path).

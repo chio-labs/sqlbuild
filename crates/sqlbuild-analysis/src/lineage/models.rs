@@ -225,6 +225,22 @@ pub enum RichLineageOutcome {
     Deferred(LineageDeferral),
 }
 
+impl RichLineageOutcome {
+    /// `(status, columns, has_star, detail)`: detail is the polyglot error or the deferral kind.
+    pub fn into_parts(self) -> (&'static str, Vec<RichLineageColumn>, bool, Option<String>) {
+        match self {
+            Self::Built { columns, has_star } => ("built", columns, has_star, None),
+            Self::Skipped(message) => ("skipped", Vec::new(), false, Some(message)),
+            Self::Deferred(kind) => (
+                "deferred",
+                Vec::new(),
+                false,
+                Some(kind.as_str().to_owned()),
+            ),
+        }
+    }
+}
+
 /// The relation lineage cache key Python's `relation_lineage_fingerprint` computes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelationFingerprint {

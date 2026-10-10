@@ -20,49 +20,50 @@ impl AuthoredFile {
         self.parts.join("/")
     }
 
-    /// `PurePath.suffix`, lowercased as Python's `str.lower` does.
+    /// `PurePath.suffix`, lowercased as `str.lower` does.
     pub(crate) fn lower_suffix(&self) -> String {
         python_suffix(self.parts.last().map_or("", String::as_str)).to_lowercase()
     }
 }
 
-/// The files Python hashes, in its order, or `None` where Python's own walk must decide.
-///
-/// `rglob` does not descend into symbolic links to directories, `is_file` follows links, and
-/// excluded directories cannot contribute files, so they are not walked.
+/// Python's hashed files in its order (links to directories not walked); `None` defers.
 pub(crate) fn authored_files(project_dir: &Path) -> Option<Vec<AuthoredFile>> {
-    let mut files: Vec<AuthoredFile> = Vec::new();
-    walk(project_dir, &mut Vec::new(), &mut files)?;
+    let mut files: Vec<AuthoredFile> = walk(project_dir, &[])?;
     files.sort_by(|left, right| left.parts.cmp(&right.parts));
     Some(files)
 }
 
-fn walk(directory: &Path, parts: &mut Vec<String>, files: &mut Vec<AuthoredFile>) -> Option<()> {
-    for entry in fs::read_dir(directory).ok()? {
-        let entry = entry.ok()?;
-        let name: String = entry.file_name().into_string().ok()?;
+fn walk(directory: &Path, parts: &[String]) -> Option<Vec<AuthoredFile>> {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return None;
+    };
+    let mut files: Vec<AuthoredFile> = Vec::new();
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return None;
+        };
+        let Ok(name) = entry.file_name().into_string() else {
+            return None;
+        };
         if is_excluded(parts.is_empty(), &name) {
             continue;
         }
-        let file_type = entry.file_type().ok()?;
+        let Ok(file_type) = entry.file_type() else {
+            return None;
+        };
+        let mut entry_parts: Vec<String> = parts.to_vec();
+        entry_parts.push(name);
         let path: PathBuf = entry.path();
         if file_type.is_dir() {
-            parts.push(name);
-            walk(&path, parts, files)?;
-            let _ = parts.pop();
-            continue;
+            files.extend(walk(&path, &entry_parts)?);
+        } else if entry_parts.last().is_some_and(|name| is_hashed_name(name)) && path.is_file() {
+            files.push(AuthoredFile {
+                path,
+                parts: entry_parts,
+            });
         }
-        if !is_hashed_name(&name) || !path.is_file() {
-            continue;
-        }
-        let mut file_parts: Vec<String> = parts.clone();
-        file_parts.push(name);
-        files.push(AuthoredFile {
-            path,
-            parts: file_parts,
-        });
     }
-    Some(())
+    Some(files)
 }
 
 fn is_excluded(at_root: bool, name: &str) -> bool {

@@ -60,21 +60,13 @@ fn schema_resource(
 }
 
 fn outcome_row(outcome: RichLineageOutcome) -> OutcomeRow {
-    match outcome {
-        RichLineageOutcome::Built { columns, has_star } => (
-            "built",
-            columns.into_iter().map(column_row).collect(),
-            has_star,
-            None,
-        ),
-        RichLineageOutcome::Skipped(message) => ("skipped", Vec::new(), false, Some(message)),
-        RichLineageOutcome::Deferred(kind) => (
-            "deferred",
-            Vec::new(),
-            false,
-            Some(kind.as_str().to_owned()),
-        ),
-    }
+    let (status, columns, has_star, detail) = outcome.into_parts();
+    (
+        status,
+        columns.into_iter().map(column_row).collect(),
+        has_star,
+        detail,
+    )
 }
 
 fn column_row(column: RichLineageColumn) -> ColumnRow {

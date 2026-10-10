@@ -56,3 +56,5 @@ pub(crate) const DYNAMIC_CONTEXT_MARKER: &[u8] = b"CTX:";
 /// Suffixes whose dynamic context marker makes the graph uncacheable.
 pub(crate) const DYNAMIC_CONTEXT_SUFFIXES: &[&str] = &[".py", ".toml"];
 pub(crate) const MISSING_ENVIRONMENT_VALUE: &str = "<missing>";
+/// A name directly followed by a byte from here on makes the graph uncacheable.
+pub(crate) const NON_ASCII_BYTE_START: u8 = 128;

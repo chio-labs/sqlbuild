@@ -6,8 +6,6 @@ mod build_rich_lineage;
 mod environment_markers;
 #[path = "tests/helpers.rs"]
 mod helpers;
-#[path = "tests/rich_helpers.rs"]
-mod rich_helpers;
 #[path = "tests/test_references.rs"]
 mod references;
 #[path = "tests/test_types.rs"]
