@@ -31,3 +31,13 @@ pub(super) fn plain_check(
         ..PlainModelCheck::default()
     }
 }
+
+pub(super) fn column(
+    column_type: Option<&str>,
+    migrates: bool,
+) -> crate::compiled_project::models::HeaderColumnShape {
+    crate::compiled_project::models::HeaderColumnShape {
+        column_type: column_type.map(str::to_owned),
+        migrates,
+    }
+}

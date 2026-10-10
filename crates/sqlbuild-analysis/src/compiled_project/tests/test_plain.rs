@@ -1,11 +1,10 @@
+use crate::compiled_project::main::header_column_blocker::header_column_blocker;
 use crate::compiled_project::main::plain_model_blocker::plain_model_blocker;
-use crate::compiled_project::main::plain_model_facts::plain_model_facts;
 use crate::compiled_project::models::{
-    AnalysisOverride, DescriptionShape, ModelSchemaFact, PlainModel, PlainModelBlocker,
-    PlainModelCheck,
+    AnalysisOverride, DescriptionShape, PlainModelBlocker, PlainModelCheck,
 };
-use crate::compiled_project::tests::helpers::plain_check;
-use crate::compiled_project::tests::test_types::{PlainBlockerTestCase, PlainFactsTestCase};
+use crate::compiled_project::tests::helpers::{column, plain_check};
+use crate::compiled_project::tests::test_types::{HeaderColumnTestCase, PlainBlockerTestCase};
 
 #[test]
 fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
@@ -37,8 +36,13 @@ fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
             expected_blocker: Some(PlainModelBlocker::CallbackConfig),
         },
         PlainBlockerTestCase {
-            description: "declared columns",
-            check: plain_check("SELECT 1", &["columns"]),
+            description: "declared columns and audits are attached natively",
+            check: plain_check("SELECT 1", &["columns", "audits"]),
+            expected_blocker: None,
+        },
+        PlainBlockerTestCase {
+            description: "dynamic columns",
+            check: plain_check("SELECT 1", &["dynamic_columns"]),
             expected_blocker: Some(PlainModelBlocker::HeaderMetadata),
         },
         PlainBlockerTestCase {
@@ -78,29 +82,29 @@ fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
 }
 
 #[test]
-fn given_plain_model_when_finishing_then_description_attaches_empty_schema() {
+fn given_header_columns_when_classifying_then_enum_types_and_migrations_need_the_attachment() {
     let test_cases = [
-        PlainFactsTestCase {
-            description: "described model",
-            model_description: Some("Orders."),
-            expected_schema: Some(ModelSchemaFact::default()),
+        HeaderColumnTestCase {
+            description: "typed columns",
+            columns: vec![column(Some("INTEGER"), false)],
+            expected_blocker: None,
         },
-        PlainFactsTestCase {
-            description: "undescribed model",
-            model_description: None,
-            expected_schema: None,
+        HeaderColumnTestCase {
+            description: "enum-typed column",
+            columns: vec![column(Some("order_status"), false)],
+            expected_blocker: Some(PlainModelBlocker::EnumColumns),
+        },
+        HeaderColumnTestCase {
+            description: "column migration",
+            columns: vec![column(None, true)],
+            expected_blocker: Some(PlainModelBlocker::ColumnMigrations),
         },
     ];
 
     for test_case in test_cases {
-        let facts = plain_model_facts(PlainModel {
-            name: "orders".to_owned(),
-            description: test_case.model_description.map(str::to_owned),
-            ..PlainModel::default()
-        });
-
         assert_eq!(
-            facts.schema, test_case.expected_schema,
+            header_column_blocker(&test_case.columns, &["order_status".to_owned()]),
+            test_case.expected_blocker,
             "{}",
             test_case.description
         );

@@ -14,7 +14,7 @@ use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 /// The Python classes the parsed metadata becomes, read from a Python mapping.
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
-struct ContractClasses<'py> {
+pub(crate) struct ContractClasses<'py> {
     schema_column: Bound<'py, PyAny>,
     schema_audit_instance: Bound<'py, PyAny>,
     measurement_thresholds: Bound<'py, PyAny>,
@@ -48,7 +48,7 @@ fn parse_model_header_metadata<'py>(
     }
 }
 
-fn column_tuple<'py>(
+pub(crate) fn column_tuple<'py>(
     py: Python<'py>,
     classes: &ContractClasses<'py>,
     parsed: &[ParsedColumn<PyNode<'py>>],
@@ -61,7 +61,7 @@ fn column_tuple<'py>(
     PyTuple::new(py, columns)
 }
 
-fn audit_tuple<'py>(
+pub(crate) fn audit_tuple<'py>(
     py: Python<'py>,
     classes: &ContractClasses<'py>,
     parsed: &[ParsedAudit<PyNode<'py>>],

@@ -66,7 +66,7 @@ class NativeCompiledProject:
 class NativeModelLoop:
     def __init__(
         self,
-        validator: object,
+        checks: tuple[object, dict[str, object]],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
         settings: tuple[bool, bool, bool, bool],
@@ -75,7 +75,7 @@ class NativeModelLoop:
         self,
         project: NativeCompiledProject,
         host: object,
-        models: list[tuple[tuple[str, str, str], str, str, str | None, bool]],
+        models: list[tuple[object, ...]],
     ) -> tuple[list[Any], int]: ...
 
 class NativeProjectGraph:

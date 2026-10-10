@@ -1,3 +1,4 @@
+pub mod header_column_blocker;
 pub mod header_metadata_keys;
 pub mod model_facts;
 pub mod plain_model_blocker;

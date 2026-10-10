@@ -1,10 +1,10 @@
 //! Deciding whether the native loop finishes a model, and finishing it.
 
 use crate::compiled_project::constants::{
-    CALLBACK_CONFIG_KEYS, DESCRIPTION_KEY, HEADER_METADATA_KEYS, MACRO_TOKEN,
+    CALLBACK_CONFIG_KEYS, HEADER_METADATA_KEYS, MACRO_TOKEN, NATIVE_HEADER_KEYS,
 };
 use crate::compiled_project::models::{
-    AnalysisOverride, CompiledModelFacts, DescriptionShape, ModelSchemaFact, PlainModel,
+    AnalysisOverride, CompiledModelFacts, DescriptionShape, HeaderColumnShape, PlainModel,
     PlainModelBlocker, PlainModelCheck,
 };
 
@@ -34,11 +34,10 @@ pub(crate) fn plain_model_blocker(check: &PlainModelCheck) -> Option<PlainModelB
     {
         return Some(PlainModelBlocker::CallbackConfig);
     }
-    let metadata_beyond_description: bool = check
-        .config_keys
-        .iter()
-        .any(|key| key != DESCRIPTION_KEY && HEADER_METADATA_KEYS.contains(&key.as_str()));
-    if metadata_beyond_description || check.description == DescriptionShape::Invalid {
+    let attachment_metadata: bool = check.config_keys.iter().any(|key| {
+        HEADER_METADATA_KEYS.contains(&key.as_str()) && !NATIVE_HEADER_KEYS.contains(&key.as_str())
+    });
+    if attachment_metadata || check.description == DescriptionShape::Invalid {
         return Some(PlainModelBlocker::HeaderMetadata);
     }
     None
@@ -55,13 +54,26 @@ fn analysis_enabled(check: &PlainModelCheck) -> bool {
     settings.sql_analysis && !settings.no_sql_validation && enabled
 }
 
-/// The retained facts; a description alone attaches an empty schema entry, as the header does.
+/// Enum-typed columns and column migrations still need the attachment's checks.
+pub(crate) fn header_column_blocker(
+    columns: &[HeaderColumnShape],
+    enum_names: &[String],
+) -> Option<PlainModelBlocker> {
+    if columns.iter().any(|column| column.migrates) {
+        return Some(PlainModelBlocker::ColumnMigrations);
+    }
+    let enum_typed: bool = columns.iter().any(|column| {
+        column
+            .column_type
+            .as_ref()
+            .is_some_and(|column_type| enum_names.contains(column_type))
+    });
+    enum_typed.then_some(PlainModelBlocker::EnumColumns)
+}
+
 pub(crate) fn plain_model_facts(model: PlainModel) -> CompiledModelFacts {
     CompiledModelFacts {
-        schema: model
-            .description
-            .as_ref()
-            .map(|_| ModelSchemaFact::default()),
+        schema: model.schema,
         name: model.name,
         relative_path: model.relative_path,
         query_sql: model.query_sql,

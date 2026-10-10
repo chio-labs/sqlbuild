@@ -15,8 +15,8 @@ pub(super) struct PlainBlockerTestCase {
     pub(super) expected_blocker: Option<crate::compiled_project::models::PlainModelBlocker>,
 }
 
-pub(super) struct PlainFactsTestCase {
+pub(super) struct HeaderColumnTestCase {
     pub(super) description: &'static str,
-    pub(super) model_description: Option<&'static str>,
-    pub(super) expected_schema: Option<crate::compiled_project::models::ModelSchemaFact>,
+    pub(super) columns: Vec<crate::compiled_project::models::HeaderColumnShape>,
+    pub(super) expected_blocker: Option<crate::compiled_project::models::PlainModelBlocker>,
 }

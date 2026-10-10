@@ -156,12 +156,22 @@ pub enum PlainModelBlocker {
     Macros,
     CallbackConfig,
     HeaderMetadata,
+    HeaderParse,
+    EnumColumns,
+    ColumnMigrations,
     SqlAnalysisDisabled,
     ImmediateSqlValidation,
     LegacySchemaFiles,
 }
 
-/// A plain model's finished facts, before its schema entry is derived from the description.
+/// One parsed header column as the plain-model check reads it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HeaderColumnShape {
+    pub column_type: Option<String>,
+    pub migrates: bool,
+}
+
+/// A natively finished model's facts.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PlainModel {
     pub name: String,
@@ -170,7 +180,8 @@ pub struct PlainModel {
     pub authored_query_sql: String,
     pub authored_sql: String,
     pub config: ModelConfigFacts,
-    pub description: Option<String>,
+    /// The attached schema entry; present when the header declares description, columns or audits.
+    pub schema: Option<ModelSchemaFact>,
     pub references: Vec<ModelReferenceFact>,
     pub enum_declarations: Vec<DeclarationFact>,
     pub constant_declarations: Vec<DeclarationFact>,

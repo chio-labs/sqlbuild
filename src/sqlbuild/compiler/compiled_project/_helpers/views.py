@@ -32,7 +32,7 @@ def plain_model_input_impl(
 ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
     """The model input the attachment would build, and its local declaration rows."""
 
-    _report_native_steps(described=facts.description is not None)
+    _report_native_steps(described=facts.schema is not None)
     interpolated_sql: str = str(interpolation.sql)
     local_enums: tuple[EnumDeclaration, ...] = tuple(declarations[0].values())
     local_constants: tuple[ConstantDeclaration, ...] = tuple(declarations[1].values())
@@ -57,11 +57,7 @@ def plain_model_input_impl(
             )
             for kind, name, package, call_argument_count in facts.references
         ),
-        schema_entry=(
-            None
-            if facts.description is None
-            else SchemaModelEntry(name=model_file.file_path.stem, description=facts.description)
-        ),
+        schema_entry=_schema_entry(model_file=model_file, facts=facts),
         sql_validation_enabled=True,
         enum_declarations=local_enums,
         constant_declarations=local_constants,
@@ -72,6 +68,21 @@ def plain_model_input_impl(
         ),
     )
     return model_input, declaration_rows(enums=local_enums, constants=local_constants)
+
+
+def _schema_entry(
+    *, model_file: DiscoveredSqlModelFile, facts: PlainModelFacts
+) -> SchemaModelEntry | None:
+    if facts.schema is None:
+        return None
+    columns, audits, typed = facts.schema
+    return SchemaModelEntry(
+        name=model_file.file_path.stem,
+        description=facts.description,
+        type_enforcement=True if typed else None,
+        columns=columns,
+        audits=audits,
+    )
 
 
 def _report_native_steps(*, described: bool) -> None:

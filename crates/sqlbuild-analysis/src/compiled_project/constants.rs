@@ -11,7 +11,8 @@ pub(crate) const HEADER_METADATA_KEYS: [&str; 8] = [
     "enums",
     "constants",
 ];
-pub(crate) const DESCRIPTION_KEY: &str = "description";
+/// Header metadata the native loop attaches itself.
+pub(crate) const NATIVE_HEADER_KEYS: [&str; 3] = ["description", "columns", "audits"];
 /// Config keys whose handling still runs in the Python attachment steps.
 pub(crate) const CALLBACK_CONFIG_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 /// Macro calls start with this token; SQL without it has nothing to expand.

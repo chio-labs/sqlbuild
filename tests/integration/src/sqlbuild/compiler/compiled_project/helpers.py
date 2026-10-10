@@ -122,7 +122,14 @@ PARITY_FILES: dict[str, str] = {
     ),
     "models/marts/opted_out.sql": ("MODEL (sql_analysis false);\nSELECT 1 AS order_id\n"),
     "models/marts/described_columns.sql": (
-        "MODEL (columns (order_id (type INTEGER)));\nSELECT 1 AS order_id\n"
+        "MODEL (\n  columns (order_id (type INTEGER, nullable false,"
+        ' audits [not_null, unique]), note (description "Free text.")),\n'
+        ");\n"
+        "SELECT 1 AS order_id, 'x' AS note\n"
+    ),
+    "models/marts/migrated.sql": (
+        "MODEL (materialized incremental, incremental_strategy append,"
+        " columns (order_id (migrate_from id)));\nSELECT 1 AS order_id\n"
     ),
 }
 
@@ -136,14 +143,14 @@ def build_inputs_with_native_loop(
     native_loop_type: type = _native.NativeModelLoop
 
     def loop(
-        validator: object,
+        checks: tuple[object, dict[str, object]],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
         settings: tuple[bool, ...],
     ) -> object:
         return _CountingLoop(
             native_loop_type(
-                validator, syntax, cursor, (settings[0], settings[1], native, settings[3])
+                checks, syntax, cursor, (settings[0], settings[1], native, settings[3])
             ),
             finished,
         )
@@ -181,7 +188,7 @@ def expansions(inputs: CompileProjectInputs) -> list[tuple[object, object]]:
     return [(item.sql_expansion, item.lint_expansion) for item in inputs.model_inputs]
 
 
-WAFFLE_SHOP_NATIVE_MODELS: int = 1
+WAFFLE_SHOP_NATIVE_MODELS: int = 8
 
 
 def copy_project(*, fixtures: tuple[str, ...], files: dict[str, str], project_dir: Path) -> Path:

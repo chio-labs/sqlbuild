@@ -135,6 +135,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.model_config.main._native_contract_classes import native_contract_classes
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
@@ -160,6 +161,7 @@ from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
     ProjectConfig,
+    SchemaAuditInstance,
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
@@ -402,7 +404,7 @@ class _ModelLoopHost:
     declarations: dict[int, _VisibleModelDeclarations] = field(default_factory=dict)
     configs: dict[int, CompileModelConfig] = field(default_factory=dict)
 
-    def config(self, *, index: int) -> CompileModelConfig:
+    def config(self, *, index: int) -> tuple[CompileModelConfig, list[str]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         self.declarations[index] = self.loop.declaration_cache.for_model(
             model_file=model_file,
@@ -410,7 +412,7 @@ class _ModelLoopHost:
         )
         config: CompileModelConfig = _effective_model_config(loop=self.loop, model_file=model_file)
         self.configs[index] = config
-        return config
+        return config, list(self.declarations[index].enums)
 
     def fallback(self, *, index: int) -> CompileModelInput:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
@@ -430,6 +432,7 @@ class _ModelLoopHost:
         references: list[tuple[str, str, str | None, int | None]],
         query_sql: str,
         description: str | None,
+        schema: tuple[tuple[SchemaColumn, ...], tuple[SchemaAuditInstance, ...], bool] | None,
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         declarations: _VisibleModelDeclarations = self.declarations.pop(index)
@@ -442,6 +445,7 @@ class _ModelLoopHost:
                 references=references,
                 query_sql=query_sql,
                 description=description,
+                schema=schema,
             ),
             declarations=(declarations.local_enums, declarations.local_constants),
         )
@@ -637,7 +641,7 @@ def _run_native_model_loop(
     files: tuple[DiscoveredSqlModelFile, ...] = loop.discovered_inputs.model_files
     settings: SettingsConfig = loop.validation_context.effective_settings
     native_loop: _native.NativeModelLoop = _native.NativeModelLoop(
-        loop.validation_context.validators.native_config.validator,
+        (loop.validation_context.validators.native_config.validator, native_contract_classes()),
         loop.context.sql_lexical_syntax.native_mapping,
         cursor_intrinsic_semantics(),
         (
@@ -658,6 +662,7 @@ def _run_native_model_loop(
                     model_file.relative_path.as_posix(),
                     str(model_file.relative_path),
                 ),
+                model_file.header_column_locations,
                 model_file.query_sql,
                 model_file.contents,
                 interpolations[model_file.file_path].sql,
