@@ -14,9 +14,10 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 @dataclass(frozen=True, slots=True)
 class NativeProjectResources:
-    """Per-resource facts in input order; every requested SQL string passed syntax validation."""
+    """Per-resource facts in input order, and whether each model's SQL passed syntax validation."""
 
     model_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    model_syntax_valid: tuple[bool, ...]
     source_entries: tuple[SourceEntry, ...]
     seed_destinations: tuple[CompiledRelationLocation, ...]
     function_deps: tuple[tuple[CompiledObjectKey, ...], ...]
@@ -29,6 +30,7 @@ class NativeModelFacts:
 
     deps: tuple[CompiledObjectKey, ...] | None
     dynamic_contract: DynamicColumnContractProof | None
+    syntax_valid: bool = False
 
 
 @dataclass(frozen=True, slots=True)

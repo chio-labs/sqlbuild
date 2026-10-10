@@ -52,6 +52,24 @@ pub struct SyntaxCheck {
     pub placeholders: Pairs,
 }
 
+/// Which Polyglot entry point Python's validation calls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyntaxMode {
+    /// `validate`, for model queries and hooks.
+    Validate,
+    /// `parse_one`, for function bodies and source expressions.
+    Parse,
+}
+
+/// Where Python's syntax validation raises instead of reporting a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SyntaxFailure {
+    /// The analysis normalization's `ValueError` message.
+    Normalization(String),
+    /// Polyglot does not know the dialect name.
+    UnknownDialect(String),
+}
+
 /// One model's references and the SQL strings its assembly validates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelFacts {
@@ -114,6 +132,9 @@ pub struct Namespace {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectResources {
     pub model_deps: Vec<Vec<ObjectKey>>,
+    /// Whether every SQL string a model's assembly validates parses; where one does not,
+    /// Python's validation reports it with its message and location.
+    pub model_syntax_valid: Vec<bool>,
     /// A managed source's `(database, schema)`; None where the entry stays as authored.
     pub sources: Vec<Option<(Option<String>, Option<String>)>>,
     pub seeds: Vec<Namespace>,

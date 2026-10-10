@@ -32,4 +32,5 @@ type ProjectResourcesRow = tuple[
     list[list[ObjectKeyRow]],
     list[list[ObjectKeyRow]],
     list[tuple[str, str]],
+    list[bool],
 ]

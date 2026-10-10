@@ -98,6 +98,7 @@ def project_facts_by_engine(
             NativeModelFacts(
                 deps=resources.model_deps[index] if resources is not None else None,
                 dynamic_contract=proofs.get(index),
+                syntax_valid=resources is not None and resources.model_syntax_valid[index],
             )
             for index in range(len(inputs.model_inputs))
         ),

@@ -28,10 +28,11 @@ def project_resources(
 ) -> NativeProjectResources:
     """Return the resource facts the native row describes, in input order."""
 
-    model_deps, source_namespaces, seed_namespaces, function_deps, audit_deps, reads = row
+    model_deps, source_namespaces, seed_namespaces, function_deps, audit_deps, reads, syntax = row
     _ = [_replay_read(kind=kind, name=name) for kind, name in reads]
     return NativeProjectResources(
         model_deps=tuple(_keys(keys) for keys in model_deps),
+        model_syntax_valid=tuple(syntax),
         source_entries=tuple(
             _source_entry(source_input=source_input, namespace=namespace)
             for source_input, namespace in zip(inputs.source_inputs, source_namespaces, strict=True)

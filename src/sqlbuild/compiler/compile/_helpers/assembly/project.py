@@ -549,7 +549,7 @@ def _assemble_compiled_model(
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
     native_deps: tuple[CompiledObjectKey, ...] | None = native_model.deps if native_model else None
-    syntax_validated: bool = native_deps is not None
+    syntax_validated: bool = native_model is not None and native_model.syntax_valid
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     analysis_query_sql: str = cursor_intrinsics_analysis_sql(
         sql=model_input.query_sql,
