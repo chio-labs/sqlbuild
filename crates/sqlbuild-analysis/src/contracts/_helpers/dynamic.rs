@@ -12,8 +12,7 @@ use crate::contracts::constants::{
     TYPE_MISMATCH_CODE, UNKNOWN_TYPE_CODE,
 };
 use crate::contracts::models::{
-    ContractDiagnostic, ContractLocation, ContractModel, ContractSeverity,
-    DynamicContractProof,
+    ContractDiagnostic, ContractLocation, ContractModel, ContractSeverity, DynamicContractProof,
 };
 use crate::type_system::models::TypeNormalizationError;
 

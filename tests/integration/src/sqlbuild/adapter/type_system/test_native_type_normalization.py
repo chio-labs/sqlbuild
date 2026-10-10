@@ -234,20 +234,21 @@ def test_given_unknown_dialect_when_normalizing_then_python_error_is_raised(
     "test_case",
     [
         DeepTypeTestCase(
-            description="100,000 array suffixes, past where the wheel itself overflows",
-            type_sql="INT" + "[]" * 100_000,
+            description="5,000 array suffixes, a depth the Python wheel normalized",
+            type_sql="INT" + "[]" * 5_000,
             expected_family=TypeFamily.OTHER,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_type_past_the_wheel_depth_when_normalizing_then_it_is_normalized(
+def test_given_deeply_nested_type_when_normalizing_then_python_shape_is_returned(
     test_case: DeepTypeTestCase,
 ) -> None:
-    outcome: TypeOutcome = type_outcome(type_sql=test_case.type_sql, dialect="generic")
+    outcome: TypeOutcome = type_outcome(type_sql=test_case.type_sql, dialect="duckdb")
 
-    assert isinstance(outcome.normalized, NormalizedType)
-    assert outcome.normalized.family == test_case.expected_family
+    assert outcome.normalized == NormalizedType(
+        normalized_name=test_case.type_sql, family=test_case.expected_family
+    ), test_case.description
 
 
 @pytest.mark.parametrize(

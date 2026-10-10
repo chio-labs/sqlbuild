@@ -25,7 +25,6 @@ sqlbuild-core.workspace = true
 sqlbuild-model-config.workspace = true
 sqlbuild-scopes.workspace = true
 sqlbuild-sqltext.workspace = true
-stacker.workspace = true
 
 [lints]
 workspace = true

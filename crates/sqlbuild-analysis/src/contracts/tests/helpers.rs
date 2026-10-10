@@ -1,7 +1,6 @@
 use crate::contracts::models::{
-    ContractDiagnostic, ContractModel, ContractSchema, DeclaredColumn,
-    DeclaredColumnFamily, DynamicContractProof, InferredOutputColumn, PromotionModel,
-    PromotionRequest,
+    ContractDiagnostic, ContractModel, ContractSchema, DeclaredColumn, DeclaredColumnFamily,
+    DynamicContractProof, InferredOutputColumn, PromotionModel, PromotionRequest,
 };
 
 pub(crate) fn model(contract: Option<&str>, schema: Option<ContractSchema>) -> ContractModel {

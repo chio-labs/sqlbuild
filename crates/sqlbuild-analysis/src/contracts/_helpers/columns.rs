@@ -13,8 +13,8 @@ use crate::contracts::constants::{
     UNPROVEN_TYPE_OUTPUT_MESSAGE,
 };
 use crate::contracts::models::{
-    ContractDiagnostic, ContractLocation, ContractModel, ContractSchema,
-    ContractSeverity, DeclaredColumn, InferredOutputColumn, RelatedOutput,
+    ContractDiagnostic, ContractLocation, ContractModel, ContractSchema, ContractSeverity,
+    DeclaredColumn, InferredOutputColumn, RelatedOutput,
 };
 use crate::type_system::models::TypeNormalizationError;
 
