@@ -1,6 +1,7 @@
 //! JSON string escaping of `json.dumps` and orjson.
 
 use crate::json::constants::FIRST_PRINTABLE_ASCII;
+use crate::json::errors::JsonEmitError;
 
 /// How a serializer escapes characters outside printable ASCII.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,4 +48,31 @@ pub(crate) fn json_string(text: &str, escaping: StringEscaping) -> String {
     }
     output.push('"');
     output
+}
+
+/// UTF-16 `units` as a quoted JSON string; `ensure_ascii` escapes a lone surrogate as `\uXXXX`.
+pub(crate) fn json_utf16_string(
+    units: &[u16],
+    escaping: StringEscaping,
+) -> Result<String, JsonEmitError> {
+    let mut output = String::with_capacity(units.len() + 2);
+    output.push('"');
+    for decoded in char::decode_utf16(units.iter().copied()) {
+        match (decoded, escaping) {
+            (Ok(character), _) => output.push_str(&escaped_or_plain(character, escaping)),
+            (Err(lone), StringEscaping::Ascii) => {
+                output.push_str(&unicode_escape(u32::from(lone.unpaired_surrogate())));
+            }
+            (Err(_), StringEscaping::Unicode) => return Err(JsonEmitError::LoneSurrogate),
+        }
+    }
+    output.push('"');
+    Ok(output)
+}
+
+fn escaped_or_plain(character: char, escaping: StringEscaping) -> String {
+    match character {
+        ' '..='~' if character != '"' && character != '\\' => character.to_string(),
+        _ => escaped(character, escaping),
+    }
 }

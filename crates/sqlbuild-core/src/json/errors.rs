@@ -11,4 +11,6 @@ pub enum JsonEmitError {
     IntegerTooLong,
     /// The value nests deeper than the native emitter writes; callers fall back to Python.
     NestingTooDeep,
+    /// A lone surrogate under an encoder that writes text unescaped; Python cannot encode it.
+    LoneSurrogate,
 }

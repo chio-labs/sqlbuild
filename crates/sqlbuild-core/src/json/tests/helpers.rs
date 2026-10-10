@@ -55,3 +55,10 @@ pub(super) fn nested_arrays(depth: usize) -> JsonValue {
         JsonValue::Array(vec![inner])
     })
 }
+
+/// `"q"\` then a lone low surrogate, a non-BMP pair, and a lone high surrogate, as UTF-16.
+pub(super) fn lone_surrogate_text() -> JsonValue {
+    JsonValue::Utf16(vec![
+        0x0022, 0x0071, 0x0022, 0x005c, 0x00e9, 0xdcff, 0xd83d, 0xde00, 0xd83d,
+    ])
+}
