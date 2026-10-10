@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Callable
+
 import pytest
 
+from sqlbuild.compiler.compile import models as compile_models
 from sqlbuild.compiler.compile.main import _build_compile_inputs as compile_inputs_module
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
@@ -46,3 +50,33 @@ def skip_model_retention(*, monkeypatch: pytest.MonkeyPatch) -> None:
         del project, model_inputs
 
     monkeypatch.setattr(compile_inputs_module, "record_model_inputs", skipped)
+
+
+LEGACY_PROJECT_TYPES: tuple[str, ...] = (
+    "CompileProjectInputs",
+    "CompileModelInput",
+    "CompiledProject",
+    "CompiledModel",
+)
+
+
+def count_legacy_constructions(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
+    """Count every construction of the Python project representation, `replace` included."""
+
+    counts: Counter[str] = Counter()
+    for name in LEGACY_PROJECT_TYPES:
+        model_type: type = getattr(compile_models, name)
+        monkeypatch.setattr(
+            model_type, "__init__", _counted_init(counts=counts, name=name, model_type=model_type)
+        )
+    return counts
+
+
+def _counted_init(*, counts: Counter[str], name: str, model_type: type) -> object:
+    original: Callable[..., None] = model_type.__init__
+
+    def counted(self: object, *args: object, **kwargs: object) -> None:
+        counts[name] += 1
+        original(self, *args, **kwargs)
+
+    return counted
