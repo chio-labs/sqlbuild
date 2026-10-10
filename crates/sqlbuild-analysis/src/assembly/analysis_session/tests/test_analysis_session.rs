@@ -242,10 +242,10 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
 }
 
 #[test]
-fn given_unschedulable_models_when_starting_then_python_analyses() {
+fn given_models_when_starting_then_only_duplicate_names_leave_analysis_to_python() {
     let test_cases = [
         UnscheduledTestCase {
-            description: "models that reference each other",
+            description: "models that reference each other analyse in one unordered wave",
             models: &[
                 (
                     "orders",
@@ -260,7 +260,7 @@ fn given_unschedulable_models_when_starting_then_python_analyses() {
                     &["orders"],
                 ),
             ],
-            expected_started: false,
+            expected_started: true,
         },
         UnscheduledTestCase {
             description: "two models with one name",

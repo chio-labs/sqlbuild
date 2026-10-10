@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from dataclasses import replace
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,8 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AnalysisFallbackTestCase,
+    CyclicAnalysisTestCase,
+    CyclicCompileTestCase,
     GeneratedAnalysisParityTestCase,
     SessionFailureTestCase,
     SharedAnalysisTestCase,
@@ -41,12 +44,14 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     analysis_request,
     compare_analyses,
     compile_inputs,
+    compiled_project_view,
     custom_nullability_rule,
     deferral_kinds,
     failing_provide_sessions,
     generated_analysis_files,
     native_pivot_proofs,
     pivot_project_files,
+    python_compiled_project_view,
     shared_analysis_files,
     started_sessions,
 )
@@ -60,6 +65,30 @@ _ADAPTER_PROFILES: tuple[ExpressionInferenceProfile, ...] = (
     SnowflakeAdapter().expression_inference_profile(),
     DuckDbAdapter().expression_inference_profile(),
 )
+_CYCLIC_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": 'name = "orders_cycle"\nadapter = "duckdb"\n',
+    "sources/raw.yml": (
+        "sources:\n  - name: raw_orders\n    description: Raw orders.\n    columns:\n"
+        "      - name: order_id\n        type: INTEGER\n"
+        "      - name: amount\n        type: DOUBLE\n"
+    ),
+    "models/orders.sql": (
+        'MODEL (description "Orders");\n\nSELECT o.order_id, o.amount, r.refund\n'
+        'FROM __source("raw_orders") AS o\n'
+        'LEFT JOIN __ref("returns") AS r ON r.order_id = o.order_id\n'
+    ),
+    "models/returns.sql": (
+        'MODEL (description "Returns");\n\n'
+        'SELECT order_id, amount * -1 AS refund FROM __ref("orders")\n'
+    ),
+    "models/order_summary.sql": (
+        'MODEL (description "Summary");\n\nSELECT * FROM __ref("returns")\n'
+    ),
+    "models/order_audit.sql": (
+        'MODEL (description "Audit");\n\n'
+        'SELECT order_id, missing_column FROM __ref("order_audit")\n'
+    ),
+}
 _ORDERS_PROJECT: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders_cycle"\nadapter = "duckdb"\n',
     "models/orders.sql": 'MODEL (description "Orders");\n\nSELECT order_id FROM __ref("returns")\n',
@@ -264,13 +293,101 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
 @pytest.mark.parametrize(
     "test_case",
     [
-        AnalysisFallbackTestCase(
-            description="models that reference each other",
-            files=_ORDERS_PROJECT,
-            allow_compact_analysis=True,
-            keeps_catalog=True,
-            expected_kind="session",
-        ),
+        CyclicAnalysisTestCase(
+            description="a ref cycle, a model reading itself and a star consumer of the cycle",
+            files=_CYCLIC_PROJECT,
+            dialects=("duckdb", "snowflake"),
+            lineage_modes=(ColumnLineageMode.FAST, ColumnLineageMode.RICH),
+            expected_analysed=16,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_matches_python(
+    test_case: CyclicAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    inputs: CompileProjectInputs = compile_inputs(
+        project_dir=tmp_path / "project", files=test_case.files
+    )
+    sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
+    parity: AnalysisParity = AnalysisParity()
+
+    _ = [
+        compare_analyses(
+            inputs=inputs,
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
+            lineage_mode=lineage_mode,
+            parity=parity,
+            monkeypatch=monkeypatch,
+        )
+        for dialect, lineage_mode in product(test_case.dialects, test_case.lineage_modes)
+    ]
+
+    assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
+    assert (
+        parity.analysed_models,
+        len(sessions),
+        None in sessions,
+        deferral_kinds(record_dir),
+    ) == (
+        test_case.expected_analysed,
+        len(test_case.dialects) * len(test_case.lineage_modes),
+        False,
+        Counter(),
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CyclicCompileTestCase(
+            description="a ref cycle, a model reading itself and a star consumer of the cycle",
+            files=_CYCLIC_PROJECT,
+            expected_exit_code=0,
+            expected_compiled=(
+                "models/order_audit.sql",
+                "models/order_summary.sql",
+                "models/orders.sql",
+                "models/returns.sql",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cyclic_project_when_compiling_then_native_output_equals_python_analysis(
+    test_case: CyclicCompileTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
+    native: tuple[int, object, object, dict[str, str]] = compiled_project_view(
+        project_dir=tmp_path / "native" / "orders_cycle", files=test_case.files, capsys=capsys
+    )
+    native_deferrals: Counter[str] = deferral_kinds(record_dir)
+
+    python: tuple[int, object, object, dict[str, str]] = python_compiled_project_view(
+        project_dir=tmp_path / "python" / "orders_cycle",
+        files=test_case.files,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+
+    assert native == python
+    assert (native[0], tuple(native[3]), native_deferrals) == (
+        test_case.expected_exit_code,
+        test_case.expected_compiled,
+        Counter(),
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         AnalysisFallbackTestCase(
             description="lineage disabled, so compact analysis is off",
             files=_ORDERS_PROJECT,

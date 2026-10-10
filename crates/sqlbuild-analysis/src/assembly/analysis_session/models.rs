@@ -304,6 +304,8 @@ pub struct AnalysisSession {
     pub(crate) request: SessionRequest,
     pub(crate) catalog: SessionCatalog,
     pub(crate) dependency_ordered: bool,
+    /// Whether models `ref` each other in a cycle, so Python's completion pass is skipped.
+    pub(crate) cyclic: bool,
     pub(crate) waves: Vec<Vec<usize>>,
     pub(crate) next_wave: usize,
     pub(crate) available_types: ShapeTable,
