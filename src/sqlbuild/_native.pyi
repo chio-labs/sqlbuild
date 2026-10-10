@@ -1,6 +1,7 @@
 """Private SQLBuild native engine bindings."""
 
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, TypedDict
 
 from sqlbuild.compiler.sql_test_glue.models import (
@@ -661,6 +662,10 @@ def build_rich_column_lineage(
 ) -> list[
     tuple[str, list[tuple[str, str, str, str, list[tuple[str, str, str]]]], bool, str | None]
 ]: ...
+
+def relation_lineage_fingerprint(
+    project_dir: Path, prefix: bytes, /
+) -> tuple[str, str | None]: ...
 
 # Native analysis: SQL test planning glue.
 def plan_compiled_sql_tests(

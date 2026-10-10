@@ -294,6 +294,24 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
             expected_enabled=True,
         ),
         NativeStageTierTestCase(
+            description="python_relation_fingerprint",
+            engine=CompilerEngine.PYTHON,
+            stage=NativeStage.RELATION_FINGERPRINT,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_relation_fingerprint",
+            engine=CompilerEngine.NATIVE,
+            stage=NativeStage.RELATION_FINGERPRINT,
+            expected_enabled=False,
+        ),
+        NativeStageTierTestCase(
+            description="native_preview_relation_fingerprint",
+            engine=CompilerEngine.NATIVE_PREVIEW,
+            stage=NativeStage.RELATION_FINGERPRINT,
+            expected_enabled=True,
+        ),
+        NativeStageTierTestCase(
             description="python_sql_test_glue",
             engine=CompilerEngine.PYTHON,
             stage=NativeStage.SQL_TEST_GLUE,
@@ -366,6 +384,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.CONTRACTS,
                     NativeStage.LINEAGE_FACTS,
                     NativeStage.RICH_LINEAGE,
+                    NativeStage.RELATION_FINGERPRINT,
                     NativeStage.SQL_TEST_GLUE,
                     NativeStage.PROJECT_ASSEMBLY,
                 }

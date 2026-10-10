@@ -30,9 +30,11 @@ pub(crate) struct RichContext {
 }
 
 impl RichContext {
+    /// Only tables some model references are built: the wheel is only ever sent those.
     pub(crate) fn new(
         dialect: Option<DialectType>,
         schema: &[RichSchemaResource],
+        referenced: &HashSet<String>,
         names: HashMap<String, Vec<String>>,
     ) -> Self {
         Self {
@@ -40,7 +42,7 @@ impl RichContext {
             guard: serde_json::from_value(serde_json::json!({
                 "maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH,
             })),
-            tables: schema_tables(schema),
+            tables: schema_tables(schema, referenced),
             names,
         }
     }
@@ -61,9 +63,16 @@ pub(crate) fn schema_names(resource: &RichSchemaResource) -> LineageSchemaResour
 }
 
 /// The physical name's typed columns; a later resource with columns replaces an earlier one.
-fn schema_tables(schema: &[RichSchemaResource]) -> HashMap<String, SchemaTable> {
-    let mut tables: HashMap<String, SchemaTable> = HashMap::with_capacity(schema.len());
+fn schema_tables(
+    schema: &[RichSchemaResource],
+    referenced: &HashSet<String>,
+) -> HashMap<String, SchemaTable> {
+    let mut tables: HashMap<String, SchemaTable> = HashMap::with_capacity(referenced.len());
     for resource in schema {
+        let physical_name = physical_resource_name(resource.resource_type, &resource.name);
+        if !referenced.contains(&physical_name) {
+            continue;
+        }
         let mut types: HashMap<&str, &str> = HashMap::new();
         for (name, column_type) in &resource.assigned {
             let _ = types.insert(name, python_type(column_type.as_deref()));
@@ -78,7 +87,6 @@ fn schema_tables(schema: &[RichSchemaResource]) -> HashMap<String, SchemaTable> 
         }
         let mut columns: Vec<(&str, &str)> = types.into_iter().collect();
         columns.sort_unstable();
-        let physical_name = physical_resource_name(resource.resource_type, &resource.name);
         let table = SchemaTable {
             name: physical_name.clone(),
             schema: None,

@@ -220,10 +220,20 @@ _RICH_SEED_ARGUMENTS: tuple[str, ...] = (
                 "native_failure (seed): ",
             ),
         ),
+        NativeFallbackGateTestCase(
+            description="preview_relation_fingerprint_switched_to_python_fails",
+            perturbation=stage_disable_sabotage(("relation_fingerprint",)),
+            appended_entries="",
+            expected_exit_code=1,
+            expected_lines=(
+                "Native fallback allow-list: native-preview relation_fingerprint "
+                f"relation_fingerprint.native fingerprints (seed): {_ANSWER_VANISHED}",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_seed_with_rich_lineage_when_native_defers_every_model_then_the_gate_fails(
+def test_given_seed_with_lineage_commands_when_native_stops_answering_then_the_gate_fails(
     test_case: NativeFallbackGateTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     allow_list: Path = tmp_path / "native_fallbacks.toml"

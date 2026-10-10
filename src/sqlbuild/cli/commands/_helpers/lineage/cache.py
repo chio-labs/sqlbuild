@@ -13,11 +13,15 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.models import LineageNode, RelationLineageIndex
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.frontier.constants import CACHE_DIRECTORY_NAME
 from sqlbuild.compiler.frontier.main.engine_cache_name import engine_cache_name
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 _CACHE_SCHEMA_VERSION: int = 1
@@ -48,6 +52,8 @@ _ENVIRONMENT_MARKER: bytes = b"ENV:"
 _DYNAMIC_CONTEXT_MARKER: bytes = b"CTX:"
 _DYNAMIC_CONTEXT_GRAPH_SUFFIXES: frozenset[str] = frozenset({".py", ".toml"})
 _NON_ASCII_BYTE_START: int = 128
+_NATIVE_FINGERPRINT_DEFERRED: str = "deferred"
+_NATIVE_FINGERPRINT_KIND: str = "fingerprints"
 
 
 def relation_lineage_fingerprint(
@@ -56,17 +62,16 @@ def relation_lineage_fingerprint(
     """Hash authored project inputs and invocation context without retaining their values."""
 
     try:
+        prefix: bytes = _fingerprint_prefix(cli_vars=cli_vars)
+        if native_stage_enabled(NativeStage.RELATION_FINGERPRINT):
+            status, native_digest = _native.relation_lineage_fingerprint(project_dir, prefix)
+            if status != _NATIVE_FINGERPRINT_DEFERRED:
+                report_native_answer(
+                    stage=NativeStage.RELATION_FINGERPRINT, kind=_NATIVE_FINGERPRINT_KIND
+                )
+                return native_digest
         digest: Any = hashlib.sha256()
-        digest.update(_CACHE_ALGORITHM_VERSION.encode("ascii"))
-        digest.update(_sqlbuild_version().encode("utf-8"))
-        digest.update(
-            json.dumps(
-                {} if cli_vars is None else cli_vars,
-                ensure_ascii=True,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("ascii")
-        )
+        digest.update(prefix)
         environment_names: set[str] = set()
         for path in _authored_files(project_dir=project_dir):
             relative_path: str = path.relative_to(project_dir).as_posix()
@@ -99,6 +104,19 @@ def relation_lineage_fingerprint(
         return digest.hexdigest()
     except (OSError, TypeError, UnicodeError, ValueError):
         return None
+
+
+def _fingerprint_prefix(*, cli_vars: dict[str, object] | None) -> bytes:
+    return (
+        _CACHE_ALGORITHM_VERSION.encode("ascii")
+        + _sqlbuild_version().encode("utf-8")
+        + json.dumps(
+            {} if cli_vars is None else cli_vars,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    )
 
 
 def read_relation_lineage_cache(

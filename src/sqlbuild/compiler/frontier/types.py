@@ -29,6 +29,7 @@ class NativeStage(StrEnum):
     CONTRACTS = "contracts"
     LINEAGE_FACTS = "lineage_facts"
     RICH_LINEAGE = "rich_lineage"
+    RELATION_FINGERPRINT = "relation_fingerprint"
     SQL_TEST_GLUE = "sql_test_glue"
     PROJECT_ASSEMBLY = "project_assembly"
 

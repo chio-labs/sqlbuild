@@ -224,3 +224,25 @@ pub enum RichLineageOutcome {
     Skipped(String),
     Deferred(LineageDeferral),
 }
+
+/// The relation lineage cache key Python's `relation_lineage_fingerprint` computes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelationFingerprint {
+    /// The hex SHA-256 digest of the authored inputs.
+    Digest(String),
+    /// Python returns `None`: dynamic context, malformed environment markers or unreadable input.
+    Uncacheable,
+    /// Python computes it: a directory listing failed, a name is not UTF-8, or Windows paths.
+    Deferred,
+}
+
+impl RelationFingerprint {
+    /// `(status, digest)`.
+    pub fn into_parts(self) -> (&'static str, Option<String>) {
+        match self {
+            Self::Digest(digest) => ("digest", Some(digest)),
+            Self::Uncacheable => ("uncacheable", None),
+            Self::Deferred => ("deferred", None),
+        }
+    }
+}

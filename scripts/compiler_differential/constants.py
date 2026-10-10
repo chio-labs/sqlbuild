@@ -342,6 +342,7 @@ GENERATOR_ANALYSIS_MODE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "lineage-fast-upstream",
         ("lineage", "--json", "--mode", "fast", f"{GENERATOR_ANALYSIS_MODEL}.amount"),
     ),
+    ("lineage-relations", ("lineage", "--json", GENERATOR_SELECTED_MODEL, "--direction", "both")),
 )
 DIALECT_RICH_LINEAGE: DifferentialCommand = DifferentialCommand(
     label="compile-rich-lineage", arguments=GENERATOR_RICH_LINEAGE_ARGUMENTS

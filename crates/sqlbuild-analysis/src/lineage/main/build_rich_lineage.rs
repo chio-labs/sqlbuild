@@ -1,9 +1,12 @@
 //! Rich column lineage: Python's polyglot `analyze_query` path, answered natively.
 
+use std::collections::HashSet;
+
 use polyglot_sql::DialectType;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
+use crate::lineage::_helpers::references::{physical_resource_name, physical_resources};
 use crate::lineage::_helpers::rich_lineage::{RichContext, rich_model_lineage, schema_names};
 use crate::lineage::_helpers::stars::schema_mapping;
 use crate::lineage::constants::{RICH_LINEAGE_WORKERS, RICH_LINEAGE_WORKER_STACK_BYTES};
@@ -17,10 +20,24 @@ pub fn build_rich_lineage(request: &RichLineageRequest) -> Result<Vec<RichLineag
     if request.models.is_empty() {
         return Ok(Vec::new());
     }
-    let names: Vec<LineageSchemaResource> = request.schema.iter().map(schema_names).collect();
+    let referenced: HashSet<String> = request
+        .models
+        .iter()
+        .flat_map(|query_sql| physical_resources(query_sql))
+        .map(|resource| resource.physical_name)
+        .collect();
+    let names: Vec<LineageSchemaResource> = request
+        .schema
+        .iter()
+        .map(schema_names)
+        .filter(|resource| {
+            referenced.contains(&physical_resource_name(resource.resource_type, &resource.name))
+        })
+        .collect();
     let context = RichContext::new(
         analysis_dialect(&request.dialect),
         &request.schema,
+        &referenced,
         schema_mapping(&names),
     );
     let pool = rayon::ThreadPoolBuilder::new()

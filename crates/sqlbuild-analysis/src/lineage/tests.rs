@@ -2,6 +2,8 @@
 mod build_fast_lineage;
 #[path = "tests/test_build_rich_lineage.rs"]
 mod build_rich_lineage;
+#[path = "tests/test_environment_markers.rs"]
+mod environment_markers;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/rich_helpers.rs"]

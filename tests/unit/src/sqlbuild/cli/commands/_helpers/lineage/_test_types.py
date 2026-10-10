@@ -134,3 +134,15 @@ class SharedSelectorDepthTestCase:
     select: tuple[str, ...]
     direction: str | None
     expected_node_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeFingerprintParityTestCase:
+    """Authored files whose relation lineage fingerprint both engines must compute alike."""
+
+    description: str
+    files: dict[str, str]
+    links: dict[str, str]
+    environment: dict[str, str]
+    cli_vars: dict[str, object] | None
+    expected_available: bool
