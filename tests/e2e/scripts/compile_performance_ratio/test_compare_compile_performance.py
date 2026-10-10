@@ -106,9 +106,10 @@ def test_given_two_builds_when_comparing_compile_performance_then_enforces_ratio
             base_generator=MARKER_GENERATOR,
             expected_return_code=0,
             expected_fragments=("Projects generated per side",),
-            # Cold warm-up and run, warm cache priming and run, then one edit run per side.
-            expected_base_projects=("base",) * 5,
-            expected_head_projects=("head",) * 5,
+            # Cold warm-up and run, then cache priming and a run for warm and for edit per
+            # side; head also compiles uncached after warm and edit to check equality.
+            expected_base_projects=("base",) * 6,
+            expected_head_projects=("head",) * 8,
         ),
         PerSideCompilePerformanceRatioTestCase(
             description="a failing base generator stops before any compile",
