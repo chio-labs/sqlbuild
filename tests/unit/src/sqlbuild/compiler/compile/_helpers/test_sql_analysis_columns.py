@@ -916,6 +916,24 @@ def test_given_star_projection_when_compact_analysis_enabled_then_expands_schema
             expected_sql="SELECT * FROM t WHERE d >= @@@start",
         ),
         SubstitutePlaceholderDefaultsTestCase(
+            description="an extra at sign and unknown names stay as Python's regex leaves them",
+            query_sql="@@@@a + @@@a @@@unknown @@@ a",
+            placeholders={"a": "1", "é": "2", "x\u0661": "3", "a_b1x": "4"},
+            expected_sql="@1 + 1 @@@unknown @@@ a",
+        ),
+        SubstitutePlaceholderDefaultsTestCase(
+            description="names follow Python's word characters beyond ASCII",
+            query_sql="@@@é·@@@x١ @@@a_b1x@@@",
+            placeholders={"a": "1", "é": "2", "x\u0661": "3", "a_b1x": "4"},
+            expected_sql="2·3 4@@@",
+        ),
+        SubstitutePlaceholderDefaultsTestCase(
+            description="adjacent and quoted placeholders are replaced",
+            query_sql="@@@a@@@a '@@@a'",
+            placeholders={"a": "1", "é": "2", "x\u0661": "3", "a_b1x": "4"},
+            expected_sql="11 '1'",
+        ),
+        SubstitutePlaceholderDefaultsTestCase(
             description="returns sql unchanged when no placeholders in sql",
             query_sql="SELECT * FROM t",
             placeholders={"x": "'1'"},

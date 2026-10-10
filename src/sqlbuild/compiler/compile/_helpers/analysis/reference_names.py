@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import (
     SQL_QUALIFIER_SEPARATOR_TOKEN,
 )
@@ -15,7 +16,6 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 
-_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(r"@@@(\w+)")
 _QUALIFIED_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(
     r'(?<![A-Za-z0-9_$])(?:"(?P<double>[^"]+)"|`(?P<backtick>[^`]+)`|'
     r"\[(?P<bracket>[^\]]+)\]|(?P<plain>[A-Za-z_$][A-Za-z0-9_$]*))"
@@ -58,12 +58,7 @@ def substitute_placeholder_defaults(*, query_sql: str, placeholders: dict[str, s
 
     if not placeholders:
         return query_sql
-
-    def _replacer(match: re.Match[str]) -> str:
-        name: str = match.group(1)
-        return placeholders.get(name, match.group(0))
-
-    return _PLACEHOLDER_PATTERN.sub(_replacer, query_sql)
+    return _native.substitute_placeholder_defaults(query_sql, list(placeholders.items()))
 
 
 def _replace_refs_with_stubs(
