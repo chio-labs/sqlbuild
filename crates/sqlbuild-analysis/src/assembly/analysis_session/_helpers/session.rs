@@ -267,7 +267,6 @@ impl AnalysisSession {
             let schema: Shapes = schemas[position].clone();
             if let Some(failure) = result.failure {
                 self.failures.push(failure);
-                self.mark_uncacheable(*model);
             }
             let diagnostics: Vec<DiagnosticRow> = result.binding_diagnostics.unwrap_or_default();
             let analysis: ModelAnalysis = match result.analysis {

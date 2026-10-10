@@ -49,6 +49,29 @@ const EVENTS_MART: ModelSpec = (
     &["events"],
 );
 const ORDERS: &[ModelSpec] = &[STG_ORDERS, ORDERS_MART, ORDERS_STAR, ORDERS_BAD];
+/// Aggregates over a CTE of an open source, which the engine hands to the native legacy analysis.
+const EVENTS_TOTAL: ModelSpec = (
+    "events_total",
+    "WITH e AS (SELECT event_id FROM __source(\"raw_events\")) \
+     SELECT COUNT(event_id) AS events FROM e",
+    &["raw_events"],
+    &[],
+);
+/// Nests functions past the parser's depth guard, so its analysis fails.
+const EVENTS_TOO_DEEP: ModelSpec = (
+    "events_too_deep",
+    concat!(
+        "SELECT ",
+        "ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(",
+        "ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(",
+        "ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(",
+        "ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(ABS(event_id",
+        "))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))",
+        " AS deep FROM __source(\"raw_events\")",
+    ),
+    &["raw_events"],
+    &[],
+);
 
 #[test]
 fn given_a_filled_cache_when_rerunning_then_hits_match_the_uncached_session() {
@@ -81,6 +104,11 @@ fn given_a_filled_cache_when_rerunning_then_hits_match_the_uncached_session() {
                 ),
             ],
             expected_stats: [(0, 2, 1), (1, 1, 0)],
+        },
+        CacheReuseTestCase {
+            description: "a natively answered legacy fallback and a failed analysis are stored",
+            models: &[STG_ORDERS, EVENTS_TOTAL, EVENTS_TOO_DEEP],
+            expected_stats: [(0, 3, 3), (3, 0, 0)],
         },
     ];
     for test_case in test_cases {
@@ -166,6 +194,22 @@ fn given_an_edit_when_rerunning_then_only_changed_analyses_miss_and_match_uncach
                 EVENTS_MART,
             ],
             expected_hits: &[true, false, false],
+        },
+        CacheEditTestCase {
+            description: "an edit misses only the edited model beside legacy and failed analyses",
+            models: &[STG_ORDERS, EVENTS_TOTAL, EVENTS_TOO_DEEP, ORDERS_MART],
+            edited: &[
+                (
+                    "stg_orders",
+                    "SELECT order_id, amount * 2 AS doubled FROM __source(\"raw_orders\") -- edit",
+                    &["raw_orders"],
+                    &[],
+                ),
+                EVENTS_TOTAL,
+                EVENTS_TOO_DEEP,
+                ORDERS_MART,
+            ],
+            expected_hits: &[false, true, true, true],
         },
     ];
     for test_case in test_cases {
