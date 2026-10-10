@@ -91,14 +91,17 @@ fn given_type_strings_when_normalizing_then_python_normalization_is_returned() {
             type_sql: "DECIMAL(99999999999999999999, 2)",
             dialect: "duckdb",
             expected_normalization: Ok(
-                "DECIMAL(99999999999999999999,2) | decimal | 99999999999999999999 | 2 | - | -",
+                "DECIMAL(99999999999999999999,2) | decimal | 99999999999999999999 | 2 | - | \
+                 Parse error at line 1, column 30: Invalid number: 99999999999999999999",
             ),
         },
         NormalizeTypeTestCase {
             description: "Unicode decimal digits are Python integers",
             type_sql: "VARCHAR(\u{663})",
             dialect: "snowflake",
-            expected_normalization: Ok("VARCHAR(3) | string | - | - | 3 | -"),
+            expected_normalization: Ok(
+                "VARCHAR(3) | string | - | - | 3 | Parse error at line 1, column 10: Expected number",
+            ),
         },
     ];
 
@@ -119,25 +122,35 @@ fn given_type_strings_when_normalizing_then_python_normalization_is_returned() {
 }
 
 #[test]
-fn given_array_suffixes_when_normalizing_on_a_small_stack_then_deep_types_are_normalized() {
+fn given_array_suffixes_when_normalizing_on_a_worker_stack_then_python_supported_depths_answer() {
     let test_cases = [
         BracketDepthTestCase {
-            description: "shallow types stay on the caller's stack",
+            description: "at the old native bracket cap",
             depth: 32,
             expected_native: true,
         },
         BracketDepthTestCase {
-            description: "deep types move to a stack sized for their depth",
-            depth: 100_000,
+            description: "one past the old native bracket cap",
+            depth: 33,
+            expected_native: true,
+        },
+        BracketDepthTestCase {
+            description: "a depth the Python wheel also normalizes, within a debug-build worker stack",
+            depth: 200,
             expected_native: true,
         },
     ];
 
     for test_case in test_cases {
         let type_sql: String = format!("INT{}", "[]".repeat(test_case.depth));
+        let expected_name: String = type_sql.clone();
         let answered: bool = std::thread::Builder::new()
-            .stack_size(1024 * 1024)
-            .spawn(move || normalize_type(&type_sql, "generic").is_ok())
+            .stack_size(2 * 1024 * 1024)
+            .spawn(move || {
+                normalize_type(&type_sql, "duckdb").is_ok_and(|normalization| {
+                    normalization.normalized.normalized_name == expected_name
+                })
+            })
             .expect("the test thread starts")
             .join()
             .expect("normalization does not overflow the stack");

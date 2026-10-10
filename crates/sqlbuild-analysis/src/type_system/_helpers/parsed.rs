@@ -8,6 +8,7 @@ use crate::type_system::_helpers::fallback::{
     timestamp_normalized_name,
 };
 use crate::type_system::_helpers::python_text::{python_int, split_type_and_params, upper};
+use crate::type_system::_helpers::shallow_args::shallow_args;
 use crate::type_system::constants::{
     BIGNUMERIC_TYPE_NAME, BOOLEAN_TYPE_NAMES, CUSTOM_NORMALIZATION_TYPE_NAMES, DATE_TYPE_NAME,
     DATETIME_TYPE_NAME, DECIMAL_TYPE_NAMES, FLOAT_TYPE_NAMES, FLOAT_WIRE_TYPE_NAME,
@@ -40,12 +41,12 @@ pub(crate) fn normalize_parsed(
     polyglot: &Dialect,
     dialect: Option<TypeDialect>,
 ) -> Result<NormalizedType, TypeNormalizationError> {
+    let args: Map<String, Value> = shallow_args(&parsed);
     let expression: Expression = Expression::DataType(parsed);
     let generated: String = polyglot
         .generate(&expression)
         .map_err(|error| TypeNormalizationError::Generation(error.to_string()))?;
     let normalized_name: String = upper(&generated).replace(' ', "");
-    let args: Map<String, Value> = expression_args(&expression);
     let dtype_name: String = polyglot_type_name(&args);
     let params: Vec<PythonInteger> = polyglot_type_params(&args);
     let snowflake: bool = dialect == Some(TypeDialect::Snowflake);
@@ -150,17 +151,6 @@ fn snowflake_number(raw_name: &str) -> NormalizedType {
         precision,
         scale,
         length: None,
-    }
-}
-
-/// The wheel's `Expression.args`: the serde payload of the expression's variant.
-fn expression_args(expression: &Expression) -> Map<String, Value> {
-    match serde_json::to_value(expression) {
-        Ok(Value::Object(map)) => match map.into_iter().next() {
-            Some((_, Value::Object(payload))) => payload,
-            _ => Map::new(),
-        },
-        _ => Map::new(),
     }
 }
 

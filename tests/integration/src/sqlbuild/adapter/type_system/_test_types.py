@@ -41,7 +41,7 @@ class UnknownDialectTypeTestCase:
 
 @dataclass(frozen=True)
 class DeepTypeTestCase:
-    """A type deeper than the Polyglot wheel itself could parse."""
+    """A deeply nested type the Python wheel normalized."""
 
     description: str
     type_sql: str
