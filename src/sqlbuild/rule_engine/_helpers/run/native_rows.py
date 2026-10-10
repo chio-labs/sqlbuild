@@ -3,25 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from decimal import Decimal
 from functools import partial
 from pathlib import Path
-from typing import cast
 
 import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSqlScenario,
     CompiledSqlTest,
     CompileSqlTestCte,
-    DynamicColumnContractProof,
 )
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compiled_project_facts
+from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
+from sqlbuild.compiler.compiled_project.main.plain_typed_value import plain_typed_value
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
@@ -35,8 +33,6 @@ from sqlbuild.rule_engine.constants import (
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import Finding, NativeRulesEvaluation, RulesConfig
 from sqlbuild.rule_engine.types import FindingRow
-from sqlbuild.sql_values.models import SqlValue
-from sqlbuild.sql_values.types import SqlValueKind
 
 
 def build_rules_request(
@@ -64,6 +60,10 @@ def build_rules_request(
             rules_bulk_cache_path(project_dir=resolved, file_name=NATIVE_RULES_CACHE_FILE)
         ),
     }
+    public_enums, public_constants = declaration_rows(
+        enums=tuple(project.public_enums.values()),
+        constants=tuple(project.public_constants.values()),
+    )
     project_rows: dict[str, object] = {
         "header_json": _encoded(header),
         "memo": (
@@ -83,10 +83,8 @@ def build_rules_request(
             for audit in project.audits
             if audit.attached_target_name is not None
         ],
-        "public_enums": [_enum_row(declaration) for declaration in project.public_enums.values()],
-        "public_constants": [
-            _constant_row(declaration) for declaration in project.public_constants.values()
-        ],
+        "public_enums": public_enums,
+        "public_constants": public_constants,
         "initial_findings": [finding_row(finding) for finding in initial_findings],
         "types_equal": partial(types_equal, dialect=dialect),
     }
@@ -95,7 +93,7 @@ def build_rules_request(
         counts: tuple[int, int, int]
         request, counts = _native.build_rules_request(
             project_rows,
-            [_model_row(model) for model in project.models],
+            (compiled_project_facts(project), [model.name for model in project.models]),
             [_sql_test_row(test) for test in project.sql_tests],
             [_scenario_row(scenario) for scenario in project.sql_scenarios],
         )
@@ -178,108 +176,11 @@ def finding_from_row(row: FindingRow) -> Finding:
     )
 
 
-def typed_value_payload(value: SqlValue) -> object:
-    """A typed SQL value as the plain value the rules request carries."""
-
-    if value.kind == SqlValueKind.DECIMAL:
-        return str(cast(Decimal, value.value))
-    if value.kind in {
-        SqlValueKind.STRING,
-        SqlValueKind.INTEGER,
-        SqlValueKind.BOOLEAN,
-        SqlValueKind.FLOAT,
-        SqlValueKind.NULL,
-    }:
-        return value.value
-    if value.kind in {SqlValueKind.LIST, SqlValueKind.SET}:
-        return [typed_value_payload(item) for item in cast(tuple[SqlValue, ...], value.value)]
-    return {
-        key: typed_value_payload(item)
-        for key, item in cast(tuple[tuple[str, SqlValue], ...], value.value)
-    }
-
-
 def _encoded(value: object) -> bytes:
     try:
         return orjson.dumps(value, option=orjson.OPT_SORT_KEYS, default=str)
     except orjson.JSONEncodeError as error:
         raise RulesError(str(error)) from error
-
-
-def _model_row(model: CompiledModel) -> tuple[object, ...]:
-    schema: object = None
-    if model.schema_entry is not None:
-        schema = (
-            len(model.schema_entry.audits),
-            [
-                (column.name, column.type, column.nullable, len(column.audits))
-                for column in model.schema_entry.columns
-            ],
-            [
-                (
-                    family.name.casefold(),
-                    family.name,
-                    family.pivot_column,
-                    family.value_column,
-                    family.aggregate,
-                    family.type,
-                    family.name_pattern,
-                )
-                for family in model.schema_entry.dynamic_columns
-            ],
-        )
-    proof: DynamicColumnContractProof | None = model.dynamic_column_contract
-    return (
-        (
-            model.name,
-            model.relative_path.as_posix(),
-            model.query_sql,
-            model.authored_query_sql or model.authored_sql,
-        ),
-        _encoded(model.config.values),
-        list(model.config.model_header_keys),
-        model.config.layer_schema,
-        [
-            (str(reference.ref_kind), reference.ref_name, reference.ref_package)
-            for reference in model.references
-        ],
-        schema,
-        [(column.name, column.type) for column in (model.inferred_columns or ())],
-        None
-        if proof is None
-        else (
-            proof.output_proven,
-            proof.bare_dynamic_pivot,
-            [(family.name.casefold(), family.inferred_type) for family in proof.families],
-        ),
-        list(model.enum_columns),
-        (
-            [_enum_row(declaration) for declaration in model.enum_declarations],
-            [_constant_row(declaration) for declaration in model.constant_declarations],
-        ),
-    )
-
-
-def _enum_row(declaration: EnumDeclaration) -> tuple[object, ...]:
-    return (
-        declaration.name,
-        declaration.relative_path.as_posix(),
-        [(member.name, member.value) for member in declaration.members],
-        None,
-        None,
-        None,
-    )
-
-
-def _constant_row(declaration: ConstantDeclaration) -> tuple[object, ...]:
-    return (
-        declaration.name,
-        declaration.relative_path.as_posix(),
-        [],
-        typed_value_payload(declaration.value),
-        declaration.logical_type.display_name,
-        declaration.render_as.value if declaration.render_as is not None else None,
-    )
 
 
 def _sql_test_row(test: CompiledSqlTest) -> tuple[object, ...]:
@@ -306,7 +207,7 @@ def _sql_test_row(test: CompiledSqlTest) -> tuple[object, ...]:
                 (parameter.name, parameter.value_type.value, parameter.nullable)
                 for parameter in test.parameter_schema
             ],
-            [(name, typed_value_payload(value)) for name, value in test.parameter_values],
+            [(name, plain_typed_value(value)) for name, value in test.parameter_values],
         )
     )
     return (

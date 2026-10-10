@@ -3,10 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
 from sqlbuild.compiler.discovery.models import ConstantDeclaration
-from sqlbuild.rule_engine._helpers.run.native_rows import (
-    _constant_row,  # noqa: FFL102 - verifies the native protocol row boundary
-)
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     TypedConstantPayloadTestCase,
@@ -34,7 +32,9 @@ def test_given_typed_constant_when_building_native_row_then_value_and_type_are_p
         relative_path=Path("constants/rules.sql"),
     )
 
-    _, _, members, value, value_type, render_as = _constant_row(declaration)
+    _, _, members, value, value_type, render_as = declaration_rows(
+        enums=(), constants=(declaration,)
+    )[1][0]
 
     assert members == []
     assert value == test_case.expected_value

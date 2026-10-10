@@ -526,6 +526,9 @@ class ModelInputScopeBuild:
     declarations: DeclarationResolutionContext
     context: ModelInputBuildContext
     diagnostics: tuple[CompilerDiagnostic, ...] = ()
+    native_project: _native.NativeCompiledProject | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass(frozen=True)
@@ -958,6 +961,9 @@ class CompileProjectInputs:
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
     declaration_scope: DeclarationScopeBuild | None = field(default=None, repr=False, compare=False)
+    native_project: _native.NativeCompiledProject | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass(frozen=True)
@@ -1165,6 +1171,9 @@ class CompiledProject:
         default_factory=dict, compare=False, repr=False
     )
     native_session: Any | None = field(default=None, compare=False, repr=False)
+    native_project: _native.NativeCompiledProject | None = field(
+        default=None, compare=False, repr=False
+    )
 
     @cached_property
     def lineage_graph(self) -> _native.NativeProjectGraph:

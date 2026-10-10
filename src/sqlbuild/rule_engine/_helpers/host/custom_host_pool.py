@@ -116,7 +116,7 @@ def _write_inputs(*, path: Path, project: CompiledProject, config: RulesConfig) 
 def host_payload_project(project: CompiledProject) -> CompiledProject:
     """Return the project hosts decode, without model state no Rule fact reads."""
 
-    return replace(project, models=tuple(map(_payload_model, project.models)))
+    return replace(project, models=tuple(map(_payload_model, project.models)), native_project=None)
 
 
 def _payload_model(model: CompiledModel) -> CompiledModel:

@@ -5,23 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import SqlHookEntry
+from sqlbuild.compiler.manifest.constants import RESOURCE_TYPE_PREFIX
 from sqlbuild.spec.contracts.models import (
     SchemaColumn,
     SchemaModelEntry,
     SchemaSeedEntry,
     SourceColumnEntry,
 )
-
-_RESOURCE_TYPE_PREFIX: dict[str, str] = {
-    CompiledResourceType.MODEL: "model",
-    CompiledResourceType.SOURCE: "source",
-    CompiledResourceType.SEED: "seed",
-    CompiledResourceType.DBT_REF: "model",
-    CompiledResourceType.AUDIT: "test",
-    CompiledResourceType.SQL_TEST: "test",
-}
 
 
 def build_fqn(*, project_name: str, relative_path: Path) -> list[str]:
@@ -150,7 +141,7 @@ def build_depends_on(
 def _key_to_unique_id(*, key: CompiledObjectKey, project_name: str) -> str:
     """Convert a CompiledObjectKey to a dbt-style unique_id."""
 
-    resource_prefix: str = _RESOURCE_TYPE_PREFIX.get(str(key.resource_type), "model")
+    resource_prefix: str = RESOURCE_TYPE_PREFIX.get(str(key.resource_type), "model")
     return f"{resource_prefix}.{project_name}.{key.name}"
 
 

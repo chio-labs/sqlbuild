@@ -4,6 +4,7 @@ pub(crate) mod attachments;
 pub(crate) mod boundary;
 pub(crate) mod cache;
 pub(crate) mod compile_outputs;
+pub(crate) mod compiled_project;
 pub(crate) mod contracts;
 pub(crate) mod discovery;
 pub(crate) mod graph;

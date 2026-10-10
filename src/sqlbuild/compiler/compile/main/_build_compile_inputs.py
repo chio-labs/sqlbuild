@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.attachment.audits import build_project_audit_inputs
 from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_effective_connection,
@@ -63,6 +64,7 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     ModelInputScopeBuild,
 )
+from sqlbuild.compiler.compiled_project.main._record_model_inputs import record_model_inputs
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
@@ -253,6 +255,7 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
         scope_index=declaration_scope.index,
         declaration_scope=declaration_scope,
+        native_project=model_build.native_project,
     )
 
 
@@ -318,8 +321,11 @@ def _build_models_with_declarations(
         external_sql_reference_resolver=external_sql_reference_resolver,
         reference_cache_dir=reference_cache_dir,
     )
+    native_project: _native.NativeCompiledProject = _native.NativeCompiledProject()
+    _ = record_model_inputs(project=native_project, model_inputs=model_inputs)
     return ModelInputScopeBuild(
         inputs=model_inputs,
+        native_project=native_project,
         declarations=declarations,
         context=replace(
             context,

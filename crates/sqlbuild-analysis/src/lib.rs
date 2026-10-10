@@ -4,6 +4,7 @@
 
 pub mod assembly;
 pub mod column_references;
+pub mod compiled_project;
 pub mod compiler;
 mod constants;
 pub mod contracts;
