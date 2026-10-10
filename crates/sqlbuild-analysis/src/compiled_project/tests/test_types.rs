@@ -38,12 +38,6 @@ pub(super) struct AnalysisGateTestCase {
     pub(super) expected_gate: crate::compiled_project::models::AnalysisGate,
 }
 
-pub(super) struct HeaderFeatureTestCase {
-    pub(super) description: &'static str,
-    pub(super) keys: &'static [&'static str],
-    pub(super) expected_feature: Option<crate::compiled_project::models::AttachmentFeature>,
-}
-
 pub(super) struct DeclarationErrorTestCase {
     pub(super) description: &'static str,
     pub(super) error: crate::compiled_project::errors::DeclarationError,

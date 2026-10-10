@@ -18,6 +18,7 @@ from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import
 )
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     HEADER_CONTRACT_FILES,
+    MODEL_SCHEMA_FILES,
     LEGACY_PROJECT_TYPES,
     OPT_OUT_FILES,
     PARITY_FILES,
@@ -112,6 +113,12 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
             expected_native_models=4,
         ),
         ModelLoopParityTestCase(
+            description="named model schemas, augmented and out of scope",
+            fixtures=(),
+            files=MODEL_SCHEMA_FILES,
+            expected_native_models=2,
+        ),
+        ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",
             fixtures=("tests/e2e/fixtures/waffle_shop",),
             files={},
@@ -191,6 +198,15 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
             expected_message=(
                 "model 'orders' in models/orders.sql references unknown audit factory "
                 "'order_checks'. Available audit factories: none discovered"
+            ),
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
+            description="unknown model schema",
+            model_sql="MODEL (model_schema order_shape);\nSELECT 1 AS order_id\n",
+            expected_message=(
+                "model 'orders' references unknown model_schema 'order_shape'; "
+                "available schemas: none"
             ),
             expected_code="P001",
         ),

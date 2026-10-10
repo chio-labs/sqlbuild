@@ -9,7 +9,7 @@ use sqlbuild_model_config::header_metadata::main::audit_factory_references::audi
 use sqlbuild_model_config::header_metadata::main::merged_audit_identities::merged_audit_identities;
 use sqlbuild_model_config::header_metadata::main::parse_dynamic_columns::parse_dynamic_columns;
 use sqlbuild_model_config::header_metadata::main::parse_header_metadata::parse_header_metadata;
-use sqlbuild_model_config::header_metadata::models::{DynamicFamily, ParsedColumn};
+use sqlbuild_model_config::header_metadata::models::DynamicFamily;
 use sqlbuild_model_config::model_validation::models::ColumnMigration;
 
 use crate::bindings::_helpers::compiled_project::model_loop::{
@@ -19,6 +19,9 @@ use crate::bindings::_helpers::compiled_project::model_loop_contracts::{
     EnumColumns, audit_identity, dynamic_family_objects, enum_columns, factory_audits, schema_row,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
+use crate::bindings::_helpers::compiled_project::model_loop_schema::{
+    ModelSchema, merged_columns, schema_enums,
+};
 use crate::bindings::_helpers::compiled_project::project::schema_fact;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
@@ -34,6 +37,10 @@ const RE_MODULE: &str = "re";
 const COMPILE_FUNCTION: &str = "compile";
 const ERROR_CLASS: &str = "error";
 const STRIP_METHOD: &str = "strip";
+const NAME_FIELD: &str = "name";
+const TYPE_FIELD: &str = "type";
+const MIGRATE_FROM_FIELD: &str = "migrate_from";
+const ENUMS_FIELD: &str = "enums";
 
 /// What a model's header schema entry is attached from.
 pub(crate) struct HeaderSource<'a, 'py> {
@@ -43,6 +50,7 @@ pub(crate) struct HeaderSource<'a, 'py> {
     pub(crate) relative_path: &'a str,
     /// The model's visible declarations and the identity its usages are recorded for.
     pub(crate) visible: (&'a Bound<'py, PyAny>, &'a Bound<'py, PyAny>),
+    pub(crate) schema: Option<&'a ModelSchema<'py>>,
 }
 
 /// The header's description and, when it declares any schema metadata, its entry.
@@ -59,6 +67,7 @@ pub(crate) struct HeaderSchema<'py> {
     pub(crate) type_enforcement: bool,
     pub(crate) enum_columns: Bound<'py, PyDict>,
     pub(crate) generated_usages: Vec<Bound<'py, PyAny>>,
+    pub(crate) model_schema: Option<String>,
     pub(crate) fact: ModelSchemaFact,
 }
 
@@ -68,12 +77,16 @@ pub(crate) fn header_schema<'py>(
     context: &LoopContext<'_, 'py>,
     source: &HeaderSource<'_, 'py>,
 ) -> PyResult<AttachedHeader<'py>> {
-    let description: Option<String> = description(context, source)?;
+    let description: Option<String> = match (description(context, source)?, source.schema) {
+        (None, Some(schema)) => schema.declaration.getattr(DESCRIPTION_KEY)?.extract()?,
+        (description, _) => description,
+    };
     let columns: Option<Bound<'py, PyAny>> = present(source.values, COLUMNS_KEY)?;
     let audits: Option<Bound<'py, PyAny>> = present(source.values, AUDITS_KEY)?;
     let dynamic: Option<Bound<'py, PyAny>> = present(source.values, DYNAMIC_COLUMNS_KEY)?;
     let factories: Option<Bound<'py, PyAny>> = present(source.values, AUDIT_FACTORIES_KEY)?;
-    if description.is_none()
+    if source.schema.is_none()
+        && description.is_none()
         && columns.is_none()
         && audits.is_none()
         && dynamic.is_none()
@@ -91,6 +104,12 @@ pub(crate) fn header_schema<'py>(
     let parsed_columns = metadata
         .columns
         .map_err(|error| raised_config_error(py, context, error))?;
+    let local_columns: Bound<'py, PyTuple> =
+        column_tuple(py, context.contracts, &parsed_columns, source.locations)?;
+    let columns: Bound<'py, PyTuple> = match source.schema {
+        Some(schema) => merged_columns(context, schema, &local_columns, model)?,
+        None => local_columns,
+    };
     let families = dynamic_families(py, context, &node(dynamic), model)?;
     let parsed_audits = metadata
         .audits
@@ -106,30 +125,34 @@ pub(crate) fn header_schema<'py>(
         .collect::<PyResult<_>>()?;
     merged_audit_identities(&direct_identities, &generated_identities, model)
         .map_err(|error| raised_config_error(py, context, error))?;
-    let migrations: Vec<ColumnMigration> = parsed_columns
+    let migrations: Vec<ColumnMigration> = columns
         .iter()
-        .map(column_migration)
+        .map(|column| column_migration(&column))
         .collect::<PyResult<_>>()?;
     if let Some(error) = column_migration_error(source.name, source.values, &migrations)? {
         let error = native_config_error(py, error)?.into_bound(py).into_any();
         return Err(config_error(context.classes, &error, Some(source.values)));
     }
-    let type_enforcement: bool = !families.is_empty()
-        || parsed_columns.iter().any(|column| {
-            column
-                .column_type
-                .as_ref()
-                .is_some_and(|node| !node.0.is_none())
-        });
-    let columns: Bound<'py, PyTuple> =
-        column_tuple(py, context.contracts, &parsed_columns, source.locations)?;
+    let mut type_enforcement: bool = !families.is_empty();
+    for column in columns.iter() {
+        type_enforcement |= !column.getattr(TYPE_FIELD)?.is_none();
+    }
     let audits: Bound<'py, PyTuple> = PyTuple::new(
         py,
         direct_audits.iter().chain(generated).collect::<Vec<_>>(),
     )?;
     let families: Vec<Bound<'py, PyAny>> = dynamic_family_objects(py, context, &families)?;
+    let enums: Bound<'py, PyDict> = source.visible.0.getattr(ENUMS_FIELD)?.downcast_into()?;
+    let enums: Bound<'py, PyDict> = match source.schema {
+        Some(schema) => {
+            let merged: Bound<'py, PyDict> = enums.copy()?;
+            merged.update(schema_enums(context, schema)?.as_mapping())?;
+            merged
+        }
+        None => enums,
+    };
     let resolved: EnumColumns<'py> =
-        enum_columns(context, source.visible, source.values, &columns)?;
+        enum_columns(context, (&enums, source.visible), source.values, &columns)?;
     let fact: ModelSchemaFact =
         schema_fact(schema_row(&resolved.columns, audits.len(), &families)?);
     Ok(AttachedHeader {
@@ -141,6 +164,7 @@ pub(crate) fn header_schema<'py>(
             type_enforcement,
             enum_columns: resolved.declarations,
             generated_usages: resolved.usages,
+            model_schema: source.schema.map(|schema| schema.name.clone()),
             fact,
         }),
     })
@@ -204,16 +228,9 @@ fn raised_config_error(
     }
 }
 
-fn column_migration(column: &ParsedColumn<PyNode<'_>>) -> PyResult<ColumnMigration> {
+fn column_migration(column: &Bound<'_, PyAny>) -> PyResult<ColumnMigration> {
     Ok(ColumnMigration {
-        name: column.name.0.str()?.to_string(),
-        migrate_from: optional_text(column.migrate_from.as_ref())?,
+        name: column.getattr(NAME_FIELD)?.str()?.to_string(),
+        migrate_from: column.getattr(MIGRATE_FROM_FIELD)?.extract()?,
     })
-}
-
-fn optional_text(node: Option<&PyNode<'_>>) -> PyResult<Option<String>> {
-    match node {
-        Some(node) if !node.0.is_none() => Ok(Some(node.0.str()?.to_string())),
-        _ => Ok(None),
-    }
 }

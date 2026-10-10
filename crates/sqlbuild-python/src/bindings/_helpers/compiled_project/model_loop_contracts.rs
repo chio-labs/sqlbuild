@@ -160,13 +160,15 @@ pub(crate) fn dynamic_family_objects<'py>(
 /// `resolve_enum_contract_columns` and `_generated_enum_usages` for a header schema entry.
 pub(crate) fn enum_columns<'py>(
     context: &LoopContext<'_, 'py>,
-    visible: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    visible: (
+        &Bound<'py, PyDict>,
+        (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    ),
     values: &Bound<'py, PyDict>,
     columns: &Bound<'py, PyTuple>,
 ) -> PyResult<EnumColumns<'py>> {
     let py: Python<'py> = columns.py();
-    let (declarations, consumer) = visible;
-    let enums: Bound<'py, PyDict> = declarations.getattr("enums")?.downcast_into()?;
+    let (enums, (declarations, consumer)) = visible;
     let enforced: bool = match values.get_item(CONTRACT_KEY)? {
         Some(value) => value.eq(&context.classes.contract_enforced)?,
         None => false,

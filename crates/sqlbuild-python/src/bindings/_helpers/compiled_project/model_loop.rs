@@ -7,11 +7,10 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
 use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
 use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
-use sqlbuild_analysis::compiled_project::main::header_attachment_feature::header_attachment_feature;
 use sqlbuild_analysis::compiled_project::main::legacy_schema_error::legacy_schema_error;
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_analysis::compiled_project::models::{
-    AnalysisGate, AttachmentFeature, LegacySchemaFile, ModelLoopSettings,
+    AnalysisGate, LegacySchemaFile, ModelLoopSettings,
 };
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
@@ -28,10 +27,13 @@ use crate::bindings::_helpers::compiled_project::model_loop_host::{
     FinishedModel, ModelLoopRow, ReferenceRow, attached_input, callback, plain_input,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
-    analysis_override, config_keys, hook_presence, reference_row,
+    analysis_override, hook_presence, reference_row,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
     OptOut, OptOutModel, rejected_opt_out,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_schema::{
+    ModelSchema, model_schema, schema_column_names, schema_usages,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::discovery::project_files::python_semantics;
@@ -90,6 +92,17 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) generated_usage: Bound<'py, PyAny>,
     /// `ContractPolicy.ENFORCED`.
     pub(crate) contract_enforced: Bound<'py, PyAny>,
+    /// Public reusable model schemas by name.
+    pub(crate) model_schemas: Bound<'py, PyDict>,
+    /// Each indexed schema's declaration record, by name; empty without a scope resolver.
+    pub(crate) schema_records: Bound<'py, PyDict>,
+    /// Project enums by name, as a schema's column types resolve them.
+    pub(crate) schema_enums: Bound<'py, PyDict>,
+    /// `CompilerDiagnostic` and `report_compile_diagnostic`, for S006.
+    pub(crate) compiler_diagnostic: Bound<'py, PyAny>,
+    pub(crate) report_diagnostic: Bound<'py, PyAny>,
+    /// `pathlib.Path`.
+    pub(crate) path_class: Bound<'py, PyAny>,
 }
 
 /// The ordered model loop of one compile-input stage.
@@ -234,15 +247,21 @@ impl NativeModelLoop {
         } = model;
         let ModelLoopRow((name, _, relative_path, file_path), locations, _, contents, scan) = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
-        if header_attachment_feature(&config_keys(&values)?) == Some(AttachmentFeature::ModelSchema)
-        {
-            return Ok(None);
-        }
+        let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
         let index_argument = [(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())];
         let hooked: bool = hook_presence(&values)?;
         if hooked {
             callback(context.host, CHECK_HOOKS_CALLBACK, &index_argument)?;
         }
+        let schema_usages: Vec<Bound<'py, PyAny>> = match &schema {
+            Some(schema) => {
+                match schema_usages(context, schema, &visible.consumer, (name, relative_path))? {
+                    Some(usages) => usages,
+                    None => return Ok(None),
+                }
+            }
+            None => Vec::new(),
+        };
         let interpolated: String =
             callback(context.host, INTERPOLATE_CALLBACK, &index_argument)?.extract()?;
         let (references, stop) = scan.clone().unwrap_or_default();
@@ -323,11 +342,13 @@ impl NativeModelLoop {
             scanned.references.iter().map(reference_row).collect(),
             argument_references,
         );
+        let declared_columns: Option<Vec<String>> =
+            schema.as_ref().map(schema_column_names).transpose()?;
         self.validate(
             context,
             (&config, &values),
             (name, &query_sql, relative_path),
-            &references,
+            (&references, declared_columns),
         )?;
         let (values, hook_statements): (Bound<'py, PyDict>, usize) = if hooked {
             let Some(expanded) = expanded_hooks(self, context, index, (name, relative_path))?
@@ -344,6 +365,7 @@ impl NativeModelLoop {
             locations: locations.bind(py),
             relative_path,
             visible: (&visible.declarations, &visible.consumer),
+            schema: schema.as_ref(),
         };
         let header: AttachedHeader<'py> = header_schema(py, context, &source)?;
         if let Some(message) = legacy_schema_error((name, relative_path), &self.legacy_schema_files)
@@ -359,6 +381,7 @@ impl NativeModelLoop {
             declarations,
             hook_statements,
             analysis,
+            schema_usages,
         }))
     }
 
@@ -428,8 +451,9 @@ impl NativeModelLoop {
         context: &LoopContext<'_, '_>,
         config: (&Bound<'_, PyAny>, &Bound<'_, PyDict>),
         model: (&str, &str, &str),
-        references: &[ReferenceRow],
+        references: (&[ReferenceRow], Option<Vec<String>>),
     ) -> PyResult<()> {
+        let (references, declared_columns) = references;
         let py: Python<'_> = context.host.py();
         let (config, values) = config;
         let rows: Vec<(&str, &str, bool)> = references
@@ -447,7 +471,7 @@ impl NativeModelLoop {
             (
                 values.clone(),
                 model,
-                (rows, py.None(), unmanaged, declared),
+                (rows, declared_columns, unmanaged, declared),
             ),
         )?;
         if outcome.is_none() {

@@ -37,10 +37,6 @@ pub(super) fn analysing_settings(
     }
 }
 
-pub(super) fn keys(keys: &[&str]) -> Vec<String> {
-    keys.iter().map(|key| (*key).to_owned()).collect()
-}
-
 pub(super) fn python_312() -> sqlbuild_core::text::models::PythonText {
     sqlbuild_core::text::main::python_text::python_text((3, 12), "15.0.0")
         .expect("Python 3.12 is supported")

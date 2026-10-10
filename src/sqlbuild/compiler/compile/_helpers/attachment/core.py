@@ -35,6 +35,7 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_source_names,
     build_known_table_function_names,
 )
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.diagnostics.sql_analysis_opt_outs import (
     rejected_sql_analysis_opt_out,
 )
@@ -119,6 +120,7 @@ from sqlbuild.compiler.compiled_project.main._model_input_row import model_input
 from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
 from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
 from sqlbuild.compiler.compiled_project.models import PlainModelFacts
+from sqlbuild.compiler.compiled_project.types import PlainSchemaRow
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.main._model_query_start import get_model_query_start
 from sqlbuild.compiler.discovery.models import (
@@ -164,9 +166,7 @@ from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
     ProjectConfig,
-    SchemaAuditInstance,
     SchemaColumn,
-    SchemaDynamicColumnFamily,
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
@@ -502,19 +502,13 @@ class _ModelLoopHost:
         references: list[tuple[str, str, str | None, int | None]],
         query_sql: str,
         description: str | None,
-        schema: (
-            tuple[
-                tuple[SchemaColumn, ...],
-                tuple[SchemaAuditInstance, ...],
-                bool,
-                tuple[SchemaDynamicColumnFamily, ...],
-            ]
-            | None
-        ),
+        schema: PlainSchemaRow | None,
         enum_columns: dict[str, EnumDeclaration],
         analysis: tuple[bool, SourceLocation | None],
         hook_statements: int,
-        declarations: tuple[str, list[tuple[int, int, int, int]], list[UsageRecord]],
+        declarations: tuple[
+            str, list[tuple[int, int, int, int]], list[UsageRecord], list[UsageRecord]
+        ],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         visible: _VisibleModelDeclarations = self.declarations.pop(index)
@@ -541,7 +535,7 @@ class _ModelLoopHost:
                     dict.fromkeys(
                         (
                             *dict.fromkeys(declarations[2]),
-                            *self._hook_usages(index=index),
+                            *self._hook_usages(index=index, schema_usages=declarations[3]),
                         )
                     )
                 ),
@@ -549,10 +543,13 @@ class _ModelLoopHost:
             declarations=(visible.local_enums, visible.local_constants),
         )
 
-    def _hook_usages(self, *, index: int) -> tuple[UsageRecord, ...]:
+    def _hook_usages(
+        self, *, index: int, schema_usages: list[UsageRecord]
+    ) -> tuple[UsageRecord, ...]:
         expansion: HookExpansionResult | None = self.hooks.pop(index, None)
         return (
             *(() if expansion is None else expansion.usages),
+            *schema_usages,
             *self.python_hooks.pop(index, ()),
         )
 
@@ -750,7 +747,11 @@ def _run_native_model_loop(
         (
             loop.validation_context.validators.native_config.validator,
             native_contract_classes(),
-            model_loop_classes(audit_factories=loop.discovered_inputs.audit_factories),
+            model_loop_classes(
+                audit_factories=loop.discovered_inputs.audit_factories,
+                context=loop.context,
+                report_diagnostic=report_compile_diagnostic,
+            ),
         ),
         loop.context.sql_lexical_syntax.native_mapping,
         cursor_intrinsic_semantics(),

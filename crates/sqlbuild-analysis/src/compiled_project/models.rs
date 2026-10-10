@@ -144,17 +144,6 @@ pub enum AnalysisGate {
     Conflict,
 }
 
-/// Model features the attachment still finishes, in the order the attachment reaches them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AttachmentFeature {
-    ModelSchema,
-    AnalysisOptOut,
-    ImmediateValidation,
-    ReferenceScan,
-    ExternalReferences,
-    LegacySchemaFiles,
-}
-
 /// A known declaration the consumer cannot see, as its scope record describes it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct InaccessibleDeclaration {

@@ -97,3 +97,12 @@ pub(super) struct ClassifyTestCase {
     pub(super) grants: &'static [(u32, VisibilityReason, usize)],
     pub(super) expected_classified: Option<(&'static [VisibleRow], &'static [usize])>,
 }
+
+/// One declaration's scope facts, an authored consumer path, and whether it is visible.
+pub(super) struct PathVisibleTestCase {
+    pub(super) description: &'static str,
+    pub(super) scope: crate::scope_index::models::ScopeKind,
+    pub(super) owning_path: Option<&'static str>,
+    pub(super) path: &'static str,
+    pub(super) expected_visible: bool,
+}

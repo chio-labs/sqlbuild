@@ -93,9 +93,10 @@ def _schema_entry(
 ) -> SchemaModelEntry | None:
     if facts.schema is None:
         return None
-    columns, audits, typed, dynamic_columns = facts.schema
+    columns, audits, typed, dynamic_columns, model_schema = facts.schema
     return SchemaModelEntry(
         name=model_file.file_path.stem,
+        model_schema=model_schema,
         description=facts.description,
         type_enforcement=True if typed else None,
         columns=columns,

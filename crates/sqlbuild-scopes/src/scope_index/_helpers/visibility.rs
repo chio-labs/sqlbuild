@@ -3,12 +3,14 @@
 use crate::scope_index::_helpers::paths::{
     canonical_ancestors, is_canonical_descendant, normalize_path, parent,
 };
-use crate::scope_index::constants::CURRENT_PATH_COMPONENT;
-use crate::scope_index::models::ScopeKind;
+use crate::scope_index::constants::{
+    CURRENT_PATH_COMPONENT, PATH_RESOURCE_PREFIX, PATH_RESOURCE_SUFFIX,
+};
 use crate::scope_index::models::{
     DeclarationRecord, ResourceIdentity, ResourceRecord, ScopeDeferral, ScopeIndex,
     VisibilityGroups,
 };
+use crate::scope_index::models::{DeclaredScope, ResourceKind, ScopeKind};
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -119,20 +121,53 @@ pub(crate) fn path_visibility(
     path_resource: &ResourceIdentity,
     folder: &str,
 ) -> Result<bool, ScopeDeferral> {
-    Ok(match declaration.scope {
+    scope_visibility(
+        &DeclaredScope {
+            scope: declaration.scope,
+            owner: declaration.identity.owner.clone(),
+            owning_path: declaration.owning_path.clone(),
+        },
+        path_resource,
+        folder,
+    )
+}
+
+/// Python's `path_visibility_reason(...) is not None` for an authored consumer path.
+pub(crate) fn authored_path_visibility(
+    declared: &DeclaredScope,
+    path: &str,
+) -> Result<bool, ScopeDeferral> {
+    let normalized: String = normalize_path(path)?;
+    let path_resource: ResourceIdentity = ResourceIdentity {
+        kind: ResourceKind::Model,
+        name: format!("{PATH_RESOURCE_PREFIX}{normalized}{PATH_RESOURCE_SUFFIX}"),
+    };
+    scope_visibility(declared, &path_resource, &parent(&normalized)?)
+}
+
+fn scope_visibility(
+    declared: &DeclaredScope,
+    path_resource: &ResourceIdentity,
+    folder: &str,
+) -> Result<bool, ScopeDeferral> {
+    Ok(match declared.scope {
         ScopeKind::Global => true,
-        ScopeKind::Private => declaration.identity.owner.as_ref() == Some(path_resource),
-        ScopeKind::Local => folder == owner_path(declaration)?,
-        ScopeKind::Inherited => is_canonical_descendant(folder, &owner_path(declaration)?),
+        ScopeKind::Private => declared.owner.as_ref() == Some(path_resource),
+        ScopeKind::Local => folder == owner_folder(declared.owning_path.as_deref())?,
+        ScopeKind::Inherited => {
+            is_canonical_descendant(folder, &owner_folder(declared.owning_path.as_deref())?)
+        }
     })
 }
 
 /// Python's `_declaration_owner`.
 fn owner_path(declaration: &DeclarationRecord) -> Result<String, ScopeDeferral> {
+    owner_folder(declaration.owning_path.as_deref())
+}
+
+fn owner_folder(owning_path: Option<&str>) -> Result<String, ScopeDeferral> {
     normalize_path(
-        declaration
-            .owning_path
-            .as_deref()
+        owning_path
             .filter(|path| !path.is_empty())
             .unwrap_or(CURRENT_PATH_COMPONENT),
     )

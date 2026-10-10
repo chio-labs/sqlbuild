@@ -1,9 +1,8 @@
 //! The model loop's ordered decisions and the facts it retains for a finished model.
 
-use crate::compiled_project::constants::{MACRO_TOKEN, MODEL_SCHEMA_KEY};
+use crate::compiled_project::constants::MACRO_TOKEN;
 use crate::compiled_project::models::{
-    AnalysisGate, AnalysisOverride, AttachmentFeature, CompiledModelFacts, ModelLoopSettings,
-    PlainModel,
+    AnalysisGate, AnalysisOverride, CompiledModelFacts, ModelLoopSettings, PlainModel,
 };
 
 /// The attachment's gate: project switches first, so an override is only read when they allow.
@@ -19,13 +18,6 @@ pub(crate) fn analysis_gate(
         AnalysisOverride::Disabled => AnalysisGate::Disabled,
         AnalysisOverride::Conflict => AnalysisGate::Conflict,
     }
-}
-
-/// The header feature among `keys` the attachment still finishes.
-pub(crate) fn header_attachment_feature(keys: &[String]) -> Option<AttachmentFeature> {
-    keys.iter()
-        .any(|key| key == MODEL_SCHEMA_KEY)
-        .then_some(AttachmentFeature::ModelSchema)
 }
 
 /// Whether declaration-expanded SQL still calls macros.

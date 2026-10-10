@@ -201,6 +201,28 @@ OPT_OUT_FILES: dict[str, str] = {
 }
 
 
+MODEL_SCHEMA_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+    "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+    "schemas/orders.sql": (
+        "SCHEMA (\n  name order_shape,\n  description 'Order shape.',\n"
+        "  columns (order_id (type INTEGER, nullable false), status (type order_status)),\n);\n"
+    ),
+    "models/marts/_sqlbuild/schemas/local.sql": (
+        "SCHEMA (\n  name marts_shape,\n  columns (order_id (type INTEGER)),\n);\n"
+    ),
+    "models/orders.sql": (
+        "MODEL (\n  contract enforced,\n  model_schema order_shape,\n"
+        "  columns (order_id (audits [unique]), note (type VARCHAR)),\n);\n"
+        "SELECT 1 AS order_id, 'PLACED' AS status, 'x' AS note\n"
+    ),
+    "models/staging/hidden.sql": (
+        "MODEL (\n  description 'Out of reach.',\n  model_schema marts_shape,\n);\n"
+        "SELECT 1 AS order_id\n"
+    ),
+}
+
+
 def build_inputs_with_native_loop(
     *, project_dir: Path, native: bool, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[CompileProjectInputs, list[int]]:

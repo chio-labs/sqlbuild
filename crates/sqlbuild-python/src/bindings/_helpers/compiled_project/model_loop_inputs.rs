@@ -12,14 +12,6 @@ const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 const SQL_VALIDATION_KEY: &str = "sql_validation";
 pub(crate) const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 
-pub(crate) fn config_keys(values: &Bound<'_, PyDict>) -> PyResult<Vec<String>> {
-    let mut keys: Vec<String> = Vec::with_capacity(values.len());
-    for key in values.keys() {
-        keys.push(key.str()?.to_string());
-    }
-    Ok(keys)
-}
-
 /// Whether either hook key holds a value.
 pub(crate) fn hook_presence(values: &Bound<'_, PyDict>) -> PyResult<bool> {
     for key in HOOK_KEYS {

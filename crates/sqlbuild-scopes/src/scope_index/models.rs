@@ -455,3 +455,12 @@ pub struct ResourceVisibility {
     pub visible: Vec<VisibleEntry>,
     pub inaccessible: Vec<usize>,
 }
+
+/// The scope facts that decide whether a declaration is visible from an authored path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeclaredScope {
+    pub scope: ScopeKind,
+    /// The owning resource of a private declaration.
+    pub owner: Option<ResourceIdentity>,
+    pub owning_path: Option<String>,
+}
