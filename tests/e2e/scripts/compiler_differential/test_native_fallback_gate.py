@@ -217,7 +217,7 @@ def test_given_committed_allow_list_when_fallback_only_stage_is_switched_off_the
                 "Native fallback allow-list: native-preview rich_lineage rich_lineage.native "
                 f"rich_models (seed): {_ANSWER_VANISHED}",
                 "Native fallback allow-list: native-preview rich_lineage rich_columns.py "
-                "native_failure (seed): ",
+                "unsupported_dialect (seed): ",
             ),
         ),
         NativeFallbackGateTestCase(

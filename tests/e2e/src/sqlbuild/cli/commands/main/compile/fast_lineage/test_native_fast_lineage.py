@@ -9,10 +9,13 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage._test_types import (
     NativeFastLineageCliTestCase,
     NativeRichLineageCliTestCase,
+    NativeRichLineageFailureCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage.helpers import (
     EngineLineageRun,
+    FailedLineageRun,
     engine_lineage_run,
+    failed_rich_lineage_run,
     model_lineage_summaries,
 )
 
@@ -103,6 +106,27 @@ _RICH_FILES: dict[str, str] = {
         'JOIN __ref("order_facts") AS f USING (customer_id)\n'
     ),
 }
+
+_NATIVE_PANIC_ERROR: str = "NativeCompilerError: native SQL compilation panicked"
+_RICH_PANIC_INJECTION: str = f"""
+import sqlbuild._native as native
+
+
+def _panicked(request):
+    raise native.NativeCompilerError({_NATIVE_PANIC_ERROR!r})
+
+
+native.build_rich_column_lineage = _panicked
+"""
+_PREVIEW_RICH_COMPILE: tuple[str, ...] = (
+    "--compiler-engine",
+    "native-preview",
+    "compile",
+    "--json",
+    "--no-cache",
+    "--lineage-mode",
+    "rich",
+)
 
 
 @pytest.mark.parametrize(
@@ -230,6 +254,56 @@ def test_given_project_when_tracing_rich_lineage_with_each_engine_then_native_ma
     assert (
         preview._replace(rich_wheel_analyses=wheel.rich_wheel_analyses, rich_native_models=0)
         == wheel
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeRichLineageFailureCliTestCase(
+            description="compile --lineage-mode rich",
+            files=_RICH_FILES,
+            command=_PREVIEW_RICH_COMPILE,
+            expected_returncode=1,
+            expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
+            expected_wheel_analyses=0,
+            expected_native_models=0,
+        ),
+        NativeRichLineageFailureCliTestCase(
+            description="lineage --mode rich",
+            files=_RICH_FILES,
+            command=(
+                "--compiler-engine",
+                "native-preview",
+                "lineage",
+                "order_facts.whole_amount",
+                "--mode",
+                "rich",
+                "--json",
+            ),
+            expected_returncode=1,
+            expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
+            expected_wheel_analyses=0,
+            expected_native_models=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_rich_lineage_panic_when_running_then_command_fails_without_the_wheel(
+    test_case: NativeRichLineageFailureCliTestCase, tmp_path: Path
+) -> None:
+    run: FailedLineageRun = failed_rich_lineage_run(
+        project_dir=tmp_path,
+        files=test_case.files,
+        args=test_case.command,
+        perturbation=_RICH_PANIC_INJECTION,
+    )
+
+    assert run == FailedLineageRun(
+        returncode=test_case.expected_returncode,
+        last_error_line=test_case.expected_error_line,
+        rich_wheel_analyses=test_case.expected_wheel_analyses,
+        rich_native_models=test_case.expected_native_models,
     )
 
 

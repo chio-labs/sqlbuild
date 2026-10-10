@@ -8,6 +8,9 @@ use polyglot_sql::{
     TransformKind, ValidationSchema, analyze_query,
 };
 
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+
 use crate::lineage::_helpers::references::{
     PhysicalResource, normalized_sql, physical_resource_name, physical_resources,
 };
@@ -22,7 +25,7 @@ use crate::lineage::models::{
 /// What every model of one request shares: the dialect, the guard and the known tables.
 pub(crate) struct RichContext {
     dialect: Option<DialectType>,
-    guard: Result<ComplexityGuardOptions, serde_json::Error>,
+    guard: ComplexityGuardOptions,
     /// `_polyglot_schema_tables`: each physical name's columns, sorted by name.
     tables: HashMap<String, SchemaTable>,
     /// `_build_schema_mapping`'s column names, in its insertion order, for star expansion.
@@ -39,13 +42,26 @@ impl RichContext {
     ) -> Self {
         Self {
             dialect,
-            guard: serde_json::from_value(serde_json::json!({
-                "maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH,
-            })),
+            guard: ComplexityGuardOptions {
+                max_function_call_depth: Some(MAX_FUNCTION_CALL_DEPTH),
+                ..ComplexityGuardOptions::default()
+            },
             tables: schema_tables(schema, referenced),
             names,
         }
     }
+}
+
+/// Analyse every model in parallel; the first panic in request order is the request's error.
+pub(crate) fn outcomes_in_order(
+    models: &[String],
+    analyse: impl Fn(&str) -> RichLineageOutcome + Sync,
+) -> Result<Vec<RichLineageOutcome>, String> {
+    let outcomes: Vec<Result<RichLineageOutcome, String>> = models
+        .par_iter()
+        .map(|query_sql| catch_compiler_panic(|| Ok(analyse(query_sql))))
+        .collect();
+    outcomes.into_iter().collect()
 }
 
 /// The column names star expansion reads: assigned then defaulted, first position kept.
@@ -122,16 +138,13 @@ pub(crate) fn rich_model_lineage(query_sql: &str, context: &RichContext) -> Rich
     let Some(dialect) = context.dialect else {
         return RichLineageOutcome::Deferred(LineageDeferral::UnsupportedDialect);
     };
-    let Ok(guard) = &context.guard else {
-        return RichLineageOutcome::Deferred(LineageDeferral::NativeFailure);
-    };
     let physical = physical_resources(query_sql);
     let referenced: BTreeSet<&str> = physical
         .iter()
         .map(|resource| resource.physical_name.as_str())
         .collect();
     let options = AnalyzeQueryOptions {
-        complexity_guard: Some(*guard),
+        complexity_guard: Some(context.guard),
         dialect,
         schema: Some(ValidationSchema {
             tables: referenced

@@ -3,19 +3,17 @@
 use std::collections::HashSet;
 
 use polyglot_sql::DialectType;
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::lineage::_helpers::dialects::is_compiled_dialect;
 use crate::lineage::_helpers::references::{physical_resource_name, physical_resources};
-use crate::lineage::_helpers::rich_lineage::{RichContext, rich_model_lineage, schema_names};
+use crate::lineage::_helpers::rich_lineage::{
+    RichContext, outcomes_in_order, rich_model_lineage, schema_names,
+};
 use crate::lineage::_helpers::stars::schema_mapping;
 use crate::lineage::constants::{RICH_LINEAGE_WORKER_STACK_BYTES, RICH_LINEAGE_WORKERS};
-use crate::lineage::models::{
-    LineageDeferral, LineageSchemaResource, RichLineageOutcome, RichLineageRequest,
-};
+use crate::lineage::models::{LineageSchemaResource, RichLineageOutcome, RichLineageRequest};
 
-/// One outcome per model, in request order. A parser panic defers only its own model.
+/// One outcome per model, in request order; a parser panic fails the whole request.
 pub fn build_rich_lineage(request: &RichLineageRequest) -> Result<Vec<RichLineageOutcome>, String> {
     if request.models.is_empty() {
         return Ok(Vec::new());
@@ -49,16 +47,11 @@ pub fn build_rich_lineage(request: &RichLineageRequest) -> Result<Vec<RichLineag
         .thread_name(|index| format!("sqlbuild-rich-lineage-{index}"))
         .build()
         .map_err(|error| error.to_string())?;
-    Ok(pool.install(|| {
-        request
-            .models
-            .par_iter()
-            .map(|query_sql| {
-                catch_compiler_panic(|| Ok(rich_model_lineage(query_sql, &context)))
-                    .unwrap_or(RichLineageOutcome::Deferred(LineageDeferral::NativeFailure))
-            })
-            .collect()
-    }))
+    pool.install(|| {
+        outcomes_in_order(&request.models, |query_sql| {
+            rich_model_lineage(query_sql, &context)
+        })
+    })
 }
 
 /// The wheel decodes the options' dialect with serde; this build may not carry it.

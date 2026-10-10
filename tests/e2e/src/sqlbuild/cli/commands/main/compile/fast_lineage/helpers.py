@@ -103,6 +103,48 @@ def engine_lineage_run(
     )
 
 
+class FailedLineageRun(NamedTuple):
+    """A failed command's return code, last stderr line, wheel calls and native answers."""
+
+    returncode: int
+    last_error_line: str
+    rich_wheel_analyses: int
+    rich_native_models: int
+
+
+def failed_rich_lineage_run(
+    *, project_dir: Path, files: dict[str, str], args: tuple[str, ...], perturbation: str
+) -> FailedLineageRun:
+    """Run one command with `perturbation` installed as `sitecustomize` in the CLI process."""
+
+    for relative_path, contents in files.items():
+        path: Path = project_dir / "project" / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    extlib: Path = project_dir / "extlib"
+    extlib.mkdir()
+    _ = (extlib / "sitecustomize.py").write_text(perturbation, encoding="utf-8")
+    record_dir: Path = project_dir / "records"
+    result: subprocess.CompletedProcess[str] = run_installed_sqb(
+        project_dir=project_dir / "project",
+        args=args,
+        env={
+            REUSE_DISABLE_ENV_VAR: "1",
+            ANALYSIS_RECORD_DIR_ENV_VAR: str(record_dir),
+            "PYTHONPATH": str(extlib),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
+    )
+    return FailedLineageRun(
+        returncode=result.returncode,
+        last_error_line=(result.stderr.strip().splitlines() or [""])[-1],
+        rich_wheel_analyses=_site_calls(record_dir)[RICH_WHEEL_SITE],
+        rich_native_models=_native_answers(record_dir)[
+            (_RICH_ANSWER_SITE, NATIVE_RICH_LINEAGE_ANSWER_KIND)
+        ],
+    )
+
+
 def model_lineage_summaries(compile_report: str) -> dict[str, object]:
     """The `lineage` summary of every model in a JSON compile report, by model name."""
 

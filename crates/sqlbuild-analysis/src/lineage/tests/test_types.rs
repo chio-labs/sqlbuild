@@ -59,3 +59,10 @@ pub(crate) struct InterruptedListingPolicyTestCase {
     pub(crate) policy: InterruptedListingPolicy,
     pub(crate) expected_status: &'static str,
 }
+
+pub(crate) struct RichPanicTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) models: &'static [&'static str],
+    /// The answered models' SQL in order, or the request's error.
+    pub(crate) expected_outcome: Result<&'static [&'static str], &'static str>,
+}

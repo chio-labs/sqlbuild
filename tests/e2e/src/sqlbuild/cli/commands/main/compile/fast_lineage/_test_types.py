@@ -16,6 +16,19 @@ class NativeFastLineageCliTestCase:
 
 
 @dataclass(frozen=True)
+class NativeRichLineageFailureCliTestCase:
+    """A native rich lineage failure injected at the binding, compiled through the CLI."""
+
+    description: str
+    files: dict[str, str]
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_error_line: str
+    expected_wheel_analyses: int
+    expected_native_models: int
+
+
+@dataclass(frozen=True)
 class NativeRichLineageCliTestCase:
     """The wheel and the native engine compiling and tracing rich lineage of one project."""
 

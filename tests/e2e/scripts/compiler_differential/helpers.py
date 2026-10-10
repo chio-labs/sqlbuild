@@ -115,7 +115,7 @@ RICH_LINEAGE_SABOTAGE: str = """
 import sqlbuild._native as native
 
 native.build_rich_column_lineage = lambda request: [
-    ("deferred", [], False, "native_failure") for _ in request[2]
+    ("deferred", [], False, "unsupported_dialect") for _ in request[2]
 ]
 """
 RICH_LINEAGE_SEED: int = 6

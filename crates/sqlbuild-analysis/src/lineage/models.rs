@@ -222,6 +222,7 @@ pub enum RichLineageOutcome {
     },
     /// Polyglot rejected the query; Python logs this message and records no lineage.
     Skipped(String),
+    /// Only `UnsupportedDialect`: the wheel answers dialects this build lacks.
     Deferred(LineageDeferral),
 }
 
