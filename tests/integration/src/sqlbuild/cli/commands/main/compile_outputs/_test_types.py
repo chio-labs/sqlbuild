@@ -34,3 +34,31 @@ class ReuseDisruptionTestCase:
     disrupt: Callable[[Path, pytest.MonkeyPatch], None]
     expected_reused: tuple[bool, ...]
     expected_slots: int
+
+
+@dataclass(frozen=True)
+class JsonReportTextTestCase:
+    """One report value and the text the shipped encoders wrote for it."""
+
+    description: str
+    report: dict[object, object]
+    expected_text: str
+
+
+@dataclass(frozen=True)
+class JsonReportErrorTestCase:
+    """One report value the shipped encoder rejected, and its error message."""
+
+    description: str
+    report: dict[object, object]
+    orjson_only: bool
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class CliJsonReportTestCase:
+    """One compile of the surrogate project and the report text or error it produces."""
+
+    description: str
+    args: tuple[str, ...]
+    expected_fragment: str

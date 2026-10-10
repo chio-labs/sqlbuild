@@ -1,11 +1,14 @@
 use crate::project_reuse::_helpers::entry::{read_entry, write_entry};
+use crate::project_reuse::_helpers::identity::search_path_stamps;
 use crate::project_reuse::_helpers::timings::{compile_timings_span, replace_compile_timings};
+use crate::project_reuse::models::ReuseRules;
 use crate::project_reuse::tests::helpers::{
     damage, slot_names, store_aged_slots, stored_inputs, stored_output,
 };
 use crate::project_reuse::tests::test_types::{
     EntryReadTestCase, NonUnicodeNameTestCase, SlotPruneTestCase, TimingsSpanTestCase,
 };
+use crate::project_snapshot::main::path_text::path_text;
 use crate::project_snapshot::main::snapshot_project_files::snapshot_project_files;
 use crate::project_snapshot::main::text_path::text_path;
 use crate::project_snapshot::models::SnapshotRules;
@@ -165,5 +168,48 @@ fn given_file_names_when_snapshotting_then_each_stamp_names_its_exact_file() {
             "{}",
             test_case.description
         );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn given_search_path_entry_that_is_not_utf8_when_stamping_then_its_real_folder_is_stamped() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let test_cases = [
+        NonUnicodeNameTestCase {
+            description: "unicode folder",
+            name: "site_é".as_bytes(),
+            expected_escaped: false,
+        },
+        NonUnicodeNameTestCase {
+            description: "folder that is not UTF-8",
+            name: b"site_\xff",
+            expected_escaped: true,
+        },
+    ];
+    let rules = ReuseRules {
+        missing_path_mtime_ns: -1,
+        project_root_path_mtime_ns: -2,
+        ..ReuseRules::default()
+    };
+
+    for test_case in test_cases {
+        let folder = tempfile::tempdir().expect("search path parent");
+        let entry = folder
+            .path()
+            .join(std::ffi::OsStr::from_bytes(test_case.name));
+        std::fs::create_dir(&entry).expect("search path folder");
+        let text = path_text(entry.as_os_str());
+
+        let stamps = search_path_stamps(std::slice::from_ref(&text), folder.path(), &rules);
+
+        assert_eq!(
+            text.starts_with('\0'),
+            test_case.expected_escaped,
+            "{}",
+            test_case.description
+        );
+        assert!(stamps[0].1 > 0, "{}", test_case.description);
     }
 }

@@ -1,6 +1,7 @@
 //! Whole-project compile reuse on the shared native store, driven by the Python host's facts.
 
 use std::collections::{BTreeMap, HashMap};
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -18,6 +19,7 @@ use sqlbuild_cache::project_reuse::models::{
     CompileRecord, HostIdentity, RecordOutcome, RecordResult, RecordedArtifact, ReuseAttempt,
     ReuseCheck, ReuseOutcome, ReuseRules, SettingsInputs, StoredOutput,
 };
+use sqlbuild_cache::project_snapshot::main::path_text::path_text;
 use sqlbuild_cache::project_snapshot::models::SnapshotRules;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
@@ -82,10 +84,10 @@ impl From<ReuseRulesPy> for ReuseRules {
 struct ReuseCheckPy {
     project_dir: PathBuf,
     store_directory: PathBuf,
-    selected_target: Option<String>,
+    selected_target: Option<OsString>,
     invocation: Vec<u8>,
-    runtime: BTreeMap<String, String>,
-    search_path: Vec<String>,
+    runtime: BTreeMap<String, OsString>,
+    search_path: Vec<OsString>,
     bypass_requested: bool,
     json_output: bool,
     rules: ReuseRulesPy,
@@ -102,7 +104,7 @@ struct CompileRecordPy {
     read_run_id: bool,
     settings_inputs: Option<Vec<SettingsRow>>,
     template_environment_names: Vec<String>,
-    module_paths: Vec<String>,
+    module_paths: Vec<OsString>,
     artifacts: HashMap<String, ArtifactRow>,
     artifacts_written: bool,
     dag_path: Option<String>,
@@ -184,7 +186,7 @@ impl NativeReuseAttempt {
                     .map(|rows| rows.into_iter().map(settings_inputs).collect())
                     .ok_or_else(String::new),
                 template_environment_names: record.template_environment_names,
-                module_paths: record.module_paths,
+                module_paths: texts(&record.module_paths),
                 artifacts: record
                     .artifacts
                     .into_iter()
@@ -240,8 +242,12 @@ fn check_compile_reuse(py: Python<'_>, check: ReuseCheckPy) -> PyResult<NativeRe
             store_path: store_slot(&check.store_directory, check.selected_target.as_deref()),
             identity: HostIdentity {
                 invocation_digest: native_digest(&check.invocation),
-                runtime: check.runtime,
-                search_path: check.search_path,
+                runtime: check
+                    .runtime
+                    .iter()
+                    .map(|(name, value)| (name.clone(), path_text(value)))
+                    .collect(),
+                search_path: texts(&check.search_path),
             },
             bypass_requested: check.bypass_requested,
             json_output: check.json_output,
@@ -268,13 +274,19 @@ fn native_digest(contents: &[u8]) -> String {
 }
 
 /// The one store file kept for the selected target.
-fn store_slot(directory: &Path, selected_target: Option<&str>) -> PathBuf {
-    let label: String =
-        selected_target.map_or_else(String::new, |target| format!("target:{target}"));
+fn store_slot(directory: &Path, selected_target: Option<&OsStr>) -> PathBuf {
+    let label: String = selected_target.map_or_else(String::new, |target| {
+        format!("target:{}", path_text(target))
+    });
     directory.join(format!(
         "{}.{REUSE_STORE_SUFFIX}",
         hex_digest(&bytes_digest(label.as_bytes()))
     ))
+}
+
+/// Host strings that may carry undecodable bytes, as exact text.
+fn texts(values: &[OsString]) -> Vec<String> {
+    values.iter().map(|value| path_text(value)).collect()
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

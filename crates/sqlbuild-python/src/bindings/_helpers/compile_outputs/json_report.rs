@@ -1,9 +1,10 @@
 //! Emit a command's JSON report as orjson would, or as `json.dumps` does when orjson rejects it.
 
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{
     PyBool, PyBoolMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString,
-    PyStringMethods, PyTuple,
+    PyStringMethods, PyTuple, PyTypeMethods,
 };
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::main::dumps::dumps;
@@ -13,55 +14,89 @@ use sqlbuild_core::json::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
+const ORJSON_SURROGATE: &str = "str is not valid UTF-8: surrogates not allowed";
+const ORJSON_WIDE_INTEGER: &str = "Integer exceeds 64-bit range";
+const ORJSON_KEY: &str = "Dict key must be str";
+const INDENTED: OrjsonOptions = OrjsonOptions {
+    indent_2: true,
+    sort_keys: false,
+};
+
 /// What converting the report found besides its values.
 #[derive(Default)]
 struct Conversion {
-    /// orjson would raise `TypeError` (an integer beyond 64 bits or a non-string key).
-    orjson_rejects: bool,
+    /// The `TypeError` orjson raises at the first value it rejects.
+    orjson_error: Option<String>,
+    /// The `TypeError` `json.dumps` raises at the first value it cannot encode either.
+    stdlib_error: Option<String>,
+    /// A string holds a lone surrogate, which only `json.dumps` writes (as an escape).
+    surrogate: bool,
 }
 
-/// The report text, or `None` when it holds a value neither encoder path is reproduced for.
+/// The report as `orjson.dumps(report, option=OPT_INDENT_2)`, raising orjson's `TypeError`.
+#[pyfunction]
+fn emit_orjson_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
+    compiler_guard(|| {
+        let mut conversion: Conversion = Conversion::default();
+        let value: JsonValue = conversion.json_value(report)?;
+        if let Some(error) = conversion.orjson_error {
+            return Err(PyTypeError::new_err(error));
+        }
+        emitted(&value, &JsonDialect::Orjson(INDENTED))
+    })
+}
+
+/// The report as orjson or `json.dumps(indent=2)` writes it; `None` for a lone surrogate.
 #[pyfunction]
 fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     compiler_guard(|| {
         let mut conversion: Conversion = Conversion::default();
-        let Some(value) = conversion.json_value(report)? else {
-            return Ok(None);
-        };
-        let dialect: JsonDialect = if conversion.orjson_rejects {
-            JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2)))
-        } else {
-            JsonDialect::Orjson(OrjsonOptions {
-                indent_2: true,
-                sort_keys: false,
-            })
-        };
-        if let Ok(text) = dumps(&value, &dialect) {
-            return Ok(Some(text));
+        let value: JsonValue = conversion.json_value(report)?;
+        if conversion.orjson_error.is_none() {
+            return emitted(&value, &JsonDialect::Orjson(INDENTED)).map(Some);
         }
-        Ok(None)
+        if let Some(error) = conversion.stdlib_error {
+            return Err(PyTypeError::new_err(error));
+        }
+        if conversion.surrogate {
+            return Ok(None);
+        }
+        emitted(
+            &value,
+            &JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2))),
+        )
+        .map(Some)
     })
 }
 
+fn emitted(value: &JsonValue, dialect: &JsonDialect) -> PyResult<String> {
+    dumps(value, dialect).map_err(|error| PyTypeError::new_err(format!("{error:?}")))
+}
+
 impl Conversion {
-    fn json_value(&mut self, value: &Bound<'_, PyAny>) -> PyResult<Option<JsonValue>> {
+    fn orjson_rejects(&mut self, error: String) {
+        self.orjson_error.get_or_insert(error);
+    }
+
+    fn stdlib_rejects(&mut self, error: String) {
+        self.stdlib_error.get_or_insert(error);
+    }
+
+    fn json_value(&mut self, value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
         if value.is_none() {
-            return Ok(Some(JsonValue::Null));
+            return Ok(JsonValue::Null);
         }
         if let Ok(flag) = value.downcast::<PyBool>() {
-            return Ok(Some(JsonValue::Bool(flag.is_true())));
+            return Ok(JsonValue::Bool(flag.is_true()));
         }
         if value.is_instance_of::<PyInt>() {
             return self.integer(value);
         }
         if value.is_instance_of::<PyFloat>() {
-            return Ok(Some(JsonValue::Float(value.extract::<f64>()?)));
+            return Ok(JsonValue::Float(value.extract::<f64>()?));
         }
         if let Ok(text) = value.downcast::<PyString>() {
-            return Ok(match text.to_str() {
-                Ok(text) => Some(JsonValue::String(text.to_owned())),
-                Err(_) => None,
-            });
+            return Ok(JsonValue::String(self.text(text)));
         }
         if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
             return self.array(value);
@@ -69,71 +104,97 @@ impl Conversion {
         if let Ok(mapping) = value.downcast::<PyDict>() {
             return self.object(mapping);
         }
-        Ok(None)
+        let name: String = value.get_type().name()?.to_string();
+        self.orjson_rejects(format!("Type is not JSON serializable: {name}"));
+        self.stdlib_rejects(format!("Object of type {name} is not JSON serializable"));
+        Ok(JsonValue::Null)
+    }
+
+    /// The string, noting a lone surrogate orjson rejects and only `json.dumps` escapes.
+    fn text(&mut self, text: &Bound<'_, PyString>) -> String {
+        let Ok(text) = text.to_str() else {
+            self.orjson_rejects(ORJSON_SURROGATE.to_owned());
+            self.surrogate = true;
+            return String::new();
+        };
+        text.to_owned()
     }
 
     /// orjson encodes 64-bit integers; wider ones make it raise, so `json.dumps` writes them.
-    fn integer(&mut self, value: &Bound<'_, PyAny>) -> PyResult<Option<JsonValue>> {
+    fn integer(&mut self, value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
         if let Ok(signed) = value.extract::<i64>() {
-            return Ok(Some(JsonValue::Integer(JsonInteger::from(signed))));
+            return Ok(JsonValue::Integer(JsonInteger::from(signed)));
         }
         if let Ok(unsigned) = value.extract::<u64>() {
-            return Ok(Some(JsonValue::Integer(JsonInteger::from(unsigned))));
+            return Ok(JsonValue::Integer(JsonInteger::from(unsigned)));
         }
-        self.orjson_rejects = true;
+        self.orjson_rejects(ORJSON_WIDE_INTEGER.to_owned());
         let decimal: String = value.str()?.to_str()?.to_owned();
-        Ok(JsonInteger::parse(&decimal).map(JsonValue::Integer))
+        Ok(JsonInteger::parse(&decimal).map_or(JsonValue::Null, JsonValue::Integer))
     }
 
-    fn array(&mut self, value: &Bound<'_, PyAny>) -> PyResult<Option<JsonValue>> {
+    fn array(&mut self, value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
         let mut items: Vec<JsonValue> = Vec::new();
         for item in value.try_iter()? {
-            match self.json_value(&item?)? {
-                Some(item) => items.push(item),
-                None => return Ok(None),
-            }
+            items.push(self.json_value(&item?)?);
         }
-        Ok(Some(JsonValue::Array(items)))
+        Ok(JsonValue::Array(items))
     }
 
-    fn object(&mut self, mapping: &Bound<'_, PyDict>) -> PyResult<Option<JsonValue>> {
+    fn object(&mut self, mapping: &Bound<'_, PyDict>) -> PyResult<JsonValue> {
         let mut entries: Vec<(String, JsonValue)> = Vec::with_capacity(mapping.len());
         for (key, item) in mapping.iter() {
-            let Some(key) = self.object_key(&key)? else {
-                return Ok(None);
-            };
-            match self.json_value(&item)? {
-                Some(item) => entries.push((key, item)),
-                None => return Ok(None),
-            }
+            let key: String = self.object_key(&key)?;
+            let item: JsonValue = self.json_value(&item)?;
+            entries.push((key, item));
         }
-        Ok(Some(JsonValue::Object(entries)))
+        Ok(JsonValue::Object(entries))
     }
 
-    /// A string key, or the text `json.dumps` writes for a scalar key orjson would reject.
-    fn object_key(&mut self, key: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    /// A string key, or the text `json.dumps` writes for a scalar key orjson rejects.
+    fn object_key(&mut self, key: &Bound<'_, PyAny>) -> PyResult<String> {
         if let Ok(text) = key.downcast::<PyString>() {
-            return Ok(match text.to_str() {
-                Ok(text) => Some(text.to_owned()),
-                Err(_) => None,
-            });
+            return Ok(self.text(text));
         }
-        self.orjson_rejects = true;
+        self.orjson_rejects(ORJSON_KEY.to_owned());
         if key.is_none() {
-            return Ok(Some("null".to_owned()));
+            return Ok("null".to_owned());
         }
         if let Ok(flag) = key.downcast::<PyBool>() {
-            return Ok(Some(
-                if flag.is_true() { "true" } else { "false" }.to_owned(),
-            ));
+            return Ok(if flag.is_true() { "true" } else { "false" }.to_owned());
         }
         if key.is_instance_of::<PyInt>() {
-            return Ok(Some(key.str()?.to_str()?.to_owned()));
+            return Ok(key.str()?.to_str()?.to_owned());
         }
-        Ok(None)
+        if key.is_instance_of::<PyFloat>() {
+            return float_key(key);
+        }
+        let name: String = key.get_type().name()?.to_string();
+        self.stdlib_rejects(format!(
+            "keys must be str, int, float, bool or None, not {name}"
+        ));
+        Ok(String::new())
     }
 }
 
+/// `json.dumps` writes a float key as `float.__repr__`, or as `NaN` / `Infinity`.
+fn float_key(key: &Bound<'_, PyAny>) -> PyResult<String> {
+    let number: f64 = key.extract::<f64>()?;
+    if number.is_nan() {
+        return Ok("NaN".to_owned());
+    }
+    if number.is_infinite() {
+        return Ok(if number.is_sign_positive() {
+            "Infinity"
+        } else {
+            "-Infinity"
+        }
+        .to_owned());
+    }
+    Ok(key.repr()?.to_str()?.to_owned())
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(emit_orjson_report, module)?)?;
     module.add_function(wrap_pyfunction!(emit_json_report, module)?)
 }
