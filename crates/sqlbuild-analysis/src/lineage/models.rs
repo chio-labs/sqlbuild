@@ -241,6 +241,15 @@ impl RichLineageOutcome {
     }
 }
 
+/// What a directory whose `readdir` fails mid-listing does to the fingerprint, by Python version.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptedListingPolicy {
+    /// Python 3.12: `Path.walk` lets the `OSError` escape `rglob`, so the result is `None`.
+    Uncacheable,
+    /// Python 3.13 and 3.14: `glob` skips the directory's entries.
+    Skip,
+}
+
 /// The relation lineage cache key Python's `relation_lineage_fingerprint` computes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelationFingerprint {

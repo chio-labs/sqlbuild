@@ -6,19 +6,39 @@ use std::fmt::Write;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
 
-use crate::lineage::_helpers::authored_files::AuthoredFile;
+use crate::lineage::_helpers::authored_files::{AuthoredFile, AuthoredFiles};
 use crate::lineage::_helpers::environment_markers::environment_names;
 use crate::lineage::constants::{
     DYNAMIC_CONTEXT_MARKER, DYNAMIC_CONTEXT_SUFFIXES, MISSING_ENVIRONMENT_VALUE,
 };
+use crate::lineage::models::{InterruptedListingPolicy, RelationFingerprint};
 
 struct ScannedFile {
     contents: Vec<u8>,
     environment: Vec<String>,
 }
 
+/// The fingerprint of the walked files under `policy` for interrupted listings.
+pub(crate) fn fingerprint_outcome(
+    authored: AuthoredFiles,
+    prefix: &[u8],
+    policy: InterruptedListingPolicy,
+) -> RelationFingerprint {
+    match authored {
+        AuthoredFiles::Files {
+            interrupted: true, ..
+        } if policy == InterruptedListingPolicy::Uncacheable => RelationFingerprint::Uncacheable,
+        AuthoredFiles::Files { files, .. } => fingerprint_digest(&files, prefix).map_or(
+            RelationFingerprint::Uncacheable,
+            RelationFingerprint::Digest,
+        ),
+        AuthoredFiles::Undecodable => RelationFingerprint::Uncacheable,
+        AuthoredFiles::Unavailable => RelationFingerprint::Deferred,
+    }
+}
+
 /// The hex digest, or `None` where Python returns `None`.
-pub(crate) fn fingerprint_digest(files: &[AuthoredFile], prefix: &[u8]) -> Option<String> {
+fn fingerprint_digest(files: &[AuthoredFile], prefix: &[u8]) -> Option<String> {
     let scanned: Vec<Option<ScannedFile>> = files.par_iter().map(scanned_file).collect();
     let mut digest = Sha256::new();
     digest.update(prefix);

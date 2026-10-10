@@ -661,7 +661,9 @@ def build_rich_column_lineage(
 ) -> list[
     tuple[str, list[tuple[str, str, str, str, list[tuple[str, str, str]]]], bool, str | None]
 ]: ...
-def relation_lineage_fingerprint(project_dir: Path, prefix: bytes, /) -> tuple[str, str | None]: ...
+def relation_lineage_fingerprint(
+    project_dir: Path, prefix: bytes, interrupted_listing_uncacheable: bool, /
+) -> tuple[str, str | None]: ...
 
 # Native analysis: SQL test planning glue.
 def plan_compiled_sql_tests(

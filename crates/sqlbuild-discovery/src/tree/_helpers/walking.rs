@@ -5,7 +5,7 @@ use crate::tree::_helpers::listing::{join_relative, list_directory};
 use crate::tree::models::{ProjectTree, TreeEntry};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::ffi::OsString;
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 
 pub(crate) type WalkedDirectory = (String, Arc<Vec<TreeEntry>>);
 
@@ -36,7 +36,14 @@ pub(crate) fn listing(
     if let Some(cached) = cached_listing(tree, directory) {
         return Ok(cached);
     }
-    let listing: Arc<Vec<TreeEntry>> = Arc::new(list_directory(&tree.absolute(directory)));
+    let read = list_directory(&tree.absolute(directory));
+    if read.interrupted {
+        tree.interrupted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(directory.to_owned());
+    }
+    let listing: Arc<Vec<TreeEntry>> = Arc::new(read.entries);
     remember_raw_names(tree, directory, &listing);
     if let Ok(mut listings) = tree.listings.lock() {
         listings.insert(directory.to_owned(), Arc::clone(&listing));

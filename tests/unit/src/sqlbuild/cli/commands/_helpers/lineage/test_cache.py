@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild.cli.commands._helpers.lineage.cache import relation_lineage_fingerprint
+from sqlbuild.cli.commands._helpers.lineage.cache import (
+    _INTERRUPTED_LISTING_UNCACHEABLE,
+    relation_lineage_fingerprint,
+)
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
+    InterruptedListingFingerprintTestCase,
     LineageFingerprintAvailabilityTestCase,
     LineageFingerprintEnvironmentTestCase,
     NativeFingerprintParityTestCase,
 )
+from tests.unit.src.sqlbuild.cli.commands._helpers.lineage.helpers import interrupt_listing
 
 _LAYOUT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\nschema = "${ENV:ORDERS_SCHEMA}"\n',
@@ -245,10 +251,40 @@ def test_given_authored_files_when_fingerprinting_natively_then_matches_python(
         project_dir=tmp_path, cli_vars=test_case.cli_vars
     )
 
-    native_status: str = _native.relation_lineage_fingerprint(tmp_path, b"")[0]
+    native_status: str = _native.relation_lineage_fingerprint(tmp_path, b"", True)[0]
     for relative_path in test_case.unreadable_directories:
         (tmp_path / relative_path).chmod(0o755)
 
     assert native_digest == python_digest
     assert (native_digest is not None) is test_case.expected_available
     assert native_status != "deferred"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        InterruptedListingFingerprintTestCase(
+            description="a hashed directory whose listing fails mid-way",
+            files={"sqlbuild_project.toml": 'name = "orders"\n', "models/a.sql": "SELECT 1\n"},
+            interrupted_directory="models",
+            expected_uncacheable_before=(3, 13),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_interrupted_listing_when_python_fingerprints_then_native_policy_matches_python(
+    test_case: InterruptedListingFingerprintTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for relative_path, contents in test_case.files.items():
+        path: Path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "native")
+    interrupt_listing(monkeypatch=monkeypatch, directory=tmp_path / test_case.interrupted_directory)
+
+    python_digest: str | None = relation_lineage_fingerprint(project_dir=tmp_path, cli_vars=None)
+
+    assert (python_digest is None) is (sys.version_info < test_case.expected_uncacheable_before)
+    assert (python_digest is None) is _INTERRUPTED_LISTING_UNCACHEABLE

@@ -73,3 +73,11 @@ pub(super) struct WideNameWalkTestCase {
     pub(super) expected_failures: &'static [bool],
     pub(super) expected_contents: &'static [&'static str],
 }
+
+/// Listing results fed to the listing collector, `None` standing for a failed `readdir` step.
+pub(super) struct InterruptedListingTestCase {
+    pub(super) description: &'static str,
+    pub(super) entries: &'static [Option<&'static str>],
+    pub(super) expected_names: &'static [&'static str],
+    pub(super) expected_interrupted: bool,
+}

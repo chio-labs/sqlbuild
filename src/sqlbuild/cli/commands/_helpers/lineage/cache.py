@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 from contextlib import closing
 from importlib.metadata import PackageNotFoundError, version
@@ -54,6 +55,10 @@ _DYNAMIC_CONTEXT_GRAPH_SUFFIXES: frozenset[str] = frozenset({".py", ".toml"})
 _NON_ASCII_BYTE_START: int = 128
 _NATIVE_FINGERPRINT_DEFERRED: str = "deferred"
 _NATIVE_FINGERPRINT_KIND: str = "fingerprints"
+_FIRST_PYTHON_SKIPPING_INTERRUPTED_LISTINGS: tuple[int, int] = (3, 13)
+_INTERRUPTED_LISTING_UNCACHEABLE: bool = (
+    sys.version_info < _FIRST_PYTHON_SKIPPING_INTERRUPTED_LISTINGS
+)
 
 
 def relation_lineage_fingerprint(
@@ -64,7 +69,9 @@ def relation_lineage_fingerprint(
     try:
         prefix: bytes = _fingerprint_prefix(cli_vars=cli_vars)
         if native_stage_enabled(NativeStage.RELATION_FINGERPRINT):
-            status, native_digest = _native.relation_lineage_fingerprint(project_dir, prefix)
+            status, native_digest = _native.relation_lineage_fingerprint(
+                project_dir, prefix, _INTERRUPTED_LISTING_UNCACHEABLE
+            )
             if status != _NATIVE_FINGERPRINT_DEFERRED:
                 report_native_answer(
                     stage=NativeStage.RELATION_FINGERPRINT, kind=_NATIVE_FINGERPRINT_KIND

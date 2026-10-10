@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use sqlbuild_discovery::tree::main::interrupted_listings::interrupted_listings;
 use sqlbuild_discovery::tree::main::rglob::rglob;
 use sqlbuild_discovery::tree::models::{ProjectTree, TreeEntry};
 
@@ -26,7 +27,11 @@ impl AuthoredFile {
 
 /// The files Python hashes, in its order; an undecodable path makes Python's encode fail.
 pub(crate) enum AuthoredFiles {
-    Files(Vec<AuthoredFile>),
+    /// The files, and whether any walked directory's listing failed after it opened.
+    Files {
+        files: Vec<AuthoredFile>,
+        interrupted: bool,
+    },
     /// A hashed path whose name is not valid UTF-8 (or UTF-16): Python returns `None`.
     Undecodable,
     /// Discovery's snapshot could not be read; it lists unreadable directories as empty.
@@ -52,7 +57,10 @@ pub(crate) fn authored_files(project_dir: &Path) -> AuthoredFiles {
             relative_path,
         });
     }
-    AuthoredFiles::Files(files)
+    AuthoredFiles::Files {
+        files,
+        interrupted: !interrupted_listings(&tree).is_empty(),
+    }
 }
 
 fn is_hashed_entry(entry: &TreeEntry) -> bool {

@@ -6,6 +6,8 @@ mod build_rich_lineage;
 mod environment_markers;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_interrupted_listing_policy.rs"]
+mod interrupted_listing_policy;
 #[path = "tests/test_references.rs"]
 mod references;
 #[path = "tests/test_types.rs"]

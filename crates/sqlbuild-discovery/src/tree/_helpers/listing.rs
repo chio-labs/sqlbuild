@@ -1,23 +1,40 @@
 //! One directory listing with the entry type facts Python's `os.scandir` reports.
 
 use crate::tree::_helpers::raw_names::raw_segment;
-use crate::tree::models::TreeEntry;
+use crate::tree::models::{DirectoryListing, TreeEntry};
 use std::fs::{DirEntry, FileType};
 use std::path::Path;
 
 /// List a directory; an unreadable directory lists as empty, as in Python's snapshot.
-pub(crate) fn list_directory(directory: &Path) -> Vec<TreeEntry> {
+pub(crate) fn list_directory(directory: &Path) -> DirectoryListing {
     let Ok(entries) = std::fs::read_dir(directory) else {
-        return Vec::new();
+        return DirectoryListing {
+            entries: Vec::new(),
+            interrupted: false,
+        };
     };
+    collect_listing(entries, |entry| tree_entry(&entry))
+}
+
+/// A listing that failed after the directory opened lists as empty and is marked interrupted.
+pub(crate) fn collect_listing<T>(
+    entries: impl Iterator<Item = std::io::Result<T>>,
+    entry_facts: impl Fn(T) -> TreeEntry,
+) -> DirectoryListing {
     let mut listing: Vec<TreeEntry> = Vec::new();
     for entry in entries {
         let Ok(entry) = entry else {
-            return Vec::new();
+            return DirectoryListing {
+                entries: Vec::new(),
+                interrupted: true,
+            };
         };
-        listing.push(tree_entry(&entry));
+        listing.push(entry_facts(entry));
     }
-    listing
+    DirectoryListing {
+        entries: listing,
+        interrupted: false,
+    }
 }
 
 fn tree_entry(entry: &DirEntry) -> TreeEntry {

@@ -1,3 +1,5 @@
+use crate::lineage::models::InterruptedListingPolicy;
+
 pub(crate) struct ReferenceTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,
@@ -49,4 +51,11 @@ pub(crate) struct EnvironmentMarkerTestCase {
     pub(crate) contents: &'static [u8],
     /// The names read, or `None` where Python refuses to cache the graph.
     pub(crate) expected_names: Option<&'static [&'static str]>,
+}
+
+pub(crate) struct InterruptedListingPolicyTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) interrupted: bool,
+    pub(crate) policy: InterruptedListingPolicy,
+    pub(crate) expected_status: &'static str,
 }

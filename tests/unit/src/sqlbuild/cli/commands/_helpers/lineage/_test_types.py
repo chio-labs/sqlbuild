@@ -147,3 +147,13 @@ class NativeFingerprintParityTestCase:
     environment: dict[str, str]
     cli_vars: dict[str, object] | None
     expected_available: bool
+
+
+@dataclass(frozen=True)
+class InterruptedListingFingerprintTestCase:
+    """A directory whose listing fails after it opened, under this Python's own `rglob`."""
+
+    description: str
+    files: dict[str, str]
+    interrupted_directory: str
+    expected_uncacheable_before: tuple[int, int]

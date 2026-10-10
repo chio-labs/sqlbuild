@@ -2,18 +2,15 @@
 
 use std::path::Path;
 
-use crate::lineage::_helpers::authored_files::{AuthoredFiles, authored_files};
-use crate::lineage::_helpers::fingerprint_digest::fingerprint_digest;
-use crate::lineage::models::RelationFingerprint;
+use crate::lineage::_helpers::authored_files::authored_files;
+use crate::lineage::_helpers::fingerprint_digest::fingerprint_outcome;
+use crate::lineage::models::{InterruptedListingPolicy, RelationFingerprint};
 
 /// Hash Python's encoded `prefix`, the authored files and the environment values they read.
-pub fn relation_fingerprint(project_dir: &Path, prefix: &[u8]) -> RelationFingerprint {
-    match authored_files(project_dir) {
-        AuthoredFiles::Files(files) => fingerprint_digest(&files, prefix).map_or(
-            RelationFingerprint::Uncacheable,
-            RelationFingerprint::Digest,
-        ),
-        AuthoredFiles::Undecodable => RelationFingerprint::Uncacheable,
-        AuthoredFiles::Unavailable => RelationFingerprint::Deferred,
-    }
+pub fn relation_fingerprint(
+    project_dir: &Path,
+    prefix: &[u8],
+    policy: InterruptedListingPolicy,
+) -> RelationFingerprint {
+    fingerprint_outcome(authored_files(project_dir), prefix, policy)
 }

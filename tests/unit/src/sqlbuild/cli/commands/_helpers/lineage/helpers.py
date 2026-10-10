@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import glob
+import inspect
+import os
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
+from types import TracebackType
+from typing import Protocol
+
+import pytest
 
 from sqlbuild.cli.commands.models import ColumnLineageTrace, LineageNode
 from sqlbuild.compiler.compile.models import (
@@ -245,3 +252,61 @@ def _target(name: str) -> CompiledRelationLocation:
         name=name,
         qualified_name=f"main.{name}",
     )
+
+
+class _ScandirListing(Protocol):
+    """The part of `os.scandir`'s iterator the interrupted listing wraps."""
+
+    def close(self) -> None: ...
+
+
+class _InterruptedListing:
+    """A `scandir` iterator whose first step fails after the directory opened."""
+
+    def __init__(self, listing: _ScandirListing) -> None:
+        self._listing: _ScandirListing = listing
+
+    def __enter__(self) -> _InterruptedListing:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self._listing.close()
+
+    def __iter__(self) -> Iterator[os.DirEntry[str]]:
+        return self
+
+    def __next__(self) -> os.DirEntry[str]:
+        raise OSError(5, "Input/output error")
+
+    def close(self) -> None:
+        self._listing.close()
+
+
+class _NoStringGlobber:
+    """Stands in for `glob._StringGlobber` on Pythons whose `rglob` does not use it."""
+
+
+def interrupt_listing(*, monkeypatch: pytest.MonkeyPatch, directory: Path) -> None:
+    """Make every `scandir` of `directory` fail mid-listing, wherever glob binds `scandir`."""
+
+    real_scandir: Callable[..., _ScandirListing] = os.scandir
+    target: str = os.path.abspath(directory)
+
+    def scandir(path: str | os.PathLike[str] = ".") -> object:
+        listing: _ScandirListing = real_scandir(path)
+        choices: dict[bool, object] = {True: _InterruptedListing(listing), False: listing}
+        return choices[os.path.abspath(os.fspath(path)) == target]
+
+    globber: object = getattr(glob, "_StringGlobber", _NoStringGlobber)
+    bound_early: bool = getattr(globber, "scandir", None) is real_scandir
+    replacements: dict[bool, object] = {
+        True: staticmethod(scandir),
+        False: inspect.getattr_static(globber, "scandir", None),
+    }
+    monkeypatch.setattr(os, "scandir", scandir)
+    monkeypatch.setattr(globber, "scandir", replacements[bound_early], raising=False)
