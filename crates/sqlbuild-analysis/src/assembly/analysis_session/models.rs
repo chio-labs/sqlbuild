@@ -96,12 +96,15 @@ pub struct FinishedSession {
     pub(crate) tables: PivotTables,
     pub(crate) pool: Result<Arc<ThreadPool>, String>,
     pub(crate) models: HashMap<String, SessionModelFacts>,
+    /// Each model's dynamic pivot proof from the session's own relation facts, by model name.
+    pub(crate) dynamic_proofs: HashMap<String, ContractProof>,
 }
 
-/// A compiled model's output names and lineage from an analysis the session completed natively.
+/// A compiled model's typed output columns and lineage from an analysis the session completed
+/// natively.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionModelFacts {
-    pub columns: Option<Vec<String>>,
+    pub columns: Option<Vec<ColumnFact>>,
     pub lineage: OutputSources,
 }
 

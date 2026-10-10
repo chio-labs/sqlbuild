@@ -4,8 +4,9 @@ use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
-    catalog, expected_facts, fact_lines, failed, finished_session, legacy_lines, model_requests,
-    orders_request, pivot_request, proven, recovered_facts, session_lines,
+    catalog, expected_facts, fact_lines, failed, finished_session, kept_dynamic_proofs,
+    legacy_lines, model_requests, orders_request, pivot_request, proven, recovered_facts,
+    session_lines,
 };
 use crate::assembly::analysis_session::tests::test_types::{
     CteRecoveryTestCase, LegacyAnalysisTestCase, ModelSpec, PivotTestCase, SessionFactsTestCase,
@@ -177,7 +178,7 @@ fn given_models_when_running_the_session_then_publishes_as_python_does() {
 fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_successes() {
     let test_cases = [
         SessionFactsTestCase {
-            description: "native lineage keeps output names and sources",
+            description: "native lineage keeps typed output columns and sources",
             models: &[
                 (
                     "stg_orders",
@@ -193,14 +194,14 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
                 ),
             ],
             expected_facts: &[
-                "Some([\"order_id\", \"doubled\"]) \
+                "Some([\"order_id INTEGER non_null\", \"doubled DOUBLE unknown\"]) \
                  order_id<-[(\"raw_orders\", \"order_id\")] \
                  doubled<-[(\"raw_orders\", \"amount\")]",
-                "Some([\"missing_column\"]) missing_column<-[(\"raw_orders\", \"missing_column\")]",
+                "Some([\"missing_column - unknown\"]) missing_column<-[(\"raw_orders\", \"missing_column\")]",
             ],
         },
         SessionFactsTestCase {
-            description: "a native legacy analysis keeps its output names and sources",
+            description: "a native legacy analysis keeps its typed output columns and sources",
             models: &[
                 (
                     "events",
@@ -216,8 +217,8 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
                 ),
             ],
             expected_facts: &[
-                "Some([\"event_id\"]) event_id<-[(\"raw_events\", \"event_id\")]",
-                "Some([\"event_id\", \"one\"]) event_id<-[(\"events\", \"event_id\")] one<-[]",
+                "Some([\"event_id - unknown\"]) event_id<-[(\"raw_events\", \"event_id\")]",
+                "Some([\"event_id - unknown\", \"one INT non_null\"]) event_id<-[(\"events\", \"event_id\")] one<-[]",
             ],
         },
         SessionFactsTestCase {
@@ -238,8 +239,8 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
                 ),
             ],
             expected_facts: &[
-                "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"raw_events\", \"event_id\")]",
-                "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"events\", \"gr\u{f6}\u{df}e\")]",
+                "Some([\"gr\u{f6}\u{df}e - unknown\"]) gr\u{f6}\u{df}e<-[(\"raw_events\", \"event_id\")]",
+                "Some([\"gr\u{f6}\u{df}e - non_null\"]) gr\u{f6}\u{df}e<-[(\"events\", \"gr\u{f6}\u{df}e\")]",
             ],
         },
     ];
@@ -634,6 +635,36 @@ fn given_handed_back_models_when_analysing_legacy_then_matches_python_or_defers(
             test_case
                 .expected_lines
                 .map(|lines| lines.iter().map(|line| (*line).to_owned()).collect()),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_finished_session_when_reading_dynamic_proofs_then_keeps_each_models_proof() {
+    let test_cases = [PivotTestCase {
+        description: "a bare DuckDB pivot keeps its proof; a family-less model keeps none",
+        dialect: "duckdb",
+        sql: "PIVOT __source(\"raw_orders\") ON status USING MAX(amount) GROUP BY customer_id",
+        family: Some(("status", "amount", "MAX")),
+        expected_outcome: proven(
+            &[("customer_id", "INTEGER", "non_null")],
+            Some("DOUBLE"),
+            "raw_orders",
+            true,
+        ),
+    }];
+    for test_case in test_cases {
+        let PivotOutcome::Proof(expected) = test_case.expected_outcome else {
+            panic!("{}: the case expects a proof", test_case.description);
+        };
+
+        let kept = kept_dynamic_proofs(test_case.dialect, test_case.sql, test_case.family);
+
+        assert_eq!(
+            kept,
+            vec![Some(expected), None],
             "{}",
             test_case.description
         );

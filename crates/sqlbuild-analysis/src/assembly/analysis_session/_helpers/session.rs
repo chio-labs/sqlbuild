@@ -31,8 +31,8 @@ use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
 use crate::assembly::analysis_session::_helpers::publication::{ShapeOptions, ShapeSource};
 use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_TYPE};
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, ColumnFact, FinishedSession, LineageFacts, LineageRow, ModelAnalysis,
-    ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables, SessionModelFacts,
+    AnalysisSession, ColumnFact, ContractProof, FinishedSession, LineageFacts, LineageRow,
+    ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables, SessionModelFacts,
     SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -125,9 +125,14 @@ impl AnalysisSession {
         let (schema_additions, analysis_names) = self.catalog.into_changes();
         let request: SessionRequest = self.request;
         let mut model_facts: HashMap<String, SessionModelFacts> = HashMap::new();
-        for (model, outcome) in request.models.iter().zip(&models) {
+        let mut dynamic_proofs: HashMap<String, ContractProof> = HashMap::new();
+        for ((model, outcome), proof) in request.models.iter().zip(&models).zip(&dynamic_contracts)
+        {
             if let Some(facts) = session_model_facts(&outcome.analysis) {
                 model_facts.insert(model.name.clone(), facts);
+            }
+            if let PivotOutcome::Proof(proof) = proof {
+                dynamic_proofs.insert(model.name.clone(), proof.clone());
             }
         }
         let finished = FinishedSession {
@@ -140,6 +145,7 @@ impl AnalysisSession {
             },
             pool,
             models: model_facts,
+            dynamic_proofs,
         };
         let outcome = SessionOutcome {
             models,
@@ -729,17 +735,14 @@ fn enriched_analysis(
     merged
 }
 
-/// A compiled model's output names and lineage from a successful analysis with native lineage.
+/// A compiled model's typed output columns and lineage from a successful analysis with native
+/// lineage.
 fn session_model_facts(analysis: &ModelAnalysis) -> Option<SessionModelFacts> {
     let (LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows)) = &analysis.lineage;
     analysis.analysis_succeeded.then(|| SessionModelFacts {
-        columns: analysis.columns.as_deref().map(column_names),
+        columns: analysis.columns.clone(),
         lineage: rows.iter().map(output_sources).collect(),
     })
-}
-
-fn column_names(columns: &[ColumnFact]) -> Vec<String> {
-    columns.iter().map(|column| column.name.clone()).collect()
 }
 
 /// One lineage row as `(output column, [(resource name, column name)])`.

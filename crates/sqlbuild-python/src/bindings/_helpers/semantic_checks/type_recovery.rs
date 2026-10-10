@@ -141,7 +141,11 @@ fn recovery_model(
         Some(lineage) => (inferred_columns, lineage),
         None => {
             let facts = session_model_facts(session, &name)?;
-            (facts.columns.clone(), facts.lineage.clone())
+            let names: Option<Vec<String>> = facts
+                .columns
+                .as_ref()
+                .map(|columns| columns.iter().map(|column| column.name.clone()).collect());
+            (names, facts.lineage.clone())
         }
     };
     Ok(RecoveryModel {

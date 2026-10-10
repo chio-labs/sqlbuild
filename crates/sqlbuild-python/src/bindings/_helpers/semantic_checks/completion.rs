@@ -145,8 +145,10 @@ fn completion_model(
         Some(names) => names,
         None => session_model_facts(session, &name)?
             .columns
-            .clone()
-            .unwrap_or_default(),
+            .iter()
+            .flatten()
+            .map(|column| column.name.clone())
+            .collect(),
     };
     let lineage: Vec<LineageInput> = match lineage {
         Some(lineage) => lineage,

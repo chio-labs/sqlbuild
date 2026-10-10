@@ -1,4 +1,4 @@
-//! The output names and lineage a finished analysis session kept for compiled models.
+//! The typed output columns and lineage a finished analysis session kept for compiled models.
 
 use crate::assembly::analysis_session::models::{FinishedSession, SessionModelFacts};
 
