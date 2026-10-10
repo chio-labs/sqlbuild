@@ -28,6 +28,7 @@ class NativeStage(StrEnum):
     SEMANTIC_CHECKS = "semantic_checks"
     CONTRACTS = "contracts"
     LINEAGE_FACTS = "lineage_facts"
+    RICH_LINEAGE = "rich_lineage"
     SQL_TEST_GLUE = "sql_test_glue"
     PROJECT_ASSEMBLY = "project_assembly"
 

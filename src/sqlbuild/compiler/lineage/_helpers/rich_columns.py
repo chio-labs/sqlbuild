@@ -87,7 +87,6 @@ def build_rich_project_column_lineage(
     schema: dict[str, dict[str, str]] = _build_schema_mapping(project)
     polyglot_tables: dict[str, dict[str, object]] = _polyglot_schema_tables(schema)
     model_results: dict[str, ModelColumnLineage] = {}
-    collapsed_edges: list[ColumnLineageEdge] = []
 
     for model in project.models:
         if model_names is not None and model.name not in model_names:
@@ -101,7 +100,17 @@ def build_rich_project_column_lineage(
         if result is None:
             continue
         model_results[model.name] = result
-        target_resource_name: str = model.name
+
+    return assemble_rich_project_column_lineage(model_results)
+
+
+def assemble_rich_project_column_lineage(
+    model_results: dict[str, ModelColumnLineage],
+) -> ProjectColumnLineage:
+    """Collapse per-model rich lineage, in model order, into the project graph and its edges."""
+
+    collapsed_edges: list[ColumnLineageEdge] = []
+    for target_resource_name, result in model_results.items():
         for column in result.columns:
             target: QualifiedLineageColumn = QualifiedLineageColumn(
                 resource_type=CompiledResourceType.MODEL,

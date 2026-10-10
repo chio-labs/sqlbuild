@@ -9,6 +9,9 @@ from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage._helpers.fast_columns import (
     build_fast_project_column_lineage,
 )
+from sqlbuild.compiler.lineage._helpers.native_rich_columns import (
+    build_native_rich_project_column_lineage,
+)
 from sqlbuild.compiler.lineage._helpers.rich_columns import (
     build_rich_project_column_lineage,
 )
@@ -43,6 +46,10 @@ def build_project_column_lineage(
                 model_names=model_names,
             )
         case ColumnLineageMode.RICH:
+            if native_stage_enabled(NativeStage.RICH_LINEAGE):
+                return build_native_rich_project_column_lineage(
+                    project=project, dialect=dialect, model_names=model_names
+                )
             return build_rich_project_column_lineage(
                 project=project,
                 dialect=dialect,

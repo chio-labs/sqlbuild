@@ -13,3 +13,15 @@ class NativeFastLineageCliTestCase:
     expected_lineage: dict[str, dict[str, object]]
     expected_minimum_python_fallback_parses: int
     expected_minimum_traced_edges: int
+
+
+@dataclass(frozen=True)
+class NativeRichLineageCliTestCase:
+    """The wheel and the native engine compiling and tracing rich lineage of one project."""
+
+    description: str
+    files: dict[str, str]
+    lineage_targets: tuple[str, ...]
+    expected_wheel_analyses: int
+    expected_native_models: int
+    expected_minimum_traced_edges: int

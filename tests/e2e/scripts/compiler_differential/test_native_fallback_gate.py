@@ -11,6 +11,8 @@ from tests.e2e.scripts.compiler_differential._test_types import NativeFallbackGa
 from tests.e2e.scripts.compiler_differential.helpers import (
     MACRO_RESOLUTION_SABOTAGE,
     MODEL_ANALYSIS_SABOTAGE,
+    RICH_LINEAGE_SABOTAGE,
+    RICH_LINEAGE_SEED,
     harness_arguments,
     stage_disable_sabotage,
     write_native_perturbation,
@@ -180,6 +182,81 @@ def test_given_committed_allow_list_when_fallback_only_stage_is_switched_off_the
     )
 
     output: str = capsys.readouterr().out
+    assert exit_code == test_case.expected_exit_code, output
+    assert all(line in output for line in test_case.expected_lines), output
+
+
+_RICH_SEED_ARGUMENTS: tuple[str, ...] = (
+    "--corpus",
+    "seeds",
+    "--seed-start",
+    str(RICH_LINEAGE_SEED),
+    "--seeds",
+    "1",
+    "--jobs",
+    "2",
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeFallbackGateTestCase(
+            description="recorded_rich_lineage_passes",
+            perturbation="",
+            appended_entries="",
+            expected_exit_code=0,
+            expected_lines=("Compiler differential passed: 3 projects identical",),
+        ),
+        NativeFallbackGateTestCase(
+            description="preview_rich_lineage_deferring_every_model_fails",
+            perturbation=RICH_LINEAGE_SABOTAGE,
+            appended_entries="",
+            expected_exit_code=1,
+            expected_lines=(
+                "Native fallback allow-list: native-preview rich_lineage rich_lineage.native "
+                f"rich_models (seed): {_ANSWER_VANISHED}",
+                "Native fallback allow-list: native-preview rich_lineage rich_columns.py "
+                "native_failure (seed): ",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_seed_with_rich_lineage_when_native_defers_every_model_then_the_gate_fails(
+    test_case: NativeFallbackGateTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    allow_list: Path = tmp_path / "native_fallbacks.toml"
+    recorded: int = run_compiler_differential(
+        [
+            *_RICH_SEED_ARGUMENTS,
+            "--work-dir",
+            str(tmp_path / "record"),
+            "--native-fallbacks",
+            "update",
+            "--native-fallback-list",
+            str(allow_list),
+        ]
+    )
+    sabotage: Path = write_native_perturbation(tmp_path / "sabotage", source=test_case.perturbation)
+    _ = capsys.readouterr()
+
+    exit_code: int = run_compiler_differential(
+        [
+            *_RICH_SEED_ARGUMENTS,
+            "--work-dir",
+            str(tmp_path / "check"),
+            "--native-fallbacks",
+            "check",
+            "--native-fallback-list",
+            str(allow_list),
+            "--engine-env",
+            f"native-preview:PYTHONPATH={sabotage}",
+        ]
+    )
+
+    output: str = capsys.readouterr().out
+    assert recorded == 0
     assert exit_code == test_case.expected_exit_code, output
     assert all(line in output for line in test_case.expected_lines), output
 

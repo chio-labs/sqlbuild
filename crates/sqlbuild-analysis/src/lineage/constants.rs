@@ -27,3 +27,9 @@ pub(crate) const REFERENCE_PREFIX: &str = "__";
 pub(crate) const UDF_CALL: &str = "__udf(";
 pub(crate) const PHYSICAL_RESOURCE_PREFIX: &str = "__sqlbuild_";
 pub(crate) const PHYSICAL_NAME_REPLACEMENT: &str = "__";
+/// The column type Python's schema mapping gives a column without one.
+pub(crate) const UNKNOWN_COLUMN_TYPE: &str = "UNKNOWN";
+/// Rich lineage workers, matching the compile's analysis pool.
+pub(crate) const RICH_LINEAGE_WORKERS: usize = 4;
+/// Polyglot analysis recurses deeply on long set-operation chains.
+pub(crate) const RICH_LINEAGE_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;

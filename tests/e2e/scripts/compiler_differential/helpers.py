@@ -111,6 +111,15 @@ import sqlbuild._native as native
 native.start_model_analysis_session = lambda *_args: None
 """
 
+RICH_LINEAGE_SABOTAGE: str = """
+import sqlbuild._native as native
+
+native.build_rich_column_lineage = lambda request: [
+    ("deferred", [], False, "native_failure") for _ in request[2]
+]
+"""
+RICH_LINEAGE_SEED: int = 6
+
 _STAGE_DISABLE_SABOTAGE: str = """
 import sqlbuild.compiler.frontier.main.native_stage_enabled as enabled
 from sqlbuild.compiler.frontier.types import NativeStage

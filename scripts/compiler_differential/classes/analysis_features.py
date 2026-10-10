@@ -8,6 +8,7 @@ from collections.abc import Callable
 from scripts.compiler_differential.constants import (
     GENERATOR_ANALYSIS_FOLDER,
     GENERATOR_ANALYSIS_MODE_COMMANDS,
+    GENERATOR_ANALYSIS_MODEL,
     GENERATOR_ANALYSIS_TEST_FOLDER,
     GENERATOR_OPEN_SOURCE,
     GENERATOR_SELECTED_MODEL,
@@ -354,17 +355,27 @@ class AnalysisFeatureWriter:
             ),
         )
         self.commands = tuple(
-            _selected_command(label=label, arguments=arguments, model=base.name)
+            _selected_command(
+                label=label,
+                arguments=arguments,
+                model=base.name,
+                analysis_model=f"cte_facts_{base.name}",
+            )
             for label, arguments in GENERATOR_ANALYSIS_MODE_COMMANDS
         )
 
 
-def _selected_command(*, label: str, arguments: tuple[str, ...], model: str) -> DifferentialCommand:
-    """Return one analysis-mode command with the selected model substituted."""
+def _selected_command(
+    *, label: str, arguments: tuple[str, ...], model: str, analysis_model: str
+) -> DifferentialCommand:
+    """Return one analysis-mode command with the selected and analysis models substituted."""
 
     return DifferentialCommand(
         label=label,
         arguments=tuple(
-            model if argument == GENERATOR_SELECTED_MODEL else argument for argument in arguments
+            argument.replace(GENERATOR_ANALYSIS_MODEL, analysis_model).replace(
+                GENERATOR_SELECTED_MODEL, model
+            )
+            for argument in arguments
         ),
     )

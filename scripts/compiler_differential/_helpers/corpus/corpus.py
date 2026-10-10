@@ -17,6 +17,7 @@ from scripts.compiler_differential.constants import (
     CORPUS_FAILURES,
     CORPUS_FIXTURES,
     CORPUS_SEEDS,
+    DIALECT_RICH_LINEAGE,
     DUCKDB_ADAPTER,
     EXAMPLE_ROOT,
     EXPECT_SUCCESS,
@@ -156,14 +157,14 @@ def _seed_project(seed: int) -> CorpusProject:
 
 
 def _dialect_seed_project(*, seed: int, dialect: str) -> CorpusProject:
-    """Compile a seed's analysis blocks under another adapter's dialect; plan needs a warehouse."""
+    """Compile a seed's analysis blocks, with rich lineage, under another adapter's dialect."""
 
     generated: GeneratedProject = ProjectBuilder(
         seed, blocks=GENERATOR_DIALECT_BLOCKS, dialect=dialect
     ).build()
     return CorpusProject(
         name=f"seed/{seed}-{dialect}",
-        commands=(COLD_COMPILE,),
+        commands=(COLD_COMPILE, DIALECT_RICH_LINEAGE),
         expected=EXPECT_SUCCESS,
         writer=generated.write,
         seed_coverage=True,

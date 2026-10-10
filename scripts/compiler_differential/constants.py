@@ -27,6 +27,7 @@ NATIVE_FALLBACK_PROJECT_CORPUS: str = "project"
 NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
     "analysis_session": "model_analysis",
     "fast_columns.py": "lineage_facts",
+    "rich_columns.py": "rich_lineage",
     "type_recovery.py": "semantic_checks",
     "recovery.py": "semantic_checks",
     "metadata_validation.py": "semantic_checks",
@@ -323,10 +324,27 @@ GENERATOR_DIALECT_BLOCKS: tuple[str, ...] = tuple(
     block for block in GENERATOR_ANALYSIS_BLOCKS if block not in GENERATOR_DIALECT_EXCLUDED_BLOCKS
 )
 GENERATOR_SELECTED_MODEL: str = "{model}"
+GENERATOR_ANALYSIS_MODEL: str = "{analysis_model}"
+GENERATOR_RICH_LINEAGE_ARGUMENTS: tuple[str, ...] = ("compile", "--json", "--lineage-mode", "rich")
 GENERATOR_ANALYSIS_MODE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("compile-select", ("compile", "--json", "--select", GENERATOR_SELECTED_MODEL)),
     ("compile-no-analysis", ("compile", "--json", "--no-sql-analysis")),
-    ("compile-rich-lineage", ("compile", "--json", "--lineage-mode", "rich")),
+    ("compile-rich-lineage", GENERATOR_RICH_LINEAGE_ARGUMENTS),
+    (
+        "lineage-rich-upstream",
+        ("lineage", "--json", f"{GENERATOR_ANALYSIS_MODEL}.amount", "--direction", "upstream"),
+    ),
+    (
+        "lineage-rich-downstream",
+        ("lineage", "--json", f"{GENERATOR_SELECTED_MODEL}.amount", "--direction", "downstream"),
+    ),
+    (
+        "lineage-fast-upstream",
+        ("lineage", "--json", "--mode", "fast", f"{GENERATOR_ANALYSIS_MODEL}.amount"),
+    ),
+)
+DIALECT_RICH_LINEAGE: DifferentialCommand = DifferentialCommand(
+    label="compile-rich-lineage", arguments=GENERATOR_RICH_LINEAGE_ARGUMENTS
 )
 GENERATOR_CHANNEL_ENV_VAR: str = "SQB_DIFFERENTIAL_CHANNEL"
 GENERATOR_MISSING_ENV_VAR: str = "SQB_DIFFERENTIAL_UNSET"

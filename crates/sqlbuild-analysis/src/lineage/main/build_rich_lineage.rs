@@ -1,0 +1,49 @@
+//! Rich column lineage: Python's polyglot `analyze_query` path, answered natively.
+
+use polyglot_sql::DialectType;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+
+use crate::lineage::_helpers::rich_lineage::{RichContext, rich_model_lineage, schema_names};
+use crate::lineage::_helpers::stars::schema_mapping;
+use crate::lineage::constants::{RICH_LINEAGE_WORKERS, RICH_LINEAGE_WORKER_STACK_BYTES};
+use crate::lineage::main::parser_dialect::is_compiled_dialect;
+use crate::lineage::models::{
+    LineageDeferral, LineageSchemaResource, RichLineageOutcome, RichLineageRequest,
+};
+
+/// One outcome per model, in request order. A parser panic defers only its own model.
+pub fn build_rich_lineage(request: &RichLineageRequest) -> Result<Vec<RichLineageOutcome>, String> {
+    if request.models.is_empty() {
+        return Ok(Vec::new());
+    }
+    let names: Vec<LineageSchemaResource> = request.schema.iter().map(schema_names).collect();
+    let context = RichContext::new(
+        analysis_dialect(&request.dialect),
+        &request.schema,
+        schema_mapping(&names),
+    );
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(RICH_LINEAGE_WORKERS.min(request.models.len()))
+        .stack_size(RICH_LINEAGE_WORKER_STACK_BYTES)
+        .thread_name(|index| format!("sqlbuild-rich-lineage-{index}"))
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(pool.install(|| {
+        request
+            .models
+            .par_iter()
+            .map(|query_sql| {
+                catch_compiler_panic(|| Ok(rich_model_lineage(query_sql, &context)))
+                    .unwrap_or(RichLineageOutcome::Deferred(LineageDeferral::NativeFailure))
+            })
+            .collect()
+    }))
+}
+
+/// The wheel decodes the options' dialect with serde; this build may not carry it.
+fn analysis_dialect(name: &str) -> Option<DialectType> {
+    serde_json::from_value::<DialectType>(serde_json::Value::String(name.to_owned()))
+        .ok()
+        .filter(|dialect| is_compiled_dialect(*dialect))
+}

@@ -651,6 +651,17 @@ def build_fast_column_lineage(
     /,
 ) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
 
+def build_rich_column_lineage(
+    request: tuple[
+        str,
+        list[tuple[str, str, list[tuple[str, str | None]], list[tuple[str, str | None]]]],
+        list[str],
+    ],
+    /,
+) -> list[
+    tuple[str, list[tuple[str, str, str, str, list[tuple[str, str, str]]]], bool, str | None]
+]: ...
+
 # Native analysis: SQL test planning glue.
 def plan_compiled_sql_tests(
     request: NativeSqlTestPlanningRequest, /

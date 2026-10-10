@@ -169,3 +169,58 @@ impl FastLineageOutcome {
         }
     }
 }
+
+/// Python's `InferredNullability` values that rich lineage produces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineageNullability {
+    NonNull,
+    Nullable,
+    Unknown,
+}
+
+impl LineageNullability {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NonNull => "non_null",
+            Self::Nullable => "nullable",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// One resource's typed columns, as Python's schema mapping builds them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RichSchemaResource {
+    pub resource_type: LineageResourceType,
+    pub name: String,
+    /// `columns[name] = type or "UNKNOWN"`: a repeat keeps its position and takes the later type.
+    pub assigned: Vec<(String, Option<String>)>,
+    /// `columns.setdefault(name, type or "UNKNOWN")`, applied after `assigned`.
+    pub defaulted: Vec<(String, Option<String>)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RichLineageRequest {
+    /// The `PolyglotAnalysisDialect` value Python resolved from the adapter's dialect.
+    pub dialect: String,
+    pub schema: Vec<RichSchemaResource>,
+    /// Each requested model's compiled query SQL, in project order.
+    pub models: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RichLineageColumn {
+    pub column: LineageColumn,
+    pub nullability: LineageNullability,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RichLineageOutcome {
+    Built {
+        columns: Vec<RichLineageColumn>,
+        has_star: bool,
+    },
+    /// Polyglot rejected the query; Python logs this message and records no lineage.
+    Skipped(String),
+    Deferred(LineageDeferral),
+}

@@ -30,6 +30,7 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.SEMANTIC_CHECKS: NativeStageTier.PREVIEW,
     NativeStage.CONTRACTS: NativeStageTier.PREVIEW,
     NativeStage.LINEAGE_FACTS: NativeStageTier.PREVIEW,
+    NativeStage.RICH_LINEAGE: NativeStageTier.PREVIEW,
     NativeStage.SQL_TEST_GLUE: NativeStageTier.PREVIEW,
     NativeStage.PROJECT_ASSEMBLY: NativeStageTier.PREVIEW,
 }
