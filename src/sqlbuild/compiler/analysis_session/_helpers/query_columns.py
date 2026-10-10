@@ -25,10 +25,8 @@ from sqlbuild.compiler.sql_analysis.constants import (
     TABLE_FUNCTION_ANALYSIS_PREFIX,
 )
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
-from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 
 _BATCH_MODE: str = "batch"
-_NORMALIZED_MODES: frozenset[str] = frozenset({"parse", "legacy"})
 _LINEAGE_RESOURCE_TYPES: dict[str, CompiledResourceType] = {
     SqlReferenceKind.REF: CompiledResourceType.MODEL,
     SqlReferenceKind.SOURCE: CompiledResourceType.SOURCE,
@@ -76,10 +74,8 @@ def native_query_columns(
                 nullability_rule_rows(profile),
                 shape_rows(column_types_by_table),
                 shape_rows(column_nullability_by_table),
-                [
-                    _query_row(query=query, dialect=profile.sql_analysis_dialect)
-                    for query in queries
-                ],
+                [_query_row(query) for query in queries],
+                profile.sql_analysis_dialect or "generic",
             ),
             (adapter_rules, InferredNullability) if adapter_rules else None,
         )
@@ -103,12 +99,10 @@ def _inferred_columns(
     )
 
 
-def _query_row(*, query: NativeColumnQuery, dialect: str | None) -> tuple[object, ...]:
+def _query_row(query: NativeColumnQuery) -> tuple[object, ...]:
     references: tuple[CompileSqlReference, ...] = query.references
     return (
-        normalize_analysis_sql(sql=query.sql, dialect=dialect)
-        if query.mode in _NORMALIZED_MODES
-        else query.sql,
+        query.sql,
         list((query.placeholders or {}).items()),
         [_analysis_name(reference) for reference in references],
         [

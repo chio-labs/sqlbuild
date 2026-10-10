@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.types import QueryColumnsMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
@@ -146,3 +147,13 @@ class ProjectionFactsTestCase:
     description: str
     queries: tuple[tuple[str, str], ...]
     expected_differences: list[tuple[int, str, object, object]]
+
+
+@dataclass(frozen=True)
+class NormalizationRejectionTestCase:
+    """Queries outside the session whose analysis SQL Python's normalization rejects."""
+
+    description: str
+    queries: tuple[tuple[str, QueryColumnsMode], ...]
+    dialect: str
+    expected_message: str

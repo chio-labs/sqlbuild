@@ -6,17 +6,24 @@ Expected outputs recorded from the pre-port Python `infer_columns_with_sql_analy
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     FallbackColumnsTestCase,
     MissingSessionAnalysisTestCase,
+    NormalizationRejectionTestCase,
     TableFunctionColumnsTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import compiled_project
@@ -136,6 +143,38 @@ def test_given_session_without_model_analysis_when_assembling_then_raises_native
         )
 
     assert str(raised.value) == test_case.expected_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NormalizationRejectionTestCase(
+            description="a parse query whose table-function call never closes",
+            queries=(("SELECT 1 AS a", "parse"), ('SELECT * FROM __table_fn("f")(1', "parse")),
+            dialect="duckdb",
+            expected_message="invalid table-function analysis input: Parenthesis",
+        ),
+        NormalizationRejectionTestCase(
+            description="a legacy query whose table-function argument quote never closes",
+            queries=(('SELECT * FROM __table_fn("f")(\'x)', "legacy"),),
+            dialect="motherduck",
+            expected_message="invalid table-function analysis input: Quote",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_normalization_rejects_when_inferring_columns_then_python_value_error_raises(
+    test_case: NormalizationRejectionTestCase,
+) -> None:
+    queries: tuple[NativeColumnQuery, ...] = tuple(
+        NativeColumnQuery(sql=sql, mode=mode) for sql, mode in test_case.queries
+    )
+
+    with pytest.raises(ValueError, match=re.escape(test_case.expected_message)):
+        _ = infer_native_query_columns(
+            queries=queries,
+            profile=ExpressionInferenceProfile(sql_analysis_dialect=test_case.dialect),
+        )
 
 
 if __name__ == "__main__":

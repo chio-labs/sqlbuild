@@ -335,6 +335,8 @@ pub struct QueryColumnsInput {
 #[derive(Debug, Clone, Default)]
 pub struct QueryColumnsRequest {
     pub dialect: String,
+    /// The unaliased `profile.sql_analysis_dialect or "generic"` normalization reads.
+    pub normalization_dialect: String,
     pub function_return_types: Pairs,
     /// Adapter nullability rules as `(function name, rule id)`.
     pub nullability_rules: Option<Pairs>,

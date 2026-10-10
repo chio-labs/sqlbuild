@@ -20,7 +20,29 @@ use crate::assembly::analysis_session::models::{
     ModelReference, ModelRequest, QueryColumns, QueryColumnsInput, QueryColumnsMode,
     QueryColumnsRequest,
 };
-use crate::semantic_validation::models::ProjectCatalog;
+use crate::semantic_validation::main::normalize::normalize_analysis_sql;
+use crate::semantic_validation::models::{NormalizationInput, ProjectCatalog};
+
+/// The request with `Parse` and `Legacy` SQL normalized in order; Err is the first rejection.
+pub(crate) fn normalized_request(
+    request: &QueryColumnsRequest,
+) -> Result<QueryColumnsRequest, String> {
+    let mut normalized: QueryColumnsRequest = request.clone();
+    for query in &mut normalized.queries {
+        if matches!(
+            query.mode,
+            QueryColumnsMode::Parse | QueryColumnsMode::Legacy
+        ) {
+            query.sql = normalize_analysis_sql(NormalizationInput {
+                sql: std::mem::take(&mut query.sql),
+                dialect: request.normalization_dialect.clone(),
+                stubs: HashMap::new(),
+                placeholders: HashMap::new(),
+            })?;
+        }
+    }
+    Ok(normalized)
+}
 
 /// Each query's columns, in order; only `Batch` queries read the catalog.
 pub(crate) fn query_columns(

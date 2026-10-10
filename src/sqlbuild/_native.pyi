@@ -460,6 +460,7 @@ def infer_query_columns(
         list[tuple[str, list[tuple[str, str]]]],
         list[tuple[str, list[tuple[str, str]]]],
         list[tuple[object, ...]],
+        str,
     ],
     adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
 ) -> list[tuple[bool, list[tuple[str, str | None, str]] | None, bool]]: ...

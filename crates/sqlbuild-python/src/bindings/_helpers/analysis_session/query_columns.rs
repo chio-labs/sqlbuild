@@ -2,7 +2,8 @@
 
 use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::types::PyDict;
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{PyErr, pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::assembly::analysis_session::errors::QueryColumnsFailure;
 use sqlbuild_analysis::assembly::analysis_session::main::projection_facts::projection_facts;
 use sqlbuild_analysis::assembly::analysis_session::main::query_columns::query_columns;
 use sqlbuild_analysis::assembly::analysis_session::models::{
@@ -31,8 +32,8 @@ type QueryRow = (
     bool,
     String,
 );
-/// `(dialect, function return types, nullability rules, types, nullability, queries)`.
-type RequestRow = (String, Pairs, Pairs, Shapes, Shapes, Vec<QueryRow>);
+/// `(dialect, return types, rules, types, nullability, queries, normalization dialect)`.
+type RequestRow = (String, Pairs, Pairs, Shapes, Shapes, Vec<QueryRow>, String);
 /// `([(name, type)], NULL literal names, quoted names)`.
 type ProjectionFactsRow = (Vec<(String, String)>, Vec<String>, Vec<String>);
 /// `(succeeded, [(name, type, nullability)] or None, has star)`.
@@ -47,7 +48,15 @@ fn infer_query_columns(
     request: RequestRow,
     adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
 ) -> PyResult<Vec<ColumnsRow>> {
-    let (dialect, function_return_types, nullability_rules, types, nullability, queries) = request;
+    let (
+        dialect,
+        function_return_types,
+        nullability_rules,
+        types,
+        nullability,
+        queries,
+        normalization_dialect,
+    ) = request;
     let queries: Vec<QueryColumnsInput> = queries
         .into_iter()
         .map(query_input)
@@ -56,6 +65,7 @@ fn infer_query_columns(
     let rule_failure: RuleFailure = RuleFailure::default();
     let request = QueryColumnsRequest {
         dialect,
+        normalization_dialect,
         function_return_types,
         nullability_rules: Some(nullability_rules),
         nullability_callback: adapter_rules.map(|(rules, nullability)| {
@@ -66,15 +76,26 @@ fn infer_query_columns(
         queries,
     };
     let catalog = catalog.as_ref().map(|catalog| &catalog.inner);
-    let columns = py.compiler_detach(|| query_columns(catalog, &request));
+    let columns = py.compiler_detach(|| Ok(query_columns(catalog, &request)));
     if let Some(error) = raised(&rule_failure) {
         return Err(error);
     }
     Ok(columns
         .map_err(|reason| compiler_error(native_failure(QUERY_COLUMNS_CONTEXT, &reason)))?
+        .map_err(query_columns_error)?
         .into_iter()
         .map(columns_row)
         .collect())
+}
+
+/// A normalization rejection as Python's `ValueError`; anything else as an internal failure.
+fn query_columns_error(failure: QueryColumnsFailure) -> PyErr {
+    match failure {
+        QueryColumnsFailure::Normalization(message) => compiler_error(message),
+        QueryColumnsFailure::Internal(reason) => {
+            compiler_error(native_failure(QUERY_COLUMNS_CONTEXT, &reason))
+        }
+    }
 }
 
 fn query_input(row: QueryRow) -> Result<QueryColumnsInput, String> {
