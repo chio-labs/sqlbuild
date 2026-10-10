@@ -106,14 +106,8 @@ impl AnalysisSession {
     /// Digest of every relation's types and nullability, which a legacy analysis reads whole.
     pub(crate) fn tables_digest(&self) -> ContentDigest {
         let mut key: KeyHasher = KeyHasher::default();
-        for table in [&self.available_types, &self.available_nullability] {
-            let ordered: Vec<(&str, &Pairs)> = table.ordered();
-            key.count(ordered.len());
-            for (name, shape) in ordered {
-                key.text(name);
-                key.pairs(shape);
-            }
-        }
+        key.bytes(&self.available_types.chain());
+        key.bytes(&self.available_nullability.chain());
         key.finish()
     }
 }

@@ -2,6 +2,8 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use sha2::{Digest, Sha256};
+
 use crate::assembly::analysis_session::constants::DIALECT_ALIASES;
 use crate::assembly::analysis_session::models::ModelRequest;
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -77,17 +79,31 @@ pub(crate) struct ShapeTable {
     shapes: HashMap<String, Pairs>,
     /// Each name at its first insertion, Python's dict iteration order.
     order: Vec<String>,
+    /// Digest chained over every insertion in order, so equal chains mean equal tables.
+    chain: [u8; 32],
 }
 
 impl ShapeTable {
     pub(crate) fn from_shapes(shapes: &Shapes) -> Self {
         let mut table: Self = Self::default();
         for (name, shape) in shapes {
-            if table.shapes.insert(name.clone(), shape.clone()).is_none() {
-                table.order.push(name.clone());
+            match table.shapes.get_mut(name) {
+                Some(existing) => existing.clone_from(shape),
+                None => table.insert(name, shape.clone()),
             }
         }
+        table.chain = shapes_chain(&table.ordered());
         table
+    }
+
+    /// The digest of every shape in order, which changes whenever the table does.
+    pub(crate) fn chain(&self) -> [u8; 32] {
+        self.chain
+    }
+
+    fn insert(&mut self, name: &str, shape: Pairs) {
+        self.shapes.insert(name.to_owned(), shape);
+        self.order.push(name.to_owned());
     }
 
     /// The shapes in Python's dict iteration order.
@@ -110,10 +126,31 @@ impl ShapeTable {
     /// Python's `setdefault`.
     pub(crate) fn set_default(&mut self, name: &str, shape: Pairs) {
         if !self.shapes.contains_key(name) {
-            self.shapes.insert(name.to_owned(), shape);
-            self.order.push(name.to_owned());
+            self.chain = chained(&self.chain, name, &shape);
+            self.insert(name, shape);
         }
     }
+}
+
+fn shapes_chain(shapes: &[(&str, &Pairs)]) -> [u8; 32] {
+    shapes
+        .iter()
+        .fold([0; 32], |chain, (name, shape)| chained(&chain, name, shape))
+}
+
+/// SHA-256 of `chain`, the pair count, then `name` and `shape` as length-prefixed fields.
+fn chained(chain: &[u8; 32], name: &str, shape: &Pairs) -> [u8; 32] {
+    let mut hasher: Sha256 = Sha256::new();
+    hasher.update(chain);
+    hasher.update((shape.len() as u64).to_le_bytes());
+    let fields = shape
+        .iter()
+        .flat_map(|(column, value)| [column.as_str(), value.as_str()]);
+    for field in std::iter::once(name).chain(fields) {
+        hasher.update((field.len() as u64).to_le_bytes());
+        hasher.update(field.as_bytes());
+    }
+    hasher.finalize().into()
 }
 
 /// Native catalog columns for a `{name: type}` shape.
