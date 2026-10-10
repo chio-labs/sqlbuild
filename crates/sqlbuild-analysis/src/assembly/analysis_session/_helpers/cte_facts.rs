@@ -665,7 +665,7 @@ impl Context<'_, '_> {
     fn normalized(&self, type_sql: &str) -> Fact<NormalizedType> {
         normalize_type(type_sql, self.profile.dialect)
             .map(|normalization| normalization.normalized)
-            .ok_or_else(|| format!("type normalization of {type_sql} defers"))
+            .map_err(|error| error.message())
     }
 
     /// Python's `_polyglot_direct_select_output_types`.

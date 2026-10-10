@@ -1,4 +1,4 @@
-"""Native contract validation and promotion conflicts equal Python's on generated projects."""
+"""Native contract validation on generated projects and on inputs Python once answered."""
 
 from __future__ import annotations
 
@@ -8,27 +8,25 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.contracts._test_types import (
-    DeferredContractTestCase,
-    GeneratedContractParityTestCase,
+    FormerlyDeferredContractTestCase,
+    GeneratedContractTestCase,
+    UnknownDialectContractTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
     NativeContractRecord,
     compiled_contract_project,
-    contract_views,
-    deferral_records,
+    contract_diagnostics,
     perturbed_project,
     record_native_outcomes,
     with_declared_type,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        GeneratedContractParityTestCase(
+        GeneratedContractTestCase(
             description="enforced, implicit, typed, nullability and dynamic contracts",
             seed=20261009,
             variants=60,
@@ -41,78 +39,82 @@ from tests.integration.src.sqlbuild.compiler.helpers import mismatches
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_contracts_when_validating_natively_then_diagnostics_match_python(
-    test_case: GeneratedContractParityTestCase,
+def test_given_generated_contracts_when_validating_then_every_contract_family_is_answered(
+    test_case: GeneratedContractTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     record: NativeContractRecord = record_native_outcomes(monkeypatch=monkeypatch)
     base: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
-    labels: list[object] = []
-    python_views: list[object] = []
-    native_views: list[object] = []
-    for variant in range(test_case.variants):
+    for _ in range(test_case.variants):
         project: CompiledProject = perturbed_project(project=base, rng=rng)
         for dialect in test_case.dialects:
-            python, native = contract_views(
-                project=project, dialect=dialect, monkeypatch=monkeypatch
-            )
-            labels.append((variant, dialect))
-            python_views.append(python)
-            native_views.append(native)
+            _ = contract_diagnostics(project=project, dialect=dialect)
 
-    assert mismatches(inputs=labels, expected=python_views, actual=native_views) == []
-    assert record.statuses["native"] >= test_case.expected_minimum_native
-    assert record.statuses["typed_comparisons"] >= test_case.expected_minimum_typed_comparisons
-    assert record.statuses["native_diagnostics"] >= test_case.expected_minimum_diagnostics
-    assert set(record.codes) >= test_case.expected_codes
+    assert (
+        record.statuses["native"] >= test_case.expected_minimum_native,
+        record.statuses["typed_comparisons"] >= test_case.expected_minimum_typed_comparisons,
+        record.statuses["native_diagnostics"] >= test_case.expected_minimum_diagnostics,
+        set(record.codes) >= test_case.expected_codes,
+    ) == (True, True, True, True), test_case.description
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeferredContractTestCase(
-            description="a declared type outside ASCII",
+        FormerlyDeferredContractTestCase(
+            description="a declared type outside ASCII upper-cases as Python does",
             declared_type="TÉXT",
             dialect="duckdb",
-            expected_kind="type_normalization",
-            expected_deferred_models=1,
+            expected_diagnostics=(),
         ),
-        DeferredContractTestCase(
-            description="a dialect outside the native type system",
+        FormerlyDeferredContractTestCase(
+            description="a dialect outside the old native build",
             declared_type="INTEGER",
             dialect="mysql",
-            expected_kind="type_normalization",
-            expected_deferred_models=2,
+            expected_diagnostics=(),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_input_native_cannot_answer_when_validating_then_python_answers_and_it_is_recorded(
-    test_case: DeferredContractTestCase,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+def test_given_input_python_once_answered_when_validating_then_native_diagnostics_are_returned(
+    test_case: FormerlyDeferredContractTestCase, tmp_path: Path
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    record: NativeContractRecord = record_native_outcomes(monkeypatch=monkeypatch)
     project: CompiledProject = with_declared_type(
         project=compiled_contract_project(project_dir=tmp_path / "project"),
         declared_type=test_case.declared_type,
     )
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
 
-    python, native = contract_views(
-        project=project, dialect=test_case.dialect, monkeypatch=monkeypatch
-    )
+    diagnostics = contract_diagnostics(project=project, dialect=test_case.dialect)
 
-    assert native == python
-    assert record.statuses[test_case.expected_kind] == test_case.expected_deferred_models
     assert (
-        deferral_records(record_dir)
-        == [{"kind": test_case.expected_kind, "site": "contracts/columns.py"}]
-        * test_case.expected_deferred_models
-    )
+        tuple(
+            (diagnostic.code, diagnostic.resource_name, diagnostic.column_name, diagnostic.message)
+            for diagnostic in diagnostics
+        )
+        == test_case.expected_diagnostics
+    ), test_case.description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnknownDialectContractTestCase(
+            description="a dialect Polyglot does not know raises the wheel's error",
+            dialect="motherduck",
+            expected_error="Unknown dialect: motherduck",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_dialect_when_validating_typed_contracts_then_python_error_is_raised(
+    test_case: UnknownDialectContractTestCase, tmp_path: Path
+) -> None:
+    project: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
+
+    with pytest.raises(ValueError, match=test_case.expected_error):
+        _ = contract_diagnostics(project=project, dialect=test_case.dialect)
 
 
 if __name__ == "__main__":

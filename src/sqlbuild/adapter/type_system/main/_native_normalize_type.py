@@ -1,4 +1,4 @@
-"""Native type normalization for the preview compiler engine."""
+"""Native type normalization."""
 
 from __future__ import annotations
 
@@ -14,19 +14,12 @@ from sqlbuild.adapter.type_system.constants import (
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 
 
-def normalize_native_type(
-    *, type_sql: str, dialect: TypeDialect | str | None
-) -> NormalizedType | None:
-    """Return the native normalization, or None where Python must normalize the type."""
+def normalize_native_type(*, type_sql: str, dialect: TypeDialect | str | None) -> NormalizedType:
+    """Return the native normalization of one type, raising as Polyglot does."""
 
-    if not isinstance(type_sql, str) or not isinstance(dialect, str | None):
-        return None
-    native: tuple[tuple[str, str, int | None, int | None, int | None], str | None] | None = (
-        _native.normalize_type(type_sql, str(dialect or "generic"))
+    (normalized_name, family, precision, scale, length), parse_error = _native.normalize_type(
+        type_sql, str(dialect or "generic")
     )
-    if native is None:
-        return None
-    (normalized_name, family, precision, scale, length), parse_error = native
     if parse_error is not None:
         log_debug_event(
             logger=logging.getLogger(TYPE_NORMALIZATION_LOGGER_NAME),
@@ -38,7 +31,11 @@ def normalize_native_type(
     return NormalizedType(
         normalized_name=normalized_name,
         family=TypeFamily(family),
-        precision=precision,
-        scale=scale,
-        length=length,
+        precision=_python_int(precision),
+        scale=_python_int(scale),
+        length=_python_int(length),
     )
+
+
+def _python_int(value: str | None) -> int | None:
+    return None if value is None else int(value)

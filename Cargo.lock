@@ -707,6 +707,7 @@ dependencies = [
  "sqlbuild-model-config",
  "sqlbuild-scopes",
  "sqlbuild-sqltext",
+ "stacker",
 ]
 
 [[package]]

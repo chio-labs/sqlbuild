@@ -33,9 +33,9 @@ pub(crate) const POLYGLOT_TYPE_NAME_ALIASES: &[(&str, &str)] = &[
     ("TINY_INT", "TINYINT"),
     ("VAR_CHAR", "VARCHAR"),
 ];
-/// The most `[` a type may hold before Python decides it; Polyglot's guards do not bound `[]`.
-pub(crate) const MAX_TYPE_BRACKETS: usize = 32;
+/// Brackets a type may nest before normalization moves to a stack sized for its depth.
+pub(crate) const SHALLOW_TYPE_NESTING: usize = 256;
+/// Stack reserved per nesting level of a deeply nested type: parse, write back, read and drop.
+pub(crate) const NESTED_TYPE_STACK_BYTES: usize = 64 * 1024;
 /// The function call depth limit SQLBuild passes to every Polyglot parse.
 pub(crate) const MAX_FUNCTION_CALL_DEPTH: usize = 512;
-/// Characters Python's `str.strip()` and the `\s` regex class treat as ASCII whitespace.
-pub(crate) const PYTHON_ASCII_WHITESPACE: &[u8] = b" \t\n\r\x0b\x0c\x1c\x1d\x1e\x1f";

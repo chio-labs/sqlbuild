@@ -7,3 +7,5 @@ TABLE_FILE_PREFIX: str = "unicode_"
 TABLE_FILE_SUFFIX: str = ".in"
 MAX_CODE_POINT: int = 0x10FFFF
 TABLE_METHODS: tuple[str, ...] = ("isalnum", "isalpha", "isdecimal")
+MAPPING_METHODS: tuple[str, ...] = ("casefold", "upper")
+SURROGATE_RANGE: range = range(0xD800, 0xE000)

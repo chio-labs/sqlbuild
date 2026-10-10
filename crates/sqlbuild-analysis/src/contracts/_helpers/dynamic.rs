@@ -2,6 +2,9 @@
 
 use std::collections::HashMap;
 
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+
 use crate::contracts::_helpers::type_comparison::{TypeComparer, TypeComparison};
 use crate::contracts::constants::{
     DYNAMIC_FAMILY_TYPE_MISMATCH_HELP, DYNAMIC_FAMILY_UNKNOWN_TYPE_HELP,
@@ -9,15 +12,16 @@ use crate::contracts::constants::{
     TYPE_MISMATCH_CODE, UNKNOWN_TYPE_CODE,
 };
 use crate::contracts::models::{
-    ContractDeferral, ContractDiagnostic, ContractLocation, ContractModel, ContractSeverity,
+    ContractDiagnostic, ContractLocation, ContractModel, ContractSeverity,
     DynamicContractProof,
 };
+use crate::type_system::models::TypeNormalizationError;
 
 /// The dynamic column contract diagnostics of one model, before its fixed columns.
 pub(crate) fn dynamic_column_diagnostics(
     model: &ContractModel,
     types: &TypeComparer<'_>,
-) -> Result<Vec<ContractDiagnostic>, ContractDeferral> {
+) -> Result<Vec<ContractDiagnostic>, TypeNormalizationError> {
     let Some(schema) = model
         .schema
         .as_ref()
@@ -35,7 +39,7 @@ pub(crate) fn dynamic_column_diagnostics(
     let proof_by_name: HashMap<String, Option<&str>> = families_by_casefold(proof)?;
     let mut diagnostics: Vec<ContractDiagnostic> = Vec::new();
     for family in &schema.dynamic_columns {
-        let key: String = casefold(&family.name)?;
+        let key: String = casefold(&family.name);
         let declared: &str = &family.declared_type;
         let Some(inferred) = proof_by_name.get(&key).copied().flatten() else {
             diagnostics.push(family_diagnostic(
@@ -87,21 +91,17 @@ fn not_proven(model: &ContractModel) -> ContractDiagnostic {
 
 fn families_by_casefold(
     proof: &DynamicContractProof,
-) -> Result<HashMap<String, Option<&str>>, ContractDeferral> {
+) -> Result<HashMap<String, Option<&str>>, TypeNormalizationError> {
     let mut by_name: HashMap<String, Option<&str>> = HashMap::new();
     for (name, inferred_type) in &proof.families {
-        let _ = by_name.insert(casefold(name)?, inferred_type.as_deref());
+        let _ = by_name.insert(casefold(name), inferred_type.as_deref());
     }
     Ok(by_name)
 }
 
-/// Python's `str.casefold` for ASCII names; other names defer.
-fn casefold(name: &str) -> Result<String, ContractDeferral> {
-    if name.is_ascii() {
-        Ok(name.to_ascii_lowercase())
-    } else {
-        Err(ContractDeferral::NonAsciiFamilyName)
-    }
+/// Python's `str.casefold`.
+fn casefold(name: &str) -> String {
+    python_casefold(active_python_text(), name)
 }
 
 fn family_diagnostic(

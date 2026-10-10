@@ -1,9 +1,8 @@
-"""Generated contract inputs, and the Python and native contract results they produce."""
+"""Generated contract inputs, and the native contract results they produce."""
 
 from __future__ import annotations
 
 import itertools
-import json
 import random
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
@@ -14,7 +13,6 @@ from typing import Any, NamedTuple
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.adapter.type_system._helpers.type_normalization import normalize_type
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -24,13 +22,8 @@ from sqlbuild.compiler.compile.models import (
     DynamicColumnFamilyProof,
     InferredColumn,
 )
-from sqlbuild.compiler.contracts._helpers.evaluation import (
-    python_model_contract_diagnostics,
-    requires_contract_evaluation,
-)
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.planner.types import ContractPolicy, IncrementalMode, MaterializationType
@@ -168,7 +161,7 @@ _PROMOTION_MODES: tuple[str | None, ...] = (None, "immediate", "staged", "IMMEDI
 
 type ContractView = tuple[CompilerDiagnostic, ...]
 type NativeContractRequest = tuple[str, bool, list[Any]]
-type NativeContractOutcome = tuple[str | None, list[Any]]
+type NativeContractOutcome = list[Any]
 _EMPTY_SCHEMA_ROW: tuple[list[Any], list[Any], bool, bool] = ([], [], False, False)
 
 
@@ -285,54 +278,15 @@ def _dynamic_proof(*, rng: random.Random) -> DynamicColumnContractProof:
     )
 
 
-def contract_views(
-    *,
-    project: CompiledProject,
-    dialect: str | None,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[ContractView, ContractView]:
-    """The Python contract diagnostics native defers to, and native's, for the same project."""
+def contract_diagnostics(*, project: CompiledProject, dialect: str | None) -> ContractView:
+    """The project's contract diagnostics, through the public contract entry point."""
 
-    return (
-        _on_engine(
-            engine="native",
-            monkeypatch=monkeypatch,
-            run=lambda: _python_contract_diagnostics(project=project, dialect=dialect),
-        ),
-        _on_engine(
-            engine="native-preview",
-            monkeypatch=monkeypatch,
-            run=lambda: evaluate_model_contracts(project=project, dialect=dialect).diagnostics,
-        ),
-    )
-
-
-def _python_contract_diagnostics(
-    *, project: CompiledProject, dialect: str | None
-) -> tuple[CompilerDiagnostic, ...]:
-    mode: ColumnContractMode = project.settings.column_contract_mode
-    evaluated: list[CompiledModel] = list(
-        filter(lambda model: requires_contract_evaluation(model=model, mode=mode), project.models)
-    )
-    diagnostics: list[CompilerDiagnostic] = []
-    for model in evaluated:
-        diagnostics.extend(
-            python_model_contract_diagnostics(model=model, mode=mode, dialect=dialect)
-        )
-    return tuple(diagnostics)
-
-
-def _on_engine(
-    *, engine: str, monkeypatch: pytest.MonkeyPatch, run: Callable[[], ContractView]
-) -> ContractView:
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
-    normalize_type.cache_clear()
-    return run()
+    return evaluate_model_contracts(project=project, dialect=dialect).diagnostics
 
 
 class NativeContractRecord(NamedTuple):
-    """Native contract outcomes: `native` (evaluated natively), `typed_comparisons`, handback
-    kinds and `native_diagnostics` in `statuses`; codes of natively built diagnostics in `codes`."""
+    """Native contract outcomes: `native` (evaluated natively), `typed_comparisons` and
+    `native_diagnostics` in `statuses`; codes of natively built diagnostics in `codes`."""
 
     statuses: Counter[str]
     codes: Counter[str]
@@ -349,10 +303,7 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
     def counted(request: NativeContractRequest) -> list[NativeContractOutcome]:
         outcomes: list[NativeContractOutcome] = evaluate(request)
         record.statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
-        answered: list[NativeContractOutcome] = list(filter(_answered, outcomes))
-        rows: Iterator[Sequence[Any]] = itertools.chain.from_iterable(
-            diagnostics for _, diagnostics in answered
-        )
+        rows: Iterator[Sequence[Any]] = itertools.chain.from_iterable(outcomes)
         record.codes.update(row[0] for row in rows)
         return outcomes
 
@@ -363,35 +314,20 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
 def native_contract_statuses(
     *, request: NativeContractRequest, outcomes: list[NativeContractOutcome]
 ) -> Counter[str]:
-    """Per-request counts: `native` for models native evaluated, `typed_comparisons` for those
-    that compared at least one typed column, each handback kind, and `native_diagnostics`."""
+    """Per-request counts: `native` for evaluated models, `typed_comparisons` for those that
+    compared at least one typed column, and `native_diagnostics`."""
 
     _, implicit, models = request
-    pairs: list[tuple[Sequence[Any], NativeContractOutcome]] = list(
-        zip(models, outcomes, strict=True)
-    )
-    answered: list[tuple[Sequence[Any], NativeContractOutcome]] = list(
-        filter(lambda pair: _answered(pair[1]), pairs)
-    )
     evaluated: list[Sequence[Any]] = list(
-        filter(
-            lambda model: _requires_evaluation(model=model, implicit=implicit),
-            (model for model, _ in answered),
-        )
+        filter(lambda model: _requires_evaluation(model=model, implicit=implicit), models)
     )
-    statuses: Counter[str] = Counter(
-        str(deferral) for deferral, _ in filter(lambda outcome: not _answered(outcome), outcomes)
-    )
+    statuses: Counter[str] = Counter()
     statuses["native"] += len(evaluated)
     statuses["typed_comparisons"] += sum(
         _compares_typed_column(model=model, implicit=implicit) for model in evaluated
     )
-    statuses["native_diagnostics"] += sum(len(diagnostics) for _, (_, diagnostics) in answered)
+    statuses["native_diagnostics"] += sum(len(diagnostics) for diagnostics in outcomes)
     return statuses
-
-
-def _answered(outcome: NativeContractOutcome) -> bool:
-    return outcome[0] is None
 
 
 def _schema(model: Sequence[Any]) -> Sequence[Any]:
@@ -418,16 +354,6 @@ def _compares_typed_column(*, model: Sequence[Any], implicit: bool) -> bool:
         )
         and model[3] is not None
     )
-
-
-def deferral_records(directory: Path) -> list[dict[str, str]]:
-    """Every deferral record written under `directory`, in file order."""
-
-    lines: Iterator[str] = itertools.chain.from_iterable(
-        path.read_text(encoding="utf-8").splitlines()
-        for path in sorted(directory.glob("analysis-deferrals-*.jsonl"))
-    )
-    return [json.loads(line) for line in lines]
 
 
 def with_declared_type(*, project: CompiledProject, declared_type: str) -> CompiledProject:

@@ -1,5 +1,5 @@
 use crate::contracts::main::evaluate_model_contracts::evaluate_model_contracts;
-use crate::contracts::models::{ContractModel, ContractOutcome, ContractRequest};
+use crate::contracts::models::{ContractDiagnostic, ContractModel, ContractRequest};
 use crate::contracts::tests::helpers::{
     declared, dynamic_model, inferred, model, outcome_lines, proof, schema, with_inferred,
 };
@@ -132,7 +132,7 @@ fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() 
             expected_lines: &[],
         },
         ContractTestCase {
-            description: "a type native normalization cannot answer defers the model",
+            description: "a non-ASCII type upper-cases with Python's Unicode mapping",
             implicit: true,
             model: with_inferred(
                 model(
@@ -141,7 +141,10 @@ fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() 
                 ),
                 vec![inferred("amount", Some("VARCHAR"), false)],
             ),
-            expected_lines: &["deferred:type_normalization"],
+            expected_lines: &[
+                "K002 error declared:0 column 'amount' inferred as VARCHAR but declared type is \
+                 T\u{c9}XT [amount: inferred VARCHAR]",
+            ],
         },
         ContractTestCase {
             description: "an unproven dynamic contract without a reason",
@@ -186,13 +189,13 @@ fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() 
             ],
         },
         ContractTestCase {
-            description: "a family name outside ASCII defers the model",
+            description: "a family name outside ASCII matches under Python's casefold",
             implicit: true,
             model: dynamic_model(
                 &[("straße_*", "DOUBLE")],
                 Some(proof(true, None, &[("strasse_*", Some("DOUBLE"))])),
             ),
-            expected_lines: &["deferred:non_ascii_family_name"],
+            expected_lines: &[],
         },
     ];
     for test_case in test_cases {
@@ -201,9 +204,13 @@ fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() 
             implicit_column_contracts: test_case.implicit,
             models: vec![test_case.model],
         };
-        let outcomes: Vec<ContractOutcome> = evaluate_model_contracts(&request);
+        let outcomes: Vec<Vec<ContractDiagnostic>> =
+            evaluate_model_contracts(&request).expect("duckdb types normalize");
         assert_eq!(
-            outcomes.iter().flat_map(outcome_lines).collect::<Vec<_>>(),
+            outcomes
+                .iter()
+                .flat_map(|diagnostics| outcome_lines(diagnostics))
+                .collect::<Vec<_>>(),
             test_case.expected_lines,
             "{}",
             test_case.description
@@ -226,7 +233,7 @@ fn given_models_sharing_types_when_evaluating_together_then_each_matches_its_own
         )
     };
     let test_cases = [SharedTypesTestCase {
-        description: "repeated equal, mismatched and unanswerable types",
+        description: "repeated equal, mismatched and non-ASCII types",
         models: vec![
             enforced("INT", "INTEGER"),
             enforced("INT", "VARCHAR"),
@@ -237,9 +244,9 @@ fn given_models_sharing_types_when_evaluating_together_then_each_matches_its_own
         ],
         expected_lines: &[
             "K002 error declared:0 column 'amount' inferred as VARCHAR but declared type is INT [amount: inferred VARCHAR]",
-            "deferred:type_normalization",
+            "K002 error declared:0 column 'amount' inferred as VARCHAR but declared type is T\u{c9}XT [amount: inferred VARCHAR]",
             "K002 error declared:0 column 'amount' inferred as VARCHAR but declared type is INT [amount: inferred VARCHAR]",
-            "deferred:type_normalization",
+            "K002 error declared:0 column 'amount' inferred as VARCHAR but declared type is T\u{c9}XT [amount: inferred VARCHAR]",
         ],
     }];
     for test_case in test_cases {
@@ -249,14 +256,18 @@ fn given_models_sharing_types_when_evaluating_together_then_each_matches_its_own
             models,
         };
         let together: Vec<String> = evaluate_model_contracts(&request(test_case.models.clone()))
+            .expect("duckdb types normalize")
             .iter()
-            .flat_map(outcome_lines)
+            .flat_map(|diagnostics| outcome_lines(diagnostics))
             .collect();
         let alone: Vec<String> = test_case
             .models
             .iter()
-            .flat_map(|model| evaluate_model_contracts(&request(vec![model.clone()])))
-            .flat_map(|outcome| outcome_lines(&outcome))
+            .flat_map(|model| {
+                evaluate_model_contracts(&request(vec![model.clone()]))
+                    .expect("duckdb types normalize")
+            })
+            .flat_map(|diagnostics| outcome_lines(&diagnostics))
             .collect();
 
         assert_eq!(together, alone, "{}", test_case.description);
@@ -266,4 +277,24 @@ fn given_models_sharing_types_when_evaluating_together_then_each_matches_its_own
             test_case.description
         );
     }
+}
+
+#[test]
+fn given_a_dialect_polyglot_does_not_know_when_comparing_types_then_python_error_is_returned() {
+    let request = ContractRequest {
+        dialect: "motherduck".to_owned(),
+        implicit_column_contracts: true,
+        models: vec![with_inferred(
+            model(
+                Some("enforced"),
+                Some(schema(vec![declared("amount", Some("INT"), false)], false)),
+            ),
+            vec![inferred("amount", Some("INTEGER"), false)],
+        )],
+    };
+
+    assert_eq!(
+        evaluate_model_contracts(&request).map_err(|error| error.message()),
+        Err("Unknown dialect: motherduck".to_owned())
+    );
 }

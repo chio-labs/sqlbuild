@@ -55,12 +55,7 @@ pyo3 = { version = "0.26", features = ["abi3-py312"] }
 polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "ca9e7b6e405fb6f5484472bb08780268789c5e04", default-features = false, features = [
     "ast-tools",
     "builder",
-    "dialect-bigquery",
-    "dialect-databricks",
-    "dialect-duckdb",
-    "dialect-postgresql",
-    "dialect-snowflake",
-    "dialect-tsql",
+    "all-dialects",
     "semantic",
     "stacker",
 ] }

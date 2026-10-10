@@ -1,3 +1,4 @@
+pub mod active_python_text;
 pub mod close_matches;
 pub mod decode_python_text;
 pub mod is_python_alnum;
@@ -5,6 +6,9 @@ pub mod is_python_alpha;
 pub mod is_python_decimal;
 pub mod is_python_space;
 pub mod is_python_word;
+pub mod python_casefold;
 pub mod python_cleandoc;
+pub mod python_decimal_value;
 pub mod python_strip;
 pub mod python_text;
+pub mod python_upper;

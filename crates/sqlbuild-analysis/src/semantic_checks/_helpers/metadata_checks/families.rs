@@ -31,8 +31,8 @@ impl Families {
 
     /// The family of `type_sql`, or a deferral where Python would leave the native type system.
     pub(crate) fn family(&self, type_sql: &str) -> Result<TypeFamily, SemanticDeferral> {
-        let normalization: TypeNormalization =
-            normalize_type(type_sql, &self.dialect).ok_or(SemanticDeferral::UnsupportedType)?;
+        let normalization: TypeNormalization = normalize_type(type_sql, &self.dialect)
+            .map_err(|_| SemanticDeferral::UnsupportedType)?;
         if normalization.parse_error.is_some() {
             self.fallback_types.borrow_mut().push(type_sql.to_owned());
         }
