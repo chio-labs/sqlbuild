@@ -114,7 +114,7 @@ def explicit_reference_report(
                     "hooks": [
                         {
                             "name": hook.name,
-                            "path": str(hook.relative_path),
+                            "path": hook.relative_path.as_posix(),
                             "reads": _ref_rows(hook.reads),
                         }
                         for hook in project.hook_functions
