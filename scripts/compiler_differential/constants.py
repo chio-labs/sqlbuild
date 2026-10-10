@@ -344,6 +344,9 @@ GENERATOR_ANALYSIS_MODE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("lineage-relations", ("lineage", "--json", GENERATOR_SELECTED_MODEL, "--direction", "both")),
 )
+GOLDEN_STDOUT_LABELS: frozenset[str] = frozenset(
+    label for label, _ in GENERATOR_ANALYSIS_MODE_COMMANDS if label.startswith("lineage-")
+)
 DIALECT_RICH_LINEAGE: DifferentialCommand = DifferentialCommand(
     label="compile-rich-lineage", arguments=GENERATOR_RICH_LINEAGE_ARGUMENTS
 )

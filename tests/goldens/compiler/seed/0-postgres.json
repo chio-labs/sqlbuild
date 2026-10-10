@@ -4,6 +4,11 @@
    "label": "compile",
    "exit_code": 0,
    "diagnostics": []
+  },
+  {
+   "label": "compile-rich-lineage",
+   "exit_code": 0,
+   "diagnostics": []
   }
  ],
  "compiled": {

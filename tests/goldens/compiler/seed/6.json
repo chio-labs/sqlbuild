@@ -29,6 +29,207 @@
    "label": "compile-rich-lineage",
    "exit_code": 0,
    "diagnostics": []
+  },
+  {
+   "label": "lineage-rich-upstream",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "target": {
+     "resource_type": "model",
+     "resource_name": "cte_facts_stg_fulfillment_1",
+     "column_name": "amount"
+    },
+    "direction": "upstream",
+    "metadata": {
+     "mode": "rich",
+     "max_depth": null,
+     "analyzed_models": 2,
+     "truncated": false
+    },
+    "trace": [
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "cte_facts_stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "source",
+       "resource_name": "raw_events_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     }
+    ]
+   }
+  },
+  {
+   "label": "lineage-rich-downstream",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "target": {
+     "resource_type": "model",
+     "resource_name": "stg_fulfillment_1",
+     "column_name": "amount"
+    },
+    "direction": "downstream",
+    "metadata": {
+     "mode": "rich",
+     "max_depth": null,
+     "analyzed_models": 3,
+     "truncated": false
+    },
+    "trace": [
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "cte_facts_stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "audited_stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     }
+    ]
+   }
+  },
+  {
+   "label": "lineage-fast-upstream",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "target": {
+     "resource_type": "model",
+     "resource_name": "cte_facts_stg_fulfillment_1",
+     "column_name": "amount"
+    },
+    "direction": "upstream",
+    "metadata": {
+     "mode": "fast",
+     "max_depth": null,
+     "analyzed_models": 2,
+     "truncated": false
+    },
+    "trace": [
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "cte_facts_stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "source",
+       "resource_name": "raw_events_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "stg_fulfillment_1",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     }
+    ]
+   }
+  },
+  {
+   "label": "lineage-relations",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "nodes": [
+     {
+      "id": "model:audited_stg_fulfillment_1",
+      "name": "audited_stg_fulfillment_1",
+      "resource_type": "model",
+      "relative_path": "models/features/audited_stg_fulfillment_1.sql",
+      "qualified_name": "main.audited_stg_fulfillment_1"
+     },
+     {
+      "id": "model:cte_facts_stg_fulfillment_1",
+      "name": "cte_facts_stg_fulfillment_1",
+      "resource_type": "model",
+      "relative_path": "models/analysis/cte_facts_stg_fulfillment_1.sql",
+      "qualified_name": "main.cte_facts_stg_fulfillment_1"
+     },
+     {
+      "id": "model:stg_fulfillment_1",
+      "name": "stg_fulfillment_1",
+      "resource_type": "model",
+      "relative_path": "models/fulfillment/staging/stg_fulfillment_1.sql",
+      "qualified_name": "main.stg_fulfillment_1"
+     },
+     {
+      "id": "source:raw_events_0",
+      "name": "raw_events_0",
+      "resource_type": "source",
+      "relative_path": "sources/raw.yml"
+     }
+    ],
+    "edges": [
+     {
+      "from": "model:stg_fulfillment_1",
+      "to": "model:audited_stg_fulfillment_1"
+     },
+     {
+      "from": "model:stg_fulfillment_1",
+      "to": "model:cte_facts_stg_fulfillment_1"
+     },
+     {
+      "from": "source:raw_events_0",
+      "to": "model:stg_fulfillment_1"
+     }
+    ],
+    "focus": [
+     "model:stg_fulfillment_1"
+    ],
+    "direction": "both"
+   }
   }
  ],
  "compiled": {

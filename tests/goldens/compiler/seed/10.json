@@ -29,6 +29,307 @@
    "label": "compile-rich-lineage",
    "exit_code": 0,
    "diagnostics": []
+  },
+  {
+   "label": "lineage-rich-upstream",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "target": {
+     "resource_type": "model",
+     "resource_name": "cte_facts_stg_sales_0",
+     "column_name": "amount"
+    },
+    "direction": "upstream",
+    "metadata": {
+     "mode": "rich",
+     "max_depth": null,
+     "analyzed_models": 2,
+     "truncated": false
+    },
+    "trace": [
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "cte_facts_stg_sales_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "source",
+       "resource_name": "raw_events_1",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     }
+    ]
+   }
+  },
+  {
+   "label": "lineage-rich-downstream",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "target": {
+     "resource_type": "model",
+     "resource_name": "stg_sales_0",
+     "column_name": "amount"
+    },
+    "direction": "downstream",
+    "metadata": {
+     "mode": "rich",
+     "max_depth": null,
+     "analyzed_models": 7,
+     "truncated": false
+    },
+    "trace": [
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "cte_facts_stg_sales_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "merge_stg_sales_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "spaced_stg_sales_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "taxed_stg_sales_0",
+       "column_name": "taxed"
+      },
+      "transform": "expression",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "taxed_stg_sales_0",
+       "column_name": "rounded"
+      },
+      "transform": "expression",
+      "confidence": "high"
+     },
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "sales_summary_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     }
+    ]
+   }
+  },
+  {
+   "label": "lineage-fast-upstream",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "target": {
+     "resource_type": "model",
+     "resource_name": "cte_facts_stg_sales_0",
+     "column_name": "amount"
+    },
+    "direction": "upstream",
+    "metadata": {
+     "mode": "fast",
+     "max_depth": null,
+     "analyzed_models": 2,
+     "truncated": false
+    },
+    "trace": [
+     {
+      "source": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "cte_facts_stg_sales_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "medium"
+     },
+     {
+      "source": {
+       "resource_type": "source",
+       "resource_name": "raw_events_1",
+       "column_name": "amount"
+      },
+      "target": {
+       "resource_type": "model",
+       "resource_name": "stg_sales_0",
+       "column_name": "amount"
+      },
+      "transform": "direct",
+      "confidence": "high"
+     }
+    ]
+   }
+  },
+  {
+   "label": "lineage-relations",
+   "exit_code": 0,
+   "diagnostics": [],
+   "stdout": {
+    "nodes": [
+     {
+      "id": "model:copied_stg_sales_0",
+      "name": "copied_stg_sales_0",
+      "resource_type": "model",
+      "relative_path": "models/features/copied_stg_sales_0.sql",
+      "qualified_name": "main.copied_stg_sales_0"
+     },
+     {
+      "id": "model:cte_facts_stg_sales_0",
+      "name": "cte_facts_stg_sales_0",
+      "resource_type": "model",
+      "relative_path": "models/analysis/cte_facts_stg_sales_0.sql",
+      "qualified_name": "main.cte_facts_stg_sales_0"
+     },
+     {
+      "id": "model:merge_stg_sales_0",
+      "name": "merge_stg_sales_0",
+      "resource_type": "model",
+      "relative_path": "models/features/merge_stg_sales_0.sql",
+      "qualified_name": "main.merge_stg_sales_0"
+     },
+     {
+      "id": "model:sales_summary_0",
+      "name": "sales_summary_0",
+      "resource_type": "model",
+      "relative_path": "models/sales/marts/sales_summary_0.sql",
+      "qualified_name": "main.sales_summary_0"
+     },
+     {
+      "id": "model:spaced_stg_sales_0",
+      "name": "spaced_stg_sales_0",
+      "resource_type": "model",
+      "relative_path": "models/features/spaced_stg_sales_0.sql",
+      "qualified_name": "main.spaced_stg_sales_0"
+     },
+     {
+      "id": "model:stg_sales_0",
+      "name": "stg_sales_0",
+      "resource_type": "model",
+      "relative_path": "models/sales/staging/stg_sales_0.sql",
+      "qualified_name": "main.stg_sales_0"
+     },
+     {
+      "id": "model:taxed_stg_sales_0",
+      "name": "taxed_stg_sales_0",
+      "resource_type": "model",
+      "relative_path": "models/features/taxed_stg_sales_0.sql",
+      "qualified_name": "main.taxed_stg_sales_0"
+     },
+     {
+      "id": "source:raw_events_1",
+      "name": "raw_events_1",
+      "resource_type": "source",
+      "relative_path": "sources/raw.yml"
+     }
+    ],
+    "edges": [
+     {
+      "from": "model:stg_sales_0",
+      "to": "model:copied_stg_sales_0"
+     },
+     {
+      "from": "model:stg_sales_0",
+      "to": "model:cte_facts_stg_sales_0"
+     },
+     {
+      "from": "model:stg_sales_0",
+      "to": "model:merge_stg_sales_0"
+     },
+     {
+      "from": "model:stg_sales_0",
+      "to": "model:sales_summary_0"
+     },
+     {
+      "from": "model:stg_sales_0",
+      "to": "model:spaced_stg_sales_0"
+     },
+     {
+      "from": "source:raw_events_1",
+      "to": "model:stg_sales_0"
+     },
+     {
+      "from": "model:stg_sales_0",
+      "to": "model:taxed_stg_sales_0"
+     }
+    ],
+    "focus": [
+     "model:stg_sales_0"
+    ],
+    "direction": "both"
+   }
   }
  ],
  "compiled": {
