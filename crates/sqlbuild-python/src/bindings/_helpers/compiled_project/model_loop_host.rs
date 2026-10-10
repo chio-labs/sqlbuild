@@ -1,0 +1,182 @@
+//! The Python host the loop hands finished models and user-code steps to.
+
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::PyDict;
+use pyo3::{FromPyObject, IntoPyObject};
+use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
+use sqlbuild_analysis::compiled_project::models::{
+    CompiledModelFacts, ModelConfigFacts, PlainModel,
+};
+
+use crate::bindings::_helpers::compiled_project::model_loop_header::{
+    AttachedHeader, HeaderSchema,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
+    reference_fact, stripped_values,
+};
+use crate::bindings::_helpers::compiled_project::project::{
+    DeclarationPy, ModelInputPy, config_values, declarations, model_facts,
+};
+use crate::bindings::_helpers::render::declaration_expansion::{
+    ExpandedDeclarations, ScannedReference, span_rows,
+};
+
+const PLAIN_INPUT_CALLBACK: &str = "plain_input";
+const FALLBACK_CALLBACK: &str = "fallback";
+const MODEL_ROW_CALLBACK: &str = "model_row";
+const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
+const LAYER_SCHEMA_ATTRIBUTE: &str = "layer_schema";
+const INDEX_ARGUMENT: &str = "index";
+const MODEL_INPUT_ARGUMENT: &str = "model_input";
+const VALUES_ARGUMENT: &str = "values";
+const REFERENCES_ARGUMENT: &str = "references";
+const QUERY_SQL_ARGUMENT: &str = "query_sql";
+const DESCRIPTION_ARGUMENT: &str = "description";
+const SCHEMA_ARGUMENT: &str = "schema";
+const HOOK_STATEMENTS_ARGUMENT: &str = "hook_statements";
+const DECLARATIONS_ARGUMENT: &str = "declarations";
+
+/// `((name, POSIX path, relative path, file path), column locations, query, contents, scan)`.
+#[derive(FromPyObject)]
+pub(crate) struct ModelLoopRow(
+    pub(crate) (String, String, String, String),
+    pub(crate) Py<PyDict>,
+    pub(crate) String,
+    pub(crate) String,
+    pub(crate) Option<(Vec<ScannedReference>, Option<u8>)>,
+);
+/// `(kind, name, package, call argument count)`.
+pub(crate) type ReferenceRow = (String, String, Option<String>, Option<usize>);
+/// The Python view of the model and its visible local enum and constant declarations.
+type PlainInputPy<'py> = (
+    Bound<'py, PyAny>,
+    (Vec<DeclarationPy<'py>>, Vec<DeclarationPy<'py>>),
+);
+
+/// One model the native loop finished, before the host builds its Python view.
+pub(crate) struct FinishedModel<'py> {
+    pub(crate) config: Bound<'py, PyAny>,
+    /// The hook-expanded config values, header metadata still included.
+    pub(crate) values: Bound<'py, PyDict>,
+    pub(crate) query_sql: String,
+    pub(crate) header: AttachedHeader<'py>,
+    pub(crate) references: Vec<ReferenceRow>,
+    pub(crate) declarations: ExpandedDeclarations<'py>,
+    pub(crate) hook_statements: usize,
+}
+
+/// Call a host callback with keyword arguments, as its keyword-only signature requires.
+pub(crate) fn callback<'py>(
+    host: &Bound<'py, PyAny>,
+    name: &str,
+    arguments: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    let keywords: Bound<'py, PyDict> = PyDict::new(host.py());
+    for (key, value) in arguments {
+        keywords.set_item(*key, value)?;
+    }
+    host.call_method(name, (), Some(&keywords))
+}
+
+/// The host's Python view of a natively finished model, and the facts the project retains.
+pub(crate) fn plain_input<'py>(
+    host: &Bound<'py, PyAny>,
+    index: usize,
+    row: ModelLoopRow,
+    finished: FinishedModel<'py>,
+) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
+    let py: Python<'py> = host.py();
+    let ModelLoopRow((name, relative_path, _, _), _, authored_query_sql, authored_sql, _) = row;
+    let stripped: Bound<'py, PyDict> = stripped_values(py, &finished.values)?;
+    let arguments = [
+        (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
+        (VALUES_ARGUMENT, stripped.clone().into_any()),
+        (
+            REFERENCES_ARGUMENT,
+            finished.references.clone().into_pyobject(py)?,
+        ),
+        (
+            QUERY_SQL_ARGUMENT,
+            finished.query_sql.as_str().into_pyobject(py)?.into_any(),
+        ),
+        (
+            DESCRIPTION_ARGUMENT,
+            finished.header.description.as_deref().into_pyobject(py)?,
+        ),
+        (
+            SCHEMA_ARGUMENT,
+            schema_argument(py, finished.header.schema.as_ref())?,
+        ),
+        (
+            HOOK_STATEMENTS_ARGUMENT,
+            finished.hook_statements.into_pyobject(py)?.into_any(),
+        ),
+        (
+            DECLARATIONS_ARGUMENT,
+            (
+                finished.declarations.spliced.sql.as_str(),
+                span_rows(&finished.declarations.spliced),
+                finished.declarations.usages,
+            )
+                .into_pyobject(py)?
+                .into_any(),
+        ),
+    ];
+    let (input, (enums, constants)): PlainInputPy<'py> =
+        callback(host, PLAIN_INPUT_CALLBACK, &arguments)?.extract()?;
+    let (values, encoding_error) = config_values(&stripped);
+    let facts: CompiledModelFacts = plain_model_facts(PlainModel {
+        name,
+        relative_path,
+        query_sql: finished.query_sql,
+        authored_query_sql,
+        authored_sql,
+        config: ModelConfigFacts {
+            values,
+            encoding_error,
+            header_keys: finished.config.getattr(HEADER_KEYS_ATTRIBUTE)?.extract()?,
+            layer_schema: finished.config.getattr(LAYER_SCHEMA_ATTRIBUTE)?.extract()?,
+        },
+        schema: finished.header.schema.map(|schema| schema.fact),
+        references: finished
+            .references
+            .into_iter()
+            .map(reference_fact)
+            .collect(),
+        enum_declarations: declarations(enums)?,
+        constant_declarations: declarations(constants)?,
+    });
+    Ok((input, facts))
+}
+
+/// The attachment's model input, after all its callbacks ran, and the facts read from it.
+pub(crate) fn attached_input<'py>(
+    host: &Bound<'py, PyAny>,
+    index_argument: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
+    let input: Bound<'py, PyAny> = callback(host, FALLBACK_CALLBACK, index_argument)?;
+    let row: ModelInputPy<'_> = callback(
+        host,
+        MODEL_ROW_CALLBACK,
+        &[(MODEL_INPUT_ARGUMENT, input.clone())],
+    )?
+    .extract()?;
+    Ok((input, model_facts(row)?))
+}
+
+/// The schema argument the host builds its `SchemaModelEntry` from.
+fn schema_argument<'py>(
+    py: Python<'py>,
+    schema: Option<&HeaderSchema<'py>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    match schema {
+        Some(schema) => Ok((
+            schema.columns.clone(),
+            schema.audits.clone(),
+            schema.type_enforcement,
+        )
+            .into_pyobject(py)?
+            .into_any()),
+        None => Ok(py.None().into_bound(py)),
+    }
+}

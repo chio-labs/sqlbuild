@@ -136,6 +136,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.main._native_contract_classes import native_contract_classes
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
@@ -422,6 +423,10 @@ class _ModelLoopHost:
         config: CompileModelConfig = _effective_model_config(loop=self.loop, model_file=model_file)
         self.configs[index] = config
         return config, self.declarations[index], consumer
+
+    def interpolate(self, *, index: int) -> str:
+        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
+        return applied_interpolation(self.interpolations[model_file.file_path])
 
     def constant_text(self, *, declaration: ConstantDeclaration) -> str:
         return render_constant_declaration(
@@ -730,7 +735,12 @@ def _run_native_model_loop(
         (
             loop.validation_context.validators.native_config.validator,
             native_contract_classes(),
-            (UsageRecord, SqlHookEntry),
+            {
+                "usage_record": UsageRecord,
+                "compile_error": CompileInputError,
+                "sql_hook_entry": SqlHookEntry,
+                "config_error": native_config_error,
+            },
         ),
         loop.context.sql_lexical_syntax.native_mapping,
         cursor_intrinsic_semantics(),
@@ -751,11 +761,11 @@ def _run_native_model_loop(
                     model_file.file_path.stem,
                     model_file.relative_path.as_posix(),
                     str(model_file.relative_path),
+                    str(model_file.file_path),
                 ),
                 model_file.header_column_locations,
                 model_file.query_sql,
                 model_file.contents,
-                interpolations[model_file.file_path].sql,
                 loop.native_declaration_references.get(model_file.file_path),
             )
             for model_file in files

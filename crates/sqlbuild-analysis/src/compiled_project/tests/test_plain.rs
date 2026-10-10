@@ -1,75 +1,48 @@
-use crate::compiled_project::main::header_column_blocker::header_column_blocker;
-use crate::compiled_project::main::plain_model_blocker::plain_model_blocker;
-use crate::compiled_project::models::{
-    AnalysisOverride, DescriptionShape, PlainModelBlocker, PlainModelCheck,
+use crate::compiled_project::main::analysis_gate::analysis_gate;
+use crate::compiled_project::main::enum_typed_columns::enum_typed_columns;
+use crate::compiled_project::main::header_attachment_feature::header_attachment_feature;
+use crate::compiled_project::models::{AnalysisGate, AnalysisOverride, AttachmentFeature};
+use crate::compiled_project::tests::helpers::{analysing_settings, column, keys};
+use crate::compiled_project::tests::test_types::{
+    AnalysisGateTestCase, EnumColumnsTestCase, HeaderFeatureTestCase,
 };
-use crate::compiled_project::tests::helpers::{column, plain_check};
-use crate::compiled_project::tests::test_types::{HeaderColumnTestCase, PlainBlockerTestCase};
 
 #[test]
-fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
+fn given_override_when_gating_analysis_then_project_switches_come_first() {
     let test_cases = [
-        PlainBlockerTestCase {
-            description: "description and tags are plain",
-            check: PlainModelCheck {
-                description: DescriptionShape::Text("Orders.".to_owned()),
-                ..plain_check("SELECT 1", &["description", "tags"])
-            },
-            expected_blocker: None,
+        AnalysisGateTestCase {
+            description: "inherited",
+            sql_analysis: true,
+            analysis_override: AnalysisOverride::Inherit,
+            expected_gate: AnalysisGate::Enabled,
         },
-        PlainBlockerTestCase {
-            description: "failed interpolation",
-            check: PlainModelCheck {
-                interpolated_sql: None,
-                ..plain_check("", &[])
-            },
-            expected_blocker: Some(PlainModelBlocker::Interpolation),
+        AnalysisGateTestCase {
+            description: "opted out",
+            sql_analysis: true,
+            analysis_override: AnalysisOverride::Disabled,
+            expected_gate: AnalysisGate::Disabled,
         },
-        PlainBlockerTestCase {
-            description: "hooks are finished natively",
-            check: plain_check("SELECT 1", &["pre_hooks", "post_hooks"]),
-            expected_blocker: None,
+        AnalysisGateTestCase {
+            description: "conflicting keys",
+            sql_analysis: true,
+            analysis_override: AnalysisOverride::Conflict,
+            expected_gate: AnalysisGate::Conflict,
         },
-        PlainBlockerTestCase {
-            description: "declared columns and audits are attached natively",
-            check: plain_check("SELECT 1", &["columns", "audits"]),
-            expected_blocker: None,
-        },
-        PlainBlockerTestCase {
-            description: "dynamic columns",
-            check: plain_check("SELECT 1", &["dynamic_columns"]),
-            expected_blocker: Some(PlainModelBlocker::HeaderMetadata),
-        },
-        PlainBlockerTestCase {
-            description: "blank description",
-            check: PlainModelCheck {
-                description: DescriptionShape::Invalid,
-                ..plain_check("SELECT 1", &["description"])
-            },
-            expected_blocker: Some(PlainModelBlocker::HeaderMetadata),
-        },
-        PlainBlockerTestCase {
-            description: "analysis opted out",
-            check: PlainModelCheck {
-                analysis_override: AnalysisOverride::Disabled,
-                ..plain_check("SELECT 1", &["sql_analysis"])
-            },
-            expected_blocker: Some(PlainModelBlocker::SqlAnalysisDisabled),
-        },
-        PlainBlockerTestCase {
-            description: "declaration scan stopped",
-            check: PlainModelCheck {
-                declaration_scan_failed: true,
-                ..plain_check("SELECT 1", &[])
-            },
-            expected_blocker: Some(PlainModelBlocker::DeclarationScan),
+        AnalysisGateTestCase {
+            description: "project disables analysis before the conflict is read",
+            sql_analysis: false,
+            analysis_override: AnalysisOverride::Conflict,
+            expected_gate: AnalysisGate::Disabled,
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            plain_model_blocker(&test_case.check),
-            test_case.expected_blocker,
+            analysis_gate(
+                analysing_settings(test_case.sql_analysis),
+                test_case.analysis_override
+            ),
+            test_case.expected_gate,
             "{}",
             test_case.description
         );
@@ -77,29 +50,61 @@ fn given_model_check_when_classifying_then_only_plain_models_stay_native() {
 }
 
 #[test]
-fn given_header_columns_when_classifying_then_enum_types_and_migrations_need_the_attachment() {
+fn given_header_keys_when_classifying_then_attachment_features_are_found_in_order() {
     let test_cases = [
-        HeaderColumnTestCase {
-            description: "typed columns",
-            columns: vec![column(Some("INTEGER"), false)],
-            expected_blocker: None,
+        HeaderFeatureTestCase {
+            description: "columns, audits, enums and constants are native",
+            keys: &[
+                "description",
+                "columns",
+                "audits",
+                "enums",
+                "constants",
+                "pre_hooks",
+            ],
+            expected_feature: None,
         },
-        HeaderColumnTestCase {
-            description: "enum-typed column",
-            columns: vec![column(Some("order_status"), false)],
-            expected_blocker: Some(PlainModelBlocker::EnumColumns),
+        HeaderFeatureTestCase {
+            description: "model schema before dynamic columns",
+            keys: &["dynamic_columns", "model_schema"],
+            expected_feature: Some(AttachmentFeature::ModelSchema),
         },
-        HeaderColumnTestCase {
-            description: "column migration",
-            columns: vec![column(None, true)],
-            expected_blocker: Some(PlainModelBlocker::ColumnMigrations),
+        HeaderFeatureTestCase {
+            description: "audit factories",
+            keys: &["audit_factories"],
+            expected_feature: Some(AttachmentFeature::AuditFactories),
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            header_column_blocker(&test_case.columns, &["order_status".to_owned()]),
-            test_case.expected_blocker,
+            header_attachment_feature(&keys(test_case.keys)),
+            test_case.expected_feature,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_header_columns_when_checking_enum_types_then_visible_enums_are_matched() {
+    let test_cases = [
+        EnumColumnsTestCase {
+            description: "scalar column",
+            column_type: Some("INTEGER"),
+            expected_enum_typed: false,
+        },
+        EnumColumnsTestCase {
+            description: "enum column",
+            column_type: Some("order_status"),
+            expected_enum_typed: true,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            enum_typed_columns(&[column(test_case.column_type)], &keys(&["order_status"])),
+            test_case.expected_enum_typed,
             "{}",
             test_case.description
         );

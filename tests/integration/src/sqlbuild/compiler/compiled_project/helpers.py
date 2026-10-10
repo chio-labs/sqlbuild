@@ -163,7 +163,7 @@ def build_inputs_with_native_loop(
     native_loop_type: type = _native.NativeModelLoop
 
     def loop(
-        checks: tuple[object, dict[str, object], tuple[object, object]],
+        checks: tuple[object, dict[str, object], dict[str, object]],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
         settings: tuple[bool, ...],

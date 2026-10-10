@@ -1,3 +1,5 @@
+#[path = "tests/test_column_migrations.rs"]
+mod column_migrations;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_storage_overrides.rs"]

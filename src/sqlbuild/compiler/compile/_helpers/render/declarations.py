@@ -5,10 +5,11 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
-from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -29,19 +30,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     EnumDeclaration,
-    EnumMember,
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
-from sqlbuild.compiler.model_loop.constants import (
-    ENUM_REFERENCE_KIND_CODE,
-    INVALID_CONSTANT_REFERENCE_STOP_CODE,
-    INVALID_ENUM_REFERENCE_STOP_CODE,
-    UNCLOSED_BLOCK_COMMENT_STOP_CODE,
-)
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
@@ -479,28 +473,6 @@ def _validate_no_inherited_column_overrides(
         )
 
 
-def declaration_reference_usages(
-    *,
-    declarations: DeclarationResolutionContext,
-    visibility: tuple[VisibilityRecord, ...],
-    enum_member: str | None,
-) -> tuple[UsageRecord, ...]:
-    """Usage records one resolved `@enum`/`@const` reference adds for the context's consumer."""
-
-    consumer: ResourceIdentity | DeclarationIdentity | None = declarations.consumer
-    if consumer is None:
-        return ()
-    return tuple(
-        UsageRecord(
-            consumer=consumer,
-            declaration=visible.declaration,
-            through=visible.through,
-            enum_member=enum_member,
-        )
-        for visible in usage_visibility(visibility=visibility, consumer=consumer)
-    )
-
-
 def expand_scanned_declaration_references(  # noqa: PLR0913
     *,
     sql: str,
@@ -515,72 +487,31 @@ def expand_scanned_declaration_references(  # noqa: PLR0913
     scanned, stop = references
     if not scanned and stop is None:
         return DeclarationExpansionResult(sql=sql, spans=(), usages=())
-    parts: list[str] = []
-    spans: list[ExpansionSpan] = []
-    usages: list[UsageRecord] = []
-    cursor: int = 0
-    output_length: int = 0
-    for kind, name, member, start, end in scanned:
-        replacement: str
-        visibility: tuple[VisibilityRecord, ...]
-        if kind == ENUM_REFERENCE_KIND_CODE:
-            replacement = _enum_member_text(
-                name=name,
-                member_name=cast(str, member),
-                file_path=file_path,
-                enums=declarations.enums,
-                inaccessible_enums=declarations.inaccessible_enums,
-            )
-            visibility = declarations.enum_visibility.get(name, ())
-        else:
-            replacement = _constant_text(
-                name=name,
-                file_path=file_path,
-                constants=declarations.constants,
-                inaccessible_constants=declarations.inaccessible_constants,
+    consumer: ResourceIdentity | DeclarationIdentity | None = declarations.consumer
+    expanded_sql, spans, usages = _native.expand_declaration_references(
+        (sql, list(scanned), stop),
+        declarations,
+        (
+            consumer,
+            isinstance(consumer, ResourceIdentity)
+            and consumer.kind in {ResourceKind.TEST, ResourceKind.SCENARIO},
+            str(file_path),
+        ),
+        (
+            partial(
+                render_constant_declaration,
                 value_renderer=value_renderer,
                 collection_rendering=collection_rendering,
-            )
-            visibility = declarations.constant_visibility.get(name, ())
-        parts.append(sql[cursor:start])
-        output_length += start - cursor
-        usages.extend(
-            declaration_reference_usages(
-                declarations=declarations, visibility=visibility, enum_member=member
-            )
-        )
-        parts.append(replacement)
-        spans.append(
-            ExpansionSpan(
-                source_start=start,
-                source_end=end,
-                output_start=output_length,
-                output_end=output_length + len(replacement),
-            )
-        )
-        output_length += len(replacement)
-        cursor = end
-    if stop is not None:
-        raise CompileInputError(_stop_message(stop=stop, file_path=file_path))
-    parts.append(sql[cursor:])
-    return DeclarationExpansionResult(
-        sql="".join(parts), spans=tuple(spans), usages=tuple(dict.fromkeys(usages))
+                file_path=file_path,
+            ),
+            {"usage_record": UsageRecord, "compile_error": CompileInputError},
+        ),
     )
-
-
-def _stop_message(*, stop: int, file_path: Path) -> str:
-    if stop == INVALID_ENUM_REFERENCE_STOP_CODE:
-        return _invalid_reference_message(kind=_ENUM_REFERENCE_KIND, file_path=file_path)
-    if stop == INVALID_CONSTANT_REFERENCE_STOP_CODE:
-        return _invalid_reference_message(kind=_CONSTANT_REFERENCE_KIND, file_path=file_path)
-    if stop == UNCLOSED_BLOCK_COMMENT_STOP_CODE:
-        return f"{_CONTEXT} contains an unclosed block comment"
-    return f"{_CONTEXT} contains an unclosed quoted string"
-
-
-def _invalid_reference_message(*, kind: str, file_path: Path) -> str:
-    noun: str = "enum" if kind == _ENUM_REFERENCE_KIND else "constant"
-    return f"Invalid {noun} reference in '{file_path}'"
+    return DeclarationExpansionResult(
+        sql=expanded_sql,
+        spans=tuple(ExpansionSpan(*span) for span in spans),
+        usages=tuple(dict.fromkeys(usages)),
+    )
 
 
 def usage_visibility(
@@ -643,72 +574,6 @@ def _with_declaration[T: EnumDeclaration | ConstantDeclaration](
     return declarations | {declaration.name: declaration}
 
 
-def _enum_member_text(
-    *,
-    name: str,
-    member_name: str,
-    file_path: Path,
-    enums: dict[str, EnumDeclaration],
-    inaccessible_enums: dict[str, DeclarationRecord],
-) -> str:
-    declaration: EnumDeclaration | None = enums.get(name)
-    if declaration is None:
-        inaccessible: DeclarationRecord | None = inaccessible_enums.get(name)
-        if inaccessible is not None:
-            raise CompileInputError(
-                _inaccessible_declaration_message(
-                    kind="enum", name=name, record=inaccessible, consumer=file_path
-                ),
-            )
-        scope_help: str = " in this model" if name.startswith("_") else ""
-        visible: str = ", ".join(sorted(enums)) or "none"
-        raise CompileInputError(
-            f"Unknown enum '{name}'{scope_help} in '{file_path}'. Visible enums: {visible}",
-        )
-    member: EnumMember | None = next(
-        (candidate for candidate in declaration.members if candidate.name == member_name),
-        None,
-    )
-    if member is None:
-        available: str = ", ".join(item.name for item in declaration.members)
-        raise CompileInputError(
-            f"Unknown member '{member_name}' for enum '{name}' in '{file_path}'. "
-            f"Available members: {available}",
-        )
-    return render_enum_member_value(value=member.value)
-
-
-def _constant_text(
-    *,
-    name: str,
-    file_path: Path,
-    constants: dict[str, ConstantDeclaration],
-    inaccessible_constants: dict[str, DeclarationRecord],
-    value_renderer: TypedSqlValueRenderer,
-    collection_rendering: CollectionRendering,
-) -> str:
-    declaration: ConstantDeclaration | None = constants.get(name)
-    if declaration is None:
-        inaccessible: DeclarationRecord | None = inaccessible_constants.get(name)
-        if inaccessible is not None:
-            raise CompileInputError(
-                _inaccessible_declaration_message(
-                    kind="constant", name=name, record=inaccessible, consumer=file_path
-                ),
-            )
-        scope_help: str = " in this model" if name.startswith("_") else ""
-        visible: str = ", ".join(sorted(constants)) or "none"
-        raise CompileInputError(
-            f"Unknown constant '{name}'{scope_help} in '{file_path}'. Visible constants: {visible}",
-        )
-    return render_constant_declaration(
-        declaration=declaration,
-        value_renderer=value_renderer,
-        collection_rendering=collection_rendering,
-        file_path=file_path,
-    )
-
-
 def render_constant_declaration(
     *,
     declaration: ConstantDeclaration,
@@ -749,23 +614,6 @@ def render_constant_declaration(
             f"{selected_rendering.value}: {error}",
         ) from error
     return rendered
-
-
-def _inaccessible_declaration_message(
-    *, kind: str, name: str, record: DeclarationRecord, consumer: Path
-) -> str:
-    owner: str = record.owning_path or record.ownership_root.path
-    owner_identity: str = (
-        f" ({record.identity.owner.kind.value} '{record.identity.owner.name}')"
-        if record.identity.owner is not None
-        else ""
-    )
-    return (
-        f"{kind.capitalize()} '{name}' is known but inaccessible in '{consumer}'. "
-        f"It is defined at {record.path}:{record.line}:{record.column} with "
-        f"{record.scope.value} scope owned by '{owner}'{owner_identity}; "
-        f"consumer path: '{consumer}'"
-    )
 
 
 def render_enum_member_value(*, value: str | int) -> str:

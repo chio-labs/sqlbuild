@@ -265,3 +265,17 @@ pub(crate) const PYTHON_314: u8 = 14;
 pub(crate) const MAX_DURATION_AMOUNT: u128 = i64::MAX as u128;
 /// The MODEL header key of the retention override.
 pub(crate) const RETENTION_KEY: &str = "time_travel_retention";
+
+/// Materializations whose columns can be renamed when the model also migrates.
+pub(crate) const MIGRATABLE_MATERIALIZATIONS: [&str; 4] =
+    ["table", "view", "incremental", "snapshot"];
+pub(crate) const QUALIFIED_NAME_SEPARATOR: char = '.';
+pub(crate) const MATERIALIZATION_HELP: &str =
+    "remove migrate_from from the column, or declare the model's own migrate_from";
+pub(crate) const ORIGIN_HELP: &str =
+    "write the old column name, for example revenue (migrate_from amount)";
+pub(crate) const CLAIMED_HELP: &str =
+    "keep migrate_from on the column that should receive the existing data";
+pub(crate) const CHAINED_HELP: &str = "a chain or swap cannot be renamed in place safely; give the new column \
+                            a name no other renamed column uses, or rebuild the model with \
+                            --full-refresh";

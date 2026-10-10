@@ -105,20 +105,6 @@ pub struct DynamicProofFact {
     pub families: Vec<(String, Option<String>)>,
 }
 
-/// What the native model loop knows about one model before deciding who finishes it.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct PlainModelCheck {
-    /// The effective config's top-level keys.
-    pub config_keys: Vec<String>,
-    pub description: DescriptionShape,
-    pub analysis_override: AnalysisOverride,
-    /// The variable-interpolated query, absent when interpolation failed.
-    pub interpolated_sql: Option<String>,
-    /// The declaration scan stopped on an error the attachment reports.
-    pub declaration_scan_failed: bool,
-    pub settings: ModelLoopSettings,
-}
-
 /// The project-wide switches the model loop reads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ModelLoopSettings {
@@ -134,7 +120,7 @@ pub enum DescriptionShape {
     #[default]
     Absent,
     Text(String),
-    /// Present but not a non-blank string; the Python attachment reports it.
+    /// Present but not a non-blank string.
     Invalid,
 }
 
@@ -145,22 +131,43 @@ pub enum AnalysisOverride {
     Inherit,
     Enabled,
     Disabled,
-    /// Both keys are set; the Python attachment decides whether they conflict.
-    Ambiguous,
+    /// Both keys are set to different values.
+    Conflict,
 }
 
-/// Why a model's input is finished by the Python attachment callback instead of natively.
+/// Whether a model's SQL is analysed, after the project switches and its override.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlainModelBlocker {
-    Interpolation,
-    DeclarationScan,
-    HeaderMetadata,
-    HeaderParse,
+pub enum AnalysisGate {
+    Enabled,
+    Disabled,
+    /// The override keys disagree, which the attachment reports as P003.
+    Conflict,
+}
+
+/// Model features the attachment still finishes, in the order the attachment reaches them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AttachmentFeature {
+    ModelSchema,
+    DynamicColumns,
+    AuditFactories,
     EnumColumns,
-    ColumnMigrations,
-    SqlAnalysisDisabled,
-    ImmediateSqlValidation,
+    AnalysisOptOut,
+    ImmediateValidation,
+    ReferenceScan,
+    ExternalReferences,
     LegacySchemaFiles,
+}
+
+/// A known declaration the consumer cannot see, as its scope record describes it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InaccessibleDeclaration {
+    pub path: String,
+    pub line: u64,
+    pub column: u64,
+    pub scope: String,
+    pub owner: String,
+    /// `(kind, name)` of the owning resource, when the declaration is resource-owned.
+    pub owner_identity: Option<(String, String)>,
 }
 
 /// One scanned declaration reference's character range and the text that replaces it.
@@ -187,11 +194,10 @@ pub struct SplicedSql {
     pub spans: Vec<SplicedSpan>,
 }
 
-/// One parsed header column as the plain-model check reads it.
+/// One parsed header column as the model loop's enum check reads it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct HeaderColumnShape {
     pub column_type: Option<String>,
-    pub migrates: bool,
 }
 
 /// A natively finished model's facts.

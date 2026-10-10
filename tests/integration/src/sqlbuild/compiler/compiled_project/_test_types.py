@@ -39,3 +39,13 @@ class ModelLoopParityTestCase:
     fixtures: tuple[str, ...]
     files: dict[str, str]
     expected_native_models: int
+
+
+@dataclass(frozen=True)
+class ModelLoopErrorTestCase:
+    """A model the native loop rejects with the attachment's exact message and code."""
+
+    description: str
+    model_sql: str
+    expected_message: str
+    expected_code: str

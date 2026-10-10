@@ -11,7 +11,12 @@ pub(crate) const HEADER_METADATA_KEYS: [&str; 8] = [
     "enums",
     "constants",
 ];
-/// Header metadata the native loop attaches itself.
-pub(crate) const NATIVE_HEADER_KEYS: [&str; 3] = ["description", "columns", "audits"];
+pub(crate) const MODEL_SCHEMA_KEY: &str = "model_schema";
+pub(crate) const DYNAMIC_COLUMNS_KEY: &str = "dynamic_columns";
+pub(crate) const AUDIT_FACTORIES_KEY: &str = "audit_factories";
+pub(crate) const DECLARATION_EXPANSION_CONTEXT: &str = "Enum and constant expansion";
+pub(crate) const UNCLOSED_BLOCK_COMMENT_STOP: u8 = 1;
+pub(crate) const INVALID_ENUM_REFERENCE_STOP: u8 = 2;
+pub(crate) const INVALID_CONSTANT_REFERENCE_STOP: u8 = 3;
 /// Macro calls start with this token; SQL without it has nothing to expand.
 pub(crate) const MACRO_TOKEN: char = '@';

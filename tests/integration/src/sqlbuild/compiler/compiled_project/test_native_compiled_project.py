@@ -8,7 +8,9 @@ from typing import Any
 import pytest
 
 from sqlbuild.cli.entry.main.entry import main
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
+    ModelLoopErrorTestCase,
     ModelLoopParityTestCase,
     RetainedRulesRowsTestCase,
     UnretainedRulesRowsTestCase,
@@ -93,7 +95,7 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
             description="plain, interpolated, seeded, incremental, column-contract, enum, constant, macro and hooked models",
             fixtures=(),
             files=PARITY_FILES,
-            expected_native_models=7,
+            expected_native_models=8,
         ),
         ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",
@@ -125,6 +127,81 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
     assert native.model_inputs == attached.model_inputs
     assert expansions(native) == expansions(attached)
     assert native.native_project == attached.native_project
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModelLoopErrorTestCase(
+            description="blank header description",
+            model_sql="MODEL (description ' ');\nSELECT 1 AS order_id\n",
+            expected_message="models/orders.sql model 'description' must be a non-empty string",
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
+            description="conflicting analysis overrides",
+            model_sql="MODEL (sql_analysis true, sql_validation false);\nSELECT 1 AS order_id\n",
+            expected_message="MODEL sql_analysis conflicts with legacy sql_validation",
+            expected_code="P003",
+        ),
+        ModelLoopErrorTestCase(
+            description="column rename on a rebuilt table",
+            model_sql=(
+                "MODEL (materialized table, columns (revenue (migrate_from amount)));\n"
+                "SELECT 1 AS revenue\n"
+            ),
+            expected_message=(
+                "model 'orders': column 'revenue' declares migrate_from, which is only valid for "
+                "incremental and snapshot models, or for table and view models that declare "
+                "migrate_from themselves (the old name's compatibility view then presents the "
+                "column under its old name); 'table' models are rebuilt with their new columns"
+            ),
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
+            description="unknown enum member",
+            model_sql='MODEL ();\nSELECT @enum("order_status").LOST AS status\n',
+            expected_message=(
+                "Unknown member 'LOST' for enum 'order_status' in '{model_path}'. "
+                "Available members: PLACED, SHIPPED"
+            ),
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
+            description="unknown constant",
+            model_sql='MODEL ();\nSELECT @const("max_items") AS limit_value\n',
+            expected_message=(
+                "Unknown constant 'max_items' in '{model_path}'. Visible constants: none"
+            ),
+            expected_code="P001",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_model_when_running_native_model_loop_then_attachment_error_is_raised(
+    test_case: ModelLoopErrorTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = copy_project(
+        fixtures=(),
+        files={
+            "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+            "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+            "models/orders.sql": test_case.model_sql,
+        },
+        project_dir=tmp_path / "project",
+    )
+
+    with pytest.raises(CompileInputError) as raised:
+        _ = build_inputs_with_native_loop(
+            project_dir=project_dir, native=True, monkeypatch=monkeypatch
+        )
+
+    assert raised.value.message == test_case.expected_message.format(
+        model_path=project_dir / "models" / "orders.sql"
+    )
+    assert raised.value.code == test_case.expected_code
 
 
 @pytest.mark.xfail(

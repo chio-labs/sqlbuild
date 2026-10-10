@@ -9,18 +9,6 @@ pub(super) struct RecordTestCase {
     pub(super) expected_analysis_recorded: bool,
 }
 
-pub(super) struct PlainBlockerTestCase {
-    pub(super) description: &'static str,
-    pub(super) check: crate::compiled_project::models::PlainModelCheck,
-    pub(super) expected_blocker: Option<crate::compiled_project::models::PlainModelBlocker>,
-}
-
-pub(super) struct HeaderColumnTestCase {
-    pub(super) description: &'static str,
-    pub(super) columns: Vec<crate::compiled_project::models::HeaderColumnShape>,
-    pub(super) expected_blocker: Option<crate::compiled_project::models::PlainModelBlocker>,
-}
-
 pub(super) struct SpliceTestCase {
     pub(super) description: &'static str,
     pub(super) sql: &'static str,
@@ -41,4 +29,29 @@ pub(super) struct MergeReferencesTestCase {
     pub(super) references: Vec<&'static str>,
     pub(super) arguments: Vec<&'static str>,
     pub(super) expected_references: Vec<&'static str>,
+}
+
+pub(super) struct AnalysisGateTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql_analysis: bool,
+    pub(super) analysis_override: crate::compiled_project::models::AnalysisOverride,
+    pub(super) expected_gate: crate::compiled_project::models::AnalysisGate,
+}
+
+pub(super) struct HeaderFeatureTestCase {
+    pub(super) description: &'static str,
+    pub(super) keys: &'static [&'static str],
+    pub(super) expected_feature: Option<crate::compiled_project::models::AttachmentFeature>,
+}
+
+pub(super) struct EnumColumnsTestCase {
+    pub(super) description: &'static str,
+    pub(super) column_type: Option<&'static str>,
+    pub(super) expected_enum_typed: bool,
+}
+
+pub(super) struct DeclarationErrorTestCase {
+    pub(super) description: &'static str,
+    pub(super) error: crate::compiled_project::errors::DeclarationError,
+    pub(super) expected_message: &'static str,
 }

@@ -1,45 +1,38 @@
-//! Deciding whether the native loop finishes a model, and finishing it.
+//! The model loop's ordered decisions and the facts it retains for a finished model.
 
-use crate::compiled_project::constants::{HEADER_METADATA_KEYS, MACRO_TOKEN, NATIVE_HEADER_KEYS};
+use crate::compiled_project::constants::{
+    AUDIT_FACTORIES_KEY, DYNAMIC_COLUMNS_KEY, MACRO_TOKEN, MODEL_SCHEMA_KEY,
+};
 use crate::compiled_project::models::{
-    AnalysisOverride, CompiledModelFacts, DescriptionShape, HeaderColumnShape, PlainModel,
-    PlainModelBlocker, PlainModelCheck,
+    AnalysisGate, AnalysisOverride, AttachmentFeature, CompiledModelFacts, HeaderColumnShape,
+    ModelLoopSettings, PlainModel,
 };
 
-pub(crate) fn plain_model_blocker(check: &PlainModelCheck) -> Option<PlainModelBlocker> {
-    if check.interpolated_sql.is_none() {
-        return Some(PlainModelBlocker::Interpolation);
+/// The attachment's gate: project switches first, so an override is only read when they allow.
+pub(crate) fn analysis_gate(
+    settings: ModelLoopSettings,
+    analysis_override: AnalysisOverride,
+) -> AnalysisGate {
+    if !settings.sql_analysis || settings.no_sql_validation {
+        return AnalysisGate::Disabled;
     }
-    if check.settings.legacy_schema_files {
-        return Some(PlainModelBlocker::LegacySchemaFiles);
+    match analysis_override {
+        AnalysisOverride::Inherit | AnalysisOverride::Enabled => AnalysisGate::Enabled,
+        AnalysisOverride::Disabled => AnalysisGate::Disabled,
+        AnalysisOverride::Conflict => AnalysisGate::Conflict,
     }
-    if !check.settings.defer_sql_validation {
-        return Some(PlainModelBlocker::ImmediateSqlValidation);
-    }
-    if !analysis_enabled(check) {
-        return Some(PlainModelBlocker::SqlAnalysisDisabled);
-    }
-    if check.declaration_scan_failed {
-        return Some(PlainModelBlocker::DeclarationScan);
-    }
-    let attachment_metadata: bool = check.config_keys.iter().any(|key| {
-        HEADER_METADATA_KEYS.contains(&key.as_str()) && !NATIVE_HEADER_KEYS.contains(&key.as_str())
-    });
-    if attachment_metadata || check.description == DescriptionShape::Invalid {
-        return Some(PlainModelBlocker::HeaderMetadata);
-    }
-    None
 }
 
-/// The project setting with the model's override applied; an ambiguous override is not plain.
-fn analysis_enabled(check: &PlainModelCheck) -> bool {
-    let settings = check.settings;
-    let enabled: bool = match check.analysis_override {
-        AnalysisOverride::Inherit => settings.sql_analysis,
-        AnalysisOverride::Enabled => true,
-        AnalysisOverride::Disabled | AnalysisOverride::Ambiguous => false,
-    };
-    settings.sql_analysis && !settings.no_sql_validation && enabled
+/// The header feature among `keys` the attachment still finishes, earliest first.
+pub(crate) fn header_attachment_feature(keys: &[String]) -> Option<AttachmentFeature> {
+    let has = |wanted: &str| keys.iter().any(|key| key == wanted);
+    if has(MODEL_SCHEMA_KEY) {
+        return Some(AttachmentFeature::ModelSchema);
+    }
+    if has(DYNAMIC_COLUMNS_KEY) {
+        return Some(AttachmentFeature::DynamicColumns);
+    }
+    has(AUDIT_FACTORIES_KEY).then_some(AttachmentFeature::AuditFactories)
 }
 
 /// Whether declaration-expanded SQL still calls macros.
@@ -47,21 +40,14 @@ pub(crate) fn calls_macros(sql: &str) -> bool {
     sql.contains(MACRO_TOKEN)
 }
 
-/// Enum-typed columns and column migrations still need the attachment's checks.
-pub(crate) fn header_column_blocker(
-    columns: &[HeaderColumnShape],
-    enum_names: &[String],
-) -> Option<PlainModelBlocker> {
-    if columns.iter().any(|column| column.migrates) {
-        return Some(PlainModelBlocker::ColumnMigrations);
-    }
-    let enum_typed: bool = columns.iter().any(|column| {
+/// Whether any column is typed as a visible enum.
+pub(crate) fn enum_typed_columns(columns: &[HeaderColumnShape], enum_names: &[String]) -> bool {
+    columns.iter().any(|column| {
         column
             .column_type
             .as_ref()
             .is_some_and(|column_type| enum_names.contains(column_type))
-    });
-    enum_typed.then_some(PlainModelBlocker::EnumColumns)
+    })
 }
 
 pub(crate) fn plain_model_facts(model: PlainModel) -> CompiledModelFacts {

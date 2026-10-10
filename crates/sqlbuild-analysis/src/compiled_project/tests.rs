@@ -1,5 +1,7 @@
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_declaration_errors.rs"]
+mod test_declaration_errors;
 #[path = "tests/test_plain.rs"]
 mod test_plain;
 #[path = "tests/test_splice.rs"]

@@ -66,7 +66,7 @@ class NativeCompiledProject:
 class NativeModelLoop:
     def __init__(
         self,
-        checks: tuple[object, dict[str, object], tuple[object, object]],
+        checks: tuple[object, dict[str, object], dict[str, object]],
         syntax: dict[str, object],
         cursor: tuple[list[str], tuple[tuple[int, int], str]],
         settings: tuple[bool, bool, bool, bool],
@@ -271,6 +271,15 @@ class NativeConfigError:
     help: str | None
     key: str | None
 
+def column_migration_problem(
+    model_name: str, values: dict[str, object], columns: list[tuple[str, str | None]]
+) -> NativeConfigError | None: ...
+def expand_declaration_references(
+    source: tuple[str, list[tuple[int, str, str | None, int, int]], int | None],
+    context: object,
+    consumer: tuple[object | None, bool, str],
+    renderers: tuple[object, dict[str, object]],
+) -> tuple[str, list[tuple[int, int, int, int]], list[Any]]: ...
 def parse_model_header_metadata(
     header: tuple[object, object],
     source: tuple[dict[str, Any], str],
