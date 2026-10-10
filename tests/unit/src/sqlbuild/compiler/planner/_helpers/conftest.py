@@ -6,12 +6,10 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
 )
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
-)
-from sqlbuild.compiler.planner.main.selection._build_model_path_index import (
-    build_model_path_index,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
     build_test_project,
@@ -83,5 +81,5 @@ def path_graph() -> tuple[
         upstream
     )
     all_keys: dict[str, CompiledObjectKey] = {key.name: key for key in upstream}
-    path_idx: dict[CompiledObjectKey, str] = build_model_path_index(project)
+    path_idx: dict[CompiledObjectKey, str] = project_lineage_views(project).path_index
     return all_keys, upstream, downstream, path_idx

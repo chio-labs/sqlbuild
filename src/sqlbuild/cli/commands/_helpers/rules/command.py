@@ -19,9 +19,9 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.rule_engine.main.build_catalogue import build_catalogue
 from sqlbuild.rule_engine.main.load_config import load_rules_config
 from sqlbuild.rule_engine.main.render_result import format_result
@@ -139,14 +139,8 @@ def _run_rule_selection(
         project_dir=project_dir,
     )
     graph: ProjectGraph = build_project_graph(discovered_inputs=discovered, adapter=adapter)
-    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=request.select,
-        exclude=request.exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+    selected_keys: frozenset[CompiledObjectKey] = select_project_graph(
+        graph=graph, select=request.select, exclude=request.exclude
     )
     result: RulesRunResult = run_rules(
         graph=graph,

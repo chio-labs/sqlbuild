@@ -14,10 +14,9 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
 )
 from sqlbuild.compiler.graph.main._attached_audit_gate_edges import attached_audit_gate_edges
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
 from sqlbuild.compiler.graph.main._hook_read_edges import hook_read_edges
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
-from sqlbuild.compiler.graph.main.path_nodes import path_nodes
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -76,7 +75,7 @@ def build_execution_edge_origins(
                 f"SQL test '{test.name}' runs before '{target_key.name}'"
             )
     lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
+        project_lineage_views(project).upstream_deps
     )
     edge: AttachedAuditGateEdge
     for edge in attached_audit_gate_edges(project=project):
@@ -238,24 +237,3 @@ def expand_downstream(
     """Return all transitive downstream keys reachable from the given key."""
 
     return transitive_closure(start=key, edges=downstream)
-
-
-def find_path_keys(
-    *,
-    start: CompiledObjectKey,
-    end: CompiledObjectKey,
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    """Return all keys on directed paths from start to end."""
-
-    on_path: frozenset[CompiledObjectKey] | None = path_nodes(
-        start=start,
-        end=end,
-        downstream=downstream,
-    )
-    if on_path is None:
-        raise PlannerInputError(
-            f"'{end.resource_type}:{end.name}' is not downstream of "
-            f"'{start.resource_type}:{start.name}'"
-        )
-    return on_path

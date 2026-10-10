@@ -1,5 +1,6 @@
 //! Python's planner selector syntax, error codes and messages the graph reproduces.
 
+pub(crate) const MODEL_RESOURCE: &str = "model";
 pub(crate) const SOURCE_RESOURCE: &str = "source";
 pub(crate) const SEED_RESOURCE: &str = "seed";
 pub(crate) const UDF_RESOURCE: &str = "udf";
@@ -41,3 +42,4 @@ pub(crate) const UNIT_TEST_ONLY_TEST_AND_BUILD: &str =
 /// `difflib.SequenceMatcher` treats an element as popular only in sequences this long.
 pub(crate) const AUTOJUNK_MIN_LENGTH: usize = 200;
 pub(crate) const AUTOJUNK_DIVISOR: usize = 100;
+pub(crate) const NAME_KIND: &str = "name";

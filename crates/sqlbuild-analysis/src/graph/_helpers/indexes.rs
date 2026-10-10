@@ -1,68 +1,142 @@
 //! Python's lineage edges, tag, path and name indexes over one project's resources.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::assembly::project::types::ObjectKey;
-use crate::graph::constants::SQL_TEST_RESOURCE;
-use crate::graph::models::{GraphResource, ProjectGraph};
+use crate::graph::constants::{MODEL_ROOT, MODEL_ROOT_PREFIX, SQL_TEST_RESOURCE};
+use crate::graph::models::{GraphIndexes, GraphResource, ProjectGraph};
+
+type Edges = Vec<(ObjectKey, Vec<ObjectKey>)>;
+
+/// Insertion-ordered key lists, as Python's `dict.setdefault(key, []).append(...)` builds them.
+#[derive(Default)]
+struct OrderedEdges {
+    entries: Edges,
+    index: HashMap<ObjectKey, usize>,
+}
+
+impl OrderedEdges {
+    /// The list stored for `key`, appended empty in insertion order when the key is new.
+    fn list(&mut self, key: &ObjectKey) -> &mut Vec<ObjectKey> {
+        let position: usize = match self.index.get(key) {
+            Some(&position) => position,
+            None => {
+                self.entries.push((key.clone(), Vec::new()));
+                self.index.insert(key.clone(), self.entries.len() - 1);
+                self.entries.len() - 1
+            }
+        };
+        &mut self.entries[position].1
+    }
+}
+
+/// Tag to keys in first-tagged order, each key once, as Python's tag sets hold them.
+#[derive(Default)]
+struct OrderedTags {
+    entries: Vec<(String, Vec<ObjectKey>)>,
+    index: HashMap<String, (usize, HashSet<ObjectKey>)>,
+}
+
+impl OrderedTags {
+    fn add(&mut self, tag: &str, key: &ObjectKey) {
+        let (position, seen) = self.index.entry(tag.to_owned()).or_insert_with(|| {
+            self.entries.push((tag.to_owned(), Vec::new()));
+            (self.entries.len() - 1, HashSet::new())
+        });
+        if seen.insert(key.clone()) {
+            self.entries[*position].1.push(key.clone());
+        }
+    }
+}
+
+impl ProjectGraph {
+    /// Point `key`'s name at it; a later resource with the same name replaces the key in place.
+    fn set_name(&mut self, name: &str, key: &ObjectKey) {
+        match self.name_index.get(name) {
+            Some(&position) => self.names[position].1 = key.clone(),
+            None => {
+                self.name_index.insert(name.to_owned(), self.names.len());
+                self.names.push((name.to_owned(), key.clone()));
+            }
+        }
+    }
+}
 
 pub(crate) fn build(resources: &[GraphResource]) -> ProjectGraph {
-    let mut graph = ProjectGraph::default();
-    for resource in resources {
-        if resource.key.0 == SQL_TEST_RESOURCE {
-            continue;
-        }
-        let deps: Vec<ObjectKey> = resource
-            .deps
-            .iter()
-            .filter(|dep| dep.0 != SQL_TEST_RESOURCE)
-            .cloned()
-            .collect();
-        insert_list(
-            &mut graph.upstream,
-            &mut graph.upstream_index,
-            &resource.key,
-        )
-        .clone_from(&deps);
+    let mut upstream: OrderedEdges = OrderedEdges::default();
+    for resource in resources
+        .iter()
+        .filter(|resource| resource.key.0 != SQL_TEST_RESOURCE)
+    {
+        *upstream.list(&resource.key) = lineage_deps(&resource.deps);
     }
-    graph.downstream = downstream(&graph.upstream);
-    graph.downstream_index = positions(&graph.downstream);
+    let downstream: Edges = downstream(&upstream.entries);
+    let mut tags: OrderedTags = OrderedTags::default();
+    let mut graph = ProjectGraph {
+        downstream_index: positions(&downstream),
+        downstream,
+        upstream_index: upstream.index,
+        upstream: upstream.entries,
+        ..ProjectGraph::default()
+    };
     for resource in resources {
         for tag in &resource.tags {
-            add_tag(&mut graph.tags, tag, &resource.key);
+            tags.add(tag, &resource.key);
         }
         if let Some(folder) = &resource.folder {
-            graph.paths.push((resource.key.clone(), folder.clone()));
+            graph
+                .paths
+                .push((resource.key.clone(), below_model_root(folder)));
         }
-        set_name(&mut graph, &resource.key);
+        graph.set_name(&resource.key.1, &resource.key);
+    }
+    graph.tags = tags.entries;
+    graph
+}
+
+/// A graph over indexes a caller already built, such as the planner's.
+pub(crate) fn from_indexes(indexes: GraphIndexes) -> ProjectGraph {
+    let GraphIndexes {
+        names,
+        upstream,
+        downstream,
+        tags,
+        paths,
+    } = indexes;
+    let mut graph = ProjectGraph {
+        upstream_index: positions(&upstream),
+        downstream_index: positions(&downstream),
+        upstream,
+        downstream,
+        tags,
+        paths,
+        ..ProjectGraph::default()
+    };
+    for (name, key) in names {
+        graph.set_name(&name, &key);
     }
     graph
 }
 
-/// The list stored for `key`, appended empty in insertion order when the key is new.
-fn insert_list<'graph>(
-    entries: &'graph mut Vec<(ObjectKey, Vec<ObjectKey>)>,
-    index: &mut HashMap<ObjectKey, usize>,
-    key: &ObjectKey,
-) -> &'graph mut Vec<ObjectKey> {
-    let position: usize = *index.entry(key.clone()).or_insert_with(|| {
-        entries.push((key.clone(), Vec::new()));
-        entries.len() - 1
-    });
-    &mut entries[position].1
+fn lineage_deps(deps: &[ObjectKey]) -> Vec<ObjectKey> {
+    deps.iter()
+        .filter(|dep| dep.0 != SQL_TEST_RESOURCE)
+        .cloned()
+        .collect()
 }
 
-fn downstream(upstream: &[(ObjectKey, Vec<ObjectKey>)]) -> Vec<(ObjectKey, Vec<ObjectKey>)> {
-    let mut entries: Vec<(ObjectKey, Vec<ObjectKey>)> = Vec::new();
-    let mut index: HashMap<ObjectKey, usize> = HashMap::new();
+/// Inverted edges keyed in upstream order, each list sorted by `(resource type, name)`.
+fn downstream(upstream: &[(ObjectKey, Vec<ObjectKey>)]) -> Edges {
+    let mut inverted: OrderedEdges = OrderedEdges::default();
     for (key, _) in upstream {
-        let _ = insert_list(&mut entries, &mut index, key);
+        let _ = inverted.list(key);
     }
     for (key, deps) in upstream {
         for dep in deps {
-            insert_list(&mut entries, &mut index, dep).push(key.clone());
+            inverted.list(dep).push(key.clone());
         }
     }
+    let mut entries: Edges = inverted.entries;
     for (_, keys) in &mut entries {
         keys.sort();
     }
@@ -77,20 +151,13 @@ fn positions(entries: &[(ObjectKey, Vec<ObjectKey>)]) -> HashMap<ObjectKey, usiz
         .collect()
 }
 
-fn add_tag(tags: &mut Vec<(String, Vec<ObjectKey>)>, tag: &str, key: &ObjectKey) {
-    match tags.iter_mut().find(|(name, _)| name == tag) {
-        Some((_, keys)) if keys.contains(key) => {}
-        Some((_, keys)) => keys.push(key.clone()),
-        None => tags.push((tag.to_owned(), vec![key.clone()])),
+/// A model directory with forward slashes and the leading `models/` removed.
+fn below_model_root(folder: &str) -> String {
+    let folder: String = folder.replace('\\', "/");
+    if folder == MODEL_ROOT {
+        return String::new();
     }
-}
-
-fn set_name(graph: &mut ProjectGraph, key: &ObjectKey) {
-    match graph.name_index.get(&key.1) {
-        Some(&position) => graph.names[position].1 = key.clone(),
-        None => {
-            graph.name_index.insert(key.1.clone(), graph.names.len());
-            graph.names.push((key.1.clone(), key.clone()));
-        }
-    }
+    folder
+        .strip_prefix(MODEL_ROOT_PREFIX)
+        .map_or_else(|| folder.clone(), str::to_owned)
 }

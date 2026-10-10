@@ -10,6 +10,7 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.constants import (
     PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
@@ -19,7 +20,6 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection._build_resources import (
     expand_build_resource_selection,
 )
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
 from sqlbuild.compiler.planner.main.selection.unit_test_selector_error import (
@@ -441,15 +441,7 @@ def _resolve_single_side(
 def _resolve_sql(*, raw: str, project_graph: ProjectGraph) -> frozenset[_SelectionAtom]:
     return frozenset(
         _sql_atom(key)
-        for key in resolve_project_selectors(
-            select=(raw,),
-            exclude=(),
-            all_keys=project_graph.all_keys,
-            upstream_deps=project_graph.upstream_deps,
-            downstream_deps=project_graph.downstream_deps,
-            tag_index=project_graph.tag_index,
-            path_index=project_graph.path_index,
-        )
+        for key in select_project_graph(graph=project_graph, select=(raw,), exclude=())
     )
 
 

@@ -114,14 +114,13 @@ fn ranges(pattern: &[char], start: usize, end: usize) -> String {
     }
     chunks
         .iter()
-        .map(|chunk| {
-            chunk
-                .iter()
-                .map(|&character| escaped(character))
-                .collect::<String>()
-        })
+        .map(|chunk| chunk_text(chunk))
         .collect::<Vec<String>>()
         .join("-")
+}
+
+fn chunk_text(chunk: &[char]) -> String {
+    chunk.iter().map(|&character| escaped(character)).collect()
 }
 
 /// A literal set member; `!` stays bare so a leading one still negates, as in Python.

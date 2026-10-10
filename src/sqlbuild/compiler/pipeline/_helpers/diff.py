@@ -9,13 +9,9 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
-    build_lineage_downstream_deps,
-)
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
-    build_lineage_upstream_deps,
-)
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
+from sqlbuild.compiler.graph.models import LineageGraphViews
 from sqlbuild.compiler.pipeline.constants import (
     MODEL_PATH_ROOT,
     PATH_SELECTOR_PREFIX,
@@ -23,12 +19,6 @@ from sqlbuild.compiler.pipeline.constants import (
 )
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection._build_model_path_index import (
-    build_model_path_index,
-)
-from sqlbuild.compiler.planner.main.selection._build_model_tag_index import (
-    build_model_tag_index,
-)
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 
@@ -63,12 +53,7 @@ def resolve_diff_model_names(
 ) -> tuple[str, ...]:
     """Resolve diff selectors to model names only."""
 
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
-    )
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_downstream_deps(upstream_deps)
-    )
+    lineage: LineageGraphViews = project_lineage_views(project)
     all_keys: dict[str, CompiledObjectKey] = {
         **{model.name: model.key for model in project.models},
         **{source.name: source.key for source in project.sources},
@@ -78,10 +63,10 @@ def resolve_diff_model_names(
         select=select,
         exclude=exclude,
         all_keys=all_keys,
-        upstream=upstream_deps,
-        downstream=downstream_deps,
-        tag_index=build_model_tag_index(project),
-        path_index=build_model_path_index(project),
+        upstream=lineage.upstream_deps,
+        downstream=lineage.downstream_deps,
+        tag_index=lineage.tag_index,
+        path_index=lineage.path_index,
     )
     return tuple(
         model.name

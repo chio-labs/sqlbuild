@@ -1,4 +1,4 @@
-"""Enumerations shared by graph facts."""
+"""Enumerations and aliases shared by graph facts."""
 
 from __future__ import annotations
 
@@ -11,3 +11,6 @@ class HookReadType(StrEnum):
     PYTHON = "Python"
     SQL = "SQL"
     INLINE_SQL = "inline SQL"
+
+
+type NativeKey = tuple[str, str]

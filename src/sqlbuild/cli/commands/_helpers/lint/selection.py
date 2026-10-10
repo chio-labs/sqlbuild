@@ -14,10 +14,10 @@ from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer impo
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.lint.constants import LINT_DIRECTORY_NAMES, PARENT_PATH_SEGMENT, SQL_FILE_SUFFIX
 from sqlbuild.lint.main.scan_fixture_typed_null_candidates import (
     scan_fixture_typed_null_candidates,
@@ -109,14 +109,8 @@ def _resolve_model_paths(
     if exact_paths is not None:
         return exact_paths
     graph: ProjectGraph = build_project_graph(discovered_inputs=discovered, adapter=adapter)
-    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+    selected_keys: frozenset[CompiledObjectKey] = select_project_graph(
+        graph=graph, select=select, exclude=exclude
     )
     selected_names: frozenset[str] = frozenset(
         key.name for key in selected_keys if key.resource_type == CompiledResourceType.MODEL

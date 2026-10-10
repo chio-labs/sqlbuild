@@ -8,7 +8,7 @@ from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, C
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.graph._helpers.algorithms import transitive_closure_many_impl
 from sqlbuild.compiler.graph._helpers.audit_gates import attached_audit_gate_edges_impl
-from sqlbuild.compiler.graph._helpers.lineage import build_lineage_upstream_deps_impl
+from sqlbuild.compiler.graph._helpers.native_graph import project_lineage_views_impl
 from sqlbuild.compiler.graph._helpers.sql_refs import sql_ref_key_impl
 from sqlbuild.compiler.graph.models import HookReadEdge
 from sqlbuild.compiler.graph.types import HookReadType
@@ -86,7 +86,7 @@ def hook_read_cycles_impl(*, project: CompiledProject) -> tuple[HookReadEdge, ..
     if not edges:
         return ()
     upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {
-        key: list(deps) for key, deps in build_lineage_upstream_deps_impl(project).items()
+        key: list(deps) for key, deps in project_lineage_views_impl(project).upstream_deps.items()
     }
     for gate in attached_audit_gate_edges_impl(project=project):
         upstream.setdefault(gate.gated, []).append(gate.read)

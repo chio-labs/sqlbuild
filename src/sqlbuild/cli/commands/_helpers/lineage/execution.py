@@ -47,11 +47,11 @@ from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.main.build_semantic_uses import build_direct_semantic_uses
 from sqlbuild.compiler.lineage.models import DirectSemanticColumnUse
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.constants import UNKNOWN_SELECTOR_ERROR_CODE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -254,14 +254,8 @@ def _semantic_use_model_names(
             )[0]
             for target in request.targets
         )
-    keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=request.select,
-        exclude=request.exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+    keys: frozenset[CompiledObjectKey] = select_project_graph(
+        graph=graph, select=request.select, exclude=request.exclude
     )
     return frozenset(key.name for key in keys if key.resource_type == CompiledResourceType.MODEL)
 

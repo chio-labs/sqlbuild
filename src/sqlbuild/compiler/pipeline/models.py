@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.planner.models import (
@@ -37,6 +38,7 @@ class ProjectGraph:
     tag_index: dict[str, frozenset[CompiledObjectKey]]
     path_index: dict[CompiledObjectKey, str]
     all_keys: dict[str, CompiledObjectKey]
+    native: _native.NativeProjectGraph | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

@@ -70,7 +70,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredTaskFunction,
 )
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
@@ -364,7 +364,7 @@ def lineage_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, str]
     edges: set[tuple[str, str]] = set()
     key: CompiledObjectKey
     deps: tuple[CompiledObjectKey, ...]
-    for key, deps in build_lineage_upstream_deps(project).items():
+    for key, deps in project_lineage_views(project).upstream_deps.items():
         edges.update((key.name, dep.name) for dep in deps)
     return frozenset(edges)
 

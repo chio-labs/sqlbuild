@@ -16,12 +16,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
-    build_lineage_downstream_deps,
-)
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
-    build_lineage_upstream_deps,
-)
 from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
     apply_unit_test_selectors,
     resolve_configured_rule_selection,
@@ -31,7 +25,7 @@ from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     gather_deferred_relations,
     resolve_deferred_target_config,
 )
-from sqlbuild.compiler.pipeline._helpers.graph import build_static_all_keys
+from sqlbuild.compiler.pipeline._helpers.graph import build_project_graph_impl
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline._helpers.python_plan_entries import (
     build_python_run_plan_outputs,
@@ -46,12 +40,6 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
 )
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
-from sqlbuild.compiler.planner.main.selection._build_model_path_index import (
-    build_model_path_index,
-)
-from sqlbuild.compiler.planner.main.selection._build_model_tag_index import (
-    build_model_tag_index,
-)
 from sqlbuild.compiler.planner.models import (
     DeferralInputs,
     PlannerOverrides,
@@ -98,7 +86,7 @@ def run_compile_pipeline(
     effective_config: dict[str, object] = compile_result.connection_config
     project: CompiledProject = compile_result.project
     compile_seconds: float = compile_result.compile_seconds
-    graph: ProjectGraph = _build_project_graph(project=project)
+    graph: ProjectGraph = build_project_graph_impl(project)
     project_dir: Path | None = discovered_inputs.project_dir
     if project_dir is None:
         raise RulesError("compiler rules require a resolved project directory")
@@ -215,7 +203,7 @@ def _build_result(
         run_selection = resolve_python_sql_run_selection_from_inputs(
             select=select,
             exclude=exclude,
-            project_graph=_build_project_graph(project=project),
+            project_graph=build_project_graph_impl(project),
             discovered_inputs=discovered_inputs,
         )
         selected_sql_keys = run_selection.sql_keys
@@ -273,18 +261,4 @@ def _build_result(
         custom_materializations=custom_materializations,
         python_node_names=python_outputs.selected_python_node_names,
         python_plan_entries=python_outputs.python_plan_entries,
-    )
-
-
-def _build_project_graph(*, project: CompiledProject) -> ProjectGraph:
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
-    )
-    return ProjectGraph(
-        project=project,
-        upstream_deps=upstream_deps,
-        downstream_deps=build_lineage_downstream_deps(upstream_deps),
-        tag_index=build_model_tag_index(project),
-        path_index=build_model_path_index(project),
-        all_keys=build_static_all_keys(project),
     )

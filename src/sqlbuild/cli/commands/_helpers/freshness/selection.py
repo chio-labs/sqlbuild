@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.compiler.planner.main.selection.upstream import expand_project_upstream_keys
 
 
@@ -16,30 +16,12 @@ def resolve_freshness_source_names(
 
     selected_keys: frozenset[CompiledObjectKey]
     if select:
-        selected_keys = resolve_project_selectors(
-            select=select,
-            exclude=(),
-            all_keys=graph.all_keys,
-            upstream_deps=graph.upstream_deps,
-            downstream_deps=graph.downstream_deps,
-            tag_index=graph.tag_index,
-            path_index=graph.path_index,
-        )
+        selected_keys = select_project_graph(graph=graph, select=select, exclude=())
     else:
         selected_keys = frozenset(graph.all_keys.values())
 
     excluded_keys: frozenset[CompiledObjectKey] = (
-        resolve_project_selectors(
-            select=exclude,
-            exclude=(),
-            all_keys=graph.all_keys,
-            upstream_deps=graph.upstream_deps,
-            downstream_deps=graph.downstream_deps,
-            tag_index=graph.tag_index,
-            path_index=graph.path_index,
-        )
-        if exclude
-        else frozenset()
+        select_project_graph(graph=graph, select=exclude, exclude=()) if exclude else frozenset()
     )
     source_names: frozenset[str] = _source_names_for_keys(graph=graph, keys=selected_keys)
     excluded_source_names: frozenset[str] = _source_names_for_keys(

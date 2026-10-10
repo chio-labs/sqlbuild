@@ -2,21 +2,10 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledSeed,
-    CompiledSource,
-)
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
-    build_lineage_downstream_deps,
-)
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
-    build_lineage_upstream_deps,
-)
+from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
@@ -25,13 +14,10 @@ from sqlbuild.compiler.planner._helpers.graph.core import (
     topologically_order_keys,
 )
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import expand_selected_loader_dependencies
-from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
-    build_model_path_index_impl as build_model_path_index,
+from sqlbuild.compiler.planner._helpers.graph.selectors import (
+    parse_selector,
+    resolve_graph_selectors,
 )
-from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
-    build_model_tag_index_impl as build_model_tag_index,
-)
-from sqlbuild.compiler.planner._helpers.graph.selectors import parse_selector, resolve_selectors
 from sqlbuild.compiler.planner.models import (
     ParsedSelector,
     PathSelector,
@@ -57,15 +43,12 @@ def build_planner_scope(
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps
     )
-    all_keys: dict[str, CompiledObjectKey] = _build_all_keys(project)
+    all_keys: dict[str, CompiledObjectKey] = project_lineage_views(project).all_keys
     resolved_selected_keys: frozenset[CompiledObjectKey] = (
         selected_keys
         if selected_keys is not None
-        else _resolve_selection_on_lineage_graph(
-            project=project,
-            select=select,
-            exclude=exclude,
-            all_keys=all_keys,
+        else resolve_graph_selectors(
+            graph=build_native_project_graph(project), select=select, exclude=exclude
         )
     )
     executable_dependency_source_keys: frozenset[CompiledObjectKey] = (
@@ -110,46 +93,6 @@ def build_planner_scope(
         python_read_source_names=python_read_source_names,
         sql_test_selection=sql_test_selection or SqlTestSelection(),
     )
-
-
-def _resolve_selection_on_lineage_graph(
-    *,
-    project: CompiledProject,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-    all_keys: dict[str, CompiledObjectKey],
-) -> frozenset[CompiledObjectKey]:
-    """Resolve user selection against the LINEAGE graph; execution edges never affect selection."""
-
-    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
-    )
-    return resolve_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=all_keys,
-        upstream=lineage_upstream,
-        downstream=build_lineage_downstream_deps(lineage_upstream),
-        tag_index=build_model_tag_index(project),
-        path_index=build_model_path_index(project),
-    )
-
-
-def _build_all_keys(project: CompiledProject) -> dict[str, CompiledObjectKey]:
-    keys: dict[str, CompiledObjectKey] = {}
-    model: CompiledModel
-    for model in project.models:
-        keys[model.name] = model.key
-    source: CompiledSource
-    for source in project.sources:
-        keys[source.name] = source.key
-    seed: CompiledSeed
-    for seed in project.seeds:
-        keys[seed.name] = seed.key
-    function: CompiledFunction
-    for function in project.functions:
-        keys[function.name] = function.key
-    return keys
 
 
 def _upstream_source_selector_keys(

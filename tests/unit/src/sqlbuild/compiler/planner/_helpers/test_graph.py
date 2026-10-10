@@ -9,7 +9,6 @@ from sqlbuild.compiler.planner._helpers.graph.core import (
     build_execution_upstream_deps,
     expand_downstream,
     expand_upstream,
-    find_path_keys,
     topologically_order_keys,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
@@ -19,8 +18,6 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     ExecutionEdgeOriginsTestCase,
     ExpandDownstreamTestCase,
     ExpandUpstreamTestCase,
-    FindPathKeysErrorTestCase,
-    FindPathKeysTestCase,
     SqlTestFunctionGraphDepsTestCase,
     TopologicalOrderTestCase,
 )
@@ -339,73 +336,6 @@ def test_given_key_when_expanding_downstream_then_returns_expected_keys(
     )
 
     assert result == test_case.expected_keys
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        FindPathKeysTestCase(
-            description="finds all nodes on directed paths between start and end",
-            downstream={
-                source_key("raw"): (model_key("a"),),
-                model_key("a"): (model_key("b"), model_key("c")),
-                model_key("b"): (model_key("d"),),
-                model_key("c"): (model_key("d"),),
-                model_key("d"): (),
-            },
-            start=source_key("raw"),
-            end=model_key("d"),
-            expected_keys=frozenset(
-                {
-                    source_key("raw"),
-                    model_key("a"),
-                    model_key("b"),
-                    model_key("c"),
-                    model_key("d"),
-                }
-            ),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_start_and_end_when_finding_path_keys_then_returns_expected(
-    test_case: FindPathKeysTestCase,
-) -> None:
-    result: frozenset[CompiledObjectKey] = find_path_keys(
-        start=test_case.start,
-        end=test_case.end,
-        downstream=test_case.downstream,
-    )
-
-    assert result == test_case.expected_keys
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        FindPathKeysErrorTestCase(
-            description="raises when end is not downstream of start",
-            downstream={
-                model_key("a"): (model_key("b"),),
-                model_key("b"): (),
-                model_key("c"): (),
-            },
-            start=model_key("a"),
-            end=model_key("c"),
-            expected_error_type=ValueError,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_unreachable_end_when_finding_path_keys_then_raises(
-    test_case: FindPathKeysErrorTestCase,
-) -> None:
-    with pytest.raises(test_case.expected_error_type, match="not downstream"):
-        find_path_keys(
-            start=test_case.start,
-            end=test_case.end,
-            downstream=test_case.downstream,
-        )
 
 
 @pytest.mark.parametrize(

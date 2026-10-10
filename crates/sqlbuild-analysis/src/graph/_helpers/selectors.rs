@@ -7,33 +7,19 @@ use crate::graph::_helpers::close_matches::close_matches;
 use crate::graph::_helpers::closure::Direction;
 use crate::graph::constants::{
     EMPTY_SELECTOR_CODE, EMPTY_VALUE_CODE, EXPANSION_MARKER, FOLDER_SEPARATOR,
-    INTERSECTION_SEPARATOR, KIND_SEPARATOR, MISPLACED_MARKER_CODE, MISSING_NAME_CODE, MODEL_ROOT,
-    MODEL_ROOT_PREFIX, PATH_KIND, PATH_ROOT_CODE, PATH_ROOT_ERROR, PATH_SELECTOR_CODE,
-    PATH_SEPARATOR, PATTERN_CHARACTERS, PLANNER_DEFAULT_CODE, SEED_RESOURCE, SOURCE_RESOURCE,
-    SQL_FILE_SUFFIX, SUGGESTION_CUTOFF, SUGGESTION_LIMIT, TABLE_FUNCTION_RESOURCE, TAG_KIND,
-    TEST_KIND, UDF_RESOURCE, UNIT_TEST_CODE, UNIT_TEST_ONLY_TEST_AND_BUILD, UNKNOWN_KIND_CODE,
-    UNKNOWN_NAME_CODE, UNKNOWN_PATH_CODE, UNKNOWN_TAG_CODE, UNMAPPED_KIND_CODE, UNMAPPED_KINDS,
+    INTERSECTION_SEPARATOR, KIND_SEPARATOR, MISPLACED_MARKER_CODE, MISSING_NAME_CODE,
+    MODEL_RESOURCE, MODEL_ROOT, MODEL_ROOT_PREFIX, NAME_KIND, PATH_KIND, PATH_ROOT_CODE,
+    PATH_ROOT_ERROR, PATH_SELECTOR_CODE, PATH_SEPARATOR, PATTERN_CHARACTERS, PLANNER_DEFAULT_CODE,
+    SEED_RESOURCE, SOURCE_RESOURCE, SQL_FILE_SUFFIX, SUGGESTION_CUTOFF, SUGGESTION_LIMIT,
+    TABLE_FUNCTION_RESOURCE, TAG_KIND, TEST_KIND, UDF_RESOURCE, UNIT_TEST_CODE,
+    UNIT_TEST_ONLY_TEST_AND_BUILD, UNKNOWN_KIND_CODE, UNKNOWN_NAME_CODE, UNKNOWN_PATH_CODE,
+    UNKNOWN_TAG_CODE, UNMAPPED_KIND_CODE, UNMAPPED_KINDS,
 };
-use crate::graph::models::{ProjectGraph, SelectorError};
+use crate::graph::errors::SelectorError;
+use crate::graph::models::{BuildResources, ParsedSelector, ProjectGraph};
 
-type Keys = BTreeSet<ObjectKey>;
+pub(crate) type Keys = BTreeSet<ObjectKey>;
 type Resolved = Result<Keys, SelectorError>;
-
-/// One parsed selector: `kind:value` (kind `name` when bare) or `start~end`, with `+` markers.
-enum Parsed<'raw> {
-    Kind {
-        kind: &'raw str,
-        value: &'raw str,
-        upstream: bool,
-        downstream: bool,
-    },
-    Path {
-        start: &'raw str,
-        end: &'raw str,
-        upstream: bool,
-        downstream: bool,
-    },
-}
 
 fn error(code: &'static str, message: String) -> SelectorError {
     SelectorError {
@@ -59,22 +45,47 @@ pub(crate) fn resolve(
     };
     let excluded: Keys = tokens(graph, exclude)?;
     let scoped: Keys = selected.difference(&excluded).cloned().collect();
-    let mut expanded: Keys = scoped.clone();
-    for key in &scoped {
-        expanded.extend(
-            graph
-                .closure(key, Direction::Upstream)
-                .into_iter()
-                .filter(|upstream| {
-                    upstream.0 == UDF_RESOURCE || upstream.0 == TABLE_FUNCTION_RESOURCE
-                }),
-        );
+    Ok(build_resources(graph, &scoped, BuildResources::SELECTION)
+        .into_iter()
+        .collect())
+}
+
+/// Python's `expand_required_build_resources`: functions and seeds a selected scope needs.
+pub(crate) fn build_resources(
+    graph: &ProjectGraph,
+    selected: &Keys,
+    include: BuildResources,
+) -> Keys {
+    let mut expanded: Keys = selected.clone();
+    for key in selected {
+        for upstream in graph.closure(key, Direction::Upstream) {
+            let wanted: bool = (include.upstream_functions && is_function(&upstream))
+                || (include.upstream_seeds && upstream.0 == SEED_RESOURCE);
+            if wanted {
+                expanded.insert(upstream);
+            }
+        }
     }
-    Ok(expanded.into_iter().collect())
+    if include.downstream_functions {
+        for key in selected.iter().filter(|key| key.0 == MODEL_RESOURCE) {
+            expanded.extend(
+                graph
+                    .edges(key, Direction::Downstream)
+                    .iter()
+                    .filter(|key| is_function(key))
+                    .cloned(),
+            );
+        }
+    }
+    expanded
+}
+
+fn is_function(key: &ObjectKey) -> bool {
+    key.0 == UDF_RESOURCE || key.0 == TABLE_FUNCTION_RESOURCE
 }
 
 /// The union of whitespace-separated tokens across `selectors`, without build expansion.
-fn tokens(graph: &ProjectGraph, selectors: &[String]) -> Resolved {
+pub(crate) fn tokens(graph: &ProjectGraph, selectors: &[String]) -> Resolved {
     let mut resolved: Keys = Keys::new();
     for selector in selectors {
         for token in selector
@@ -99,19 +110,19 @@ fn intersection(graph: &ProjectGraph, token: &str) -> Resolved {
 
 fn single(graph: &ProjectGraph, raw: &str) -> Resolved {
     match parse(raw)? {
-        Parsed::Path {
+        ParsedSelector::Path {
             start,
             end,
             upstream,
             downstream,
-        } => path(graph, (start, end), (upstream, downstream)),
-        Parsed::Kind {
+        } => path(graph, (&start, &end), (upstream, downstream)),
+        ParsedSelector::Kind {
             kind,
             value,
             upstream,
             downstream,
         } => {
-            let keys: Keys = matched(graph, kind, value)?;
+            let keys: Keys = matched(graph, &kind, &value)?;
             let mut result: Keys = keys.clone();
             for key in &keys {
                 if upstream {
@@ -154,7 +165,7 @@ fn named(graph: &ProjectGraph, name: &str) -> Result<ObjectKey, SelectorError> {
         .ok_or_else(|| error(UNKNOWN_NAME_CODE, format!("unknown selector name '{name}'")))
 }
 
-fn parse(raw: &str) -> Result<Parsed<'_>, SelectorError> {
+pub(crate) fn parse(raw: &str) -> Result<ParsedSelector, SelectorError> {
     let stripped: &str = raw.trim_matches(python_space);
     if stripped.is_empty() {
         return Err(error(EMPTY_SELECTOR_CODE, "empty selector".to_owned()));
@@ -187,9 +198,9 @@ fn parse(raw: &str) -> Result<Parsed<'_>, SelectorError> {
                 format!("path selector '{stripped}' requires names on both sides of '~'"),
             ));
         }
-        return Ok(Parsed::Path {
-            start,
-            end,
+        return Ok(ParsedSelector::Path {
+            start: start.to_owned(),
+            end: end.to_owned(),
             upstream,
             downstream,
         });
@@ -213,15 +224,13 @@ fn parse(raw: &str) -> Result<Parsed<'_>, SelectorError> {
         None if core.contains(FOLDER_SEPARATOR) => (PATH_KIND, core.trim_matches(FOLDER_SEPARATOR)),
         None => (NAME_KIND, core),
     };
-    Ok(Parsed::Kind {
-        kind,
-        value,
+    Ok(ParsedSelector::Kind {
+        kind: kind.to_owned(),
+        value: value.to_owned(),
         upstream,
         downstream,
     })
 }
-
-const NAME_KIND: &str = "name";
 
 fn is_selector_kind(prefix: &str) -> bool {
     [
@@ -236,7 +245,7 @@ fn is_selector_kind(prefix: &str) -> bool {
 }
 
 /// Python's `match_selector_keys`: the keys one parsed selector names before `+` expansion.
-fn matched(graph: &ProjectGraph, kind: &str, value: &str) -> Resolved {
+pub(crate) fn matched(graph: &ProjectGraph, kind: &str, value: &str) -> Resolved {
     match kind {
         TAG_KIND => {
             let keys: Keys = graph.tagged(value);
@@ -275,7 +284,7 @@ fn matched(graph: &ProjectGraph, kind: &str, value: &str) -> Resolved {
     }
 }
 
-fn suggestion(value: &str, mut names: Vec<&str>) -> Option<String> {
+pub(crate) fn suggestion(value: &str, mut names: Vec<&str>) -> Option<String> {
     names.sort_unstable();
     let matches: Vec<String> = close_matches(value, &names, SUGGESTION_LIMIT, SUGGESTION_CUTOFF);
     if matches.is_empty() {
@@ -351,7 +360,7 @@ fn python_space(character: char) -> bool {
     character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
 }
 
-fn is_pattern(value: &str) -> bool {
+pub(crate) fn is_pattern(value: &str) -> bool {
     value.contains(PATTERN_CHARACTERS)
 }
 

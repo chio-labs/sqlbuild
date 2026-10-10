@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from sqlbuild.compiler.compile.models import CompiledAudit, CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
 from sqlbuild.compiler.graph._helpers.algorithms import transitive_closure_many_impl
-from sqlbuild.compiler.graph._helpers.lineage import build_lineage_upstream_deps_impl
+from sqlbuild.compiler.graph._helpers.native_graph import project_lineage_views_impl
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge
 
 _READABLE_RESOURCE_TYPES: frozenset[CompiledResourceType] = frozenset(
@@ -117,9 +117,11 @@ def attached_audit_gate_cycles_impl(
 ) -> tuple[AttachedAuditGateEdge, ...]:
     """Return every attached-audit read that depends on the audit's own target."""
 
+    if not _audit_gates(project=project):
+        return ()
     edges: tuple[AttachedAuditGateEdge, ...] = attached_audit_gate_edges_impl(project=project)
     upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {
-        key: list(deps) for key, deps in build_lineage_upstream_deps_impl(project).items()
+        key: list(deps) for key, deps in project_lineage_views_impl(project).upstream_deps.items()
     }
     cycles: dict[AttachedAuditGateEdge, None] = {}
     edge: AttachedAuditGateEdge
