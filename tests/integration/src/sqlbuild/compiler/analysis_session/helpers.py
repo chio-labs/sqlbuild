@@ -903,3 +903,12 @@ def upstream_lineage_sources(
     )
     trace: list[dict[str, Any]] = json.loads(capsys.readouterr().out)["trace"]
     return code, [step["source"]["resource_name"] for step in trace]
+
+
+def projection_view(
+    row: tuple[list[tuple[str, str]], list[str], list[str]],
+) -> tuple[dict[str, str], frozenset[str], frozenset[str]]:
+    """A native projection-facts row as Python's `_simple_projection_facts` returned it."""
+
+    types, null_literal_names, quoted_names = row
+    return dict(types), frozenset(null_literal_names), frozenset(quoted_names)

@@ -329,6 +329,9 @@ def scan_macro_call_sites(
     list[tuple[int, int, int, str, list[str] | None, bool]],
     tuple[int | None, str | None, str] | None,
 ]: ...
+def fixture_projection_facts(
+    sql: str, dialect: str | None, /
+) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
 def macro_call_names(sql: str, nested: bool, /) -> tuple[list[str] | None, str | None]: ...
 def splice_macro_calls(
     sql: str, sites: list[tuple[int, int]], outputs: list[str]

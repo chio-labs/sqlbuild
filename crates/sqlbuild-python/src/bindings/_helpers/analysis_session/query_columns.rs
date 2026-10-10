@@ -3,9 +3,11 @@
 use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::assembly::analysis_session::main::projection_facts::projection_facts;
 use sqlbuild_analysis::assembly::analysis_session::main::query_columns::query_columns;
 use sqlbuild_analysis::assembly::analysis_session::models::{
-    ColumnFact, QueryColumns, QueryColumnsInput, QueryColumnsMode, QueryColumnsRequest,
+    ColumnFact, ProjectionFacts, QueryColumns, QueryColumnsInput, QueryColumnsMode,
+    QueryColumnsRequest,
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_core::panics::main::native_failure::native_failure;
@@ -18,6 +20,7 @@ use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
 const QUERY_COLUMNS_CONTEXT: &str = "native query column analysis";
+const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
 
 /// `(sql, placeholders, analysis names, lineage references, recover CTE facts, mode)`.
 type QueryRow = (
@@ -30,6 +33,8 @@ type QueryRow = (
 );
 /// `(dialect, function return types, nullability rules, types, nullability, queries)`.
 type RequestRow = (String, Pairs, Pairs, Shapes, Shapes, Vec<QueryRow>);
+/// `([(name, type)], NULL literal names, quoted names)`.
+type ProjectionFactsRow = (Vec<(String, String)>, Vec<String>, Vec<String>);
 /// `(succeeded, [(name, type, nullability)] or None, has star)`.
 type ColumnsRow = (bool, Option<Vec<(String, Option<String>, String)>>, bool);
 
@@ -101,8 +106,22 @@ fn columns_row(columns: QueryColumns) -> ColumnsRow {
     )
 }
 
+/// Python's `_simple_projection_facts`: `(types, NULL literal names, quoted names)`, casefolded.
+#[pyfunction]
+fn fixture_projection_facts(
+    py: Python<'_>,
+    sql: &str,
+    dialect: Option<&str>,
+) -> PyResult<ProjectionFactsRow> {
+    let facts: ProjectionFacts = py
+        .compiler_detach(|| projection_facts(sql, dialect))
+        .map_err(|reason| compiler_error(native_failure(PROJECTION_FACTS_CONTEXT, &reason)))?;
+    Ok((facts.types, facts.null_literal_names, facts.quoted_names))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(infer_query_columns, module)?)?;
+    module.add_function(wrap_pyfunction!(fixture_projection_facts, module)?)?;
     Ok(())
 }
 

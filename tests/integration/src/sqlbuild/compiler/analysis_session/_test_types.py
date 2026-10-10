@@ -137,3 +137,12 @@ class MissingSessionAnalysisTestCase:
 
     description: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class ProjectionFactsTestCase:
+    """Fixture queries whose projection facts Python recorded in a golden."""
+
+    description: str
+    queries: tuple[tuple[str, str], ...]
+    expected_differences: list[tuple[int, str, object, object]]

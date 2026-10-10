@@ -389,3 +389,12 @@ impl fmt::Debug for NullabilityCallback {
         formatter.write_str("NullabilityCallback")
     }
 }
+
+/// Python's `_simple_projection_facts` of a fixture query; names are casefolded.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProjectionFacts {
+    /// `(name, type)` in projection order; a later projection of a name wins.
+    pub types: Vec<(String, String)>,
+    pub null_literal_names: Vec<String>,
+    pub quoted_names: Vec<String>,
+}

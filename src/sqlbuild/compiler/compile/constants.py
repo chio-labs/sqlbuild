@@ -109,10 +109,6 @@ MACRO_ARGUMENT_NESTED_CALL_TAG: str = "c"
 SQL_INTERPOLATION_TOKEN: str = "@@"
 
 TEMPLATE_OPEN_TOKEN: str = "${"
-POLYGLOT_LITERAL_KIND: str = "literal"
-POLYGLOT_ARRAY_KIND: str = "array_func"
-POLYGLOT_STRUCTURED_KINDS: frozenset[str] = frozenset({"parse_json", "struct"})
-POLYGLOT_FUNCTION_KIND: str = "function"
 
 MACRO_CALL_PATTERN: re.Pattern[str] = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(")
 SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(

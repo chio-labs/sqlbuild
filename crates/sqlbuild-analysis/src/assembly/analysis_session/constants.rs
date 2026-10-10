@@ -206,3 +206,24 @@ pub(crate) const VARINT_PAYLOAD_MASK: u8 = 0x7f;
 pub(crate) const VARINT_PAYLOAD_BITS: u32 = 7;
 /// The most bytes one stored `u64` varint takes.
 pub(crate) const VARINT_MAX_BYTES: usize = 10;
+/// Payload kinds and literal types Python's fixture projection facts read.
+pub(crate) const NULL_PAYLOAD_KIND: &str = "null";
+pub(crate) const LITERAL_PAYLOAD_KIND: &str = "literal";
+pub(crate) const ARRAY_PAYLOAD_KIND: &str = "array_func";
+pub(crate) const STRUCTURED_PAYLOAD_KINDS: [&str; 2] = ["parse_json", "struct"];
+pub(crate) const FUNCTION_PAYLOAD_KIND: &str = "function";
+pub(crate) const SELECT_PAYLOAD_KEY: &str = "select";
+/// `{literal_type: type}` Python's `_simple_expression_type` maps a literal to.
+pub(crate) const LITERAL_FIXTURE_TYPES: [(&str, &str); 3] = [
+    ("string", "VARCHAR"),
+    ("number", "NUMBER"),
+    ("boolean", "BOOLEAN"),
+];
+/// `{function name: type}` Python's `_simple_expression_type` maps a function to.
+pub(crate) const FUNCTION_FIXTURE_TYPES: [(&str, &str); 3] = [
+    ("ARRAY_CONSTRUCT", "ARRAY"),
+    ("OBJECT_CONSTRUCT", "OBJECT"),
+    ("PARSE_JSON", "VARIANT"),
+];
+pub(crate) const ARRAY_FIXTURE_TYPE: &str = "ARRAY";
+pub(crate) const VARIANT_FIXTURE_TYPE: &str = "VARIANT";
