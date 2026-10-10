@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import record_analysis_cache_metrics
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
@@ -13,6 +11,7 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
 )
+from sqlbuild.compiler.compile._helpers.analysis.set_operations import names_set_operation
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_relation_names,
     binding_schema_for_model,
@@ -37,10 +36,6 @@ from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
-
-_SET_OPERATION_PATTERN: re.Pattern[str] = re.compile(
-    r"\b(?:UNION|INTERSECT|EXCEPT)\b", re.IGNORECASE
-)
 
 
 class PythonModelAnalysis:
@@ -197,7 +192,7 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
         ],
         sorted(binding_relation_names(references)),
         _recovers_cte_facts(model_input),
-        _SET_OPERATION_PATTERN.search(request.query_sql) is not None,
+        names_set_operation(request.query_sql),
         (
             (
                 str(values.get("valid_from_column") or SNAPSHOT_DEFAULT_VALID_FROM_COLUMN),
