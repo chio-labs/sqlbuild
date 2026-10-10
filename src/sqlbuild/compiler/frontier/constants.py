@@ -73,7 +73,9 @@ STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.discovery.models:DiscoveredProjectInputs": frozenset({"native_session"}),
     "sqlbuild.compiler.compile.models:DeclarationScopeResolver": frozenset({"native_contexts"}),
     "sqlbuild.compiler.compile.models:DeclarationScopeBuild": frozenset({"sql_test_scans"}),
-    "sqlbuild.compiler.compile.models:CompiledProject": frozenset({"native_session"}),
+    "sqlbuild.compiler.compile.models:CompiledProject": frozenset(
+        {"native_session", "lineage_graph"}
+    ),
 }
 STAGE_CAPTURE_DECODED_SEQUENCES: frozenset[str] = frozenset(
     {"sqlbuild.compiler.compile.models:CompactLineageFacts"}

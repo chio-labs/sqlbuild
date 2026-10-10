@@ -6,6 +6,7 @@ pub(crate) mod cache;
 pub(crate) mod compile_outputs;
 pub(crate) mod contracts;
 pub(crate) mod discovery;
+pub(crate) mod graph;
 pub(crate) mod lineage;
 pub(crate) mod model_config;
 pub(crate) mod project_assembly;

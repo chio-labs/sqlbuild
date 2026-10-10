@@ -45,13 +45,13 @@ from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.main.selected_graph import (
     build_project_graph_with_analysis_selection,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
 from sqlbuild.rule_engine.constants import RULE_FIX_AVAILABLE_NOTE
@@ -185,14 +185,8 @@ def _analyze_compile_project(
         _ = complete_compile_phase(
             status=status, message=f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
         )
-    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+    selected_keys: frozenset[CompiledObjectKey] = select_project_graph(
+        graph=graph, select=select, exclude=exclude
     )
     rules_result: RulesRunResult = RulesRunResult(
         findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0

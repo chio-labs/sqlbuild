@@ -387,24 +387,6 @@ class ExpandDownstreamTestCase:
 
 
 @dataclass(frozen=True)
-class FindPathKeysTestCase:
-    description: str
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    start: CompiledObjectKey
-    end: CompiledObjectKey
-    expected_keys: frozenset[CompiledObjectKey]
-
-
-@dataclass(frozen=True)
-class FindPathKeysErrorTestCase:
-    description: str
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    start: CompiledObjectKey
-    end: CompiledObjectKey
-    expected_error_type: type[Exception]
-
-
-@dataclass(frozen=True)
 class ParseSelectorTestCase:
     description: str
     raw: str

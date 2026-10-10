@@ -10,7 +10,7 @@ pub struct GraphResource {
     pub key: ObjectKey,
     pub deps: Vec<ObjectKey>,
     pub tags: Vec<String>,
-    /// A model's folder below `models/`; `None` for every other resource.
+    /// A model's directory relative to the project, `models/` prefix optional; `None` otherwise.
     pub folder: Option<String>,
 }
 
@@ -32,10 +32,46 @@ pub struct ProjectGraph {
     pub(crate) name_index: HashMap<String, usize>,
 }
 
-/// Python's `PlannerInputError` for a selector: code, message and optional help.
+/// One parsed selector token: `kind:value` (kind `name` when bare) or `start~end`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SelectorError {
-    pub code: &'static str,
-    pub message: String,
-    pub help: Option<String>,
+pub enum ParsedSelector {
+    Kind {
+        kind: String,
+        value: String,
+        upstream: bool,
+        downstream: bool,
+    },
+    Path {
+        start: String,
+        end: String,
+        upstream: bool,
+        downstream: bool,
+    },
+}
+
+/// Which resources `expand_required_build_resources` adds around a selected scope.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BuildResources {
+    pub upstream_functions: bool,
+    pub upstream_seeds: bool,
+    pub downstream_functions: bool,
+}
+
+impl BuildResources {
+    /// What `--select`/`--exclude` resolution adds: upstream functions only.
+    pub const SELECTION: Self = Self {
+        upstream_functions: true,
+        upstream_seeds: false,
+        downstream_functions: false,
+    };
+}
+
+/// Python's `ProjectGraph` indexes as handed in, in Python's dict order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GraphIndexes {
+    pub names: Vec<(String, ObjectKey)>,
+    pub upstream: Vec<(ObjectKey, Vec<ObjectKey>)>,
+    pub downstream: Vec<(ObjectKey, Vec<ObjectKey>)>,
+    pub tags: Vec<(String, Vec<ObjectKey>)>,
+    pub paths: Vec<(ObjectKey, String)>,
 }

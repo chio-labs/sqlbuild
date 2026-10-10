@@ -13,24 +13,13 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompiledSource,
 )
-from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
-    build_lineage_downstream_deps,
-)
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
-    build_lineage_upstream_deps,
-)
+from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
     topologically_order_keys,
 )
-from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
-    build_model_path_index_impl as build_model_path_index,
-)
-from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
-    build_model_tag_index_impl as build_model_tag_index,
-)
-from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_selectors
+from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_graph_selectors
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
@@ -77,23 +66,8 @@ def build_clone_plan_output(
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps
     )
-    all_keys: dict[str, CompiledObjectKey] = {
-        **{model.name: model.key for model in project.models},
-        **{source.name: source.key for source in project.sources},
-        **{seed.name: seed.key for seed in project.seeds},
-        **{function.name: function.key for function in project.functions},
-    }
-    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
-    )
-    selected_keys: frozenset[CompiledObjectKey] = resolve_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=all_keys,
-        upstream=lineage_upstream,
-        downstream=build_lineage_downstream_deps(lineage_upstream),
-        tag_index=build_model_tag_index(project),
-        path_index=build_model_path_index(project),
+    selected_keys: frozenset[CompiledObjectKey] = resolve_graph_selectors(
+        graph=build_native_project_graph(project), select=select, exclude=exclude
     )
     return PlanOutput(
         execution_order=topologically_order_keys(upstream=upstream_deps),

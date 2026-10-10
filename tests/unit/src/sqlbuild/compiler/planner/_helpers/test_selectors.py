@@ -6,6 +6,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
 )
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 from sqlbuild.compiler.planner._helpers.graph.selectors import (
     parse_selector,
@@ -706,15 +707,11 @@ def test_given_invalid_path_selector_when_resolving_then_raises_with_message(
 def test_given_model_paths_when_building_path_index_then_returns_expected_folders(
     test_case: BuildPathIndexTestCase,
 ) -> None:
-    from sqlbuild.compiler.planner.main.selection._build_model_path_index import (
-        build_model_path_index,
-    )
-
     project: CompiledProject = build_test_project(
         model_deps={name: () for name in test_case.model_paths},
         model_paths=test_case.model_paths,
     )
-    result: dict[CompiledObjectKey, str] = build_model_path_index(project)
+    result: dict[CompiledObjectKey, str] = project_lineage_views(project).path_index
     result_by_name: dict[str, str] = {key.name: folder for key, folder in result.items()}
 
     assert result_by_name == test_case.expected_folders

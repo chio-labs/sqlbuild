@@ -1,7 +1,11 @@
 use crate::assembly::project::types::ObjectKey;
+use crate::graph::errors::SelectorError;
 use crate::graph::main::build_project_graph::build_project_graph;
 use crate::graph::main::resolve_selectors::resolve_selectors;
-use crate::graph::models::{GraphResource, ProjectGraph, SelectorError};
+use crate::graph::models::{GraphResource, ProjectGraph};
+use crate::graph::tests::test_types::SelectorFailure;
+
+type OwnedFailure = (String, String, Option<String>);
 
 type ResourceSpec = (
     &'static str,
@@ -25,7 +29,7 @@ const ORDERS_PROJECT: &[ResourceSpec] = &[
         "order_items",
         &[("model", "orders"), ("seed", "countries")],
         &["daily", "finance"],
-        Some("mart/items"),
+        Some("models/mart/items"),
     ),
     ("model", "customers", &[], &[], Some("staging/crm")),
     (
@@ -33,7 +37,7 @@ const ORDERS_PROJECT: &[ResourceSpec] = &[
         "customer_orders",
         &[("model", "customers"), ("model", "orders")],
         &[],
-        Some(""),
+        Some("models"),
     ),
     ("source", "raw_orders", &[], &[], None),
     ("seed", "countries", &[], &["ref"], None),
@@ -58,10 +62,7 @@ pub(super) fn orders_graph() -> ProjectGraph {
 }
 
 /// The resolved keys, or the error's `(code, message, help)`.
-pub(super) fn resolved(
-    select: &[&str],
-    exclude: &[&str],
-) -> Result<Vec<ObjectKey>, (String, String, Option<String>)> {
+pub(super) fn resolved(select: &[&str], exclude: &[&str]) -> Result<Vec<ObjectKey>, OwnedFailure> {
     let owned = |values: &[&str]| {
         values
             .iter()
@@ -77,15 +78,12 @@ pub(super) fn resolved(
     )
 }
 
-pub(super) fn expected(
-    outcome: &Result<&[(&str, &str)], (&str, &str, Option<&str>)>,
-) -> Result<Vec<ObjectKey>, (String, String, Option<String>)> {
-    match outcome {
-        Ok(keys) => Ok(keys.iter().map(key).collect()),
-        Err((code, message, help)) => Err((
-            (*code).to_owned(),
-            (*message).to_owned(),
-            help.map(str::to_owned),
-        )),
-    }
+/// The keys a selector case expects.
+pub(super) fn keys(pairs: &[(&str, &str)]) -> Vec<ObjectKey> {
+    pairs.iter().map(key).collect()
+}
+
+/// An owned copy of the `(code, message, help)` a selector case expects.
+pub(super) fn failure((code, message, help): SelectorFailure) -> OwnedFailure {
+    (code.to_owned(), message.to_owned(), help.map(str::to_owned))
 }

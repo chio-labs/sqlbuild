@@ -1,449 +1,138 @@
-"""Selector parsing and scope resolution for planner graph selection."""
+"""Planner selector boundary over the native selector grammar and graph resolution."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from difflib import get_close_matches
-from fnmatch import fnmatchcase
+from collections.abc import Iterable, Mapping
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.planner._helpers.graph.core import (
-    expand_downstream,
-    expand_upstream,
-    find_path_keys,
-)
+from sqlbuild.compiler.graph.main._compiled_graph_keys import compiled_graph_keys
+from sqlbuild.compiler.graph.main._native_graph_from_views import native_graph_from_views
+from sqlbuild.compiler.graph.main._native_graph_keys import native_graph_keys
 from sqlbuild.compiler.planner.constants import (
-    EMPTY_SELECTOR_PATH,
-    MODEL_SELECTOR_ROOT,
-    MODEL_SELECTOR_ROOT_PREFIX,
-    PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
-    PATH_SELECTOR_SEPARATOR,
-    SELECTOR_KIND_SEPARATOR,
-    SELECTOR_MISSING_NAME_ERROR_FRAGMENT,
-    SELECTOR_PATH_SEPARATOR,
-    SELECTOR_SUGGESTION_CUTOFF,
-    SELECTOR_SUGGESTION_LIMIT,
-    SQL_FILE_SELECTOR_SUFFIX,
     UNIT_TEST_SELECTOR_ERROR_CODE,
     UNIT_TEST_SELECTOR_ONLY_TEST_AND_BUILD,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
-from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector, SelectorExpansion
+from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.planner.types import SelectorKind
-from sqlbuild.errors.contracts.exceptions import SharedInputError
 
-_SELECTOR_KIND_BY_PREFIX: dict[str, SelectorKind] = {
-    SelectorKind.SEED: SelectorKind.SEED,
-    SelectorKind.SOURCE: SelectorKind.SOURCE,
-    SelectorKind.TASK: SelectorKind.TASK,
-    SelectorKind.ASSET: SelectorKind.ASSET,
-    SelectorKind.LOADER: SelectorKind.LOADER,
-    SelectorKind.CHECK: SelectorKind.CHECK,
-    SelectorKind.TAG: SelectorKind.TAG,
-    SelectorKind.PATH: SelectorKind.PATH,
-    SelectorKind.TEST: SelectorKind.TEST,
-}
+_KIND_SELECTOR: str = "kind"
 
-_RESOURCE_TYPE_BY_SELECTOR_KIND: dict[SelectorKind, CompiledResourceType] = {
-    SelectorKind.SEED: CompiledResourceType.SEED,
-    SelectorKind.SOURCE: CompiledResourceType.SOURCE,
-}
+type _Edges = Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+type _Failure = tuple[str, str, str | None]
+type _Outcome = tuple[list[tuple[str, str]] | None, _Failure | None]
 
 
 def parse_selector(raw: str) -> ParsedSelector | PathSelector:
     """Parse one raw selector token into a structured form."""
 
-    stripped: str = raw.strip()
-    try:
-        expansion: SelectorExpansion = split_selector_expansion(raw)
-    except SharedInputError as error:
-        code: str = "S001" if not stripped else "S002"
-        if SELECTOR_MISSING_NAME_ERROR_FRAGMENT in str(error):
-            code = "S004"
-        raise PlannerInputError(str(error), code=code) from None
-
-    upstream: bool = expansion.upstream
-    downstream: bool = expansion.downstream
-    core: str = expansion.core
-
-    if PATH_SELECTOR_SEPARATOR in core:
-        parts: list[str] = core.split(PATH_SELECTOR_SEPARATOR, 1)
-        start_name: str = parts[0].strip()
-        end_name: str = parts[1].strip()
-        if not start_name or not end_name:
-            raise PlannerInputError(
-                f"path selector '{stripped}' requires names on both sides of '~'",
-                code="S003",
-            )
-        return PathSelector(
-            start_name=start_name,
-            end_name=end_name,
-            upstream=upstream,
-            downstream=downstream,
-        )
-
-    name: str = core
-    if SELECTOR_KIND_SEPARATOR in name:
-        prefix: str
-        value: str
-        prefix, value = name.split(SELECTOR_KIND_SEPARATOR, 1)
-        kind: SelectorKind | None = _SELECTOR_KIND_BY_PREFIX.get(prefix)
-        if kind is None:
-            raise PlannerInputError(
-                f"unknown selector type '{prefix}' in '{stripped}'", code="S005"
-            )
-        if not value:
-            raise PlannerInputError(f"selector '{stripped}' has empty value after ':'", code="S006")
-        return ParsedSelector(kind=kind, value=value, upstream=upstream, downstream=downstream)
-
-    if SELECTOR_PATH_SEPARATOR in name:
-        folder_value: str = name.strip(SELECTOR_PATH_SEPARATOR)
+    parsed, failure = _native.parse_project_selector(raw)
+    if parsed is None:
+        raise _selector_error(failure)
+    shape, first, second, upstream, downstream = parsed
+    if shape == _KIND_SELECTOR:
         return ParsedSelector(
-            kind=SelectorKind.PATH, value=folder_value, upstream=upstream, downstream=downstream
+            kind=SelectorKind(first), value=second, upstream=upstream, downstream=downstream
         )
+    return PathSelector(start_name=first, end_name=second, upstream=upstream, downstream=downstream)
 
-    return ParsedSelector(
-        kind=SelectorKind.NAME, value=name, upstream=upstream, downstream=downstream
-    )
+
+def resolve_graph_selectors(
+    *,
+    graph: _native.NativeProjectGraph,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+) -> frozenset[CompiledObjectKey]:
+    """Resolve select/exclude strings against a native graph, adding required functions."""
+
+    return _selected(graph.resolve(list(select), list(exclude)))
 
 
 def resolve_selectors(
     *,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
-    all_keys: dict[str, CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]] | None = None,
-    path_index: dict[CompiledObjectKey, str] | None = None,
+    all_keys: Mapping[str, CompiledObjectKey],
+    upstream: _Edges,
+    downstream: _Edges,
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]] | None = None,
+    path_index: Mapping[CompiledObjectKey, str] | None = None,
 ) -> frozenset[CompiledObjectKey]:
     """Resolve raw select/exclude strings into a final set of object keys."""
 
-    effective_tag_index: dict[str, frozenset[CompiledObjectKey]] = tag_index or {}
-    effective_path_index: dict[CompiledObjectKey, str] = path_index or {}
-
-    if not select and not exclude:
-        return frozenset(all_keys.values())
-
-    selected: frozenset[CompiledObjectKey] = (
-        resolve_selector_tokens(
-            selectors=select,
-            all_keys=all_keys,
-            upstream=upstream,
-            downstream=downstream,
-            tag_index=effective_tag_index,
-            path_index=effective_path_index,
-        )
-        if select
-        else frozenset(all_keys.values())
-    )
-    excluded: frozenset[CompiledObjectKey] = resolve_selector_tokens(
-        selectors=exclude,
+    graph: _native.NativeProjectGraph = native_graph_from_views(
         all_keys=all_keys,
         upstream=upstream,
         downstream=downstream,
-        tag_index=effective_tag_index,
-        path_index=effective_path_index,
+        tag_index=tag_index or {},
+        path_index=path_index or {},
     )
-
-    scoped: frozenset[CompiledObjectKey] = selected - excluded
-    return expand_required_build_resources(
-        selected_keys=scoped,
-        upstream=upstream,
-        downstream=downstream,
-        include_upstream_functions=True,
-        include_upstream_seeds=False,
-        include_downstream_functions=False,
-    )
+    return resolve_graph_selectors(graph=graph, select=select, exclude=exclude)
 
 
 def resolve_selector_tokens(
     *,
     selectors: tuple[str, ...],
-    all_keys: dict[str, CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
+    all_keys: Mapping[str, CompiledObjectKey],
+    upstream: _Edges,
+    downstream: _Edges,
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
 ) -> frozenset[CompiledObjectKey]:
     """Union the keys matched by whitespace-separated selector tokens, without build expansion."""
 
-    resolved: set[CompiledObjectKey] = set()
-    raw_selector: str
-    for raw_selector in selectors:
-        token: str
-        for token in raw_selector.split():
-            resolved.update(
-                _resolve_token(
-                    token=token,
-                    all_keys=all_keys,
-                    upstream=upstream,
-                    downstream=downstream,
-                    tag_index=tag_index,
-                    path_index=path_index,
-                )
-            )
-    return frozenset(resolved)
+    graph: _native.NativeProjectGraph = native_graph_from_views(
+        all_keys=all_keys,
+        upstream=upstream,
+        downstream=downstream,
+        tag_index=tag_index,
+        path_index=path_index,
+    )
+    return _selected(graph.tokens(list(selectors)))
 
 
 def match_selector_keys(
     *,
     parsed: ParsedSelector,
-    all_keys: dict[str, CompiledObjectKey],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
+    all_keys: Mapping[str, CompiledObjectKey],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
 ) -> frozenset[CompiledObjectKey]:
     """Return the keys one parsed selector matches before `+` graph expansion."""
 
-    if parsed.kind == SelectorKind.TAG:
-        tagged_keys: frozenset[CompiledObjectKey] = tag_index.get(parsed.value, frozenset())
-        if not tagged_keys:
-            raise PlannerInputError(f"no models found with tag '{parsed.value}'", code="S008")
-        return tagged_keys
-
-    if parsed.kind == SelectorKind.PATH:
-        return _match_path(value=parsed.value, path_index=path_index)
-
-    if parsed.kind == SelectorKind.TEST:
-        raise unit_test_selector_rejection(
-            selector=f"{SelectorKind.TEST}{SELECTOR_KIND_SEPARATOR}{parsed.value}"
-        )
-
-    keys: frozenset[CompiledObjectKey] = _lookup_keys(parsed=parsed, all_keys=all_keys)
-    if not keys:
-        label: str = "pattern" if _is_name_pattern(parsed.value) else "name"
-        raise PlannerInputError(
-            f"unknown selector {label} '{parsed.value}'",
-            code="S007",
-            help=selector_name_help(value=parsed.value, candidates=all_keys),
-        )
-    return keys
+    graph: _native.NativeProjectGraph = native_graph_from_views(
+        all_keys=all_keys, upstream={}, downstream={}, tag_index=tag_index, path_index=path_index
+    )
+    return _selected(graph.matched(str(parsed.kind), parsed.value))
 
 
 def expand_required_build_resources(
     *,
     selected_keys: frozenset[CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
+    upstream: _Edges,
+    downstream: _Edges,
     include_upstream_functions: bool = True,
     include_upstream_seeds: bool = False,
     include_downstream_functions: bool = False,
 ) -> frozenset[CompiledObjectKey]:
     """Add non-model resources needed to build a coherent selected model scope."""
 
-    expanded: set[CompiledObjectKey] = set(selected_keys)
-    key: CompiledObjectKey
-    for key in tuple(selected_keys):
-        upstream_key: CompiledObjectKey
-        for upstream_key in expand_upstream(key=key, upstream=upstream):
-            if include_upstream_functions and upstream_key.resource_type in {
-                CompiledResourceType.UDF,
-                CompiledResourceType.TABLE_FN,
-            }:
-                expanded.add(upstream_key)
-            if include_upstream_seeds and upstream_key.resource_type == CompiledResourceType.SEED:
-                expanded.add(upstream_key)
-    if not include_downstream_functions:
-        return frozenset(expanded)
-    selected_model_keys: frozenset[CompiledObjectKey] = frozenset(
-        key for key in selected_keys if key.resource_type == CompiledResourceType.MODEL
+    graph: _native.NativeProjectGraph = native_graph_from_views(
+        all_keys={}, upstream=upstream, downstream=downstream, tag_index={}, path_index={}
     )
-    for key in selected_model_keys:
-        downstream_key: CompiledObjectKey
-        for downstream_key in downstream.get(key, ()):
-            if downstream_key.resource_type in {
-                CompiledResourceType.UDF,
-                CompiledResourceType.TABLE_FN,
-            }:
-                expanded.add(downstream_key)
-    return frozenset(expanded)
-
-
-def _resolve_token(
-    *,
-    token: str,
-    all_keys: dict[str, CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]:
-    """Resolve one selector token, handling comma intersection."""
-
-    parts: list[str] = token.split(",")
-    if len(parts) == 1:
-        return _resolve_single(
-            raw=parts[0],
-            all_keys=all_keys,
-            upstream=upstream,
-            downstream=downstream,
-            tag_index=tag_index,
-            path_index=path_index,
+    return compiled_graph_keys(
+        graph.build_resources(
+            native_graph_keys(selected_keys),
+            (include_upstream_functions, include_upstream_seeds, include_downstream_functions),
         )
-
-    sets: list[frozenset[CompiledObjectKey]] = [
-        _resolve_single(
-            raw=part,
-            all_keys=all_keys,
-            upstream=upstream,
-            downstream=downstream,
-            tag_index=tag_index,
-            path_index=path_index,
-        )
-        for part in parts
-    ]
-    result: frozenset[CompiledObjectKey] = sets[0]
-    subsequent: frozenset[CompiledObjectKey]
-    for subsequent in sets[1:]:
-        result = result & subsequent
-    return result
-
-
-def _resolve_single(
-    *,
-    raw: str,
-    all_keys: dict[str, CompiledObjectKey],
-    upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: dict[str, frozenset[CompiledObjectKey]],
-    path_index: dict[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]:
-    """Resolve one atomic selector (no commas)."""
-
-    parsed: ParsedSelector | PathSelector = parse_selector(raw)
-
-    if isinstance(parsed, PathSelector):
-        start_name: str = parsed.start_name
-        end_name: str = parsed.end_name
-        start_key: CompiledObjectKey | None = all_keys.get(start_name)
-        end_key: CompiledObjectKey | None = all_keys.get(end_name)
-        if start_key is None:
-            raise PlannerInputError(f"unknown selector name '{start_name}'", code="S007")
-        if end_key is None:
-            raise PlannerInputError(f"unknown selector name '{end_name}'", code="S007")
-        result: set[CompiledObjectKey] = set(
-            find_path_keys(start=start_key, end=end_key, downstream=downstream)
-        )
-        if parsed.upstream:
-            result.update(expand_upstream(key=start_key, upstream=upstream))
-        if parsed.downstream:
-            result.update(expand_downstream(key=end_key, downstream=downstream))
-        return frozenset(result)
-
-    keys: frozenset[CompiledObjectKey] = match_selector_keys(
-        parsed=parsed,
-        all_keys=all_keys,
-        tag_index=tag_index,
-        path_index=path_index,
     )
-    result: set[CompiledObjectKey] = set(keys)
-    key: CompiledObjectKey
-    if parsed.upstream:
-        for key in keys:
-            result.update(expand_upstream(key=key, upstream=upstream))
-    if parsed.downstream:
-        for key in keys:
-            result.update(expand_downstream(key=key, downstream=downstream))
-    return frozenset(result)
-
-
-def _match_path(
-    *,
-    value: str,
-    path_index: dict[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]:
-    """Match a `models/`-rooted path selector against model folders."""
-
-    folder: str = _normalize_path_selector_value(value)
-    selector_folder: str = _model_path_candidate(folder)
-    matched_keys: frozenset[CompiledObjectKey] = frozenset(
-        key
-        for key, indexed_folder in path_index.items()
-        if _path_matches(indexed_folder=indexed_folder, selector_folder=selector_folder)
-    )
-    if not matched_keys:
-        raise PlannerInputError(
-            f"no models found under path '{folder}'."
-            + (
-                " Path selectors match folders; select a single model by its name."
-                if folder.endswith(SQL_FILE_SELECTOR_SUFFIX)
-                else ""
-            ),
-            code="S009",
-        )
-    return matched_keys
-
-
-def _normalize_path_selector_value(value: str) -> str:
-    return value.replace("\\", "/").strip("/")
-
-
-def _model_path_candidate(folder: str) -> str:
-    if folder == MODEL_SELECTOR_ROOT:
-        return EMPTY_SELECTOR_PATH
-    if folder.startswith(MODEL_SELECTOR_ROOT_PREFIX):
-        return folder[len(MODEL_SELECTOR_ROOT_PREFIX) :]
-    raise PlannerInputError(
-        PATH_SELECTOR_EXPLICIT_ROOT_ERROR,
-        code="S012",
-    )
-
-
-def _path_matches(*, indexed_folder: str, selector_folder: str) -> bool:
-    if selector_folder == EMPTY_SELECTOR_PATH:
-        return True
-    return indexed_folder == selector_folder or indexed_folder.startswith(f"{selector_folder}/")
-
-
-def _lookup_keys(
-    *,
-    parsed: ParsedSelector,
-    all_keys: dict[str, CompiledObjectKey],
-) -> frozenset[CompiledObjectKey]:
-    """Look up object keys for an exact or glob-pattern name selector."""
-
-    if parsed.kind == SelectorKind.NAME:
-        if not _is_name_pattern(parsed.value):
-            candidate: CompiledObjectKey | None = all_keys.get(parsed.value)
-            return frozenset() if candidate is None else frozenset((candidate,))
-        return frozenset(key for name, key in all_keys.items() if fnmatchcase(name, parsed.value))
-
-    resource_type: CompiledResourceType | None = _RESOURCE_TYPE_BY_SELECTOR_KIND.get(parsed.kind)
-    if resource_type is None:
-        raise PlannerInputError(
-            f"selector type '{parsed.kind}' does not map to a resource type yet",
-            code="S010",
-        )
-
-    if not _is_name_pattern(parsed.value):
-        candidate = all_keys.get(parsed.value)
-        if candidate is not None and candidate.resource_type == resource_type:
-            return frozenset((candidate,))
-        return frozenset()
-    return frozenset(
-        key
-        for name, key in all_keys.items()
-        if key.resource_type == resource_type and fnmatchcase(name, parsed.value)
-    )
-
-
-def _is_name_pattern(value: str) -> bool:
-    return any(character in value for character in "*?[")
 
 
 def selector_name_help(*, value: str, candidates: Iterable[str]) -> str | None:
     """Suggest the nearest selectable names for an unknown selector name."""
 
-    if _is_name_pattern(value):
-        return None
-    matches: list[str] = get_close_matches(
-        value, sorted(candidates), n=SELECTOR_SUGGESTION_LIMIT, cutoff=SELECTOR_SUGGESTION_CUTOFF
-    )
-    if not matches:
-        return None
-    return f"did you mean {', '.join(f"'{match}'" for match in matches)}?"
+    return _native.project_selector_name_help(value, list(candidates))
 
 
 def unit_test_selector_rejection(*, selector: str) -> PlannerInputError:
@@ -453,3 +142,17 @@ def unit_test_selector_rejection(*, selector: str) -> PlannerInputError:
         f"selector '{selector}' selects a unit test; {UNIT_TEST_SELECTOR_ONLY_TEST_AND_BUILD}",
         code=UNIT_TEST_SELECTOR_ERROR_CODE,
     )
+
+
+def _selected(outcome: _Outcome) -> frozenset[CompiledObjectKey]:
+    keys, failure = outcome
+    if keys is None:
+        raise _selector_error(failure)
+    return compiled_graph_keys(keys)
+
+
+def _selector_error(failure: _Failure | None) -> PlannerInputError:
+    if failure is None:
+        return PlannerInputError("selector resolution returned neither keys nor an error")
+    code, message, help_text = failure
+    return PlannerInputError(message, code=code, help=help_text)

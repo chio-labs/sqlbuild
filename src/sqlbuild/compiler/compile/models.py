@@ -1166,6 +1166,57 @@ class CompiledProject:
     )
     native_session: Any | None = field(default=None, compare=False, repr=False)
 
+    @cached_property
+    def lineage_graph(self) -> _native.NativeProjectGraph:
+        """The lineage edges, tags, model folders and names, indexed natively once per project."""
+
+        rows: list[tuple[tuple[str, str], list[tuple[str, str]], list[str], str | None]] = [
+            (
+                self._graph_key(model.key),
+                self._graph_keys(model.deps),
+                self._graph_tags(model.config.values.get("tags")),
+                str(model.relative_path.parent),
+            )
+            for model in self.models
+        ]
+        rows.extend(
+            (self._graph_key(source.key), self._graph_keys(source.deps), [], None)
+            for source in self.sources
+        )
+        rows.extend(
+            (
+                self._graph_key(seed.key),
+                self._graph_keys(seed.deps),
+                list(seed.schema_entry.tags),
+                None,
+            )
+            for seed in self.seeds
+        )
+        rows.extend(
+            (
+                self._graph_key(function.key),
+                self._graph_keys(function.deps),
+                list(function.tags),
+                None,
+            )
+            for function in self.functions
+        )
+        return _native.NativeProjectGraph.from_resources(rows)
+
+    @staticmethod
+    def _graph_key(key: CompiledObjectKey) -> tuple[str, str]:
+        return (str(key.resource_type), key.name)
+
+    @classmethod
+    def _graph_keys(cls, keys: Sequence[CompiledObjectKey]) -> list[tuple[str, str]]:
+        return [cls._graph_key(key) for key in keys]
+
+    @staticmethod
+    def _graph_tags(value: object) -> list[str]:
+        if isinstance(value, list | tuple):
+            return [str(item) for item in value]
+        return []
+
 
 @dataclass(frozen=True)
 class CompileSqlTestCte:

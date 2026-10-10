@@ -1,5 +1,6 @@
 use crate::assembly::project::types::ObjectKey;
-use crate::graph::models::{ProjectGraph, SelectorError};
+use crate::graph::errors::SelectorError;
+use crate::graph::models::ProjectGraph;
 
 /// The keys `--select` minus `--exclude` resolve to, with their build functions, sorted.
 pub fn resolve_selectors(
