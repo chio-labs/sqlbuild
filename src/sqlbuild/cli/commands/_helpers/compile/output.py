@@ -7,8 +7,6 @@ from collections import Counter
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-import orjson
-
 import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.compile.semantic_notice import (
     selected_semantic_coverage,
@@ -218,13 +216,12 @@ def format_compile_json(
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
     }
-    native: str | None = _native_json_report(result)
-    if native is not None:
-        return native
-    try:
-        return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
-    except TypeError:
+    emitted: str | None = _native.emit_json_report(result)
+    if emitted is None:
+        report_native_fallback(site=NativeFallbackSite.COMPILE_JSON_REPORT)
         return json.dumps(result, indent=2)
+    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
+    return emitted
 
 
 def format_compile_error_json(
@@ -251,19 +248,7 @@ def format_compile_error_json(
         "stopped": True,
         "diagnostics": [_diagnostic_to_json(diagnostic)],
     }
-    native: str | None = _native_json_report(result)
-    if native is not None:
-        return native
-    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
-
-
-def _native_json_report(result: dict[str, object]) -> str | None:
-    """Emit the report natively; `None` for lone surrogates or non-JSON objects it defers."""
-
-    emitted: str | None = _native.emit_json_report(result)
-    if emitted is None:
-        report_native_fallback(site=NativeFallbackSite.COMPILE_JSON_REPORT)
-        return None
+    emitted: str = _native.emit_orjson_report(result)
     report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
     return emitted
 

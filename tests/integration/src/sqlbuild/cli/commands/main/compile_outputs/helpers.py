@@ -11,6 +11,7 @@ from typing import Any, NamedTuple, cast
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.cli.commands._helpers.compile import output as output_module
 from sqlbuild.cli.commands._helpers.compile import target_writer as target_writer_module
 from sqlbuild.cli.commands.classes import native_artifact_batch as artifact_batch_module
@@ -25,7 +26,7 @@ from sqlbuild.cli.compile_reuse.constants import (
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
 OUTPUT_MODEL_HEADER: str = (
@@ -50,6 +51,16 @@ BLOCKED_ARTIFACT: str = "target/compiled/models/orders_north.sql"
 HELPER_MODULE_DIRECTORY: str = "site_packages"
 HELPER_MODULE: str = "orders_reuse_helper"
 TRACKED_VARIABLE: str = "SQLBUILD_ORDERS_REGION"
+
+SURROGATE_SELECTOR: str = "orders\udcff"
+SURROGATE_HOOK_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+    "models/orders.sql": "MODEL (description 'Orders.');\nSELECT 1 AS order_id\n",
+    "hooks/python/notify.py": (
+        "from sqlbuild.hooks import hook\n\n\n@hook\ndef notify_complete(ctx):\n"
+        '    """Notify \\udcff complete."""\n    return None\n'
+    ),
+}
 
 type CompileOutcome = tuple[int, dict[str, Any], dict[str, bytes]]
 
@@ -85,6 +96,27 @@ def record_output_work(
     ):
         monkeypatch.setattr(module, "report_native_answer", counted)
     return counts
+
+
+def record_json_fallbacks(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record every JSON report the native emitter left to `json.dumps`."""
+
+    sites: list[str] = []
+
+    def recorded(*, site: NativeFallbackSite) -> None:
+        sites.append(site.value)
+
+    monkeypatch.setattr(output_module, "report_native_fallback", recorded)
+    return sites
+
+
+def compile_json_text(
+    *, project_dir: Path, args: tuple[str, ...], capsys: pytest.CaptureFixture[str]
+) -> str:
+    """Compile through the CLI and return the JSON report text."""
+
+    _ = main(["--project-dir", str(project_dir), "compile", "--json", *args])
+    return capsys.readouterr().out
 
 
 def compile_outputs(
@@ -173,6 +205,13 @@ def change_runtime(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         return {**runtime_identity(), "python": "3.0.0 (simulated)"}
 
     monkeypatch.setattr(native_reuse_module, "runtime_identity", changed)
+
+
+def change_native_build(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report another build of the native extension from now on, as after reinstalling it."""
+
+    del project_dir
+    monkeypatch.setattr(native_module, "BUILD_IDENTITY", f"{native_module.BUILD_IDENTITY}-rebuilt")
 
 
 def edit_loaded_module(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:

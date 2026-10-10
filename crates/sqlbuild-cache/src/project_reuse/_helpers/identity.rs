@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::project_reuse::_helpers::files::file_digest;
 use crate::project_reuse::constants::NATIVE_DIGEST_PREFIX;
 use crate::project_reuse::models::{ReuseRules, SettingsInputs};
+use crate::project_snapshot::main::text_path::text_path;
 
 /// Stat each `sys.path` entry, leaving the project root to the project walk.
 pub(crate) fn search_path_stamps(
@@ -18,16 +19,19 @@ pub(crate) fn search_path_stamps(
     search_path
         .iter()
         .map(|entry| {
-            let path: &str = if entry.is_empty() { "." } else { entry };
-            let mtime_ns: i64 =
-                if project_root.is_some() && resolved(Path::new(path)) == project_root {
-                    rules.project_root_path_mtime_ns
-                } else {
-                    match std::fs::metadata(path) {
-                        Ok(metadata) => modified_ns(&metadata),
-                        Err(_) => rules.missing_path_mtime_ns,
-                    }
-                };
+            let path: PathBuf = if entry.is_empty() {
+                PathBuf::from(".")
+            } else {
+                text_path(entry)
+            };
+            let mtime_ns: i64 = if project_root.is_some() && resolved(&path) == project_root {
+                rules.project_root_path_mtime_ns
+            } else {
+                match std::fs::metadata(&path) {
+                    Ok(metadata) => modified_ns(&metadata),
+                    Err(_) => rules.missing_path_mtime_ns,
+                }
+            };
             (entry.clone(), mtime_ns)
         })
         .collect()
@@ -214,7 +218,7 @@ pub(crate) fn module_stamps(
         if covered.contains(path) || !seen.insert(path.as_str()) {
             continue;
         }
-        if let Ok(metadata) = std::fs::metadata(path) {
+        if let Ok(metadata) = std::fs::metadata(text_path(path)) {
             stamps.push((path.clone(), modified_ns(&metadata), metadata.len()));
         }
     }
@@ -224,10 +228,10 @@ pub(crate) fn module_stamps(
 
 /// Whether every recorded module file still has the same stat identity.
 pub(crate) fn module_stamps_unchanged(stamps: &[(String, i64, u64)]) -> bool {
-    stamps
-        .iter()
-        .all(|(path, mtime_ns, size)| match std::fs::metadata(path) {
+    stamps.iter().all(
+        |(path, mtime_ns, size)| match std::fs::metadata(text_path(path)) {
             Ok(metadata) => modified_ns(&metadata) == *mtime_ns && metadata.len() == *size,
             Err(_) => false,
-        })
+        },
+    )
 }
