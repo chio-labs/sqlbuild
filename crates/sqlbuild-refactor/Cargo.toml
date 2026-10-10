@@ -1,0 +1,22 @@
+[package]
+name = "sqlbuild-refactor"
+version.workspace = true
+description = "Native `sqb rename` and `sqb mv` for SQLBuild: refactoring plans, text edits, staging and commit with Python's exact output."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sqlbuild-analysis.workspace = true
+sqlbuild-config.workspace = true
+sqlbuild-core.workspace = true
+sqlbuild-sqltext.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -97,11 +97,13 @@ impl<'input> Composer<'input> {
         }
     }
 
-    fn push(&mut self, tag: String, content: NodeContent, span: Span) -> usize {
+    fn push(&mut self, tag: String, content: NodeContent, span: Span, decorated: bool) -> usize {
         self.document.nodes.push(Node {
             tag,
             content,
             position: start_position(span),
+            span: (span.start.index(), span.end.index()),
+            decorated,
         });
         self.document.nodes.len() - 1
     }
@@ -262,6 +264,19 @@ impl<'input> Composer<'input> {
         None
     }
 
+    /// PyYAML's marks of a literal or folded scalar: from its indicator to just past the last line
+    /// break its content consumed, before the next line's indentation.
+    fn block_marks(&self, span: Span) -> (usize, usize) {
+        let start = self.block_indicator(span).unwrap_or(span.start.index());
+        let end = span.end.index().min(self.chars.len());
+        let mut trimmed = end;
+        while trimmed > start && self.chars[trimmed - 1] == ' ' {
+            trimmed -= 1;
+        }
+        let after_break = trimmed > start && matches!(self.chars[trimmed - 1], '\n' | '\r');
+        (start, if after_break { trimmed } else { end })
+    }
+
     /// The column of the `-` that starts the sequence entry holding the indicator at `indicator`.
     fn entry_column(&self, indicator: usize) -> Option<usize> {
         let mut end = indicator;
@@ -372,19 +387,27 @@ impl<'input> Composer<'input> {
                 if style == ScalarStyle::Plain && tag.is_none() && anchor_id == 0 {
                     self.check_plain(&value, span, placement)?;
                 }
-                let value = match style {
-                    ScalarStyle::Literal | ScalarStyle::Folded => {
-                        Cow::Owned(self.block_scalar(&value, span, placement)?)
-                    }
-                    _ => value,
+                let (value, marks) = match style {
+                    ScalarStyle::Literal | ScalarStyle::Folded => (
+                        Cow::Owned(self.block_scalar(&value, span, placement)?),
+                        self.block_marks(span),
+                    ),
+                    _ => (value, (span.start.index(), span.end.index())),
                 };
                 let non_specific = full_tag(tag.as_ref()).as_deref() == Some(NON_SPECIFIC_TAG);
                 if non_specific && value.is_empty() && style == ScalarStyle::Plain {
                     return Err(unsupported("an empty scalar tagged '!'"));
                 }
                 self.open_anchor(anchor_id, span)?;
+                let decorated = anchor_id != 0 || tag.is_some();
                 let tag = scalar_tag(&value, style, full_tag(tag.as_ref()));
-                let node = self.push(tag, NodeContent::Scalar(value.into_owned()), span);
+                let node = self.push(
+                    tag,
+                    NodeContent::Scalar(value.into_owned()),
+                    span,
+                    decorated,
+                );
+                self.document.nodes[node].span = marks;
                 Ok(self.close_anchor(anchor_id, node))
             }
             Event::SequenceStart(anchor_id, tag) => {
@@ -414,8 +437,9 @@ impl<'input> Composer<'input> {
             }
             items.push(self.compose_node(event, item_span, item_placement)?);
         }
+        let decorated = anchor_id != 0 || tag.is_some();
         let tag = collection_tag(full_tag(tag.as_ref()), SEQ_TAG);
-        let node = self.push(tag, NodeContent::Sequence(items), span);
+        let node = self.push(tag, NodeContent::Sequence(items), span, decorated);
         Ok(self.close_anchor(anchor_id, node))
     }
 
@@ -442,8 +466,9 @@ impl<'input> Composer<'input> {
             let value = self.compose_node(value_event, value_span, value_placement)?;
             entries.push((key, value));
         }
+        let decorated = anchor_id != 0 || tag.is_some();
         let tag = collection_tag(full_tag(tag.as_ref()), MAP_TAG);
-        let node = self.push(tag, NodeContent::Mapping(entries), span);
+        let node = self.push(tag, NodeContent::Mapping(entries), span, decorated);
         Ok(self.close_anchor(anchor_id, node))
     }
 

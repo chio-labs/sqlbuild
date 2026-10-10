@@ -1,0 +1,12 @@
+#[path = "tests/test_header_edits.rs"]
+mod header_edits;
+#[path = "tests/helpers.rs"]
+mod helpers;
+#[path = "tests/test_sql_sites.rs"]
+mod sql_sites;
+#[path = "tests/test_types.rs"]
+mod test_types;
+#[path = "tests/test_text_edits.rs"]
+mod text_edits;
+#[path = "tests/test_yaml_edits.rs"]
+mod yaml_edits;

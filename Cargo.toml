@@ -11,6 +11,7 @@ members = [
     "crates/sqlbuild-attachments",
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
+    "crates/sqlbuild-refactor",
     "crates/sqlbuild-python",
 ]
 resolver = "2"
@@ -31,6 +32,7 @@ order = [
     "sqlbuild-attachments",
     "sqlbuild-analysis",
     "sqlbuild-rules",
+    "sqlbuild-refactor",
     "sqlbuild-python",
 ]
 python-boundary = "sqlbuild-python"
@@ -83,6 +85,7 @@ sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-discovery = { path = "crates/sqlbuild-discovery" }
 sqlbuild-render = { path = "crates/sqlbuild-render" }
+sqlbuild-refactor = { path = "crates/sqlbuild-refactor" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-model-config = { path = "crates/sqlbuild-model-config" }
 sqlbuild-scopes = { path = "crates/sqlbuild-scopes" }

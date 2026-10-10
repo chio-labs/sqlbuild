@@ -99,3 +99,27 @@ impl ConfigValue {
             .map(|(_, value)| value)
     }
 }
+
+/// The content of one composed YAML node; aliases share node ids.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ComposedYamlContent {
+    Scalar(String),
+    Sequence(Vec<usize>),
+    Mapping(Vec<(usize, usize)>),
+}
+
+/// One node `yaml.compose` returns, with its PyYAML `start_mark.index` and `end_mark.index`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComposedYamlNode {
+    pub content: ComposedYamlContent,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// The node graph `yaml.compose(text, Loader=yaml.SafeLoader)` returns; `root` is `None` for an
+/// empty stream.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ComposedYaml {
+    pub nodes: Vec<ComposedYamlNode>,
+    pub root: Option<usize>,
+}

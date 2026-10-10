@@ -775,10 +775,24 @@ dependencies = [
  "sqlbuild-core",
  "sqlbuild-discovery",
  "sqlbuild-model-config",
+ "sqlbuild-refactor",
  "sqlbuild-render",
  "sqlbuild-rules",
  "sqlbuild-scopes",
  "sqlbuild-sqltext",
+]
+
+[[package]]
+name = "sqlbuild-refactor"
+version = "0.154.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sqlbuild-analysis",
+ "sqlbuild-config",
+ "sqlbuild-core",
+ "sqlbuild-sqltext",
+ "tempfile",
 ]
 
 [[package]]
