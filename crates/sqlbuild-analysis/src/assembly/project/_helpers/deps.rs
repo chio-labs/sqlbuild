@@ -2,9 +2,12 @@
 
 use std::collections::HashSet;
 
+use sqlbuild_core::text::main::python_str_repr::python_str_repr;
+
 use crate::assembly::project::constants::{
-    ATTACHED_AUDIT_KINDS, AUDIT_TARGET_DEFERRAL, DBT_REF_KIND, KIND_RESOURCES, MODEL_RESOURCE,
+    ATTACHED_AUDIT_KINDS, AUDIT_TARGET_KIND_ENUM, DBT_REF_KIND, KIND_RESOURCES, MODEL_RESOURCE,
 };
+use crate::assembly::project::errors::AssemblyError;
 use crate::assembly::project::models::{AuditFacts, Reference};
 use crate::assembly::project::types::Fact;
 use crate::assembly::project::types::ObjectKey;
@@ -19,7 +22,14 @@ pub(crate) fn audit_deps(audit: &AuditFacts) -> Fact<Vec<ObjectKey>> {
     let mut keys: Vec<ObjectKey> = reference_deps(&audit.references);
     if let Some((kind, name)) = &audit.attached {
         if !ATTACHED_AUDIT_KINDS.contains(&kind.as_str()) {
-            return Err(AUDIT_TARGET_DEFERRAL.to_owned());
+            return Err(match python_str_repr(kind) {
+                Some(repr) => {
+                    AssemblyError::Value(format!("{repr} is not a valid {AUDIT_TARGET_KIND_ENUM}"))
+                }
+                None => AssemblyError::Internal(format!(
+                    "a non-ASCII attached audit target kind is not a valid {AUDIT_TARGET_KIND_ENUM}"
+                )),
+            });
         }
         keys.push((kind.clone(), name.clone()));
     }

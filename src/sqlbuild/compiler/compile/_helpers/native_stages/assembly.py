@@ -26,8 +26,6 @@ from sqlbuild.compiler.compile.models import (
     DynamicColumnContractProof,
     ModelSqlAnalysis,
 )
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
     assemble_native_project_resources,
@@ -51,10 +49,10 @@ def project_facts_by_engine(
     authoritative_column_types_by_table: dict[str, dict[str, str]],
     column_nullability_by_table: dict[str, dict[str, InferredNullability]],
     dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
-) -> NativeProjectFacts | None:
-    """Return the native project facts, or None where Python must derive all of them."""
+) -> NativeProjectFacts:
+    """Return the native project facts."""
 
-    resources: NativeProjectResources | None = assemble_native_project_resources(
+    resources: NativeProjectResources = assemble_native_project_resources(
         inputs=inputs,
         dialect=dialect,
         syntax_checks=model_syntax_checks(
@@ -67,8 +65,6 @@ def project_facts_by_engine(
             ),
         ),
     )
-    if resources is None:
-        report_native_fallback(site=NativeFallbackSite.PROJECT_ASSEMBLY)
     pivots: dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]] = standalone_pivot_models(
         model_inputs=inputs.model_inputs, analyses=analyses
     )
@@ -92,9 +88,9 @@ def project_facts_by_engine(
     return NativeProjectFacts(
         models=tuple(
             NativeModelFacts(
-                deps=resources.model_deps[index] if resources is not None else None,
+                deps=resources.model_deps[index],
                 dynamic_contract=proofs.get(index),
-                syntax_valid=resources is not None and resources.model_syntax_valid[index],
+                syntax_valid=resources.model_syntax_valid[index],
             )
             for index in range(len(inputs.model_inputs))
         ),

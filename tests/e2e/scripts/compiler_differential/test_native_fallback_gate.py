@@ -10,7 +10,6 @@ from scripts.compiler_differential.main.differential import run_compiler_differe
 from tests.e2e.scripts.compiler_differential._test_types import NativeFallbackGateTestCase
 from tests.e2e.scripts.compiler_differential.helpers import (
     MODEL_ANALYSIS_SABOTAGE,
-    PROJECT_ASSEMBLY_SABOTAGE,
     harness_arguments,
     write_native_perturbation,
 )
@@ -40,17 +39,6 @@ _VANISHED_ENTRY: str = (
                 "Native fallback allow-list: native-preview macro_calls "
                 "macro_calls.resolution deferred (project): listed but no longer occurs; remove it "
                 "from the allow-list",
-            ),
-        ),
-        NativeFallbackGateTestCase(
-            description="shipped_project_assembly_sabotaged_to_python_fails",
-            perturbation=PROJECT_ASSEMBLY_SABOTAGE,
-            appended_entries="",
-            expected_exit_code=1,
-            expected_lines=(
-                "Native fallback allow-list: native-preview project_assembly "
-                "project_assembly.assembly deferred (project): ",
-                "not on the allow-list; port it or list it with a reason",
             ),
         ),
         NativeFallbackGateTestCase(

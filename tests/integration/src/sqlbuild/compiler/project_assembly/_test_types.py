@@ -12,29 +12,25 @@ class GeneratedAssemblyParityTestCase:
     count: int
     model_count: int
     environment: dict[str, str]
-    expected_minimum_python_calls: int
     expected_minimum_environment_reads: int
 
 
 @dataclass(frozen=True)
 class AssemblyDeferralTestCase:
-    """A project Python rejects: native raises the same error, deferring only where recorded."""
+    """A project whose model SQL Python rejects with a syntax error."""
 
     description: str
     files: dict[str, str]
-    expected_kind: str | None
     expected_error: str
 
 
 @dataclass(frozen=True)
-class DeferredAssemblyTestCase:
-    """A project native hands back to Python, which assembles it without error."""
+class EdgeAssemblyTestCase:
+    """Projects whose assembly raises or reads Python-only values, against Python's golden."""
 
     description: str
-    effective_vars: dict[str, object]
-    seed_schema: str
-    expected_schema: str
-    expected_kind: str
+    projects: tuple[tuple[str, dict[str, str], dict[str, object] | None], ...]
+    expected_raised: int
 
 
 @dataclass(frozen=True)
@@ -54,7 +50,6 @@ class OptOutTestCase:
     description: str
     models: dict[str, str]
     expected_rejected: dict[str, bool]
-    expected_python_validations: int
 
 
 @dataclass(frozen=True)

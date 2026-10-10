@@ -99,12 +99,6 @@ if _directory:
         _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
 """
 
-PROJECT_ASSEMBLY_SABOTAGE: str = """
-import sqlbuild._native as native
-
-native.assemble_project_resource_facts = lambda *_args: (None, "sabotaged")
-"""
-
 MODEL_ANALYSIS_SABOTAGE: str = """
 import sqlbuild._native as native
 

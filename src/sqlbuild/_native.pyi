@@ -665,13 +665,13 @@ def sql_syntax_error(
 ) -> str | None: ...
 def check_native_sql_syntax(
     request: tuple[str, list[tuple[str, list[tuple[str, str]]]]], /
-) -> tuple[bool | None, str | None]: ...
+) -> bool: ...
 def assemble_project_resource_facts(
     request: tuple[
         str,
         tuple[str | None, str | None, str | None] | None,
         tuple[str | None, str | None, str | None, str | None],
-        list[tuple[str, str, str]],
+        list[tuple[str, str, str, tuple[str, str] | None]],
         list[tuple[str, str | None]],
         list[
             tuple[
@@ -689,20 +689,15 @@ def assemble_project_resource_facts(
     ],
     /,
 ) -> tuple[
-    tuple[
-        list[list[tuple[str, str]]],
-        list[tuple[str | None, str | None] | None],
-        list[tuple[str | None, str | None, str | None, str | None]],
-        list[list[tuple[str, str]]],
-        list[list[tuple[str, str]]],
-        list[tuple[str, str]],
-        list[bool],
-    ]
-    | None,
-    str | None,
+    list[list[tuple[str, str]]],
+    list[tuple[str | None, str | None] | None],
+    list[tuple[str | None, str | None, str | None, str | None]],
+    list[list[tuple[str, str]]],
+    list[list[tuple[str, str]]],
+    list[tuple[str, str]],
+    list[bool],
+    tuple[str, int, str, str, str | None, int | None] | None,
 ]: ...
-
-# Internal oracle hooks for tests that compare native foundations with Python; not an API.
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
 def _oracle_text_positions(
     data: bytes, byte_offsets: list[int]

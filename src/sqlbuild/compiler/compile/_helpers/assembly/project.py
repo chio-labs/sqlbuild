@@ -44,15 +44,6 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.targets import (
     build_model_relation_target,
-    build_seed_relation_target,
-)
-from sqlbuild.compiler.compile._helpers.config.namespace_validation import (
-    validate_preserved_logical_namespace,
-)
-from sqlbuild.compiler.compile._helpers.deps.dependencies import (
-    audit_scope_deps,
-    function_build_deps,
-    model_build_deps,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
@@ -76,7 +67,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     find_macro_call_names,
 )
-from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
@@ -121,6 +111,8 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullabili
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.profiling.main._record_cpu import record_compile_cpu_timing
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
+from sqlbuild.compiler.project_assembly.constants import AUDIT_SLOT, SEED_SLOT, SOURCE_SLOT
+from sqlbuild.compiler.project_assembly.main._native_resource import native_resource
 from sqlbuild.compiler.project_assembly.models import (
     NativeModelFacts,
     NativeProjectFacts,
@@ -145,11 +137,9 @@ from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
     resolve_effective_scenario_config,
 )
 from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
     SchemaDynamicColumnFamily,
     SourceEntry,
     SourceLocation,
-    TargetConfig,
 )
 
 
@@ -172,9 +162,6 @@ def assemble_compiled_project(
 
     sql_analysis_enabled: bool = (
         inputs.effective_settings.sql_analysis and not skip_column_inference
-    )
-    seed_names: frozenset[str] = frozenset(
-        seed_input.schema_entry.name for seed_input in inputs.seed_inputs
     )
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
         build_column_nullability_by_table(inputs)
@@ -307,7 +294,7 @@ def assemble_compiled_project(
                     dynamic_families_by_table=dynamic_families_by_table,
                 )
             )
-    native: NativeProjectFacts | None = project_facts_by_engine(
+    native: NativeProjectFacts = project_facts_by_engine(
         inputs=inputs,
         dialect=profile.sql_analysis_dialect,
         analysis_model_names=analysis_model_names,
@@ -318,7 +305,7 @@ def assemble_compiled_project(
         column_nullability_by_table=column_nullability_by_table,
         dynamic_families_by_table=dynamic_families_by_table,
     )
-    resources: NativeProjectResources | None = native.resources if native else None
+    resources: NativeProjectResources = native.resources
     scope_index: ScopeIndex = scope_index_with_compile_usages(inputs=inputs)
     report_scope_index_errors(index=scope_index)
     effective_target_values: dict[str, object] = resolve_early_model_templates(
@@ -371,7 +358,7 @@ def assemble_compiled_project(
                 sql_validation_enabled=(
                     analysis_model_names is None or _model_name(model_input) in analysis_model_names
                 ),
-                native_model=native.models[index] if native else None,
+                native_model=native.models[index],
                 column_nullability_by_table=column_nullability_by_table,
                 column_types_by_table=column_types_by_table,
                 dynamic_contract_analysis_inputs=dynamic_contract_analysis_inputs,
@@ -384,34 +371,43 @@ def assemble_compiled_project(
         sources=tuple(
             _assemble_compiled_source(
                 source_input=source_input,
-                target_config=inputs.effective_target,
-                effective_vars=inputs.effective_vars,
-                native_entry=resources.source_entries[index] if resources else None,
+                native_entry=native_resource(
+                    resources=resources,
+                    slot=SOURCE_SLOT,
+                    items=resources.source_entries,
+                    index=index,
+                ),
             )
             for index, source_input in enumerate(inputs.source_inputs)
         ),
         seeds=tuple(
             _assemble_compiled_seed(
                 seed_input=seed_input,
-                defaults=inputs.project_config.defaults,
-                target_config=inputs.effective_target,
-                effective_vars=inputs.effective_vars,
-                native_destination=resources.seed_destinations[index] if resources else None,
+                native_destination=native_resource(
+                    resources=resources,
+                    slot=SEED_SLOT,
+                    items=resources.seed_destinations,
+                    index=index,
+                ),
             )
             for index, seed_input in enumerate(inputs.seed_inputs)
         ),
         functions=tuple(
             _assemble_compiled_function(
                 function_input=function_input,
-                seed_names=seed_names,
-                native_deps=resources.function_deps[index] if resources else None,
+                native_deps=resources.function_deps[index],
             )
             for index, function_input in enumerate(inputs.sql_function_inputs)
         ),
         audits=tuple(
             _assemble_compiled_audit(
                 audit_input=audit_input,
-                native_scope_deps=resources.audit_scope_deps[index] if resources else None,
+                native_scope_deps=native_resource(
+                    resources=resources,
+                    slot=AUDIT_SLOT,
+                    items=resources.audit_scope_deps,
+                    index=index,
+                ),
             )
             for index, audit_input in enumerate(inputs.audit_inputs)
         ),
@@ -475,7 +471,7 @@ def _assemble_compiled_model(
     model_input: CompileModelInput,
     sql_analysis_enabled: bool,
     sql_validation_enabled: bool = True,
-    native_model: NativeModelFacts | None = None,
+    native_model: NativeModelFacts,
     column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
     column_types_by_table: dict[str, dict[str, str]] | None = None,
     dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs | None = None,
@@ -484,8 +480,7 @@ def _assemble_compiled_model(
     allow_compact_analysis: bool = False,
 ) -> CompiledModel:
     model_name: str = model_input.model_file.file_path.stem
-    native_deps: tuple[CompiledObjectKey, ...] | None = native_model.deps if native_model else None
-    syntax_validated: bool = native_model is not None and native_model.syntax_valid
+    syntax_validated: bool = native_model.syntax_valid
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
     analysis_query_sql: str = cursor_intrinsics_analysis_sql(
         sql=model_input.query_sql,
@@ -550,19 +545,13 @@ def _assemble_compiled_model(
         sql_analysis.dynamic_column_contract
         if sql_analysis is not None and sql_analysis.dynamic_column_contract is not None
         else native_model.dynamic_contract
-        if native_model is not None
-        else None
     )
     if dynamic_column_contract is not None and dynamic_column_contract.output_proven:
         inferred_columns = dynamic_column_contract.fixed_columns
         fast_lineage_has_star = True
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
-        deps=(
-            native_deps
-            if native_deps is not None
-            else model_build_deps(references=model_input.references)
-        ),
+        deps=native_model.deps,
         name=model_name,
         relative_path=model_input.model_file.relative_path,
         query_sql=model_input.query_sql,
@@ -704,103 +693,20 @@ def _binding_compiler_diagnostics(
 
 
 def _assemble_compiled_source(
-    *,
-    source_input: CompileSourceInput,
-    target_config: TargetConfig | None,
-    effective_vars: dict[str, object],
-    native_entry: SourceEntry | None = None,
+    *, source_input: CompileSourceInput, native_entry: SourceEntry
 ) -> CompiledSource:
-    source_entry: SourceEntry = (
-        native_entry
-        if native_entry is not None
-        else _build_source_relation_entry(
-            source_entry=source_input.source_entry,
-            target_config=target_config,
-            effective_vars=effective_vars,
-        )
-    )
     return CompiledSource(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=source_entry.name),
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=native_entry.name),
         deps=(),
-        name=source_entry.name,
-        source_entry=source_entry,
+        name=native_entry.name,
+        source_entry=native_entry,
         source_file=source_input.source_file,
     )
 
 
-def _build_source_relation_entry(
-    *,
-    source_entry: SourceEntry,
-    target_config: TargetConfig | None,
-    effective_vars: dict[str, object],
-) -> SourceEntry:
-    if source_entry.loader is None or target_config is None:
-        return source_entry
-    loader_target_config: TargetConfig = replace(
-        target_config,
-        schema=target_config.loader_schema or target_config.schema,
-    )
-    validate_preserved_logical_namespace(
-        resource_label=f"Managed source '{source_entry.name}'",
-        logical_database=source_entry.database,
-        logical_schema=source_entry.schema,
-        target_config=loader_target_config,
-    )
-    return replace(
-        source_entry,
-        database=(
-            source_entry.database
-            if source_entry.database is not None
-            else _expand_target_value(
-                value=target_config.database,
-                effective_vars=effective_vars,
-            )
-        ),
-        schema=(
-            source_entry.schema
-            if source_entry.schema is not None
-            else _expand_target_value(
-                value=target_config.loader_schema or target_config.schema,
-                effective_vars=effective_vars,
-            )
-        ),
-    )
-
-
-def _expand_target_value(*, value: str | None, effective_vars: dict[str, object]) -> str | None:
-    if value is None:
-        return None
-    return str(
-        expand_template_data(
-            value=value,
-            variables=effective_vars,
-            context_values={},
-            context_label="managed source target",
-            allow_context=False,
-            preserve_context_tokens=False,
-            preserve_unknown_context=False,
-        )
-    )
-
-
 def _assemble_compiled_seed(
-    *,
-    seed_input: CompileSeedInput,
-    defaults: DefaultsConfig,
-    target_config: TargetConfig | None,
-    effective_vars: dict[str, object],
-    native_destination: CompiledRelationLocation | None = None,
+    *, seed_input: CompileSeedInput, native_destination: CompiledRelationLocation
 ) -> CompiledSeed:
-    target: CompiledRelationLocation = (
-        native_destination
-        if native_destination is not None
-        else build_seed_relation_target(
-            seed_entry=seed_input.schema_entry,
-            defaults=defaults,
-            target_config=target_config,
-            effective_vars=effective_vars,
-        )
-    )
     return CompiledSeed(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SEED, name=seed_input.schema_entry.name
@@ -810,15 +716,14 @@ def _assemble_compiled_seed(
         seed_file=seed_input.seed_file,
         schema_entry=seed_input.schema_entry,
         schema_file=seed_input.schema_file,
-        destination=target,
+        destination=native_destination,
     )
 
 
 def _assemble_compiled_function(
     *,
     function_input: CompileSqlFunctionInput,
-    seed_names: frozenset[str] = frozenset(),
-    native_deps: tuple[CompiledObjectKey, ...] | None = None,
+    native_deps: tuple[CompiledObjectKey, ...],
 ) -> CompiledFunction:
     return CompiledFunction(
         key=CompiledObjectKey(
@@ -827,11 +732,7 @@ def _assemble_compiled_function(
             ),
             name=function_input.name,
         ),
-        deps=(
-            native_deps
-            if native_deps is not None
-            else function_build_deps(references=function_input.references, seed_names=seed_names)
-        ),
+        deps=native_deps,
         name=function_input.name,
         relative_path=function_input.function_file.relative_path,
         arguments=function_input.arguments,
@@ -868,7 +769,7 @@ def _assemble_compiled_function(
 def _assemble_compiled_audit(
     *,
     audit_input: CompileAuditInput,
-    native_scope_deps: tuple[CompiledObjectKey, ...] | None = None,
+    native_scope_deps: tuple[CompiledObjectKey, ...],
 ) -> CompiledAudit:
     audit_name: str = _resolve_audit_name(audit_input)
     normalized_target_kind: AttachedAuditTargetKind | None = None
@@ -876,15 +777,7 @@ def _assemble_compiled_audit(
         normalized_target_kind = AttachedAuditTargetKind(audit_input.attached_target_kind)
     return CompiledAudit(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=audit_name),
-        scope_deps=(
-            native_scope_deps
-            if native_scope_deps is not None
-            else audit_scope_deps(
-                references=audit_input.references,
-                attached_target_kind=audit_input.attached_target_kind,
-                attached_target_name=audit_input.attached_target_name,
-            )
-        ),
+        scope_deps=native_scope_deps,
         name=audit_name,
         definition_name=(audit_input.audit_block.name or audit_input.audit_file.file_path.stem),
         audit_file=audit_input.audit_file,

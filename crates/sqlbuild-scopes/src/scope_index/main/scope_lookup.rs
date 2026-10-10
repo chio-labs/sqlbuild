@@ -1,8 +1,7 @@
 //! The groupings Python's `build_lookup` derives from an index and its relationship grants.
 
 use crate::scope_index::_helpers::identities::{
-    declaration_repr, declaration_text, grant_through_text, python_str_repr, resource_repr,
-    resource_text,
+    declaration_repr, declaration_text, grant_through_text, resource_repr, resource_text,
 };
 use crate::scope_index::_helpers::ordering::{keyed_groups, sorted_by_key};
 use crate::scope_index::_helpers::paths::normalize_path;
@@ -10,6 +9,7 @@ use crate::scope_index::_helpers::visibility::VisibilityIndex;
 use crate::scope_index::models::{
     DeclarationIdentity, GrantRecord, ScopeDeferral, ScopeIndex, ScopeLookupGroups,
 };
+use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 /// Every lookup grouping of `index` once `grants` are attached to it.
 pub fn scope_lookup_groups(

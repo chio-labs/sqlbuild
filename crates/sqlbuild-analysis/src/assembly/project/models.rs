@@ -3,6 +3,7 @@
 use sqlbuild_model_config::templates::models::Scalar;
 
 use crate::assembly::analysis_session::types::Pairs;
+use crate::assembly::project::errors::AssemblyError;
 use crate::assembly::project::types::ObjectKey;
 
 /// One SQL reference a resource makes: Python's `CompileSqlReference`.
@@ -14,11 +15,45 @@ pub struct Reference {
     pub package: Option<String>,
 }
 
-/// One project variable, as a scalar Python renders with `str()`, or a value only Python renders.
+/// One project variable: a scalar, or another Python value described by its Python renderings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Variable {
     Scalar(Scalar),
-    Unsupported,
+    Opaque(OpaqueVariable),
+}
+
+/// A variable value only Python renders: its `str()` and `render_project_var_text` outcome.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpaqueVariable {
+    /// `str(value)`: a whole-template result and the text the resolver compares.
+    pub text: String,
+    pub render: OpaqueRender,
+}
+
+/// `render_project_var_text(value=value, label=label)` for any label.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpaqueRender {
+    Text(String),
+    /// The `ValueError` message after the label.
+    Rejected(String),
+    /// Another exception, which Python raises; the index of the exception the request holds.
+    Raises(usize),
+}
+
+/// Which resource list a failure belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceSlot {
+    Source,
+    Seed,
+    Audit,
+}
+
+/// The first resource whose assembly raises, in Python's assembly order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceFailure {
+    pub slot: ResourceSlot,
+    pub index: usize,
+    pub error: AssemblyError,
 }
 
 /// One environment or context lookup a template made, which Python records for compile reuse.
@@ -158,4 +193,6 @@ pub struct ProjectResources {
     pub function_deps: Vec<Vec<ObjectKey>>,
     pub audit_deps: Vec<Vec<ObjectKey>>,
     pub reads: Vec<InputRead>,
+    /// The resource Python raises at; the lists stop before it and later resources are absent.
+    pub failure: Option<ResourceFailure>,
 }

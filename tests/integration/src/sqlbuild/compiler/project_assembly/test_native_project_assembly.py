@@ -1,11 +1,10 @@
-"""Native project assembly equals Python's resource assembly, or hands the project back."""
+"""Native project assembly equals Python's recorded resource assembly and its errors."""
 
 from __future__ import annotations
 
 import os
 import random
 from collections import Counter
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -18,11 +17,16 @@ from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInpu
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
+from tests.integration.src.sqlbuild.compiler.helpers import (
+    GoldenEntry,
+    golden_differences,
+    golden_entry,
+    golden_name,
+    read_golden,
+)
 from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import (
     AssemblyDeferralTestCase,
-    DeferredAssemblyTestCase,
+    EdgeAssemblyTestCase,
     GeneratedAssemblyParityTestCase,
     GraphFactsTestCase,
     NativePanicTestCase,
@@ -30,11 +34,9 @@ from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import
     WindowsEnvironmentTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
-    DEFERRED_PROJECT_FACTS,
-    DEFERRED_SYNTAX_CHECK,
+    EDGE_ASSEMBLY_PROJECTS,
     assemble_with,
-    assembly_deferrals,
-    assembly_view,
+    assembly_outcome,
     generated_assembly_files,
     project_inputs,
     python_resource_calls,
@@ -69,58 +71,87 @@ _SEED_FILES: dict[str, str] = {
             count=8,
             model_count=12,
             environment={"SQB_ASSEMBLY_LOADERS": "loaders"},
-            expected_minimum_python_calls=200,
             expected_minimum_environment_reads=4,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_projects_when_assembling_natively_then_matches_python(
+def test_given_generated_projects_when_assembling_natively_then_matches_python_golden(
     test_case: GeneratedAssemblyParityTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     _ = [monkeypatch.setenv(name, value) for name, value in test_case.environment.items()]
     calls: Counter[str] = python_resource_calls(monkeypatch=monkeypatch)
     rng: random.Random = random.Random(test_case.seed)
+    project_dirs: list[Path] = [tmp_path / f"project_{index}" for index in range(test_case.count)]
     inputs: list[CompileProjectInputs] = [
         project_inputs(
-            project_dir=tmp_path / f"project_{index}",
+            project_dir=project_dir,
             files=generated_assembly_files(rng=rng, model_count=test_case.model_count),
         )
-        for index in range(test_case.count)
+        for project_dir in project_dirs
     ]
-    python: list[tuple[object, tuple[tuple[str, ...], bool]]] = [
-        recorded_assembly(
-            inputs=item,
-            engine=CompilerEngine.NATIVE,
-            monkeypatch=monkeypatch,
-            deferred=DEFERRED_PROJECT_FACTS,
-        )
-        for item in inputs
-    ]
-    python_calls: int = calls.total()
     native: list[tuple[object, tuple[tuple[str, ...], bool]]] = [
-        recorded_assembly(
-            inputs=item, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
-        )
+        recorded_assembly(inputs=item, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch)
         for item in inputs
+    ]
+    golden: list[GoldenEntry] = [
+        golden_entry("project_assembly", view, masked=(str(project_dir),))
+        for project_dir, view in zip(project_dirs, native, strict=True)
     ]
 
     assert (
-        mismatches(
-            inputs=list(range(test_case.count)),
-            expected=list[object](python),
-            actual=list[object](native),
+        golden_differences(
+            read_golden(golden_name("project_assembly", test_case.description)), golden
         )
         == []
     )
     assert sum(len(reads[0]) for _, reads in native) >= test_case.expected_minimum_environment_reads
-    assert python_calls >= test_case.expected_minimum_python_calls
-    assert calls.total() == python_calls
-    assert assembly_deferrals(record_dir) == Counter()
+    assert calls == Counter()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EdgeAssemblyTestCase(
+            description="error and python value edges",
+            projects=EDGE_ASSEMBLY_PROJECTS,
+            expected_raised=22,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_projects_python_rejects_when_assembling_natively_then_matches_python_golden(
+    test_case: EdgeAssemblyTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SQB_EDGE_UNSET", raising=False)
+    project_dirs: list[Path] = [
+        tmp_path / f"edge_{index}" for index in range(len(test_case.projects))
+    ]
+    outcomes: list[tuple[object, ...]] = [
+        assembly_outcome(
+            project_dir=project_dir,
+            files=files,
+            effective_vars=effective_vars,
+            monkeypatch=monkeypatch,
+        )
+        for project_dir, (_, files, effective_vars) in zip(
+            project_dirs, test_case.projects, strict=True
+        )
+    ]
+    golden: list[GoldenEntry] = [
+        golden_entry("project_assembly", outcome, masked=(str(project_dir),))
+        for project_dir, outcome in zip(project_dirs, outcomes, strict=True)
+    ]
+
+    assert (
+        golden_differences(
+            read_golden(golden_name("project_assembly", test_case.description)), golden
+        )
+        == []
+    )
+    assert sum(outcome[0] != "ok" for outcome in outcomes) == test_case.expected_raised
 
 
 @pytest.mark.parametrize(
@@ -132,7 +163,6 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "models/orders.sql": 'MODEL (description "Orders");\n\nSELECT FROM WHERE (\n',
             },
-            expected_kind=None,
             expected_error="SQL syntax error in model 'orders'",
         ),
         AssemblyDeferralTestCase(
@@ -144,114 +174,22 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
                     ");\n\nSELECT 1 AS n\n"
                 ),
             },
-            expected_kind=None,
             expected_error="Polyglot could not parse model 'orders' pre_hooks[0]",
-        ),
-        AssemblyDeferralTestCase(
-            description="a seed schema reading an unset environment variable",
-            files={
-                "sqlbuild_project.toml": _PROJECT_TOML,
-                "seeds/lookups.yml": seed_yml("${ENV:SQB_UNSET_SEED_SCHEMA}"),
-                **_SEED_FILES,
-            },
-            expected_kind="target_template",
-            expected_error="references missing ENV variable 'SQB_UNSET_SEED_SCHEMA'",
-        ),
-        AssemblyDeferralTestCase(
-            description="a preserved target schema the seed does not own",
-            files={
-                "sqlbuild_project.toml": (
-                    'name = "assembly"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
-                    '[connection]\ndatabase = ":memory:"\n\n[targets.dev]\nschema = "preserve"\n'
-                ),
-                "seeds/lookups.yml": (
-                    "seeds:\n  - name: countries\n    description: Countries.\n"
-                    "    columns:\n      - name: n\n        type: INTEGER\n"
-                ),
-                "seeds/countries.csv": "n\n1\n",
-                "models/orders.sql": (
-                    'MODEL (description "Orders", schema "orders");\n\nSELECT 1 AS n\n'
-                ),
-            },
-            expected_kind="preserved_namespace",
-            expected_error="Seed 'countries' has no logical schema",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_projects_python_rejects_when_assembling_natively_then_raises_python_error(
+def test_given_model_sql_the_parser_rejects_when_assembling_then_raises_python_error(
     test_case: AssemblyDeferralTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     inputs: CompileProjectInputs = project_inputs(project_dir=tmp_path, files=test_case.files)
 
-    with pytest.raises(CompileInputError) as python_error:
-        _ = assemble_with(
-            inputs=inputs,
-            engine=CompilerEngine.NATIVE,
-            monkeypatch=monkeypatch,
-            deferred=DEFERRED_PROJECT_FACTS,
-        )
-    with pytest.raises(CompileInputError) as native_error:
-        _ = assemble_with(
-            inputs=inputs, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
-        )
+    with pytest.raises(CompileInputError) as raised:
+        _ = assemble_with(inputs=inputs, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch)
 
-    assert test_case.expected_error in str(python_error.value)
-    assert str(native_error.value) == str(python_error.value)
-    assert assembly_deferrals(record_dir) == Counter(
-        f"project_assembly:{kind}" for kind in filter(None, (test_case.expected_kind,))
-    )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        DeferredAssemblyTestCase(
-            description="a seed schema reading a list variable",
-            effective_vars={"tags": ["daily"]},
-            seed_schema="${tags}",
-            expected_schema="['daily']",
-            expected_kind="target_template",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_a_variable_only_python_renders_when_assembling_natively_then_python_assembles(
-    test_case: DeferredAssemblyTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
-    inputs: CompileProjectInputs = replace(
-        project_inputs(
-            project_dir=tmp_path,
-            files={
-                "sqlbuild_project.toml": _PROJECT_TOML,
-                "seeds/lookups.yml": seed_yml(test_case.seed_schema),
-                **_SEED_FILES,
-            },
-        ),
-        effective_vars=test_case.effective_vars,
-    )
-
-    python: CompiledProject = assemble_with(
-        inputs=inputs,
-        engine=CompilerEngine.NATIVE,
-        monkeypatch=monkeypatch,
-        deferred=DEFERRED_PROJECT_FACTS,
-    )
-    native: CompiledProject = assemble_with(
-        inputs=inputs, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
-    )
-
-    assert assembly_view(native) == assembly_view(python)
-    assert native.seeds[0].destination.schema == test_case.expected_schema
-    assert assembly_deferrals(record_dir) == Counter(
-        {f"project_assembly:{test_case.expected_kind}": 1}
-    )
+    assert test_case.expected_error in str(raised.value)
 
 
 @pytest.mark.parametrize(
@@ -269,9 +207,7 @@ def test_given_a_variable_only_python_renders_when_assembling_natively_then_pyth
 def test_given_windows_environment_when_assembling_natively_then_env_lookups_match_python(
     test_case: WindowsEnvironmentTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    record_dir: Path = tmp_path / "records"
     monkeypatch.setattr(os, "environ", windows_environ(test_case.environment))
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     inputs: CompileProjectInputs = project_inputs(
         project_dir=tmp_path,
         files={
@@ -281,19 +217,11 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
         },
     )
 
-    python: CompiledProject = assemble_with(
-        inputs=inputs,
-        engine=CompilerEngine.NATIVE,
-        monkeypatch=monkeypatch,
-        deferred=DEFERRED_PROJECT_FACTS,
-    )
     native: CompiledProject = assemble_with(
-        inputs=inputs, engine=CompilerEngine.NATIVE_PREVIEW, monkeypatch=monkeypatch
+        inputs=inputs, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch
     )
 
-    assert python.seeds[0].destination.schema == test_case.expected_schema
-    assert assembly_view(native) == assembly_view(python)
-    assert assembly_deferrals(record_dir) == Counter()
+    assert native.seeds[0].destination.schema == test_case.expected_schema
 
 
 @pytest.mark.parametrize(
@@ -310,7 +238,6 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
                 ),
             },
             expected_rejected={"broken_hook": False, "broken_query": False, "parses": True},
-            expected_python_validations=7,
         )
     ],
     ids=lambda case: case.description,
@@ -318,27 +245,16 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
 def test_given_sql_analysis_opt_outs_when_attaching_natively_then_python_rejections_match(
     test_case: OptOutTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     files: dict[str, str] = {"sqlbuild_project.toml": _REQUIRED_ANALYSIS_TOML, **test_case.models}
 
-    python: tuple[dict[str, bool], int] = rejected_opt_outs(
-        project_dir=tmp_path / "python",
+    native: dict[str, bool] = rejected_opt_outs(
+        project_dir=tmp_path / "native",
         files=files,
         engine=CompilerEngine.NATIVE,
         monkeypatch=monkeypatch,
-        deferred=DEFERRED_SYNTAX_CHECK,
-    )
-    native: tuple[dict[str, bool], int] = rejected_opt_outs(
-        project_dir=tmp_path / "native",
-        files=files,
-        engine=CompilerEngine.NATIVE_PREVIEW,
-        monkeypatch=monkeypatch,
     )
 
-    assert python == (test_case.expected_rejected, test_case.expected_python_validations)
-    assert native == (test_case.expected_rejected, 0)
-    assert assembly_deferrals(record_dir) == Counter()
+    assert native == test_case.expected_rejected
 
 
 @pytest.mark.parametrize(
@@ -427,8 +343,6 @@ def test_given_project_when_assembling_natively_then_request_carries_graph_facts
 def test_given_native_assembly_panics_when_assembling_then_raises_without_python_retry(
     test_case: NativePanicTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
     inputs: CompileProjectInputs = project_inputs(
         project_dir=tmp_path / "project", files=test_case.files
@@ -441,8 +355,4 @@ def test_given_native_assembly_panics_when_assembling_then_raises_without_python
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=test_case.dialect),
         )
 
-    assert (str(raised.value), calls, assembly_deferrals(record_dir)) == (
-        test_case.expected_message,
-        Counter(),
-        Counter(),
-    )
+    assert (str(raised.value), calls) == (test_case.expected_message, Counter())

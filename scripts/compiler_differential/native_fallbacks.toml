@@ -8,31 +8,10 @@ seeds = 12
 
 [[entry]]
 engine = "native"
-stage = "analysis"
-site = "project_assembly"
-kind = "syntax_error"
-counts = { failure = 3 }
-
-[[entry]]
-engine = "native"
-stage = "analysis"
-site = "project_assembly"
-kind = "unsupported_dialect"
-counts = { failure = 1 }
-
-[[entry]]
-engine = "native"
 stage = "macro_calls"
 site = "macro_calls.mocked_evaluation"
 kind = "test_mock"
 counts = { seed = 29 }
-
-[[entry]]
-engine = "native"
-stage = "project_assembly"
-site = "project_assembly.assembly"
-kind = "deferred"
-counts = { failure = 4 }
 
 [[entry]]
 engine = "native"
@@ -43,31 +22,10 @@ counts = { seed = 29 }
 
 [[entry]]
 engine = "native-preview"
-stage = "analysis"
-site = "project_assembly"
-kind = "syntax_error"
-counts = { failure = 3 }
-
-[[entry]]
-engine = "native-preview"
-stage = "analysis"
-site = "project_assembly"
-kind = "unsupported_dialect"
-counts = { failure = 1 }
-
-[[entry]]
-engine = "native-preview"
 stage = "macro_calls"
 site = "macro_calls.mocked_evaluation"
 kind = "test_mock"
 counts = { seed = 29 }
-
-[[entry]]
-engine = "native-preview"
-stage = "project_assembly"
-site = "project_assembly.assembly"
-kind = "deferred"
-counts = { failure = 4 }
 
 [[entry]]
 engine = "native-preview"

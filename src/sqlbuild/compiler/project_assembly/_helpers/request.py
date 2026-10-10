@@ -6,6 +6,7 @@ import os
 import re
 from collections.abc import Iterable
 
+from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import CompileProjectInputs, CompileSqlReference
 from sqlbuild.compiler.project_assembly.constants import (
     BOOLEAN_VARIABLE,
@@ -14,9 +15,13 @@ from sqlbuild.compiler.project_assembly.constants import (
     NATIVE_INT_MAX,
     NATIVE_INT_MIN,
     NONE_VARIABLE,
+    OPAQUE_VARIABLE,
+    RENDER_LABEL,
+    RENDER_RAISES,
+    RENDER_REJECTED,
+    RENDERED_TEXT,
     TEXT_VARIABLE,
     TRUE_TEXT,
-    UNSUPPORTED_VARIABLE,
 )
 from sqlbuild.compiler.project_assembly.types import (
     AuditRow,
@@ -34,9 +39,12 @@ def project_request(
     inputs: CompileProjectInputs,
     dialect: str | None,
     syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
-) -> ProjectRequestRow:
-    """Return the request row; `syntax_checks` holds each model's SQL Python would validate."""
+) -> tuple[ProjectRequestRow, list[Exception | None]]:
+    """Return the request row and, per variable, the exception rendering it as text raises."""
 
+    renders: list[tuple[str, str] | Exception | None] = [
+        _opaque_render(value=value) for value in inputs.effective_vars.values()
+    ]
     target: TargetConfig | None = inputs.effective_target
     defaults: DefaultsConfig = inputs.project_config.defaults
     target_values: tuple[str | None, ...] = (
@@ -51,11 +59,16 @@ def project_request(
     seed_values: list[str | None] = []
     for seed_input in inputs.seed_inputs:
         seed_values.extend((seed_input.schema_entry.database, seed_input.schema_entry.schema))
-    return (
+    row: ProjectRequestRow = (
         dialect or "generic",
         (target.database, target.schema, target.loader_schema) if target is not None else None,
         (defaults.database, defaults.schema, defaults.seed_database, defaults.seed_schema),
-        [_variable_row(name=name, value=value) for name, value in inputs.effective_vars.items()],
+        [
+            _variable_row(name=name, value=value, render=render, index=index)
+            for index, ((name, value), render) in enumerate(
+                zip(inputs.effective_vars.items(), renders, strict=True)
+            )
+        ],
         _environment_rows((*target_values, *default_values, *seed_values)),
         [
             (
@@ -103,6 +116,7 @@ def project_request(
             for audit_input in inputs.audit_inputs
         ],
     )
+    return row, [render if isinstance(render, Exception) else None for render in renders]
 
 
 def _tag_rows(value: object) -> list[str]:
@@ -123,16 +137,38 @@ def _environment_rows(values: Iterable[str | None]) -> list[tuple[str, str | Non
     return [(name, os.environ.get(name)) for name in names]
 
 
-def _variable_row(*, name: str, value: object) -> VariableRow:
+def _variable_row(
+    *, name: str, value: object, render: tuple[str, str] | Exception | None, index: int
+) -> VariableRow:
     if value is None:
-        return (name, NONE_VARIABLE, "")
+        return (name, NONE_VARIABLE, "", None)
     if type(value) is bool:
-        return (name, BOOLEAN_VARIABLE, TRUE_TEXT if value else FALSE_TEXT)
+        return (name, BOOLEAN_VARIABLE, TRUE_TEXT if value else FALSE_TEXT, None)
     if type(value) is str:
-        return (name, TEXT_VARIABLE, value)
+        return (name, TEXT_VARIABLE, value, None)
     if type(value) is int and NATIVE_INT_MIN <= value <= NATIVE_INT_MAX:
-        return (name, TEXT_VARIABLE, str(value))
-    return (name, UNSUPPORTED_VARIABLE, "")
+        return (name, TEXT_VARIABLE, str(value), None)
+    held: tuple[str, str] = (RENDER_RAISES, str(index))
+    return (name, OPAQUE_VARIABLE, str(value), held if isinstance(render, Exception) else render)
+
+
+def _opaque_render(*, value: object) -> tuple[str, str] | Exception | None:
+    """`render_project_var_text` for any label: text, the message after the label, or the error."""
+
+    if value is None or type(value) in (bool, str):
+        return None
+    if type(value) is int and NATIVE_INT_MIN <= value <= NATIVE_INT_MAX:
+        return None
+    try:
+        text: str = render_project_var_text(value=value, label=RENDER_LABEL)
+    except ValueError as error:
+        message: str = str(error)
+        if message.startswith(RENDER_LABEL):
+            return (RENDER_REJECTED, message[len(RENDER_LABEL) :])
+        return error
+    except Exception as error:
+        return error
+    return (RENDERED_TEXT, text)
 
 
 def _reference_rows(references: tuple[CompileSqlReference, ...]) -> list[ReferenceRow]:

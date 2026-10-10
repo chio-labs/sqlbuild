@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import datetime
 import os
 import random
 from collections import Counter
 from collections.abc import Callable
-from operator import methodcaller
+from dataclasses import replace
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 import pytest
@@ -17,7 +17,6 @@ import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly import project as project_module
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile._helpers.diagnostics import sql_analysis_opt_outs
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -30,22 +29,8 @@ from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.sql_values.types import CollectionRendering
-from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import deferral_kinds
 
-_PYTHON_RESOURCE_FUNCTIONS: tuple[str, ...] = (
-    "_build_source_relation_entry",
-    "build_seed_relation_target",
-    "validate_sql_syntax",
-    "validate_hook_sql_syntax",
-    "model_build_deps",
-    "function_build_deps",
-    "audit_scope_deps",
-)
-_ASSEMBLY_RECORD_PREFIX: str = "project_assembly:"
-_OPT_OUT_VALIDATORS: tuple[str, ...] = ("validate_sql_syntax", "validate_hook_sql_syntax")
-type NativeDeferrals = tuple[tuple[ModuleType, str], ...]
-DEFERRED_PROJECT_FACTS: NativeDeferrals = ((project_module, "project_facts_by_engine"),)
-DEFERRED_SYNTAX_CHECK: NativeDeferrals = ((sql_analysis_opt_outs, "check_native_sql_syntax"),)
+_PYTHON_RESOURCE_FUNCTIONS: tuple[str, ...] = ("validate_sql_syntax", "validate_hook_sql_syntax")
 _ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
     value_renderer=DuckDbAdapter(),
     collection_rendering=CollectionRendering.VALUE_LIST,
@@ -174,34 +159,53 @@ def project_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjec
 
 
 def assemble_with(
-    *,
-    inputs: CompileProjectInputs,
-    engine: CompilerEngine,
-    monkeypatch: pytest.MonkeyPatch,
-    deferred: NativeDeferrals = (),
+    *, inputs: CompileProjectInputs, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> CompiledProject:
-    """Assemble `inputs` with `engine`, making each native entry in `deferred` defer to Python."""
+    """Assemble `inputs` with `engine`."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    with monkeypatch.context() as patch:
-        _ = [patch.setattr(module, name, _deferral) for module, name in deferred]
-        return assemble_compiled_project(inputs=inputs)
+    return assemble_compiled_project(inputs=inputs)
 
 
 def recorded_assembly(
-    *,
-    inputs: CompileProjectInputs,
-    engine: CompilerEngine,
-    monkeypatch: pytest.MonkeyPatch,
-    deferred: NativeDeferrals = (),
+    *, inputs: CompileProjectInputs, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[object, tuple[tuple[str, ...], bool]]:
     """Assemble `inputs` with `engine`; return its assembly view and the input reads recorded."""
 
     with COMPILE_INPUT_READS.recording() as reads:
         project: CompiledProject = assemble_with(
-            inputs=inputs, engine=engine, monkeypatch=monkeypatch, deferred=deferred
+            inputs=inputs, engine=engine, monkeypatch=monkeypatch
         )
     return assembly_view(project), (reads.environment_names, reads.read_run_id)
+
+
+def assembly_outcome(
+    *,
+    project_dir: Path,
+    files: dict[str, str],
+    effective_vars: dict[str, object] | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[object, ...]:
+    """Attach and assemble `files`: `("ok", view)`, or the error's class, message, help and code."""
+
+    try:
+        inputs: CompileProjectInputs = project_inputs(project_dir=project_dir, files=files)
+        merged: CompileProjectInputs = replace(
+            inputs, effective_vars={**inputs.effective_vars, **(effective_vars or {})}
+        )
+        return (
+            "ok",
+            assembly_view(
+                assemble_with(inputs=merged, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch)
+            ),
+        )
+    except Exception as error:
+        return (
+            type(error).__name__,
+            str(error).replace(str(project_dir), "<dir>"),
+            getattr(error, "help", None),
+            getattr(error, "code", None),
+        )
 
 
 def assembly_view(project: CompiledProject) -> object:
@@ -223,49 +227,19 @@ def rejected_opt_outs(
     files: dict[str, str],
     engine: CompilerEngine,
     monkeypatch: pytest.MonkeyPatch,
-    deferred: NativeDeferrals = (),
-) -> tuple[dict[str, bool], int]:
-    """Attach `files` with `engine`; return each opt-out's rejection and Python validations.
+) -> dict[str, bool]:
+    """Attach `files` with `engine`; return whether each opt-out is rejected."""
 
-    Each native entry in `deferred` defers, so Python answers its work."""
-
-    calls: Counter[str] = Counter()
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    with monkeypatch.context() as patch:
-        _ = [patch.setattr(module, name, _deferral) for module, name in deferred]
-        _ = [
-            patch.setattr(
-                sql_analysis_opt_outs,
-                name,
-                _counted(name=name, function=getattr(sql_analysis_opt_outs, name), calls=calls),
-            )
-            for name in _OPT_OUT_VALIDATORS
-        ]
-        inputs: CompileProjectInputs = project_inputs(project_dir=project_dir, files=files)
-    return (
-        {
-            model_input.model_file.file_path.stem: (
-                model_input.rejected_sql_analysis_opt_out is not None
-            )
-            for model_input in inputs.model_inputs
-        },
-        calls.total(),
-    )
-
-
-def assembly_deferrals(record_dir: Path) -> Counter[str]:
-    """Count the project assembly `site:kind` deferral records below `record_dir`."""
-
-    return Counter(
-        filter(
-            methodcaller("startswith", _ASSEMBLY_RECORD_PREFIX),
-            deferral_kinds(record_dir).elements(),
-        )
-    )
+    inputs: CompileProjectInputs = project_inputs(project_dir=project_dir, files=files)
+    return {
+        model_input.model_file.file_path.stem: model_input.rejected_sql_analysis_opt_out is not None
+        for model_input in inputs.model_inputs
+    }
 
 
 def python_resource_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count calls to Python's resource-fact functions from project assembly."""
+    """Count calls to Python's model syntax error reporting from project assembly."""
 
     calls: Counter[str] = Counter()
     _ = [
@@ -306,5 +280,303 @@ def _counted(*, name: str, function: Callable[..., Any], calls: Counter[str]) ->
     return counted
 
 
-def _deferral(**_kwargs: object) -> None:
-    return None
+_EDGE_PROJECT: str = (
+    'name = "assembly"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+    '[connection]\ndatabase = ":memory:"\n\n'
+)
+_EDGE_MODEL: str = (
+    'MODEL (description "Orders", database "lake", schema "orders");\n\nSELECT 1 AS n\n'
+)
+_EDGE_SOURCE: str = (
+    "sources:\n  - name: raw_orders\n    description: Raw orders.\n    managed: true\n"
+    "    write_strategy: table\n{ns}    columns:\n      - name: n\n        type: INTEGER\n"
+)
+_EDGE_LOADER: str = (
+    "from sqlbuild.loaders import loader\n\n\n"
+    "@loader\ndef raw_orders(ctx):\n    '''Load raw orders.'''\n    return [{'n': 1}]\n"
+)
+_EDGE_VARS: dict[str, object] = {
+    "tags": ["daily", "x"],
+    "meta": {"b": 1, "a": "z"},
+    "ratio": 1.5,
+    "day": datetime.date(2024, 1, 2),
+    "big": 10**30,
+    "flag": True,
+    "none": None,
+    "mixed": [datetime.date(2024, 1, 2)],
+    "name": "prod",
+}
+
+
+def _edge_seeds(*namespaces: str) -> str:
+    return "seeds:\n" + "".join(
+        f"  - name: s{index}\n    description: Seed {index}.\n{namespace}"
+        "    columns:\n      - name: n\n        type: INTEGER\n"
+        for index, namespace in enumerate(namespaces)
+    )
+
+
+def _edge_seed_files(*namespaces: str) -> dict[str, str]:
+    return {
+        "seeds/lookups.yml": _edge_seeds(*namespaces),
+        "models/orders.sql": _EDGE_MODEL,
+        **{f"seeds/s{index}.csv": "n\n1\n" for index in range(len(namespaces))},
+    }
+
+
+def _edge_target(text: str) -> str:
+    return _EDGE_PROJECT + "[targets.dev]\n" + text
+
+
+def _edge_source_files(ns: str = "") -> dict[str, str]:
+    return {
+        "sources/raw.yml": _EDGE_SOURCE.format(ns=ns),
+        "python/loaders/raw.py": _EDGE_LOADER,
+        "models/orders.sql": _EDGE_MODEL,
+    }
+
+
+# Projects whose assembly raises, or reads variables only Python renders: (description, files,
+# effective vars merged over the project's).
+EDGE_ASSEMBLY_PROJECTS: tuple[tuple[str, dict[str, str], dict[str, object] | None], ...] = (
+    (
+        "seed schema missing env",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${ENV:SQB_EDGE_UNSET}"\n'),
+        },
+        None,
+    ),
+    (
+        "seed database unknown var",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    database: "${var:nope}"\n'),
+        },
+        None,
+    ),
+    (
+        "seed unknown ctx",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${CTX:model.nope}"\n'),
+        },
+        None,
+    ),
+    (
+        "seed template syntax",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${coalesce(}"\n'),
+        },
+        None,
+    ),
+    (
+        "second seed fails after first",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "ok"\n', '    schema: "${ENV:SQB_EDGE_UNSET}"\n'),
+        },
+        None,
+    ),
+    (
+        "preserved schema seed",
+        {"sqlbuild_project.toml": _edge_target('schema = "preserve"\n'), **_edge_seed_files("")},
+        None,
+    ),
+    (
+        "preserved database and schema seed",
+        {
+            "sqlbuild_project.toml": _edge_target('database = "preserve"\nschema = "preserve"\n'),
+            **_edge_seed_files(""),
+        },
+        None,
+    ),
+    (
+        "preserved managed source",
+        {
+            "sqlbuild_project.toml": _edge_target('database = "preserve"\nschema = "dev"\n'),
+            **_edge_source_files(),
+        },
+        None,
+    ),
+    (
+        "managed source target missing env",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "${ENV:SQB_EDGE_UNSET}"\n'),
+            **_edge_source_files(),
+        },
+        None,
+    ),
+    (
+        "managed source loader schema unknown var",
+        {
+            "sqlbuild_project.toml": _edge_target(
+                'schema = "dev"\nloader_schema = "${var:nope}"\n'
+            ),
+            **_edge_source_files(),
+        },
+        None,
+    ),
+    (
+        "target schema override missing env",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "${ENV:SQB_EDGE_UNSET}"\n'),
+            **_edge_seed_files(""),
+        },
+        None,
+    ),
+    (
+        "target database override unknown var",
+        {
+            "sqlbuild_project.toml": _edge_target('database = "${var:nope}"\nschema = "dev"\n'),
+            **_edge_seed_files(""),
+        },
+        None,
+    ),
+    (
+        "default seed schema unknown var",
+        {
+            "sqlbuild_project.toml": _EDGE_PROJECT
+            + '[defaults]\nseed_schema = "${var:nope}"\n\n[targets.dev]\nschema = "dev"\n',
+            **_edge_seed_files(""),
+        },
+        None,
+    ),
+    (
+        "default database missing env",
+        {
+            "sqlbuild_project.toml": _EDGE_PROJECT
+            + '[defaults]\ndatabase = "${ENV:SQB_EDGE_UNSET}"\n\n[targets.dev]\nschema = "dev"\n',
+            **_edge_seed_files(""),
+        },
+        None,
+    ),
+    (
+        "model syntax error before seed error",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${ENV:SQB_EDGE_UNSET}"\n'),
+            "models/orders.sql": 'MODEL (description "Orders");\n\nSELECT FROM WHERE (\n',
+        },
+        None,
+    ),
+    (
+        "source error before seed error",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "${ENV:SQB_EDGE_UNSET}"\n'),
+            **_edge_source_files(),
+            "seeds/lookups.yml": _edge_seeds('    schema: "${var:nope}"\n'),
+            "seeds/s0.csv": "n\n1\n",
+        },
+        None,
+    ),
+    (
+        "list var whole",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${tags}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "list var in text",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "s_${tags}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "dict var whole",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${meta}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "dict var in text",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "s_${var:meta}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "float var whole and in text",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${ratio}"\n', '    schema: "s_${ratio}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "date var whole",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${day}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "date var in text",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "s_${day}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "big int var whole and in text",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${big}"\n', '    database: "d_${big}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "bool and none vars",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "${flag}"\n', '    schema: "s_${none}_${flag}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "list of dates in text",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files('    schema: "s_${mixed}"\n'),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "list var in coalesce",
+        {
+            "sqlbuild_project.toml": _edge_target('schema = "dev"\n'),
+            **_edge_seed_files("    schema: \"${coalesce(tags, 'x')}\"\n"),
+        },
+        _EDGE_VARS,
+    ),
+    (
+        "dict var in target schema text",
+        {"sqlbuild_project.toml": _edge_target('schema = "t_${meta}"\n'), **_edge_seed_files("")},
+        _EDGE_VARS,
+    ),
+    (
+        "float var in managed source target",
+        {"sqlbuild_project.toml": _edge_target('schema = "${ratio}"\n'), **_edge_source_files()},
+        _EDGE_VARS,
+    ),
+    (
+        "unused opaque vars",
+        {
+            "sqlbuild_project.toml": _EDGE_PROJECT
+            + '[vars]\nname = "prod"\n\n[targets.dev]\nschema = "dev_${name}"\n',
+            **_edge_seed_files('    schema: "s_${name}"\n'),
+            **_edge_source_files(),
+        },
+        _EDGE_VARS,
+    ),
+)

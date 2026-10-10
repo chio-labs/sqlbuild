@@ -456,30 +456,6 @@ class ExtractSqlAnalysisExpectedBranchesErrorTestCase:
 
 
 @dataclass(frozen=True)
-class ModelBuildDepsTestCase:
-    description: str
-    references: tuple[CompileSqlReference, ...]
-    expected_deps: tuple[CompiledObjectKey, ...]
-    seed_names: frozenset[str] = field(default_factory=frozenset)
-
-
-@dataclass(frozen=True)
-class AuditScopeDepsTestCase:
-    description: str
-    references: tuple[CompileSqlReference, ...]
-    attached_target_kind: str | None
-    attached_target_name: str | None
-    expected_scope_deps: tuple[CompiledObjectKey, ...]
-
-
-@dataclass(frozen=True)
-class SqlTestScopeDepsTestCase:
-    description: str
-    expected_model_names: tuple[str, ...]
-    expected_scope_deps: tuple[CompiledObjectKey, ...]
-
-
-@dataclass(frozen=True)
 class AssembleCompiledProjectTestCase:
     description: str
     repo_files: dict[str, str]

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 type ReferenceRow = tuple[str, str, str | None]
 type SyntaxCheckRow = tuple[str, list[tuple[str, str]]]
-type VariableRow = tuple[str, str, str]
+type VariableRow = tuple[str, str, str, tuple[str, str] | None]
+type FailureRow = tuple[str, int, str, str, str | None, int | None]
 type ModelRow = tuple[str, str, list[str], list[ReferenceRow], list[SyntaxCheckRow]]
 type SourceRow = tuple[str, bool, str | None, str | None]
 type SeedRow = tuple[str, list[str], str | None, str | None]
@@ -34,4 +35,5 @@ type ProjectResourcesRow = tuple[
     list[list[ObjectKeyRow]],
     list[tuple[str, str]],
     list[bool],
+    FailureRow | None,
 ]

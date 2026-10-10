@@ -35,5 +35,4 @@ class NativeFallbackSite(StrEnum):
     SCOPE_REBIND_LOOKUP = "declaration_scopes.rebind_lookup"
     LINT_EXPANSION = "model_loop.lint_expansion"
     MACRO_CALL_MOCKED = "macro_calls.mocked_evaluation"
-    PROJECT_ASSEMBLY = "project_assembly.assembly"
     SQL_TEST_MACRO_MOCK_QUERIES = "sql_test_glue.macro_mock_queries"

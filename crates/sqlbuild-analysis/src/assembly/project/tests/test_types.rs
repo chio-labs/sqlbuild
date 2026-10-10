@@ -53,7 +53,7 @@ pub(crate) struct SyntaxTestCase {
     pub(crate) dialect: &'static str,
     pub(crate) sql: &'static str,
     pub(crate) placeholders: &'static [(&'static str, &'static str)],
-    /// None where native defers to Python.
+    /// None where Python raises.
     pub(crate) expected_valid: Option<bool>,
 }
 
@@ -77,6 +77,6 @@ pub(crate) struct EnvironmentTestCase {
 pub(crate) struct SyntaxBatchTestCase {
     pub(crate) description: &'static str,
     pub(crate) sqls: &'static [&'static str],
-    /// None where native defers to Python.
+    /// None where Python raises.
     pub(crate) expected_valid: Option<bool>,
 }

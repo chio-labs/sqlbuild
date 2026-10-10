@@ -7,24 +7,17 @@ use polyglot_sql::{
     validate_with_dialect,
 };
 
-use crate::assembly::project::constants::{
-    INVALID_SQL, MAX_FUNCTION_CALL_DEPTH, NORMALIZATION_DEFERRAL, UNSUPPORTED_DIALECT_DEFERRAL,
-};
+use crate::assembly::project::constants::{INVALID_SQL, MAX_FUNCTION_CALL_DEPTH};
 use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
 
 use crate::assembly::project::models::{SyntaxCheck, SyntaxFailure, SyntaxMode};
-use crate::assembly::project::types::Fact;
 use crate::lineage::main::parser_dialect::parser_dialect;
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
 use crate::semantic_validation::models::NormalizationInput;
 
-/// Whether Polyglot's `validate` accepts the cleaned SQL; Python raises where it does not.
-pub(crate) fn syntax_valid(check: &SyntaxCheck, dialect: &str) -> Fact<bool> {
-    match syntax_error(check, dialect, SyntaxMode::Validate) {
-        Ok(error) => Ok(error.is_none()),
-        Err(SyntaxFailure::Normalization(_)) => Err(NORMALIZATION_DEFERRAL.to_owned()),
-        Err(SyntaxFailure::UnknownDialect(_)) => Err(UNSUPPORTED_DIALECT_DEFERRAL.to_owned()),
-    }
+/// Whether Polyglot's `validate` accepts the cleaned SQL; Err is the `ValueError` Python raises.
+pub(crate) fn syntax_valid(check: &SyntaxCheck, dialect: &str) -> Result<bool, SyntaxFailure> {
+    syntax_error(check, dialect, SyntaxMode::Validate).map(|error| error.is_none())
 }
 
 /// Python's syntax error message for one SQL string, None where Polyglot accepts it.

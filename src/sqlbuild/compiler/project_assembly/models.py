@@ -22,20 +22,30 @@ class NativeProjectResources:
     seed_destinations: tuple[CompiledRelationLocation, ...]
     function_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    failure: NativeResourceFailure | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NativeResourceFailure:
+    """The resource Python's assembly raises at, and the exception it raises there."""
+
+    slot: str
+    index: int
+    error: Exception
 
 
 @dataclass(frozen=True, slots=True)
 class NativeModelFacts:
-    """One model's native facts; each None where Python derives it."""
+    """One model's native facts."""
 
-    deps: tuple[CompiledObjectKey, ...] | None
+    deps: tuple[CompiledObjectKey, ...]
     dynamic_contract: DynamicColumnContractProof | None
     syntax_valid: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class NativeProjectFacts:
-    """Every model's native facts, and the resource facts unless Python must assemble them."""
+    """Every model's native facts and the resource facts."""
 
     models: tuple[NativeModelFacts, ...]
-    resources: NativeProjectResources | None
+    resources: NativeProjectResources

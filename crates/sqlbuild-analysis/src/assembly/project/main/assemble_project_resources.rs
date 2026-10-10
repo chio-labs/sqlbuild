@@ -1,66 +1,11 @@
-//! Python's resource assembly facts for one project, or why Python must assemble it.
-
-use std::cell::RefCell;
+//! Python's resource assembly facts for one project, up to the resource Python raises at.
 
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
-use crate::assembly::project::_helpers::deps::{audit_deps, reference_deps};
-use crate::assembly::project::_helpers::syntax::syntax_valid;
-use crate::assembly::project::_helpers::targets::{managed_source, seed_target};
-use crate::assembly::project::_helpers::templates::TemplateInputs;
-use crate::assembly::project::models::{ModelFacts, ProjectRequest, ProjectResources};
-use crate::assembly::project::types::Fact;
+use crate::assembly::project::_helpers::resources::project_resources;
+use crate::assembly::project::models::{ProjectRequest, ProjectResources};
 
-/// Each resource's dependencies and namespace; Err is a deferral kind or a native failure.
+/// Each resource's facts up to the first resource Python raises at; Err is a native failure.
 pub fn assemble_project_resources(request: &ProjectRequest) -> Result<ProjectResources, String> {
-    catch_compiler_panic(|| resources(request))
-}
-
-fn resources(request: &ProjectRequest) -> Fact<ProjectResources> {
-    let model_syntax_valid: Vec<bool> = request
-        .models
-        .iter()
-        .map(|model| valid_syntax(model, &request.dialect))
-        .collect();
-    let target = request.target.as_ref();
-    let inputs = TemplateInputs {
-        variables: &request.variables,
-        environment: &request.environment,
-        reads: RefCell::new(Vec::new()),
-    };
-    let sources = request
-        .sources
-        .iter()
-        .map(|source| managed_source(source, target, &inputs))
-        .collect::<Fact<_>>()?;
-    let seeds = request
-        .seeds
-        .iter()
-        .map(|seed| seed_target(seed, &request.defaults, target, &inputs))
-        .collect::<Fact<_>>()?;
-    Ok(ProjectResources {
-        model_syntax_valid,
-        model_deps: request
-            .models
-            .iter()
-            .map(|model| reference_deps(&model.references))
-            .collect(),
-        sources,
-        seeds,
-        function_deps: request
-            .functions
-            .iter()
-            .map(|function| reference_deps(&function.references))
-            .collect(),
-        audit_deps: request.audits.iter().map(audit_deps).collect::<Fact<_>>()?,
-        reads: inputs.reads.into_inner(),
-    })
-}
-
-/// Whether Python's model and hook syntax validation passes.
-fn valid_syntax(model: &ModelFacts, dialect: &str) -> bool {
-    model
-        .syntax_checks
-        .iter()
-        .all(|check| syntax_valid(check, dialect) == Ok(true))
+    catch_compiler_panic(|| Ok(project_resources(request)))
 }

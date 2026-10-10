@@ -8,11 +8,8 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     hook_sql_statements,
-    validate_hook_sql_syntax,
-    validate_sql_syntax,
 )
 from sqlbuild.compiler.compile.constants import UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     SqlAnalysisOptOutRequest,
@@ -77,31 +74,10 @@ def _parses(request: SqlAnalysisOptOutRequest) -> bool:
     statements: list[str] = [request.query_sql]
     for hook_name in _HOOK_KEYS:
         statements.extend(hook_sql_statements(request.config.values.get(hook_name)))
-    native: bool | None = check_native_sql_syntax(
+    return check_native_sql_syntax(
         checks=tuple((statement, request.placeholders) for statement in statements),
         dialect=None,
     )
-    if native is not None:
-        return native
-    model_name: str = request.model_file.file_path.stem
-    try:
-        validate_sql_syntax(
-            query_sql=request.query_sql,
-            model_name=model_name,
-            file_path=request.model_file.file_path,
-            placeholders=request.placeholders,
-        )
-        for hook_name in _HOOK_KEYS:
-            validate_hook_sql_syntax(
-                value=request.config.values.get(hook_name),
-                hook_name=hook_name,
-                model_name=model_name,
-                file_path=request.model_file.file_path,
-                placeholders=request.placeholders,
-            )
-    except CompileInputError:
-        return False
-    return True
 
 
 def unneeded_opt_out_diagnostic(
