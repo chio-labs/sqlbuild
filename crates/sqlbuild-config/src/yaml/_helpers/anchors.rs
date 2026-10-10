@@ -85,30 +85,3 @@ pub(crate) fn is_python_anchor_name(name: &str) -> bool {
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
 }
-
-/// Where the `count` node properties (anchor, tag) written before char index `start` begin.
-pub(crate) fn properties_start(
-    chars: &[char],
-    code_ends: &[usize],
-    start: usize,
-    count: usize,
-) -> Option<usize> {
-    (0..count).try_fold(start, |position, _| {
-        let (token_start, token) = token_before(chars, code_ends, position)?;
-        if token.starts_with(['&', '!']) {
-            return Some(token_start);
-        }
-        token
-            .ends_with('>')
-            .then(|| verbatim_tag_start(chars, token_start))
-            .flatten()
-    })
-}
-
-/// The `!<` that opens the verbatim tag whose last token starts at `token_start`.
-fn verbatim_tag_start(chars: &[char], token_start: usize) -> Option<usize> {
-    (1..=token_start)
-        .rev()
-        .find(|index| chars[index - 1] == '!' && chars.get(*index) == Some(&'<'))
-        .map(|index| index - 1)
-}

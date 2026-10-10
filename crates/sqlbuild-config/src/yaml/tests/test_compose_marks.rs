@@ -61,6 +61,44 @@ fn given_yaml_documents_when_composing_then_scalar_marks_match_pyyaml() {
             expected_scalars: Ok(&[(0, 1, "k"), (4, 8, "a"), (14, 15, "m"), (24, 28, "x")]),
         },
         ComposeMarksTestCase {
+            description: "a tag after a double-quoted value holding ' # ' starts at the tag",
+            text: "sources: [{name: raw_orders, description: \"Orders # archived\", expression: !!str \"(SELECT 1 AS id)\"}]\n",
+            expected_scalars: Ok(&[
+                (0, 7, "sources"),
+                (11, 15, "name"),
+                (17, 27, "raw_orders"),
+                (29, 40, "description"),
+                (42, 61, "Orders # archived"),
+                (63, 73, "expression"),
+                (75, 99, "(SELECT 1 AS id)"),
+            ]),
+        },
+        ComposeMarksTestCase {
+            description: "a tag after a single-quoted value holding ' # ' starts at the tag",
+            text: "sources: [{name: raw_orders, description: 'Orders # archived', expression: !!str '(SELECT 1 AS id)'}]\n",
+            expected_scalars: Ok(&[
+                (0, 7, "sources"),
+                (11, 15, "name"),
+                (17, 27, "raw_orders"),
+                (29, 40, "description"),
+                (42, 61, "Orders # archived"),
+                (63, 73, "expression"),
+                (75, 99, "(SELECT 1 AS id)"),
+            ]),
+        },
+        ComposeMarksTestCase {
+            description: "real comments between and after properties are skipped",
+            text: "k: &a  # real comment\n  v\nq: \"x # y\"  # c\nr: !!str &b 'z' # c\n",
+            expected_scalars: Ok(&[
+                (0, 1, "k"),
+                (3, 25, "v"),
+                (26, 27, "q"),
+                (29, 36, "x # y"),
+                (42, 43, "r"),
+                (45, 57, "z"),
+            ]),
+        },
+        ComposeMarksTestCase {
             description: "a quoted scalar ends at its closing quote, before spaces and a comment",
             text: "k: 'it''s'   # 'x'\nd: \"a \\\" b\"  \n",
             expected_scalars: Ok(&[

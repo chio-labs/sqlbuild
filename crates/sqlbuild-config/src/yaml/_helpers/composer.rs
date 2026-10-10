@@ -10,7 +10,7 @@ use crate::yaml::constants::{
     FLOW_KEY_INDICATOR, MAP_TAG, MAX_NATIVE_IMPLICIT_KEY_CHARACTERS, MAX_NESTING_DEPTH,
     NON_SPECIFIC_TAG, PLAIN_FORBIDDEN_FIRST_CHARACTERS, SEQ_TAG, SEQUENCE_ENTRY_TOKEN,
 };
-use crate::yaml::models::{ComposedDocument, Node, NodeContent};
+use crate::yaml::models::{ComposedDocument, MarkStart, Node, NodeContent};
 use saphyr_parser::{Event, Parser, ScalarStyle, ScanError, Span, StrInput, Tag};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -55,7 +55,9 @@ struct Composer<'input> {
     anchors: HashMap<usize, usize>,
     anchor_names: HashSet<String>,
     open_anchors: HashSet<usize>,
+    previous_start: usize,
     previous_end: usize,
+    current_start: usize,
     current_end: usize,
 }
 
@@ -85,7 +87,9 @@ impl<'input> Composer<'input> {
     fn next(&mut self) -> Result<(Event<'input>, Span), ConfigError> {
         match self.parser.next_event() {
             Some(Ok(event)) => {
+                self.previous_start = self.current_start;
                 self.previous_end = self.current_end;
+                self.current_start = event.1.start.index();
                 self.current_end = event.1.end.index();
                 Ok(event)
             }
@@ -97,13 +101,19 @@ impl<'input> Composer<'input> {
         }
     }
 
-    fn push(&mut self, tag: String, content: NodeContent, span: Span, properties: usize) -> usize {
+    fn push(
+        &mut self,
+        tag: String,
+        content: NodeContent,
+        span: Span,
+        mark_start: MarkStart,
+    ) -> usize {
         self.document.nodes.push(Node {
             tag,
             content,
             position: start_position(span),
             span: (span.start.index(), span.end.index()),
-            properties,
+            mark_start,
         });
         self.document.nodes.len() - 1
     }
@@ -259,6 +269,41 @@ impl<'input> Composer<'input> {
                 _ => {}
             }
             token_start = matches!(character, ' ' | '\n' | '\r');
+            index += 1;
+        }
+        None
+    }
+
+    /// PyYAML's start mark: the first property after the last event or in an implicit start.
+    fn mark_start(&self, has_properties: bool, span: Span) -> MarkStart {
+        if has_properties {
+            let start: usize = span.start.index();
+            self.first_property(self.previous_end, start)
+                .or_else(|| self.first_property(self.previous_start, start))
+                .map_or(MarkStart::Unknown, MarkStart::Property)
+        } else {
+            MarkStart::Token
+        }
+    }
+
+    /// The first `&` or `!` token from `from` to `start`, skipping comments.
+    fn first_property(&self, from: usize, start: usize) -> Option<usize> {
+        let mut index = from.min(start);
+        let mut token_start = true;
+        while index < start {
+            let character = self.char_at(index)?;
+            let after_space =
+                index == 0 || self.char_at(index - 1).is_some_and(char::is_whitespace);
+            if character == '#' && after_space {
+                while !matches!(self.char_at(index), None | Some('\n' | '\r')) {
+                    index += 1;
+                }
+                continue;
+            }
+            if matches!(character, '&' | '!') && token_start {
+                return Some(index);
+            }
+            token_start = character.is_whitespace() || matches!(character, '[' | '{' | ',');
             index += 1;
         }
         None
@@ -420,13 +465,13 @@ impl<'input> Composer<'input> {
                     return Err(unsupported("an empty scalar tagged '!'"));
                 }
                 self.open_anchor(anchor_id, span)?;
-                let properties = usize::from(anchor_id != 0) + usize::from(tag.is_some());
+                let mark_start = self.mark_start(anchor_id != 0 || tag.is_some(), span);
                 let tag = scalar_tag(&value, style, full_tag(tag.as_ref()));
                 let node = self.push(
                     tag,
                     NodeContent::Scalar(value.into_owned()),
                     span,
-                    properties,
+                    mark_start,
                 );
                 self.document.nodes[node].span = marks;
                 Ok(self.close_anchor(anchor_id, node))
@@ -448,6 +493,7 @@ impl<'input> Composer<'input> {
         placement: Placement,
     ) -> Result<usize, ConfigError> {
         let (anchor_id, tag) = properties;
+        let mark_start = self.mark_start(anchor_id != 0 || tag.is_some(), span);
         self.open_anchor(anchor_id, span)?;
         let item_placement = placement.child(self.is_flow(span), false, Parent::SequenceEntry);
         let mut items: Vec<usize> = Vec::new();
@@ -458,9 +504,8 @@ impl<'input> Composer<'input> {
             }
             items.push(self.compose_node(event, item_span, item_placement)?);
         }
-        let properties = usize::from(anchor_id != 0) + usize::from(tag.is_some());
         let tag = collection_tag(full_tag(tag.as_ref()), SEQ_TAG);
-        let node = self.push(tag, NodeContent::Sequence(items), span, properties);
+        let node = self.push(tag, NodeContent::Sequence(items), span, mark_start);
         Ok(self.close_anchor(anchor_id, node))
     }
 
@@ -471,6 +516,7 @@ impl<'input> Composer<'input> {
         placement: Placement,
     ) -> Result<usize, ConfigError> {
         let (anchor_id, tag) = properties;
+        let mark_start = self.mark_start(anchor_id != 0 || tag.is_some(), span);
         self.open_anchor(anchor_id, span)?;
         let flow = self.is_flow(span);
         let mut entries: Vec<(usize, usize)> = Vec::new();
@@ -487,9 +533,8 @@ impl<'input> Composer<'input> {
             let value = self.compose_node(value_event, value_span, value_placement)?;
             entries.push((key, value));
         }
-        let properties = usize::from(anchor_id != 0) + usize::from(tag.is_some());
         let tag = collection_tag(full_tag(tag.as_ref()), MAP_TAG);
-        let node = self.push(tag, NodeContent::Mapping(entries), span, properties);
+        let node = self.push(tag, NodeContent::Mapping(entries), span, mark_start);
         Ok(self.close_anchor(anchor_id, node))
     }
 
@@ -548,7 +593,9 @@ pub(crate) fn compose(text: &str) -> Result<ComposedDocument, ConfigError> {
         anchors: HashMap::new(),
         anchor_names: HashSet::new(),
         open_anchors: HashSet::new(),
+        previous_start: 0,
         previous_end: 0,
+        current_start: 0,
         current_end: 0,
     }
     .compose_stream()

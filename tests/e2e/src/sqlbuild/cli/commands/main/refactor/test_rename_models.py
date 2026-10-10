@@ -30,6 +30,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     write_orders_project,
 )
 
+_TAGGED_SOURCES: str = (
+    "# archived feeds\n"
+    'sources: [{name: archived_orders, description: "Orders # archived", '
+    'expression: !!str "(SELECT 1 AS id)"}, '
+    "{name: archived_refunds, description: 'Refunds # archived', "
+    "expression: !!str '(SELECT 2 AS id)'}]  # flow form\n"
+)
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -57,6 +65,15 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
             },
             expected_relation="stg_order_lines",
             extra_files=CUSTOMER_DECLARATIONS,
+        ),
+        ModelRefactorE2ETestCase(
+            description="rename keeps tagged sources after quoted values holding ' # '",
+            command=("rename", "model:stg_orders", "stg_order_lines"),
+            expected_removed="models/staging/stg_orders.sql",
+            expected_file="models/staging/stg_order_lines.sql",
+            expected_fragments={"sources/archived.yml": (_TAGGED_SOURCES,)},
+            expected_relation="stg_order_lines",
+            extra_files={"sources/archived.yml": _TAGGED_SOURCES},
         ),
         ModelRefactorE2ETestCase(
             description="rename rewrites reusable schema relationships audits",
