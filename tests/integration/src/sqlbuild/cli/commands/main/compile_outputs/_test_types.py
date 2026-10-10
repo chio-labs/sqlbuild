@@ -1,4 +1,8 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
 
 
 @dataclass(frozen=True)
@@ -19,3 +23,14 @@ class PublicationFailureTestCase:
     engine: str
     expected_error: str
     expected_published_files: int
+
+
+@dataclass(frozen=True)
+class ReuseDisruptionTestCase:
+    """One engine's stored compile disrupted between an unchanged rerun and the next compile."""
+
+    description: str
+    engine: str
+    disrupt: Callable[[Path, pytest.MonkeyPatch], None]
+    expected_reused: tuple[bool, ...]
+    expected_slots: int

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlbuild._native import NativeReuseAttempt
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome, FileStamp
 
 
@@ -128,3 +129,5 @@ class CompileReuseAttempt:
     snapshot_ns: int = 0
     digests: dict[str, str] = field(default_factory=dict)
     restamped: frozenset[str] = frozenset()
+    native: NativeReuseAttempt | None = field(default=None, compare=False, repr=False)
+    """The natively checked attempt, recorded natively after a miss."""

@@ -12,8 +12,8 @@ from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from sqlbuild.cli.compile_reuse._helpers.project_files import (
+    file_digest,
     is_racy,
-    project_file_digests,
     snapshot_project_files,
 )
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import (
@@ -68,16 +68,13 @@ def stored_project_files(*, project_dir: Path, snapshot_ns: int) -> dict[str, St
     """Record the project as a stored compile would, with digests for every readable file."""
 
     snapshot: dict[str, FileStamp] = snapshot_project_files(project_dir=str(project_dir))
-    digests: list[str | None] = project_file_digests(
-        project_dir=str(project_dir), relative_paths=list(snapshot)
-    )
     return {
         relative_path: StoredProjectFile(
             stamp=stamp,
-            digest=digest,
+            digest=file_digest(path=str(project_dir / relative_path)),
             racy=is_racy(stamp=stamp, snapshot_ns=snapshot_ns),
         )
-        for (relative_path, stamp), digest in zip(snapshot.items(), digests, strict=True)
+        for relative_path, stamp in snapshot.items()
     }
 
 

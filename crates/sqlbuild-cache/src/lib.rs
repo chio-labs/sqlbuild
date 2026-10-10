@@ -4,5 +4,6 @@
 
 pub mod artifacts;
 pub mod digest;
+pub mod project_reuse;
 pub mod project_snapshot;
 pub mod store;

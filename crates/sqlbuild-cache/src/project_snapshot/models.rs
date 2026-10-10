@@ -6,8 +6,8 @@ pub struct PathStamp {
     pub relative_path: String,
     pub kind: &'static str,
     pub size: u64,
-    pub mtime_ns: i128,
-    pub ctime_ns: i128,
+    pub mtime_ns: i64,
+    pub ctime_ns: i64,
     pub inode: u64,
     pub link: Option<String>,
 }

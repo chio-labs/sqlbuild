@@ -18,6 +18,8 @@ REUSE_FORMAT_VERSION: int = 1
 REUSE_ENTRY_DIRECTORY_NAME: str = "project-reuse-v1"
 REUSE_ENTRY_MAGIC: bytes = b"SQBREUSE1\n"
 REUSE_ENTRY_SUFFIX: str = ".entry"
+NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
+NATIVE_REUSE_SUFFIX: str = ".store"
 REUSE_STDOUT_SUFFIX: str = ".stdout"
 REUSE_RETIRED_RENDER_SUFFIX: str = ".render"
 REUSE_STDOUT_SEPARATOR: str = "-"
@@ -40,7 +42,6 @@ UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
 )
 MISSING_ENVIRONMENT_VALUE: str = "\0missing"
 MISSING_FILE_DIGEST: str = "\0missing"
-NATIVE_DIGEST_PREFIX: str = "b3:"
 PROJECT_CONFIG_FILENAMES: tuple[str, ...] = ("sqlbuild_project.toml", "sqlbuild_project.yml")
 
 RACY_WINDOW_NS: int = 2_000_000_000

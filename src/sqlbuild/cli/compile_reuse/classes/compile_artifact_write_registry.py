@@ -8,8 +8,11 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+import sqlbuild._native as _native
 from sqlbuild.cli.compile_reuse.classes.compile_artifact_writes import CompileArtifactWrites
 from sqlbuild.cli.compile_reuse.models import RecordedArtifact
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.types import NativeStage
 
 
 class CompileArtifactWriteRegistry:
@@ -40,7 +43,9 @@ class CompileArtifactWriteRegistry:
         if not recorders:
             return
         artifact: RecordedArtifact = RecordedArtifact(
-            digest=hashlib.blake2b(contents, digest_size=self._digest_size).hexdigest()
+            digest=_native.artifact_digest(contents)
+            if native_stage_enabled(NativeStage.COMPILE_OUTPUTS)
+            else hashlib.blake2b(contents, digest_size=self._digest_size).hexdigest()
         )
         for recorder in recorders:
             recorder.record(path=os.path.abspath(path), artifact=artifact)

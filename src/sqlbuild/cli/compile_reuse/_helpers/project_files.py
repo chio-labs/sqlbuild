@@ -6,7 +6,6 @@ import hashlib
 import os
 import stat
 
-import sqlbuild._native as _native
 from sqlbuild.cli.compile_reuse.constants import (
     BROKEN_LINK_KIND,
     DIGEST_SIZE_BYTES,
@@ -16,7 +15,6 @@ from sqlbuild.cli.compile_reuse.constants import (
     EXCLUDED_ROOT_DIRECTORIES,
     FILE_KIND,
     FILE_LINK_KIND,
-    NATIVE_DIGEST_PREFIX,
     OUTPUT_FILE_DESCRIPTORS,
     PRESENCE_ONLY_FILE_SUFFIXES,
     PRESENCE_ONLY_KIND,
@@ -26,10 +24,6 @@ from sqlbuild.cli.compile_reuse.constants import (
 )
 from sqlbuild.cli.compile_reuse.models import ProjectFilesComparison, StoredProjectFile
 from sqlbuild.cli.compile_reuse.types import FileStamp
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 
 _DIRECTORY_STAMP: FileStamp = FileStamp(DIRECTORY_KIND, 0, 0, 0, 0, None)
 _PRESENCE_STAMP: FileStamp = FileStamp(PRESENCE_ONLY_KIND, 0, 0, 0, 0, None)
@@ -42,14 +36,9 @@ _HASHABLE_KINDS: frozenset[str] = frozenset({FILE_KIND, FILE_LINK_KIND})
 def snapshot_project_files(*, project_dir: str) -> dict[str, FileStamp]:
     """Stat every compile-relevant path under the project, keyed by relative path."""
 
-    output_files: frozenset[tuple[int, int]] = _redirected_output_files()
-    native: dict[str, FileStamp] | None = _native_snapshot(
-        project_dir=project_dir, output_files=output_files
-    )
-    if native is not None:
-        return native
     stamps: dict[str, FileStamp] = {}
     prefix_length: int = len(project_dir) + 1
+    output_files: frozenset[tuple[int, int]] = redirected_output_files()
     visited_links: set[str] = {os.path.realpath(project_dir)}
     pending: list[tuple[str, bool]] = [(project_dir, True)]
     while pending:
@@ -70,47 +59,6 @@ def snapshot_project_files(*, project_dir: str) -> dict[str, FileStamp]:
                     visited_links.add(resolved)
                     pending.append((entry.path, False))
     return stamps
-
-
-def _native_snapshot(
-    *, project_dir: str, output_files: frozenset[tuple[int, int]]
-) -> dict[str, FileStamp] | None:
-    if not native_stage_enabled(NativeStage.COMPILE_OUTPUTS):
-        return None
-    rows: list[tuple[str, str, int, int, int, int, str | None]] | None = (
-        _native.snapshot_project_paths(
-            project_dir,
-            {
-                "excluded": sorted(EXCLUDED_DIRECTORIES),
-                "excluded_root": sorted(EXCLUDED_ROOT_DIRECTORIES),
-                "presence_suffixes": list(PRESENCE_ONLY_FILE_SUFFIXES),
-                "output_files": sorted(output_files),
-            },
-        )
-    )
-    if rows is None:
-        report_native_fallback(site=NativeFallbackSite.COMPILE_REUSE_SNAPSHOT)
-        return None
-    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="snapshot_paths", units=len(rows))
-    return {
-        relative_path: FileStamp(kind, size, mtime_ns, ctime_ns, inode, link)
-        for relative_path, kind, size, mtime_ns, ctime_ns, inode, link in rows
-    }
-
-
-def project_file_digests(*, project_dir: str, relative_paths: list[str]) -> list[str | None]:
-    """Content digests of project input files; native digests carry their own prefix."""
-
-    paths: list[str] = [os.path.join(project_dir, path) for path in relative_paths]
-    if not native_stage_enabled(NativeStage.COMPILE_OUTPUTS):
-        return [file_digest(path=path) for path in paths]
-    digests: list[str | None] = _native.digest_files(paths)
-    report_native_answer(
-        stage=NativeStage.COMPILE_OUTPUTS,
-        kind="project_file_digests",
-        units=sum(digest is not None for digest in digests),
-    )
-    return [None if digest is None else NATIVE_DIGEST_PREFIX + digest for digest in digests]
 
 
 def file_digest(*, path: str) -> str | None:
@@ -146,9 +94,7 @@ def compare_project_files(
             continue
         if stamp.kind not in _HASHABLE_KINDS or previous.digest is None:
             return changed
-        digest: str | None = project_file_digests(
-            project_dir=project_dir, relative_paths=[relative_path]
-        )[0]
+        digest: str | None = file_digest(path=os.path.join(project_dir, relative_path))
         if digest is None or digest != previous.digest:
             return changed
         verified[relative_path] = digest
@@ -238,18 +184,14 @@ def with_missing_digests(
     """Return digests extended with racy files, plus the given paths, that still lack one."""
 
     completed: dict[str, str] = dict(digests)
-    missing: list[str] = [
-        relative_path
-        for relative_path, stamp in snapshot.items()
-        if stamp.kind in _HASHABLE_KINDS
-        and relative_path not in completed
-        and (relative_path in paths or is_racy(stamp=stamp, snapshot_ns=snapshot_ns))
-    ]
-    for relative_path, digest in zip(
-        missing,
-        project_file_digests(project_dir=project_dir, relative_paths=missing) if missing else [],
-        strict=True,
-    ):
+    for relative_path, stamp in snapshot.items():
+        if (
+            stamp.kind not in _HASHABLE_KINDS
+            or relative_path in completed
+            or not (relative_path in paths or is_racy(stamp=stamp, snapshot_ns=snapshot_ns))
+        ):
+            continue
+        digest: str | None = file_digest(path=os.path.join(project_dir, relative_path))
         if digest is not None:
             completed[relative_path] = digest
     return completed
@@ -317,7 +259,7 @@ def _link_stamp(*, entry: os.DirEntry[str], is_root: bool) -> FileStamp | None:
     return FileStamp(DIRECTORY_LINK_KIND, 0, 0, 0, 0, link)
 
 
-def _redirected_output_files() -> frozenset[tuple[int, int]]:
+def redirected_output_files() -> frozenset[tuple[int, int]]:
     """Identify stdout and stderr files, which hold this command's output, not its inputs."""
 
     identities: set[tuple[int, int]] = set()
