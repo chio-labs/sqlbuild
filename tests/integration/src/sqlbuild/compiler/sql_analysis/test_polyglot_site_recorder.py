@@ -14,15 +14,14 @@ from tests.integration.src.sqlbuild.compiler.sql_analysis._test_types import Sit
 from tests.integration.src.sqlbuild.compiler.sql_analysis.helpers import recorded_rows
 
 _PROCESS: str = (
-    "from sqlbuild.compiler.references.main.extract_relation_names import "
-    "extract_relation_names\n"
+    "from sqlbuild.rule_engine.classes.sql_document import SqlDocument\n"
     "from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql\n"
     "for _ in range(2):\n"
-    "    assert extract_relation_names(sql='SELECT 1 FROM main.orders', dialect='duckdb')\n"
+    "    assert SqlDocument(source='SELECT 1 FROM main.orders', dialect='duckdb').polyglot_ast()\n"
     "module = import_polyglot_sql()\n"
     "print(type(module.parse_one).__name__, isinstance(module.PolyglotError, type))\n"
 )
-_SITE: str = "compiler/references/_helpers/relation_names.py:extract_relation_names_impl"
+_SITE: str = "rule_engine/classes/sql_document.py:SqlDocument.polyglot_ast"
 
 
 @pytest.mark.parametrize(
@@ -31,7 +30,7 @@ _SITE: str = "compiler/references/_helpers/relation_names.py:extract_relation_na
         SiteRecorderTestCase(
             description="recording",
             record_dir="records",
-            expected_rows=((_SITE, "parse", 2),),
+            expected_rows=((_SITE, "parse_one", 2),),
             expected_entry_point="_RecordedEntryPoint",
         ),
         SiteRecorderTestCase(

@@ -332,6 +332,9 @@ def scan_macro_call_sites(
     list[tuple[int, int, int, str, list[str] | None, bool]],
     tuple[int | None, str | None, str] | None,
 ]: ...
+def extract_sql_relation_names(
+    sql: str, dialect: str | None
+) -> tuple[list[tuple[str, str | None, str | None]], list[str]] | None: ...
 def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]], /) -> str: ...
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
