@@ -72,6 +72,7 @@ fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> P
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::bindings::_helpers::analysis::relation_names::register(module)?;
+    crate::bindings::_helpers::analysis::explicit_references::register(module)?;
     module.add_function(wrap_pyfunction!(query_fingerprint, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validations_json, module)?)?;
