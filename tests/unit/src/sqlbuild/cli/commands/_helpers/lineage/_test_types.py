@@ -134,3 +134,36 @@ class SharedSelectorDepthTestCase:
     select: tuple[str, ...]
     direction: str | None
     expected_node_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FingerprintedFilesTestCase:
+    """Authored files whose relation lineage fingerprint hashes exactly the expected inputs."""
+
+    description: str
+    files: dict[str, str]
+    links: dict[str, str]
+    unreadable_directories: tuple[str, ...]
+    environment: dict[str, str]
+    cli_vars: dict[str, object] | None
+    expected_hashed_files: tuple[str, ...]
+    expected_environment_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UncacheableFingerprintTestCase:
+    """Authored files whose relation lineage fingerprint is unavailable."""
+
+    description: str
+    files: dict[str, str]
+    expected_fingerprint: None
+
+
+@dataclass(frozen=True)
+class InterruptedListingFingerprintTestCase:
+    """A directory whose listing fails after it opened, under this Python's own `rglob`."""
+
+    description: str
+    files: dict[str, str]
+    interrupted_directory: str
+    expected_uncacheable_before: tuple[int, int]

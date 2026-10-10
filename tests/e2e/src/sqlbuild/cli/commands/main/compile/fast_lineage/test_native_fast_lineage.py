@@ -8,10 +8,14 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage._test_types import (
     NativeFastLineageCliTestCase,
+    NativeRichLineageCliTestCase,
+    NativeRichLineageFailureCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage.helpers import (
     EngineLineageRun,
+    FailedLineageRun,
     engine_lineage_run,
+    failed_rich_lineage_run,
     model_lineage_summaries,
 )
 
@@ -65,6 +69,63 @@ _DEEP_UNION_FILES: dict[str, str] = {
         'SELECT order_id FROM __source("raw_orders")\n'
     ),
 }
+
+
+_RICH_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _PROJECT_FILES["sqlbuild_project.toml"],
+    "sources/raw.yml": _PROJECT_FILES["sources/raw.yml"],
+    "seeds/regions.csv": "region_id,label\n1,north\n",
+    "seeds/regions.yml": (
+        "seeds:\n  - name: regions\n    description: Regions.\n    columns:\n"
+        "      - name: region_id\n        type: INTEGER\n      - name: label\n        type: VARCHAR\n"
+    ),
+    "models/staging/stg_orders.sql": _PROJECT_FILES["models/staging/stg_orders.sql"],
+    "models/marts/order_facts.sql": (
+        'MODEL (description "Order facts");\n\n'
+        "WITH ranked AS (\n"
+        "  SELECT o.*, r.label, CAST(o.amount AS BIGINT) AS whole_amount\n"
+        '  FROM __ref("stg_orders") AS o\n'
+        '  LEFT JOIN __seed("regions") AS r ON o.customer_id = r.region_id\n'
+        ")\n"
+        "SELECT order_id, customer_id, COALESCE(label, 'none') AS region_label,\n"
+        "  whole_amount, amount * 2 AS doubled, 'fixed' AS tag\n"
+        "FROM ranked\n"
+    ),
+    "models/marts/customer_totals.sql": (
+        'MODEL (description "Totals per customer");\n\n'
+        "SELECT customer_id, SUM(doubled) AS total_doubled, COUNT(*) AS order_count,\n"
+        "  MAX(region_label) AS region_label\n"
+        'FROM __ref("order_facts")\nGROUP BY customer_id\n'
+        "UNION ALL\n"
+        'SELECT customer_id, amount, 1, NULL FROM __source("raw_orders")\n'
+    ),
+    "models/marts/customer_copies.sql": (
+        'MODEL (description "Customer copies");\n\n'
+        'SELECT t.*, f.tag FROM __ref("customer_totals") AS t\n'
+        'JOIN __ref("order_facts") AS f USING (customer_id)\n'
+    ),
+}
+
+_NATIVE_PANIC_ERROR: str = "NativeCompilerError: native SQL compilation panicked"
+_RICH_PANIC_INJECTION: str = f"""
+import sqlbuild._native as native
+
+
+def _panicked(request):
+    raise native.NativeCompilerError({_NATIVE_PANIC_ERROR!r})
+
+
+native.build_rich_column_lineage = _panicked
+"""
+_RICH_COMPILE: tuple[str, ...] = (
+    "--compiler-engine",
+    "native",
+    "compile",
+    "--json",
+    "--no-cache",
+    "--lineage-mode",
+    "rich",
+)
 
 
 @pytest.mark.parametrize(
@@ -135,6 +196,121 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
         test_case.expected_minimum_traced_edges
     )
     assert runs["native-preview"] == native
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeRichLineageCliTestCase(
+            description="stars, CTEs, joins, seeds, set operations and aggregates",
+            files=_RICH_FILES,
+            lineage_targets=(
+                "customer_copies.total_doubled",
+                "order_facts.whole_amount",
+                "stg_orders.amount",
+            ),
+            expected_lineage={
+                "customer_copies": {
+                    "available": True,
+                    "column_count": 5,
+                    "edge_count": 8,
+                    "has_star": True,
+                },
+                "customer_totals": {
+                    "available": True,
+                    "column_count": 4,
+                    "edge_count": 5,
+                    "has_star": False,
+                },
+                "order_facts": {
+                    "available": True,
+                    "column_count": 6,
+                    "edge_count": 5,
+                    "has_star": False,
+                },
+                "stg_orders": {
+                    "available": True,
+                    "column_count": 3,
+                    "edge_count": 3,
+                    "has_star": True,
+                },
+            },
+            expected_wheel_calls=0,
+            expected_minimum_traced_edges=4,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_when_tracing_rich_lineage_with_each_engine_then_output_matches(
+    test_case: NativeRichLineageCliTestCase, tmp_path: Path
+) -> None:
+    runs: dict[str, EngineLineageRun] = {
+        engine: engine_lineage_run(
+            project_dir=tmp_path / engine,
+            files=test_case.files,
+            engine=engine,
+            targets=test_case.lineage_targets,
+            mode="rich",
+        )
+        for engine in _ENGINES
+    }
+    native: EngineLineageRun = runs["native"]
+
+    assert native.compile_returncode == 0, native.compile_report
+    assert model_lineage_summaries(native.compile_report) == test_case.expected_lineage
+    assert [code for code, _, _ in native.traces] == [0] * len(native.traces)
+    assert sum('"source"' in stdout for _, stdout, _ in native.traces) >= (
+        test_case.expected_minimum_traced_edges
+    )
+    assert native.wheel_calls == test_case.expected_wheel_calls
+    assert runs["native-preview"] == native
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeRichLineageFailureCliTestCase(
+            description="compile --lineage-mode rich",
+            files=_RICH_FILES,
+            command=_RICH_COMPILE,
+            expected_returncode=1,
+            expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
+            expected_wheel_calls=0,
+        ),
+        NativeRichLineageFailureCliTestCase(
+            description="lineage --mode rich",
+            files=_RICH_FILES,
+            command=(
+                "--compiler-engine",
+                "native",
+                "lineage",
+                "order_facts.whole_amount",
+                "--mode",
+                "rich",
+                "--json",
+            ),
+            expected_returncode=1,
+            expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
+            expected_wheel_calls=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_rich_lineage_panic_when_running_then_command_fails_without_the_wheel(
+    test_case: NativeRichLineageFailureCliTestCase, tmp_path: Path
+) -> None:
+    run: FailedLineageRun = failed_rich_lineage_run(
+        project_dir=tmp_path,
+        files=test_case.files,
+        args=test_case.command,
+        perturbation=_RICH_PANIC_INJECTION,
+    )
+
+    assert run == FailedLineageRun(
+        returncode=test_case.expected_returncode,
+        last_error_line=test_case.expected_error_line,
+        wheel_calls=test_case.expected_wheel_calls,
+    )
 
 
 if __name__ == "__main__":

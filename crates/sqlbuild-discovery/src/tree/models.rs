@@ -22,6 +22,14 @@ pub struct TreeEntry {
     pub is_walkable_dir: bool,
 }
 
+/// One directory's entries, and whether reading them failed after the directory opened.
+#[derive(Debug)]
+pub struct DirectoryListing {
+    pub entries: Vec<TreeEntry>,
+    /// `readdir` failed mid-listing; the listing is empty. Python 3.12's `Path.walk` raises here.
+    pub interrupted: bool,
+}
+
 /// Directory listings read once per pass and shared by every query, keyed by relative path.
 #[derive(Debug)]
 pub struct ProjectTree {
@@ -29,6 +37,8 @@ pub struct ProjectTree {
     pub(crate) listings: Mutex<HashMap<String, Arc<Vec<TreeEntry>>>>,
     /// The real names of listed entries that are not valid UTF-8, by relative path.
     pub(crate) raw_names: RwLock<HashMap<String, OsString>>,
+    /// Relative directories whose listing failed after they opened.
+    pub(crate) interrupted: Mutex<Vec<String>>,
 }
 
 impl ProjectTree {
@@ -38,6 +48,7 @@ impl ProjectTree {
             directory: directory.to_path_buf(),
             listings: Mutex::new(HashMap::new()),
             raw_names: RwLock::new(HashMap::new()),
+            interrupted: Mutex::new(Vec::new()),
         }
     }
 

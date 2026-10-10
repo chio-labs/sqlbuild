@@ -77,6 +77,86 @@
      "message": "Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'"
     }
    ]
+  },
+  {
+   "label": "lineage-rich-upstream",
+   "exit_code": 1,
+   "diagnostics": [
+    "Project discovery  START",
+    "Project assembly  START",
+    "Declaration parsing  START",
+    "Declaration parsing  OK  (<elapsed>)",
+    "Python discovery  START",
+    "Python discovery  OK  (<elapsed>)",
+    "Project assembly  OK  (<elapsed>)",
+    "Project discovery  OK  (<elapsed>)",
+    "error[P001]: Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'",
+    "",
+    ""
+   ],
+   "stdout": [
+    ""
+   ]
+  },
+  {
+   "label": "lineage-rich-downstream",
+   "exit_code": 1,
+   "diagnostics": [
+    "Project discovery  START",
+    "Project assembly  START",
+    "Declaration parsing  START",
+    "Declaration parsing  OK  (<elapsed>)",
+    "Python discovery  START",
+    "Python discovery  OK  (<elapsed>)",
+    "Project assembly  OK  (<elapsed>)",
+    "Project discovery  OK  (<elapsed>)",
+    "error[P001]: Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'",
+    "",
+    ""
+   ],
+   "stdout": [
+    ""
+   ]
+  },
+  {
+   "label": "lineage-fast-upstream",
+   "exit_code": 1,
+   "diagnostics": [
+    "Project discovery  START",
+    "Project assembly  START",
+    "Declaration parsing  START",
+    "Declaration parsing  OK  (<elapsed>)",
+    "Python discovery  START",
+    "Python discovery  OK  (<elapsed>)",
+    "Project assembly  OK  (<elapsed>)",
+    "Project discovery  OK  (<elapsed>)",
+    "error[P001]: Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'",
+    "",
+    ""
+   ],
+   "stdout": [
+    ""
+   ]
+  },
+  {
+   "label": "lineage-relations",
+   "exit_code": 1,
+   "diagnostics": [
+    "Project discovery  START",
+    "Project assembly  START",
+    "Declaration parsing  START",
+    "Declaration parsing  OK  (<elapsed>)",
+    "Python discovery  START",
+    "Python discovery  OK  (<elapsed>)",
+    "Project assembly  OK  (<elapsed>)",
+    "Project discovery  OK  (<elapsed>)",
+    "error[P001]: Model file models/sales/marts/sales_summary_1.sql references unknown model 'missing_model'",
+    "",
+    ""
+   ],
+   "stdout": [
+    ""
+   ]
   }
  ],
  "compiled": {},

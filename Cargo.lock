@@ -704,6 +704,7 @@ dependencies = [
  "sha2",
  "sqlbuild-cache",
  "sqlbuild-core",
+ "sqlbuild-discovery",
  "sqlbuild-model-config",
  "sqlbuild-render",
  "sqlbuild-scopes",

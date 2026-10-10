@@ -1,5 +1,7 @@
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_interrupted_listings.rs"]
+mod interrupted_listings;
 #[path = "tests/test_ordering.rs"]
 mod ordering;
 #[path = "tests/test_os_failures.rs"]
