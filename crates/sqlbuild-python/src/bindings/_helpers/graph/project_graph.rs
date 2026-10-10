@@ -6,14 +6,16 @@ use sqlbuild_analysis::assembly::project::types::ObjectKey;
 use sqlbuild_analysis::graph::errors::SelectorError;
 use sqlbuild_analysis::graph::main::build_project_graph::build_project_graph;
 use sqlbuild_analysis::graph::main::build_resources::build_resources;
+use sqlbuild_analysis::graph::main::edge_keys::edge_keys;
 use sqlbuild_analysis::graph::main::graph_from_indexes::graph_from_indexes;
 use sqlbuild_analysis::graph::main::match_selector::match_selector;
+use sqlbuild_analysis::graph::main::model_layer_count::model_layer_count;
 use sqlbuild_analysis::graph::main::parse_selector::parse_selector;
 use sqlbuild_analysis::graph::main::resolve_selector_tokens::resolve_selector_tokens;
 use sqlbuild_analysis::graph::main::resolve_selectors::resolve_selectors;
 use sqlbuild_analysis::graph::main::selector_name_help::selector_name_help;
 use sqlbuild_analysis::graph::models::{
-    BuildResources, GraphIndexes, GraphResource, ParsedSelector, ProjectGraph,
+    BuildResources, EdgeDirection, GraphIndexes, GraphResource, ParsedSelector, ProjectGraph,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
@@ -45,6 +47,10 @@ pub(crate) struct NativeProjectGraph {
     graph: ProjectGraph,
 }
 
+fn dependency_edges(key: &ObjectKey, deps: &[ObjectKey]) -> Vec<(ObjectKey, ObjectKey)> {
+    deps.iter().map(|dep| (dep.clone(), key.clone())).collect()
+}
+
 fn outcome(result: Result<Vec<ObjectKey>, SelectorError>) -> KeysOutcome {
     match result {
         Ok(keys) => (Some(keys), None),
@@ -54,6 +60,13 @@ fn outcome(result: Result<Vec<ObjectKey>, SelectorError>) -> KeysOutcome {
 
 fn failure(error: SelectorError) -> FailureRow {
     (error.code, error.message, error.help)
+}
+
+impl NativeProjectGraph {
+    /// Wrap a graph another native stage built, such as project assembly.
+    pub(crate) fn new(graph: ProjectGraph) -> Self {
+        Self { graph }
+    }
 }
 
 #[pymethods]
@@ -71,9 +84,7 @@ impl NativeProjectGraph {
                     folder,
                 })
                 .collect();
-            Ok(Self {
-                graph: build_project_graph(&resources),
-            })
+            Ok(Self::new(build_project_graph(&resources)))
         })
     }
 
@@ -82,15 +93,13 @@ impl NativeProjectGraph {
     fn from_indexes(indexes: IndexesRow) -> PyResult<Self> {
         compiler_guard(|| {
             let (names, upstream, downstream, tags, paths) = indexes;
-            Ok(Self {
-                graph: graph_from_indexes(GraphIndexes {
-                    names,
-                    upstream,
-                    downstream,
-                    tags,
-                    paths,
-                }),
-            })
+            Ok(Self::new(graph_from_indexes(GraphIndexes {
+                names,
+                upstream,
+                downstream,
+                tags,
+                paths,
+            })))
         })
     }
 
@@ -104,6 +113,44 @@ impl NativeProjectGraph {
             graph.tags.clone(),
             graph.paths.clone(),
         )
+    }
+
+    /// The key's direct upstream lineage keys, in authored dependency order.
+    fn upstream(&self, key: ObjectKey) -> Vec<ObjectKey> {
+        edge_keys(&self.graph, &key, EdgeDirection::Upstream).to_vec()
+    }
+
+    /// The key's direct downstream keys, sorted by `(resource type, name)`.
+    fn downstream(&self, key: ObjectKey) -> Vec<ObjectKey> {
+        edge_keys(&self.graph, &key, EdgeDirection::Downstream).to_vec()
+    }
+
+    /// Every selectable key, in project order with later same-name resources replacing earlier.
+    fn keys(&self) -> Vec<ObjectKey> {
+        self.graph
+            .names
+            .iter()
+            .map(|(_, key)| key.clone())
+            .collect()
+    }
+
+    /// `(selector name, key)` in project order.
+    fn names(&self) -> Vec<(String, ObjectKey)> {
+        self.graph.names.clone()
+    }
+
+    /// Every lineage edge as `(dependency, dependent)`, in upstream order.
+    fn edges(&self) -> Vec<(ObjectKey, ObjectKey)> {
+        self.graph
+            .upstream
+            .iter()
+            .flat_map(|(key, deps)| dependency_edges(key, deps))
+            .collect()
+    }
+
+    /// The compile report's execution layer count over models.
+    fn model_layer_count(&self) -> usize {
+        model_layer_count(&self.graph)
     }
 
     /// `--select` minus `--exclude`, plus the functions they need to build.

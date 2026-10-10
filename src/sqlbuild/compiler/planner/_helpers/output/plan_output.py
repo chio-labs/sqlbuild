@@ -425,6 +425,13 @@ def build_selected_audit_entries(
     model_materializations: dict[str, str],
 ) -> list[AuditPlanEntry]:
     entries: list[AuditPlanEntry] = []
+    selected_audits: tuple[CompiledAudit, ...] = tuple(
+        audit
+        for audit in project.audits
+        if audit_is_selected(audit=audit, selected_keys=scope.selected_keys)
+    )
+    if not selected_audits:
+        return entries
     lineage: LineageGraphViews = project_lineage_views(project)
     lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         lineage.upstream_deps
@@ -433,9 +440,7 @@ def build_selected_audit_entries(
         lineage.downstream_deps
     )
     audit: CompiledAudit
-    for audit in project.audits:
-        if not audit_is_selected(audit=audit, selected_keys=scope.selected_keys):
-            continue
+    for audit in selected_audits:
         entries.append(
             plan_audit(
                 audit=audit,

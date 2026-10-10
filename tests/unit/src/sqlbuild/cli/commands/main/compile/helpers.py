@@ -47,6 +47,7 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import (
     prepare_python_dag_project,
 )
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )
@@ -419,7 +420,7 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
         effective_vars={},
         models=tuple(models),
     )
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=project,
         upstream_deps=upstream_deps,
         downstream_deps={key: () for key in upstream_deps},
@@ -447,7 +448,7 @@ def build_linear_compile_output_graph(*, model_count: int) -> ProjectGraph:
             *downstream_deps[previous_model.key],
             model.key,
         )
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=graph.project,
         upstream_deps=upstream_deps,
         downstream_deps=downstream_deps,

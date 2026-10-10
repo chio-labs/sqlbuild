@@ -229,18 +229,10 @@ def _build_model_node(model: CompiledModel) -> DagNode:
 def _build_edges(
     *, graph: ProjectGraph, python_graph: PythonNodeGraph | None = None
 ) -> tuple[DagEdge, ...]:
-    edges: list[DagEdge] = []
-    key: CompiledObjectKey
-    dep_keys: tuple[CompiledObjectKey, ...]
-    for key, dep_keys in graph.upstream_deps.items():
-        dep_key: CompiledObjectKey
-        for dep_key in dep_keys:
-            edges.append(
-                DagEdge(
-                    from_id=_node_id(dep_key),
-                    to_id=_node_id(key),
-                )
-            )
+    edges: list[DagEdge] = [
+        DagEdge(from_id=f"{dep_kind}:{dep_name}", to_id=f"{kind}:{name}")
+        for (dep_kind, dep_name), (kind, name) in graph.native.edges()
+    ]
     edges.extend(_build_loader_edges(graph))
     if python_graph is not None:
         edges.extend(_build_python_edges(python_graph))
