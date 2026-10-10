@@ -124,7 +124,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "models/orders.sql": 'MODEL (description "Orders");\n\nSELECT FROM WHERE (\n',
             },
-            expected_kind="syntax_error",
+            expected_kind=None,
             expected_error="SQL syntax error in model 'orders'",
         ),
         AssemblyDeferralTestCase(
@@ -136,7 +136,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
                     ");\n\nSELECT 1 AS n\n"
                 ),
             },
-            expected_kind="syntax_error",
+            expected_kind=None,
             expected_error="Polyglot could not parse model 'orders' pre_hooks[0]",
         ),
         AssemblyDeferralTestCase(
@@ -171,7 +171,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python(
     ],
     ids=lambda case: case.description,
 )
-def test_given_projects_python_rejects_when_assembling_natively_then_defers_with_python_error(
+def test_given_projects_python_rejects_when_assembling_natively_then_raises_python_error(
     test_case: AssemblyDeferralTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -194,8 +194,10 @@ def test_given_projects_python_rejects_when_assembling_natively_then_defers_with
 
     assert test_case.expected_error in str(python_error.value)
     assert str(native_error.value) == str(python_error.value)
-    assert assembly_deferrals(record_dir) == Counter(
-        {f"project_assembly:{test_case.expected_kind}": 1}
+    assert assembly_deferrals(record_dir) == (
+        Counter({f"project_assembly:{test_case.expected_kind}": 1})
+        if test_case.expected_kind is not None
+        else Counter()
     )
 
 
@@ -241,8 +243,10 @@ def test_given_a_variable_only_python_renders_when_assembling_natively_then_pyth
 
     assert assembly_view(native) == assembly_view(python)
     assert native.seeds[0].destination.schema == test_case.expected_schema
-    assert assembly_deferrals(record_dir) == Counter(
-        {f"project_assembly:{test_case.expected_kind}": 1}
+    assert assembly_deferrals(record_dir) == (
+        Counter({f"project_assembly:{test_case.expected_kind}": 1})
+        if test_case.expected_kind is not None
+        else Counter()
     )
 
 

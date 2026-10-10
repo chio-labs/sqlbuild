@@ -664,6 +664,12 @@ def assemble_compiled_sql_tests(
 ) -> list[NativeSqlTestAssemblyRow]: ...
 
 # Native analysis: compiled project assembly.
+def sql_syntax_error(
+    sql: str,
+    placeholders: Mapping[str, str] | None,
+    dialect: str | None,
+    parse_one: bool = False,
+) -> str | None: ...
 def check_native_sql_syntax(
     request: tuple[str, list[tuple[str, list[tuple[str, str]]]]], /
 ) -> tuple[bool | None, str | None]: ...
@@ -689,6 +695,7 @@ def assemble_project_resource_facts(
         list[list[tuple[str, str]]],
         list[list[tuple[str, str]]],
         list[tuple[str, str]],
+        list[bool],
     ]
     | None,
     str | None,

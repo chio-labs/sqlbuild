@@ -1,17 +1,23 @@
 //! Python's resource assembly facts for one project, computed natively for the preview engine.
 
+use std::collections::HashMap;
+
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 use sqlbuild_analysis::assembly::project::main::assemble_project_resources::assemble_project_resources;
 use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
+use sqlbuild_analysis::assembly::project::main::sql_syntax_error::sql_syntax_error as check_syntax_error;
 use sqlbuild_analysis::assembly::project::models::{
     AuditFacts, InputRead, ModelFacts, Namespace, ProjectRequest, ProjectResources, Reference,
-    SeedDefaults, SeedFacts, SourceFacts, SyntaxCheck, TargetNamespace, Variable,
+    SeedDefaults, SeedFacts, SourceFacts, SyntaxCheck, SyntaxFailure, SyntaxMode, TargetNamespace,
+    Variable,
 };
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
 use sqlbuild_model_config::templates::models::Scalar;
 
+use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
 
 const TEXT_VARIABLE: &str = "text";
@@ -70,6 +76,7 @@ type ResourcesRow = (
     Vec<Vec<ObjectKey>>,
     Vec<Vec<ObjectKey>>,
     Vec<(&'static str, String)>,
+    Vec<bool>,
 );
 
 /// The project's resource facts, or None with the reason Python must assemble it.
@@ -83,6 +90,39 @@ fn assemble_project_resource_facts(
         Ok(resources) => (Some(resources_row(resources)), None),
         Err(reason) => (None, Some(reason)),
     }
+}
+
+/// Python's syntax error message for one SQL string, None where it parses; raises where Python
+/// raises: `ValueError` for SQL the analysis normalization rejects or an unknown dialect.
+#[pyfunction]
+#[pyo3(signature = (sql, placeholders, dialect, parse_one=false))]
+fn sql_syntax_error(
+    py: Python<'_>,
+    sql: String,
+    placeholders: Option<HashMap<String, String>>,
+    dialect: Option<String>,
+    parse_one: bool,
+) -> PyResult<Option<String>> {
+    let check = SyntaxCheck {
+        sql,
+        placeholders: placeholders.unwrap_or_default().into_iter().collect(),
+    };
+    let dialect: String = dialect
+        .filter(|dialect| !dialect.is_empty())
+        .unwrap_or_else(|| "generic".to_owned());
+    let mode = if parse_one {
+        SyntaxMode::Parse
+    } else {
+        SyntaxMode::Validate
+    };
+    py.compiler_detach(|| Ok(check_syntax_error(&check, &dialect, mode)))
+        .map_err(compiler_error)?
+        .map_err(|failure| match failure {
+            SyntaxFailure::Normalization(message) => PyValueError::new_err(message),
+            SyntaxFailure::UnknownDialect(name) => {
+                PyValueError::new_err(format!("Unknown dialect: {name}"))
+            }
+        })
 }
 
 /// Whether every `(sql, placeholders)` parses, or None with the reason Python must check it.
@@ -200,6 +240,7 @@ fn resources_row(resources: ProjectResources) -> ResourcesRow {
         resources.function_deps,
         resources.audit_deps,
         resources.reads.into_iter().map(read_row).collect(),
+        resources.model_syntax_valid,
     )
 }
 
@@ -222,5 +263,6 @@ fn namespace_row(namespace: Namespace) -> NamespaceRow {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(assemble_project_resource_facts, module)?)?;
     module.add_function(wrap_pyfunction!(check_native_sql_syntax, module)?)?;
+    module.add_function(wrap_pyfunction!(sql_syntax_error, module)?)?;
     Ok(())
 }

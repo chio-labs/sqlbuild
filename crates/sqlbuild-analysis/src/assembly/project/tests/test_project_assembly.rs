@@ -206,10 +206,10 @@ fn given_model_sql_when_validating_syntax_then_matches_python_or_defers() {
         },
         SyntaxTestCase {
             dialect: "duckdb",
-            description: "a placeholder followed by text Python's \\w may extend",
+            description: "a placeholder name Python's \\w extends past ASCII stays authored",
             sql: "SELECT @@@x\u{e9} AS a",
             placeholders: &[("x", "1")],
-            expected_valid: None,
+            expected_valid: Some(true),
         },
         SyntaxTestCase {
             dialect: "trino",
@@ -310,9 +310,9 @@ fn given_sql_batches_when_checking_syntax_then_stops_at_python_first_rejection_o
             expected_valid: Some(false),
         },
         SyntaxBatchTestCase {
-            description: "a statement native defers before any rejection",
+            description: "a non-ASCII placeholder name before a rejection",
             sqls: &["SELECT @@@x\u{e9}", "SELECT FROM WHERE ("],
-            expected_valid: None,
+            expected_valid: Some(false),
         },
     ];
     for test_case in test_cases {
