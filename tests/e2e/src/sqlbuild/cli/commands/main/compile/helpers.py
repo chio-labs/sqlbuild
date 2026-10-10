@@ -33,6 +33,7 @@ import sqlbuild.adapter.type_system._helpers.type_normalization as type_normaliz
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
+import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
 import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
 import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_waves
@@ -59,8 +60,11 @@ from sqlbuild.cli.compile_reuse._helpers.entry_file import (
     write_entry,
 )
 from sqlbuild.cli.compile_reuse.constants import (
+    NATIVE_REUSE_DIRECTORY_NAME,
+    NATIVE_REUSE_SUFFIX,
     REUSE_DISABLE_ENV_VAR,
     REUSE_ENTRY_DIRECTORY_NAME,
+    REUSE_ENTRY_SUFFIX,
 )
 from sqlbuild.cli.compile_reuse.models import (
     ProjectFilesComparison,
@@ -3176,10 +3180,16 @@ def recorded_events(*, path: Path) -> list[dict[str, object]]:
 
 
 def compile_reuse_entry_paths(*, project_dir: Path) -> tuple[Path, ...]:
-    """Return every stored compile reuse entry of a project."""
+    """Return every stored compile reuse entry of a project, in either engine's store."""
 
+    cache_directory: Path = compiler_cache_directory(project_dir)
     return tuple(
-        sorted((compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME).glob("*.entry"))
+        sorted(
+            [
+                *(cache_directory / REUSE_ENTRY_DIRECTORY_NAME).glob(f"*{REUSE_ENTRY_SUFFIX}"),
+                *(cache_directory / NATIVE_REUSE_DIRECTORY_NAME).glob(f"*{NATIVE_REUSE_SUFFIX}"),
+            ]
+        )
     )
 
 
@@ -3425,13 +3435,13 @@ def record_digested_paths(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record every project file compile reuse reads to compute a content digest."""
 
     paths: list[str] = []
-    original: Callable[..., list[str | None]] = reuse_project_files.project_file_digests
+    original: Callable[..., str | None] = reuse_project_files.file_digest
 
-    def recording_digests(*, project_dir: str, relative_paths: list[str]) -> list[str | None]:
-        paths.extend(os.path.join(project_dir, path) for path in relative_paths)
-        return original(project_dir=project_dir, relative_paths=relative_paths)
+    def recording_digest(*, path: str) -> str | None:
+        paths.append(path)
+        return original(path=path)
 
-    monkeypatch.setattr(reuse_project_files, "project_file_digests", recording_digests)
+    monkeypatch.setattr(reuse_project_files, "file_digest", recording_digest)
     return paths
 
 
@@ -3439,6 +3449,7 @@ def settle_racy_window(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Treat files written before a compile starts as settled instead of waiting two seconds."""
 
     monkeypatch.setattr(reuse_project_files, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(native_reuse, "RACY_WINDOW_NS", 0)
 
 
 def write_large_file(*, project_dir: Path, relative_path: str, size_bytes: int) -> Path:
@@ -3496,6 +3507,7 @@ def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -
         raise error
 
     monkeypatch.setattr(reuse_store, "provider_settings_inputs", raise_error)
+    monkeypatch.setattr(native_reuse, "provider_settings_inputs", raise_error)
 
 
 def compile_in_process_output(

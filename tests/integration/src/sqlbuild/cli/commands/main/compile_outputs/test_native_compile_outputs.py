@@ -29,7 +29,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs.helpers im
     write_files,
 )
 
-_SEQUENCE_STEPS: tuple[str, ...] = ("cold", "warm", "touch", "edit", "delete")
+_SEQUENCE_STEPS: tuple[str, ...] = ("cold", "warm", "touch", "retouch", "edit", "delete")
 _PUBLICATION_ERROR: str = (
     "[Errno 21] Is a directory: "
     "'<project>/target/.sqlbuild-staging-<id>/compiled/models/orders_north.sql' -> "
@@ -43,32 +43,41 @@ _PUBLICATION_ERROR: str = (
         CompileOutputsSequenceTestCase(
             description="the shipped engine writes outputs in Python",
             engine="native",
-            expected_exit_codes=(0, 0, 0, 0, 0),
-            expected_work=({}, {}, {}, {}, {}),
+            expected_exit_codes=(0, 0, 0, 0, 0, 0),
+            expected_work=({}, {}, {}, {}, {}, {}),
         ),
         CompileOutputsSequenceTestCase(
-            description="the preview engine writes outputs natively",
+            description="the preview engine writes outputs and reuses compiles natively",
             engine="native-preview",
-            expected_exit_codes=(0, 0, 0, 0, 0),
+            expected_exit_codes=(0, 0, 0, 0, 0, 0),
             expected_work=(
-                {"artifact_files": 3, "json_reports": 1, "snapshot_paths": 10},
-                {"snapshot_paths": 5},
                 {
                     "artifact_files": 3,
                     "json_reports": 1,
-                    "project_file_digests": 1,
-                    "snapshot_paths": 10,
+                    "reuse_records": 1,
+                    "reuse_snapshot_paths": 5,
                 },
+                {"reuse_replays": 1, "reuse_snapshot_paths": 5},
                 {
                     "artifact_files": 3,
                     "json_reports": 1,
-                    "project_file_digests": 1,
-                    "snapshot_paths": 10,
+                    "reuse_digested_files": 1,
+                    "reuse_records": 1,
+                    "reuse_snapshot_paths": 5,
+                },
+                {"reuse_digested_files": 1, "reuse_replays": 1, "reuse_snapshot_paths": 5},
+                {
+                    "artifact_files": 3,
+                    "json_reports": 1,
+                    "reuse_digested_files": 1,
+                    "reuse_records": 1,
+                    "reuse_snapshot_paths": 5,
                 },
                 {
                     "artifact_files": 2,
                     "json_reports": 1,
-                    "snapshot_paths": 8,
+                    "reuse_records": 1,
+                    "reuse_snapshot_paths": 4,
                     "stale_files_removed": 1,
                 },
             ),

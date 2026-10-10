@@ -1,11 +1,13 @@
+import importlib
 import json
 import os
 import re
 import shutil
+import sys
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 import pytest
 
@@ -14,9 +16,20 @@ from sqlbuild.cli.commands._helpers.compile import target_writer as target_write
 from sqlbuild.cli.commands.classes import native_artifact_batch as artifact_batch_module
 from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.cli.compile_reuse._helpers import attempt as attempt_module
+from sqlbuild.cli.compile_reuse._helpers import native_reuse as native_reuse_module
 from sqlbuild.cli.compile_reuse._helpers import project_files as project_files_module
-from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
+from sqlbuild.cli.compile_reuse._helpers import store as store_module
+from sqlbuild.cli.compile_reuse._helpers.runtime_identity import runtime_identity
+from sqlbuild.cli.compile_reuse.constants import (
+    NATIVE_REUSE_DIRECTORY_NAME,
+    NATIVE_REUSE_SUFFIX,
+    REUSE_DISABLE_ENV_VAR,
+    REUSE_ENTRY_DIRECTORY_NAME,
+    REUSE_ENTRY_SUFFIX,
+)
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
+from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.frontier.types import NativeStage
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
@@ -39,6 +52,8 @@ DELETED_MODEL: str = "models/orders_west.sql"
 COMPILE_OUTPUTS_PREFIX: str = f"{NativeStage.COMPILE_OUTPUTS.value}:"
 TOUCH_BACK_NS: int = 3_600_000_000_000
 BLOCKED_ARTIFACT: str = "target/compiled/models/orders_north.sql"
+HELPER_MODULE_DIRECTORY: str = "site_packages"
+HELPER_MODULE: str = "orders_reuse_helper"
 
 type CompileOutcome = tuple[int, dict[str, Any], dict[str, bytes]]
 
@@ -62,6 +77,7 @@ def record_output_work(
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, reuse_disabled)
     monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
     monkeypatch.setattr(project_files_module, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(native_reuse_module, "RACY_WINDOW_NS", 0)
 
     def counted(*, stage: NativeStage, kind: str, units: int = 1) -> None:
         counts[f"{stage.value}:{kind}"] += units
@@ -70,7 +86,7 @@ def record_output_work(
         output_module,
         target_writer_module,
         artifact_batch_module,
-        project_files_module,
+        native_reuse_module,
     ):
         monkeypatch.setattr(module, "report_native_answer", counted)
     return counts
@@ -86,6 +102,125 @@ def compile_outputs(
     for key in ("compile_timings", "compiler_engine"):
         _ = payload.pop(key, None)
     return exit_code, payload, compile_files(project_dir=project_dir)
+
+
+def reuse_compile(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[bool, CompileOutcome]:
+    """Compile through the CLI with reuse on; return whether it replayed, and its outcome."""
+
+    exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json"])
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    timings: dict[str, int] = cast(dict[str, int], payload.pop("compile_timings"))
+    _ = payload.pop("compiler_engine", None)
+    return timings["project_reuse_hits"] == 1, (
+        exit_code,
+        payload,
+        compile_files(project_dir=project_dir),
+    )
+
+
+class ReuseComparison(NamedTuple):
+    """One reuse-enabled compile, whether it replayed, and an uncached compile of the project."""
+
+    reused: bool
+    outcome: tuple[int, dict[str, Any], dict[str, bytes]]
+    reference: tuple[int, dict[str, Any], dict[str, bytes]]
+
+
+def reuse_against_uncached(
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> ReuseComparison:
+    """Compile with reuse on, then compile a fresh copy with --no-cache, both comparable."""
+
+    reused, outcome = reuse_compile(project_dir=project_dir, capsys=capsys)
+    reference: CompileOutcome = uncached_reference(
+        project_dir=project_dir, reference_dir=project_dir.parent / "uncached", capsys=capsys
+    )
+    return ReuseComparison(
+        reused=reused, outcome=comparable(outcome), reference=comparable(reference)
+    )
+
+
+def stored_compile_files(*, project_dir: Path) -> list[Path]:
+    """Every stored compile slot of either engine."""
+
+    cache_directory: Path = compiler_cache_directory(project_dir)
+    return sorted(
+        [
+            *(cache_directory / REUSE_ENTRY_DIRECTORY_NAME).glob(f"*{REUSE_ENTRY_SUFFIX}"),
+            *(cache_directory / NATIVE_REUSE_DIRECTORY_NAME).glob(f"*{NATIVE_REUSE_SUFFIX}"),
+        ]
+    )
+
+
+def corrupt_stored_compiles(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overwrite every stored compile file with bytes no reader accepts."""
+
+    del monkeypatch
+    for path in stored_compile_files(project_dir=project_dir):
+        _ = path.write_bytes(b"garbage")
+
+
+def truncate_stored_compiles(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cut every stored compile file in half."""
+
+    del monkeypatch
+    for path in stored_compile_files(project_dir=project_dir):
+        contents: bytes = path.read_bytes()
+        _ = path.write_bytes(contents[: len(contents) // 2])
+
+
+def change_runtime(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Report a different interpreter from now on."""
+
+    del project_dir
+
+    def changed() -> dict[str, str]:
+        return {**runtime_identity(), "python": "3.0.0 (simulated)"}
+
+    monkeypatch.setattr(attempt_module, "runtime_identity", changed)
+    monkeypatch.setattr(native_reuse_module, "runtime_identity", changed)
+
+
+def edit_loaded_module(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Rewrite the imported helper module outside the project."""
+
+    del monkeypatch
+    module: Path = project_dir.parent / HELPER_MODULE_DIRECTORY / f"{HELPER_MODULE}.py"
+    _ = module.write_text(module.read_text(encoding="utf-8") + "# edited\n", encoding="utf-8")
+
+
+def edit_then_fail_store(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Edit a model, then make every later store fail while enumerating provider settings."""
+
+    def raise_error(**_kwargs: object) -> None:
+        raise RuntimeError("settings went away")
+
+    _edit(project_dir=project_dir)
+    monkeypatch.setattr(store_module, "provider_settings_inputs", raise_error)
+    monkeypatch.setattr(native_reuse_module, "provider_settings_inputs", raise_error)
+
+
+def block_stored_compiles(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace every stored compile file with a non-empty directory."""
+
+    del monkeypatch
+    for path in stored_compile_files(project_dir=project_dir):
+        path.unlink()
+        path.mkdir()
+        _ = (path / "keep.txt").write_text("kept\n", encoding="utf-8")
+
+
+def load_helper_module(*, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Import a helper module from outside the project, as an installed package would be."""
+
+    directory: Path = tmp_path / HELPER_MODULE_DIRECTORY
+    directory.mkdir()
+    _ = (directory / f"{HELPER_MODULE}.py").write_text("ORDERS = 1\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(directory))
+    monkeypatch.delitem(sys.modules, HELPER_MODULE, raising=False)
+    _ = importlib.import_module(HELPER_MODULE)
 
 
 def compile_files(*, project_dir: Path) -> dict[str, bytes]:
@@ -189,6 +324,7 @@ _SEQUENCE_ACTIONS: dict[str, Callable[..., None]] = {
     "cold": _unchanged,
     "warm": _unchanged,
     "touch": _touch_back,
+    "retouch": _touch_back,
     "edit": _edit,
     "delete": _delete,
 }

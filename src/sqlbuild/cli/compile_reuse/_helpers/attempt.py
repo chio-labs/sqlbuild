@@ -13,6 +13,7 @@ from sqlbuild.cli.compile_reuse._helpers.entry_file import (
     read_entry_stdout,
     rewrite_entry_inputs,
 )
+from sqlbuild.cli.compile_reuse._helpers.native_reuse import native_attempt
 from sqlbuild.cli.compile_reuse._helpers.project_files import (
     carried_forward_digests,
     compare_project_files,
@@ -61,6 +62,9 @@ from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_VALUE,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.presentation.main.supports_color import supports_color
 
 
@@ -74,6 +78,13 @@ def attempt_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt:
     bypass: CompileReuseAttempt = CompileReuseAttempt(
         outcome=CompileReuseOutcome.BYPASS, project_dir=Path(project_dir), started=started
     )
+    if native_stage_enabled(NativeStage.COMPILE_OUTPUTS):
+        native: CompileReuseAttempt | None = native_attempt(
+            request=request, project_dir=project_dir, started=started
+        )
+        if native is not None:
+            return native
+        report_native_fallback(site=NativeFallbackSite.COMPILE_REUSE_SNAPSHOT)
     if _bypasses_reuse(request=request, project_dir=project_dir):
         return bypass
     snapshot_ns: int = time.time_ns()

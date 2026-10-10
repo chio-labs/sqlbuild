@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from sqlbuild.cli.compile_reuse._helpers.entry_file import remove_entry, write_entry
+from sqlbuild.cli.compile_reuse._helpers.native_reuse import record_native
 from sqlbuild.cli.compile_reuse._helpers.project_files import (
     pending_digest_bytes,
     snapshot_project_files,
@@ -65,6 +66,20 @@ def write_compile_entry(
     """Store a reusable compile, or drop the stored one when this compile cannot be reused."""
 
     if attempt.outcome is not CompileReuseOutcome.MISS or attempt.entry_path is None:
+        return
+    if attempt.native is not None:
+        record_native(
+            store_path=attempt.entry_path,
+            native=attempt.native,
+            output=output,
+            exit_code=exit_code,
+            input_reads=input_reads,
+            artifact_writes=artifact_writes,
+            compile_cache_enabled=compile_cache_enabled,
+            artifacts_written=artifacts_written,
+            dag_artifact_path=dag_artifact_path,
+            json_output=json_output,
+        )
         return
     try:
         _write_compile_entry(

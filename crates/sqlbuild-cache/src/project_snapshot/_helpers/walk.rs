@@ -14,7 +14,7 @@ const DIRECTORY_LINK: &str = "dl";
 const BROKEN_LINK: &str = "bl";
 const SPECIAL: &str = "s";
 const PRESENCE: &str = "p";
-const NANOS: i128 = 1_000_000_000;
+const NANOS: i64 = 1_000_000_000;
 
 /// Every stamped path in walk order, or `None` when a name is not UTF-8 and Python must walk.
 pub(crate) fn snapshot(project_dir: &Path, rules: &SnapshotRules) -> Option<Vec<PathStamp>> {
@@ -135,8 +135,8 @@ fn file_stamp(metadata: &Metadata, link: Option<String>) -> PathStamp {
         relative_path: String::new(),
         kind,
         size: metadata.size(),
-        mtime_ns: i128::from(metadata.mtime()) * NANOS + i128::from(metadata.mtime_nsec()),
-        ctime_ns: i128::from(metadata.ctime()) * NANOS + i128::from(metadata.ctime_nsec()),
+        mtime_ns: metadata.mtime() * NANOS + metadata.mtime_nsec(),
+        ctime_ns: metadata.ctime() * NANOS + metadata.ctime_nsec(),
         inode: metadata.ino(),
         link,
     }

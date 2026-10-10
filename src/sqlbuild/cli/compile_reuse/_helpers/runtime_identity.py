@@ -133,6 +133,17 @@ def settings_inputs_digest(*, inputs: tuple[SettingsEnvironmentInputs, ...]) -> 
 def invocation_digest(*, request: CompileReuseRequest, project_dir: str, use_color: bool) -> str:
     """Hash every command-line choice and location that can change compile output."""
 
+    return hashlib.blake2b(
+        invocation_identity(request=request, project_dir=project_dir, use_color=use_color),
+        digest_size=DIGEST_SIZE_BYTES,
+    ).hexdigest()
+
+
+def invocation_identity(
+    *, request: CompileReuseRequest, project_dir: str, use_color: bool
+) -> bytes:
+    """Encode every command-line choice and location that can change compile output."""
+
     payload: dict[str, object] = {
         "project_dir": project_dir,
         "requested_project_dir": None if request.project_dir is None else str(request.project_dir),
@@ -152,10 +163,9 @@ def invocation_digest(*, request: CompileReuseRequest, project_dir: str, use_col
         "sys_path": list(sys.path),
         "compiler_engine": resolve_compiler_engine().value,
     }
-    encoded: bytes = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), default=repr
-    ).encode("utf-8", "surrogateescape")
-    return hashlib.blake2b(encoded, digest_size=DIGEST_SIZE_BYTES).hexdigest()
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=repr).encode(
+        "utf-8", "surrogateescape"
+    )
 
 
 def _settings_environment(*, inputs: SettingsEnvironmentInputs) -> list[tuple[str, str]]:
