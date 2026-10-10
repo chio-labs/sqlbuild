@@ -20,7 +20,7 @@ use crate::assembly::analysis_session::constants::{
     WILDCARD,
 };
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow, ModelRequest};
-use crate::assembly::analysis_session::types::{Pairs, Shapes};
+use crate::assembly::analysis_session::types::{NullabilityCallback, Pairs, Shapes};
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
 use crate::semantic_validation::models::NormalizationInput;
 
@@ -30,8 +30,9 @@ pub(crate) struct EnrichmentInput<'a> {
     pub(crate) input_schemas: &'a Shapes,
     pub(crate) dialect: &'a str,
     pub(crate) function_return_types: &'a Pairs,
-    /// Adapter nullability rules by function name; None where one is not a rule Python ships.
+    /// Adapter nullability rules by function name.
     pub(crate) nullability_rules: Option<&'a Pairs>,
+    pub(crate) nullability_callback: Option<&'a NullabilityCallback>,
 }
 
 /// Python's re-analysis: its outcome, columns, plain lineage facts and the star flag.
@@ -116,6 +117,7 @@ fn legacy(input: &EnrichmentInput<'_>, cleaned: &str) -> Option<Enrichment> {
             dialect: input.dialect,
             function_return_types: input.function_return_types,
             rules: input.nullability_rules,
+            callback: input.nullability_callback,
         },
     }) {
         Ok(analysis) => analysis,
@@ -198,6 +200,7 @@ fn native_projection(
             dialect: input.dialect,
             function_return_types: input.function_return_types,
             rules: input.nullability_rules,
+            callback: input.nullability_callback,
         },
     }) {
         Ok(recovery) => recovery,

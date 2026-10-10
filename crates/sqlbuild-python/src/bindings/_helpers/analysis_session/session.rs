@@ -1,6 +1,7 @@
 //! The native model analysis session and expression-source shapes for the preview engine.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyRef, PyResult, Python};
+use pyo3::types::PyDict;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::main::attach_analysis_cache::attach_analysis_cache;
 use sqlbuild_analysis::assembly::analysis_session::main::expression_shapes::expression_shapes;
@@ -26,6 +27,9 @@ use sqlbuild_cache::store::models::NativeStore;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use std::path::PathBuf;
 
+use crate::bindings::_helpers::analysis_session::nullability_rules::{
+    RuleFailure, nullability_callback, raised,
+};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
 use crate::bindings::models::ProjectCatalog;
@@ -134,6 +138,7 @@ pub(crate) struct NativeModelAnalysisSession {
     sharing: (usize, usize),
     cache_path: Option<PathBuf>,
     cache_stats: Option<CacheStatsRow>,
+    rule_failure: RuleFailure,
 }
 
 /// The native store kind holding finished model analyses.
@@ -170,16 +175,23 @@ impl NativeModelAnalysisSession {
     }
 
     /// Advance; None means Python must analyse every model, no deferrals means done.
-    fn run(&mut self, py: Python<'_>) -> Option<StepRow> {
-        let mut session: AnalysisSession = self.inner.take()?;
+    fn run(&mut self, py: Python<'_>) -> PyResult<Option<StepRow>> {
+        let Some(mut session) = self.inner.take() else {
+            return Ok(None);
+        };
         let result: Result<(AnalysisSession, SessionStep), String> =
             py.compiler_detach(move || {
                 run_analysis_session(&mut session).map(|step| (session, step))
             });
-        let (session, step) = self.kept(result)?;
+        if let Some(error) = raised(&self.rule_failure) {
+            return Err(error);
+        }
+        let Some((session, step)) = self.kept(result) else {
+            return Ok(None);
+        };
         self.sharing = session_sharing(&session);
         self.inner = Some(session);
-        Some(step_row(step))
+        Ok(Some(step_row(step)))
     }
 
     /// Answer the last step's deferrals; False means Python must analyse every model.
@@ -244,15 +256,22 @@ impl NativeModelAnalysisSession {
 }
 
 /// Start a session on `catalog`, or None where Python must analyse.
+///
+/// `adapter_rules` holds the adapter's own nullability rules by name, with the
+/// `InferredNullability` type they take and return; the request names them `python`.
 #[pyfunction]
-#[pyo3(signature = (catalog, request, cache=None))]
+#[pyo3(signature = (catalog, request, cache=None, adapter_rules=None))]
 fn start_model_analysis_session(
     py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
     request: RequestRow,
     cache: Option<(PathBuf, String)>,
+    adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
 ) -> PyResult<Option<NativeModelAnalysisSession>> {
-    let request: SessionRequest = session_request(request);
+    let mut request: SessionRequest = session_request(request);
+    let rule_failure: RuleFailure = RuleFailure::default();
+    request.nullability_callback = adapter_rules
+        .map(|(rules, nullability)| nullability_callback(rules, nullability, rule_failure.clone()));
     let catalog = &catalog.inner;
     let session: Option<AnalysisSession> = py
         .compiler_detach(|| Ok(start_analysis_session(request, catalog)))
@@ -278,6 +297,7 @@ fn start_model_analysis_session(
         sharing: (0, 0),
         cache_path,
         cache_stats,
+        rule_failure,
     }))
 }
 
@@ -329,6 +349,7 @@ fn session_request(request: RequestRow) -> SessionRequest {
         case_sensitive_shapes,
         function_return_types,
         nullability_rules,
+        nullability_callback: None,
         rich_type_inference,
         column_types,
         column_nullability,

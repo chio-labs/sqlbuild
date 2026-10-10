@@ -61,16 +61,6 @@ class CyclicCompileTestCase:
 
 
 @dataclass(frozen=True)
-class SessionFailureTestCase:
-    """A session that fails after Python answered deferrals, so Python analyses everything."""
-
-    description: str
-    seed: int
-    model_count: int
-    expected_kinds: dict[str, int]
-
-
-@dataclass(frozen=True)
 class StandalonePivotProofTestCase:
     """A pivot model left out of model analysis, whose proof assembly takes natively."""
 
@@ -105,3 +95,14 @@ class CteFactRecoveryParityTestCase:
     count: int
     expected_minimum_compared: int
     expected_minimum_recovered: dict[str, int]
+
+
+@dataclass(frozen=True)
+class AdapterRuleCallbackTestCase:
+    """A project-local adapter rule the native session calls back into, and what it raises."""
+
+    description: str
+    seed: int
+    model_count: int
+    raised: type[Exception] | None
+    expected_minimum_calls: int

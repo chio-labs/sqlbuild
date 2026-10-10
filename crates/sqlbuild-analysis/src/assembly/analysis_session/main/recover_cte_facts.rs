@@ -28,6 +28,7 @@ fn recovered_facts(request: &CteFactRequest) -> Result<CteFacts, String> {
             dialect: &request.dialect,
             function_return_types: &request.function_return_types,
             rules: request.nullability_rules.as_ref(),
+            callback: None,
         },
     })?;
     let mut direct_outputs: Vec<String> = recovered.direct_outputs.into_iter().collect();

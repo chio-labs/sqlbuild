@@ -106,7 +106,7 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
             ],
         },
         SessionTestCase {
-            description: "a non-ASCII filter column Python casefolds still defers to Python",
+            description: "a non-ASCII filter column is analysed natively",
             models: &[
                 (
                     "events",
@@ -123,15 +123,20 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
                 ),
             ],
             expected_steps: &[
-                &["publish events gr\u{f6}\u{df}e:UNKNOWN", "defer analysis 1"],
-                &[],
+                &[
+                    "publish events gr\u{f6}\u{df}e:UNKNOWN",
+                    "publish events_mart gr\u{f6}\u{df}e:UNKNOWN",
+                ],
             ],
             expected_outcomes: &[
                 &[
                     "gr\u{f6}\u{df}e - unknown",
                     "succeeded=true star=false/false diagnostics=[]",
                 ],
-                &["succeeded=true star=false/false diagnostics=[]"],
+                &[
+                    "gr\u{f6}\u{df}e - non_null",
+                    "succeeded=true star=false/false diagnostics=[]",
+                ],
             ],
         },
         SessionTestCase {
@@ -209,7 +214,7 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
             ],
         },
         SessionFactsTestCase {
-            description: "a model Python analysed keeps no session facts",
+            description: "a non-ASCII model analysed natively keeps its session facts",
             models: &[
                 (
                     "events",
@@ -227,7 +232,7 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
             ],
             expected_facts: &[
                 "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"raw_events\", \"event_id\")]",
-                "none",
+                "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"events\", \"gr\u{f6}\u{df}e\")]",
             ],
         },
     ];
@@ -378,14 +383,20 @@ fn given_dynamic_pivots_when_proving_then_matches_python_or_defers() {
             dialect: "duckdb",
             sql: "PIVOT FROM WHERE",
             family: Some(("status", "amount", "MAX")),
-            expected_outcome: PivotOutcome::Deferred,
+            expected_outcome: failed(
+                "dynamic pivot SQL could not be parsed: Parse error at line 1, column 11: \
+                 Unexpected token: From",
+            ),
         },
         PivotTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             dialect: "duckdb",
             sql: "SELECT * FROM __ref(\"stra\u{df}e\")",
             family: Some(("status", "amount", "MAX")),
-            expected_outcome: PivotOutcome::Deferred,
+            expected_outcome: failed(
+                "dynamic-family passthrough from 'stra\u{df}e' must redeclare the upstream \
+                 families exactly",
+            ),
         },
         PivotTestCase {
             description: "no declared families",
@@ -466,9 +477,9 @@ fn given_cte_reads_when_recovering_facts_then_matches_python_or_defers() {
             expected_facts: Some((&[], &[], &[], &["order_id"])),
         },
         CteRecoveryTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             sql: "WITH b\u{e4}se AS (SELECT order_id FROM orders) SELECT order_id FROM b\u{e4}se",
-            expected_facts: None,
+            expected_facts: Some((&[("order_id", "INTEGER")], &[], &["order_id"], &[])),
         },
     ];
     for test_case in test_cases {
@@ -559,9 +570,13 @@ fn given_handed_back_models_when_analysing_legacy_then_matches_python_or_defers(
             ]),
         },
         LegacyAnalysisTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             sql: "SELECT \"gr\u{f6}\u{df}e\" FROM orders WHERE \"gr\u{f6}\u{df}e\" IS NOT NULL",
-            expected_lines: None,
+            expected_lines: Some(&[
+                "succeeded=true star=false",
+                "gr\u{f6}\u{df}e - unknown",
+                "gr\u{f6}\u{df}e direct medium [model:orders:gr\u{f6}\u{df}e]",
+            ]),
         },
     ];
     for test_case in test_cases {

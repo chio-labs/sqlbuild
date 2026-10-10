@@ -337,6 +337,7 @@ impl AnalysisSession {
                     dialect: &self.request.dialect,
                     function_return_types: &self.request.function_return_types,
                     rules: self.request.nullability_rules.as_ref(),
+                    callback: self.request.nullability_callback.as_ref(),
                 },
             })
         })
@@ -438,6 +439,7 @@ impl AnalysisSession {
                 dialect: &self.request.dialect,
                 function_return_types: &self.request.function_return_types,
                 nullability_rules: self.request.nullability_rules.as_ref(),
+                nullability_callback: self.request.nullability_callback.as_ref(),
             })
             .collect();
         let pool = self.catalog.native.analysis_pool()?;

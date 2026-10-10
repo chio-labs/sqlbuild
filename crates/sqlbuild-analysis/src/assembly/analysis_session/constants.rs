@@ -193,6 +193,10 @@ pub(crate) const JOIN_FULL: &str = "FULL";
 /// Ids of the adapter nullability rules Python registers, by the function it calls.
 pub(crate) const FIRST_ARG_RULE: &str = "first_arg";
 pub(crate) const CONDITIONAL_RESULT_RULE: &str = "conditional_result";
+/// The rule id of `safe_cast_nullability`.
+pub(crate) const SAFE_CAST_RULE: &str = "safe_cast";
+/// The rule id of a project-local adapter's own rule, which the callback runs.
+pub(crate) const PYTHON_RULE: &str = "python";
 pub(crate) const NON_NULL_NULLABILITY: &str = "non_null";
 pub(crate) const NULLABLE_NULLABILITY: &str = "nullable";
 /// Bumped whenever the stored outcome or a key's fields change; older entries never match.

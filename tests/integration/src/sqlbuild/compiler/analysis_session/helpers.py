@@ -506,10 +506,8 @@ def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     started: list[Any] = []
     original: Callable[..., Any] = native_module.start_model_analysis_session
 
-    def start(
-        catalog: object, request: tuple[object, ...], cache: tuple[str, str] | None = None
-    ) -> Any:
-        started.append(original(catalog, request, cache))
+    def start(catalog: object, request: tuple[object, ...], *options: object) -> Any:
+        started.append(original(catalog, request, *options))
         return started[-1]
 
     monkeypatch.setattr(native_module, "start_model_analysis_session", start)
@@ -829,38 +827,3 @@ def _analysis_views(analyses: dict[str, ModelSqlAnalysis] | None) -> object:
 
 def _catalog_view(catalog: Any) -> tuple[object, ...]:
     return (dict(catalog.schemas), dict(catalog.analysis_shapes))
-
-
-class FailingProvideSession:
-    """A native session whose answers to deferrals are refused, as a failed session refuses."""
-
-    def __init__(self, session: Any) -> None:
-        self._session: Any = session
-        self.answered: int = 0
-        self.failure: str = "injected session failure"
-
-    def run(self) -> object:
-        return self._session.run()
-
-    def provide(self, answers: list[object]) -> bool:
-        self.answered += len(answers)
-        return False
-
-    def finish(self) -> object:
-        return self._session.finish()
-
-
-def failing_provide_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[FailingProvideSession]:
-    """Make every native session refuse Python's answers; return the sessions started."""
-
-    started: list[FailingProvideSession] = []
-    original: Callable[..., Any] = native_module.start_model_analysis_session
-
-    def start(
-        catalog: object, request: tuple[object, ...], cache: tuple[str, str] | None = None
-    ) -> FailingProvideSession:
-        started.append(FailingProvideSession(original(catalog, request, cache)))
-        return started[-1]
-
-    monkeypatch.setattr(native_module, "start_model_analysis_session", start)
-    return started
