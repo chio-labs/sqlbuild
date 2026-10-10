@@ -17,23 +17,14 @@ from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_context
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
-from sqlbuild.compiler.compile._helpers.scenarios.core import (
-    extract_sql_scenario_expected_model_names,
-)
-from sqlbuild.compiler.compile._helpers.sql_tests.core import (
-    extract_sql_test_expected_model_names,
-    extract_top_level_ctes_with_scanner,
-)
 from sqlbuild.compiler.compile._helpers.sql_tests.native import native_sql_test_ctes
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompileSqlTestCte,
     DeclarationResolutionContext,
     DeclarationScopeBuild,
     DeclarationScopeResolver,
     LoadedMacro,
 )
-from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
@@ -73,7 +64,7 @@ from sqlbuild.compiler.scopes.types import (
     VisibilityReason,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
+from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 PROJECT_CONFIG: str = (
     'name = "scope_parity"\nadapter = "duckdb"\n\n[connection]\ndatabase = "scope.duckdb"\n'
@@ -492,13 +483,12 @@ LEXICAL_SYNTAXES: dict[str, SqlLexicalSyntax] = {
 
 
 @dataclass(frozen=True)
-class ExpectedNameScanParity:
-    """How the native relationship scans compared with Python over one corpus."""
+class RelationshipScans:
+    """The native relationship scans of one corpus as golden entries, and how many failed."""
 
-    mismatches: list[tuple[object, object, object]]
+    golden: list[GoldenEntry]
     scanned: int
-    python_errors: int
-    native_errors: int
+    errors: int
 
 
 def generated_expected_model_sqls(*, rng: random.Random, count: int) -> list[str]:
@@ -515,62 +505,69 @@ def _generated_expected_model_sql(*, rng: random.Random) -> str:
     return f"{rng.choice(_LEADING)}{rng.choice(_WITH)}{','.join(ctes)}{rng.choice(_TRAILING)}"
 
 
-def expected_name_scan_parity(
-    *, sqls: list[str], syntax: SqlLexicalSyntax
-) -> ExpectedNameScanParity:
-    """Compare each native scan, test and scenario names and test CTEs, with Python's result."""
+def relationship_scans(*, sqls: list[str], syntax: SqlLexicalSyntax) -> RelationshipScans:
+    """Scan each SQL text's test names, scenario names and test CTEs natively."""
 
     test_texts: list[tuple[str, str]] = [(sql, _TEST_LABEL) for sql in sqls]
     scenario_texts: list[tuple[str, str]] = [(sql, _SCENARIO_LABEL) for sql in sqls]
-    native: list[object] = [
-        *native_expected_model_names(texts=test_texts, scenario=False, syntax=syntax),
-        *native_expected_model_names(texts=scenario_texts, scenario=True, syntax=syntax),
-        *native_sql_test_ctes(texts=test_texts, syntax=syntax),
-    ]
-    python: list[object] = [
-        *(_python_expected_names(sql=sql, syntax=syntax) for sql in sqls),
-        *(_python_scenario_names(sql=sql, syntax=syntax) for sql in sqls),
-        *(_python_test_ctes(sql=sql, syntax=syntax) for sql in sqls),
-    ]
-    return ExpectedNameScanParity(
-        mismatches=mismatches(inputs=[*sqls, *sqls, *sqls], expected=python, actual=native),
-        scanned=sum(isinstance(outcome, tuple) for outcome in native),
-        python_errors=sum(isinstance(outcome, str) for outcome in python),
-        native_errors=sum(isinstance(outcome, str) for outcome in native),
+    outcomes: list[tuple[object, object, object]] = list(
+        zip(
+            native_expected_model_names(texts=test_texts, scenario=False, syntax=syntax),
+            native_expected_model_names(texts=scenario_texts, scenario=True, syntax=syntax),
+            native_sql_test_ctes(texts=test_texts, syntax=syntax),
+            strict=True,
+        )
+    )
+    flat: list[object] = list(chain.from_iterable(outcomes))
+    return RelationshipScans(
+        golden=[golden_entry("relationship_scan", outcome) for outcome in outcomes],
+        scanned=sum(isinstance(outcome, tuple) for outcome in flat),
+        errors=sum(isinstance(outcome, str) for outcome in flat),
     )
 
 
-def _python_expected_names(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[str, ...] | str:
-    try:
-        return extract_sql_test_expected_model_names(
-            sql=sql, file_label=_TEST_LABEL, syntax=syntax, mode=SqlTestMode.MODEL
+UNICODE_RELATIONSHIP_CHARACTERS: tuple[str, ...] = (
+    "\u0345",
+    "\u216b",
+    "\u00b2",
+    "\u0663",
+    "\u00e9",
+    "\u1885",
+    "\u2160",
+    "\u00aa",
+    "\u02b0",
+    "\u0300",
+    "\U0001d7ce",
+    "\u2155",
+    "\u00df",
+    "\ufb00",
+    "\u0130",
+    "\u1e9e",
+)
+_UNICODE_RELATIONSHIP_TEMPLATES: tuple[str, ...] = (
+    "WITH {c}x AS (SELECT 1) SELECT 1",
+    "WITH x{c} AS (SELECT 1) SELECT 1",
+    "WITH __expected__a{c} AS (SELECT 1)",
+    "WITH __expected__a AS (SELECT 1) {c}",
+    "{c}WITH x AS (SELECT 1)",
+    "WITH{c} x AS (SELECT 1)",
+    "WITH x AS{c}(SELECT 1)",
+    "WITH x AS (SELECT 1) SELECT{c} 1",
+    "WITH x AS (SELECT 1) ,{c}y AS (SELECT 2)",
+    "wit{c} x AS (SELECT 1)",
+    "WITH x a{c} (SELECT 1)",
+)
+
+
+def unicode_relationship_sqls(characters: tuple[str, ...]) -> list[str]:
+    """Each template around each character: identifier, keyword and separator edges."""
+
+    return list(
+        chain.from_iterable(
+            map(lambda template: template.format(c=character), _UNICODE_RELATIONSHIP_TEMPLATES)
+            for character in characters
         )
-    except CompileInputError as error:
-        return str(error)
-
-
-def _python_scenario_names(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[str, ...] | str:
-    try:
-        return extract_sql_scenario_expected_model_names(
-            sql=sql, file_label=_SCENARIO_LABEL, syntax=syntax
-        )
-    except CompileInputError as error:
-        return str(error)
-
-
-def _python_test_ctes(*, sql: str, syntax: SqlLexicalSyntax) -> tuple[tuple[str, str], ...] | str:
-    try:
-        ctes: tuple[CompileSqlTestCte, ...] = extract_top_level_ctes_with_scanner(
-            sql=sql,
-            file_label=_TEST_LABEL,
-            context_label="SQL test",
-            with_requirement="mock CTEs and one __expected__<model> CTE",
-            cte_type=CompileSqlTestCte,
-            syntax=syntax,
-        )
-    except CompileInputError as error:
-        return str(error)
-    return tuple((cte.name, cte.sql_body) for cte in ctes)
+    )
 
 
 @dataclass(frozen=True)
