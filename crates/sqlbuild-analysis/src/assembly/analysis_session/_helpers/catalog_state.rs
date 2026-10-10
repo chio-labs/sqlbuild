@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::assembly::analysis_session::_helpers::compact_batch::SharedResult;
+use crate::assembly::analysis_session::_helpers::compact_batch::{MemoKey, SharedResult};
 use crate::assembly::analysis_session::_helpers::mappings::{
     ShapeTable, catalog_columns, catalog_relations, same_mapping,
 };
@@ -23,7 +23,7 @@ pub(crate) struct SessionCatalog {
     pub(crate) shared_members: usize,
     pub(crate) reanalysed_members: usize,
     /// Python's `shared_analyses`: exact shared results by their complete native input.
-    pub(crate) shared_results: HashMap<String, SharedResult>,
+    pub(crate) shared_results: HashMap<MemoKey, SharedResult>,
 }
 
 impl SessionCatalog {

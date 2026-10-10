@@ -9,15 +9,16 @@ use rayon::iter::{
 };
 use regex::{Captures, Regex};
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::{ShapeTable, native_dialect};
 use crate::assembly::analysis_session::constants::{
-    BINDING_SEVERITIES, COMPACT_WORKERS, CONFIDENCE_CODES, DEFAULT_BINDING_MESSAGE, FACT_LENGTH,
-    INVALID_NATIVE_RESPONSE, LEGACY_FALLBACK, LEGACY_RESPONSE_LENGTH, MIN_SHARED_MEMBERS,
-    NULLABILITY_BY_CODE, PYTHON_ASCII_SPACES, QUALIFIED_SCAN_TOKENS, REFERENCE_MARKER_PATTERN,
-    RELATION_STUB_PREFIX, RESPONSE_LENGTH, SOURCE_LENGTH, TRANSFORM_CODES,
-    UNSTUBBED_REFERENCE_KIND,
+    BATCH_CHUNK_MEMBERS, BINDING_SEVERITIES, COMPACT_WORKERS, CONFIDENCE_CODES,
+    DEFAULT_BINDING_MESSAGE, FACT_LENGTH, INVALID_NATIVE_RESPONSE, LEGACY_FALLBACK,
+    LEGACY_RESPONSE_LENGTH, MIN_SHARED_MEMBERS, NULLABILITY_BY_CODE, PYTHON_ASCII_SPACES,
+    QUALIFIED_SCAN_TOKENS, REFERENCE_MARKER_PATTERN, RELATION_STUB_PREFIX, RESPONSE_LENGTH,
+    SOURCE_LENGTH, TRANSFORM_CODES, UNSTUBBED_REFERENCE_KIND,
 };
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -75,7 +76,7 @@ pub(crate) struct MemberResult {
     pub(crate) binding_diagnostics: Option<Vec<DiagnosticRow>>,
     /// The failure Python logs at debug level.
     pub(crate) failure: Option<String>,
-    /// A shared member's lineage before its relation stubs were named, for later batches.
+    /// The lineage before relation stubs were named, kept for a result later batches reuse.
     canonical: Option<CanonicalLineage>,
 }
 
@@ -85,6 +86,9 @@ struct CanonicalLineage {
     stubs: Vec<String>,
     lineage: Vec<LineageRow>,
 }
+
+/// The digest a remembered shared result is found by.
+pub(crate) type MemoKey = [u8; 32];
 
 /// Python's `BindingCatalog.shared_analyses` entry: an exact shared result later batches reuse.
 #[derive(Debug, Clone)]
@@ -151,76 +155,27 @@ impl SessionCatalog {
         let cleaned: Vec<String> = self.normalize_members(batch)?;
         let mut shared: Vec<Option<SharedQuery>> = self.shared_queries(batch, &cleaned)?;
         self.shared_members += shared.iter().flatten().count();
-        let keys: Vec<Option<String>> = batch
+        let mut query_digests: HashMap<&str, MemoKey> = HashMap::new();
+        let keys: Vec<Option<MemoKey>> = batch
             .members
             .iter()
             .zip(&shared)
             .map(|(member, share)| {
-                share
-                    .as_ref()
-                    .map(|share| shared_result_key(batch, member, share))
+                let share: &SharedQuery = share.as_ref()?;
+                let query: MemoKey = *query_digests
+                    .entry(share.key.as_str())
+                    .or_insert_with(|| Sha256::digest(share.key.as_bytes()).into());
+                Some(shared_result_key(batch, member, share, &query))
             })
             .collect();
-        let mut results: Vec<Option<MemberResult>> = batch
-            .members
-            .iter()
-            .zip(&shared)
-            .zip(&keys)
-            .zip(&cleaned)
-            .map(|(((member, share), key), cleaned_sql)| {
-                let remembered: &SharedResult = self.shared_results.get(key.as_ref()?)?;
-                remembered.reused(member, share.as_ref()?, cleaned_sql)
-            })
-            .collect();
-        let analyzed: Vec<usize> = (0..results.len())
-            .filter(|index| results[*index].is_none())
-            .collect();
-        if !analyzed.is_empty() {
-            let subset = Batch {
-                members: analyzed
-                    .iter()
-                    .map(|index| batch.members[*index].clone())
-                    .collect(),
-                ..*batch
-            };
-            let subset_cleaned: Vec<String> = analyzed
-                .iter()
-                .map(|index| cleaned[*index].clone())
-                .collect();
-            let subset_shared: Vec<Option<SharedQuery>> =
-                analyzed.iter().map(|index| shared[*index].take()).collect();
-            let BatchRun {
-                results: mut analyzed_results,
-                inexact,
-            } = self.run_batch(&subset, subset_cleaned, &subset_shared)?;
-            self.reanalysed_members += inexact.len();
-            if !inexact.is_empty() {
-                let rerun_subset = Batch {
-                    members: inexact
-                        .iter()
-                        .map(|index| subset.members[*index].clone())
-                        .collect(),
-                    ..*batch
-                };
-                let rerun_cleaned: Vec<String> = inexact
-                    .iter()
-                    .map(|index| analyzed_results[*index].cleaned_sql.clone())
-                    .collect();
-                let unshared: Vec<Option<SharedQuery>> = inexact.iter().map(|_| None).collect();
-                let rerun: BatchRun = self.run_batch(&rerun_subset, rerun_cleaned, &unshared)?;
-                for (index, result) in inexact.iter().zip(rerun.results) {
-                    analyzed_results[*index] = result;
-                }
+        for (member, sql) in batch.members.iter().zip(&cleaned) {
+            if let Some(schema) = member.binding_schema {
+                let _ = self.prepare(&[(sql.as_str(), schema)]);
             }
-            for (position, (index, result)) in analyzed.iter().zip(analyzed_results).enumerate() {
-                if let Some(key) = keys[*index].as_ref()
-                    && !inexact.contains(&position)
-                    && let Some(remembered) = SharedResult::remembered(&result)
-                {
-                    self.shared_results.entry(key.clone()).or_insert(remembered);
-                }
-                results[*index] = Some(result);
-            }
+        }
+        let mut results: Vec<Option<MemberResult>> = batch.members.iter().map(|_| None).collect();
+        for chunk in batch_chunks(&shared) {
+            self.analyze_chunk(batch, &chunk, &cleaned, &mut shared, &keys, &mut results)?;
         }
         let results: Vec<MemberResult> = results
             .into_iter()
@@ -229,12 +184,98 @@ impl SessionCatalog {
         self.with_separate_validation(&batch.members, results)
     }
 
+    /// Reuse remembered shared results for `chunk`'s members, analyse the rest, and remember
+    /// each new exact shared result for later members.
+    fn analyze_chunk(
+        &mut self,
+        batch: &Batch<'_>,
+        chunk: &[usize],
+        cleaned: &[String],
+        shared: &mut [Option<SharedQuery>],
+        keys: &[Option<MemoKey>],
+        results: &mut [Option<MemberResult>],
+    ) -> Result<(), String> {
+        let mut analyzed: Vec<usize> = Vec::with_capacity(chunk.len());
+        for index in chunk {
+            let reused: Option<MemberResult> = keys[*index]
+                .as_ref()
+                .and_then(|key| self.shared_results.get(key))
+                .zip(shared[*index].as_ref())
+                .and_then(|(remembered, share)| {
+                    remembered.reused(&batch.members[*index], share, &cleaned[*index])
+                });
+            match reused {
+                Some(result) => results[*index] = Some(result),
+                None => analyzed.push(*index),
+            }
+        }
+        if analyzed.is_empty() {
+            return Ok(());
+        }
+        let subset = Batch {
+            members: analyzed
+                .iter()
+                .map(|index| batch.members[*index].clone())
+                .collect(),
+            ..*batch
+        };
+        let subset_cleaned: Vec<String> = analyzed
+            .iter()
+            .map(|index| cleaned[*index].clone())
+            .collect();
+        let subset_shared: Vec<Option<SharedQuery>> =
+            analyzed.iter().map(|index| shared[*index].take()).collect();
+        let mut first: HashSet<MemoKey> = HashSet::new();
+        let remember: Vec<bool> = analyzed
+            .iter()
+            .map(|index| {
+                keys[*index]
+                    .is_some_and(|key| !self.shared_results.contains_key(&key) && first.insert(key))
+            })
+            .collect();
+        let BatchRun {
+            results: mut analyzed_results,
+            inexact,
+        } = self.run_batch(&subset, subset_cleaned, &subset_shared, &remember)?;
+        self.reanalysed_members += inexact.len();
+        if !inexact.is_empty() {
+            let rerun_subset = Batch {
+                members: inexact
+                    .iter()
+                    .map(|index| subset.members[*index].clone())
+                    .collect(),
+                ..*batch
+            };
+            let rerun_cleaned: Vec<String> = inexact
+                .iter()
+                .map(|index| analyzed_results[*index].cleaned_sql.clone())
+                .collect();
+            let unshared: Vec<Option<SharedQuery>> = inexact.iter().map(|_| None).collect();
+            let kept: Vec<bool> = inexact.iter().map(|_| false).collect();
+            let rerun: BatchRun = self.run_batch(&rerun_subset, rerun_cleaned, &unshared, &kept)?;
+            for (index, result) in inexact.iter().zip(rerun.results) {
+                analyzed_results[*index] = result;
+            }
+        }
+        for (position, (index, result)) in analyzed.iter().zip(analyzed_results).enumerate() {
+            if let Some(key) = keys[*index].as_ref()
+                && !inexact.contains(&position)
+                && let Some(remembered) = SharedResult::remembered(&result)
+            {
+                self.shared_results.entry(*key).or_insert(remembered);
+            }
+            results[*index] = Some(result);
+        }
+        Ok(())
+    }
+
     /// Python's `_analyze_compact_inputs` run: prepare, analyse, project and find inexact sharing.
     fn run_batch(
         &mut self,
         batch: &Batch<'_>,
         cleaned: Vec<String>,
         shared: &[Option<SharedQuery>],
+        remember: &[bool],
     ) -> Result<BatchRun, String> {
         let payload: BatchPayload = self.batch_payload(batch, &cleaned, shared)?;
         let job = self.native.prepare_compact(&payload.request.to_string())?;
@@ -249,7 +290,7 @@ impl SessionCatalog {
             &response,
             &payload.query_indexes,
             batch.dialect,
-            project_response(&response, cleaned, shared)?,
+            project_response(&response, cleaned, remember)?,
         )?;
         Ok(BatchRun { results, inexact })
     }
@@ -655,6 +696,37 @@ impl SessionCatalog {
     }
 }
 
+/// The batch's members in chunks of about [`BATCH_CHUNK_MEMBERS`], in batch order with every
+/// member placed in the chunk of the first member sharing its query, so a large wave is
+/// analysed, projected and freed a chunk at a time.
+fn batch_chunks(shared: &[Option<SharedQuery>]) -> Vec<Vec<usize>> {
+    let mut chunks: Vec<Vec<usize>> = Vec::new();
+    let mut chunk_by_key: HashMap<&str, usize> = HashMap::new();
+    for (index, query) in shared.iter().enumerate() {
+        let grouped: Option<usize> = query
+            .as_ref()
+            .and_then(|query| chunk_by_key.get(query.key.as_str()).copied());
+        let chunk: usize = match grouped {
+            Some(chunk) => chunk,
+            None => {
+                if chunks
+                    .last()
+                    .is_none_or(|chunk| chunk.len() >= BATCH_CHUNK_MEMBERS)
+                {
+                    chunks.push(Vec::new());
+                }
+                let chunk: usize = chunks.len() - 1;
+                if let Some(query) = query {
+                    chunk_by_key.insert(query.key.as_str(), chunk);
+                }
+                chunk
+            }
+        };
+        chunks[chunk].push(index);
+    }
+    chunks
+}
+
 impl SharedResult {
     /// Python's `remembered_shared_results` entry for one exact, fully projected result.
     ///
@@ -741,22 +813,31 @@ impl SharedResult {
     }
 }
 
-/// Python's `shared_result_keys` entry: a shared member's complete native input.
-fn shared_result_key(batch: &Batch<'_>, member: &BatchMember<'_>, share: &SharedQuery) -> String {
+/// Digest of Python's `shared_result_keys` entry: a shared member's complete native input,
+/// given the digest of its shared query's identity.
+fn shared_result_key(
+    batch: &Batch<'_>,
+    member: &BatchMember<'_>,
+    share: &SharedQuery,
+    query: &MemoKey,
+) -> MemoKey {
     let reference_types: Vec<(&str, &str)> = member
         .lineage_references
         .iter()
         .map(|(name, resource_type, _)| (share.stub(name), resource_type.as_str()))
         .collect();
-    json!([
-        share.key,
+    let rest: String = json!([
         member.recover_cte_facts,
         batch.rich_type_inference,
         batch.function_return_types,
         declared_column_order(member, batch.nullability),
         reference_types,
     ])
-    .to_string()
+    .to_string();
+    let mut hasher: Sha256 = Sha256::new();
+    hasher.update(query);
+    hasher.update(rest.as_bytes());
+    hasher.finalize().into()
 }
 
 fn lineage_resources(member: &BatchMember<'_>, share: Option<&SharedQuery>) -> Map<String, Value> {
@@ -962,7 +1043,7 @@ fn to_index(value: u64) -> Result<usize, String> {
 fn project_response(
     response: &Value,
     cleaned: Vec<String>,
-    shared: &[Option<SharedQuery>],
+    remember: &[bool],
 ) -> Result<Vec<MemberResult>, String> {
     let strings: Vec<&str> = response
         .get("strings")
@@ -988,8 +1069,8 @@ fn project_response(
         .filter(|analyses| analyses.len() == cleaned.len())
         .ok_or(INVALID_BATCH)?;
     let mut results: Vec<MemberResult> = Vec::with_capacity(cleaned.len());
-    for ((cleaned_sql, analysis), share) in cleaned.into_iter().zip(analyses).zip(shared) {
-        let (analysis, failure, canonical) = project_member(&batch, analysis, share.is_some())?;
+    for ((cleaned_sql, analysis), remember) in cleaned.into_iter().zip(analyses).zip(remember) {
+        let (analysis, failure, canonical) = project_member(&batch, analysis, *remember)?;
         results.push(MemberResult {
             cleaned_sql,
             analysis,

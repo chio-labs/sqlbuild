@@ -27,6 +27,8 @@ pub(crate) const BINDING_SEVERITIES: [&str; 2] = ["error", "warning"];
 pub(crate) const DEFAULT_BINDING_MESSAGE: &str = "SQL binding failed";
 /// Analysis workers per compact batch, as Python requests.
 pub(crate) const COMPACT_WORKERS: usize = 4;
+/// Members a large batch analyses at a time, bounding the native response a run holds.
+pub(crate) const BATCH_CHUNK_MEMBERS: usize = 512;
 /// Python's `NATIVE_DIALECT_ALIASES`.
 pub(crate) const DIALECT_ALIASES: [(&str, &str); 3] = [
     ("postgres", "postgresql"),
