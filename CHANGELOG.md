@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.154.0](https://github.com/chio-labs/sqlbuild/compare/v0.153.0...v0.154.0) (2026-10-10)
+
+
+### Features
+
+* **native:** close out M3 shipped-stage ports and delete their Python fallbacks ([#1077](https://github.com/chio-labs/sqlbuild/issues/1077)) ([2cec8a4](https://github.com/chio-labs/sqlbuild/commit/2cec8a423db47698ccf1b96b95b707cd57f75b4c))
+
 ## [0.153.0](https://github.com/chio-labs/sqlbuild/compare/v0.152.0...v0.153.0) (2026-10-10)
 
 
