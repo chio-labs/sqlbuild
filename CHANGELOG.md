@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.155.0](https://github.com/chio-labs/sqlbuild/compare/v0.154.0...v0.155.0) (2026-10-10)
+
+
+### Features
+
+* **native:** make native model analysis the default with a native analysis cache ([#1079](https://github.com/chio-labs/sqlbuild/issues/1079)) ([2a73431](https://github.com/chio-labs/sqlbuild/commit/2a7343197e10433f3cafc2e350bc421d9100c3f3))
+
 ## [0.154.0](https://github.com/chio-labs/sqlbuild/compare/v0.153.0...v0.154.0) (2026-10-10)
 
 
