@@ -62,3 +62,20 @@ pub(super) fn lone_surrogate_text() -> JsonValue {
         0x0022, 0x0071, 0x0022, 0x005c, 0x00e9, 0xdcff, 0xd83d, 0xde00, 0xd83d,
     ])
 }
+
+/// `inner` wrapped in `depth` single-item lists.
+pub(super) fn wrapped_in_arrays(depth: usize, inner: JsonValue) -> JsonValue {
+    (0..depth).fold(inner, |value, _| JsonValue::Array(vec![value]))
+}
+
+/// Run `check` on a thread with room for Python-depth recursion.
+pub(super) fn on_large_stack(check: impl FnOnce() -> bool + Send + 'static) -> bool {
+    std::thread::Builder::new()
+        .stack_size(LARGE_STACK_BYTES)
+        .spawn(check)
+        .expect("test thread")
+        .join()
+        .expect("test thread result")
+}
+
+const LARGE_STACK_BYTES: usize = 256 * 1024 * 1024;

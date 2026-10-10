@@ -28,6 +28,9 @@ use sqlbuild_rules::models::{
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::types::CompilerDetach;
 
+const LEFT_ARGUMENT: &str = "left";
+const RIGHT_ARGUMENT: &str = "right";
+
 type FaultRow = (bool, String, String, u64, u64, String, String);
 type NamedType = (String, Option<String>);
 type CteRow = (String, String);
@@ -233,6 +236,14 @@ fn finalize_rule_findings_rows(
     Ok(finalized.into_iter().map(fault_row).collect())
 }
 
+/// `left=` and `right=`: the callback is `types_equal`, whose arguments are keyword-only.
+fn type_arguments<'py>(py: Python<'py>, left: &str, right: &str) -> PyResult<Bound<'py, PyDict>> {
+    let arguments: Bound<'py, PyDict> = PyDict::new(py);
+    arguments.set_item(LEFT_ARGUMENT, left)?;
+    arguments.set_item(RIGHT_ARGUMENT, right)?;
+    Ok(arguments)
+}
+
 fn built_models(
     project: &ProjectRowsPy<'_>,
     request: &EvaluateRequest,
@@ -240,9 +251,8 @@ fn built_models(
 ) -> PyResult<Vec<Model>> {
     let mut python_error: Option<PyErr> = None;
     let fallback = |left: &str, right: &str| -> Result<bool, String> {
-        match project
-            .types_equal
-            .call1((left, right))
+        match type_arguments(project.types_equal.py(), left, right)
+            .and_then(|arguments| project.types_equal.call((), Some(&arguments)))
             .and_then(|equal| equal.extract::<bool>())
         {
             Ok(equal) => Ok(equal),

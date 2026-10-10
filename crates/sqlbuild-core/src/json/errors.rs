@@ -9,7 +9,7 @@ pub enum JsonEmitError {
     IntegerOutOfRange,
     /// `json.dumps` met an integer with more digits than Python's string conversion limit.
     IntegerTooLong,
-    /// The value nests deeper than the native emitter writes; callers fall back to Python.
+    /// orjson's recursion limit, or `json.dumps` beyond Python's default recursion limit.
     NestingTooDeep,
     /// A lone surrogate under an encoder that writes text unescaped; Python cannot encode it.
     LoneSurrogate,

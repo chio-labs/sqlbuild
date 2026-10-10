@@ -63,6 +63,32 @@ SURROGATE_HOOK_FILES: dict[str, str] = {
     ),
 }
 
+
+def nested_payload_hook_files(*, depth: int) -> dict[str, str]:
+    """A model whose Python post-hook payload is `depth` nested lists around 1."""
+
+    return {
+        "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+        "models/orders.sql": (
+            "MODEL (description 'Orders.', materialized table, post_hooks [python(\"notify\", "
+            f"payload: {'[' * depth}1{']' * depth})]);\nSELECT 1 AS order_id\n"
+        ),
+        "hooks/python/notify.py": (
+            "from sqlbuild.hooks import hook\n\n\n@hook\ndef notify(ctx, payload):\n"
+            '    """Notify."""\n    return None\n'
+        ),
+    }
+
+
+def nested_lists(*, depth: int) -> object:
+    """`depth` nested single-item lists around 1."""
+
+    value: object = 1
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
 type CompileOutcome = tuple[int, dict[str, Any], dict[str, bytes]]
 
 
@@ -97,6 +123,12 @@ def record_output_work(
     ):
         monkeypatch.setattr(module, "report_native_answer", counted)
     return counts
+
+
+def main_compile_json(*, project_dir: Path) -> int:
+    """Compile through the CLI with `--json --no-cache`; the report stays in captured stdout."""
+
+    return main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
 
 
 def compile_json_text(
