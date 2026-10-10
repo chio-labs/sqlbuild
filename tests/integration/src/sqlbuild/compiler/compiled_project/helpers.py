@@ -136,6 +136,11 @@ PARITY_FILES: dict[str, str] = {
         'SELECT @enum("order_status").PLACED AS status, @const("order_cap") AS cap\n'
         'WHERE 30 NOT IN @const("held_codes")\n'
     ),
+    "macros/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
+    "models/marts/priced.sql": (
+        "MODEL (description 'Priced orders.');\n"
+        "SELECT @cents('3') AS cents, order_id FROM __ref(\"stg_orders\")\n"
+    ),
     "models/marts/migrated.sql": (
         "MODEL (materialized incremental, incremental_strategy append,"
         " columns (order_id (migrate_from id)));\nSELECT 1 AS order_id\n"
@@ -197,7 +202,7 @@ def expansions(inputs: CompileProjectInputs) -> list[tuple[object, object]]:
     return [(item.sql_expansion, item.lint_expansion) for item in inputs.model_inputs]
 
 
-WAFFLE_SHOP_NATIVE_MODELS: int = 8
+WAFFLE_SHOP_NATIVE_MODELS: int = 13
 
 
 def copy_project(*, fixtures: tuple[str, ...], files: dict[str, str], project_dir: Path) -> Path:

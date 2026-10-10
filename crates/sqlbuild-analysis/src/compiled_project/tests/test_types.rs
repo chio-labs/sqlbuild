@@ -35,3 +35,10 @@ pub(super) struct EnumLiteralTestCase {
     pub(super) integer: bool,
     pub(super) expected_literal: &'static str,
 }
+
+pub(super) struct MergeReferencesTestCase {
+    pub(super) description: &'static str,
+    pub(super) references: Vec<&'static str>,
+    pub(super) arguments: Vec<&'static str>,
+    pub(super) expected_references: Vec<&'static str>,
+}

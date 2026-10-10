@@ -11,6 +11,7 @@ use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
 use sqlbuild_analysis::compiled_project::main::enum_member_literal::enum_member_literal;
 use sqlbuild_analysis::compiled_project::main::header_column_blocker::header_column_blocker;
 use sqlbuild_analysis::compiled_project::main::header_metadata_keys::is_header_metadata_key;
+use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_analysis::compiled_project::main::plain_model_blocker::plain_model_blocker;
 use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
 use sqlbuild_analysis::compiled_project::main::splice_declarations::splice_declarations;
@@ -68,6 +69,9 @@ const QUERY_SQL_ARGUMENT: &str = "query_sql";
 const DESCRIPTION_ARGUMENT: &str = "description";
 const SCHEMA_ARGUMENT: &str = "schema";
 const DECLARATIONS_ARGUMENT: &str = "declarations";
+const EXPAND_MACROS_CALLBACK: &str = "expand_macros";
+const SQL_ARGUMENT: &str = "sql";
+const SPANS_ARGUMENT: &str = "spans";
 const DECLARATION_ARGUMENT: &str = "declaration";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const ENUMS_ATTRIBUTE: &str = "enums";
@@ -119,6 +123,7 @@ pub(crate) struct NativeModelLoop {
 
 /// One model as the loop finishes it: its row, effective config and visible enum names.
 struct LoopModel<'a, 'py> {
+    index: usize,
     row: &'a ModelLoopRow,
     config: Bound<'py, PyAny>,
     visible: &'a VisibleDeclarations<'py>,
@@ -162,7 +167,7 @@ struct Validation<'a, 'py> {
     config: &'a Bound<'py, PyAny>,
     values: &'a Bound<'py, PyDict>,
     model: (&'a str, &'a str, &'a str),
-    references: &'a [SqlReference],
+    references: &'a [ReferenceRow],
 }
 
 /// One model the native loop finished, before the host builds its Python view.
@@ -172,7 +177,7 @@ struct FinishedModel<'py> {
     query_sql: String,
     description: Option<String>,
     schema: Option<HeaderSchema<'py>>,
-    references: Vec<SqlReference>,
+    references: Vec<ReferenceRow>,
     declarations: ExpandedDeclarations<'py>,
 }
 
@@ -239,6 +244,7 @@ impl NativeModelLoop {
                 host: host.clone(),
             };
             let model: LoopModel<'_, 'py> = LoopModel {
+                index,
                 row: &row,
                 config,
                 visible: &visible,
@@ -266,6 +272,7 @@ impl NativeModelLoop {
         model: LoopModel<'_, 'py>,
     ) -> PyResult<Option<FinishedModel<'py>>> {
         let LoopModel {
+            index,
             row,
             config,
             visible,
@@ -299,10 +306,13 @@ impl NativeModelLoop {
         let Some(declarations) = self.expand_declarations(py, visible, sql, references)? else {
             return Ok(None);
         };
-        if calls_macros(&declarations.spliced.sql) {
-            return Ok(None);
-        }
-        let Ok(query_sql) = self.canonical_query(name, &declarations.spliced.sql, &values)? else {
+        let (macro_sql, argument_references): (String, Vec<ReferenceRow>) =
+            if calls_macros(&declarations.spliced.sql) {
+                expand_macros(visible, index, &declarations.spliced)?
+            } else {
+                (declarations.spliced.sql.clone(), Vec::new())
+            };
+        let Ok(query_sql) = self.canonical_query(name, &macro_sql, &values)? else {
             return Ok(None);
         };
         let ReferenceExtraction::Extracted(scan) = extract_sql_references(&query_sql, &self.syntax)
@@ -317,11 +327,15 @@ impl NativeModelLoop {
         {
             return Ok(None);
         }
+        let references: Vec<ReferenceRow> = merge_call_site_references(
+            scan.references.iter().map(reference_row).collect(),
+            argument_references,
+        );
         let validation: Validation<'_, 'py> = Validation {
             config: &config,
             values: &values,
             model: (name, &query_sql, relative_path),
-            references: &scan.references,
+            references: &references,
         };
         if !self.validates(py, &validation)? {
             return Ok(None);
@@ -347,7 +361,7 @@ impl NativeModelLoop {
             query_sql,
             description,
             schema,
-            references: scan.references,
+            references,
             declarations,
         }))
     }
@@ -437,7 +451,7 @@ impl NativeModelLoop {
         let rows: Vec<(&str, &str, bool)> = validation
             .references
             .iter()
-            .map(|reference| (reference.kind, reference.name.as_str(), false))
+            .map(|(kind, name, _, _)| (kind.as_str(), name.as_str(), false))
             .collect();
         let unmanaged: Bound<'_, PyAny> = validation
             .config
@@ -622,11 +636,13 @@ fn plain_input<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
     let py: Python<'py> = host.py();
     let ModelLoopRow((name, relative_path, _), _, authored_query_sql, authored_sql, _, _) = row;
-    let reference_rows: Vec<ReferenceRow> = finished.references.iter().map(reference_row).collect();
     let arguments = [
         (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
         (VALUES_ARGUMENT, finished.stripped.clone().into_any()),
-        (REFERENCES_ARGUMENT, reference_rows.into_pyobject(py)?),
+        (
+            REFERENCES_ARGUMENT,
+            finished.references.clone().into_pyobject(py)?,
+        ),
         (
             QUERY_SQL_ARGUMENT,
             finished.query_sql.as_str().into_pyobject(py)?.into_any(),
@@ -729,12 +745,34 @@ fn reference_row(reference: &SqlReference) -> ReferenceRow {
     )
 }
 
-fn reference_fact(reference: SqlReference) -> ModelReferenceFact {
+fn reference_fact((kind, name, package, _): ReferenceRow) -> ModelReferenceFact {
     ModelReferenceFact {
-        kind: reference.kind.to_owned(),
-        name: reference.name,
-        package: reference.package,
+        kind,
+        name,
+        package,
     }
+}
+
+/// Expand the model's macro calls through the host, which runs the project's macros.
+fn expand_macros(
+    visible: &VisibleDeclarations<'_>,
+    index: usize,
+    spliced: &SplicedSql,
+) -> PyResult<(String, Vec<ReferenceRow>)> {
+    let py = visible.host.py();
+    callback(
+        &visible.host,
+        EXPAND_MACROS_CALLBACK,
+        &[
+            (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
+            (
+                SQL_ARGUMENT,
+                spliced.sql.as_str().into_pyobject(py)?.into_any(),
+            ),
+            (SPANS_ARGUMENT, span_rows(spliced).into_pyobject(py)?),
+        ],
+    )?
+    .extract()
 }
 
 fn config_keys(values: &Bound<'_, PyDict>) -> PyResult<Vec<String>> {

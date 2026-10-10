@@ -2,6 +2,7 @@ pub mod calls_macros;
 pub mod enum_member_literal;
 pub mod header_column_blocker;
 pub mod header_metadata_keys;
+pub mod merge_call_site_references;
 pub mod model_facts;
 pub mod plain_model_blocker;
 pub mod plain_model_facts;

@@ -8,6 +8,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlExpansion,
     CompileModelInput,
     CompileSqlReference,
+    ExpansionSpan,
     SqlInterpolation,
 )
 from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
@@ -34,14 +35,20 @@ def plain_model_input_impl(
 
     _report_native_steps(described=facts.schema is not None)
     interpolated_sql: str = str(interpolation.sql)
+    macro_sql: str = (
+        facts.declaration_sql if facts.macro_expansion is None else facts.macro_expansion.sql
+    )
+    macro_spans: tuple[ExpansionSpan, ...] = (
+        () if facts.macro_expansion is None else facts.macro_expansion.spans
+    )
     local_enums: tuple[EnumDeclaration, ...] = tuple(declarations[0].values())
     local_constants: tuple[ConstantDeclaration, ...] = tuple(declarations[1].values())
     model_input: CompileModelInput = CompileModelInput(
         sql_expansion=(
             CompiledSqlExpansion(
                 authored_sql=model_file.query_sql,
-                expanded_sql=facts.declaration_sql,
-                passes=(facts.declaration_spans, ()),
+                expanded_sql=macro_sql,
+                passes=(facts.declaration_spans, macro_spans),
             )
             if interpolated_sql == model_file.query_sql
             else None
@@ -63,11 +70,17 @@ def plain_model_input_impl(
         sql_validation_enabled=True,
         enum_declarations=local_enums,
         constant_declarations=local_constants,
+        macro_deps=(
+            ()
+            if facts.macro_expansion is None
+            else tuple(item.name for item in facts.macro_expansion.dependencies)
+        ),
+        macro_usages=() if facts.macro_expansion is None else facts.macro_expansion.usages,
         declaration_usages=facts.declaration_usages,
         lint_expansion=CompiledSqlExpansion(
             authored_sql=model_file.query_sql,
-            expanded_sql=facts.declaration_sql,
-            passes=(interpolation.spans, facts.declaration_spans, ()),
+            expanded_sql=macro_sql,
+            passes=(interpolation.spans, facts.declaration_spans, macro_spans),
         ),
     )
     return model_input, declaration_rows(enums=local_enums, constants=local_constants)

@@ -404,6 +404,7 @@ class _ModelLoopHost:
     interpolations: dict[Path, SqlInterpolation]
     declarations: dict[int, _VisibleModelDeclarations] = field(default_factory=dict)
     configs: dict[int, CompileModelConfig] = field(default_factory=dict)
+    macros: dict[int, MacroExpansionResult] = field(default_factory=dict)
 
     current_file: Path = Path()
 
@@ -436,7 +437,30 @@ class _ModelLoopHost:
             interpolation=self.interpolations[model_file.file_path],
             declarations=self.declarations.pop(index),
             effective_config=self.configs.pop(index),
+            expanded_macros=self.macros.pop(index, None),
         )
+
+    def expand_macros(
+        self, *, index: int, sql: str, spans: list[tuple[int, int, int, int]]
+    ) -> tuple[str, list[tuple[str, str, str | None, int | None]]]:
+        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
+        expansion: MacroExpansionResult = _macro_expansion(
+            loop=self.loop,
+            model_file=model_file,
+            declarations=_declaration_context(
+                declarations=self.declarations[index],
+                consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
+            ),
+            declaration_expansion=DeclarationExpansionResult(
+                sql=sql, spans=_expansion_spans(spans), usages=()
+            ),
+            interpolated_sql=applied_interpolation(self.interpolations[model_file.file_path]),
+        )
+        self.macros[index] = expansion
+        return expansion.sql, [
+            (str(item.ref_kind), item.ref_name, item.ref_package, item.call_argument_count)
+            for item in expansion.argument_references
+        ]
 
     def plain_input(
         self,
@@ -462,15 +486,8 @@ class _ModelLoopHost:
                 description=description,
                 schema=schema,
                 declaration_sql=declarations[0],
-                declaration_spans=tuple(
-                    ExpansionSpan(
-                        source_start=source_start,
-                        source_end=source_end,
-                        output_start=output_start,
-                        output_end=output_end,
-                    )
-                    for source_start, source_end, output_start, output_end in declarations[1]
-                ),
+                declaration_spans=_expansion_spans(declarations[1]),
+                macro_expansion=self.macros.pop(index, None),
                 declaration_usages=tuple(dict.fromkeys(declarations[2])),
             ),
             declarations=(visible.local_enums, visible.local_constants),
@@ -707,6 +724,72 @@ def _run_native_model_loop(
     return list(inputs)
 
 
+def _expansion_spans(rows: list[tuple[int, int, int, int]]) -> tuple[ExpansionSpan, ...]:
+    return tuple(
+        ExpansionSpan(
+            source_start=source_start,
+            source_end=source_end,
+            output_start=output_start,
+            output_end=output_end,
+        )
+        for source_start, source_end, output_start, output_end in rows
+    )
+
+
+def _declaration_context(
+    *, declarations: _VisibleModelDeclarations, consumer: ResourceIdentity
+) -> DeclarationResolutionContext:
+    return DeclarationResolutionContext(
+        enums=declarations.enums,
+        constants=declarations.constants,
+        inaccessible_enums=declarations.inaccessible_enums,
+        inaccessible_constants=declarations.inaccessible_constants,
+        enum_visibility=declarations.enum_visibility,
+        constant_visibility=declarations.constant_visibility,
+        macros=declarations.macros,
+        macro_records=declarations.macro_records,
+        inaccessible_macros=declarations.inaccessible_macros,
+        consumer=consumer,
+    )
+
+
+def _macro_expansion(
+    *,
+    loop: _ModelInputLoop,
+    model_file: DiscoveredSqlModelFile,
+    declarations: DeclarationResolutionContext,
+    declaration_expansion: DeclarationExpansionResult,
+    interpolated_sql: str,
+) -> MacroExpansionResult:
+    """Expand the model's macro calls, locating argument errors in the authored query."""
+
+    context: ModelInputBuildContext = loop.context
+    try:
+        return expand_sql_macros_result(
+            sql=declaration_expansion.sql,
+            file_path=model_file.file_path,
+            loaded_macros=context.loaded_macros,
+            macro_context=context.macro_context,
+            declaration_resolver=context.declaration_resolver,
+            declarations=declarations if context.declaration_resolver is not None else None,
+            consumer=declarations.consumer,
+        )
+    except MacroArgumentError as error:
+        location: SourceLocation | None = (
+            _authored_model_location(
+                model_file=model_file,
+                sql=declaration_expansion.sql,
+                offset=error.offset,
+                passes=(declaration_expansion.spans,),
+            )
+            if interpolated_sql == model_file.query_sql
+            else None
+        )
+        if location is None:
+            raise
+        raise error.located(location) from None
+
+
 def _effective_model_config(
     *, loop: _ModelInputLoop, model_file: DiscoveredSqlModelFile
 ) -> CompileModelConfig:
@@ -740,6 +823,7 @@ def _build_model_input(
     interpolation: SqlInterpolation,
     declarations: _VisibleModelDeclarations,
     effective_config: CompileModelConfig,
+    expanded_macros: MacroExpansionResult | None,
 ) -> CompileModelInput:
     discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
     context: ModelInputBuildContext = loop.context
@@ -788,17 +872,8 @@ def _build_model_input(
         ),
     )
     var_substituted_sql: str = applied_interpolation(interpolation)
-    declaration_context: DeclarationResolutionContext = DeclarationResolutionContext(
-        enums=declarations.enums,
-        constants=declarations.constants,
-        inaccessible_enums=declarations.inaccessible_enums,
-        inaccessible_constants=declarations.inaccessible_constants,
-        enum_visibility=declarations.enum_visibility,
-        constant_visibility=declarations.constant_visibility,
-        macros=declarations.macros,
-        macro_records=declarations.macro_records,
-        inaccessible_macros=declarations.inaccessible_macros,
-        consumer=model_identity,
+    declaration_context: DeclarationResolutionContext = _declaration_context(
+        declarations=declarations, consumer=model_identity
     )
     declaration_expansion: DeclarationExpansionResult = expand_scanned_declaration_references(
         sql=var_substituted_sql,
@@ -810,32 +885,17 @@ def _build_model_input(
     )
     report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_expansions")
     declaration_expanded_sql: str = declaration_expansion.sql
-    try:
-        macro_expansion: MacroExpansionResult = expand_sql_macros_result(
-            sql=declaration_expanded_sql,
-            file_path=model_file.file_path,
-            loaded_macros=loaded_macros,
-            macro_context=macro_context,
-            declaration_resolver=context.declaration_resolver,
-            declarations=(
-                declaration_context if context.declaration_resolver is not None else None
-            ),
-            consumer=model_identity,
+    macro_expansion: MacroExpansionResult = (
+        _macro_expansion(
+            loop=loop,
+            model_file=model_file,
+            declarations=declaration_context,
+            declaration_expansion=declaration_expansion,
+            interpolated_sql=var_substituted_sql,
         )
-    except MacroArgumentError as error:
-        location: SourceLocation | None = (
-            _authored_model_location(
-                model_file=model_file,
-                sql=declaration_expanded_sql,
-                offset=error.offset,
-                passes=(declaration_expansion.spans,),
-            )
-            if var_substituted_sql == model_file.query_sql
-            else None
-        )
-        if location is None:
-            raise
-        raise error.located(location) from None
+        if expanded_macros is None
+        else expanded_macros
+    )
     expanded_query_sql: str = macro_expansion.sql
     expanded_query_sql = get_validated_model_cursor_intrinsics(
         sql=expanded_query_sql,

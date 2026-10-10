@@ -26,6 +26,22 @@ pub(crate) fn splice_declarations(sql: &str, splices: &[DeclarationSplice]) -> S
     SplicedSql { sql: output, spans }
 }
 
+pub(crate) fn merge_call_site_references<T: PartialEq>(
+    references: Vec<T>,
+    arguments: Vec<T>,
+) -> Vec<T> {
+    if arguments.is_empty() {
+        return references;
+    }
+    let mut merged: Vec<T> = Vec::with_capacity(references.len() + arguments.len());
+    for reference in references.into_iter().chain(arguments) {
+        if !merged.contains(&reference) {
+            merged.push(reference);
+        }
+    }
+    merged
+}
+
 /// An enum member's SQL literal: integers as written, text single-quoted with quotes doubled.
 pub(crate) fn enum_member_literal(text: &str, integer: bool) -> String {
     if integer {
