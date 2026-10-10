@@ -7,6 +7,7 @@ pub mod column_references;
 pub mod compiler;
 mod constants;
 pub mod contracts;
+pub mod graph;
 pub mod lineage;
 pub mod query_analysis;
 pub mod semantic_checks;
