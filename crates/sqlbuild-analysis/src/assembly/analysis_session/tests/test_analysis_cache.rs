@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::models::NativeStore;
 
 use crate::assembly::analysis_session::models::{
@@ -5,10 +8,10 @@ use crate::assembly::analysis_session::models::{
 };
 use crate::assembly::analysis_session::tests::helpers::{
     CachedRun, cached_run, damaged, model_keys, model_requests, orders_request, pairs,
-    session_lines, shapes, uncached_catalog,
+    session_lines, shapes, started, uncached_catalog,
 };
 use crate::assembly::analysis_session::tests::test_types::{
-    CacheEditTestCase, CacheKeyTestCase, CacheReuseTestCase, ModelSpec,
+    CacheEditTestCase, CacheKeyTestCase, CacheReuseTestCase, ModelSpec, RelationDigestTestCase,
 };
 
 const STG_ORDERS: ModelSpec = (
@@ -352,6 +355,75 @@ fn given_any_analysis_input_changed_when_keying_then_the_key_changes() {
 
         assert_ne!(model_keys(request)[1], base, "{}", test_case.description);
     }
+}
+
+#[test]
+fn given_any_relation_fact_changed_when_digesting_then_the_digest_changes() {
+    let test_cases = [
+        RelationDigestTestCase {
+            description: "available types",
+            change: |session| {
+                session
+                    .available_types
+                    .set_default("raw_items", pairs(&[("id", "INTEGER")]))
+            },
+        },
+        RelationDigestTestCase {
+            description: "available nullability",
+            change: |session| {
+                session
+                    .available_nullability
+                    .set_default("raw_items", pairs(&[("id", "non_null")]))
+            },
+        },
+        RelationDigestTestCase {
+            description: "closed shape",
+            change: |session| {
+                session
+                    .complete_shapes
+                    .set_default("raw_items", pairs(&[("id", "INTEGER")]))
+            },
+        },
+        RelationDigestTestCase {
+            description: "catalog schema",
+            change: |session| {
+                let _ = session
+                    .catalog
+                    .prepare(&[("", &shapes(&[("raw_items", &[("id", "INTEGER")])]))]);
+            },
+        },
+    ];
+    for test_case in test_cases {
+        let mut session = started(orders_request(model_requests(ORDERS)));
+        let before = session.relation_digest("raw_items");
+        (test_case.change)(&mut session);
+
+        assert_ne!(
+            session.relation_digest("raw_items"),
+            before,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_read_relation_fact_changed_when_keying_then_the_reading_model_key_changes() {
+    let mut session = started(orders_request(model_requests(ORDERS)));
+    let key = |session: &crate::assembly::analysis_session::models::AnalysisSession| {
+        let names: Vec<&str> = session.model_relation_names(1).into_iter().collect();
+        let relations: HashMap<&str, ContentDigest> = names
+            .iter()
+            .map(|name| (*name, session.relation_digest(name)))
+            .collect();
+        session.model_key(&[0; 32], 1, &Vec::new(), &relations)
+    };
+    let before: ContentDigest = key(&session);
+    session
+        .available_nullability
+        .set_default("stg_orders", pairs(&[("order_id", "non_null")]));
+
+    assert_ne!(key(&session), before);
 }
 
 fn family() -> DynamicFamily {

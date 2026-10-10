@@ -101,3 +101,9 @@ pub(crate) struct CacheKeyTestCase {
     /// Changes one input of the request the key must cover.
     pub(crate) change: fn(&mut crate::assembly::analysis_session::models::SessionRequest),
 }
+
+pub(crate) struct RelationDigestTestCase {
+    pub(crate) description: &'static str,
+    /// Records one fact about `raw_items` in the started session.
+    pub(crate) change: fn(&mut crate::assembly::analysis_session::models::AnalysisSession),
+}

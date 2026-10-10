@@ -518,11 +518,21 @@ impl AnalysisSession {
         }
         let pool: Arc<ThreadPool> = self.catalog.native.analysis_pool()?;
         let session_digest: ContentDigest = cache.session_digest;
+        let names: Vec<&str> = models
+            .iter()
+            .flat_map(|model| self.model_relation_names(*model))
+            .collect::<HashSet<&str>>()
+            .into_iter()
+            .collect();
         let keys: Vec<ContentDigest> = pool.install(|| {
+            let relations: HashMap<&str, ContentDigest> = names
+                .par_iter()
+                .map(|name| (*name, self.relation_digest(name)))
+                .collect();
             models
                 .par_iter()
                 .zip(schemas)
-                .map(|(model, schema)| self.model_key(&session_digest, *model, schema))
+                .map(|(model, schema)| self.model_key(&session_digest, *model, schema, &relations))
                 .collect()
         });
         let stored: Vec<Option<Vec<u8>>> = keys

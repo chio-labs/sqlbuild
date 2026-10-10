@@ -49,19 +49,10 @@ impl AnalysisSession {
             .is_some_and(|cache| cache.hits.get(model).copied().unwrap_or(false))
     }
 
-    /// The key of `model` analysed with `schema` against the session's current relation facts.
-    pub(crate) fn model_key(
-        &self,
-        session_digest: &ContentDigest,
-        model: usize,
-        schema: &Shapes,
-    ) -> ContentDigest {
+    /// The names whose relation facts `model`'s analysis may read, in sorted order.
+    pub(crate) fn model_relation_names(&self, model: usize) -> BTreeSet<&str> {
         let request: &ModelRequest = &self.request.models[model];
-        let mut key: KeyHasher = KeyHasher::default();
-        key.bytes(session_digest);
-        put_model(&mut key, request);
-        put_shapes(&mut key, schema);
-        let names: BTreeSet<&str> = request
+        request
             .references
             .iter()
             .map(|reference| reference.analysis_name.as_str())
@@ -72,14 +63,41 @@ impl AnalysisSession {
                     .iter()
                     .map(|(name, _, _)| name.as_str()),
             )
-            .collect();
+            .collect()
+    }
+
+    /// Digest of the types, nullability, closed shape and catalog schema the session holds
+    /// for `name` now.
+    pub(crate) fn relation_digest(&self, name: &str) -> ContentDigest {
+        let mut key: KeyHasher = KeyHasher::default();
+        key.text(name);
+        put_optional_pairs(&mut key, self.available_types.get(name));
+        put_optional_pairs(&mut key, self.available_nullability.get(name));
+        put_optional_pairs(&mut key, self.complete_shapes.get(name));
+        put_optional_pairs(&mut key, self.catalog.known_schema(name));
+        key.finish()
+    }
+
+    /// The key of `model` analysed with `schema`, given [`Self::relation_digest`] of every
+    /// name [`Self::model_relation_names`] returns.
+    pub(crate) fn model_key(
+        &self,
+        session_digest: &ContentDigest,
+        model: usize,
+        schema: &Shapes,
+        relations: &HashMap<&str, ContentDigest>,
+    ) -> ContentDigest {
+        let mut key: KeyHasher = KeyHasher::default();
+        key.bytes(session_digest);
+        put_model(&mut key, &self.request.models[model]);
+        put_shapes(&mut key, schema);
+        let names: BTreeSet<&str> = self.model_relation_names(model);
         key.count(names.len());
         for name in names {
-            key.text(name);
-            put_optional_pairs(&mut key, self.available_types.get(name));
-            put_optional_pairs(&mut key, self.available_nullability.get(name));
-            put_optional_pairs(&mut key, self.complete_shapes.get(name));
-            put_optional_pairs(&mut key, self.catalog.known_schema(name));
+            match relations.get(name) {
+                Some(digest) => key.bytes(digest),
+                None => key.bytes(&self.relation_digest(name)),
+            }
         }
         key.flag(self.dependency_ordered);
         key.finish()
