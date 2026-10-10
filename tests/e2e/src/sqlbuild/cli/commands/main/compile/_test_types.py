@@ -755,6 +755,15 @@ class ExternalModuleEditTestCase:
 
 
 @dataclass(frozen=True)
+class NativeAnalysisStoreTestCase:
+    """A change between two compiles, and how many stored native model analyses it misses."""
+
+    description: str
+    change: Callable[[Path, pytest.MonkeyPatch], None]
+    expected_misses: int
+
+
+@dataclass(frozen=True)
 class SqlTestScanStoreTestCase:
     """A change between two compiles, and how many stored SQL-test scans it must invalidate."""
 

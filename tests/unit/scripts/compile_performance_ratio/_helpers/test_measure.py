@@ -1,8 +1,15 @@
 """Tests for per-phase medians in the same-runner compile performance ratio guard."""
 
+from pathlib import Path
+
 import pytest
 
-from scripts.compile_performance_ratio._helpers.measure import check_cache_use, median_phases
+from scripts.compile_performance_ratio._helpers.measure import (
+    check_cache_use,
+    check_matches_uncached,
+    compiled_tree,
+    median_phases,
+)
 from scripts.compile_performance_ratio.constants import COLD_MODE, EDIT_MODE, WARM_MODE
 from scripts.compile_performance_ratio.exceptions import CompileComparisonError
 from scripts.compile_performance_ratio.models import CompileRun
@@ -10,7 +17,9 @@ from tests.unit.scripts.compile_performance_ratio._helpers._test_types import (
     CacheUseErrorTestCase,
     CacheUseTestCase,
     MedianPhasesTestCase,
+    UncachedMatchTestCase,
 )
+from tests.unit.scripts.compile_performance_ratio._helpers.helpers import write_model_files
 
 
 @pytest.mark.parametrize(
@@ -78,26 +87,14 @@ def test_given_compile_runs_when_taking_phase_medians_then_reports_only_complete
             mode=EDIT_MODE,
         ),
         CacheUseTestCase(
-            description="a natively analysed edit bypasses the analysis cache for every model",
+            description="a warm compile that hit the analysis cache for every model",
             run=CompileRun(
                 label="head",
                 wall_seconds=1.0,
                 cpu_seconds=1.0,
                 timings_ms={},
                 analysis_cache_misses=0,
-                analysis_cache_bypasses=3000,
-            ),
-            mode=EDIT_MODE,
-        ),
-        CacheUseTestCase(
-            description="a natively analysed warm compile has no analysis cache miss",
-            run=CompileRun(
-                label="head",
-                wall_seconds=1.0,
-                cpu_seconds=1.0,
-                timings_ms={},
-                analysis_cache_misses=0,
-                analysis_cache_bypasses=3000,
+                analysis_cache_bypasses=0,
             ),
             mode=WARM_MODE,
         ),
@@ -125,7 +122,7 @@ def test_given_observed_cache_use_when_checking_then_accepts_the_run(
     "test_case",
     (
         CacheUseErrorTestCase(
-            description="an edit that neither missed nor bypassed the cache was not observed",
+            description="an edit that missed no cache entry was not observed",
             run=CompileRun(
                 label="head",
                 wall_seconds=1.0,
@@ -135,7 +132,20 @@ def test_given_observed_cache_use_when_checking_then_accepts_the_run(
                 analysis_cache_bypasses=0,
             ),
             mode=EDIT_MODE,
-            expected_message="reported no analysis cache miss or bypass",
+            expected_message="reported no analysis cache miss",
+        ),
+        CacheUseErrorTestCase(
+            description="an edit that bypassed the cache did not measure a cached compile",
+            run=CompileRun(
+                label="head",
+                wall_seconds=1.0,
+                cpu_seconds=1.0,
+                timings_ms={},
+                analysis_cache_misses=0,
+                analysis_cache_bypasses=3000,
+            ),
+            mode=EDIT_MODE,
+            expected_message="bypassed the analysis cache for 3000 models",
         ),
         CacheUseErrorTestCase(
             description="a warm compile that missed the cache is not an unchanged compile",
@@ -158,6 +168,72 @@ def test_given_unobserved_cache_use_when_checking_then_rejects_the_run(
 ) -> None:
     with pytest.raises(CompileComparisonError, match=test_case.expected_message):
         check_cache_use(run=test_case.run, mode=test_case.mode)
+
+
+def _run(report: str) -> CompileRun:
+    return CompileRun(label="head", wall_seconds=1.0, cpu_seconds=1.0, timings_ms={}, report=report)
+
+
+def _check_against_uncached(*, test_case: UncachedMatchTestCase, project_dir: Path) -> None:
+    write_model_files(project_dir=project_dir, model_files=test_case.incremental_files)
+    compiled: dict[str, bytes] = compiled_tree(project_dir=project_dir)
+
+    def uncached() -> CompileRun:
+        write_model_files(project_dir=project_dir, model_files=test_case.uncached_files)
+        return _run(test_case.uncached_report)
+
+    check_matches_uncached(
+        incremental=_run(test_case.incremental_report),
+        compiled=compiled,
+        uncached=uncached,
+        project_dir=project_dir,
+        mode=EDIT_MODE,
+    )
+
+
+def test_given_an_edit_the_uncached_compile_reproduces_when_checking_then_accepts_it(
+    tmp_path: Path,
+) -> None:
+    _check_against_uncached(
+        test_case=UncachedMatchTestCase(
+            description="an edit the uncached compile reproduces",
+            incremental_report='{"models": 2}',
+            uncached_report='{"models": 2}',
+            incremental_files={"target/compiled/models/orders.sql": "SELECT 1"},
+            uncached_files={"target/compiled/models/orders.sql": "SELECT 1"},
+            expected_message="",
+        ),
+        project_dir=tmp_path,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        UncachedMatchTestCase(
+            description="a stale report",
+            incremental_report='{"models": 2}',
+            uncached_report='{"models": 3}',
+            incremental_files={"target/compiled/models/orders.sql": "SELECT 1"},
+            uncached_files={"target/compiled/models/orders.sql": "SELECT 1"},
+            expected_message="report differs",
+        ),
+        UncachedMatchTestCase(
+            description="a stale compiled artifact",
+            incremental_report='{"models": 2}',
+            uncached_report='{"models": 2}',
+            incremental_files={"target/compiled/models/orders.sql": "SELECT 1"},
+            uncached_files={"target/compiled/models/orders.sql": "SELECT 2"},
+            expected_message="models/orders.sql",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_a_stale_incremental_compile_when_checking_against_uncached_then_rejects_it(
+    test_case: UncachedMatchTestCase, tmp_path: Path
+) -> None:
+    with pytest.raises(CompileComparisonError, match=test_case.expected_message):
+        _check_against_uncached(test_case=test_case, project_dir=tmp_path)
 
 
 if __name__ == "__main__":

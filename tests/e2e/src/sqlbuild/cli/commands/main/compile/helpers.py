@@ -67,6 +67,7 @@ from sqlbuild.cli.compile_reuse.models import (
     StoredCompileHeader,
     StoredCompileInputs,
 )
+from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
@@ -4107,6 +4108,30 @@ def sql_test_scan_counts(run: CompileReuseRun) -> tuple[int, int]:
     return run.timings["sql_test_scan_cache_hits"], run.timings["sql_test_scan_cache_misses"]
 
 
+def native_analysis_counts(run: CompileReuseRun) -> tuple[int, int, int]:
+    """Return the analysis cache entry hits, misses and bypasses of one compile."""
+
+    return (
+        run.timings["analysis_entry_cache_hits"],
+        run.timings["analysis_cache_misses"],
+        run.timings["analysis_cache_bypasses"],
+    )
+
+
+def edit_staging_type(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Change one staging output type, which reaches the staging model's consumers."""
+
+    staging_type_change(root)
+
+
+def corrupt_native_analysis_store(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overwrite the stored native model analyses with bytes that are not a store file."""
+
+    path: Path = compiler_cache_directory(root) / NATIVE_ANALYSIS_STORE_FILE_NAME
+    assert path.is_file()
+    _ = path.write_bytes(b"not a native store")
+
+
 def edit_sql_test_scan_input(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
     """Edit one SQL test file between compiles."""
 
@@ -4244,8 +4269,10 @@ def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def ignore_query_in_analysis_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Key cached model analyses without their query, so an edited query reads a stale analysis."""
+    """Key Python's cached model analyses without their query, so an edited query reads a stale
+    analysis; the Python engine runs, since native analysis keys its own cache."""
 
+    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
     analysis_key: Callable[..., str] = project_assembly.model_analysis_cache_key
 
     def query_blind_key(**kwargs: Any) -> str:
