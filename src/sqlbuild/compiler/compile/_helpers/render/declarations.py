@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationExpansionContext,
@@ -43,6 +41,9 @@ from sqlbuild.compiler.model_loop.constants import (
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
+from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
+    scan_native_declaration_references,
+)
 from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.scopes.constants import CURRENT_PATH_COMPONENT, QUALIFIED_IDENTITY_SEPARATOR
@@ -69,24 +70,11 @@ from sqlbuild.compiler.scopes.types import (
     ScopeKind,
     UsageKind,
 )
-from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn, SchemaModelEntry
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError, SqlValueValidationError
 from sqlbuild.sql_values.main.validate_rendered_size import validate_rendered_sql_value_size
 from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
 
-_ENUM_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
-    r"@enum\s*\(\s*(?P<quote>['\"])(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
-    r"(?P=quote)\s*\)\s*\.\s*(?P<member>[A-Za-z_][A-Za-z0-9_]*)"
-)
-_CONSTANT_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
-    r"@const\s*\(\s*(?P<quote>['\"])(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
-    r"(?P=quote)\s*\)"
-)
-_DECLARATION_REFERENCE_START_PATTERN: re.Pattern[str] = re.compile(r"@(?P<kind>enum|const)\b")
-_DECLARATION_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`$@/-]")
 _CONTEXT: str = "Enum and constant expansion"
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
 _ENUM_REFERENCE_KIND: str = "enum"
@@ -312,39 +300,25 @@ def declaration_usage_records(
 ) -> tuple[UsageRecord, ...]:
     """Collect declaration usages with path or expected-model provenance."""
 
+    scanned, stop = scan_native_declaration_references(sqls=(sql,), skip_malformed=True)[0]
+    if stop is not None:
+        raise CompileInputError(_unclosed_text_message(stop))
     usages: list[UsageRecord] = []
-    cursor: int = 0
-    while (reference_start := _find_next_reference_start(sql=sql, start=cursor)) is not None:
-        start_match: re.Match[str] | None = _DECLARATION_REFERENCE_START_PATTERN.match(
-            sql, reference_start
-        )
-        if start_match is None:
-            break
-        is_enum: bool = start_match.group("kind") == _ENUM_REFERENCE_KIND
-        match: re.Match[str] | None = (
-            _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
-            if is_enum
-            else _CONSTANT_REFERENCE_PATTERN.match(sql, reference_start)
-        )
-        if match is None:
-            cursor = start_match.end()
-            continue
-        name: str = match.group("name")
+    for kind, name, _member, _start, _end in scanned:
         visibility: tuple[VisibilityRecord, ...] = (
             declarations.enum_visibility.get(name, ())
-            if is_enum
+            if kind == ENUM_REFERENCE_KIND_CODE
             else declarations.constant_visibility.get(name, ())
         )
-        for record in usage_visibility(visibility=visibility, consumer=resource):
-            usages.append(
-                UsageRecord(
-                    consumer=resource,
-                    declaration=record.declaration,
-                    kind=UsageKind.RUNTIME,
-                    through=record.through,
-                )
+        usages.extend(
+            UsageRecord(
+                consumer=resource,
+                declaration=record.declaration,
+                kind=UsageKind.RUNTIME,
+                through=record.through,
             )
-        cursor = match.end()
+            for record in usage_visibility(visibility=visibility, consumer=resource)
+        )
     return tuple(dict.fromkeys(usages))
 
 
@@ -570,6 +544,10 @@ def _stop_message(*, stop: int, file_path: Path) -> str:
         return _invalid_reference_message(kind=_ENUM_REFERENCE_KIND, file_path=file_path)
     if stop == INVALID_CONSTANT_REFERENCE_STOP_CODE:
         return _invalid_reference_message(kind=_CONSTANT_REFERENCE_KIND, file_path=file_path)
+    return _unclosed_text_message(stop)
+
+
+def _unclosed_text_message(stop: int) -> str:
     if stop == UNCLOSED_BLOCK_COMMENT_STOP_CODE:
         return f"{_CONTEXT} contains an unclosed block comment"
     return f"{_CONTEXT} contains an unclosed quoted string"
@@ -770,28 +748,3 @@ def render_enum_member_value(*, value: str | int) -> str:
         return str(value)
     escaped_value: str = value.replace("'", "''")
     return f"'{escaped_value}'"
-
-
-def _find_next_reference_start(*, sql: str, start: int) -> int | None:
-    if sql.find("@enum", start) < 0 and sql.find("@const", start) < 0:
-        return None
-    index: int = start
-    while index < len(sql):
-        special: re.Match[str] | None = _DECLARATION_SCAN_SPECIAL.search(sql, index)
-        if special is None:
-            return None
-        index = special.start()
-        character: str = sql[index]
-        if character in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if character == MACRO_TOKEN and _DECLARATION_REFERENCE_START_PATTERN.match(sql, index):
-            return index
-        index += 1
-    return None

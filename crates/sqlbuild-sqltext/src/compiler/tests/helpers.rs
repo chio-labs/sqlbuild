@@ -142,7 +142,7 @@ pub(crate) fn batch_sizes_bound_workers_by_contract() -> bool {
 pub(crate) fn scanned_references(sql: &str) -> Option<String> {
     let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
     let scan: DeclarationReferenceScan =
-        scan_declaration_references(python, &[sql.to_owned()]).pop()?;
+        scan_declaration_references(python, &[sql.to_owned()], false).pop()?;
     let references: String = scan
         .references
         .iter()

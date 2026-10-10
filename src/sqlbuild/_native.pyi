@@ -310,6 +310,9 @@ def parse_macro_arguments(text: str, nested: list[tuple[int, int]]) -> tuple[obj
 def scan_sql_declaration_references(
     sqls: list[str], python_version: tuple[int, int], unicode_version: str
 ) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
+def scan_sql_declaration_usages(
+    sqls: list[str], python_version: tuple[int, int], unicode_version: str
+) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
 def interpolate_sql_batch(
     sqls: list[tuple[str, str]],
     sources: tuple[

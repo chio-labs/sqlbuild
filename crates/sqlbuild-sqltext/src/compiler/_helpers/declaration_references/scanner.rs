@@ -4,21 +4,30 @@ use crate::compiler::_helpers::declaration_references::reference_syntax::{
     MatchedReference, ReferenceSyntax, match_reference,
 };
 use crate::compiler::models::{
-    DeclarationReference, DeclarationReferenceScan, DeclarationReferenceStop,
+    DeclarationReference, DeclarationReferenceKind, DeclarationReferenceScan,
+    DeclarationReferenceStop,
 };
 use sqlbuild_core::text::models::PythonText;
 
 const SPECIAL_BYTES: &[u8] = b"'\"`$@/-";
+const ENUM_KEYWORD: &str = "@enum";
+const CONSTANT_KEYWORD: &str = "@const";
 
 /// Where the walk for the next reference start ended.
 enum NextStart<'sql> {
     Reference(usize, MatchedReference<'sql>),
+    /// A malformed reference start and the byte offset after its `@enum`/`@const` keyword.
+    Malformed(DeclarationReferenceKind, usize),
     End,
     Stop(DeclarationReferenceStop),
 }
 
-/// Python's references in `sql` (code points) and its stopping error.
-pub(crate) fn scan_references(python: PythonText, sql: &str) -> DeclarationReferenceScan {
+/// Python's references in `sql` (code points) and stop; `skip_malformed` resumes past malformed.
+pub(crate) fn scan_references(
+    python: PythonText,
+    sql: &str,
+    skip_malformed: bool,
+) -> DeclarationReferenceScan {
     let mut references: Vec<DeclarationReference> = Vec::new();
     let mut offsets: CharOffsets = CharOffsets::default();
     let mut cursor: usize = 0;
@@ -27,6 +36,14 @@ pub(crate) fn scan_references(python: PythonText, sql: &str) -> DeclarationRefer
         let (start, matched) = match next_reference_start(python, sql, cursor) {
             NextStart::Reference(start, matched) => (start, matched),
             NextStart::End => break,
+            NextStart::Malformed(_, keyword_end) if skip_malformed => {
+                cursor = keyword_end;
+                continue;
+            }
+            NextStart::Malformed(kind, _) => {
+                stop = Some(DeclarationReferenceStop::Malformed(kind));
+                break;
+            }
             NextStart::Stop(found) => {
                 stop = Some(found);
                 break;
@@ -77,7 +94,7 @@ fn next_reference_start(python: PythonText, sql: &str, start: usize) -> NextStar
                 ReferenceSyntax::NotReference => Some(index + 1),
                 ReferenceSyntax::Matched(matched) => return NextStart::Reference(index, matched),
                 ReferenceSyntax::Malformed(kind) => {
-                    return NextStart::Stop(DeclarationReferenceStop::Malformed(kind));
+                    return NextStart::Malformed(kind, index + keyword_length(kind));
                 }
             },
             _ => Some(index + 1),
@@ -88,6 +105,13 @@ fn next_reference_start(python: PythonText, sql: &str, start: usize) -> NextStar
         }
     }
     NextStart::End
+}
+
+fn keyword_length(kind: DeclarationReferenceKind) -> usize {
+    match kind {
+        DeclarationReferenceKind::Enum => ENUM_KEYWORD.len(),
+        DeclarationReferenceKind::Constant => CONSTANT_KEYWORD.len(),
+    }
 }
 
 /// Python's `quoted_text_end_impl` for `'`, `"` (doubled quotes escape) and backticks.
