@@ -18,7 +18,8 @@ use crate::assembly::analysis_session::main::take_analysis_cache::take_analysis_
 use crate::assembly::analysis_session::models::{
     AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, DynamicFamily, FinishedSession,
     LineageRow, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest, PivotModel,
-    PivotOutcome, PivotTables, SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
+    PivotOutcome, PivotTables, SessionModelAnalysis, SessionModelFacts, SessionOutcome,
+    SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::tests::test_types::{CachedRun, ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -283,12 +284,12 @@ fn fact_line(facts: &SessionModelFacts) -> String {
     format!("{columns:?} {}", lineage.join(" "))
 }
 
-/// The proofs a finished session keeps for `pivot_request`'s models, analysed in one session.
-pub(crate) fn kept_dynamic_proofs(
+/// The proof and published columns a finished session keeps for `pivot_request`'s models.
+pub(crate) fn kept_model_analyses(
     dialect: &str,
     sql: &str,
     family: Option<(&str, &str, &str)>,
-) -> Vec<PivotOutcome> {
+) -> Vec<(PivotOutcome, Option<Vec<String>>)> {
     let pivots: PivotBatchRequest = pivot_request(dialect, sql, family);
     let names: [&str; 2] = ["customer_amounts", "plain"];
     let models: Vec<ModelRequest> = names
@@ -313,14 +314,19 @@ pub(crate) fn kept_dynamic_proofs(
     let (_, _, finished) = completed(started(request));
     names
         .iter()
-        .map(|name| {
-            finished
-                .dynamic_proofs
-                .get(*name)
-                .cloned()
-                .map_or(PivotOutcome::Absent, PivotOutcome::Proof)
-        })
+        .map(|name| kept_line(finished.model_analysis(name)))
         .collect()
+}
+
+fn kept_line(analysis: SessionModelAnalysis<'_>) -> (PivotOutcome, Option<Vec<String>>) {
+    let proof: PivotOutcome = analysis
+        .dynamic_proof
+        .cloned()
+        .map_or(PivotOutcome::Absent, PivotOutcome::Proof);
+    let columns: Option<Vec<String>> = analysis
+        .columns
+        .map(|columns| columns.iter().map(column_line).collect());
+    (proof, columns)
 }
 
 /// Proofs over typed `raw_orders` and pivot `status_amounts`: the model, then a family-less one.
@@ -603,4 +609,9 @@ pub(crate) fn current_model_key(session: &AnalysisSession, name: &str) -> Conten
         .map(|relation| (relation, session.relation_digest(relation)))
         .collect();
     session.model_key(&ContentDigest::default(), model, &Vec::new(), &relations)
+}
+
+/// Owned copies of expected lines.
+pub(crate) fn lines(expected: &[&str]) -> Vec<String> {
+    expected.iter().map(|line| (*line).to_owned()).collect()
 }

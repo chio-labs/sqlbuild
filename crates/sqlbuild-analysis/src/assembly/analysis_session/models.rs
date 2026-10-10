@@ -98,7 +98,35 @@ pub struct FinishedSession {
     pub(crate) pool: Result<Arc<ThreadPool>, String>,
     pub(crate) models: HashMap<String, SessionModelFacts>,
     /// Each model's dynamic pivot proof from the session's own relation facts, by model name.
-    pub dynamic_proofs: HashMap<String, ContractProof>,
+    pub(crate) dynamic_proofs: HashMap<String, ContractProof>,
+}
+
+/// The session's typed result for one compiled model, borrowed from the finished session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionModelAnalysis<'a> {
+    /// A proven pivot's fixed columns, else a successful analysis's; None where later decided.
+    pub columns: Option<&'a [ColumnFact]>,
+    /// The session's dynamic pivot proof, for a model declaring dynamic families.
+    pub dynamic_proof: Option<&'a ContractProof>,
+}
+
+impl FinishedSession {
+    /// The session's typed columns and dynamic proof for model `name`, without re-analysis.
+    #[must_use]
+    pub fn model_analysis(&self, name: &str) -> SessionModelAnalysis<'_> {
+        let dynamic_proof: Option<&ContractProof> = self.dynamic_proofs.get(name);
+        let proven: Option<&[ColumnFact]> = dynamic_proof
+            .filter(|proof| proof.output_proven)
+            .map(|proof| proof.fixed_columns.as_slice());
+        let analysed: Option<&[ColumnFact]> = self
+            .models
+            .get(name)
+            .and_then(|facts| facts.columns.as_deref());
+        SessionModelAnalysis {
+            columns: proven.or(analysed),
+            dynamic_proof,
+        }
+    }
 }
 
 /// A compiled model's typed output columns and lineage from a native session analysis.

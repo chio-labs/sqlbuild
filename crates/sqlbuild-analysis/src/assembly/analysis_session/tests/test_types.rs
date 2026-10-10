@@ -142,3 +142,13 @@ pub(crate) struct CachedRun {
         Vec<String>,
     ),
 }
+
+pub(crate) struct KeptAnalysisTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) family: Option<(&'static str, &'static str, &'static str)>,
+    pub(crate) expected_outcome: PivotOutcome,
+    /// `name type nullability` of each model's published columns: the pivot, then a plain one.
+    pub(crate) expected_columns: [&'static [&'static str]; 2],
+}

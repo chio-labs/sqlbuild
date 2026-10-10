@@ -4,13 +4,13 @@ use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
-    catalog, expected_facts, fact_lines, failed, finished_session, kept_dynamic_proofs,
-    legacy_lines, model_requests, orders_request, pivot_request, proven, recovered_facts,
+    catalog, expected_facts, fact_lines, failed, finished_session, kept_model_analyses,
+    legacy_lines, lines, model_requests, orders_request, pivot_request, proven, recovered_facts,
     session_lines,
 };
 use crate::assembly::analysis_session::tests::test_types::{
-    CteRecoveryTestCase, LegacyAnalysisTestCase, ModelSpec, PivotTestCase, SessionFactsTestCase,
-    SessionFailureTestCase, SessionTestCase, UnscheduledTestCase,
+    CteRecoveryTestCase, KeptAnalysisTestCase, LegacyAnalysisTestCase, ModelSpec, PivotTestCase,
+    SessionFactsTestCase, SessionFailureTestCase, SessionTestCase, UnscheduledTestCase,
 };
 
 /// A model whose missing column stays untyped over a known input, so completion re-analyses it.
@@ -642,9 +642,9 @@ fn given_handed_back_models_when_analysing_legacy_then_matches_python_or_defers(
 }
 
 #[test]
-fn given_a_finished_session_when_reading_dynamic_proofs_then_keeps_each_models_proof() {
-    let test_cases = [PivotTestCase {
-        description: "a bare DuckDB pivot keeps its proof; a family-less model keeps none",
+fn given_a_finished_session_when_reading_model_analyses_then_keeps_typed_columns_and_proofs() {
+    let test_cases = [KeptAnalysisTestCase {
+        description: "a proven pivot publishes its fixed columns; a plain model its analysis",
         dialect: "duckdb",
         sql: "PIVOT __source(\"raw_orders\") ON status USING MAX(amount) GROUP BY customer_id",
         family: Some(("status", "amount", "MAX")),
@@ -654,13 +654,23 @@ fn given_a_finished_session_when_reading_dynamic_proofs_then_keeps_each_models_p
             "raw_orders",
             true,
         ),
+        expected_columns: [&["customer_id INTEGER non_null"], &["1 - non_null"]],
     }];
     for test_case in test_cases {
-        let kept = kept_dynamic_proofs(test_case.dialect, test_case.sql, test_case.family);
+        let kept = kept_model_analyses(test_case.dialect, test_case.sql, test_case.family);
 
         assert_eq!(
             kept,
-            vec![test_case.expected_outcome, PivotOutcome::Absent],
+            vec![
+                (
+                    test_case.expected_outcome,
+                    Some(lines(test_case.expected_columns[0]))
+                ),
+                (
+                    PivotOutcome::Absent,
+                    Some(lines(test_case.expected_columns[1]))
+                ),
+            ],
             "{}",
             test_case.description
         );
