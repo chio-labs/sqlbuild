@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 
 from scripts.compiler_differential._helpers.corpus.failure_cases import all_failure_cases
+from scripts.compiler_differential._helpers.refactor_corpus.refactor_cases import refactor_cases
 from scripts.compiler_differential.classes.dense_project import DenseProject
 from scripts.compiler_differential.classes.project_builder import ProjectBuilder
 from scripts.compiler_differential.constants import (
@@ -95,6 +96,7 @@ def build_corpus(
             )
             for case in all_failure_cases()
         )
+        entries.extend(refactor_cases())
     if CORPUS_DENSE in corpora:
         entries.extend(
             CorpusProject(

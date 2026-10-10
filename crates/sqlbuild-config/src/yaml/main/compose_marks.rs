@@ -5,10 +5,7 @@ use crate::errors::{ConfigError, ConfigErrorKind};
 use crate::models::{ComposedYaml, ComposedYamlContent, ComposedYamlNode};
 use crate::yaml::models::NodeContent;
 
-/// The nodes of `yaml.compose(text, Loader=yaml.SafeLoader)` with their char-index marks.
-///
-/// A node with an anchor or a tag is `Unsupported`: PyYAML starts its mark at the anchor or tag,
-/// which the parser's scalar span does not record.
+/// PyYAML's safe `yaml.compose` nodes with char-index marks; anchors and tags are `Unsupported`.
 pub fn compose_marks(text: &str) -> Result<ComposedYaml, ConfigError> {
     let shift = usize::from(text.starts_with(BYTE_ORDER_MARK));
     let text = crate::yaml::_helpers::reader::without_byte_order_mark(text);

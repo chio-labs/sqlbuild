@@ -25,6 +25,8 @@ class ExpectedOutcome:
     error_code: str | None = None
     succeeding_commands: tuple[str, ...] = ()
     warning_code: str | None = None
+    refused_commands: tuple[str, ...] = ()
+    """Labels of commands that must exit non-zero in an otherwise successful project."""
 
 
 @dataclass(frozen=True)

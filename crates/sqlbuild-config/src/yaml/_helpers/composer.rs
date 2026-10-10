@@ -264,8 +264,7 @@ impl<'input> Composer<'input> {
         None
     }
 
-    /// PyYAML's marks of a literal or folded scalar: from its indicator to just past the last line
-    /// break its content consumed, before the next line's indentation.
+    /// PyYAML's block scalar marks: indicator to just past the last consumed line break.
     fn block_marks(&self, span: Span) -> (usize, usize) {
         let start = self.block_indicator(span).unwrap_or(span.start.index());
         let end = span.end.index().min(self.chars.len());

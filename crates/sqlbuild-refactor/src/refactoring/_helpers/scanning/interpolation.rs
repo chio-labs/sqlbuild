@@ -1,12 +1,11 @@
-//! An exact port of `scan_interpolation_sites`: SQLBuild interpolation sites outside comments and
-//! strings, with the lint lexical policy (`neutralize_interpolation` without formatting).
+//! An exact port of `scan_interpolation_sites` with the lint lexical policy.
 
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::models::PythonText;
 
-use crate::refactoring::_helpers::chars::{find, slice, starts_with};
+use crate::refactoring::_helpers::scanning::chars::{find, slice, starts_with};
 
 /// The reference functions the lint scan pattern matches, in `sorted()` order.
 const REFERENCE_FUNCTIONS: [&str; 6] = [
@@ -134,8 +133,7 @@ impl Scanner<'_> {
         self.site_pattern_end(index).map(PatternMatch::Site)
     }
 
-    /// `'(?:\\.|''|[^'\\])*(?:'|\Z)` with the regex's backtracking: a backslash before a line
-    /// break stops the greedy scan, and the match then ends at the last doubled quote.
+    /// Python's quoted-string regex, backtracking to the last doubled quote after `\` + newline.
     fn backslash_quoted_end(&self, index: usize, quote: char) -> Option<usize> {
         let body = self.body;
         let mut position = index + 1;

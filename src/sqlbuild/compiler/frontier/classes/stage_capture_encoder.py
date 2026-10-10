@@ -23,6 +23,8 @@ from sqlbuild.compiler.frontier.constants import (
     STAGE_CAPTURE_INVOCATION_ID_MASK,
     STAGE_CAPTURE_INVOCATION_ID_PATTERN,
     STAGE_CAPTURE_OMITTED_ATTRIBUTES,
+    STAGE_CAPTURE_REFACTOR_STAGING_MASK,
+    STAGE_CAPTURE_REFACTOR_STAGING_PATTERN,
     STAGE_CAPTURE_RESERVED_KEYS,
     STAGE_CAPTURE_SHARED_MARKER,
     STAGE_CAPTURE_SHARED_MIN_BYTES,
@@ -186,12 +188,13 @@ def _encode_scalar(value: object) -> object | None:
 
 
 def mask_capture_noise(text: str) -> str:
-    """Mask invocation ids and native store suffixes, which differ between identical compiles."""
+    """Mask invocation ids, native store suffixes and refactor staging folders of a compile."""
 
-    return STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN.sub(
+    masked: str = STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN.sub(
         "",
         STAGE_CAPTURE_INVOCATION_ID_PATTERN.sub(STAGE_CAPTURE_INVOCATION_ID_MASK, text),
     )
+    return STAGE_CAPTURE_REFACTOR_STAGING_PATTERN.sub(STAGE_CAPTURE_REFACTOR_STAGING_MASK, masked)
 
 
 def _sort_key(item: object) -> str:

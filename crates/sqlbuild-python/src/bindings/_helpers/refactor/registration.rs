@@ -1,22 +1,22 @@
-//! Plan, stage, migrate and commit `sqb rename` and `sqb mv` natively for the Python shell.
-//!
-//! Every function takes and returns JSON. An expected refactoring failure comes back as
-//! `{"error": {...}}` so the Python facade raises the exception the Python planner raises.
+//! JSON bindings for native `sqb rename` and `sqb mv`; expected failures return `{"error": ...}`.
 
-use std::path::Path;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{Bound, Py, PyAny, PyErr, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::json;
+use sqlbuild_refactor::refactoring::errors::RefactorError;
 use sqlbuild_refactor::refactoring::main::commit_refactor_plan::commit_refactor_plan;
 use sqlbuild_refactor::refactoring::main::plan_refactor::plan_refactor;
-use sqlbuild_refactor::refactoring::main::stage_refactor_plan::{Originals, stage_refactor_plan};
+use sqlbuild_refactor::refactoring::main::stage_refactor_plan::stage_refactor_plan;
 use sqlbuild_refactor::refactoring::main::with_model_migration::with_model_migration;
 use sqlbuild_refactor::refactoring::models::{
-    DeclarationMoves, ModelFacts, RefactorError, RefactorFacts, RefactorPlan, RefactorRequest,
+    DeclarationMoves, ModelFacts, RefactorFacts, RefactorPlan, RefactorRequest,
 };
+use sqlbuild_refactor::refactoring::types::Originals;
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 
@@ -32,8 +32,7 @@ fn encode<T: Serialize>(key: &str, result: Result<T, RefactorError>) -> PyResult
     serde_json::to_string(&value).map_err(value_error)
 }
 
-/// Plan one refactoring; `declaration_moves(model, source, destination)` returns the Python
-/// host's declaration moves as JSON.
+/// Plan one refactoring; `declaration_moves(model, source, destination)` returns JSON moves.
 #[pyfunction]
 fn plan_refactor_json(
     py: Python<'_>,
@@ -44,19 +43,19 @@ fn plan_refactor_json(
     compiler_guard(|| {
         let facts: RefactorFacts = decode(facts_json)?;
         let request: RefactorRequest = decode(request_json)?;
-        let mut host_error: Option<PyErr> = None;
-        let mut host = |model: &str, source: &str, destination: &str| {
+        let host_error: RefCell<Option<PyErr>> = RefCell::new(None);
+        let host = |model: &str, source: &str, destination: &str| {
             let moves = declaration_moves
-                .call1(py, (model, source, destination))
+                .call1(py, ((model, source, destination),))
                 .and_then(|value| value.extract::<String>(py))
                 .and_then(|text| decode::<DeclarationMoves>(&text));
             moves.map_err(|error| {
-                host_error = Some(error);
+                host_error.replace(Some(error));
                 RefactorError::deferred("the declaration-move host failed")
             })
         };
-        let result = plan_refactor(&facts, &request, &mut host);
-        if let Some(error) = host_error {
+        let result = plan_refactor(&facts, &request, &host);
+        if let Some(error) = host_error.into_inner() {
             return Err(error);
         }
         encode("plan", result)
@@ -122,14 +121,16 @@ fn commit_refactor_plan_json(
         let plan: RefactorPlan = decode(plan_json)?;
         let originals: Originals = decode(originals_json)?;
         let written =
-            commit_refactor_plan(Path::new(project_dir), &originals, &plan).map(|paths| {
-                paths
-                    .into_iter()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .collect::<Vec<String>>()
-            });
+            commit_refactor_plan(Path::new(project_dir), &originals, &plan).map(path_strings);
         encode("written", written)
     })
+}
+
+fn path_strings(paths: Vec<PathBuf>) -> Vec<String> {
+    paths
+        .into_iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

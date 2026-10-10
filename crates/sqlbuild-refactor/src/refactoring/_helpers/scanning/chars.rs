@@ -14,14 +14,9 @@ pub(crate) fn slice(text: &[char], start: usize, end: usize) -> String {
 
 /// `text.startswith(needle, at)`.
 pub(crate) fn starts_with(text: &[char], at: usize, needle: &str) -> bool {
-    let mut index = at;
-    for character in needle.chars() {
-        if text.get(index) != Some(&character) {
-            return false;
-        }
-        index += 1;
-    }
-    true
+    (at..)
+        .zip(needle.chars())
+        .all(|(index, character)| text.get(index) == Some(&character))
 }
 
 /// `text.find(needle, from)`.

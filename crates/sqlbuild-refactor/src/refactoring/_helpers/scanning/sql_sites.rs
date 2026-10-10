@@ -1,13 +1,12 @@
-//! Reference call sites, offset-preserving analysis SQL, and compiled-to-authored offsets, as
-//! `sql_sites.py` finds them.
+//! Call sites, analysis SQL and authored offsets, as `sql_sites.py` finds them.
 
 use std::collections::BTreeSet;
 
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 
-use crate::refactoring::_helpers::chars::{chars, rfind, slice, starts_with};
-use crate::refactoring::_helpers::interpolation::interpolation_sites;
-use crate::refactoring::_helpers::scan_context::ScanContext;
+use crate::refactoring::_helpers::scanning::chars::{chars, rfind, slice, starts_with};
+use crate::refactoring::_helpers::scanning::interpolation::interpolation_sites;
+use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::constants::{GENERIC_PLACEHOLDER_KIND, PLACEHOLDER_PAD, REF_FUNCTION};
 use crate::refactoring::models::{ExpansionSpan, ModelFacts};
 
@@ -26,8 +25,7 @@ pub(crate) struct ResourceSite {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct AnalysisSql {
     pub(crate) sql: String,
-    /// `(kind, name)` of each resource call, with the placeholders standing in for it, in first
-    /// appearance order.
+    /// Each resource call `(kind, name)` with its placeholders, in first appearance order.
     pub(crate) tables: Vec<((String, String), BTreeSet<String>)>,
 }
 
@@ -119,8 +117,7 @@ pub(crate) fn resource_sites(text: &[char], context: &ScanContext) -> Vec<Resour
         .collect()
 }
 
-/// The name spans of `__ref` calls to a model inside a quoted string's raw text
-/// (`EMBEDDED_REF_PATTERN`).
+/// `EMBEDDED_REF_PATTERN` name spans of `__ref` calls inside a quoted string's raw text.
 pub(crate) fn embedded_ref_spans(text: &[char], name: &str) -> Vec<(usize, usize)> {
     let mut spans: Vec<(usize, usize)> = Vec::new();
     let mut index = 0;

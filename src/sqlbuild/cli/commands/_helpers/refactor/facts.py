@@ -1,8 +1,4 @@
-"""Plain-data compiler facts the native refactoring planner reads.
-
-This is the only refactor module that reads `CompiledProject`. Once the native command core
-returns project facts (M5 PR B), these facts come from it instead.
-"""
+"""Plain-data compiler facts for native refactoring; the only `CompiledProject` reader."""
 
 from __future__ import annotations
 
@@ -16,6 +12,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompiledSqlExpansion,
+    ExpansionSpan,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -93,10 +90,11 @@ def model_facts(*, project: CompiledProject, project_dir: Path) -> list[dict[str
     ]
 
 
-def declaration_moves_host(*, project: RefactorProject) -> Callable[[str, str, str], str]:
+def declaration_moves_host(*, project: RefactorProject) -> Callable[[tuple[str, str, str]], str]:
     """Return the host callback that works out declaration moves with the Python scope index."""
 
-    def moves(model_name: str, source_path: str, destination: str) -> str:
+    def moves(move: tuple[str, str, str]) -> str:
+        model_name, source_path, destination = move
         report_native_fallback(site=NativeFallbackSite.REFACTOR_DECLARATION_MOVES)
         found: tuple[tuple[tuple[str, str], ...], tuple[ManualLocation, ...]] = (
             plan_declaration_moves(
@@ -121,9 +119,7 @@ def _model(*, model: CompiledModel, expansion: CompiledSqlExpansion | None) -> d
     return {
         "name": model.name,
         "path": model.relative_path.as_posix(),
-        "deps": [
-            {"resource_type": dep.resource_type.value, "name": dep.name} for dep in model.deps
-        ],
+        "deps": [{"resource_type": str(dep.resource_type), "name": dep.name} for dep in model.deps],
         "query_sql": model.query_sql,
         "authored_query_sql": model.authored_query_sql,
         "materialized": get_config_str(values=values, key=_MATERIALIZED_KEY),
@@ -158,23 +154,24 @@ def _model(*, model: CompiledModel, expansion: CompiledSqlExpansion | None) -> d
         "expansion": (
             {
                 "expanded_sql": expansion.expanded_sql,
-                "passes": [
-                    [
-                        {
-                            "source_start": span.source_start,
-                            "source_end": span.source_end,
-                            "output_start": span.output_start,
-                            "output_end": span.output_end,
-                        }
-                        for span in spans
-                    ]
-                    for spans in expansion.passes
-                ],
+                "passes": [_spans(spans=spans) for spans in expansion.passes],
             }
             if expansion is not None
             else None
         ),
     }
+
+
+def _spans(*, spans: tuple[ExpansionSpan, ...]) -> list[dict[str, int]]:
+    return [
+        {
+            "source_start": span.source_start,
+            "source_end": span.source_end,
+            "output_start": span.output_start,
+            "output_end": span.output_end,
+        }
+        for span in spans
+    ]
 
 
 def _authored_files(*, discovered: DiscoveredProjectInputs) -> list[dict[str, object]]:

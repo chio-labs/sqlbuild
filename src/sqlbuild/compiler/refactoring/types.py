@@ -24,6 +24,17 @@ class RefactorStatus(StrEnum):
     COMPILE_FAILED = "compile_failed"
 
 
+class NativeRefactorErrorKind(StrEnum):
+    """Which exception a native refactoring failure becomes."""
+
+    INPUT = "input"
+    EDIT = "edit"
+    WRITE = "write"
+    DEFERRED = "deferred"
+    VALUE = "value"
+    IO = "io"
+
+
 class EditKind(StrEnum):
     """What one text edit changes, for output grouping."""
 

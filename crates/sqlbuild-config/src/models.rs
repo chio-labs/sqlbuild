@@ -108,6 +108,16 @@ pub enum ComposedYamlContent {
     Mapping(Vec<(usize, usize)>),
 }
 
+impl ComposedYamlContent {
+    /// The value of a scalar node.
+    pub fn as_scalar(&self) -> Option<&str> {
+        match self {
+            Self::Scalar(value) => Some(value),
+            Self::Sequence(_) | Self::Mapping(_) => None,
+        }
+    }
+}
+
 /// One node `yaml.compose` returns, with its PyYAML `start_mark.index` and `end_mark.index`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComposedYamlNode {
@@ -116,8 +126,7 @@ pub struct ComposedYamlNode {
     pub end: usize,
 }
 
-/// The node graph `yaml.compose(text, Loader=yaml.SafeLoader)` returns; `root` is `None` for an
-/// empty stream.
+/// The node graph PyYAML's safe `yaml.compose` returns; `root` is `None` for an empty stream.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ComposedYaml {
     pub nodes: Vec<ComposedYamlNode>,

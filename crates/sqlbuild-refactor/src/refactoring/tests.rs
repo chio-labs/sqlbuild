@@ -2,6 +2,8 @@
 mod header_edits;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_planning.rs"]
+mod planning;
 #[path = "tests/test_sql_sites.rs"]
 mod sql_sites;
 #[path = "tests/test_types.rs"]

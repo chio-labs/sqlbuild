@@ -2,8 +2,9 @@
 
 use std::path::{Component, Path, PathBuf};
 
-/// `Path.resolve()` without `strict`: symlinks are resolved as far as the path exists, and the
-/// rest is normalised lexically.
+use crate::refactoring::constants::CURRENT_DIRECTORY;
+
+/// Non-strict `Path.resolve()`: symlinks resolve while the path exists, then lexically.
 pub(crate) fn resolve(path: &Path) -> PathBuf {
     let mut resolved = PathBuf::new();
     for component in path.components() {
@@ -14,9 +15,7 @@ pub(crate) fn resolve(path: &Path) -> PathBuf {
             }
             other => {
                 resolved.push(other.as_os_str());
-                if resolved.symlink_metadata().is_ok()
-                    && let Ok(canonical) = std::fs::canonicalize(&resolved)
-                {
+                if let Ok(canonical) = std::fs::canonicalize(&resolved) {
                     resolved = canonical;
                 }
             }
@@ -27,7 +26,9 @@ pub(crate) fn resolve(path: &Path) -> PathBuf {
 
 /// A relative path as `PurePath.as_posix()` spells it, or `None` when not relative.
 pub(crate) fn relative_posix(path: &Path, base: &Path) -> Option<String> {
-    let relative = path.strip_prefix(base).ok()?;
+    let Ok(relative) = path.strip_prefix(base) else {
+        return None;
+    };
     let parts: Vec<String> = relative
         .components()
         .map(|component| component.as_os_str().to_string_lossy().into_owned())
@@ -51,7 +52,7 @@ pub(crate) fn name(path: &str) -> &str {
 pub(crate) fn parent(path: &str) -> String {
     let parts: Vec<&str> = path
         .split('/')
-        .filter(|part| !part.is_empty() && *part != ".")
+        .filter(|part| !part.is_empty() && *part != CURRENT_DIRECTORY)
         .collect();
     if parts.len() <= 1 {
         return ".".to_owned();
@@ -87,7 +88,7 @@ pub(crate) fn join(project_dir: &Path, relative: &str) -> PathBuf {
     let mut path = project_dir.to_path_buf();
     for part in relative
         .split('/')
-        .filter(|part| !part.is_empty() && *part != ".")
+        .filter(|part| !part.is_empty() && *part != CURRENT_DIRECTORY)
     {
         path.push(part);
     }

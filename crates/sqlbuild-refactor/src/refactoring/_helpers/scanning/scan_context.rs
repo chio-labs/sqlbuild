@@ -4,7 +4,8 @@ use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy;
 
-use crate::refactoring::models::{RefactorError, RefactorFacts};
+use crate::refactoring::errors::RefactorError;
+use crate::refactoring::models::RefactorFacts;
 
 /// The dialect's quote policy and the Python string semantics of the host.
 #[derive(Clone, Copy, Debug)]

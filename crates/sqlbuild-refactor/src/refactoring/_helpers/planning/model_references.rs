@@ -1,24 +1,22 @@
-//! Every authored reference to a model by name, and the ones a rename cannot rewrite, as
-//! `model_references.py` finds them.
+//! Authored model references and unrewritable ones, as `model_references.py` finds them.
 
-use crate::refactoring::_helpers::chars::{chars, slice};
-use crate::refactoring::_helpers::header_edits::{
+use crate::refactoring::_helpers::edits::header_edits::{
     model_name_header_edits, schema_model_name_edits,
 };
-use crate::refactoring::_helpers::project_files::ProjectSqlFile;
-use crate::refactoring::_helpers::scan_context::ScanContext;
-use crate::refactoring::_helpers::sql_sites::{
-    ResourceSite, authored_offset, model_body, resource_sites,
-};
-use crate::refactoring::_helpers::text_edits::{
+use crate::refactoring::_helpers::edits::text_edits::{
     identifier_sites, manual_at, path_edits, text_edit,
+};
+use crate::refactoring::_helpers::files::project_files::ProjectSqlFile;
+use crate::refactoring::_helpers::scanning::chars::{chars, slice};
+use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
+use crate::refactoring::_helpers::scanning::sql_sites::{
+    ResourceSite, authored_offset, model_body, resource_sites,
 };
 use crate::refactoring::constants::{
     EXPECTED_FIXTURE_PREFIX, MODEL_RESOURCE_TYPE, REF_FIXTURE_PREFIX, REF_KIND,
 };
-use crate::refactoring::models::{
-    EditKind, ManualLocation, ModelFacts, RefactorError, SqlFileRole, TextEdit,
-};
+use crate::refactoring::errors::RefactorError;
+use crate::refactoring::models::{EditKind, ManualLocation, ModelFacts, SqlFileRole, TextEdit};
 
 fn ref_sites(text: &[char], name: &str, context: &ScanContext) -> Vec<ResourceSite> {
     resource_sites(text, context)
@@ -72,8 +70,8 @@ fn ref_edits(item: &ProjectSqlFile, names: (&str, &str), context: &ScanContext) 
                 (site.name_start, site.name_end),
                 new.to_owned(),
                 EditKind::Reference,
-                (Some(slice(text, site.start, site.end)), Some(after)),
             )
+            .with_display(Some(slice(text, site.start, site.end)), Some(after))
         })
         .collect()
 }
@@ -94,19 +92,22 @@ fn fixture_edits(item: &ProjectSqlFile, names: (&str, &str)) -> Vec<TextEdit> {
     identifier_sites(&item.text, &searched)
         .into_iter()
         .filter_map(|(start, end, name)| {
-            let replacement = fixture_names
-                .iter()
-                .find(|(item, _)| *item == name)
-                .map(|(_, replacement)| replacement.clone())?;
+            let replacement = fixture_replacement(&fixture_names, &name)?;
             Some(text_edit(
                 &item.text,
                 (start, end),
                 replacement,
                 EditKind::Fixture,
-                (None, None),
             ))
         })
         .collect()
+}
+
+fn fixture_replacement(fixture_names: &[(String, String)], name: &str) -> Option<String> {
+    fixture_names
+        .iter()
+        .find(|(item, _)| item == name)
+        .map(|(_, replacement)| replacement.clone())
 }
 
 fn depends_on(model: &ModelFacts, name: &str) -> bool {

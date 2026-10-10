@@ -17,6 +17,7 @@ that can be tested and benchmarked with `cargo test` alone.
 | `sqlbuild-attachments` | Compile attachments for tests, audits, sources, functions, scenarios and seeds: attached generic audit argument merge, raw and quoted argument rendering, and severity and run scope resolution. Anything it cannot reproduce exactly defers to Python, which also raises every attachment error. |
 | `sqlbuild-analysis` | SQL analysis over polyglot: SQL tokens, query analysis, the binding catalog, semantic validation and usage, column references, type normalization, and SQL-test and scenario extraction, planning and rendering. Type normalization defers to Python for anything it cannot reproduce exactly. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
+| `sqlbuild-refactor` | `sqb rename` and `sqb mv`: plans over plain-data compiler facts (model and column renames, model moves, `migrate_from`), the lint interpolation-site scan, MODEL, SCHEMA and YAML edits at PyYAML-exact node marks, and staging and commit with rollback, with the Python planner's exact output. |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
 
 ## Layering
@@ -25,7 +26,7 @@ Dependencies point one way, from the top of this graph to the bottom:
 
 ```text
 sqlbuild-python
-  -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments -> sqlbuild-render
+  -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments -> sqlbuild-render
   -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-discovery -> sqlbuild-config
   -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-core
 ```

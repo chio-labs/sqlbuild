@@ -25,3 +25,11 @@ class RefactorWriteError(RefactorInputError):
     """Project files changed between planning and writing."""
 
     code: str = "C958"
+
+
+class RefactorValueError(ValueError):
+    """An unhandled value failure the Python planner also leaves to the caller."""
+
+
+class RefactorIOError(OSError):
+    """A file read or write failure the Python planner also leaves to the caller."""

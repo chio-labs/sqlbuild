@@ -1,12 +1,14 @@
-use crate::refactoring::_helpers::chars::chars;
-use crate::refactoring::_helpers::interpolation::interpolation_sites;
-use crate::refactoring::_helpers::sql_sites::{
-    ModelBody, analysis_sql, authored_offset, authored_span, embedded_ref_spans, resource_sites,
+use crate::refactoring::_helpers::scanning::chars::chars;
+use crate::refactoring::_helpers::scanning::interpolation::interpolation_sites;
+use crate::refactoring::_helpers::scanning::sql_sites::{
+    authored_offset, authored_span, embedded_ref_spans,
 };
-use crate::refactoring::models::ExpansionSpan;
-use crate::refactoring::tests::helpers::{context, python, span_texts};
+use crate::refactoring::tests::helpers::{
+    analysis_lines, context, expansion_body, python, resource_site_lines, span_texts,
+};
 use crate::refactoring::tests::test_types::{
-    AnalysisSqlTestCase, InterpolationSitesTestCase, ResourceSitesTestCase,
+    AnalysisSqlTestCase, AuthoredOffsetTestCase, AuthoredSpanTestCase, EmbeddedRefsTestCase,
+    InterpolationSitesTestCase, ResourceSitesTestCase,
 };
 
 #[test]
@@ -79,8 +81,8 @@ fn given_sql_when_finding_resource_sites_then_single_name_calls_are_returned() {
             description: "spaced and double-quoted reference",
             sql: "SELECT * FROM __ref( \"orders\" ) JOIN __seed('codes')",
             expected_sites: &[
-                ("ref", "orders", "__ref( \"orders\" )", "orders"),
-                ("seed", "codes", "__seed('codes')", "codes"),
+                "ref orders __ref( \"orders\" ) orders",
+                "seed codes __seed('codes') codes",
             ],
         },
         ResourceSitesTestCase {
@@ -90,30 +92,12 @@ fn given_sql_when_finding_resource_sites_then_single_name_calls_are_returned() {
         },
     ];
     for test_case in test_cases {
-        let sites: Vec<(String, String, String, String)> =
-            resource_sites(&chars(test_case.sql), &context("duckdb"))
-                .into_iter()
-                .map(|site| {
-                    let texts = span_texts(
-                        test_case.sql,
-                        &[(site.start, site.end), (site.name_start, site.name_end)],
-                    );
-                    (site.kind, site.name, texts[0].clone(), texts[1].clone())
-                })
-                .collect();
-        let expected: Vec<(String, String, String, String)> = test_case
-            .expected_sites
-            .iter()
-            .map(|(kind, name, call, name_text)| {
-                (
-                    (*kind).to_owned(),
-                    (*name).to_owned(),
-                    (*call).to_owned(),
-                    (*name_text).to_owned(),
-                )
-            })
-            .collect();
-        assert_eq!(sites, expected, "{}", test_case.description);
+        assert_eq!(
+            resource_site_lines(test_case.sql),
+            test_case.expected_sites,
+            "{}",
+            test_case.description
+        );
     }
 }
 
@@ -124,7 +108,7 @@ fn given_sql_when_building_analysis_sql_then_sites_become_same_length_placeholde
             description: "resource and macro sites",
             sql: "SELECT a FROM __ref('orders') o JOIN @m(x) m",
             expected_sql: "SELECT a FROM _qr0___________ o JOIN _qx1_ m",
-            expected_tables: &[("ref", "orders", &["_qr0___________"])],
+            expected_tables: &["ref orders _qr0___________"],
         },
         AnalysisSqlTestCase {
             description: "a site shorter than its placeholder base",
@@ -134,62 +118,86 @@ fn given_sql_when_building_analysis_sql_then_sites_become_same_length_placeholde
         },
     ];
     for test_case in test_cases {
-        let analysis = analysis_sql(&chars(test_case.sql), &context("duckdb"));
+        let (sql, tables): (String, Vec<String>) = analysis_lines(test_case.sql);
+        assert_eq!(sql, test_case.expected_sql, "{}", test_case.description);
         assert_eq!(
-            analysis.sql, test_case.expected_sql,
+            tables, test_case.expected_tables,
             "{}",
             test_case.description
         );
-        let tables: Vec<(String, String, Vec<String>)> = analysis
-            .tables
-            .iter()
-            .map(|((kind, name), placeholders)| {
-                (
-                    kind.clone(),
-                    name.clone(),
-                    placeholders.iter().cloned().collect(),
-                )
-            })
-            .collect();
-        let expected: Vec<(String, String, Vec<String>)> = test_case
-            .expected_tables
-            .iter()
-            .map(|(kind, name, placeholders)| {
-                (
-                    (*kind).to_owned(),
-                    (*name).to_owned(),
-                    placeholders.iter().map(|item| (*item).to_owned()).collect(),
-                )
-            })
-            .collect();
-        assert_eq!(tables, expected, "{}", test_case.description);
     }
 }
 
 #[test]
 fn given_quoted_text_when_finding_embedded_refs_then_escaped_quotes_match() {
-    let text = "x __ref(\\\"orders\\\") __ref('orders_v2') y";
-    assert_eq!(
-        span_texts(text, &embedded_ref_spans(&chars(text), "orders")),
-        vec!["orders"]
-    );
+    let test_cases = [EmbeddedRefsTestCase {
+        description: "an escaped double-quoted reference matches, a longer name does not",
+        text: "x __ref(\\\"orders\\\") __ref('orders_v2') y",
+        name: "orders",
+        expected_names: &["orders"],
+    }];
+    for test_case in test_cases {
+        assert_eq!(
+            span_texts(
+                test_case.text,
+                &embedded_ref_spans(&chars(test_case.text), test_case.name)
+            ),
+            test_case.expected_names,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
 fn given_expansion_passes_when_mapping_offsets_then_generated_text_is_flagged() {
-    let body = ModelBody {
-        body_start: 10,
-        compiled_sql: "SELECT a + b FROM t".to_owned(),
-        passes: vec![vec![ExpansionSpan {
-            source_start: 7,
-            source_end: 11,
-            output_start: 7,
-            output_end: 12,
-        }]],
-    };
-    assert_eq!(authored_offset(&body, 3), (13, false));
-    assert_eq!(authored_offset(&body, 8), (17, true));
-    assert_eq!(authored_offset(&body, 13), (22, false));
-    assert_eq!(authored_span(&body, 13, 17), Some((22, 26)));
-    assert_eq!(authored_span(&body, 6, 9), None);
+    let test_cases = [
+        AuthoredOffsetTestCase {
+            description: "an offset before the expansion",
+            offset: 3,
+            expected_offset: (13, false),
+        },
+        AuthoredOffsetTestCase {
+            description: "an offset inside generated text",
+            offset: 8,
+            expected_offset: (17, true),
+        },
+        AuthoredOffsetTestCase {
+            description: "an offset after the expansion shifts back",
+            offset: 13,
+            expected_offset: (22, false),
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            authored_offset(&expansion_body(), test_case.offset),
+            test_case.expected_offset,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_expansion_passes_when_mapping_spans_then_generated_spans_have_no_source() {
+    let test_cases = [
+        AuthoredSpanTestCase {
+            description: "a span after the expansion",
+            span: (13, 17),
+            expected_span: Some((22, 26)),
+        },
+        AuthoredSpanTestCase {
+            description: "a span crossing generated text",
+            span: (6, 9),
+            expected_span: None,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            authored_span(&expansion_body(), test_case.span.0, test_case.span.1),
+            test_case.expected_span,
+            "{}",
+            test_case.description
+        );
+    }
 }

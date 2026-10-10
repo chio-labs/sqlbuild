@@ -2,13 +2,14 @@
 
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::refactoring::_helpers::chars::{
+use crate::refactoring::_helpers::scanning::chars::{
     count_before, is_identifier_character, rfind, slice, starts_with_ignoring_case,
 };
 use crate::refactoring::constants::EDIT_ERROR_CODE;
+use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::{
-    EditKind, FileChange, ManualLocation, MigrationDeclaration, RefactorError, RefactorErrorKind,
-    RefactorPlan, RefactorRequest, TextEdit,
+    EditKind, FileChange, ManualLocation, MigrationDeclaration, RefactorPlan, RefactorRequest,
+    TextEdit,
 };
 
 /// Edits and findings from one planning step, merged into a plan at the end.
@@ -31,23 +32,20 @@ pub(crate) fn line_column(text: &[char], offset: usize) -> (usize, usize) {
     )
 }
 
-/// One edit with its position and display text; `before` and `after` default as Python's do.
+/// One edit with its position; `before` and `after` default as Python's do.
 pub(crate) fn text_edit(
     text: &[char],
     span: (usize, usize),
     replacement: String,
     kind: EditKind,
-    display: (Option<String>, Option<String>),
 ) -> TextEdit {
     let (start, end) = span;
     let (line, column) = line_column(text, start);
     TextEdit {
         start,
         end,
-        before: display.0.unwrap_or_else(|| slice(text, start, end)),
-        after: display
-            .1
-            .unwrap_or_else(|| python_strip(&replacement).to_owned()),
+        before: slice(text, start, end),
+        after: python_strip(&replacement).to_owned(),
         replacement,
         kind,
         line,
@@ -93,7 +91,7 @@ pub(crate) fn apply_text_edits(
             None => unique.push(edit),
         }
     }
-    unique.sort_by(|left, right| (right.start, right.end).cmp(&(left.start, left.end)));
+    unique.sort_by_key(|edit| std::cmp::Reverse((edit.start, edit.end)));
     let mut result: Vec<char> = text.to_vec();
     let mut previous_start = text.len() + 1;
     for edit in unique {
@@ -177,9 +175,9 @@ pub(crate) fn build_plan(
     request: RefactorRequest,
     parts: RefactorParts,
     moves: &[(String, String)],
-    renamed_columns: Vec<(String, String, String)>,
-    help: Option<&str>,
+    outcome: (Vec<(String, String, String)>, Option<&str>),
 ) -> RefactorPlan {
+    let (renamed_columns, help) = outcome;
     let help = (!parts.manual.is_empty())
         .then_some(help)
         .flatten()
@@ -195,8 +193,7 @@ pub(crate) fn build_plan(
     }
 }
 
-/// Unquoted identifier tokens matching `names`, outside comments and strings, as
-/// `identifier_sites` finds them; each site carries the matching name as given.
+/// Unquoted code identifiers matching `names`, as `identifier_sites` finds them.
 pub(crate) fn identifier_sites(text: &[char], names: &[String]) -> Vec<(usize, usize, String)> {
     if names.is_empty() {
         return Vec::new();

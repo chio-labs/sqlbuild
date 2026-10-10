@@ -1,6 +1,4 @@
-//! Plain-data facts a refactoring reads, and the plan it produces, as Python's models hold them.
-//!
-//! Every offset counts code points, as Python string offsets do.
+//! Plain-data refactoring facts and plans as Python's models hold them; offsets count code points.
 
 use serde::{Deserialize, Serialize};
 
@@ -76,6 +74,17 @@ pub struct TextEdit {
     pub column: usize,
     pub before: String,
     pub after: String,
+}
+
+impl TextEdit {
+    /// The edit with the display text Python's planner gives it instead of the defaults.
+    pub fn with_display(self, before: Option<String>, after: Option<String>) -> Self {
+        Self {
+            before: before.unwrap_or(self.before),
+            after: after.unwrap_or(self.after),
+            ..self
+        }
+    }
 }
 
 /// Every edit to one file, and where the file lives afterwards.
@@ -255,63 +264,4 @@ pub struct RefactorFacts {
     /// Declaration moves of a model move across folders, worked out by the Python host.
     #[serde(default)]
     pub declaration_moves: Option<DeclarationMoves>,
-}
-
-/// Which Python exception an expected refactoring failure becomes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RefactorErrorKind {
-    /// `RefactorInputError`: the request cannot be planned.
-    Input,
-    /// `RefactorEditError`: two planned edits overlap.
-    Edit,
-    /// `RefactorWriteError`: project files changed while the refactoring ran.
-    Write,
-    /// Native code cannot reproduce this plan exactly; the Python planner must run instead.
-    Deferred,
-    /// A `ValueError` the Python planner does not handle, such as a header the tokenizer rejects.
-    Value,
-    /// An `OSError` reading or writing project files, which Python does not handle either.
-    Io,
-}
-
-/// An expected refactoring failure with Python's code, message and help.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub struct RefactorError {
-    pub kind: RefactorErrorKind,
-    pub code: String,
-    pub message: String,
-    pub help: Option<String>,
-}
-
-impl RefactorError {
-    /// A `RefactorInputError` with an explicit code.
-    pub fn input(code: &str, message: impl Into<String>, help: Option<&str>) -> Self {
-        Self {
-            kind: RefactorErrorKind::Input,
-            code: code.to_owned(),
-            message: message.into(),
-            help: help.map(str::to_owned),
-        }
-    }
-
-    /// An unhandled `ValueError` with Python's message.
-    pub fn value(message: String) -> Self {
-        Self {
-            kind: RefactorErrorKind::Value,
-            code: String::new(),
-            message,
-            help: None,
-        }
-    }
-
-    /// A deferral to the Python planner, with the reason native code stopped.
-    pub fn deferred(message: impl Into<String>) -> Self {
-        Self {
-            kind: RefactorErrorKind::Deferred,
-            code: String::new(),
-            message: message.into(),
-            help: None,
-        }
-    }
 }

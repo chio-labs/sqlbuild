@@ -1,22 +1,20 @@
-//! Native column-reference facts for one SQL body, and the edits they imply, as
-//! `column_references.py` derives them.
+//! Column-reference facts of one SQL body and their edits, as `column_references.py` derives.
 
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::refactoring::_helpers::chars::slice;
-use crate::refactoring::_helpers::sql_sites::{
+use crate::refactoring::_helpers::edits::text_edits::{manual_at, text_edit};
+use crate::refactoring::_helpers::scanning::chars::slice;
+use crate::refactoring::_helpers::scanning::sql_sites::{
     AnalysisSql, ModelBody, authored_offset, authored_span,
 };
-use crate::refactoring::_helpers::text_edits::{manual_at, text_edit};
 use crate::refactoring::constants::{
     CTE_SCOPE_PREFIX, REF_KIND, ROOT_SCOPE, SEED_KIND, SOURCE_KIND, UNKNOWN_COLUMN_TYPE,
 };
-use crate::refactoring::models::{
-    EditKind, ManualLocation, RefactorError, RefactorFacts, TextEdit,
-};
+use crate::refactoring::errors::RefactorError;
+use crate::refactoring::models::{EditKind, ManualLocation, RefactorFacts, TextEdit};
 
 /// The known output columns of every model, source and seed, keyed by `(kind, name)`.
 pub(crate) type ResourceColumns = Vec<((String, String), Vec<String>)>;
@@ -130,7 +128,6 @@ impl BodyContext<'_> {
             span,
             respell(&authored, new),
             EditKind::Column,
-            (None, None),
         )
     }
 }
@@ -158,11 +155,16 @@ impl BodyEdits {
     }
 }
 
-fn set_columns(columns: &mut ResourceColumns, key: (String, String), names: Vec<String>) {
+fn set_columns(
+    mut columns: ResourceColumns,
+    key: (String, String),
+    names: Vec<String>,
+) -> ResourceColumns {
     match columns.iter_mut().find(|(item, _)| *item == key) {
         Some(entry) => entry.1 = names,
         None => columns.push((key, names)),
     }
+    columns
 }
 
 /// The known output columns of every model, source, and seed.
@@ -175,22 +177,18 @@ pub(crate) fn resource_columns(facts: &RefactorFacts) -> ResourceColumns {
                 names.push(column.name.clone());
             }
         }
-        set_columns(
-            &mut columns,
-            (REF_KIND.to_owned(), model.name.clone()),
-            names,
-        );
+        columns = set_columns(columns, (REF_KIND.to_owned(), model.name.clone()), names);
     }
     for source in &facts.sources {
-        set_columns(
-            &mut columns,
+        columns = set_columns(
+            columns,
             (SOURCE_KIND.to_owned(), source.name.clone()),
             source.columns.clone(),
         );
     }
     for seed in &facts.seeds {
-        set_columns(
-            &mut columns,
+        columns = set_columns(
+            columns,
             (SEED_KIND.to_owned(), seed.name.clone()),
             seed.columns.clone(),
         );
@@ -243,9 +241,9 @@ pub(crate) fn consumer_edits(
     facts: &ColumnFacts,
     context: &BodyContext<'_>,
     names: (&str, &str),
-    cascade_root: bool,
-    root_stars_pass: bool,
+    stars: (bool, bool),
 ) -> BodyEdits {
+    let (cascade_root, root_stars_pass) = stars;
     let (old, _) = names;
     if !facts.parsed {
         return BodyEdits::manual(context.manual(None, "SQL could not be analysed".to_owned()));
@@ -338,8 +336,8 @@ fn reference_edits(
         (end_span.1, end_span.1),
         format!(" AS {authored_name}"),
         EditKind::Column,
-        (Some(String::new()), Some(format!("AS {authored_name}"))),
-    );
+    )
+    .with_display(Some(String::new()), Some(format!("AS {authored_name}")));
     BodyEdits {
         edits: vec![renamed, alias],
         ..BodyEdits::default()
@@ -401,13 +399,15 @@ pub(crate) fn output_edits(
             continue;
         };
         match context.map_span(start, end) {
-            Some(span) => result.edits.push(text_edit(
-                context.contents,
-                (span.1, span.1),
-                format!(" AS {new}"),
-                EditKind::Column,
-                (Some(String::new()), Some(format!("AS {new}"))),
-            )),
+            Some(span) => result.edits.push(
+                text_edit(
+                    context.contents,
+                    (span.1, span.1),
+                    format!(" AS {new}"),
+                    EditKind::Column,
+                )
+                .with_display(Some(String::new()), Some(format!("AS {new}"))),
+            ),
             None => result.manual.push(context.manual(
                 Some(context.locate(start)),
                 format!("column {old} is produced inside a macro call"),

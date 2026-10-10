@@ -2,8 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::refactoring::_helpers::workspace::{Originals, commit_changes};
-use crate::refactoring::models::{RefactorError, RefactorPlan};
+use crate::refactoring::_helpers::files::workspace::commit_changes;
+use crate::refactoring::errors::RefactorError;
+use crate::refactoring::models::RefactorPlan;
+use crate::refactoring::types::Originals;
 
 /// Write every change, restoring all files if any write fails, and return the written paths.
 pub fn commit_refactor_plan(

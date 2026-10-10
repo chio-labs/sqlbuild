@@ -1,5 +1,4 @@
-//! Token-exact MODEL and SCHEMA header edits for renamed models and columns, as
-//! `header_edits.py` and `schema_edits.py` make them.
+//! Token-exact MODEL and SCHEMA header edits, as `header_edits.py` and `schema_edits.py` make.
 
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::is_python_word::is_python_word;
@@ -8,16 +7,17 @@ use sqlbuild_sqltext::compiler::main::model_header_matching::match_batch;
 use sqlbuild_sqltext::compiler::main::model_header_tokenizing::tokenize_one;
 use sqlbuild_sqltext::compiler::main::statement_header_matching::match_statement_header;
 
-use crate::refactoring::_helpers::chars::{find, rfind, slice, starts_with};
-use crate::refactoring::_helpers::sql_sites::embedded_ref_spans;
-use crate::refactoring::_helpers::text_edits::{text_edit, whole_word_offsets};
+use crate::refactoring::_helpers::edits::text_edits::{text_edit, whole_word_offsets};
+use crate::refactoring::_helpers::scanning::chars::{find, rfind, slice, starts_with};
+use crate::refactoring::_helpers::scanning::sql_sites::embedded_ref_spans;
 use crate::refactoring::constants::{
     COLUMN_VALUED_CONFIG_KEYS, COLUMNS_KEY, CURSOR_INPUTS_KEY, HEADER_CLOSERS,
     HEADER_DESCRIPTION_KEY, HEADER_INDENT, HEADER_KEY_AND_VALUE_TOKENS, HEADER_OPEN_PAREN,
     HEADER_OPENERS, HEADER_SEPARATOR, MIGRATE_FROM_KEY, PARENTHESIZED_EMPTY_TOKENS, REF_FUNCTION,
     RELATIONSHIPS_AUDIT, RELATIONSHIPS_FIELD_KEY, RELATIONSHIPS_TO_KEY, SCHEMA_KEYWORD,
 };
-use crate::refactoring::models::{EditKind, RefactorError, TextEdit};
+use crate::refactoring::errors::RefactorError;
+use crate::refactoring::models::{EditKind, TextEdit};
 
 const END_TOKEN: u8 = 0;
 const WORD_TOKEN: u8 = 1;
@@ -193,13 +193,7 @@ fn rename_value_token(
         let quote = text[token.start];
         format!("{quote}{new_value}{quote}")
     };
-    text_edit(
-        text,
-        (token.start, token.end),
-        replacement,
-        kind,
-        (None, None),
-    )
+    text_edit(text, (token.start, token.end), replacement, kind)
 }
 
 /// `(input name token, value tokens)` for every `cursor_inputs` entry.
@@ -335,13 +329,15 @@ pub(crate) fn add_column_entry_edit(
         }
         let opener = entry[1];
         let indentation = line_indent(text, entry[0].start);
-        return Some(text_edit(
-            text,
-            (opener.end, opener.end),
-            format!("\n{indentation}{HEADER_INDENT}{declaration},"),
-            EditKind::Migration,
-            (Some(String::new()), Some(declaration)),
-        ));
+        return Some(
+            text_edit(
+                text,
+                (opener.end, opener.end),
+                format!("\n{indentation}{HEADER_INDENT}{declaration},"),
+                EditKind::Migration,
+            )
+            .with_display(Some(String::new()), Some(declaration)),
+        );
     }
     insert_header_entry_edit(
         contents,
@@ -380,13 +376,10 @@ pub(crate) fn insert_header_entry_edit(
     } else {
         format!("\n{HEADER_INDENT}{entry},\n")
     };
-    Some(text_edit(
-        text,
-        (start, start),
-        replacement,
-        EditKind::Migration,
-        (Some(String::new()), Some(display.to_owned())),
-    ))
+    Some(
+        text_edit(text, (start, start), replacement, EditKind::Migration)
+            .with_display(Some(String::new()), Some(display.to_owned())),
+    )
 }
 
 /// Header offsets that still mention a word outside descriptions.
@@ -464,7 +457,6 @@ fn model_name_token_edits(
                         (token.start + start, token.start + end),
                         new.to_owned(),
                         EditKind::Reference,
-                        (None, None),
                     )
                 }),
         );
@@ -535,16 +527,16 @@ fn column_migration_edit(
             (opener.end, opener.end),
             replacement,
             EditKind::Migration,
-            (Some(String::new()), Some(declaration)),
-        );
+        )
+        .with_display(Some(String::new()), Some(declaration));
     }
     text_edit(
         text,
         (name.end, name.end),
         format!(" ({declaration})"),
         EditKind::Migration,
-        (Some(String::new()), Some(declaration)),
     )
+    .with_display(Some(String::new()), Some(declaration))
 }
 
 fn line_indent(text: &[char], offset: usize) -> String {
@@ -617,10 +609,10 @@ pub(crate) fn schema_model_name_edits(
 pub(crate) fn schema_column_edits(
     contents: &str,
     text: &[char],
-    upstream: &str,
-    names: (&str, &str),
+    column: (&str, (&str, &str)),
     python: PythonText,
 ) -> Result<Vec<TextEdit>, RefactorError> {
+    let (upstream, names) = column;
     let mut edits: Vec<TextEdit> = Vec::new();
     for span in schema_header_spans(contents, text, python) {
         edits.extend(column_token_edits(

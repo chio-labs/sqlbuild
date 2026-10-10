@@ -1,30 +1,30 @@
-//! Resolve a model rename or move, find what blocks it, and decide its migrations, as
-//! `model_planning.py` does.
+//! Resolve, block and migrate a model rename or move, as `model_planning.py` does.
 
 use std::path::Path;
 
-use crate::refactoring::_helpers::header_edits::{header_tokens, is_value};
-use crate::refactoring::_helpers::model_references::{
-    macro_reference_locations, model_reference_edits,
-};
-use crate::refactoring::_helpers::paths::{
+use crate::refactoring::_helpers::edits::header_edits::{header_tokens, is_value};
+use crate::refactoring::_helpers::edits::text_edits::{RefactorParts, manual_at};
+use crate::refactoring::_helpers::edits::yaml_edits::yaml_model_edits;
+use crate::refactoring::_helpers::files::paths::{
     join, name, parent, relative_posix, resolve, stem, suffix, with_name,
 };
-use crate::refactoring::_helpers::project_files::{ProjectSqlFile, project_sql_files, yaml_files};
-use crate::refactoring::_helpers::scan_context::ScanContext;
-use crate::refactoring::_helpers::text_edits::{RefactorParts, manual_at};
-use crate::refactoring::_helpers::yaml_edits::yaml_model_edits;
+use crate::refactoring::_helpers::files::project_files::{
+    ProjectSqlFile, project_sql_files, yaml_files,
+};
+use crate::refactoring::_helpers::planning::model_references::{
+    macro_reference_locations, model_reference_edits,
+};
+use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::constants::{
-    HISTORY_MATERIALIZATIONS, MIGRATABLE_MATERIALIZATIONS, MIGRATE_FROM_KEY, SQL_SUFFIX,
+    CURRENT_DIRECTORY, HISTORY_MATERIALIZATIONS, MIGRATABLE_MATERIALIZATIONS, MIGRATE_FROM_KEY,
+    SQL_SUFFIX,
 };
+use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{
-    DeclarationMoves, ManualLocation, ModelFacts, RefactorError, RefactorFacts, RefactorOperation,
-    RefactorRequest,
+    DeclarationMoves, ManualLocation, ModelFacts, RefactorFacts, RefactorOperation,
+    RefactorRequest, TextEdit,
 };
-
-/// Works out which declaration files a model move takes along: `(model, source, destination)`.
-pub type DeclarationMoveHost<'a> =
-    dyn FnMut(&str, &str, &str) -> Result<DeclarationMoves, RefactorError> + 'a;
+use crate::refactoring::types::DeclarationMoveHost;
 
 /// The model a request names, and the request with its name and destination resolved.
 pub(crate) struct ModelTarget<'a> {
@@ -67,8 +67,7 @@ pub(crate) fn find_model<'a>(
         })
 }
 
-/// `IDENTIFIER_PATTERN.match`: `^[A-Za-z_][A-Za-z0-9_]*$`, where `$` also matches before a
-/// trailing newline.
+/// `IDENTIFIER_PATTERN.match`, whose `$` also matches before a trailing newline.
 fn is_identifier(name: &str) -> bool {
     let name = name.strip_suffix('\n').unwrap_or(name);
     let mut characters = name.chars();
@@ -153,7 +152,7 @@ fn resolve_destination(
             None,
         ));
     };
-    if suffix(name(&relative)) != SQL_SUFFIX || relative == "." {
+    if suffix(name(&relative)) != SQL_SUFFIX || relative == CURRENT_DIRECTORY {
         return Err(RefactorError::input(
             "C955",
             format!("destination '{raw}' must be a .sql file or a folder ending in /"),
@@ -168,13 +167,13 @@ pub(crate) fn model_parts(
     facts: &RefactorFacts,
     target: &ModelTarget<'_>,
     context: &ScanContext,
-    host: &mut DeclarationMoveHost<'_>,
+    host: &DeclarationMoveHost<'_>,
 ) -> Result<RefactorParts, RefactorError> {
     let files = project_sql_files(facts);
     let old = target.model.name.as_str();
     let new = target.request.new_name.as_str();
     let declaration = declaration_moves(target, host)?;
-    let mut edits = Vec::new();
+    let mut edits: Vec<(String, TextEdit)> = Vec::new();
     if new != old {
         edits.extend(model_reference_edits(&files, (old, new), context)?);
         edits.extend(yaml_model_edits(&yaml_files(facts), old, new)?);
@@ -224,7 +223,7 @@ fn collisions(facts: &RefactorFacts, target: &ModelTarget<'_>) -> Vec<ManualLoca
 
 fn declaration_moves(
     target: &ModelTarget<'_>,
-    host: &mut DeclarationMoveHost<'_>,
+    host: &DeclarationMoveHost<'_>,
 ) -> Result<DeclarationMoves, RefactorError> {
     let destination = target.destination();
     if parent(&destination) == parent(&target.source_path) {

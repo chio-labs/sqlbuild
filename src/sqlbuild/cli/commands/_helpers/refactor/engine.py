@@ -1,7 +1,4 @@
-"""Run each refactoring step natively under the `refactoring` stage, or with the Python planner.
-
-A native plan carries its JSON; the later steps of that plan run natively too.
-"""
+"""Run each refactoring step natively under the `refactoring` stage, or with the Python planner."""
 
 from __future__ import annotations
 

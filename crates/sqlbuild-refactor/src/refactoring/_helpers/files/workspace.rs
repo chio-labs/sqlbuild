@@ -1,5 +1,4 @@
-//! Stage refactoring edits in a scratch copy, then commit them with rollback, as `workspace.py`
-//! does.
+//! Stage edits in a scratch copy, then commit with rollback, as `workspace.py` does.
 
 use std::fs;
 use std::io::Write;
@@ -7,17 +6,16 @@ use std::path::{Path, PathBuf};
 
 use sqlbuild_core::text::main::decode_python_text::decode_python_text;
 
-use crate::refactoring::_helpers::chars::chars;
-use crate::refactoring::_helpers::paths::{join, suffix};
-use crate::refactoring::_helpers::text_edits::apply_text_edits;
+use crate::refactoring::_helpers::edits::text_edits::apply_text_edits;
+use crate::refactoring::_helpers::files::paths::{join, suffix};
+use crate::refactoring::_helpers::scanning::chars::chars;
 use crate::refactoring::constants::{
     COPIED_PROJECT_SUFFIXES, HIDDEN_PREFIX, IGNORED_PROJECT_DIRECTORIES, PYCACHE_DIRECTORY,
     WRITE_ERROR_CODE,
 };
-use crate::refactoring::models::{FileChange, RefactorError, RefactorErrorKind};
-
-/// Original texts keyed by original path, in plan order.
-pub type Originals = Vec<(String, String)>;
+use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
+use crate::refactoring::models::FileChange;
+use crate::refactoring::types::Originals;
 
 fn io_error(path: &Path, error: impl std::fmt::Display) -> RefactorError {
     RefactorError {
@@ -173,21 +171,7 @@ pub(crate) fn commit_changes(
     changes: &[FileChange],
 ) -> Result<Vec<PathBuf>, RefactorError> {
     let current = read_originals(project_dir, changes)?;
-    let changed: Vec<String> = {
-        let mut changed: Vec<String> = originals
-            .iter()
-            .filter(|(path, text)| {
-                current
-                    .iter()
-                    .find(|(item, _)| item == path)
-                    .map(|(_, now)| now)
-                    != Some(text)
-            })
-            .map(|(path, _)| path.clone())
-            .collect();
-        changed.sort();
-        changed
-    };
+    let changed: Vec<String> = changed_paths(originals, &current);
     if !changed.is_empty() || current.len() != originals.len() {
         return Err(RefactorError {
             kind: RefactorErrorKind::Write,
@@ -200,48 +184,75 @@ pub(crate) fn commit_changes(
         });
     }
     let contents = edited_contents(originals, changes)?;
-    let mut created_directories: Vec<PathBuf> = Vec::new();
-    let mut written: Vec<PathBuf> = Vec::new();
-    let result = write_all(
-        project_dir,
-        changes,
-        &contents,
-        &mut created_directories,
-        &mut written,
-    );
+    let (progress, result) = write_all(project_dir, changes, &contents);
     if let Err(error) = result {
-        rollback(project_dir, originals, &written, &created_directories);
+        rollback(
+            project_dir,
+            originals,
+            &progress.written,
+            &progress.created_directories,
+        );
         return Err(error);
     }
     prune_emptied_directories(project_dir, changes);
-    Ok(written)
+    Ok(progress.written)
+}
+
+/// Original paths whose text on disk differs from the planned original, sorted.
+fn changed_paths(originals: &Originals, current: &[(String, String)]) -> Vec<String> {
+    let mut changed: Vec<String> = originals
+        .iter()
+        .filter(|(path, text)| current_text(current, path) != Some(text))
+        .map(|(path, _)| path.clone())
+        .collect();
+    changed.sort();
+    changed
+}
+
+fn current_text<'a>(current: &'a [(String, String)], path: &str) -> Option<&'a String> {
+    current
+        .iter()
+        .find(|(item, _)| item == path)
+        .map(|(_, now)| now)
+}
+
+/// What a commit wrote before it finished or failed.
+#[derive(Default)]
+struct WriteProgress {
+    created_directories: Vec<PathBuf>,
+    written: Vec<PathBuf>,
 }
 
 fn write_all(
     project_dir: &Path,
     changes: &[FileChange],
     contents: &[(String, String)],
-    created_directories: &mut Vec<PathBuf>,
-    written: &mut Vec<PathBuf>,
-) -> Result<(), RefactorError> {
-    for change in changes {
-        let target = join(project_dir, &change.path);
-        if let Some(parent) = target.parent() {
-            created_directories.extend(missing_directories(parent));
-            fs::create_dir_all(parent).map_err(|error| io_error(parent, error))?;
+) -> (WriteProgress, Result<(), RefactorError>) {
+    let mut progress = WriteProgress::default();
+    let mut write = || -> Result<(), RefactorError> {
+        for change in changes {
+            let target = join(project_dir, &change.path);
+            if let Some(parent) = target.parent() {
+                progress
+                    .created_directories
+                    .extend(missing_directories(parent));
+                fs::create_dir_all(parent).map_err(|error| io_error(parent, error))?;
+            }
+            progress.written.push(target.clone());
+            if !target.exists() {
+                let source = join(project_dir, &change.original_path);
+                fs::copy(&source, &target).map_err(|error| io_error(&source, error))?;
+            }
+            write_atomically(&target, contents_for(contents, &change.path))?;
         }
-        written.push(target.clone());
-        if !target.exists() {
+        for change in changes.iter().filter(|change| change.moved()) {
             let source = join(project_dir, &change.original_path);
-            fs::copy(&source, &target).map_err(|error| io_error(&source, error))?;
+            fs::remove_file(&source).map_err(|error| io_error(&source, error))?;
         }
-        write_atomically(&target, contents_for(contents, &change.path))?;
-    }
-    for change in changes.iter().filter(|change| change.moved()) {
-        let source = join(project_dir, &change.original_path);
-        fs::remove_file(&source).map_err(|error| io_error(&source, error))?;
-    }
-    Ok(())
+        Ok(())
+    };
+    let result = write();
+    (progress, result)
 }
 
 /// Replace a text file atomically with a temporary file in its folder, keeping its mode.

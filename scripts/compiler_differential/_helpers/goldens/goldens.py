@@ -17,12 +17,14 @@ from scripts.compiler_differential._helpers.comparing.normalize import (
 )
 from scripts.compiler_differential.constants import (
     GOLDEN_CORPUS_PREFIXES,
+    GOLDEN_FULL_REPORT_LABEL_PREFIX,
     GOLDEN_LABEL,
     GOLDEN_MANIFEST_DROPPED_KEYS,
     GOLDEN_MANIFEST_RESOURCE_SECTIONS,
     GOLDEN_MISSING_HINT,
     GOLDEN_MODE_CHECK,
     GOLDEN_PATH_MASK,
+    GOLDEN_REPORT_KEY,
     GOLDEN_RESOURCE_DROPPED_FIELDS,
     GOLDEN_SEED_CORPUS,
     GOLDEN_SEED_RANGE_FILE,
@@ -160,6 +162,11 @@ def _command(
             else _lines(
                 text=normalize_stderr(_masked(text=outcome.stderr, masked_paths=masked_paths))
             )
+        ),
+        **(
+            {GOLDEN_REPORT_KEY: report}
+            if outcome.label.startswith(GOLDEN_FULL_REPORT_LABEL_PREFIX)
+            else {}
         ),
     }
 

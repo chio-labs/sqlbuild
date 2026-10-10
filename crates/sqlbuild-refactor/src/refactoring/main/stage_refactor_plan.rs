@@ -2,12 +2,13 @@
 
 use std::path::Path;
 
-use crate::refactoring::_helpers::workspace::{
+use crate::refactoring::_helpers::files::workspace::{
     copy_project_inputs, read_originals, write_staged_changes,
 };
-use crate::refactoring::models::{RefactorError, RefactorPlan};
+use crate::refactoring::errors::RefactorError;
+use crate::refactoring::models::RefactorPlan;
 
-pub use crate::refactoring::_helpers::workspace::Originals;
+use crate::refactoring::types::Originals;
 
 /// Copy the project inputs once, apply the plan there, and return the original texts.
 pub fn stage_refactor_plan(

@@ -1,17 +1,17 @@
-//! Model and column references in source and seed YAML declarations, as `yaml_edits.py` finds
-//! them over PyYAML's composed nodes.
+//! Model and column references in YAML declarations, as `yaml_edits.py` finds them.
 
 use sqlbuild_config::errors::ConfigErrorKind;
 use sqlbuild_config::models::{ComposedYaml, ComposedYamlContent, ComposedYamlNode};
 use sqlbuild_config::yaml::main::compose_marks::compose_marks;
 
-use crate::refactoring::_helpers::chars::{chars, find};
-use crate::refactoring::_helpers::sql_sites::embedded_ref_spans;
-use crate::refactoring::_helpers::text_edits::{path_edits, text_edit};
+use crate::refactoring::_helpers::edits::text_edits::{path_edits, text_edit};
+use crate::refactoring::_helpers::scanning::chars::{chars, find};
+use crate::refactoring::_helpers::scanning::sql_sites::embedded_ref_spans;
 use crate::refactoring::constants::{
     RELATIONSHIPS_AUDIT, RELATIONSHIPS_FIELD_KEY, RELATIONSHIPS_TO_KEY,
 };
-use crate::refactoring::models::{DiscoveredFile, EditKind, RefactorError, TextEdit};
+use crate::refactoring::errors::RefactorError;
+use crate::refactoring::models::{DiscoveredFile, EditKind, TextEdit};
 
 /// The `to` and `field` scalars of one relationships audit.
 struct YamlRelationship<'a> {
@@ -47,10 +47,7 @@ impl ComposedFile<'_> {
     }
 
     fn scalar_value(node: &ComposedYamlNode) -> Option<&str> {
-        match &node.content {
-            ComposedYamlContent::Scalar(value) => Some(value),
-            _ => None,
-        }
+        node.content.as_scalar()
     }
 
     fn raw(&self, node: &ComposedYamlNode) -> Vec<char> {
@@ -59,19 +56,16 @@ impl ComposedFile<'_> {
     }
 
     /// Every scalar reached through sequence items and mapping values, in document order.
-    fn scalars(&self, id: usize, found: &mut Vec<usize>) {
+    fn scalars(&self, id: usize) -> Vec<usize> {
         match &self.node(id).content {
-            ComposedYamlContent::Scalar(_) => found.push(id),
+            ComposedYamlContent::Scalar(_) => vec![id],
             ComposedYamlContent::Sequence(items) => {
-                for item in items {
-                    self.scalars(*item, found);
-                }
+                items.iter().flat_map(|item| self.scalars(*item)).collect()
             }
-            ComposedYamlContent::Mapping(entries) => {
-                for (_, value) in entries {
-                    self.scalars(*value, found);
-                }
-            }
+            ComposedYamlContent::Mapping(entries) => entries
+                .iter()
+                .flat_map(|(_, value)| self.scalars(*value))
+                .collect(),
         }
     }
 
@@ -126,7 +120,6 @@ impl ComposedFile<'_> {
             (start, start + value.chars().count()),
             new.to_owned(),
             kind,
-            (None, None),
         )
     }
 
@@ -151,8 +144,7 @@ pub(crate) fn yaml_model_edits(
             continue;
         };
         let root = composed.document.root.unwrap_or_default();
-        let mut scalars: Vec<usize> = Vec::new();
-        composed.scalars(root, &mut scalars);
+        let scalars: Vec<usize> = composed.scalars(root);
         let mut found: Vec<TextEdit> = Vec::new();
         for id in scalars {
             let node = composed.node(id);
@@ -165,7 +157,6 @@ pub(crate) fn yaml_model_edits(
                             (node.start + start, node.start + end),
                             new.to_owned(),
                             EditKind::Reference,
-                            (None, None),
                         )
                     }),
             );

@@ -1,11 +1,10 @@
-//! Authored project files and SQL bodies a refactoring reads and edits, as `project_files.py`
-//! collects them.
+//! Authored files and SQL bodies a refactoring edits, as `project_files.py` collects them.
 
 use std::collections::BTreeMap;
 
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::refactoring::_helpers::chars::{chars, find};
+use crate::refactoring::_helpers::scanning::chars::{chars, find};
 use crate::refactoring::models::{DiscoveredFile, RefactorFacts, SqlFileRole};
 
 /// One authored SQL file, the role discovery gave it, and its code points.
@@ -28,8 +27,7 @@ pub(crate) struct AuthoredBody {
     pub(crate) body: String,
 }
 
-/// Every discovered SQL file with its authored contents, the first file of a path winning,
-/// sorted by path.
+/// Discovered SQL files with authored contents, sorted by path; the first of a path wins.
 pub(crate) fn project_sql_files(facts: &RefactorFacts) -> Vec<ProjectSqlFile> {
     let mut files: BTreeMap<String, ProjectSqlFile> = BTreeMap::new();
     let models = facts.model_files.iter().map(|file| {

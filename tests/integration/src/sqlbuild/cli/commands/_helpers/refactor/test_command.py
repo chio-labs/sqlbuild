@@ -9,9 +9,15 @@ import pytest
 from sqlbuild.cli.commands._helpers.refactor.command import run_refactor_command
 from sqlbuild.cli.commands.models import RefactorCommandRequest
 from sqlbuild.cli.commands.types import CliCommand
+from sqlbuild.compiler.frontier.types import CompilerEngine
 from tests.integration.src.sqlbuild.cli.commands._helpers.refactor._test_types import (
     BareTargetRefactorTestCase,
+    NativeEditCountTestCase,
     RefactorStatusMessagesTestCase,
+)
+from tests.integration.src.sqlbuild.cli.commands._helpers.refactor.helpers import (
+    refactoring_answers,
+    start_recording,
 )
 
 _PROJECT_FILES: dict[str, str] = {
@@ -169,6 +175,65 @@ def test_given_bare_target_when_running_then_applies_refactor(
     missing_path: str
     for missing_path in test_case.expected_missing_paths:
         assert not (tmp_path / missing_path).exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeEditCountTestCase(
+            description="a model rename plans its reference natively and adds migrate_from",
+            command=CliCommand.RENAME,
+            target="model:stg_orders",
+            new_name="stg_order_lines",
+            expected_native_counts={
+                CompilerEngine.NATIVE.value: {"planned_edits": 0, "migration_edits": 0},
+                CompilerEngine.NATIVE_PREVIEW.value: {"planned_edits": 1, "migration_edits": 1},
+            },
+        ),
+        NativeEditCountTestCase(
+            description="a column rename plans the owner output and the downstream alias natively",
+            command=CliCommand.RENAME,
+            target="column:stg_orders.amount",
+            new_name="revenue",
+            expected_native_counts={
+                CompilerEngine.NATIVE.value: {"planned_edits": 0, "migration_edits": 0},
+                CompilerEngine.NATIVE_PREVIEW.value: {"planned_edits": 3, "migration_edits": 0},
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_refactor_when_running_then_native_stage_plans_exact_edit_count(
+    test_case: NativeEditCountTestCase,
+    refactor_compiler_engine: CompilerEngine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    relative_path: str
+    content: str
+    for relative_path, content in _PROJECT_FILES.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    start_recording(record_dir=tmp_path / "records", monkeypatch=monkeypatch)
+
+    exit_code: int = run_refactor_command(
+        request=RefactorCommandRequest(
+            command=test_case.command,
+            target=test_case.target,
+            new_name=test_case.new_name,
+            project_dir=project_dir,
+            no_color=True,
+        )
+    )
+
+    assert exit_code == 0, capsys.readouterr().out
+    assert (
+        refactoring_answers(record_dir=tmp_path / "records")
+        == test_case.expected_native_counts[refactor_compiler_engine.value]
+    )
 
 
 if __name__ == "__main__":

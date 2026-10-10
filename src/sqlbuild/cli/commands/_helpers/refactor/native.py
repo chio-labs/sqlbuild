@@ -18,6 +18,8 @@ from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.refactoring.exceptions import (
     RefactorEditError,
     RefactorInputError,
+    RefactorIOError,
+    RefactorValueError,
     RefactorWriteError,
 )
 from sqlbuild.compiler.refactoring.models import (
@@ -29,11 +31,14 @@ from sqlbuild.compiler.refactoring.models import (
     RefactorRequest,
     TextEdit,
 )
-from sqlbuild.compiler.refactoring.types import EditKind, RefactorOperation
+from sqlbuild.compiler.refactoring.types import (
+    EditKind,
+    NativeRefactorErrorKind,
+    RefactorOperation,
+)
 
 _PLANNED_EDITS_KIND: str = "planned_edits"
 _MIGRATION_EDITS_KIND: str = "migration_edits"
-_DEFERRED_KIND: str = "deferred"
 _PLAN_KEY: str = "plan"
 _ERROR_KEY: str = "error"
 
@@ -50,7 +55,7 @@ def plan_native_refactor(
             declaration_moves_host(project=project),
         )
     )
-    if response.get(_ERROR_KEY, {}).get("kind") == _DEFERRED_KIND:
+    if response.get(_ERROR_KEY, {}).get("kind") == NativeRefactorErrorKind.DEFERRED:
         report_native_fallback(site=NativeFallbackSite.REFACTOR_PLAN)
         return None
     payload: dict[str, Any] = _payload(response=response, key=_PLAN_KEY)
@@ -193,14 +198,14 @@ def _payload(*, response: dict[str, Any], key: str) -> Any:
     error: dict[str, Any] | None = response.get(_ERROR_KEY)
     if error is None:
         return response[key]
-    kind: str = str(error["kind"])
+    kind: NativeRefactorErrorKind = NativeRefactorErrorKind(str(error["kind"]))
     message: str = str(error["message"])
-    if kind == "value":
-        raise ValueError(message)
-    if kind == "io":
-        raise OSError(message)
-    if kind == "edit":
+    if kind is NativeRefactorErrorKind.VALUE:
+        raise RefactorValueError(message)
+    if kind is NativeRefactorErrorKind.IO:
+        raise RefactorIOError(message)
+    if kind is NativeRefactorErrorKind.EDIT:
         raise RefactorEditError(message)
-    if kind == "write":
+    if kind is NativeRefactorErrorKind.WRITE:
         raise RefactorWriteError(message, help=error.get("help"))
     raise RefactorInputError(message, code=str(error["code"]), help=error.get("help"))

@@ -1,11 +1,11 @@
 //! Add model `migrate_from` to a staged rename whenever its relation moves.
 
-use crate::refactoring::_helpers::chars::chars;
-use crate::refactoring::_helpers::header_edits::insert_header_entry_edit;
-use crate::refactoring::_helpers::model_planning::decide_model_migration;
-use crate::refactoring::_helpers::workspace::Originals;
+use crate::refactoring::_helpers::edits::header_edits::insert_header_entry_edit;
+use crate::refactoring::_helpers::planning::model_planning::decide_model_migration;
+use crate::refactoring::_helpers::scanning::chars::chars;
 use crate::refactoring::constants::MIGRATE_FROM_KEY;
 use crate::refactoring::models::{ManualLocation, MigrationDeclaration, ModelFacts, RefactorPlan};
+use crate::refactoring::types::Originals;
 
 /// The plan with `migrate_from <old>` on the model whenever its relation moves.
 pub fn with_model_migration(

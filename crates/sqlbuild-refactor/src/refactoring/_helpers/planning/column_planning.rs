@@ -1,33 +1,35 @@
-//! Walk a column rename from its owner model through every downstream reader, as
-//! `column_planning.py` does.
+//! Walk a column rename through every downstream reader, as `column_planning.py` does.
 
 use std::collections::{BTreeSet, HashSet, VecDeque};
 
-use crate::refactoring::_helpers::chars::chars;
-use crate::refactoring::_helpers::column_references::{
-    BodyContext, BodyMapping, ColumnQuery, ResourceColumns, analyze_column, columns_of,
-    consumer_edits, output_edits, resource_columns,
-};
-use crate::refactoring::_helpers::header_edits::{
+use crate::refactoring::_helpers::edits::header_edits::{
     add_column_entry_edit, column_config_edits, column_entry_edits, consumer_column_header_edits,
     header_tokens, schema_column_edits, unhandled_word_offsets,
 };
-use crate::refactoring::_helpers::model_planning::{
-    find_model, needs_column_migration, validate_identifier,
+use crate::refactoring::_helpers::edits::text_edits::{
+    RefactorParts, manual_at, merge_parts, path_edits,
 };
-use crate::refactoring::_helpers::project_files::{
+use crate::refactoring::_helpers::edits::yaml_edits::yaml_column_edits;
+use crate::refactoring::_helpers::files::project_files::{
     AuthoredBody, ProjectSqlFile, authored_bodies, project_sql_files, yaml_files,
 };
-use crate::refactoring::_helpers::scan_context::ScanContext;
-use crate::refactoring::_helpers::sql_sites::{analysis_sql, model_body};
-use crate::refactoring::_helpers::text_edits::{RefactorParts, manual_at, merge_parts, path_edits};
-use crate::refactoring::_helpers::yaml_edits::yaml_column_edits;
+use crate::refactoring::_helpers::planning::column_references::{
+    BodyContext, BodyMapping, ColumnQuery, ResourceColumns, analyze_column, columns_of,
+    consumer_edits, output_edits, resource_columns,
+};
+use crate::refactoring::_helpers::planning::model_planning::{
+    find_model, needs_column_migration, validate_identifier,
+};
+use crate::refactoring::_helpers::scanning::chars::chars;
+use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
+use crate::refactoring::_helpers::scanning::sql_sites::{analysis_sql, model_body};
 use crate::refactoring::constants::{
     EXPECTED_FIXTURE_PREFIX, MIGRATE_FROM_KEY, MODEL_RESOURCE_TYPE, REF_FIXTURE_PREFIX, REF_KIND,
     ROOT_SCOPE,
 };
+use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{
-    DiscoveredFile, ManualLocation, MigrationDeclaration, ModelFacts, RefactorError, RefactorFacts,
+    DiscoveredFile, ManualLocation, MigrationDeclaration, ModelFacts, RefactorFacts,
     RefactorRequest, SqlFileRole, TextEdit,
 };
 
@@ -151,7 +153,7 @@ fn schema_edits(
     context: &ColumnRenameContext<'_>,
     model: &ModelFacts,
 ) -> Result<Vec<(String, TextEdit)>, RefactorError> {
-    let mut edits = Vec::new();
+    let mut edits: Vec<(String, TextEdit)> = Vec::new();
     for file in context
         .files
         .iter()
@@ -162,8 +164,7 @@ fn schema_edits(
             schema_column_edits(
                 &file.contents,
                 &file.text,
-                &model.name,
-                context.names(),
+                (&model.name, context.names()),
                 context.scan.python,
             )?,
         ));
@@ -298,7 +299,7 @@ fn header_parts(
     edits.extend(entry_edits.unwrap_or_default());
     edits.extend(added);
     let handled: Vec<usize> = edits.iter().map(|edit| edit.start).collect();
-    let manual = unhandled_word_offsets(&text, &tokens, old, &handled)
+    let manual: Vec<ManualLocation> = unhandled_word_offsets(&text, &tokens, old, &handled)
         .into_iter()
         .map(|offset| {
             manual_at(
@@ -380,8 +381,7 @@ fn consumer_part(
         &facts,
         &body,
         context.names(),
-        context.cascade,
-        context.cascade,
+        (context.cascade, context.cascade),
     );
     let file = context.file(body.path);
     let header = match file {
@@ -464,7 +464,7 @@ fn authored_body(
         fallback_offset: body.start,
     };
     let outputs = output_edits(&facts, &located, &fixture_scopes, context.names());
-    let consumers = consumer_edits(&facts, &located, context.names(), false, true);
+    let consumers = consumer_edits(&facts, &located, context.names(), (false, true));
     let mut edits = outputs.edits;
     edits.extend(consumers.edits);
     let mut manual = outputs.manual;
