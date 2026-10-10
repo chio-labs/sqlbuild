@@ -3425,13 +3425,13 @@ def record_digested_paths(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record every project file compile reuse reads to compute a content digest."""
 
     paths: list[str] = []
-    original: Callable[..., str | None] = reuse_project_files.file_digest
+    original: Callable[..., list[str | None]] = reuse_project_files.project_file_digests
 
-    def recording_digest(*, path: str) -> str | None:
-        paths.append(path)
-        return original(path=path)
+    def recording_digests(*, project_dir: str, relative_paths: list[str]) -> list[str | None]:
+        paths.extend(os.path.join(project_dir, path) for path in relative_paths)
+        return original(project_dir=project_dir, relative_paths=relative_paths)
 
-    monkeypatch.setattr(reuse_project_files, "file_digest", recording_digest)
+    monkeypatch.setattr(reuse_project_files, "project_file_digests", recording_digests)
     return paths
 
 

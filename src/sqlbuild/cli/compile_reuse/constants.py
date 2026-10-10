@@ -40,6 +40,7 @@ UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
 )
 MISSING_ENVIRONMENT_VALUE: str = "\0missing"
 MISSING_FILE_DIGEST: str = "\0missing"
+NATIVE_DIGEST_PREFIX: str = "b3:"
 PROJECT_CONFIG_FILENAMES: tuple[str, ...] = ("sqlbuild_project.toml", "sqlbuild_project.yml")
 
 RACY_WINDOW_NS: int = 2_000_000_000

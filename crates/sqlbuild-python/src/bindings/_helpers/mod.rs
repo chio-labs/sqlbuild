@@ -3,6 +3,7 @@ pub(crate) mod analysis_session;
 pub(crate) mod attachments;
 pub(crate) mod boundary;
 pub(crate) mod cache;
+pub(crate) mod compile_outputs;
 pub(crate) mod contracts;
 pub(crate) mod discovery;
 pub(crate) mod lineage;

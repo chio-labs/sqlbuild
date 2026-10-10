@@ -9,6 +9,7 @@ from pathlib import Path
 
 import orjson
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.compile.semantic_notice import (
     selected_semantic_coverage,
     semantic_coverage_notice,
@@ -38,7 +39,11 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
+from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
+from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
@@ -214,6 +219,9 @@ def format_compile_json(
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
     }
+    native: str | None = _native_json_report(result)
+    if native is not None:
+        return native
     try:
         return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
     except TypeError:
@@ -244,7 +252,23 @@ def format_compile_error_json(
         "stopped": True,
         "diagnostics": [_diagnostic_to_json(diagnostic)],
     }
+    native: str | None = _native_json_report(result)
+    if native is not None:
+        return native
     return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+
+
+def _native_json_report(result: dict[str, object]) -> str | None:
+    """Emit the report natively when the preview stage is on and every value is encodable."""
+
+    if not native_stage_enabled(NativeStage.COMPILE_OUTPUTS):
+        return None
+    emitted: str | None = _native.emit_json_report(result)
+    if emitted is None:
+        report_native_fallback(site=NativeFallbackSite.COMPILE_JSON_REPORT)
+        return None
+    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
+    return emitted
 
 
 def _summary(
