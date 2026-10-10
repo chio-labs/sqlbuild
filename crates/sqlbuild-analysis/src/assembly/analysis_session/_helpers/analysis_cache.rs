@@ -1,5 +1,4 @@
-//! The session's per-model analysis cache: keys over everything a model's analysis reads, and
-//! the stored form of a finished native outcome.
+//! Per-model analysis cache keys over everything an analysis reads, and stored outcomes.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -8,7 +7,10 @@ use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::errors::StoreDecodeError;
 use sqlbuild_cache::store::models::NativeStore;
 
-use crate::assembly::analysis_session::constants::ANALYSIS_CACHE_FORMAT;
+use crate::assembly::analysis_session::constants::{
+    ANALYSIS_CACHE_FORMAT, VARINT_CONTINUATION, VARINT_MAX_BYTES, VARINT_PAYLOAD_BITS,
+    VARINT_PAYLOAD_MASK,
+};
 use crate::assembly::analysis_session::models::{
     AnalysisCache, AnalysisCacheStats, AnalysisSession, ColumnFact, DynamicFamily, LineageFacts,
     LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, SessionRequest,
@@ -66,20 +68,18 @@ impl AnalysisSession {
             .collect()
     }
 
-    /// Digest of the types, nullability, closed shape and catalog schema the session holds
-    /// for `name` now.
+    /// Digest of `name`'s current types, nullability, closed shape and catalog schema.
     pub(crate) fn relation_digest(&self, name: &str) -> ContentDigest {
         let mut key: KeyHasher = KeyHasher::default();
         key.text(name);
-        put_optional_pairs(&mut key, self.available_types.get(name));
-        put_optional_pairs(&mut key, self.available_nullability.get(name));
-        put_optional_pairs(&mut key, self.complete_shapes.get(name));
-        put_optional_pairs(&mut key, self.catalog.known_schema(name));
+        key.optional_pairs(self.available_types.get(name));
+        key.optional_pairs(self.available_nullability.get(name));
+        key.optional_pairs(self.complete_shapes.get(name));
+        key.optional_pairs(self.catalog.known_schema(name));
         key.finish()
     }
 
-    /// The key of `model` analysed with `schema`, given [`Self::relation_digest`] of every
-    /// name [`Self::model_relation_names`] returns.
+    /// The key of `model` analysed with `schema`, given its relations' digests.
     pub(crate) fn model_key(
         &self,
         session_digest: &ContentDigest,
@@ -89,8 +89,8 @@ impl AnalysisSession {
     ) -> ContentDigest {
         let mut key: KeyHasher = KeyHasher::default();
         key.bytes(session_digest);
-        put_model(&mut key, &self.request.models[model]);
-        put_shapes(&mut key, schema);
+        key.model(&self.request.models[model]);
+        key.shapes(schema);
         let names: BTreeSet<&str> = self.model_relation_names(model);
         key.count(names.len());
         for name in names {
@@ -111,7 +111,7 @@ impl AnalysisSession {
             key.count(ordered.len());
             for (name, shape) in ordered {
                 key.text(name);
-                put_pairs(&mut key, shape);
+                key.pairs(shape);
             }
         }
         key.finish()
@@ -143,6 +143,83 @@ impl KeyHasher {
     fn finish(self) -> ContentDigest {
         self.0.finalize().into()
     }
+
+    fn model(&mut self, model: &ModelRequest) {
+        self.text(&model.name);
+        self.text(&model.query_sql);
+        self.pairs(&model.placeholders);
+        self.count(model.references.len());
+        for reference in &model.references {
+            self.text(&reference.analysis_name);
+            self.flag(reference.model_ref);
+        }
+        self.count(model.lineage_references.len());
+        for (name, resource_type, resource) in &model.lineage_references {
+            self.text(name);
+            self.text(resource_type);
+            self.text(resource);
+        }
+        self.count(model.required_names.len());
+        for name in &model.required_names {
+            self.text(name);
+        }
+        self.flag(model.recover_cte_facts);
+        self.flag(model.has_set_operation);
+        match &model.snapshot_columns {
+            Some((valid_from, valid_to)) => {
+                self.flag(true);
+                self.text(valid_from);
+                self.text(valid_to);
+            }
+            None => self.flag(false),
+        }
+        self.text(&model.pivot_sql);
+        self.families(&model.dynamic_families);
+    }
+
+    fn families(&mut self, families: &[DynamicFamily]) {
+        self.count(families.len());
+        for family in families {
+            self.text(&family.name);
+            self.text(&family.pivot_column);
+            self.text(&family.value_column);
+            self.text(&family.aggregate);
+            self.text(&family.data_type);
+            match family.name_pattern.as_deref() {
+                Some(pattern) => {
+                    self.flag(true);
+                    self.text(pattern);
+                }
+                None => self.flag(false),
+            }
+        }
+    }
+
+    fn pairs(&mut self, pairs: &Pairs) {
+        self.count(pairs.len());
+        for (name, value) in pairs {
+            self.text(name);
+            self.text(value);
+        }
+    }
+
+    fn optional_pairs(&mut self, pairs: Option<&Pairs>) {
+        match pairs {
+            Some(pairs) => {
+                self.flag(true);
+                self.pairs(pairs);
+            }
+            None => self.flag(false),
+        }
+    }
+
+    fn shapes(&mut self, shapes: &Shapes) {
+        self.count(shapes.len());
+        for (name, shape) in shapes {
+            self.text(name);
+            self.pairs(shape);
+        }
+    }
 }
 
 /// Digest of the request facts every model's analysis may read.
@@ -151,8 +228,8 @@ fn session_digest(request: &SessionRequest) -> ContentDigest {
     key.text(ANALYSIS_CACHE_FORMAT);
     key.text(&request.dialect);
     key.flag(request.case_sensitive_shapes);
-    put_pairs(&mut key, &request.function_return_types);
-    put_optional_pairs(&mut key, request.nullability_rules.as_ref());
+    key.pairs(&request.function_return_types);
+    key.optional_pairs(request.nullability_rules.as_ref());
     key.flag(request.rich_type_inference);
     for shapes in [
         &request.column_types,
@@ -160,91 +237,14 @@ fn session_digest(request: &SessionRequest) -> ContentDigest {
         &request.complete_schemas,
         &request.catalog_schemas,
     ] {
-        put_shapes(&mut key, shapes);
+        key.shapes(shapes);
     }
     key.count(request.dynamic_families_by_table.len());
     for (table, families) in &request.dynamic_families_by_table {
         key.text(table);
-        put_families(&mut key, families);
+        key.families(families);
     }
     key.finish()
-}
-
-fn put_model(key: &mut KeyHasher, model: &ModelRequest) {
-    key.text(&model.name);
-    key.text(&model.query_sql);
-    put_pairs(key, &model.placeholders);
-    key.count(model.references.len());
-    for reference in &model.references {
-        key.text(&reference.analysis_name);
-        key.flag(reference.model_ref);
-    }
-    key.count(model.lineage_references.len());
-    for (name, resource_type, resource) in &model.lineage_references {
-        key.text(name);
-        key.text(resource_type);
-        key.text(resource);
-    }
-    key.count(model.required_names.len());
-    for name in &model.required_names {
-        key.text(name);
-    }
-    key.flag(model.recover_cte_facts);
-    key.flag(model.has_set_operation);
-    match &model.snapshot_columns {
-        Some((valid_from, valid_to)) => {
-            key.flag(true);
-            key.text(valid_from);
-            key.text(valid_to);
-        }
-        None => key.flag(false),
-    }
-    key.text(&model.pivot_sql);
-    put_families(key, &model.dynamic_families);
-}
-
-fn put_families(key: &mut KeyHasher, families: &[DynamicFamily]) {
-    key.count(families.len());
-    for family in families {
-        key.text(&family.name);
-        key.text(&family.pivot_column);
-        key.text(&family.value_column);
-        key.text(&family.aggregate);
-        key.text(&family.data_type);
-        match family.name_pattern.as_deref() {
-            Some(pattern) => {
-                key.flag(true);
-                key.text(pattern);
-            }
-            None => key.flag(false),
-        }
-    }
-}
-
-fn put_pairs(key: &mut KeyHasher, pairs: &Pairs) {
-    key.count(pairs.len());
-    for (name, value) in pairs {
-        key.text(name);
-        key.text(value);
-    }
-}
-
-fn put_optional_pairs(key: &mut KeyHasher, pairs: Option<&Pairs>) {
-    match pairs {
-        Some(pairs) => {
-            key.flag(true);
-            put_pairs(key, pairs);
-        }
-        None => key.flag(false),
-    }
-}
-
-fn put_shapes(key: &mut KeyHasher, shapes: &Shapes) {
-    key.count(shapes.len());
-    for (name, shape) in shapes {
-        key.text(name);
-        put_pairs(key, shape);
-    }
 }
 
 /// Varint fields over a per-entry string table, so repeated names are stored once.
@@ -257,7 +257,8 @@ struct Encoder<'a> {
 
 impl<'a> Encoder<'a> {
     fn uint(&mut self, value: u64) {
-        put_varint(&mut self.body, value);
+        let (buffer, length) = varint(value);
+        self.body.extend_from_slice(&buffer[..length]);
     }
 
     fn flag(&mut self, value: bool) {
@@ -294,10 +295,9 @@ impl<'a> Encoder<'a> {
     }
 
     fn into_bytes(self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(self.body.len() + 16 * self.strings.len());
-        put_varint(&mut bytes, self.strings.len() as u64);
+        let mut bytes: Vec<u8> = push_varint(Vec::new(), self.strings.len() as u64);
         for value in &self.strings {
-            put_varint(&mut bytes, value.len() as u64);
+            bytes = push_varint(bytes, value.len() as u64);
             bytes.extend_from_slice(value.as_bytes());
         }
         bytes.extend_from_slice(&self.body);
@@ -305,12 +305,24 @@ impl<'a> Encoder<'a> {
     }
 }
 
-fn put_varint(bytes: &mut Vec<u8>, mut value: u64) {
-    while value >= 0x80 {
-        bytes.push((value as u8 & 0x7f) | 0x80);
-        value >>= 7;
+/// `value` as a little-endian base-128 varint: the buffer and how many bytes it uses.
+fn varint(mut value: u64) -> ([u8; VARINT_MAX_BYTES], usize) {
+    let mut buffer: [u8; VARINT_MAX_BYTES] = [0; VARINT_MAX_BYTES];
+    let mut length: usize = 0;
+    while value >= VARINT_CONTINUATION {
+        buffer[length] = (value as u8 & VARINT_PAYLOAD_MASK) | VARINT_CONTINUATION as u8;
+        value >>= VARINT_PAYLOAD_BITS;
+        length += 1;
     }
-    bytes.push(value as u8);
+    buffer[length] = value as u8;
+    (buffer, length + 1)
+}
+
+fn push_varint(bytes: Vec<u8>, value: u64) -> Vec<u8> {
+    let mut bytes: Vec<u8> = bytes;
+    let (buffer, length) = varint(value);
+    bytes.extend_from_slice(&buffer[..length]);
+    bytes
 }
 
 /// Reads what an [`Encoder`] wrote; anything else is a decode error.
@@ -345,11 +357,11 @@ impl<'a> Decoder<'a> {
 
     fn uint(&mut self) -> Result<u64, StoreDecodeError> {
         let mut value: u64 = 0;
-        for shift in (0..64).step_by(7) {
+        for shift in (0..u64::BITS).step_by(VARINT_PAYLOAD_BITS as usize) {
             let byte: u8 = *self.bytes.get(self.position).ok_or(StoreDecodeError)?;
             self.position += 1;
-            value |= u64::from(byte & 0x7f) << shift;
-            if byte & 0x80 == 0 {
+            value |= u64::from(byte & VARINT_PAYLOAD_MASK) << shift;
+            if u64::from(byte) < VARINT_CONTINUATION {
                 return Ok(value);
             }
         }
@@ -401,8 +413,7 @@ impl<'a> Decoder<'a> {
     }
 }
 
-/// The stored bytes of a finished native outcome without its cleaned SQL, which is the query's
-/// normalization; Python's answers are never stored.
+/// The stored bytes of a finished native outcome, without its re-derivable cleaned SQL.
 pub(crate) fn encode_outcome(
     outcome: &ModelOutcome,
     legacy_tables: Option<&ContentDigest>,
@@ -462,8 +473,7 @@ pub(crate) fn encode_outcome(
     Some(encoder.into_bytes())
 }
 
-/// The outcome [`encode_outcome`] stored, validated against `schema`, still without its cleaned
-/// SQL, which is normalized again; other bytes do not decode.
+/// The outcome [`encode_outcome`] stored, validated against `schema`, without cleaned SQL.
 pub(crate) fn decode_outcome(
     bytes: &[u8],
     schema: &Shapes,

@@ -40,7 +40,6 @@ from sqlbuild.compiler.analysis_session.types import (
     ShapeRows,
     StepRow,
 )
-from sqlbuild.compiler.compile._helpers.analysis.cache import record_analysis_cache_metrics
 from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
@@ -123,7 +122,7 @@ class NativeModelAnalysis:
         if hits + misses == 0:
             self._python.record_uncached()
             return
-        record_analysis_cache_metrics(batch_hits=0, entry_hits=hits, misses=misses, bypasses=0)
+        self._python.record_cached(hits=hits, misses=misses)
 
     def _finished(self, session: _native.NativeModelAnalysisSession) -> FinishRow | None:
         step: StepRow | None = session.run()

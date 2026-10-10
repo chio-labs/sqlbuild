@@ -22,7 +22,7 @@ use crate::assembly::analysis_session::models::{
     PivotBatchRequest, PivotModel, PivotOutcome, PivotTables, SessionModelFacts, SessionOutcome,
     SessionRequest, SessionStep,
 };
-use crate::assembly::analysis_session::tests::test_types::{ModelSpec, RecoveredFacts};
+use crate::assembly::analysis_session::tests::test_types::{CachedRun, ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::{CatalogInput, ProjectCatalog};
 
@@ -169,19 +169,6 @@ pub(crate) fn completed_with<T>(
     let read: T = before_finish(&mut session);
     let (outcome, finished) = finish_analysis_session(session).expect("the session finished");
     (steps, outcome, finished, read)
-}
-
-/// One run of a session with an analysis cache attached.
-pub(crate) struct CachedRun {
-    /// `step_lines` of each step, then `described` of each model's outcome.
-    pub(crate) lines: (Vec<Vec<String>>, Vec<Vec<String>>),
-    pub(crate) store: NativeStore,
-    pub(crate) stats: AnalysisCacheStats,
-    pub(crate) keys: Vec<Option<ContentDigest>>,
-    /// Whether each model's outcome came from the cache.
-    pub(crate) hits: Vec<bool>,
-    /// The catalog's schema additions and analysis names, then the sorted fact models.
-    pub(crate) catalog: (Shapes, Vec<String>, Vec<String>),
 }
 
 /// Run `request` reading and filling `store`, answering deferrals as [`session_lines`] does.
@@ -563,4 +550,47 @@ fn column_line(column: &ColumnFact) -> String {
         column.data_type.as_deref().unwrap_or("-"),
         column.nullability
     )
+}
+
+/// `(hits, misses, stored)` of a cached run.
+pub(crate) fn cache_stats(run: &CachedRun) -> (usize, usize, usize) {
+    let AnalysisCacheStats {
+        hits,
+        misses,
+        stored,
+    } = run.stats;
+    (hits, misses, stored)
+}
+
+/// The request's second model, the one key tests change.
+pub(crate) fn second_model(request: &mut SessionRequest) -> &mut ModelRequest {
+    &mut request.models[1]
+}
+
+/// One dynamic pivot family over orders' amounts by status.
+pub(crate) fn amounts_family() -> DynamicFamily {
+    DynamicFamily {
+        name: "amounts".to_owned(),
+        pivot_column: "status".to_owned(),
+        value_column: "amount".to_owned(),
+        aggregate: "SUM".to_owned(),
+        data_type: "DOUBLE".to_owned(),
+        name_pattern: None,
+    }
+}
+
+/// The key of the session's model named `name` over its relations' current facts.
+pub(crate) fn current_model_key(session: &AnalysisSession, name: &str) -> ContentDigest {
+    let model: usize = session
+        .request
+        .models
+        .iter()
+        .position(|model| model.name == name)
+        .expect("the model is in the request");
+    let relations: HashMap<&str, ContentDigest> = session
+        .model_relation_names(model)
+        .into_iter()
+        .map(|relation| (relation, session.relation_digest(relation)))
+        .collect();
+    session.model_key(&ContentDigest::default(), model, &Vec::new(), &relations)
 }

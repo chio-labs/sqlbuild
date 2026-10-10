@@ -194,8 +194,7 @@ impl NativeModelAnalysisSession {
         self.kept(provided).is_some()
     }
 
-    /// Every model's outcome once the session is done, or None to analyse in Python; saves the
-    /// analysis cache, whose failures are only reported.
+    /// Every model's outcome once done, or None for Python; saves the cache best-effort.
     fn finish(&mut self, py: Python<'_>) -> Option<FinishRow> {
         let mut session: AnalysisSession = self.inner.take()?;
         let cache: Option<(NativeStore, AnalysisCacheStats)> = take_analysis_cache(&mut session);
@@ -211,8 +210,7 @@ impl NativeModelAnalysisSession {
         Some(finish_row(outcome))
     }
 
-    /// `(hits, misses, stored, save or load failure)` of the analysis cache, once finished or
-    /// when the store could not be read; None without a cache.
+    /// The analysis cache's `(hits, misses, stored, failure)`; None without a cache.
     #[getter]
     fn cache_stats(&self) -> Option<CacheStatsRow> {
         self.cache_stats.clone()

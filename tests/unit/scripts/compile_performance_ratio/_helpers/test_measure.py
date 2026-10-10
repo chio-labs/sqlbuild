@@ -4,12 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.compile_performance_ratio._helpers.measure import (
-    check_cache_use,
-    check_matches_uncached,
-    compiled_tree,
-    median_phases,
-)
+from scripts.compile_performance_ratio._helpers.measure import check_cache_use, median_phases
 from scripts.compile_performance_ratio.constants import COLD_MODE, EDIT_MODE, WARM_MODE
 from scripts.compile_performance_ratio.exceptions import CompileComparisonError
 from scripts.compile_performance_ratio.models import CompileRun
@@ -19,7 +14,7 @@ from tests.unit.scripts.compile_performance_ratio._helpers._test_types import (
     MedianPhasesTestCase,
     UncachedMatchTestCase,
 )
-from tests.unit.scripts.compile_performance_ratio._helpers.helpers import write_model_files
+from tests.unit.scripts.compile_performance_ratio._helpers.helpers import check_against_uncached
 
 
 @pytest.mark.parametrize(
@@ -115,7 +110,7 @@ def test_given_compile_runs_when_taking_phase_medians_then_reports_only_complete
 def test_given_observed_cache_use_when_checking_then_accepts_the_run(
     test_case: CacheUseTestCase,
 ) -> None:
-    check_cache_use(run=test_case.run, mode=test_case.mode)
+    assert check_cache_use(run=test_case.run, mode=test_case.mode) is test_case.expected_result
 
 
 @pytest.mark.parametrize(
@@ -170,40 +165,29 @@ def test_given_unobserved_cache_use_when_checking_then_rejects_the_run(
         check_cache_use(run=test_case.run, mode=test_case.mode)
 
 
-def _run(report: str) -> CompileRun:
-    return CompileRun(label="head", wall_seconds=1.0, cpu_seconds=1.0, timings_ms={}, report=report)
-
-
-def _check_against_uncached(*, test_case: UncachedMatchTestCase, project_dir: Path) -> None:
-    write_model_files(project_dir=project_dir, model_files=test_case.incremental_files)
-    compiled: dict[str, bytes] = compiled_tree(project_dir=project_dir)
-
-    def uncached() -> CompileRun:
-        write_model_files(project_dir=project_dir, model_files=test_case.uncached_files)
-        return _run(test_case.uncached_report)
-
-    check_matches_uncached(
-        incremental=_run(test_case.incremental_report),
-        compiled=compiled,
-        uncached=uncached,
-        project_dir=project_dir,
-        mode=EDIT_MODE,
-    )
-
-
-def test_given_an_edit_the_uncached_compile_reproduces_when_checking_then_accepts_it(
-    tmp_path: Path,
-) -> None:
-    _check_against_uncached(
-        test_case=UncachedMatchTestCase(
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        UncachedMatchTestCase(
             description="an edit the uncached compile reproduces",
             incremental_report='{"models": 2}',
             uncached_report='{"models": 2}',
             incremental_files={"target/compiled/models/orders.sql": "SELECT 1"},
             uncached_files={"target/compiled/models/orders.sql": "SELECT 1"},
-            expected_message="",
         ),
-        project_dir=tmp_path,
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_an_edit_the_uncached_compile_reproduces_when_checking_then_accepts_it(
+    test_case: UncachedMatchTestCase, tmp_path: Path
+) -> None:
+    assert (
+        check_against_uncached(
+            project_dir=tmp_path,
+            reports=(test_case.incremental_report, test_case.uncached_report),
+            files=(test_case.incremental_files, test_case.uncached_files),
+        )
+        is test_case.expected_result
     )
 
 
@@ -233,7 +217,11 @@ def test_given_a_stale_incremental_compile_when_checking_against_uncached_then_r
     test_case: UncachedMatchTestCase, tmp_path: Path
 ) -> None:
     with pytest.raises(CompileComparisonError, match=test_case.expected_message):
-        _check_against_uncached(test_case=test_case, project_dir=tmp_path)
+        check_against_uncached(
+            project_dir=tmp_path,
+            reports=(test_case.incremental_report, test_case.uncached_report),
+            files=(test_case.incremental_files, test_case.uncached_files),
+        )
 
 
 if __name__ == "__main__":

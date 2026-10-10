@@ -100,10 +100,38 @@ pub(crate) struct CacheKeyTestCase {
     pub(crate) description: &'static str,
     /// Changes one input of the request the key must cover.
     pub(crate) change: fn(&mut crate::assembly::analysis_session::models::SessionRequest),
+    pub(crate) expected_key_changed: bool,
 }
 
 pub(crate) struct RelationDigestTestCase {
     pub(crate) description: &'static str,
-    /// Records one fact about `raw_items` in the started session.
+    /// Records one relation fact in the started session.
     pub(crate) change: fn(&mut crate::assembly::analysis_session::models::AnalysisSession),
+    /// The relation whose digest, or the model whose key, is compared.
+    pub(crate) subject: &'static str,
+    pub(crate) expected_changed: bool,
+}
+
+pub(crate) struct DamagedCacheTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) models: &'static [ModelSpec],
+    /// `(hits, misses, stored)` of the run over the damaged store.
+    pub(crate) expected_stats: (usize, usize, usize),
+}
+
+/// One run of a session with an analysis cache attached.
+pub(crate) struct CachedRun {
+    /// `step_lines` of each step, then `described` of each model's outcome.
+    pub(crate) lines: (Vec<Vec<String>>, Vec<Vec<String>>),
+    pub(crate) store: sqlbuild_cache::store::models::NativeStore,
+    pub(crate) stats: crate::assembly::analysis_session::models::AnalysisCacheStats,
+    pub(crate) keys: Vec<Option<sqlbuild_cache::digest::types::ContentDigest>>,
+    /// Whether each model's outcome came from the cache.
+    pub(crate) hits: Vec<bool>,
+    /// The catalog's schema additions and analysis names, then the sorted fact models.
+    pub(crate) catalog: (
+        crate::assembly::analysis_session::types::Shapes,
+        Vec<String>,
+        Vec<String>,
+    ),
 }

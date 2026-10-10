@@ -1,7 +1,7 @@
 //! One compact analysis batch built, shared, run and projected exactly as Python's batch.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use rayon::ThreadPool;
 use rayon::iter::{
@@ -128,6 +128,15 @@ impl SharedQuery {
     }
 }
 
+/// One chunk of a batch: the member indexes it analyses, with the whole batch's inputs.
+#[derive(Clone, Copy)]
+struct ChunkInputs<'b, 'm> {
+    batch: &'b Batch<'m>,
+    members: &'b [usize],
+    cleaned: &'b [String],
+    keys: &'b [Option<MemoKey>],
+}
+
 /// One run's projected members and the shared members whose result Python recomputes.
 struct BatchRun {
     results: Vec<MemberResult>,
@@ -175,7 +184,18 @@ impl SessionCatalog {
         }
         let mut results: Vec<Option<MemberResult>> = batch.members.iter().map(|_| None).collect();
         for chunk in batch_chunks(&shared) {
-            self.analyze_chunk(batch, &chunk, &cleaned, &mut shared, &keys, &mut results)?;
+            let chunk_shared: Vec<Option<SharedQuery>> =
+                chunk.iter().map(|index| shared[*index].take()).collect();
+            let inputs = ChunkInputs {
+                batch,
+                members: &chunk,
+                cleaned: &cleaned,
+                keys: &keys,
+            };
+            let chunk_results: Vec<MemberResult> = self.analyze_chunk(&inputs, chunk_shared)?;
+            for (index, result) in chunk.iter().zip(chunk_results) {
+                results[*index] = Some(result);
+            }
         }
         let results: Vec<MemberResult> = results
             .into_iter()
@@ -184,34 +204,64 @@ impl SessionCatalog {
         self.with_separate_validation(&batch.members, results)
     }
 
-    /// Reuse remembered shared results for `chunk`'s members, analyse the rest, and remember
-    /// each new exact shared result for later members.
+    /// Reuse remembered shared results for `chunk`, analyse the rest and remember new ones.
     fn analyze_chunk(
         &mut self,
-        batch: &Batch<'_>,
-        chunk: &[usize],
-        cleaned: &[String],
-        shared: &mut [Option<SharedQuery>],
-        keys: &[Option<MemoKey>],
-        results: &mut [Option<MemberResult>],
-    ) -> Result<(), String> {
+        inputs: &ChunkInputs<'_, '_>,
+        shared: Vec<Option<SharedQuery>>,
+    ) -> Result<Vec<MemberResult>, String> {
+        let ChunkInputs {
+            batch,
+            members: chunk,
+            cleaned,
+            keys,
+        } = *inputs;
+        let mut results: Vec<Option<MemberResult>> = chunk.iter().map(|_| None).collect();
         let mut analyzed: Vec<usize> = Vec::with_capacity(chunk.len());
-        for index in chunk {
+        let mut analyzed_shared: Vec<Option<SharedQuery>> = Vec::with_capacity(chunk.len());
+        for (position, (index, share)) in chunk.iter().zip(shared).enumerate() {
             let reused: Option<MemberResult> = keys[*index]
                 .as_ref()
                 .and_then(|key| self.shared_results.get(key))
-                .zip(shared[*index].as_ref())
+                .zip(share.as_ref())
                 .and_then(|(remembered, share)| {
                     remembered.reused(&batch.members[*index], share, &cleaned[*index])
                 });
             match reused {
-                Some(result) => results[*index] = Some(result),
-                None => analyzed.push(*index),
+                Some(result) => results[position] = Some(result),
+                None => {
+                    analyzed.push(position);
+                    analyzed_shared.push(share);
+                }
             }
         }
-        if analyzed.is_empty() {
-            return Ok(());
+        if !analyzed.is_empty() {
+            let analyzed_results: Vec<MemberResult> =
+                self.analyze_unremembered(inputs, &analyzed, &analyzed_shared)?;
+            for (position, result) in analyzed.iter().zip(analyzed_results) {
+                results[*position] = Some(result);
+            }
         }
+        results
+            .into_iter()
+            .collect::<Option<_>>()
+            .ok_or_else(|| INVALID_BATCH.to_owned())
+    }
+
+    /// Analyse the chunk members at `positions`, then remember their exact shared results.
+    fn analyze_unremembered(
+        &mut self,
+        inputs: &ChunkInputs<'_, '_>,
+        positions: &[usize],
+        shared: &[Option<SharedQuery>],
+    ) -> Result<Vec<MemberResult>, String> {
+        let ChunkInputs {
+            batch,
+            members: chunk,
+            cleaned,
+            keys,
+        } = *inputs;
+        let analyzed: Vec<usize> = positions.iter().map(|position| chunk[*position]).collect();
         let subset = Batch {
             members: analyzed
                 .iter()
@@ -223,8 +273,6 @@ impl SessionCatalog {
             .iter()
             .map(|index| cleaned[*index].clone())
             .collect();
-        let subset_shared: Vec<Option<SharedQuery>> =
-            analyzed.iter().map(|index| shared[*index].take()).collect();
         let mut first: HashSet<MemoKey> = HashSet::new();
         let remember: Vec<bool> = analyzed
             .iter()
@@ -236,7 +284,7 @@ impl SessionCatalog {
         let BatchRun {
             results: mut analyzed_results,
             inexact,
-        } = self.run_batch(&subset, subset_cleaned, &subset_shared, &remember)?;
+        } = self.run_batch(&subset, subset_cleaned, shared, &remember)?;
         self.reanalysed_members += inexact.len();
         if !inexact.is_empty() {
             let rerun_subset = Batch {
@@ -257,16 +305,51 @@ impl SessionCatalog {
                 analyzed_results[*index] = result;
             }
         }
-        for (position, (index, result)) in analyzed.iter().zip(analyzed_results).enumerate() {
+        for (position, (index, result)) in analyzed.iter().zip(&analyzed_results).enumerate() {
             if let Some(key) = keys[*index].as_ref()
                 && !inexact.contains(&position)
-                && let Some(remembered) = SharedResult::remembered(&result)
+                && let Some(remembered) = SharedResult::remembered(result)
             {
                 self.shared_results.entry(*key).or_insert(remembered);
             }
-            results[*index] = Some(result);
         }
-        Ok(())
+        Ok(analyzed_results)
+    }
+
+    /// Python's `_attach_compiled_bindings`: decode the batch's fused binding validations.
+    fn attach_validations(
+        &self,
+        response: &Value,
+        query_indexes: &[usize],
+        dialect: &str,
+        mut results: Vec<MemberResult>,
+    ) -> Result<Vec<MemberResult>, String> {
+        let pool: Arc<ThreadPool> = self.native.analysis_pool()?;
+        let Some(validations) = response.get("validations").filter(|value| !value.is_null()) else {
+            return Ok(results);
+        };
+        let query_count: usize = query_indexes.iter().max().map_or(0, |index| index + 1);
+        let validations: &Vec<Value> = validations
+            .as_array()
+            .filter(|validations| validations.len() == query_count)
+            .ok_or("native compilation returned an invalid binding batch")?;
+        let decoded: Vec<Option<Result<Vec<DiagnosticRow>, String>>> = pool.install(|| {
+            results
+                .par_iter()
+                .zip(query_indexes)
+                .map(|(result, query_index)| {
+                    let validation: &Value = &validations[*query_index];
+                    (!validation.is_null())
+                        .then(|| decode_validation(&result.cleaned_sql, dialect, validation))
+                })
+                .collect()
+        });
+        for (result, diagnostics) in results.iter_mut().zip(decoded) {
+            if let Some(diagnostics) = diagnostics {
+                result.binding_diagnostics = Some(diagnostics?);
+            }
+        }
+        Ok(results)
     }
 
     /// Python's `_analyze_compact_inputs` run: prepare, analyse, project and find inexact sharing.
@@ -285,8 +368,7 @@ impl SessionCatalog {
         let response: Value =
             serde_json::from_str(&job.run(analysis)?).map_err(|error| error.to_string())?;
         let inexact: Vec<usize> = inexact_shared_members(&response, &payload);
-        let results: Vec<MemberResult> = attach_validations(
-            &*self.native.analysis_pool()?,
+        let results: Vec<MemberResult> = self.attach_validations(
             &response,
             &payload.query_indexes,
             batch.dialect,
@@ -329,12 +411,7 @@ impl SessionCatalog {
                     }
                     let names: Vec<String> =
                         self.shared_reference_names(&cleaned[index], member, schema)?;
-                    let stubs: Vec<(String, String)> = names
-                        .into_iter()
-                        .enumerate()
-                        .map(|(position, name)| (name, format!("{RELATION_STUB_PREFIX}{position}")))
-                        .collect();
-                    Some((index, stubs))
+                    Some((index, relation_stubs(names)))
                 })
                 .collect()
         });
@@ -696,9 +773,7 @@ impl SessionCatalog {
     }
 }
 
-/// The batch's members in chunks of about [`BATCH_CHUNK_MEMBERS`], in batch order with every
-/// member placed in the chunk of the first member sharing its query, so a large wave is
-/// analysed, projected and freed a chunk at a time.
+/// Bounded member chunks in batch order, each shared query's members in its first chunk.
 fn batch_chunks(shared: &[Option<SharedQuery>]) -> Vec<Vec<usize>> {
     let mut chunks: Vec<Vec<usize>> = Vec::new();
     let mut chunk_by_key: HashMap<&str, usize> = HashMap::new();
@@ -728,10 +803,7 @@ fn batch_chunks(shared: &[Option<SharedQuery>]) -> Vec<Vec<usize>> {
 }
 
 impl SharedResult {
-    /// Python's `remembered_shared_results` entry for one exact, fully projected result.
-    ///
-    /// A result with binding diagnostics is not remembered: they are located in its own
-    /// cleaned SQL, so a member reusing them would report another member's positions.
+    /// Python's `remembered_shared_results` entry; none with member-located diagnostics.
     fn remembered(result: &MemberResult) -> Option<Self> {
         if result
             .binding_diagnostics
@@ -758,8 +830,7 @@ impl SharedResult {
         })
     }
 
-    /// Python's `reused_shared_results` projection onto `member`, or None where one of the
-    /// stubs the engine named is not among the member's relations.
+    /// Python's `reused_shared_results` projection onto `member`, or None for a foreign stub.
     fn reused(
         &self,
         member: &BatchMember<'_>,
@@ -783,19 +854,7 @@ impl SharedResult {
                 output_column: row.output_column.clone(),
                 transform_code: row.transform_code,
                 confidence_code: row.confidence_code,
-                sources: row
-                    .sources
-                    .iter()
-                    .map(|(resource_type, name, column)| {
-                        (
-                            resource_type.clone(),
-                            names
-                                .get(name.as_str())
-                                .map_or_else(|| name.clone(), |resource| (*resource).to_owned()),
-                            column.clone(),
-                        )
-                    })
-                    .collect(),
+                sources: named_sources(&row.sources, &names),
             })
             .collect();
         Some(MemberResult {
@@ -813,8 +872,32 @@ impl SharedResult {
     }
 }
 
-/// Digest of Python's `shared_result_keys` entry: a shared member's complete native input,
-/// given the digest of its shared query's identity.
+/// Each relation name with its stub, numbered by position.
+fn relation_stubs(names: Vec<String>) -> Vec<(String, String)> {
+    names
+        .into_iter()
+        .enumerate()
+        .map(|(position, name)| (name, format!("{RELATION_STUB_PREFIX}{position}")))
+        .collect()
+}
+
+/// `sources` with each stubbed relation renamed to the resource `names` maps it to.
+fn named_sources(
+    sources: &[(String, String, String)],
+    names: &HashMap<&str, &str>,
+) -> Vec<(String, String, String)> {
+    sources
+        .iter()
+        .map(|(resource_type, name, column)| {
+            let resource: String = names
+                .get(name.as_str())
+                .map_or_else(|| name.clone(), |resource| (*resource).to_owned());
+            (resource_type.clone(), resource, column.clone())
+        })
+        .collect()
+}
+
+/// Digest of Python's `shared_result_keys` entry, given its shared query's digest.
 fn shared_result_key(
     batch: &Batch<'_>,
     member: &BatchMember<'_>,
@@ -1292,41 +1375,6 @@ fn project_source(
         .to_owned(),
         pooled(batch, column)?.to_owned(),
     ))
-}
-
-/// Python's `_attach_compiled_bindings`: decode the batch's fused binding validations.
-fn attach_validations(
-    pool: &ThreadPool,
-    response: &Value,
-    query_indexes: &[usize],
-    dialect: &str,
-    mut results: Vec<MemberResult>,
-) -> Result<Vec<MemberResult>, String> {
-    let Some(validations) = response.get("validations").filter(|value| !value.is_null()) else {
-        return Ok(results);
-    };
-    let query_count: usize = query_indexes.iter().max().map_or(0, |index| index + 1);
-    let validations: &Vec<Value> = validations
-        .as_array()
-        .filter(|validations| validations.len() == query_count)
-        .ok_or("native compilation returned an invalid binding batch")?;
-    let decoded: Vec<Option<Result<Vec<DiagnosticRow>, String>>> = pool.install(|| {
-        results
-            .par_iter()
-            .zip(query_indexes)
-            .map(|(result, query_index)| {
-                let validation: &Value = &validations[*query_index];
-                (!validation.is_null())
-                    .then(|| decode_validation(&result.cleaned_sql, dialect, validation))
-            })
-            .collect()
-    });
-    for (result, diagnostics) in results.iter_mut().zip(decoded) {
-        if let Some(diagnostics) = diagnostics {
-            result.binding_diagnostics = Some(diagnostics?);
-        }
-    }
-    Ok(results)
 }
 
 /// Python's `_binding_result` over one native validation.

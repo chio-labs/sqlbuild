@@ -28,8 +28,7 @@ type ModelInput = (
     Option<String>,
     Option<String>,
 );
-/// `(dialect, return types, functions, shapes, models, file texts, sources, SQL tests)`;
-/// sources and SQL tests name their file's text by its index, so each file crosses once.
+/// `(dialect, return types, functions, shapes, models, file texts, sources, SQL tests)`.
 type RequestInput = (
     Option<String>,
     Vec<(String, String)>,

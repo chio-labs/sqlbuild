@@ -302,8 +302,7 @@ pub struct MetadataSource {
     pub contents: Arc<str>,
 }
 
-/// One model SQL test's file text, shared with its file's other tests, and its CTEs with their
-/// inferred column names.
+/// One model SQL test's shared file text and its CTEs with their inferred column names.
 #[derive(Clone, Debug)]
 pub struct MetadataSqlTest {
     pub contents: Arc<str>,

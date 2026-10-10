@@ -221,8 +221,7 @@ def _comparison(
 
 
 def check_cache_use(*, run: CompileRun, mode: str) -> None:
-    """Fail a run that bypassed the analysis cache, a warm run that missed it, or an edit run
-    that analysed nothing."""
+    """Fail a bypassing run, a warm run with misses, or an edit run that analysed nothing."""
 
     misses: int | None = run.analysis_cache_misses
     if misses is None or mode == COLD_MODE:

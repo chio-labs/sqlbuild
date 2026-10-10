@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.set_operations import names_set_operation
+from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import names_set_operation
 from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types import (
     SetOperationSearchTestCase,
 )

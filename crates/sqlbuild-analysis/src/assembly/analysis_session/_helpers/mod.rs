@@ -7,5 +7,4 @@ pub(crate) mod dynamic_pivot;
 pub(crate) mod enrichment;
 pub(crate) mod mappings;
 pub(crate) mod publication;
-pub(crate) mod schedule;
 pub(crate) mod session;

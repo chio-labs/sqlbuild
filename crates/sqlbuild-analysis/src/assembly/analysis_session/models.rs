@@ -283,8 +283,7 @@ pub struct AnalysisCacheStats {
     pub stored: usize,
 }
 
-/// A session's per-model analysis cache: each model's finished native outcome in a store,
-/// keyed by the session's settings and everything that model's analysis reads.
+/// A session's per-model analysis cache of finished native outcomes in a store.
 #[derive(Debug)]
 pub struct AnalysisCache {
     pub(crate) store: NativeStore,

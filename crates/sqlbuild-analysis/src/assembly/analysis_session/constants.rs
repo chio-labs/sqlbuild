@@ -197,3 +197,11 @@ pub(crate) const NON_NULL_NULLABILITY: &str = "non_null";
 pub(crate) const NULLABLE_NULLABILITY: &str = "nullable";
 /// Bumped whenever the stored outcome or a key's fields change; older entries never match.
 pub(crate) const ANALYSIS_CACHE_FORMAT: &str = "native-model-analysis-v1";
+/// A stored varint byte at or above this value continues into the next byte.
+pub(crate) const VARINT_CONTINUATION: u64 = 0x80;
+/// The value bits each stored varint byte carries.
+pub(crate) const VARINT_PAYLOAD_MASK: u8 = 0x7f;
+/// How many value bits each stored varint byte carries.
+pub(crate) const VARINT_PAYLOAD_BITS: u32 = 7;
+/// The most bytes one stored `u64` varint takes.
+pub(crate) const VARINT_MAX_BYTES: usize = 10;

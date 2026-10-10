@@ -6,6 +6,7 @@ use std::sync::Arc;
 use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use sqlbuild_cache::digest::types::ContentDigest;
+use sqlbuild_cache::store::errors::StoreDecodeError;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::_helpers::analysis_cache::{
@@ -25,8 +26,8 @@ use crate::assembly::analysis_session::_helpers::enrichment::{
 use crate::assembly::analysis_session::_helpers::mappings::{
     ShapeTable, dict_from_pairs, same_keys, same_relations,
 };
+use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
 use crate::assembly::analysis_session::_helpers::publication::{ShapeOptions, ShapeSource};
-use crate::assembly::analysis_session::_helpers::schedule::{producers, waves};
 use crate::assembly::analysis_session::constants::{
     DEFERRAL_ANALYSIS, DEFERRAL_ENRICHMENT, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
 };
@@ -493,8 +494,7 @@ impl AnalysisSession {
         Ok(())
     }
 
-    /// The positions in `models` the cache cannot answer; it answers the rest, after the
-    /// catalog records every model's relations exactly as an uncached batch would.
+    /// Answer `models` from the cache where it can; returns the positions it cannot answer.
     fn read_cache(&mut self, models: &[usize], schemas: &[Shapes]) -> Result<Vec<usize>, String> {
         let Some(mut cache) = self.cache.take() else {
             return Ok((0..models.len()).collect());
@@ -539,15 +539,11 @@ impl AnalysisSession {
             .iter()
             .map(|key| cache.store.get(key).map(<[u8]>::to_vec))
             .collect();
-        let decoded: Vec<Option<CachedOutcome>> = pool.install(|| {
+        let decoded: Vec<Option<Result<CachedOutcome, StoreDecodeError>>> = pool.install(|| {
             stored
                 .par_iter()
                 .zip(schemas)
-                .map(|(bytes, schema)| {
-                    bytes
-                        .as_ref()
-                        .and_then(|bytes| decode_outcome(bytes, schema).ok())
-                })
+                .map(|(bytes, schema)| Some(decode_outcome(bytes.as_ref()?, schema)))
                 .collect()
         });
         let mut tables: Option<ContentDigest> = None;
@@ -556,13 +552,13 @@ impl AnalysisSession {
         for (position, (model, found)) in models.iter().zip(decoded).enumerate() {
             cache.keys[*model] = Some(keys[position]);
             let hit: Option<ModelOutcome> = match found {
-                Some((outcome, None)) => Some(outcome),
-                Some((outcome, Some(required))) => {
+                Some(Ok((outcome, None))) => Some(outcome),
+                Some(Ok((outcome, Some(required)))) => {
                     let current: ContentDigest =
                         *tables.get_or_insert_with(|| self.tables_digest());
                     (current == required).then_some(outcome)
                 }
-                None => None,
+                Some(Err(StoreDecodeError)) | None => None,
             };
             match hit {
                 Some(outcome) => hits.push((position, outcome)),

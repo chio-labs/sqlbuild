@@ -59,12 +59,7 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
 
 
 def _analysis_store(request: NativeModelAnalysisRequest) -> tuple[str, str] | None:
-    """The store path and environment for the analysis cache, or None where Python bypasses it.
-
-    The environment adds the installed build and Python's own cache identity, which digests the
-    inference profile, versions and the target, vars and known declarations, to the session
-    request each model key covers.
-    """
+    """The analysis store's path and environment, or None where Python bypasses its cache."""
 
     context: AnalysisCacheContext | None = request.analysis_cache
     if context is None:

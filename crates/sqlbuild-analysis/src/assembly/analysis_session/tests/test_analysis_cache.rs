@@ -1,17 +1,15 @@
-use std::collections::HashMap;
-
 use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::models::NativeStore;
 
-use crate::assembly::analysis_session::models::{
-    AnalysisCacheStats, DynamicFamily, ModelReference, SessionRequest,
-};
+use crate::assembly::analysis_session::models::{ModelReference, SessionRequest};
 use crate::assembly::analysis_session::tests::helpers::{
-    CachedRun, cached_run, damaged, model_keys, model_requests, orders_request, pairs,
-    session_lines, shapes, started, uncached_catalog,
+    amounts_family, cache_stats, cached_run, current_model_key, damaged, model_keys,
+    model_requests, orders_request, pairs, second_model, session_lines, shapes, started,
+    uncached_catalog,
 };
 use crate::assembly::analysis_session::tests::test_types::{
-    CacheEditTestCase, CacheKeyTestCase, CacheReuseTestCase, ModelSpec, RelationDigestTestCase,
+    CacheEditTestCase, CacheKeyTestCase, CacheReuseTestCase, CachedRun, DamagedCacheTestCase,
+    ModelSpec, RelationDigestTestCase,
 };
 
 const STG_ORDERS: ModelSpec = (
@@ -52,15 +50,6 @@ const EVENTS_MART: ModelSpec = (
 );
 const ORDERS: &[ModelSpec] = &[STG_ORDERS, ORDERS_MART, ORDERS_STAR, ORDERS_BAD];
 
-fn stats(run: &CachedRun) -> (usize, usize, usize) {
-    let AnalysisCacheStats {
-        hits,
-        misses,
-        stored,
-    } = run.stats;
-    (hits, misses, stored)
-}
-
 #[test]
 fn given_a_filled_cache_when_rerunning_then_hits_match_the_uncached_session() {
     let test_cases = [
@@ -100,7 +89,7 @@ fn given_a_filled_cache_when_rerunning_then_hits_match_the_uncached_session() {
             orders_request(model_requests(test_case.models)),
             NativeStore::default(),
         );
-        let cold_stats: (usize, usize, usize) = stats(&cold);
+        let cold_stats: (usize, usize, usize) = cache_stats(&cold);
         let cold_lines = cold.lines;
         let cold_catalog = cold.catalog;
         let warm: CachedRun =
@@ -120,7 +109,7 @@ fn given_a_filled_cache_when_rerunning_then_hits_match_the_uncached_session() {
             test_case.description
         );
         assert_eq!(
-            [cold_stats, stats(&warm)],
+            [cold_stats, cache_stats(&warm)],
             test_case.expected_stats,
             "{}",
             test_case.description
@@ -209,24 +198,35 @@ fn given_an_edit_when_rerunning_then_only_changed_analyses_miss_and_match_uncach
 
 #[test]
 fn given_damaged_entries_when_rerunning_then_every_model_is_analysed_again() {
-    let cold: CachedRun = cached_run(
-        orders_request(model_requests(ORDERS)),
-        NativeStore::default(),
-    );
-    let keys = cold.keys.clone();
-    let warm: CachedRun = cached_run(
-        orders_request(model_requests(ORDERS)),
-        damaged(cold.store, &keys),
-    );
+    let test_cases = [DamagedCacheTestCase {
+        description: "every stored entry holds bytes no outcome encodes to",
+        models: ORDERS,
+        expected_stats: (0, 4, 4),
+    }];
+    for test_case in test_cases {
+        let cold: CachedRun = cached_run(
+            orders_request(model_requests(test_case.models)),
+            NativeStore::default(),
+        );
+        let keys = cold.keys.clone();
+        let warm: CachedRun = cached_run(
+            orders_request(model_requests(test_case.models)),
+            damaged(cold.store, &keys),
+        );
 
-    assert_eq!(warm.lines, session_lines(ORDERS));
-    assert_eq!(stats(&warm), (0, 4, 4));
-}
-
-fn mart(
-    request: &mut SessionRequest,
-) -> &mut crate::assembly::analysis_session::models::ModelRequest {
-    &mut request.models[1]
+        assert_eq!(
+            warm.lines,
+            session_lines(test_case.models),
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            cache_stats(&warm),
+            test_case.expected_stats,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
@@ -234,85 +234,111 @@ fn given_any_analysis_input_changed_when_keying_then_the_key_changes() {
     let test_cases = [
         CacheKeyTestCase {
             description: "model name",
-            change: |request| mart(request).name = "orders_mart_v2".to_owned(),
+            change: |request| second_model(request).name = "orders_mart_v2".to_owned(),
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "query",
-            change: |request| mart(request).query_sql.push(' '),
+            change: |request| second_model(request).query_sql.push(' '),
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "placeholders",
-            change: |request| mart(request).placeholders = pairs(&[("region", "east")]),
+            change: |request| second_model(request).placeholders = pairs(&[("region", "east")]),
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "reference analysis names",
             change: |request| {
-                mart(request).references.push(ModelReference {
+                second_model(request).references.push(ModelReference {
                     analysis_name: "raw_orders".to_owned(),
                     model_ref: false,
                 })
             },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "reference kinds",
-            change: |request| mart(request).references[0].model_ref = false,
+            change: |request| second_model(request).references[0].model_ref = false,
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "lineage references",
-            change: |request| mart(request).lineage_references[0].1 = "seed".to_owned(),
+            change: |request| second_model(request).lineage_references[0].1 = "seed".to_owned(),
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "required relation names",
-            change: |request| mart(request).required_names.push("raw_orders".to_owned()),
+            change: |request| {
+                second_model(request)
+                    .required_names
+                    .push("raw_orders".to_owned())
+            },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "CTE fact recovery",
-            change: |request| mart(request).recover_cte_facts = true,
+            change: |request| second_model(request).recover_cte_facts = true,
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "set operation",
-            change: |request| mart(request).has_set_operation = true,
+            change: |request| second_model(request).has_set_operation = true,
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "snapshot columns",
             change: |request| {
-                mart(request).snapshot_columns =
+                second_model(request).snapshot_columns =
                     Some(("valid_from".to_owned(), "valid_to".to_owned()))
             },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "pivot SQL",
-            change: |request| mart(request).pivot_sql.push(' '),
+            change: |request| second_model(request).pivot_sql.push(' '),
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "dynamic families",
-            change: |request| mart(request).dynamic_families.push(family()),
+            change: |request| {
+                second_model(request)
+                    .dynamic_families
+                    .push(amounts_family())
+            },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "dialect",
             change: |request| request.dialect = "postgres".to_owned(),
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "shape case sensitivity",
             change: |request| request.case_sensitive_shapes = true,
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "function return types",
             change: |request| request.function_return_types = pairs(&[("score", "DOUBLE")]),
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "nullability rules",
             change: |request| request.nullability_rules = None,
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "rich type inference",
             change: |request| request.rich_type_inference = false,
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "relation types",
             change: |request| {
                 request.column_types = shapes(&[("raw_orders", &[("order_id", "BIGINT")])])
             },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "relation nullability",
@@ -322,6 +348,7 @@ fn given_any_analysis_input_changed_when_keying_then_the_key_changes() {
                     &[("order_id", "unknown"), ("amount", "unknown")],
                 )])
             },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "complete binding schemas",
@@ -330,6 +357,7 @@ fn given_any_analysis_input_changed_when_keying_then_the_key_changes() {
                     .complete_schemas
                     .push(("raw_items".to_owned(), pairs(&[("id", "INTEGER")])))
             },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "catalog schemas",
@@ -338,14 +366,16 @@ fn given_any_analysis_input_changed_when_keying_then_the_key_changes() {
                     .catalog_schemas
                     .push(("raw_items".to_owned(), pairs(&[("id", "INTEGER")])))
             },
+            expected_key_changed: true,
         },
         CacheKeyTestCase {
             description: "dynamic families by table",
             change: |request| {
                 request
                     .dynamic_families_by_table
-                    .push(("raw_orders".to_owned(), vec![family()]))
+                    .push(("raw_orders".to_owned(), vec![amounts_family()]))
             },
+            expected_key_changed: true,
         },
     ];
     let base = model_keys(orders_request(model_requests(ORDERS)))[1];
@@ -353,7 +383,12 @@ fn given_any_analysis_input_changed_when_keying_then_the_key_changes() {
         let mut request: SessionRequest = orders_request(model_requests(ORDERS));
         (test_case.change)(&mut request);
 
-        assert_ne!(model_keys(request)[1], base, "{}", test_case.description);
+        assert_eq!(
+            model_keys(request)[1] != base,
+            test_case.expected_key_changed,
+            "{}",
+            test_case.description
+        );
     }
 }
 
@@ -367,6 +402,8 @@ fn given_any_relation_fact_changed_when_digesting_then_the_digest_changes() {
                     .available_types
                     .set_default("raw_items", pairs(&[("id", "INTEGER")]))
             },
+            subject: "raw_items",
+            expected_changed: true,
         },
         RelationDigestTestCase {
             description: "available nullability",
@@ -375,6 +412,8 @@ fn given_any_relation_fact_changed_when_digesting_then_the_digest_changes() {
                     .available_nullability
                     .set_default("raw_items", pairs(&[("id", "non_null")]))
             },
+            subject: "raw_items",
+            expected_changed: true,
         },
         RelationDigestTestCase {
             description: "closed shape",
@@ -383,6 +422,8 @@ fn given_any_relation_fact_changed_when_digesting_then_the_digest_changes() {
                     .complete_shapes
                     .set_default("raw_items", pairs(&[("id", "INTEGER")]))
             },
+            subject: "raw_items",
+            expected_changed: true,
         },
         RelationDigestTestCase {
             description: "catalog schema",
@@ -391,16 +432,18 @@ fn given_any_relation_fact_changed_when_digesting_then_the_digest_changes() {
                     .catalog
                     .prepare(&[("", &shapes(&[("raw_items", &[("id", "INTEGER")])]))]);
             },
+            subject: "raw_items",
+            expected_changed: true,
         },
     ];
     for test_case in test_cases {
         let mut session = started(orders_request(model_requests(ORDERS)));
-        let before = session.relation_digest("raw_items");
+        let before = session.relation_digest(test_case.subject);
         (test_case.change)(&mut session);
 
-        assert_ne!(
-            session.relation_digest("raw_items"),
-            before,
+        assert_eq!(
+            session.relation_digest(test_case.subject) != before,
+            test_case.expected_changed,
             "{}",
             test_case.description
         );
@@ -409,30 +452,26 @@ fn given_any_relation_fact_changed_when_digesting_then_the_digest_changes() {
 
 #[test]
 fn given_a_read_relation_fact_changed_when_keying_then_the_reading_model_key_changes() {
-    let mut session = started(orders_request(model_requests(ORDERS)));
-    let key = |session: &crate::assembly::analysis_session::models::AnalysisSession| {
-        let names: Vec<&str> = session.model_relation_names(1).into_iter().collect();
-        let relations: HashMap<&str, ContentDigest> = names
-            .iter()
-            .map(|name| (*name, session.relation_digest(name)))
-            .collect();
-        session.model_key(&[0; 32], 1, &Vec::new(), &relations)
-    };
-    let before: ContentDigest = key(&session);
-    session
-        .available_nullability
-        .set_default("stg_orders", pairs(&[("order_id", "non_null")]));
+    let test_cases = [RelationDigestTestCase {
+        description: "upstream nullability with equal types",
+        change: |session| {
+            session
+                .available_nullability
+                .set_default("stg_orders", pairs(&[("order_id", "non_null")]))
+        },
+        subject: "orders_mart",
+        expected_changed: true,
+    }];
+    for test_case in test_cases {
+        let mut session = started(orders_request(model_requests(ORDERS)));
+        let before: ContentDigest = current_model_key(&session, test_case.subject);
+        (test_case.change)(&mut session);
 
-    assert_ne!(key(&session), before);
-}
-
-fn family() -> DynamicFamily {
-    DynamicFamily {
-        name: "amounts".to_owned(),
-        pivot_column: "status".to_owned(),
-        value_column: "amount".to_owned(),
-        aggregate: "SUM".to_owned(),
-        data_type: "DOUBLE".to_owned(),
-        name_pattern: None,
+        assert_eq!(
+            current_model_key(&session, test_case.subject) != before,
+            test_case.expected_changed,
+            "{}",
+            test_case.description
+        );
     }
 }

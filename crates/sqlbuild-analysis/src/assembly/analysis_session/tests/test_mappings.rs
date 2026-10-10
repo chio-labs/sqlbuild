@@ -1,5 +1,5 @@
+use crate::assembly::analysis_session::_helpers::mappings::waves;
 use crate::assembly::analysis_session::_helpers::mappings::{dict_from_pairs, same_mapping};
-use crate::assembly::analysis_session::_helpers::schedule::waves;
 use crate::assembly::analysis_session::tests::helpers::pairs;
 use crate::assembly::analysis_session::tests::test_types::{DictTestCase, WavesTestCase};
 

@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile._helpers.analysis.columns import (
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
     analyze_columns_and_lineage_with_polyglot,
 )
-from sqlbuild.compiler.compile._helpers.analysis.set_operations import names_set_operation
+from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import names_set_operation
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_relation_names,
     binding_schema_for_model,
@@ -165,6 +165,11 @@ class PythonModelAnalysis:
             compact_fact_cache={},
             compact_decoded_fact_cache={},
         )
+
+    def record_cached(self, *, hits: int, misses: int) -> None:
+        """Record the analysis cache entries a native session read and missed."""
+
+        record_analysis_cache_metrics(batch_hits=0, entry_hits=hits, misses=misses, bypasses=0)
 
     def record_uncached(self) -> None:
         """Record that every analysed model bypassed the analysis cache."""

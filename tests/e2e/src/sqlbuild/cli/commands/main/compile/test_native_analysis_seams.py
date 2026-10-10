@@ -81,6 +81,7 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
         test_case.expected_native_returns,
         test_case.expected_native_returns,
     )
+    planned_counts: list[int] = []
     for seams in (native_seams, preview_seams):
         assert isinstance(seams["build_native_column_lineage"][0], ProjectColumnLineage)
         assert isinstance(seams["assemble_native_project_resources"][0], NativeProjectResources)
@@ -95,12 +96,12 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
         assert isinstance(planned_artifacts, tuple)
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
+        planned_counts.append(len(planned_artifacts))
         assert isinstance(seams["complete_native_semantic_diagnostics"][0], CompiledProject)
         assert isinstance(seams["evaluate_native_model_contracts"][0], ContractValidationResult)
-    assert [len(call.args[0].tests) for call in native_sql_test_planning.call_args_list] == [
-        len(native_seams["plan_native_sql_test_artifacts"][0]),
-        len(preview_seams["plan_native_sql_test_artifacts"][0]),
-    ]
+    assert [
+        len(call.args[0].tests) for call in native_sql_test_planning.call_args_list
+    ] == planned_counts
     assert (native_run.returncode, preview_run.returncode) == (0, 0)
     assert report_without_engine(native_run) == report_without_engine(python_run)
     assert report_without_engine(preview_run) == report_without_engine(python_run)

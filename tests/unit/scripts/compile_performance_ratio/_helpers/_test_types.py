@@ -51,6 +51,7 @@ class CacheUseTestCase:
     description: str
     run: CompileRun
     mode: str
+    expected_result: None = None
 
 
 @dataclass(frozen=True)
@@ -68,4 +69,5 @@ class UncachedMatchTestCase:
     uncached_report: str
     incremental_files: dict[str, str]
     uncached_files: dict[str, str]
-    expected_message: str
+    expected_message: str = ""
+    expected_result: None = None
