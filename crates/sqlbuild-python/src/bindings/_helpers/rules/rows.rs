@@ -1,71 +1,41 @@
 //! Build and evaluate the built-in rules request natively from compiled-project rows.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef, PyResult, Python,
 };
-use pyo3::types::{
-    PyBool, PyBoolMethods, PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList,
-    PyString, PyStringMethods, PyTuple,
-};
+use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods};
 use pyo3::{FromPyObject, pyclass, pyfunction, wrap_pyfunction};
-use serde_json::{Map, Number, Value};
 use sqlbuild_rules::engine::main::build_models::build_models;
 use sqlbuild_rules::engine::main::evaluate_rows::evaluate_rows;
 use sqlbuild_rules::engine::main::finalize_rows::finalize_rows;
+use sqlbuild_rules::engine::main::project_model_rows::project_model_rows;
 use sqlbuild_rules::errors::RowsError;
 use sqlbuild_rules::models::{
-    Declaration, DeclarationMember, DirectTestResourceKind, DynamicFamilyRow, DynamicProofRow,
-    EvaluateRequest, Fault, Model, ModelRow, ModelRowsContext, Reference, RowsEvaluation,
-    RowsRequest, RulesConfig, SchemaColumnRow, SchemaRow, SqlScenarioFact, SqlTestCteFact,
-    SqlTestFact, SqlTestMode, SqlTestParameterFact, SqlTestParameterValueFact, TestedResource,
+    Declaration, DeclarationMember, DirectTestResourceKind, EvaluateRequest, Fault, Model,
+    ModelRow, ModelRowsContext, RowsEvaluation, RowsRequest, RulesConfig, SqlScenarioFact,
+    SqlTestCteFact, SqlTestFact, SqlTestMode, SqlTestParameterFact, SqlTestParameterValueFact,
+    TestedResource,
 };
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::values::plain_value;
 use crate::bindings::types::CompilerDetach;
 
 const LEFT_ARGUMENT: &str = "left";
 const RIGHT_ARGUMENT: &str = "right";
 
 type FaultRow = (bool, String, String, u64, u64, String, String);
-type NamedType = (String, Option<String>);
 type CteRow = (String, String);
-type SchemaColumnPy = (String, Option<String>, Option<bool>, u32);
-type DynamicFamilyPy = (
-    String,
-    String,
-    String,
-    String,
-    String,
-    String,
-    Option<String>,
-);
 type ModelTestPayloadPy = (Vec<CteRow>, Vec<CteRow>, Vec<CteRow>, bool, bool);
 type TestNamesRow = (Vec<String>, Vec<String>, Vec<String>, Vec<String>);
 type BuiltCounts = (usize, usize, usize);
 type EvaluationRow = (Vec<FaultRow>, Vec<String>, u64, u64, u64, u64, bool);
-
-/// One compiled model; see `rule_engine/_helpers/engine/native_rows.py` for the layout.
-#[derive(FromPyObject)]
-struct ModelRowPy<'py>(
-    (String, String, String, String),
-    Bound<'py, PyBytes>,
-    Vec<String>,
-    Option<String>,
-    Vec<(String, String, Option<String>)>,
-    Option<SchemaRowPy>,
-    Vec<NamedType>,
-    Option<(bool, bool, Vec<NamedType>)>,
-    Vec<String>,
-    (Vec<DeclarationRowPy<'py>>, Vec<DeclarationRowPy<'py>>),
-);
-
-#[derive(FromPyObject)]
-struct SchemaRowPy(u32, Vec<SchemaColumnPy>, Vec<DynamicFamilyPy>);
 
 /// Name, relative path, members, value, value type and rendering of one declaration.
 #[derive(FromPyObject)]
@@ -138,7 +108,7 @@ struct NativeRulesRequest {
 #[pyfunction]
 fn build_rules_request<'py>(
     mut project: ProjectRowsPy<'py>,
-    models: Vec<ModelRowPy<'py>>,
+    models: (PyRef<'py, NativeCompiledProject>, Vec<String>),
     sql_tests: Vec<SqlTestRowPy<'py>>,
     scenarios: Vec<ScenarioRowPy>,
 ) -> PyResult<(NativeRulesRequest, BuiltCounts)> {
@@ -156,7 +126,8 @@ fn build_rules_request<'py>(
             .into_iter()
             .map(fault)
             .collect();
-        let rows: Vec<ModelRow> = models.into_iter().map(model_row).collect::<PyResult<_>>()?;
+        let rows: Vec<ModelRow> =
+            project_model_rows(models.0.facts(), &models.1).map_err(value_error)?;
         request.models = built_models(&project, &request, rows)?;
         let counts: BuiltCounts = (
             request.models.len(),
@@ -275,84 +246,6 @@ fn built_models(
         fallback,
     );
     built.map_err(|message| python_error.take().unwrap_or_else(|| value_error(message)))
-}
-
-fn model_row(row: ModelRowPy<'_>) -> PyResult<ModelRow> {
-    let ModelRowPy(
-        (name, relative_path, query_sql, authored_sql),
-        config_json,
-        authored_config_keys,
-        logical_schema,
-        references,
-        schema,
-        inferred_columns,
-        dynamic_proof,
-        enum_columns,
-        (enum_declarations, constant_declarations),
-    ) = row;
-    let config: BTreeMap<String, Value> =
-        serde_json::from_slice(config_json.as_bytes()).map_err(value_error)?;
-    Ok(ModelRow {
-        name,
-        relative_path,
-        query_sql,
-        authored_sql,
-        config,
-        authored_config_keys,
-        logical_schema,
-        references: references
-            .into_iter()
-            .map(|(ref_kind, ref_name, ref_package)| Reference {
-                ref_kind,
-                ref_name,
-                ref_package,
-            })
-            .collect(),
-        schema: schema.map(schema_row),
-        inferred_columns,
-        dynamic_proof: dynamic_proof.map(|(output_proven, bare_dynamic_pivot, families)| {
-            DynamicProofRow {
-                output_proven,
-                bare_dynamic_pivot,
-                families,
-            }
-        }),
-        enum_columns,
-        enum_declarations: declarations(enum_declarations)?,
-        constant_declarations: declarations(constant_declarations)?,
-    })
-}
-
-fn schema_row(row: SchemaRowPy) -> SchemaRow {
-    let SchemaRowPy(audit_count, columns, dynamic_columns) = row;
-    SchemaRow {
-        audit_count,
-        columns: columns
-            .into_iter()
-            .map(|(name, data_type, nullable, audit_count)| SchemaColumnRow {
-                name,
-                data_type,
-                nullable,
-                audit_count,
-            })
-            .collect(),
-        dynamic_columns: dynamic_columns
-            .into_iter()
-            .map(
-                |(key, name, pivot_column, value_column, aggregate, data_type, name_pattern)| {
-                    DynamicFamilyRow {
-                        key,
-                        name,
-                        pivot_column,
-                        value_column,
-                        aggregate,
-                        data_type,
-                        name_pattern,
-                    }
-                },
-            )
-            .collect(),
-    }
 }
 
 fn declarations(rows: Vec<DeclarationRowPy<'_>>) -> PyResult<Vec<Declaration>> {
@@ -545,63 +438,6 @@ fn fault_row(fault: Fault) -> FaultRow {
 }
 
 /// A plain Python value as the rules request's JSON value, as orjson with `default=str` encodes it.
-fn plain_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
-    if value.is_none() {
-        return Ok(Value::Null);
-    }
-    if let Ok(flag) = value.downcast::<PyBool>() {
-        return Ok(Value::Bool(flag.is_true()));
-    }
-    if value.is_instance_of::<PyInt>() {
-        return integer_value(value);
-    }
-    if value.is_instance_of::<PyFloat>() {
-        return Ok(Number::from_f64(value.extract::<f64>()?).map_or(Value::Null, Value::Number));
-    }
-    if let Ok(text) = value.downcast::<PyString>() {
-        return Ok(Value::String(text.to_str()?.to_owned()));
-    }
-    if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
-        return value
-            .try_iter()?
-            .map(|item| plain_value(&item?))
-            .collect::<PyResult<Vec<Value>>>()
-            .map(Value::Array);
-    }
-    if let Ok(mapping) = value.downcast::<PyDict>() {
-        return object_value(mapping);
-    }
-    Ok(Value::String(value.str()?.to_str()?.to_owned()))
-}
-
-/// A Python integer within 64 bits; orjson rejects wider integers with the same message.
-fn integer_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
-    if let Ok(signed) = value.extract::<i64>() {
-        return Ok(Value::from(signed));
-    }
-    match value.extract::<u64>() {
-        Ok(unsigned) => Ok(Value::from(unsigned)),
-        Err(error) => Err(value_error(format!(
-            "Integer exceeds 64-bit range: {error}"
-        ))),
-    }
-}
-
-/// A string-keyed dictionary with its keys sorted, as `OPT_SORT_KEYS` encodes it.
-fn object_value(mapping: &Bound<'_, PyDict>) -> PyResult<Value> {
-    let mut entries: Vec<(String, Value)> = Vec::new();
-    for (key, item) in mapping.iter() {
-        let Ok(key) = key.downcast::<PyString>() else {
-            return Err(value_error("Dict key must be str"));
-        };
-        entries.push((key.to_str()?.to_owned(), plain_value(&item)?));
-    }
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
-    Ok(Value::Object(
-        entries.into_iter().collect::<Map<String, Value>>(),
-    ))
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeRulesRequest>()?;
     module.add_function(wrap_pyfunction!(build_rules_request, module)?)?;

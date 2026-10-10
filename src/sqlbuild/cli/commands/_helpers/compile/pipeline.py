@@ -271,19 +271,19 @@ def build_compile_manifest_payload(
 
     if not manifest:
         return None
-    from sqlbuild.compiler.manifest.main.build import build_manifest
+    from sqlbuild.compiler.manifest.main.build_graph_manifest import build_graph_manifest
 
     manifest_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Building manifest...")
-    manifest_payload: dict[str, object] = build_manifest(
+    manifest_payload: dict[str, object] = build_graph_manifest(
         project=analysis.graph.project,
+        plan_output=None,
         project_name=analysis.discovered_inputs.project_config.name,
         adapter_type=resolve_effective_adapter_name(
             project_config=analysis.discovered_inputs.project_config,
             local_config=analysis.discovered_inputs.local_config,
         ),
-        upstream_deps=analysis.graph.upstream_deps,
-        downstream_deps=analysis.graph.downstream_deps,
+        graph=analysis.graph.native,
     )
     _ = complete_compile_phase(
         status=status, message=f"Built manifest. ({time.monotonic() - manifest_start:.2f}s)"

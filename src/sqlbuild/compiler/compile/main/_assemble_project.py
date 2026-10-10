@@ -7,6 +7,7 @@ from dataclasses import replace
 from functools import partial
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.audit_gates import (
     attached_audit_gate_diagnostics,
@@ -25,6 +26,7 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     PythonSqlReferenceReport,
 )
+from sqlbuild.compiler.compiled_project.main._record_model_analyses import record_model_analyses
 from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -53,10 +55,13 @@ def assemble_project(
         analysis_cache_dir=analysis_cache_dir,
         analysis_model_names=analysis_model_names,
     )
-    project: CompiledProject = (
-        run_with_macro_bridge(stage=assemble)
-        if native_stage_enabled(NativeStage.MACRO_CALLS) and active_macro_bridge() is None
-        else assemble()
+    project: CompiledProject = _with_native_project(
+        project=(
+            run_with_macro_bridge(stage=assemble)
+            if native_stage_enabled(NativeStage.MACRO_CALLS) and active_macro_bridge() is None
+            else assemble()
+        ),
+        native_project=inputs.native_project,
     )
     python_sql: PythonSqlReferenceReport = (
         python_sql_reference_diagnostics(
@@ -77,3 +82,14 @@ def assemble_project(
         diagnostics=(*project.diagnostics, *reference_diagnostics),
         unmatched_literal_sql_relations=python_sql.unmatched,
     )
+
+
+def _with_native_project(
+    *, project: CompiledProject, native_project: _native.NativeCompiledProject | None
+) -> CompiledProject:
+    """Hand the compile's native project the assembled analyses and keep it on the project."""
+
+    if native_project is None:
+        return project
+    _ = record_model_analyses(project=native_project, models=project.models)
+    return replace(project, native_project=native_project)

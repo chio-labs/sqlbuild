@@ -1,5 +1,7 @@
 //! The compiled project graph and selector resolution, held natively for Python's graph users.
 
+use std::collections::HashMap;
+
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
@@ -14,6 +16,7 @@ use sqlbuild_analysis::graph::main::parse_selector::parse_selector;
 use sqlbuild_analysis::graph::main::resolve_selector_tokens::resolve_selector_tokens;
 use sqlbuild_analysis::graph::main::resolve_selectors::resolve_selectors;
 use sqlbuild_analysis::graph::main::selector_name_help::selector_name_help;
+use sqlbuild_analysis::graph::main::unique_id_edges::unique_id_edges;
 use sqlbuild_analysis::graph::models::{
     BuildResources, EdgeDirection, GraphIndexes, GraphResource, ParsedSelector, ProjectGraph,
 };
@@ -34,6 +37,8 @@ type IndexesRow = (
     Vec<(String, Vec<ObjectKey>)>,
     Vec<(ObjectKey, String)>,
 );
+/// `(unique id, neighbour unique ids)` in graph order.
+type UniqueIdMap = Vec<(String, Vec<String>)>;
 /// `PlannerInputError`'s `(code, message, help)`.
 type FailureRow = (&'static str, String, Option<String>);
 /// The keys, or the `PlannerInputError` Python raises instead.
@@ -146,6 +151,28 @@ impl NativeProjectGraph {
             .iter()
             .flat_map(|(key, deps)| dependency_edges(key, deps))
             .collect()
+    }
+
+    /// The manifest's `(parent_map, child_map)` entries as dbt-style unique ids, in graph order.
+    fn unique_id_maps(
+        &self,
+        project_name: &str,
+        prefixes: HashMap<String, String>,
+    ) -> (UniqueIdMap, UniqueIdMap) {
+        (
+            unique_id_edges(
+                &self.graph,
+                EdgeDirection::Upstream,
+                project_name,
+                &prefixes,
+            ),
+            unique_id_edges(
+                &self.graph,
+                EdgeDirection::Downstream,
+                project_name,
+                &prefixes,
+            ),
+        )
     }
 
     /// The compile report's execution layer count over models.
