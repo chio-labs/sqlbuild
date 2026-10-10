@@ -13,7 +13,9 @@ use sqlbuild_analysis::semantic_checks::types::RevisedBinding;
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
-use crate::bindings::_helpers::semantic_checks::session_facts::session_model_facts;
+use crate::bindings::_helpers::semantic_checks::session_facts::{
+    column_names, session_model_facts,
+};
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
@@ -141,11 +143,7 @@ fn recovery_model(
         Some(lineage) => (inferred_columns, lineage),
         None => {
             let facts = session_model_facts(session, &name)?;
-            let names: Option<Vec<String>> = facts
-                .columns
-                .as_ref()
-                .map(|columns| columns.iter().map(|column| column.name.clone()).collect());
-            (names, facts.lineage.clone())
+            (column_names(facts), facts.lineage.clone())
         }
     };
     Ok(RecoveryModel {

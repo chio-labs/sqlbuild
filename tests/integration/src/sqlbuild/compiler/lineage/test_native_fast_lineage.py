@@ -17,14 +17,14 @@ from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
 )
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
     golden_entry,
     golden_name,
+    mismatches,
     read_golden,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 from tests.integration.src.sqlbuild.compiler.lineage._test_types import (
     FormerlyDeferredLineageTestCase,
     GeneratedLineageParityTestCase,
@@ -181,13 +181,6 @@ def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_i
             expected_native_statuses={"built": _MODEL_COUNT},
             expected_error=None,
         ),
-        FormerlyDeferredLineageTestCase(
-            description="a dialect name Polyglot does not know raises Python's error",
-            dialect="nonsense",
-            keeps_catalog=True,
-            expected_native_statuses={"unknown_dialect": _MODEL_COUNT},
-            expected_error="Unknown dialect: nonsense",
-        ),
     ],
     ids=lambda case: case.description,
 )
@@ -209,11 +202,45 @@ def test_given_formerly_deferred_models_when_building_fast_lineage_then_native_a
         compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
     )
 
-    if test_case.expected_error is None:
+    _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
+
+    assert statuses == Counter(test_case.expected_native_statuses), test_case.description
+    assert deferral_records(record_dir) == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormerlyDeferredLineageTestCase(
+            description="a dialect name Polyglot does not know raises Python's error",
+            dialect="nonsense",
+            keeps_catalog=True,
+            expected_native_statuses={"unknown_dialect": _MODEL_COUNT},
+            expected_error="Unknown dialect: nonsense",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_dialect_when_building_fast_lineage_then_python_error_raises(
+    test_case: FormerlyDeferredLineageTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
+    compiled: CompiledProject = without_compact_facts(
+        compiled_project(
+            project_dir=tmp_path / "project",
+            files=generated_lineage_files(rng=random.Random(7), model_count=_MODEL_COUNT),
+        )
+    )
+    project: CompiledProject = replace(
+        compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
+    )
+
+    with pytest.raises(ValueError, match=test_case.expected_error):
         _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
-    else:
-        with pytest.raises(ValueError, match=test_case.expected_error):
-            _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
 
     assert statuses == Counter(test_case.expected_native_statuses), test_case.description
     assert deferral_records(record_dir) == []

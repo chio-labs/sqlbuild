@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
     golden_name,

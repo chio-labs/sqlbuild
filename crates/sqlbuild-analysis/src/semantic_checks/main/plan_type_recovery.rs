@@ -7,10 +7,6 @@ use crate::semantic_checks::models::{SemanticFailure, TypeRecoveryRequest, TypeR
 use crate::semantic_validation::models::ProjectCatalog;
 
 /// Plan type recovery on the compile's analysis pool.
-///
-/// # Errors
-///
-/// The error Python's recovery raised for the same input, or an internal native failure.
 pub fn plan_type_recovery(
     request: &TypeRecoveryRequest,
     catalog: &ProjectCatalog,

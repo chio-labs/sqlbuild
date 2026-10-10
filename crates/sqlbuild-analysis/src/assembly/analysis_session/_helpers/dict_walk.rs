@@ -177,7 +177,10 @@ pub(crate) enum PyValue {
 
 /// The wheel's guarded `parse_one`; Ok(None) is the `PolyglotError` Python catches.
 pub(crate) fn parse_one(sql: &str, dialect: &str) -> Result<Option<Expression>, String> {
-    Ok(parse_one_or_error(sql, dialect)?.ok())
+    match parse_one_or_error(sql, dialect)? {
+        Ok(parsed) => Ok(Some(parsed)),
+        Err(_polyglot_error) => Ok(None),
+    }
 }
 
 /// The wheel's guarded `parse_one`, with the message of the `PolyglotError` it raises.

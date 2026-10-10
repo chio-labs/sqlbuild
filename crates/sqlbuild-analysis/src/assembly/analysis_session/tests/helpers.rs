@@ -10,7 +10,6 @@ use sqlbuild_cache::store::models::NativeStore;
 
 use crate::assembly::analysis_session::main::attach_analysis_cache::attach_analysis_cache;
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
-use crate::assembly::analysis_session::main::finished_dynamic_proof::finished_dynamic_proof;
 use crate::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
 use crate::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
 use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
@@ -289,7 +288,7 @@ pub(crate) fn kept_dynamic_proofs(
     dialect: &str,
     sql: &str,
     family: Option<(&str, &str, &str)>,
-) -> Vec<Option<ContractProof>> {
+) -> Vec<PivotOutcome> {
     let pivots: PivotBatchRequest = pivot_request(dialect, sql, family);
     let names: [&str; 2] = ["customer_amounts", "plain"];
     let models: Vec<ModelRequest> = names
@@ -314,7 +313,13 @@ pub(crate) fn kept_dynamic_proofs(
     let (_, _, finished) = completed(started(request));
     names
         .iter()
-        .map(|name| finished_dynamic_proof(&finished, name).cloned())
+        .map(|name| {
+            finished
+                .dynamic_proofs
+                .get(*name)
+                .cloned()
+                .map_or(PivotOutcome::Absent, PivotOutcome::Proof)
+        })
         .collect()
 }
 

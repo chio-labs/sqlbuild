@@ -1,14 +1,12 @@
 """Expression schemas are memoized only within their owning compiler catalog."""
 
 import json
-from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile.models import CompiledProject
@@ -18,20 +16,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ExpressionMemoCase,
     RestoredShapeCase,
 )
-
-
-def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
-    """Record the expressions of every native expression-source shape batch."""
-
-    original: Callable[..., Any] = native_module.infer_expression_source_shapes
-    batches: list[tuple[str, ...]] = []
-
-    def traced(catalog: object, request: tuple[Any, ...], *rules: Any) -> Any:
-        batches.append(tuple(request[4]))
-        return original(catalog, request, *rules)
-
-    monkeypatch.setattr(native_module, "infer_expression_source_shapes", traced)
-    return batches
+from tests.integration.src.sqlbuild.compiler.pipeline.helpers import traced_shape_batches
 
 
 @pytest.mark.parametrize(

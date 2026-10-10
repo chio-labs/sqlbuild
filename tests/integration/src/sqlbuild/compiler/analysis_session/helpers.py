@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import itertools
 import json
 import random
 from collections import Counter
@@ -51,6 +53,7 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompiledLineageColumnFact,
     CompiledModel,
+    CompileModelInput,
     CompileProjectInputs,
     DynamicColumnContractProof,
     InferredColumn,
@@ -60,7 +63,10 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from sqlbuild.sql_values.types import CollectionRendering
-from tests.integration.src.sqlbuild.compiler.golden_views import GoldenEntry, golden_entry
+from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
+    AdapterRuleCallbackTestCase,
+)
+from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 _PROJECT_TOML: str = (
     'name = "orders_analysis"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
@@ -744,11 +750,15 @@ def _compare_proofs(
         column_nullability_by_table=request.column_nullability_by_table,
         dynamic_families_by_table=request.dynamic_families_by_table,
     )
-    for model_input in request.model_inputs:
+    proved: list[bool] = [
+        bool(model_dynamic_families(model_input))
+        and model_input.model_file.file_path.stem in analyses
+        for model_input in request.model_inputs
+    ]
+    pivot_inputs: list[CompileModelInput] = list(itertools.compress(request.model_inputs, proved))
+    for model_input in pivot_inputs:
         families: tuple[SchemaDynamicColumnFamily, ...] = model_dynamic_families(model_input)
-        analysis: ModelSqlAnalysis | None = analyses.get(model_input.model_file.file_path.stem)
-        if not families or analysis is None:
-            continue
+        analysis: ModelSqlAnalysis = analyses[model_input.model_file.file_path.stem]
         models: tuple[tuple[str, tuple[SchemaDynamicColumnFamily, ...]], ...] = (
             (
                 model_pivot_sql(
@@ -802,3 +812,94 @@ def _analysis_views(analyses: dict[str, ModelSqlAnalysis]) -> object:
 
 def _catalog_view(catalog: Any) -> tuple[object, ...]:
     return (dict(catalog.schemas), dict(catalog.analysis_shapes))
+
+
+class RecordingNullabilityRule:
+    """An adapter nullability rule recording its calls, answering nullable or raising."""
+
+    def __init__(self, *, raised: type[Exception] | None) -> None:
+        self.calls: list[tuple[InferredNullability, ...]] = []
+        self._outcomes: list[Callable[[], InferredNullability]] = [
+            _nullable,
+            *(functools.partial(_raise, error) for error in filter(None, (raised,))),
+        ]
+
+    def __call__(self, arguments: tuple[InferredNullability, ...]) -> InferredNullability:
+        self.calls.append(arguments)
+        return self._outcomes[-1]()
+
+
+def adapter_rule_request(
+    *,
+    test_case: AdapterRuleCallbackTestCase,
+    rule: RecordingNullabilityRule,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> NativeModelAnalysisRequest:
+    """A generated project plus the adapter-rule models, analysed with `rule` for UPPER and IFF."""
+
+    request: NativeModelAnalysisRequest = analysis_request(
+        inputs=compile_inputs(
+            project_dir=tmp_path / "project",
+            files={
+                **generated_analysis_files(
+                    rng=random.Random(test_case.seed), model_count=test_case.model_count
+                ),
+                **ADAPTER_RULE_MODELS,
+            },
+        ),
+        monkeypatch=monkeypatch,
+        inference_profile=ExpressionInferenceProfile(
+            sql_analysis_dialect="duckdb",
+            function_nullability_rules={"UPPER": rule, "IFF": rule},
+        ),
+    )
+    rule.calls.clear()
+    return request
+
+
+def _nullable() -> InferredNullability:
+    return InferredNullability.NULLABLE
+
+
+def _raise(error: type[Exception]) -> InferredNullability:
+    raise error("adapter rule failed")
+
+
+def write_shared_query_project(
+    *, project_dir: Path, models: dict[str, str], upstream_sql: str
+) -> None:
+    """Write an orders project with `orders`, `customers` and `models`."""
+
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n', encoding="utf-8"
+    )
+    model_dir: Path = project_dir / "models"
+    model_dir.mkdir()
+    for name, sql in {"orders": upstream_sql, "customers": upstream_sql, **models}.items():
+        _ = (model_dir / f"{name}.sql").write_text(sql, encoding="utf-8")
+
+
+def upstream_lineage_sources(
+    *, project_dir: Path, column: str, mode: str, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, list[str]]:
+    """The lineage command's exit code and the upstream resources of `column` one level up."""
+
+    code: int = main(
+        [
+            "--project-dir",
+            str(project_dir),
+            "lineage",
+            column,
+            "--format",
+            "json",
+            "--direction",
+            "upstream",
+            "--depth",
+            "1",
+            "--mode",
+            mode,
+        ]
+    )
+    trace: list[dict[str, Any]] = json.loads(capsys.readouterr().out)["trace"]
+    return code, [step["source"]["resource_name"] for step in trace]

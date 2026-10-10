@@ -2,6 +2,7 @@
 
 pub mod diagnostics;
 pub mod map_diagnostics;
+pub mod new_analysis_pool;
 pub mod normalize;
 pub mod normalize_batch;
 pub mod normalize_dialect;

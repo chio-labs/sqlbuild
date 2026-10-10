@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 use sqlbuild_analysis::assembly::project::main::assemble_project_resources::assemble_project_resources;
@@ -100,19 +101,18 @@ fn assemble_project_resource_facts(
     }
 }
 
-/// Python's syntax error message for one SQL string, None where it parses; raises where Python
-/// raises: `ValueError` for SQL the analysis normalization rejects or an unknown dialect.
+/// Python's syntax error message for one SQL string, None where it parses.
 #[pyfunction]
 #[pyo3(signature = (sql, placeholders, dialect, parse_one=false))]
 fn sql_syntax_error(
-    py: Python<'_>,
-    sql: String,
+    sql: &Bound<'_, PyString>,
     placeholders: Option<HashMap<String, String>>,
     dialect: Option<String>,
     parse_one: bool,
 ) -> PyResult<Option<String>> {
+    let py: Python<'_> = sql.py();
     let check = SyntaxCheck {
-        sql,
+        sql: sql.to_str()?.to_owned(),
         placeholders: placeholders.unwrap_or_default().into_iter().collect(),
     };
     let dialect: String = dialect

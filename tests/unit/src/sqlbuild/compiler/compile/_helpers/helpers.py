@@ -1,3 +1,4 @@
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -5,11 +6,16 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,
@@ -68,7 +74,11 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
-from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
+from sqlbuild.compiler.lineage.types import (
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    InferredNullability,
+)
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
@@ -811,4 +821,30 @@ def extract_test_sql(
 
     return extract_unexpanded_sql_test(
         sql=sql, file_label=file_label, mode=mode, syntax=SqlLexicalSyntax()
+    )[0]
+
+
+def reanalysed_columns(
+    *,
+    query_sql: str,
+    references: tuple[CompileSqlReference, ...] = (),
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
+    column_types_by_table: dict[str, dict[str, str]] | None = None,
+    inference_profile: ExpressionInferenceProfile | None = None,
+    allow_compact_analysis: bool = True,
+    recover_cte_facts: bool = True,
+) -> NativeQueryColumns:
+    """Native compact re-analysis over known input types, as source bindings run it."""
+
+    assert allow_compact_analysis and recover_cte_facts
+    values: list[InferredNullability] = list(
+        itertools.chain.from_iterable(
+            map(dict.values, (column_nullability_by_table or {}).values())
+        )
+    )
+    assert all(value == InferredNullability.UNKNOWN for value in values)
+    return infer_native_query_columns(
+        queries=(NativeColumnQuery(sql=query_sql, mode="reanalysis", references=references),),
+        profile=inference_profile or ExpressionInferenceProfile(),
+        column_types_by_table=column_types_by_table,
     )[0]

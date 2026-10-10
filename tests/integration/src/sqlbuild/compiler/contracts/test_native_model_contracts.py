@@ -14,6 +14,7 @@ from tests.integration.src.sqlbuild.compiler.contracts._test_types import (
     UnknownDialectContractTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
+    ContractView,
     NativeContractRecord,
     compiled_contract_project,
     contract_diagnostics,
@@ -22,7 +23,7 @@ from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
     record_native_outcomes,
     with_declared_type,
 )
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
     golden_entry,
@@ -168,7 +169,7 @@ def test_given_input_python_once_answered_when_validating_then_native_diagnostic
         declared_type=test_case.declared_type,
     )
 
-    diagnostics = contract_diagnostics(project=project, dialect=test_case.dialect)
+    diagnostics: ContractView = contract_diagnostics(project=project, dialect=test_case.dialect)
 
     assert (
         tuple(

@@ -656,15 +656,11 @@ fn given_a_finished_session_when_reading_dynamic_proofs_then_keeps_each_models_p
         ),
     }];
     for test_case in test_cases {
-        let PivotOutcome::Proof(expected) = test_case.expected_outcome else {
-            panic!("{}: the case expects a proof", test_case.description);
-        };
-
         let kept = kept_dynamic_proofs(test_case.dialect, test_case.sql, test_case.family);
 
         assert_eq!(
             kept,
-            vec![Some(expected), None],
+            vec![test_case.expected_outcome, PivotOutcome::Absent],
             "{}",
             test_case.description
         );

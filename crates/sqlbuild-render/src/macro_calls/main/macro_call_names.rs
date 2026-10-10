@@ -3,11 +3,9 @@
 use sqlbuild_core::text::models::PythonText;
 
 use crate::macro_calls::_helpers::scanner::{every_call_name, top_level_calls};
-use crate::macro_calls::models::ScanError;
+use crate::macro_calls::errors::ScanError;
 
-/// Python's `_scan_sqlbuild_call_names`: unique call names in encounter order, declaration
-/// calls included; top-level calls only, or with `nested` every call start the scan visits; or
-/// the error Python's scan raises.
+/// Python's `_scan_sqlbuild_call_names`: unique call names in encounter order.
 pub fn macro_call_names(
     python: PythonText,
     sql: &str,

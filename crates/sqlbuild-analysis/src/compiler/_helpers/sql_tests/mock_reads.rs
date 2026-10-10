@@ -226,8 +226,7 @@ fn fold(text: &str) -> String {
     python_casefold(active_python_text(), text)
 }
 
-/// Python's `scan_sql_reference_calls(...).references`; a failing scan raises its unlocated
-/// `CompileInputError`.
+/// Python's `scan_sql_reference_calls(...).references`; a failing scan raises unlocated.
 fn references(sql: &str, syntax: &LexicalSyntax) -> Deferrable<Vec<Reference>> {
     match extract_sql_references(sql, syntax) {
         ReferenceExtraction::Extracted(scan) => {
@@ -331,8 +330,7 @@ fn proxy_parse_options() -> Deferrable<ParseOptions> {
     })
 }
 
-/// Python's `_defined_cte_keys` over `to_dict()`: the folded name of every CTE in a `ctes` list,
-/// which only `WITH` clauses hold, at any depth.
+/// Python's `_defined_cte_keys` over `to_dict()`.
 fn defined_cte_keys(parsed: &Expression) -> HashSet<String> {
     let mut keys: HashSet<String> = HashSet::new();
     for node in parsed.dfs() {

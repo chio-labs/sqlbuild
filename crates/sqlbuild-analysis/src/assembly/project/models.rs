@@ -150,8 +150,7 @@ pub struct Namespace {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProjectResources {
     pub model_deps: Vec<Vec<ObjectKey>>,
-    /// Whether every SQL string a model's assembly validates parses; where one does not,
-    /// Python's validation reports it with its message and location.
+    /// Whether every SQL string a model's assembly validates parses; Python reports failures.
     pub model_syntax_valid: Vec<bool>,
     /// A managed source's `(database, schema)`; None where the entry stays as authored.
     pub sources: Vec<Option<(Option<String>, Option<String>)>>,

@@ -162,8 +162,7 @@ impl NativeModelAnalysisSession {
             .unwrap_or_default()
     }
 
-    /// Analyse every model; a model's adapter rule exception is raised as it was, any internal
-    /// native failure as `NativeCompilerError`.
+    /// Analyse every model.
     fn run(&mut self, py: Python<'_>) -> PyResult<StepRow> {
         let mut session: AnalysisSession = self.running()?;
         let result: Result<(AnalysisSession, SessionStep), String> =
@@ -226,18 +225,15 @@ impl NativeModelAnalysisSession {
 }
 
 /// Start a session on `catalog`.
-///
-/// `adapter_rules` holds the adapter's own nullability rules by name, with the
-/// `InferredNullability` type they take and return; the request names them `python`.
 #[pyfunction]
 #[pyo3(signature = (catalog, request, cache=None, adapter_rules=None))]
 fn start_model_analysis_session(
-    py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
     request: RequestRow,
     cache: Option<(PathBuf, String)>,
     adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
 ) -> PyResult<NativeModelAnalysisSession> {
+    let py: Python<'_> = catalog.py();
     let mut request: SessionRequest = session_request(request);
     let rule_failure: RuleFailure = RuleFailure::default();
     request.nullability_callback = adapter_rules

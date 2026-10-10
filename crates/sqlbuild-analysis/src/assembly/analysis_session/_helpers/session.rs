@@ -14,6 +14,7 @@ use crate::assembly::analysis_session::_helpers::analysis_cache::{
     CachedOutcome, decode_outcome, encode_outcome,
 };
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
+use crate::assembly::analysis_session::_helpers::catalog_state::{ShapeOptions, ShapeSource};
 use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
 };
@@ -28,7 +29,6 @@ use crate::assembly::analysis_session::_helpers::mappings::{
     ShapeTable, dict_from_pairs, same_keys, same_relations,
 };
 use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
-use crate::assembly::analysis_session::_helpers::publication::{ShapeOptions, ShapeSource};
 use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_TYPE};
 use crate::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, ContractProof, FinishedSession, LineageFacts, LineageRow,
@@ -44,11 +44,6 @@ const SESSION_CONTEXT: &str = "native model analysis";
 
 impl AnalysisSession {
     /// A session over `request`; a `ref` cycle is one wave.
-    ///
-    /// # Errors
-    ///
-    /// A native failure where two models share a name: discovery rejects duplicate model names
-    /// (D007) before any analysis, so this is a broken invariant.
     pub(crate) fn start(request: SessionRequest, catalog: &ProjectCatalog) -> Result<Self, String> {
         let producers: Vec<Vec<usize>> = producers(&request.models)
             .ok_or_else(|| native_failure(SESSION_CONTEXT, "two analysed models share a name"))?;
@@ -341,8 +336,7 @@ impl AnalysisSession {
         Ok(())
     }
 
-    /// Python's re-analysis of each candidate natively; the first failure in model order fails
-    /// the analysis.
+    /// Python's re-analysis of each candidate; the first failure in model order fails it.
     fn native_enrichments(
         &self,
         candidates: &[(usize, Shapes, bool)],
@@ -735,8 +729,7 @@ fn enriched_analysis(
     merged
 }
 
-/// A compiled model's typed output columns and lineage from a successful analysis with native
-/// lineage.
+/// A model's typed output columns and lineage from a successful native-lineage analysis.
 fn session_model_facts(analysis: &ModelAnalysis) -> Option<SessionModelFacts> {
     let (LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows)) = &analysis.lineage;
     analysis.analysis_succeeded.then(|| SessionModelFacts {

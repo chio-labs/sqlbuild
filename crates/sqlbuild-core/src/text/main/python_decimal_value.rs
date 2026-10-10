@@ -3,8 +3,6 @@
 use crate::text::models::PythonText;
 
 /// The digit value Python's `int()` reads from one character, if `str.isdecimal()` is true.
-///
-/// Every generated decimal range starts at a zero digit and runs in blocks of ten.
 pub fn python_decimal_value(python: PythonText, character: char) -> Option<u32> {
     if character.is_ascii() {
         return character.to_digit(10);

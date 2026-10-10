@@ -197,10 +197,8 @@ def test_given_projects_python_rejects_when_assembling_natively_then_raises_pyth
 
     assert test_case.expected_error in str(python_error.value)
     assert str(native_error.value) == str(python_error.value)
-    assert assembly_deferrals(record_dir) == (
-        Counter({f"project_assembly:{test_case.expected_kind}": 1})
-        if test_case.expected_kind is not None
-        else Counter()
+    assert assembly_deferrals(record_dir) == Counter(
+        f"project_assembly:{kind}" for kind in filter(None, (test_case.expected_kind,))
     )
 
 
@@ -246,10 +244,8 @@ def test_given_a_variable_only_python_renders_when_assembling_natively_then_pyth
 
     assert assembly_view(native) == assembly_view(python)
     assert native.seeds[0].destination.schema == test_case.expected_schema
-    assert assembly_deferrals(record_dir) == (
-        Counter({f"project_assembly:{test_case.expected_kind}": 1})
-        if test_case.expected_kind is not None
-        else Counter()
+    assert assembly_deferrals(record_dir) == Counter(
+        {f"project_assembly:{test_case.expected_kind}": 1}
     )
 
 

@@ -15,6 +15,10 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     SharedQueryOutputTestCase,
 )
+from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
+    upstream_lineage_sources,
+    write_shared_query_project,
+)
 
 _UPSTREAM_SQL: str = (
     "MODEL (description 'Test model.', materialized view); SELECT 1 AS id, 2.5 AS amount"
@@ -25,39 +29,6 @@ _STUB_CTE: str = (
     '(SELECT CAST(2 AS VARCHAR) AS id) SELECT id FROM __ref("{upstream}")'
 )
 _MISSING: str = _HEADER + 'SELECT id FROM __ref("{upstream}") WHERE missing > 0'
-
-
-def _write_project(*, project_dir: Path, models: dict[str, str]) -> None:
-    _ = (project_dir / "sqlbuild_project.toml").write_text(
-        'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n', encoding="utf-8"
-    )
-    model_dir: Path = project_dir / "models"
-    model_dir.mkdir()
-    for name, sql in {"orders": _UPSTREAM_SQL, "customers": _UPSTREAM_SQL, **models}.items():
-        _ = (model_dir / f"{name}.sql").write_text(sql, encoding="utf-8")
-
-
-def _upstream_sources(
-    *, project_dir: Path, column: str, mode: str, capsys: pytest.CaptureFixture[str]
-) -> tuple[int, list[str]]:
-    code: int = main(
-        [
-            "--project-dir",
-            str(project_dir),
-            "lineage",
-            column,
-            "--format",
-            "json",
-            "--direction",
-            "upstream",
-            "--depth",
-            "1",
-            "--mode",
-            mode,
-        ]
-    )
-    trace: list[dict[str, Any]] = json.loads(capsys.readouterr().out)["trace"]
-    return code, [step["source"]["resource_name"] for step in trace]
 
 
 @pytest.mark.parametrize(
@@ -142,12 +113,14 @@ def test_given_equal_shapes_when_compiling_then_each_model_keeps_its_own_lineage
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _write_project(project_dir=tmp_path, models=test_case.models)
+    write_shared_query_project(
+        project_dir=tmp_path, models=test_case.models, upstream_sql=_UPSTREAM_SQL
+    )
 
     compiled: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     diagnostics: list[object] = json.loads(capsys.readouterr().out)["diagnostics"]
     traces: list[tuple[int, list[str]]] = [
-        _upstream_sources(project_dir=tmp_path, column=column, mode=mode, capsys=capsys)
+        upstream_lineage_sources(project_dir=tmp_path, column=column, mode=mode, capsys=capsys)
         for column, _, mode in test_case.expected_lineage
     ]
 
@@ -188,7 +161,9 @@ def test_given_equal_shapes_with_findings_when_compiling_then_reports_each_model
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _write_project(project_dir=tmp_path, models=test_case.models)
+    write_shared_query_project(
+        project_dir=tmp_path, models=test_case.models, upstream_sql=_UPSTREAM_SQL
+    )
 
     compiled: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     diagnostics: list[dict[str, Any]] = json.loads(capsys.readouterr().out)["diagnostics"]
@@ -202,11 +177,6 @@ def test_given_equal_shapes_with_findings_when_compiling_then_reports_each_model
         )
         for diagnostic in diagnostics
     )
-    columns: dict[str, int] = {
-        model: sql.index("missing") + 1
-        for model, sql in test_case.models.items()
-        if "missing" in sql
-    }
 
     assert compiled == 1
     assert findings == sorted(
@@ -214,8 +184,8 @@ def test_given_equal_shapes_with_findings_when_compiling_then_reports_each_model
             model,
             "B002",
             f"Unknown column 'missing' in {upstream}",
-            columns[model],
-            columns[model] + len("missing"),
+            test_case.models[model].index("missing") + 1,
+            test_case.models[model].index("missing") + 1 + len("missing"),
         )
         for model, upstream in test_case.expected_findings
     )

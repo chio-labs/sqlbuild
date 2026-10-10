@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
     golden_entry,
@@ -22,18 +22,13 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks._test_types import 
 from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
     SemanticInputs,
     captured_semantic_inputs,
+    files_with_non_ascii,
     generated_metadata_files,
     native_metadata,
-    non_ascii_variant,
     record_metadata_families,
     semantic_outcome,
     with_dialect,
 )
-
-
-def metadata_files(*, rng: random.Random, model_count: int, non_ascii: bool) -> dict[str, str]:
-    files: dict[str, str] = generated_metadata_files(rng=rng, model_count=model_count)
-    return non_ascii_variant(files=files, rng=rng) if non_ascii else files
 
 
 @pytest.mark.parametrize(
@@ -83,8 +78,10 @@ def test_given_generated_projects_when_checking_metadata_natively_then_matches_r
         project_dir: Path = tmp_path / f"project_{index}"
         captured: SemanticInputs = captured_semantic_inputs(
             project_dir=project_dir,
-            files=metadata_files(
-                rng=rng, model_count=test_case.model_count, non_ascii=test_case.non_ascii
+            files=files_with_non_ascii(
+                files=generated_metadata_files(rng=rng, model_count=test_case.model_count),
+                rng=rng,
+                non_ascii=test_case.non_ascii,
             ),
             monkeypatch=monkeypatch,
         )

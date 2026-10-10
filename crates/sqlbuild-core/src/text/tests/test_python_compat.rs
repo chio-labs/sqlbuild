@@ -12,7 +12,7 @@ use crate::text::main::python_upper::python_upper;
 use crate::text::models::PythonText;
 use crate::text::tests::test_types::{
     CaseMappingTestCase, CharacterClassTestCase, CleandocTestCase, CloseMatchesTestCase,
-    PythonTextTestCase,
+    IgnorecaseTestCase, PythonTextTestCase,
 };
 
 const KEYS: &[&str] = &[
@@ -336,30 +336,106 @@ fn given_unicode_versions_when_folding_and_upper_casing_then_python_str_methods_
 
 #[test]
 fn given_character_pairs_when_matching_ignoring_case_then_python_re_agrees() {
-    // `re.fullmatch(re.escape(pattern), text, re.IGNORECASE)` under Python 3.12.
-    let test_cases: [(char, char, bool); 15] = [
-        ('k', '\u{212a}', true),
-        ('K', '\u{212a}', true),
-        ('s', '\u{17f}', true),
-        ('i', '\u{131}', true),
-        ('I', '\u{130}', true),
-        ('i', '\u{130}', true),
-        ('\u{3c3}', '\u{3c2}', true),
-        ('\u{3a3}', '\u{3c2}', true),
-        ('\u{b5}', '\u{39c}', true),
-        ('\u{df}', '\u{1e9e}', true),
-        ('\u{df}', 'S', false),
-        ('\u{130}', '\u{131}', true),
-        ('a', '\u{e1}', false),
-        ('\u{1c80}', '\u{412}', true),
-        ('\u{fb05}', '\u{fb06}', true),
+    let test_cases = [
+        IgnorecaseTestCase {
+            description: "k against \u{212a}",
+            pattern: 'k',
+            text: '\u{212a}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "K against \u{212a}",
+            pattern: 'K',
+            text: '\u{212a}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "s against \u{17f}",
+            pattern: 's',
+            text: '\u{17f}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "i against \u{131}",
+            pattern: 'i',
+            text: '\u{131}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "I against \u{130}",
+            pattern: 'I',
+            text: '\u{130}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "i against \u{130}",
+            pattern: 'i',
+            text: '\u{130}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "\u{3c3} against \u{3c2}",
+            pattern: '\u{3c3}',
+            text: '\u{3c2}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "\u{3a3} against \u{3c2}",
+            pattern: '\u{3a3}',
+            text: '\u{3c2}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "\u{b5} against \u{39c}",
+            pattern: '\u{b5}',
+            text: '\u{39c}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "\u{df} against \u{1e9e}",
+            pattern: '\u{df}',
+            text: '\u{1e9e}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "\u{df} against S",
+            pattern: '\u{df}',
+            text: 'S',
+            expected_match: false,
+        },
+        IgnorecaseTestCase {
+            description: "\u{130} against \u{131}",
+            pattern: '\u{130}',
+            text: '\u{131}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "a against \u{e1}",
+            pattern: 'a',
+            text: '\u{e1}',
+            expected_match: false,
+        },
+        IgnorecaseTestCase {
+            description: "\u{1c80} against \u{412}",
+            pattern: '\u{1c80}',
+            text: '\u{412}',
+            expected_match: true,
+        },
+        IgnorecaseTestCase {
+            description: "\u{fb05} against \u{fb06}",
+            pattern: '\u{fb05}',
+            text: '\u{fb06}',
+            expected_match: true,
+        },
     ];
     let python: PythonText = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
-    for (pattern, text, expected) in test_cases {
+    for test_case in test_cases {
         assert_eq!(
-            python_ignorecase_key(python, pattern) == python_ignorecase_key(python, text),
-            expected,
-            "{pattern:?} against {text:?}"
+            python_ignorecase_key(python, test_case.pattern)
+                == python_ignorecase_key(python, test_case.text),
+            test_case.expected_match,
+            "{}",
+            test_case.description
         );
     }
 }

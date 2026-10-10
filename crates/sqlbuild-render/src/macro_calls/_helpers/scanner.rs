@@ -5,7 +5,7 @@ use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::models::PythonText;
 
-use crate::macro_calls::models::ScanError;
+use crate::macro_calls::errors::ScanError;
 
 const TYPED_REFERENCE_NAMES: [&str; 3] = ["__ref", "__source", "__seed"];
 
@@ -17,8 +17,7 @@ pub(crate) struct ScannedCall {
     pub(crate) name: String,
 }
 
-/// Where Python's scan of the text raises: in the call starting at a byte offset, or between
-/// calls.
+/// Where Python's scan of the text raises: in the call starting at a byte offset, or between calls.
 pub(crate) struct ScannedFailure {
     pub(crate) call_start: Option<usize>,
     pub(crate) error: ScanError,
@@ -60,8 +59,7 @@ pub(crate) fn top_level_calls(
     (calls, None)
 }
 
-/// Python's `_scan_sqlbuild_call_names(include_nested=True)`: every call start's name in order,
-/// continuing just past the character after each name, as Python's cursor does.
+/// Python's `_scan_sqlbuild_call_names(include_nested=True)`: every call start's name in order.
 pub(crate) fn every_call_name(python: PythonText, text: &str) -> Result<Vec<String>, ScanError> {
     let mut names: Vec<String> = Vec::new();
     let mut cursor = 0;

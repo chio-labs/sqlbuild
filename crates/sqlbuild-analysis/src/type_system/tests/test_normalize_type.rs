@@ -1,5 +1,5 @@
+use crate::type_system::errors::TypeNormalizationError;
 use crate::type_system::main::normalize_type::normalize_type;
-use crate::type_system::models::TypeNormalizationError;
 use crate::type_system::tests::helpers::normalization_text;
 use crate::type_system::tests::test_types::{BracketDepthTestCase, NormalizeTypeTestCase};
 

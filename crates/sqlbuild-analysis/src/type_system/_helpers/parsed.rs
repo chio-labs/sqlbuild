@@ -16,9 +16,8 @@ use crate::type_system::constants::{
     MAX_FUNCTION_CALL_DEPTH, POLYGLOT_CUSTOM_TYPE_NAME, POLYGLOT_TYPE_NAME_ALIASES,
     STRING_TYPE_NAMES, TIMESTAMP_TYPE_NAMES, UNBOUNDED_TEXT_TYPE_NAMES,
 };
-use crate::type_system::models::{
-    NormalizedType, PythonInteger, TypeDialect, TypeFamily, TypeNormalizationError,
-};
+use crate::type_system::errors::TypeNormalizationError;
+use crate::type_system::models::{NormalizedType, PythonInteger, TypeDialect, TypeFamily};
 
 /// Parse one type with SQLBuild's Polyglot guard; the error text is what Python logs.
 pub(crate) fn parse_type(type_sql: &str, dialect: &Dialect) -> Result<DataType, String> {
@@ -179,8 +178,7 @@ fn polyglot_type_name(args: &Map<String, Value>) -> String {
     data_type
 }
 
-/// Python's `_polyglot_type_params`: `int(value)` of each present parameter, skipping what
-/// `int` rejects.
+/// Python's `_polyglot_type_params`: `int(value)` of each parameter, skipping what it rejects.
 fn polyglot_type_params(args: &Map<String, Value>) -> Vec<PythonInteger> {
     let mut params: Vec<PythonInteger> = Vec::new();
     for key in ["precision", "scale", "length"] {

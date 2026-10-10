@@ -1,8 +1,4 @@
-//! Regexes that match as Python's `re` does for this lane's patterns.
-//!
-//! Python's `\w`, `\d` and `\s` follow `str.isalnum()`, `str.isdecimal()` and `str.isspace()` of
-//! the running Python, and `re.IGNORECASE` also matches `ı`, `İ`, `ſ` and the Kelvin sign to ASCII
-//! letters; the `regex` crate differs on each beyond ASCII. Patterns spell those classes out.
+//! Regexes matching as Python's `re` does, spelling out classes the `regex` crate reads otherwise.
 
 use std::fmt::Write;
 use std::sync::LazyLock;

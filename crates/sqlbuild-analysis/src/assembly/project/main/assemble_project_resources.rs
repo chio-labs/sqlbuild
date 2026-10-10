@@ -65,8 +65,7 @@ fn resources(request: &ProjectRequest) -> Fact<ProjectResources> {
     })
 }
 
-/// Whether Python's model and hook syntax validation passes; where it raises, Python's
-/// validation runs for that model and reports the failure.
+/// Whether Python's model and hook syntax validation passes.
 fn valid_syntax(model: &ModelFacts, dialect: &str) -> bool {
     model
         .syntax_checks

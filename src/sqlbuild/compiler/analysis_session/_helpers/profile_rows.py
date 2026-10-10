@@ -6,11 +6,11 @@ from collections.abc import Mapping
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
-from sqlbuild.adapter.type_system.main._safe_cast_nullability import safe_cast_nullability
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
+from sqlbuild.adapter.type_system.main.safe_cast_nullability import safe_cast_nullability
 from sqlbuild.compiler.analysis_session.constants import (
     NULLABILITY_RULE_ADAPTER,
     NULLABILITY_RULE_CONDITIONAL_RESULT,
@@ -57,7 +57,8 @@ def case_sensitive_shapes(*, profile: ExpressionInferenceProfile, dialect: str |
 def shape_rows(shapes: Mapping[str, Mapping[str, str]]) -> ShapeRows:
     """`{relation: {column: value}}` as ordered rows; discovery rejects non-text names and types."""
 
-    return [
-        (name, [(column, str(value)) for column, value in shape.items()])
-        for name, shape in shapes.items()
-    ]
+    return [(name, _shape_pairs(shape)) for name, shape in shapes.items()]
+
+
+def _shape_pairs(shape: Mapping[str, str]) -> list[tuple[str, str]]:
+    return [(column, str(value)) for column, value in shape.items()]

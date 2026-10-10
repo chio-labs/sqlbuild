@@ -21,8 +21,7 @@ pub(crate) fn remove_python_space(text: &str) -> String {
         .collect()
 }
 
-/// Python's base-10 `int(text)`: whitespace, a sign, Unicode decimal digits and single
-/// underscores between digits; None where Python raises `ValueError`.
+/// Python's base-10 `int(text)`, None where Python raises `ValueError`.
 pub(crate) fn python_int(text: &str) -> Option<PythonInteger> {
     let python: PythonText = active_python_text();
     let stripped: &str = python_strip(text);
@@ -51,8 +50,7 @@ pub(crate) fn python_int(text: &str) -> Option<PythonInteger> {
     Some(PythonInteger::from_digits(negative, &value))
 }
 
-/// Python's `_split_type_and_params`: the regex `^([A-Z0-9_]+)(?:\(([^)]*)\))?$`, then
-/// `int(part.strip())` for each comma-separated parameter, skipping what `int` rejects.
+/// Python's `_split_type_and_params`.
 pub(crate) fn split_type_and_params(type_sql: &str) -> (&str, Vec<PythonInteger>) {
     let candidate: &str = type_sql.strip_suffix('\n').unwrap_or(type_sql);
     let name_end: usize = candidate

@@ -33,8 +33,7 @@ type FactsRow = (
     String,
     Vec<DiagnosticRow>,
 );
-/// The test's facts, and the `(kind, message)` of the error its assembly raises, if any: kind
-/// `input` (no facts), `internal` (no facts) or `decimal_overflow` (after the facts).
+/// The test's facts, and the `(kind, message)` of the error its assembly raises, if any.
 type AssemblyRow = (Option<FactsRow>, Option<(&'static str, String)>);
 
 /// The Python assembly request: the project's model inputs and the SQL test inputs.

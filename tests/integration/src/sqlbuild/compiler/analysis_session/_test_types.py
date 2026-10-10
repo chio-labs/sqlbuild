@@ -118,7 +118,7 @@ class FallbackColumnsTestCase:
 
     description: str
     query_sql: str
-    expected_columns: tuple[tuple[str, str | None, str], ...] | None
+    expected_columns: tuple[tuple[str, str | None, str], ...]
 
 
 @dataclass(frozen=True)

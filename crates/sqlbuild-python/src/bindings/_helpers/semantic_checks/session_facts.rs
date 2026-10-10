@@ -1,7 +1,7 @@
 //! Model output names and lineage the semantic stages read from a finished analysis session.
 
 use sqlbuild_analysis::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
-use sqlbuild_analysis::assembly::analysis_session::models::SessionModelFacts;
+use sqlbuild_analysis::assembly::analysis_session::models::{ColumnFact, SessionModelFacts};
 
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 
@@ -15,4 +15,10 @@ pub(crate) fn session_model_facts<'a>(
         .ok_or("a model asked for session facts without a finished session")?;
     finished_model_facts(finished, name)
         .ok_or_else(|| format!("the finished session kept no facts for model {name}"))
+}
+
+/// The output column names of a model's session facts.
+pub(crate) fn column_names(facts: &SessionModelFacts) -> Option<Vec<String>> {
+    let columns: &[ColumnFact] = facts.columns.as_deref()?;
+    Some(columns.iter().map(|column| column.name.clone()).collect())
 }

@@ -3,7 +3,9 @@ use crate::contracts::models::{ContractDiagnostic, ContractModel, ContractReques
 use crate::contracts::tests::helpers::{
     declared, dynamic_model, inferred, model, outcome_lines, proof, schema, with_inferred,
 };
-use crate::contracts::tests::test_types::{ContractTestCase, SharedTypesTestCase};
+use crate::contracts::tests::test_types::{
+    ContractTestCase, SharedTypesTestCase, UnknownDialectTestCase,
+};
 
 #[test]
 fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() {
@@ -281,20 +283,29 @@ fn given_models_sharing_types_when_evaluating_together_then_each_matches_its_own
 
 #[test]
 fn given_a_dialect_polyglot_does_not_know_when_comparing_types_then_python_error_is_returned() {
-    let request = ContractRequest {
-        dialect: "motherduck".to_owned(),
-        implicit_column_contracts: true,
-        models: vec![with_inferred(
-            model(
-                Some("enforced"),
-                Some(schema(vec![declared("amount", Some("INT"), false)], false)),
-            ),
-            vec![inferred("amount", Some("INTEGER"), false)],
-        )],
-    };
+    let test_cases = [UnknownDialectTestCase {
+        description: "an enforced contract compared under an unknown dialect",
+        dialect: "motherduck",
+        expected_error: "Unknown dialect: motherduck",
+    }];
+    for test_case in test_cases {
+        let request = ContractRequest {
+            dialect: test_case.dialect.to_owned(),
+            implicit_column_contracts: true,
+            models: vec![with_inferred(
+                model(
+                    Some("enforced"),
+                    Some(schema(vec![declared("amount", Some("INT"), false)], false)),
+                ),
+                vec![inferred("amount", Some("INTEGER"), false)],
+            )],
+        };
 
-    assert_eq!(
-        evaluate_model_contracts(&request).map_err(|error| error.message()),
-        Err("Unknown dialect: motherduck".to_owned())
-    );
+        assert_eq!(
+            evaluate_model_contracts(&request).map_err(|error| error.message()),
+            Err(test_case.expected_error.to_owned()),
+            "{}",
+            test_case.description
+        );
+    }
 }

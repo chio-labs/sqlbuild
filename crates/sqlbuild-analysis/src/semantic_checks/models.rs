@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::semantic_checks::types::CompletedParts;
-use crate::type_system::models::TypeNormalizationError;
+use crate::type_system::errors::TypeNormalizationError;
 
 /// One compiled model output column and the upstream columns it reads.
 #[derive(Clone, Debug, Default)]
@@ -61,8 +61,7 @@ pub struct TypeRecoveryRequest {
     pub diagnostics: Vec<DiagnosticOwner>,
 }
 
-/// Why native semantic completion fails: the error Python's completion raised for the same
-/// input, or an internal native failure.
+/// Why completion fails: Python's error for the same input, or an internal native failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SemanticFailure {
     /// The wheel's `TypeError` for tokenizing without a dialect.

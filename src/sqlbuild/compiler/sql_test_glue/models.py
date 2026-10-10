@@ -60,8 +60,7 @@ class NativeSqlTestFailure:
 
 @dataclass(frozen=True)
 class NativeSqlTestAssembly:
-    """One natively assembled test, the keyed diagnostics to report before it, and the error its
-    assembly raises: before the test where it has none, else after its macro-mock queries."""
+    """One natively assembled test, its keyed diagnostics, and the error its assembly raises."""
 
     test: CompiledSqlTest | None
     diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]

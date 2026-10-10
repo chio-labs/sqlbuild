@@ -5,13 +5,9 @@ use crate::contracts::_helpers::columns::{
 };
 use crate::contracts::_helpers::type_comparison::TypeComparer;
 use crate::contracts::models::{ContractDiagnostic, ContractRequest};
-use crate::type_system::models::TypeNormalizationError;
+use crate::type_system::errors::TypeNormalizationError;
 
 /// Each requested model's diagnostics; models that need no evaluation have none.
-///
-/// # Errors
-///
-/// The type normalization error Python raises while comparing a model's types.
 pub fn evaluate_model_contracts(
     request: &ContractRequest,
 ) -> Result<Vec<Vec<ContractDiagnostic>>, TypeNormalizationError> {

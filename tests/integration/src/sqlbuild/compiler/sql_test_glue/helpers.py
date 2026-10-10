@@ -29,7 +29,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import (
     NativeSqlTestAssemblyRow,
 )
-from tests.integration.src.sqlbuild.compiler.golden_views import GoldenEntry, golden_entry
+from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 
 @dataclass(frozen=True)
@@ -481,12 +481,14 @@ def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]
 
     def counted_failures(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
         rows: list[NativeSqlTestAssemblyRow] = assemble(request)
-        answers.update(f"failed_{failure[0]}" for _, failure in rows if failure is not None)
+        failures: list[tuple[str, str] | None] = [failure for _, failure in rows]
+        answers.update(f"failed_{failure[0]}" for failure in filter(None, failures))
         return rows
 
     def counted_assemblies(*, inputs: CompileProjectInputs) -> tuple[NativeSqlTestAssembly, ...]:
         assemblies: tuple[NativeSqlTestAssembly, ...] = seam(inputs=inputs)
-        native: list[CompiledSqlTest] = [item.test for item in assemblies if item.test is not None]
+        tests: list[CompiledSqlTest | None] = [item.test for item in assemblies]
+        native: list[CompiledSqlTest] = list(filter(None, tests))
         answers["native_assembled"] += len(native)
         answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in assemblies)
         answers["native_case_fingerprints"] += sum(
@@ -503,7 +505,7 @@ def assembly_golden_entry(*, outcome: PlanningCallOutcome, project_dir: Path) ->
     """One project's compiled SQL tests, diagnostics and raised error as a golden entry."""
 
     tests, diagnostics = cast(
-        tuple[object, object], outcome.value if outcome.raised is None else (None, None)
+        tuple[object, object], (outcome.value, (None, None))[outcome.raised is not None]
     )
     return golden_entry(
         "sql_test_assembly",

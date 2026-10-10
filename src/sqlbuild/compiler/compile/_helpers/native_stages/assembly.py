@@ -26,7 +26,7 @@ from sqlbuild.compiler.compile.models import (
     DynamicColumnContractProof,
     ModelSqlAnalysis,
 )
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (

@@ -58,14 +58,14 @@ def test_given_unprojectable_model_when_compiling_then_parsed_tree_columns_are_k
     )
     model: CompiledModel = project.models[0]
 
+    assert model.inferred_columns is not None
     assert (
-        None
-        if model.inferred_columns is None
-        else tuple(
+        tuple(
             (column.name, column.type, column.nullability.value)
             for column in model.inferred_columns
         )
-    ) == test_case.expected_columns
+        == test_case.expected_columns
+    )
 
 
 @pytest.mark.parametrize(

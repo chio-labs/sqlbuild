@@ -13,3 +13,4 @@ pub mod python_ignorecase_key;
 pub mod python_strip;
 pub mod python_text;
 pub mod python_upper;
+pub mod set_active_python_text;

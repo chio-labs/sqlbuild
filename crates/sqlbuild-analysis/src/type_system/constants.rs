@@ -35,3 +35,5 @@ pub(crate) const POLYGLOT_TYPE_NAME_ALIASES: &[(&str, &str)] = &[
 ];
 /// The function call depth limit SQLBuild passes to every Polyglot parse.
 pub(crate) const MAX_FUNCTION_CALL_DEPTH: usize = 512;
+/// Python's `str(0)`, the only integer text Python treats as false.
+pub(crate) const ZERO_TEXT: &str = "0";

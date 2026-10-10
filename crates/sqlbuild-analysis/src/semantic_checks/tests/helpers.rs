@@ -197,10 +197,10 @@ fn poisoned_chain(dialect: Option<&str>, is_error: bool) -> TypeRecoveryRequest 
 /// Plan and finish type recovery for one case of the poisoned chain.
 pub(crate) fn recovery_summary(test_case: &TypeRecoveryTestCase) -> RecoverySummary {
     let request = poisoned_chain(test_case.dialect, test_case.errors);
-    let (status, step) = match plan_type_recovery(&request, &catalog()) {
-        Ok(step) => (step.status().to_owned(), step),
-        Err(failure) => (format!("{failure:?}"), TypeRecoveryStep::Unchanged),
-    };
+    let (status, step) = plan_type_recovery(&request, &catalog()).map_or_else(
+        |failure| (format!("{failure:?}"), TypeRecoveryStep::Unchanged),
+        |step| (step.status().to_owned(), step),
+    );
     let revised = vec![
         test_case
             .revised
@@ -409,10 +409,10 @@ pub(crate) fn completion_summary(test_case: &CompletionTestCase) -> CompletionSu
     request.models[2].rejected_opt_out_file =
         [Some("legacy.sql".to_owned()), None][usize::from(test_case.without_diagnostics)].clone();
     let (failure, (diagnostics, model_bindings, order)) =
-        match complete_semantic_diagnostics(&request, &catalog()) {
-            Ok(outcome) => (None, outcome.into_parts()),
-            Err(failure) => (Some(failure), Default::default()),
-        };
+        complete_semantic_diagnostics(&request, &catalog()).map_or_else(
+            |failure| (Some(failure), Default::default()),
+            |outcome| (None, outcome.into_parts()),
+        );
     let described_order: Vec<DescribedDiagnostic> = order
         .into_iter()
         .map(|entry| described_entry(&request, &diagnostics, entry))
@@ -499,10 +499,10 @@ pub(crate) fn operand_type_summary(test_case: &OperandTypeTestCase) -> Completio
             .collect(),
     };
     let (failure, (diagnostics, model_bindings, order)) =
-        match complete_semantic_diagnostics(&request, &catalog()) {
-            Ok(outcome) => (None, outcome.into_parts()),
-            Err(failure) => (Some(failure), Default::default()),
-        };
+        complete_semantic_diagnostics(&request, &catalog()).map_or_else(
+            |failure| (Some(failure), Default::default()),
+            |outcome| (None, outcome.into_parts()),
+        );
     let described_order: Vec<DescribedDiagnostic> = order
         .into_iter()
         .map(|entry| described_entry(&request, &diagnostics, entry))

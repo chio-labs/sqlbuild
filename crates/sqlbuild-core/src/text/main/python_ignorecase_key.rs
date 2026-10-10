@@ -2,17 +2,17 @@
 
 use crate::text::models::PythonText;
 
-/// The key under which `re.IGNORECASE` matches `character`: a pattern character matches a text
-/// character exactly when both keys are equal.
+/// The key under which `re.IGNORECASE` matches `character`.
 pub fn python_ignorecase_key(python: PythonText, character: char) -> char {
     if character.is_ascii() {
         return character.to_ascii_lowercase();
     }
     let code_point: u32 = u32::from(character);
-    python
+    match python
         .ignorecase_keys
         .binary_search_by_key(&code_point, |(key, _)| *key)
-        .ok()
-        .and_then(|index| char::from_u32(python.ignorecase_keys[index].1))
-        .unwrap_or(character)
+    {
+        Ok(index) => char::from_u32(python.ignorecase_keys[index].1).unwrap_or(character),
+        Err(_not_in_table) => character,
+    }
 }

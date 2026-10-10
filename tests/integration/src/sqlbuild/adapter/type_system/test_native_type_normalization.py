@@ -25,13 +25,14 @@ from tests.integration.src.sqlbuild.adapter.type_system._test_types import (
 from tests.integration.src.sqlbuild.adapter.type_system.helpers import (
     DIALECTS,
     TypeOutcome,
+    dialect_outcomes,
     generated_type,
     is_normalized,
     logged_parse_error,
     type_outcome,
     type_outcomes,
 )
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
     golden_entry,
@@ -63,11 +64,7 @@ def test_given_generated_types_when_normalizing_then_every_known_dialect_answers
     normalized: list[TypeOutcome] = list(filter(is_normalized, outcomes))
     golden: list[GoldenEntry] = [
         golden_entry(
-            "type",
-            {
-                str(outcome.dialect): (outcome.normalized, bool(outcome.logged_errors))
-                for outcome in outcomes[index * len(DIALECTS) : (index + 1) * len(DIALECTS)]
-            },
+            "type", dialect_outcomes(outcomes[index * len(DIALECTS) : (index + 1) * len(DIALECTS)])
         )
         for index in range(len(type_strings))
     ]

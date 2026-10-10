@@ -16,8 +16,8 @@ from sqlbuild.compiler.analysis_session._helpers.profile_rows import (
 )
 from sqlbuild.compiler.analysis_session.constants import ADAPTER_NULLABILITY_CALLBACK
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
-from sqlbuild.compiler.compile._helpers.sharing.binding import lineage_reference_map
 from sqlbuild.compiler.compile.models import CompileSqlReference, InferredColumn
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import (
@@ -29,6 +29,12 @@ from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_an
 
 _BATCH_MODE: str = "batch"
 _NORMALIZED_MODES: frozenset[str] = frozenset({"parse", "legacy"})
+_LINEAGE_RESOURCE_TYPES: dict[str, CompiledResourceType] = {
+    SqlReferenceKind.REF: CompiledResourceType.MODEL,
+    SqlReferenceKind.SOURCE: CompiledResourceType.SOURCE,
+    SqlReferenceKind.SEED: CompiledResourceType.SEED,
+    SqlReferenceKind.TABLE_FUNCTION: CompiledResourceType.TABLE_FN,
+}
 
 
 def native_query_columns(
@@ -81,19 +87,19 @@ def native_query_columns(
     return tuple(
         NativeQueryColumns(
             succeeded=succeeded,
-            columns=(
-                None
-                if columns is None
-                else tuple(
-                    InferredColumn(
-                        name=name, type=data_type, nullability=InferredNullability(nullability)
-                    )
-                    for name, data_type, nullability in columns
-                )
-            ),
+            columns=None if columns is None else _inferred_columns(columns),
             has_star=has_star,
         )
         for succeeded, columns, has_star in rows
+    )
+
+
+def _inferred_columns(
+    columns: list[tuple[str, str | None, str]],
+) -> tuple[InferredColumn, ...]:
+    return tuple(
+        InferredColumn(name=name, type=data_type, nullability=InferredNullability(nullability))
+        for name, data_type, nullability in columns
     )
 
 
@@ -106,12 +112,27 @@ def _query_row(*, query: NativeColumnQuery, dialect: str | None) -> tuple[object
         list((query.placeholders or {}).items()),
         [_analysis_name(reference) for reference in references],
         [
-            (name, resource_type.value, resource_name)
-            for name, (resource_type, resource_name) in lineage_reference_map(references).items()
+            (name, resource_type, resource_name)
+            for name, (resource_type, resource_name) in _lineage_references(references).items()
         ],
         query.recover_cte_facts,
         query.mode,
     )
+
+
+def _lineage_references(
+    references: tuple[CompileSqlReference, ...],
+) -> dict[str, tuple[str, str]]:
+    """Each lineage reference's analysis name, resource type and name; the last wins in place."""
+
+    return {
+        _analysis_name(reference): (
+            _LINEAGE_RESOURCE_TYPES[reference.ref_kind].value,
+            reference.ref_name,
+        )
+        for reference in references
+        if reference.ref_kind in _LINEAGE_RESOURCE_TYPES
+    }
 
 
 def _analysis_name(reference: CompileSqlReference) -> str:

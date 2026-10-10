@@ -35,11 +35,7 @@ pub(crate) struct ParsedModel<'a> {
     pub(crate) options: &'a Result<ParseOptions, serde_json::Error>,
 }
 
-/// The model's lineage outcome.
-///
-/// # Errors
-///
-/// An internal native failure: a tree the lineage walk cannot read.
+/// The model's lineage outcome; fails on a tree the lineage walk cannot read.
 pub(crate) fn parsed_model_lineage(model: &ParsedModel<'_>) -> Result<FastLineageOutcome, String> {
     let dialect: DialectType = match model.dialect {
         Ok(dialect) => dialect,

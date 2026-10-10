@@ -70,12 +70,7 @@ def ignorecase_key_path() -> Path:
 
 
 def ignorecase_keys() -> list[tuple[int, int]]:
-    """Return every character whose `re.IGNORECASE` match key is not itself, with that key.
-
-    A pattern character matches a text character under `re.IGNORECASE` exactly when both have
-    the same key: the smallest of the character's `_sre` lower case and its `re._casefix`
-    equivalents.
-    """
+    """Return each character whose `re.IGNORECASE` key (least `_sre` lower/casefix) differs."""
 
     sre: Any = importlib.import_module("_sre")
     extra: dict[int, tuple[int, ...]] = importlib.import_module("re._casefix")._EXTRA_CASES  # noqa: SLF001

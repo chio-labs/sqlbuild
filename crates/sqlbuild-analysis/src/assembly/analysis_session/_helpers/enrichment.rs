@@ -19,8 +19,9 @@ use crate::assembly::analysis_session::constants::{
     TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
     WILDCARD,
 };
+use crate::assembly::analysis_session::models::NullabilityCallback;
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow, ModelRequest};
-use crate::assembly::analysis_session::types::{NullabilityCallback, Pairs, Shapes};
+use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
 use crate::semantic_validation::models::NormalizationInput;
 
@@ -53,11 +54,7 @@ enum Projected {
 /// One projection's upstream sources and confidence code.
 type Upstream = (Vec<(String, String, String)>, u8);
 
-/// Python's compact re-analysis.
-///
-/// # Errors
-///
-/// An internal native failure, panics included.
+/// Python's compact re-analysis. # Errors An internal native failure, panics included.
 pub(crate) fn enrichment(input: &EnrichmentInput<'_>) -> Result<Enrichment, String> {
     catch_compiler_panic(|| analysed(input))
 }

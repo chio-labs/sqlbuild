@@ -7,10 +7,6 @@ use crate::semantic_checks::models::{CompletionOutcome, CompletionRequest, Seman
 use crate::semantic_validation::models::ProjectCatalog;
 
 /// Python's recovery, explanation and opt-out rejection, on the compile's analysis pool.
-///
-/// # Errors
-///
-/// The error Python's completion raised for the same input, or an internal native failure.
 pub fn complete_semantic_diagnostics(
     request: &CompletionRequest,
     catalog: &ProjectCatalog,

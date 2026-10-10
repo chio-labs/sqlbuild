@@ -5,13 +5,10 @@ use polyglot_sql::{Dialect, DialectType};
 use crate::type_system::_helpers::dialects::coerce_type_dialect;
 use crate::type_system::_helpers::fallback::normalize_with_fallback;
 use crate::type_system::_helpers::parsed::{normalize_parsed, parse_type};
-use crate::type_system::models::{TypeDialect, TypeNormalization, TypeNormalizationError};
+use crate::type_system::errors::TypeNormalizationError;
+use crate::type_system::models::{TypeDialect, TypeNormalization};
 
 /// Normalize one type as Python does for the dialect name it hands Polyglot.
-///
-/// # Errors
-///
-/// Python's exception where it raises: an unknown dialect or an unwritable parsed type.
 pub fn normalize_type(
     type_sql: &str,
     dialect: &str,

@@ -1,6 +1,7 @@
 //! Plain-data request, deferrals and outcomes of the native model analysis session.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 
 use rayon::ThreadPool;
@@ -9,7 +10,7 @@ use sqlbuild_cache::store::models::NativeStore;
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
-use crate::assembly::analysis_session::types::{NullabilityCallback, OutputSources, Pairs, Shapes};
+use crate::assembly::analysis_session::types::{NullabilityRuleFn, OutputSources, Pairs, Shapes};
 use crate::semantic_validation::types::DiagnosticRow;
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
@@ -97,11 +98,10 @@ pub struct FinishedSession {
     pub(crate) pool: Result<Arc<ThreadPool>, String>,
     pub(crate) models: HashMap<String, SessionModelFacts>,
     /// Each model's dynamic pivot proof from the session's own relation facts, by model name.
-    pub(crate) dynamic_proofs: HashMap<String, ContractProof>,
+    pub dynamic_proofs: HashMap<String, ContractProof>,
 }
 
-/// A compiled model's typed output columns and lineage from an analysis the session completed
-/// natively.
+/// A compiled model's typed output columns and lineage from a native session analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionModelFacts {
     pub columns: Option<Vec<ColumnFact>>,
@@ -251,7 +251,6 @@ pub struct AnalysisCache {
     pub(crate) session_digest: ContentDigest,
     pub(crate) keys: Vec<Option<ContentDigest>>,
     pub(crate) hits: Vec<bool>,
-    /// Models whose outcome must not be stored: a logged failure or Python's answer.
     /// The whole-table digest each legacy analysis read; its entry also requires it.
     pub(crate) legacy_tables: Vec<Option<ContentDigest>>,
     pub(crate) stats: AnalysisCacheStats,
@@ -286,8 +285,7 @@ pub enum QueryColumnsMode {
     Reanalysis,
     /// `infer_columns_with_sql_analysis`: the parsed tree only.
     Parse,
-    /// `analyze_columns_and_lineage_with_polyglot` with compact analysis off: the parsed tree,
-    /// nullability shallow where no input nullability is known.
+    /// `analyze_columns_and_lineage_with_polyglot` with compact analysis off: the parsed tree.
     Legacy,
 }
 
@@ -352,4 +350,14 @@ pub struct CteFacts {
     pub direct_outputs: Vec<String>,
     /// Sorted outputs a filter proves non-null.
     pub non_null_outputs: Vec<String>,
+}
+
+/// The callback that runs project-local adapter nullability rules, the `python` rule id.
+#[derive(Clone)]
+pub struct NullabilityCallback(pub Arc<NullabilityRuleFn>);
+
+impl fmt::Debug for NullabilityCallback {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("NullabilityCallback")
+    }
 }

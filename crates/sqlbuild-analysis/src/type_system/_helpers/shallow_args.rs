@@ -1,7 +1,4 @@
 //! The wheel's `DataType.args` scalars, read without walking nested types.
-//!
-//! Serializing a whole parsed type recurses once per nesting level; normalization only reads
-//! the top-level tag, name and size parameters, so nested values are skipped unvisited.
 
 use std::fmt::Display;
 

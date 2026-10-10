@@ -3,15 +3,13 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::type_system::errors::TypeNormalizationError;
 use sqlbuild_analysis::type_system::main::normalize_type::normalize_type;
-use sqlbuild_analysis::type_system::models::{
-    NormalizedType, TypeNormalization, TypeNormalizationError,
-};
+use sqlbuild_analysis::type_system::models::{NormalizedType, TypeNormalization};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-/// `(name, family, precision, scale, length)` of one normalized type; the integers are the
-/// base-10 text of Python `int`s of any size.
+/// `(name, family, precision, scale, length)` of one normalized type.
 type NormalizedRow = (
     String,
     &'static str,

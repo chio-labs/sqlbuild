@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models import (
     CompileProjectInputs,
     CompileSqlTestInput,
 )
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.sql_test_glue.constants import (
     SQL_TEST_DECIMAL_OVERFLOW,
@@ -34,8 +34,7 @@ def assemble_sql_tests_by_engine(
     inputs: CompileProjectInputs,
     macro_mock_queries: Callable[[CompileSqlTestInput], dict[str, str]],
 ) -> tuple[CompiledSqlTest, ...]:
-    """Assemble every SQL test natively; a test mocking macros re-expands each model's query
-    with the user's macros, and errors raise in Python's assembly order."""
+    """Assemble every SQL test natively, raising errors in Python's assembly order."""
 
     native: tuple[NativeSqlTestAssembly, ...] = assemble_native_sql_tests(inputs=inputs)
     tests: list[CompiledSqlTest] = []

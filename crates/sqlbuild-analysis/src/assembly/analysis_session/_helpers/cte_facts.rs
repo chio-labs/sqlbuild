@@ -32,8 +32,9 @@ use crate::assembly::analysis_session::constants::{
     CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_UNKNOWN, TRANSFORM_AGGREGATION, TRANSFORM_CAST,
     TRANSFORM_CONSTANT, TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR,
 };
+use crate::assembly::analysis_session::models::NullabilityCallback;
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
-use crate::assembly::analysis_session::types::{NullabilityCallback, Pairs, Shapes};
+use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeFamily};
 
@@ -108,8 +109,7 @@ pub(crate) struct LegacyInput<'a> {
     /// Python's `lineage_reference_map` items.
     pub(crate) lineage_references: &'a [(String, String, String)],
     pub(crate) recover: bool,
-    /// Python's `_infer_columns_from_polyglot_ast`, which infers nullability through input
-    /// columns even where no input nullability is known; lineage analysis stays shallow there.
+    /// Python's `_infer_columns_from_polyglot_ast`: nullability inferred through input columns.
     pub(crate) full_nullability: bool,
     /// Python's `column_types_by_table`: every known relation's types.
     pub(crate) types: &'a ShapeTable,

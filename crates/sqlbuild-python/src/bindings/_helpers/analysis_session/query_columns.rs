@@ -5,7 +5,7 @@ use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::main::query_columns::query_columns;
 use sqlbuild_analysis::assembly::analysis_session::models::{
-    QueryColumns, QueryColumnsInput, QueryColumnsMode, QueryColumnsRequest,
+    ColumnFact, QueryColumns, QueryColumnsInput, QueryColumnsMode, QueryColumnsRequest,
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_core::panics::main::native_failure::native_failure;
@@ -94,12 +94,9 @@ fn query_input(row: QueryRow) -> Result<QueryColumnsInput, String> {
 fn columns_row(columns: QueryColumns) -> ColumnsRow {
     (
         columns.succeeded,
-        columns.columns.map(|columns| {
-            columns
-                .into_iter()
-                .map(|column| (column.name, column.data_type, column.nullability))
-                .collect()
-        }),
+        columns
+            .columns
+            .map(|columns| columns.into_iter().map(column_row).collect()),
         columns.has_star,
     )
 }
@@ -107,4 +104,8 @@ fn columns_row(columns: QueryColumns) -> ColumnsRow {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(infer_query_columns, module)?)?;
     Ok(())
+}
+
+fn column_row(column: ColumnFact) -> (String, Option<String>, String) {
+    (column.name, column.data_type, column.nullability)
 }

@@ -10,7 +10,7 @@ use sqlbuild_analysis::contracts::models::{
     PromotionConflict, PromotionModel, PromotionRequest,
 };
 
-use sqlbuild_analysis::type_system::models::TypeNormalizationError;
+use sqlbuild_analysis::type_system::errors::TypeNormalizationError;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::type_system::normalization::normalization_error;

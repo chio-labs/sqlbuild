@@ -265,8 +265,7 @@ fn column_refs(expression: &Expression) -> Result<Vec<(String, String)>, Unreada
     Ok(payload_column_refs(&payload))
 }
 
-/// Python's recursive `visit`, depth first in payload order: a `column` dict ends its branch;
-/// tuples are never entered.
+/// Python's recursive `visit`, depth first in payload order.
 fn payload_column_refs(root: &PythonValue) -> Vec<(String, String)> {
     let mut refs: Vec<(String, String)> = Vec::new();
     let mut pending: Vec<&PythonValue> = vec![root];

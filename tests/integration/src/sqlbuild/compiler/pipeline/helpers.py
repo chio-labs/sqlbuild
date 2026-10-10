@@ -5,6 +5,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -204,3 +207,17 @@ def apply_warehouse_setup_sql(*, project_dir: Path, statements: tuple[str, ...])
             connection.execute(statement)
     finally:
         connection.close()
+
+
+def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
+    """Record the expressions of every native expression-source shape batch."""
+
+    original: Callable[..., Any] = native_module.infer_expression_source_shapes
+    batches: list[tuple[str, ...]] = []
+
+    def traced(catalog: object, request: tuple[Any, ...], *rules: Any) -> Any:
+        batches.append(tuple(request[4]))
+        return original(catalog, request, *rules)
+
+    monkeypatch.setattr(native_module, "infer_expression_source_shapes", traced)
+    return batches

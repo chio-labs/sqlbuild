@@ -271,8 +271,7 @@ pub struct SqlTestAssemblyModelPayload {
 #[derive(Debug, PartialEq)]
 pub enum SqlTestAssemblyOutcome {
     Assembled(AssembledSqlTestFacts),
-    /// Python's decimal context overflows normalizing a case parameter: Python raises
-    /// `decimal.Overflow` after reporting the facts' diagnostics and building macro-mock queries.
+    /// Python's decimal context overflows normalizing a case parameter.
     FingerprintOverflow(AssembledSqlTestFacts),
     Failed(SqlTestAssemblyFailure),
 }

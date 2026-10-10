@@ -11,7 +11,9 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
-use crate::bindings::_helpers::semantic_checks::session_facts::session_model_facts;
+use crate::bindings::_helpers::semantic_checks::session_facts::{
+    column_names, session_model_facts,
+};
 use crate::bindings::_helpers::semantic_checks::type_recovery::{LineageInput, lineage_outputs};
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
@@ -143,12 +145,7 @@ fn completion_model(
 ) -> Result<CompletionModel, String> {
     let inferred_columns: Vec<String> = match inferred_columns {
         Some(names) => names,
-        None => session_model_facts(session, &name)?
-            .columns
-            .iter()
-            .flatten()
-            .map(|column| column.name.clone())
-            .collect(),
+        None => column_names(session_model_facts(session, &name)?).unwrap_or_default(),
     };
     let lineage: Vec<LineageInput> = match lineage {
         Some(lineage) => lineage,

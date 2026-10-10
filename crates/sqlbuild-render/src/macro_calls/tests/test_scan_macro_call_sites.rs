@@ -1,5 +1,5 @@
+use crate::macro_calls::errors::ScanError;
 use crate::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites;
-use crate::macro_calls::models::ScanError;
 use crate::macro_calls::tests::helpers::python_312;
 use std::time::Instant;
 

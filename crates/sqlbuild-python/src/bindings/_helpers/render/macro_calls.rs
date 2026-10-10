@@ -16,6 +16,8 @@ use crate::bindings::_helpers::render::macro_call_memo::MacroCallMemo;
 use crate::bindings::_helpers::render::macro_call_rows::{SiteRow, SpanRow, site_row, span_row};
 use crate::bindings::types::CompilerDetach;
 
+const MACRO_SCAN_CONTEXT: &str = "native macro call scan";
+
 /// `(call start or None, message)` of the error Python's scan raises.
 type FailureRow = (Option<usize>, &'static str);
 
@@ -42,10 +44,7 @@ pub(crate) fn scan_macro_call_sites(
     ))
 }
 
-const MACRO_SCAN_CONTEXT: &str = "native macro call scan";
-
-/// Python's `find_macro_call_names` (or with `nested`, `find_nested_macro_call_names`): the
-/// names, or the message of the `CompileInputError` Python's scan raises.
+/// Python's `find_macro_call_names` names, or the `CompileInputError` message of its scan.
 #[pyfunction]
 pub(crate) fn macro_call_names(
     py: Python<'_>,

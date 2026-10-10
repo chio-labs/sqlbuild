@@ -16,7 +16,7 @@ use crate::contracts::models::{
     ContractDiagnostic, ContractLocation, ContractModel, ContractSchema, ContractSeverity,
     DeclaredColumn, InferredOutputColumn, RelatedOutput,
 };
-use crate::type_system::models::TypeNormalizationError;
+use crate::type_system::errors::TypeNormalizationError;
 
 /// Python's `_requires_contract_evaluation`.
 pub(crate) fn requires_contract_evaluation(model: &ContractModel, implicit: bool) -> bool {

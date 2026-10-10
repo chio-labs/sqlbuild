@@ -28,32 +28,10 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     PolyglotAnalysisTestCase,
     SubstitutePlaceholderDefaultsTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import direct_orders_lineage
-
-
-def _reanalysed(
-    *,
-    query_sql: str,
-    references: tuple[CompileSqlReference, ...] = (),
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
-    column_types_by_table: dict[str, dict[str, str]] | None = None,
-    inference_profile: ExpressionInferenceProfile | None = None,
-    allow_compact_analysis: bool = True,
-    recover_cte_facts: bool = True,
-) -> NativeQueryColumns:
-    """Native compact re-analysis over known input types, as source bindings run it."""
-
-    assert allow_compact_analysis and recover_cte_facts
-    assert all(
-        value == InferredNullability.UNKNOWN
-        for shape in (column_nullability_by_table or {}).values()
-        for value in shape.values()
-    )
-    return infer_native_query_columns(
-        queries=(NativeColumnQuery(sql=query_sql, mode="reanalysis", references=references),),
-        profile=inference_profile or ExpressionInferenceProfile(),
-        column_types_by_table=column_types_by_table,
-    )[0]
+from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
+    direct_orders_lineage,
+    reanalysed_columns,
+)
 
 
 @pytest.mark.parametrize(
@@ -611,7 +589,7 @@ def test_given_query_sql_when_inferring_columns_then_returns_expected(
 def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact_facts(
     test_case: PolyglotAnalysisTestCase,
 ) -> None:
-    result: NativeQueryColumns = _reanalysed(
+    result: NativeQueryColumns = reanalysed_columns(
         query_sql=test_case.query_sql,
         references=test_case.references,
         column_nullability_by_table=test_case.column_nullability_by_table,
@@ -825,7 +803,7 @@ def test_given_ref_query_when_analyzing_columns_and_lineage_then_returns_compact
 def test_given_cte_chain_when_analyzing_direct_passthrough_then_type_is_conservative(
     test_case: PolyglotAnalysisTestCase,
 ) -> None:
-    result: NativeQueryColumns = _reanalysed(
+    result: NativeQueryColumns = reanalysed_columns(
         query_sql=test_case.query_sql,
         references=test_case.references,
         column_nullability_by_table=test_case.column_nullability_by_table,
@@ -903,7 +881,7 @@ def test_given_cte_chain_when_analyzing_direct_passthrough_then_type_is_conserva
 def test_given_star_projection_when_compact_analysis_enabled_then_expands_schema_lineage(
     test_case: PolyglotAnalysisTestCase,
 ) -> None:
-    result: NativeQueryColumns = _reanalysed(
+    result: NativeQueryColumns = reanalysed_columns(
         query_sql=test_case.query_sql,
         references=test_case.references,
         column_nullability_by_table=test_case.column_nullability_by_table,

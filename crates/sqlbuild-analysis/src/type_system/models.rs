@@ -1,5 +1,7 @@
 //! Normalized type shapes, matching Python's `NormalizedType` and `TypeFamily`.
 
+use crate::type_system::constants::ZERO_TEXT;
+
 /// The semantic family of one normalized type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TypeFamily {
@@ -67,7 +69,7 @@ impl PythonInteger {
     /// Whether the integer is zero, so Python treats it as false.
     #[must_use]
     pub fn is_zero(&self) -> bool {
-        self.0 == "0"
+        self.0 == ZERO_TEXT
     }
 
     /// The integer's canonical base-10 text, as Python's `str(value)` spells it.
@@ -97,26 +99,6 @@ pub struct NormalizedType {
     pub precision: Option<PythonInteger>,
     pub scale: Option<PythonInteger>,
     pub length: Option<PythonInteger>,
-}
-
-/// Why Python's `normalize_type` raises instead of returning a type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeNormalizationError {
-    /// Polyglot does not know the dialect name: the wheel's `ValueError`.
-    UnknownDialect(String),
-    /// Polyglot cannot write the parsed type back as SQL: the wheel's `PolyglotError`.
-    Generation(String),
-}
-
-impl TypeNormalizationError {
-    /// The message Python's exception carries.
-    #[must_use]
-    pub fn message(&self) -> String {
-        match self {
-            Self::UnknownDialect(name) => format!("Unknown dialect: {name}"),
-            Self::Generation(message) => message.clone(),
-        }
-    }
 }
 
 /// A normalized type and the Polyglot parse error Python logs before its text fallback.

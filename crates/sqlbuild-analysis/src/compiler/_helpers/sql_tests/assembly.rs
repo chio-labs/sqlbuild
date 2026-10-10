@@ -48,8 +48,7 @@ pub(crate) fn assemble_batch(batch: &SqlTestAssemblyBatch) -> Vec<SqlTestAssembl
         .collect()
 }
 
-/// A model's macro dependencies, or Python's scan of its pre-macro SQL when none were recorded:
-/// the names, or the message of the `CompileInputError` the scan raises.
+/// A model's macro dependencies, or Python's scan of its pre-macro SQL when none were recorded.
 type MacroNames = Result<Vec<String>, String>;
 
 struct Project<'a> {

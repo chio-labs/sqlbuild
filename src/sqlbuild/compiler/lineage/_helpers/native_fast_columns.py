@@ -19,6 +19,7 @@ from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_UNKNOWN_DIALECT,
     NATIVE_LINEAGE_UNPARSED,
 )
+from sqlbuild.compiler.lineage.exceptions import UnknownLineageDialectError
 from sqlbuild.compiler.lineage.models import (
     ColumnLineage,
     ColumnLineageSource,
@@ -95,7 +96,7 @@ def build_native_fast_project_column_lineage(
                 sqlbuild_error=detail,
             )
         elif status == NATIVE_LINEAGE_UNKNOWN_DIALECT:
-            raise ValueError(f"Unknown dialect: {detail}")
+            raise UnknownLineageDialectError(f"Unknown dialect: {detail}")
         if result is None:
             continue
         model_results[model.name] = result

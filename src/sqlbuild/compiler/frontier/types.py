@@ -30,8 +30,7 @@ class CompilerStage(StrEnum):
 
 
 class NativeFallbackSite(StrEnum):
-    """A place where a shipped native stage still hands its work to the Python implementation,
-    or runs a user's Python extension such as a macro."""
+    """A place where native hands work to Python: a fallback or a user's extension callback."""
 
     SCOPE_REBIND_LOOKUP = "declaration_scopes.rebind_lookup"
     LINT_EXPANSION = "model_loop.lint_expansion"

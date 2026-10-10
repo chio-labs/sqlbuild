@@ -7,10 +7,6 @@ use crate::semantic_checks::models::{MetadataOutcome, MetadataRequest, SemanticF
 use crate::semantic_validation::models::ProjectCatalog;
 
 /// Check metadata on the compile's analysis pool.
-///
-/// # Errors
-///
-/// The error Python's checks raised for the same input, or an internal native failure.
 pub fn check_semantic_metadata(
     request: &MetadataRequest,
     catalog: &ProjectCatalog,

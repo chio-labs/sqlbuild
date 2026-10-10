@@ -15,11 +15,10 @@ use crate::lineage::_helpers::references::physical_resources;
 use crate::lineage::_helpers::stars::{schema_mapping, star_lineage};
 use crate::lineage::main::parser_dialect::parser_dialect;
 use crate::lineage::models::{FastLineageModel, FastLineageOutcome, FastLineageRequest};
-use crate::semantic_validation::_helpers::catalog::new_analysis_pool;
+use crate::semantic_validation::main::new_analysis_pool::new_analysis_pool;
 use crate::semantic_validation::models::ProjectCatalog;
 
-/// One outcome per model, in request order, run on the compile's deep-stack analysis pool, or
-/// on a fresh one for a project restored without its catalog.
+/// One outcome per model, in request order, run on the compile's deep-stack analysis pool.
 pub fn build_fast_lineage(
     request: &FastLineageRequest,
     catalog: Option<&ProjectCatalog>,
@@ -52,7 +51,7 @@ fn model_outcomes(request: &FastLineageRequest) -> Vec<Result<FastLineageOutcome
         .as_deref()
         .filter(|name| !name.is_empty())
         .unwrap_or("generic");
-    let dialect = parser_dialect(Some(name)).ok_or(name);
+    let dialect = parser_dialect(Some(name));
     let options: Result<ParseOptions, serde_json::Error> = proxy_parse_options();
     request
         .models

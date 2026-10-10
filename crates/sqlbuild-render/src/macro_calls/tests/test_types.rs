@@ -1,7 +1,6 @@
-use crate::macro_calls::models::ScanError;
+use crate::macro_calls::errors::ScanError;
 
-/// One expected call site: start, end, name, tree names if scanned and whether typed reference
-/// text appears.
+/// One expected call site: start, end, name, scanned tree names and typed reference text.
 pub(crate) type ExpectedSite = (
     usize,
     usize,
@@ -48,4 +47,14 @@ pub(crate) struct DeepNestingTestCase {
     pub(crate) depth: usize,
     pub(crate) expected_tree_names: &'static [&'static str],
     pub(crate) expected_max_seconds: f64,
+}
+
+/// Call names as Python's `_scan_sqlbuild_call_names` returned them, or its scan error.
+pub(crate) type ExpectedNames = Result<&'static [&'static str], ScanError>;
+
+pub(crate) struct MacroCallNamesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_top_level: ExpectedNames,
+    pub(crate) expected_nested: ExpectedNames,
 }

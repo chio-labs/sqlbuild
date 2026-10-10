@@ -685,6 +685,12 @@ ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "pipeline/_helpers/target_validation.py",
     "sql_analysis",
 )
+ANALYSIS_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (
+    "crates/sqlbuild-analysis/src/contracts/constants.rs",
+)
+NATIVE_CODE_CONSTANT_PATTERN: re.Pattern[str] = re.compile(
+    r'const [A-Z0-9_]*_CODE: &str = "([A-Z][0-9]{3})";'
+)
 _NEVER_REPORTED_BY_POLYGLOT: str = (
     "polyglot defines the finding but never reports it, and no SQLBuild check maps to it"
 )

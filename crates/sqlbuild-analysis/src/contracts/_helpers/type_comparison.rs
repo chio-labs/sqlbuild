@@ -3,8 +3,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use crate::type_system::errors::TypeNormalizationError;
 use crate::type_system::main::normalize_type::normalize_type;
-use crate::type_system::models::{NormalizedType, TypeNormalization, TypeNormalizationError};
+use crate::type_system::models::{NormalizedType, TypeNormalization};
 
 /// Whether two type strings normalize to the same comparison shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

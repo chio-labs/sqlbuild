@@ -204,10 +204,13 @@ def _sql_test_columns(
         profile=profile,
     )
     result: dict[str, tuple[str, ...]] = {
-        sql: tuple(column.name for column in analysis.columns or ())
-        for sql, analysis in zip(queries, analyses, strict=True)
+        sql: _column_names(analysis) for sql, analysis in zip(queries, analyses, strict=True)
     }
     return result
+
+
+def _column_names(analysis: NativeQueryColumns) -> tuple[str, ...]:
+    return tuple(column.name for column in analysis.columns or ())
 
 
 def _names(value: object) -> tuple[str, ...]:

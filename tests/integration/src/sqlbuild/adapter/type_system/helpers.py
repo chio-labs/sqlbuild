@@ -209,3 +209,12 @@ class _RecordingHandler(logging.Handler):
                 getattr(record, "sqlbuild_error", None),
             )
         )
+
+
+def dialect_outcomes(outcomes: list[TypeOutcome]) -> dict[str, tuple[object, bool]]:
+    """One type string's normalization and whether it logged errors, by dialect."""
+
+    return {
+        str(outcome.dialect): (outcome.normalized, bool(outcome.logged_errors))
+        for outcome in outcomes
+    }

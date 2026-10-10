@@ -32,7 +32,7 @@ from sqlbuild.compiler.discovery.models import (
     EnumMember,
     ModelSchemaDeclaration,
 )
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.model_loop.constants import (
     ENUM_REFERENCE_KIND_CODE,

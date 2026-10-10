@@ -85,11 +85,7 @@ enum Boundary<'a> {
     Passthrough(&'a str),
 }
 
-/// The proof Python computes.
-///
-/// # Errors
-///
-/// An internal native failure: a panic, or a parsed tree the proof cannot read.
+/// The proof Python computes; fails on a panic or a parsed tree the proof cannot read.
 pub(crate) fn pivot_outcome(
     sql: &str,
     families: &[DynamicFamily],

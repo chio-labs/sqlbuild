@@ -14,8 +14,7 @@ pub(crate) const UPPER_TABLES: [(&str, &[(u32, &str)]); 3] = [
     ("16.0.0", include!("../upper_mappings/unicode_16_0_0.in")),
 ];
 
-/// `(unicodedata.unidata_version, keys)` of every character whose `re.IGNORECASE` key is not
-/// itself.
+/// `(unicodedata.unidata_version, keys)` of every character whose ignorecase key differs.
 pub(crate) const IGNORECASE_KEY_TABLES: [(&str, &[(u32, u32)]); 3] = [
     (
         "15.0.0",

@@ -3,7 +3,9 @@ use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_core::text::models::PythonText;
 use std::path::Path;
 
+use crate::macro_calls::errors::ScanError;
 use crate::macro_calls::models::{MacroCallEntry, MacroCallEvent, MacroCallMemo};
+use crate::macro_calls::tests::test_types::ExpectedNames;
 
 /// A memo holding one recorded `@cents(amount)` call in class 1, and that call's entry.
 pub(crate) fn recorded_memo() -> (MacroCallMemo, MacroCallEntry) {
@@ -73,4 +75,9 @@ pub(crate) fn every_event_entry() -> MacroCallEntry {
             },
         ],
     }
+}
+
+/// Expected call names as the owned names the scan returns.
+pub(crate) fn owned_names(names: ExpectedNames) -> Result<Vec<String>, ScanError> {
+    names.map(|names| names.iter().map(|name| (*name).to_owned()).collect())
 }

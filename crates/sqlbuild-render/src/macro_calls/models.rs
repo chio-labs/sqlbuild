@@ -7,6 +7,8 @@ use sqlbuild_cache::store::models::NativeStore;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::macro_calls::errors::ScanError;
+
 use crate::macro_calls::_helpers::entry_codec::{decode_entry, encode_entry};
 
 /// One top-level `@macro(...)` call in an authored SQL string; offsets count code points.
@@ -18,33 +20,10 @@ pub struct MacroCallSite {
     pub end: usize,
     /// The called macro's name.
     pub name: String,
-    /// Every macro name in the call, the top-level name first, then nested calls once each;
-    /// None where a nested call is not one Python's scan completes.
+    /// Every macro name in the call: the top-level name, then nested calls once each.
     pub tree_names: Option<Vec<String>>,
     /// The arguments mention `__ref`, `__source` or `__seed`, so typed references may be passed.
     pub typed_reference_text: bool,
-}
-
-/// An error Python's macro call scan raises.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ScanError {
-    UnclosedQuote,
-    UnclosedComment,
-    UnclosedParenthesis,
-    /// A call start whose name is not followed by its parenthesis.
-    MissingParenthesis,
-}
-
-impl ScanError {
-    /// The message of the `CompileInputError` Python's scan raises.
-    pub fn message(self) -> &'static str {
-        match self {
-            Self::UnclosedQuote => "Macro expansion contains an unclosed quoted string",
-            Self::UnclosedComment => "Macro expansion contains an unclosed block comment",
-            Self::UnclosedParenthesis => "Macro expansion contains an unclosed parenthesis",
-            Self::MissingParenthesis => "expected opening parenthesis",
-        }
-    }
 }
 
 /// Where a scan stops: inside the call at a code point offset, or between calls.

@@ -42,8 +42,7 @@ pub(crate) fn semantic_help(code: &str) -> Option<&'static str> {
         .map(|(_, help)| *help)
 }
 
-/// Python's `re.sub(r" \(context: [^)]*\)$", "", message)`: Python's `$` also matches before a
-/// final newline, which the suffix then keeps.
+/// Python's `re.sub(r" \(context: [^)]*\)$", "", message)`.
 fn without_context_suffix(message: &str) -> Result<String, SemanticFailure> {
     let suffix: &Regex = pattern(&CONTEXT_SUFFIX)?;
     let (body, newline) = match message.strip_suffix('\n') {
@@ -81,6 +80,27 @@ fn upper_type_words(text: &str) -> String {
     result
 }
 
+/// The end of the first type word at `start` that also ends on a word boundary.
+fn type_word_end(
+    characters: &[char],
+    start: usize,
+    boundary: &impl Fn(usize) -> bool,
+) -> Option<usize> {
+    for candidate in TYPE_WORDS {
+        let end: usize = start + candidate.len();
+        if let Some(slice) = characters.get(start..end)
+            && slice
+                .iter()
+                .zip(candidate.chars())
+                .all(|(character, letter)| ignorecase_equal(*character, letter))
+            && boundary(end)
+        {
+            return Some(end);
+        }
+    }
+    None
+}
+
 /// Python's `re.finditer(_TYPE_WORDS, text, re.IGNORECASE)` spans, in code points.
 fn type_word_spans(characters: &[char]) -> Vec<(usize, usize)> {
     let python = active_python_text();
@@ -93,20 +113,11 @@ fn type_word_spans(characters: &[char]) -> Vec<(usize, usize)> {
     let mut spans: Vec<(usize, usize)> = Vec::new();
     let mut start: usize = 0;
     while start < characters.len() {
-        let found: Option<usize> = boundary(start)
-            .then(|| {
-                TYPE_WORDS.iter().find_map(|candidate| {
-                    let end: usize = start + candidate.len();
-                    let matches: bool = characters.get(start..end).is_some_and(|slice| {
-                        slice
-                            .iter()
-                            .zip(candidate.chars())
-                            .all(|(character, letter)| ignorecase_equal(*character, letter))
-                    });
-                    (matches && boundary(end)).then_some(end)
-                })
-            })
-            .flatten();
+        let found: Option<usize> = if boundary(start) {
+            type_word_end(characters, start, &boundary)
+        } else {
+            None
+        };
         match found {
             Some(end) => {
                 spans.push((start, end));

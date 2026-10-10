@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use pyo3::prelude::{Py, PyAny, PyAnyMethods, PyDictMethods, PyErr, Python};
 use pyo3::types::{PyDict, PyTuple};
-use sqlbuild_analysis::assembly::analysis_session::types::NullabilityCallback;
+use sqlbuild_analysis::assembly::analysis_session::models::NullabilityCallback;
 
 /// The first exception an adapter rule raised, which the session re-raises to Python.
 pub(crate) type RuleFailure = Arc<Mutex<Option<PyErr>>>;

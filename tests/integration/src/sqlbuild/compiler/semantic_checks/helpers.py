@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import random
 import re
 from collections import Counter
@@ -342,15 +343,38 @@ def non_ascii_variant(*, files: dict[str, str], rng: random.Random) -> dict[str,
     header holding non-ASCII text, digits and Python-only line separators."""
 
     renamed: list[tuple[str, str]] = rng.sample(_NON_ASCII_NAMES, k=rng.randint(1, 6))
-    variant: dict[str, str] = {}
-    for path, text in files.items():
-        for old, new in renamed:
-            text = re.sub(rf"\b{old}\b", new, text)
-        if path.endswith(".sql") and ";" in text:
-            header_end: int = text.index(";") + 1
-            text = text[:header_end] + rng.choice(_NON_ASCII_COMMENTS) + text[header_end:]
-        variant[path] = text
-    return variant
+    return {
+        path: _non_ascii_text(path=path, text=text, renamed=renamed, rng=rng)
+        for path, text in files.items()
+    }
+
+
+def files_with_non_ascii(
+    *, files: dict[str, str], rng: random.Random, non_ascii: bool
+) -> dict[str, str]:
+    """`files`, or with `non_ascii` their `non_ascii_variant`."""
+
+    variants: tuple[Callable[[], dict[str, str]], ...] = (
+        lambda: files,
+        lambda: non_ascii_variant(files=files, rng=rng),
+    )
+    return variants[non_ascii]()
+
+
+def _non_ascii_text(
+    *, path: str, text: str, renamed: list[tuple[str, str]], rng: random.Random
+) -> str:
+    renamed_text: str = functools.reduce(
+        lambda current, names: re.sub(rf"\b{names[0]}\b", names[1], current), renamed, text
+    )
+    commented: bool = path.endswith(".sql") and ";" in renamed_text
+    comments: tuple[Callable[[], str], ...] = (
+        lambda: "",
+        lambda: rng.choice(_NON_ASCII_COMMENTS),
+    )
+    comment: str = comments[commented]()
+    header_end: int = renamed_text.find(";") + 1
+    return renamed_text[:header_end] + comment + renamed_text[header_end:]
 
 
 def semantic_outcome(complete: Callable[[], object]) -> tuple[str, object]:
@@ -366,7 +390,7 @@ def outcome_label(outcome: tuple[str, object]) -> str:
     """`completed`, or the error as `Type: message`."""
 
     kind, value = outcome
-    return kind if kind == "completed" else f"{kind}: {value}"
+    return {"completed": kind}.get(kind, f"{kind}: {value}")
 
 
 _SOURCE_COLUMNS: tuple[str, ...] = (

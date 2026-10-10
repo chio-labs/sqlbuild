@@ -15,7 +15,7 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_helpers impo
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     CteFactRecoveryParityTestCase,
 )
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     golden_differences,
     golden_entry,
     golden_name,

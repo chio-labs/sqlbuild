@@ -17,6 +17,8 @@ pub(crate) enum FingerprintFailure {
 
 /// Python's default decimal context: precision and exponent limits `normalize()` applies.
 const DECIMAL_PRECISION: usize = 28;
+/// The largest decimal digit, which carries when rounded up.
+const MAX_DIGIT: u8 = 9;
 const DECIMAL_EMAX: i64 = 999_999;
 const DECIMAL_EMIN: i64 = -999_999;
 /// The smallest exponent of a subnormal result: `Emin - prec + 1`.
@@ -141,8 +143,7 @@ fn identities(items: &[SqlTestParameterValue]) -> Result<JsonValue, FingerprintF
     ))
 }
 
-/// `Decimal.normalize().as_tuple()` under Python's default context: rounded half-even to its
-/// precision, or to the subnormal exponent floor, then stripped of trailing zeros.
+/// `Decimal.normalize().as_tuple()` under Python's default context.
 fn normalized_decimal(
     negative: bool,
     digits: &[u8],
@@ -200,8 +201,7 @@ fn normalized_decimal(
     ]))
 }
 
-/// The coefficient without its last `dropped` digits, rounded half to even; a carry may add a
-/// leading digit.
+/// The coefficient without its last `dropped` digits, rounded half-even; a carry adds a digit.
 fn rounded_half_even(coefficient: &[u8], dropped: usize) -> Vec<u8> {
     if dropped > coefficient.len() {
         return vec![0];
@@ -228,7 +228,7 @@ fn rounded_half_even(coefficient: &[u8], dropped: usize) -> Vec<u8> {
                 break;
             }
             index -= 1;
-            if kept[index] == 9 {
+            if kept[index] == MAX_DIGIT {
                 kept[index] = 0;
             } else {
                 kept[index] += 1;

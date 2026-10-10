@@ -14,7 +14,7 @@ use crate::contracts::constants::{
 use crate::contracts::models::{
     ContractDiagnostic, ContractLocation, ContractModel, ContractSeverity, DynamicContractProof,
 };
-use crate::type_system::models::TypeNormalizationError;
+use crate::type_system::errors::TypeNormalizationError;
 
 /// The dynamic column contract diagnostics of one model, before its fixed columns.
 pub(crate) fn dynamic_column_diagnostics(

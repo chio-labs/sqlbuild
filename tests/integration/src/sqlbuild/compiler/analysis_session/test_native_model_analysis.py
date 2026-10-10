@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import random
 from collections import Counter
 from itertools import product
@@ -40,8 +41,9 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     ADAPTER_RULE_MODELS,
     NativeAnalysisRuns,
     NativePivotProofs,
+    RecordingNullabilityRule,
+    adapter_rule_request,
     analyse_natively,
-    analysis_request,
     compile_inputs,
     compiled_project_view,
     custom_nullability_rule,
@@ -53,12 +55,12 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     shared_analysis_files,
     started_sessions,
 )
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     golden_differences,
     golden_name,
+    mismatches,
     read_golden,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 _DIALECT_PROFILES: tuple[ExpressionInferenceProfile, ...] = tuple(
     ExpressionInferenceProfile(sql_analysis_dialect=dialect)
@@ -507,6 +509,33 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
             raised=None,
             expected_minimum_calls=1,
         ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_called_back(
+    test_case: AdapterRuleCallbackTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rule: RecordingNullabilityRule = RecordingNullabilityRule(raised=test_case.raised)
+    request: NativeModelAnalysisRequest = adapter_rule_request(
+        test_case=test_case, rule=rule, tmp_path=tmp_path, monkeypatch=monkeypatch
+    )
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+
+    assert analyze_native_model_sql(request=request).analyses
+    assert len(rule.calls) >= test_case.expected_minimum_calls, test_case.description
+    assert all(
+        isinstance(value, InferredNullability)
+        for value in itertools.chain.from_iterable(rule.calls)
+    )
+    assert deferral_kinds(record_dir) == Counter(
+        {"analysis_session:adapter_nullability_callback": 1}
+    ), test_case.description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         AdapterRuleCallbackTestCase(
             description="the adapter rule's exception reaches the caller unchanged",
             seed=20261012,
@@ -517,47 +546,20 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     ],
     ids=lambda case: case.description,
 )
-def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_called_back(
+def test_given_failing_adapter_nullability_rule_when_analysing_natively_then_its_error_raises(
     test_case: AdapterRuleCallbackTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls: list[tuple[InferredNullability, ...]] = []
-    raised: list[type[Exception]] = []
-
-    def adapter_rule(arguments: tuple[InferredNullability, ...]) -> InferredNullability:
-        calls.append(arguments)
-        if raised:
-            raise raised[0]("adapter rule failed")
-        return InferredNullability.NULLABLE
-
-    request: NativeModelAnalysisRequest = analysis_request(
-        inputs=compile_inputs(
-            project_dir=tmp_path / "project",
-            files={
-                **generated_analysis_files(
-                    rng=random.Random(test_case.seed), model_count=test_case.model_count
-                ),
-                **ADAPTER_RULE_MODELS,
-            },
-        ),
-        monkeypatch=monkeypatch,
-        inference_profile=ExpressionInferenceProfile(
-            sql_analysis_dialect="duckdb",
-            function_nullability_rules={"UPPER": adapter_rule, "IFF": adapter_rule},
-        ),
+    rule: RecordingNullabilityRule = RecordingNullabilityRule(raised=test_case.raised)
+    request: NativeModelAnalysisRequest = adapter_rule_request(
+        test_case=test_case, rule=rule, tmp_path=tmp_path, monkeypatch=monkeypatch
     )
-    calls.clear()
-    raised.extend(filter(None, (test_case.raised,)))
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
 
-    if test_case.raised is None:
-        assert analyze_native_model_sql(request=request).analyses
-    else:
-        with pytest.raises(test_case.raised, match="adapter rule failed"):
-            _ = analyze_native_model_sql(request=request)
+    with pytest.raises(LookupError, match="adapter rule failed"):
+        _ = analyze_native_model_sql(request=request)
 
-    assert len(calls) >= test_case.expected_minimum_calls, test_case.description
-    assert all(isinstance(value, InferredNullability) for args in calls for value in args)
+    assert len(rule.calls) >= test_case.expected_minimum_calls, test_case.description
     assert deferral_kinds(record_dir) == Counter(
         {"analysis_session:adapter_nullability_callback": 1}
     ), test_case.description

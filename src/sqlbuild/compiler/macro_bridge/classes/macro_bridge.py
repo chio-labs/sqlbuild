@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.macro_bridge._helpers.call_sites import scan_macro_calls, splice_macro_calls
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     digest_module_files,
     module_digests_metadata,
@@ -29,6 +28,8 @@ from sqlbuild.compiler.macro_bridge._helpers.store_keys import (
     macro_store_token,
 )
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
+from sqlbuild.compiler.macro_bridge.main._scan_macro_calls import scan_macro_calls
+from sqlbuild.compiler.macro_bridge.main._splice_macro_calls import splice_macro_calls
 from sqlbuild.compiler.macro_bridge.models import (
     MacroCallClass,
     MacroCallScan,
@@ -140,7 +141,7 @@ class MacroBridge:
         """The complete top-level call sites of `sql`, and where its scan raises, if it does."""
 
         return scan_macro_calls(
-            sql, python_version=self._python_version, unicode_version=self._unicode_version
+            sql=sql, python_version=self._python_version, unicode_version=self._unicode_version
         )
 
     def call_class(

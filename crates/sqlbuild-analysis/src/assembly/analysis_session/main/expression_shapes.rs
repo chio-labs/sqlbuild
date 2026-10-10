@@ -3,6 +3,7 @@
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
+use crate::assembly::analysis_session::_helpers::catalog_state::{ShapeOptions, ShapeSource};
 use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
 };
@@ -10,7 +11,6 @@ use crate::assembly::analysis_session::_helpers::cte_facts::{
     LegacyAnalysis, LegacyInput, RecoveryProfile, legacy_analysis,
 };
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
-use crate::assembly::analysis_session::_helpers::publication::{ShapeOptions, ShapeSource};
 use crate::assembly::analysis_session::_helpers::session::shape_columns;
 use crate::assembly::analysis_session::models::{ExpressionShape, ExpressionShapeRequest};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};

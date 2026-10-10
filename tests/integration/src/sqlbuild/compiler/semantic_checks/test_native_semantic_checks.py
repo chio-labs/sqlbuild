@@ -11,7 +11,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.models import CompiledProject
-from tests.integration.src.sqlbuild.compiler.golden_views import (
+from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
     golden_entry,
@@ -29,9 +29,9 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
     captured_semantic_inputs,
     completed_natively,
     completion_view,
+    files_with_non_ascii,
     generated_semantic_files,
     native_completion,
-    non_ascii_variant,
     note_kinds,
     outcome_label,
     proven_output_count,
@@ -162,7 +162,7 @@ def test_given_formerly_deferred_projects_when_completing_natively_then_matches_
         )
         captured: SemanticInputs = captured_semantic_inputs(
             project_dir=project_dir,
-            files=non_ascii_variant(files=files, rng=rng) if test_case.non_ascii else files,
+            files=files_with_non_ascii(files=files, rng=rng, non_ascii=test_case.non_ascii),
             monkeypatch=monkeypatch,
         )
         views: dict[str, object] = {}
