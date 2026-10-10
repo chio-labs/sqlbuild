@@ -22,9 +22,10 @@ and of the work each native stage answers itself. It covers three kinds of recor
   path where a native stage hands work to Python, or runs Python with no native path yet;
 - analysis-stage deferrals: every `analysis-deferrals-*.jsonl` record (analysis session,
   lineage, semantic checks, contracts);
-- native answers, from `report_native_answer(stage=NativeStage.<STAGE>, kind=...)` where a
-  preview stage's native path produced the result: files, models, scans or calls. Their site is
-  `<stage>.native`.
+- native answers, from `report_native_answer(stage=NativeStage.<STAGE>, kind=...)`
+  (`frontier/main/_report_native_answer.py`) where a preview stage's native path produced the
+  result: files, models, scans or calls. Their site is `<stage>.native`. No stage is in preview
+  today, so the list holds no answer entries.
 
 Counting only fallbacks cannot tell a stage that answers natively from one that no longer runs
 natively at all. The answer counts can: if a preview stage is switched off, its `<stage>.native`
@@ -86,7 +87,7 @@ in the same PR as the change that caused it.
     same diff: the port must report the work it now answers. A fallback that vanished with no new
     answers is a stage switched off, not a port; the gate refuses it.
 - Code: every new path that hands work to Python calls `report_native_fallback`, and every new
-  native path calls `report_native_answer` where its result is used.
+  preview-stage native path calls `report_native_answer` where its result is used.
 - Goldens:
   - Every changed golden is an intended output change, named in the PR body.
   - An output-neutral port changes no golden.
