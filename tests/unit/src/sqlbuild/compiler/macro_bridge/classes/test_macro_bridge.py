@@ -7,7 +7,7 @@ import unicodedata
 import pytest
 
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
-from sqlbuild.compiler.macro_bridge.models import MacroCallSite
+from sqlbuild.compiler.macro_bridge.models import MacroCallScan
 from tests.unit.src.sqlbuild.compiler.macro_bridge.classes._test_types import (
     DeepNestingScanTestCase,
 )
@@ -47,7 +47,10 @@ def test_given_deeply_nested_calls_when_scanning_then_the_bridge_returns_promptl
     sql: str = "@m(" * test_case.depth + "x" + ")" * test_case.depth
     started: float = time.perf_counter()
 
-    sites: tuple[MacroCallSite, ...] | None = bridge.scan(sql)
+    scan: MacroCallScan = bridge.scan(sql)
 
     assert time.perf_counter() - started < test_case.expected_max_seconds
-    assert tuple(site.tree_names for site in sites or ()) == test_case.expected_tree_names
+    assert (tuple(site.tree_names for site in scan.sites), scan.failure) == (
+        test_case.expected_tree_names,
+        None,
+    )

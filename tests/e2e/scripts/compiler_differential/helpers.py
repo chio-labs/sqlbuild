@@ -99,10 +99,10 @@ if _directory:
         _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
 """
 
-MACRO_RESOLUTION_SABOTAGE: str = """
-from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
+MACRO_BRIDGE_SABOTAGE: str = """
+import sqlbuild._native as native
 
-MacroBridge.call_class = lambda self, **_: None
+native.native_text_supported = lambda *_args: False
 """
 
 MODEL_ANALYSIS_SABOTAGE: str = """

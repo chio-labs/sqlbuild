@@ -53,7 +53,6 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
     audit_scope_deps,
     function_build_deps,
     model_build_deps,
-    sql_test_scope_deps,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
@@ -78,15 +77,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
-from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
-    report_mocks_reading_referencing_helpers,
-)
-from sqlbuild.compiler.compile._helpers.sql_tests.identity import build_sql_test_case_fingerprint
-from sqlbuild.compiler.compile._helpers.sql_tests.scope_deps import (
-    function_sql_test_scope_deps,
-    macro_sql_test_scope_deps,
-    udf_sql_test_scope_deps,
-)
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
@@ -94,20 +84,15 @@ from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompileAuditInput,
     CompiledAudit,
-    CompiledDirectLogicSqlTestPayload,
     CompiledFunction,
-    CompileDirectLogicSqlTestInputPayload,
     CompiledLineageColumnFact,
     CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
-    CompiledSqlTest,
-    CompiledSqlTestResource,
     CompileModelInput,
     CompileModelSqlTestInputPayload,
     CompileProjectInputs,
@@ -131,7 +116,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
-    SqlTestMode,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
@@ -173,10 +157,6 @@ from sqlbuild.spec.contracts.models import (
 class _DynamicContractAnalysisInputs:
     families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
     authoritative_column_types_by_table: dict[str, dict[str, str]]
-
-
-_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT: int = 256
-_COMPACT_BATCH_ENTRY_REUSE_MIN_PERCENT: int = 10
 
 
 def assemble_compiled_project(
@@ -437,7 +417,7 @@ def assemble_compiled_project(
         ),
         sql_tests=assemble_sql_tests_by_engine(
             inputs=inputs,
-            assemble_python_test=lambda test_input: _assemble_compiled_sql_test(
+            macro_mock_queries=lambda test_input: _build_test_model_query_overrides(
                 test_input=test_input, model_inputs=inputs.model_inputs, inputs=inputs
             ),
         ),
@@ -928,149 +908,6 @@ def _assemble_compiled_audit(
     )
 
 
-def _assemble_compiled_sql_test(
-    *,
-    test_input: CompileSqlTestInput,
-    model_inputs: tuple[CompileModelInput, ...],
-    inputs: CompileProjectInputs,
-) -> CompiledSqlTest:
-    test_name: str = _resolve_test_name(test_input)
-    compiled_payload: CompiledModelSqlTestPayload | CompiledDirectLogicSqlTestPayload
-    scope_deps: tuple[CompiledObjectKey, ...]
-    target_model_names: tuple[str, ...] = ()
-    if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload):
-        if test_input.payload.mode == SqlTestMode.MACRO:
-            scope_deps = macro_sql_test_scope_deps(
-                tested_macro_names=test_input.payload.tested_resource_names,
-                model_inputs=model_inputs,
-            )
-        elif test_input.payload.mode == SqlTestMode.UDF:
-            scope_deps = udf_sql_test_scope_deps(
-                tested_udf_names=test_input.payload.tested_resource_names,
-                model_inputs=model_inputs,
-            )
-        else:
-            scope_deps = function_sql_test_scope_deps(
-                tested_function_names=test_input.payload.tested_resource_names,
-            )
-        compiled_payload = CompiledDirectLogicSqlTestPayload(
-            mode=test_input.payload.mode,
-            helper_ctes=test_input.payload.helper_ctes,
-            actual_cte=test_input.payload.actual_cte,
-            expected_cte=test_input.payload.expected_cte,
-            tested_resource_names=test_input.payload.tested_resource_names,
-        )
-    else:
-        model_payload: CompileModelSqlTestInputPayload = test_input.payload
-        target_model_names = tuple(
-            dict.fromkeys(
-                (
-                    *model_payload.expected_model_names,
-                    *model_payload.assertion_target_model_names,
-                    *model_payload.reference_target_model_names,
-                )
-            )
-        )
-        report_mocks_reading_referencing_helpers(
-            authored_ctes=model_payload.authored_ctes,
-            reader_ctes=(*model_payload.expected_ctes, *model_payload.assertion_ctes),
-            model_inputs=model_inputs,
-            target_model_names=target_model_names,
-            mock_model_names=model_payload.mock_model_names,
-            test_file=test_input.test_file,
-            test_block=test_input.test_block,
-            syntax=inputs.sql_lexical_syntax,
-        )
-        scope_deps = sql_test_scope_deps(expected_model_names=target_model_names)
-        compiled_payload = CompiledModelSqlTestPayload(
-            authored_ctes=model_payload.authored_ctes,
-            macro_mocks=model_payload.macro_mocks,
-            model_query_overrides=_build_test_model_query_overrides(
-                test_input=test_input,
-                model_inputs=model_inputs,
-                inputs=inputs,
-            ),
-            mock_model_names=model_payload.mock_model_names,
-            mock_source_names=model_payload.mock_source_names,
-            mock_seed_names=model_payload.mock_seed_names,
-            mock_dbt_ref_names=model_payload.mock_dbt_ref_names,
-            mock_table_function_names=model_payload.mock_table_function_names,
-            expected_ctes=model_payload.expected_ctes,
-            expected_model_names=model_payload.expected_model_names,
-            assertion_ctes=model_payload.assertion_ctes,
-            assertion_names=model_payload.assertion_names,
-        )
-    tested_resources: tuple[CompiledSqlTestResource, ...] = (
-        tuple(
-            CompiledSqlTestResource(kind=test_input.payload.mode, name=name)
-            for name in test_input.payload.tested_resource_names
-        )
-        if isinstance(test_input.payload, CompileDirectLogicSqlTestInputPayload)
-        else ()
-    )
-    case_fingerprint: str | None = (
-        build_sql_test_case_fingerprint(
-            source_path=test_input.test_file.relative_path,
-            block_index=test_input.test_block.test_index,
-            case_name=test_input.case_name,
-            parameter_schema=test_input.parameter_schema,
-            parameter_values=test_input.parameter_values,
-            expanded_sql=test_input.sql_body,
-            scope_deps=scope_deps,
-            tested_resources=tested_resources,
-        )
-        if test_input.case_name is not None
-        else None
-    )
-    return CompiledSqlTest(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name=test_name),
-        scope_deps=scope_deps,
-        name=test_name,
-        test_file=test_input.test_file,
-        test_block=test_input.test_block,
-        sql_body=test_input.sql_body,
-        mode=test_input.mode,
-        payload=compiled_payload,
-        source_path=test_input.test_file.relative_path,
-        ownership_root=test_input.test_file.ownership_root,
-        block_index=test_input.test_block.test_index,
-        explicit_name=test_input.test_block.name,
-        parent_name=test_input.parent_name,
-        case_name=test_input.case_name,
-        case_index=test_input.case_index,
-        case_fingerprint=case_fingerprint,
-        parameter_schema=test_input.parameter_schema,
-        parameter_values=test_input.parameter_values,
-        expected_model_names=(
-            test_input.payload.expected_model_names
-            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
-            else ()
-        ),
-        assertion_names=(
-            test_input.payload.assertion_names
-            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
-            else ()
-        ),
-        assertion_target_model_names=(
-            test_input.payload.assertion_target_model_names
-            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
-            else ()
-        ),
-        read_helper_names=(
-            test_input.payload.read_helper_names
-            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
-            else ()
-        ),
-        reference_target_model_names=(
-            test_input.payload.reference_target_model_names
-            if isinstance(test_input.payload, CompileModelSqlTestInputPayload)
-            else ()
-        ),
-        target_model_names=target_model_names,
-        tested_resources=tested_resources,
-    )
-
-
 def _build_test_model_query_overrides(
     *,
     test_input: CompileSqlTestInput,
@@ -1157,10 +994,3 @@ def _resolve_audit_name(audit_input: CompileAuditInput) -> str:
     if audit_input.audit_block.name is not None:
         return audit_input.audit_block.name
     return audit_input.audit_file.file_path.stem
-
-
-def _resolve_test_name(test_input: CompileSqlTestInput) -> str:
-    parent_name: str = test_input.test_block.name or test_input.test_file.file_path.stem
-    if test_input.case_name is not None:
-        return f"{parent_name} [{test_input.case_name}]"
-    return parent_name

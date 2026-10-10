@@ -1,5 +1,14 @@
-/// One expected call site: start, end, name, tree names and whether typed reference text appears.
-pub(crate) type ExpectedSite = (usize, usize, &'static str, &'static [&'static str], bool);
+use crate::macro_calls::models::ScanError;
+
+/// One expected call site: start, end, name, tree names if scanned and whether typed reference
+/// text appears.
+pub(crate) type ExpectedSite = (
+    usize,
+    usize,
+    &'static str,
+    Option<&'static [&'static str]>,
+    bool,
+);
 
 /// One expected splice: the rendered SQL and each span's source and output offsets.
 pub(crate) type ExpectedSplice = (&'static str, &'static [(usize, usize, usize, usize)]);
@@ -7,7 +16,8 @@ pub(crate) type ExpectedSplice = (&'static str, &'static [(usize, usize, usize, 
 pub(crate) struct ScanMacroCallSitesTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,
-    pub(crate) expected_sites: Option<&'static [ExpectedSite]>,
+    pub(crate) expected_sites: &'static [ExpectedSite],
+    pub(crate) expected_failure: Option<(Option<usize>, ScanError)>,
 }
 
 pub(crate) struct SpliceMacroCallsTestCase {

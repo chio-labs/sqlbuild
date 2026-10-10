@@ -10,8 +10,9 @@ const DECLARATION_READ: u8 = 1;
 const GENERATED_SQL: u8 = 2;
 const ARGUMENT_REFERENCE: u8 = 3;
 
-/// One call site: start, end, name, tree names and whether typed reference text appears.
-pub(crate) type SiteRow = (usize, usize, String, Vec<String>, bool);
+/// One call site: start, end, name, tree names if scanned and whether typed reference text
+/// appears.
+pub(crate) type SiteRow = (usize, usize, String, Option<Vec<String>>, bool);
 /// One substitution span: source start and end, output start and end.
 pub(crate) type SpanRow = (usize, usize, usize, usize);
 /// One recorded event: its tag and two text fields.

@@ -14,6 +14,23 @@ pub(crate) const UPPER_TABLES: [(&str, &[(u32, &str)]); 3] = [
     ("16.0.0", include!("../upper_mappings/unicode_16_0_0.in")),
 ];
 
+/// `(unicodedata.unidata_version, keys)` of every character whose `re.IGNORECASE` key is not
+/// itself.
+pub(crate) const IGNORECASE_KEY_TABLES: [(&str, &[(u32, u32)]); 3] = [
+    (
+        "15.0.0",
+        include!("../re_ignorecase_keys/unicode_15_0_0.in"),
+    ),
+    (
+        "15.1.0",
+        include!("../re_ignorecase_keys/unicode_15_1_0.in"),
+    ),
+    (
+        "16.0.0",
+        include!("../re_ignorecase_keys/unicode_16_0_0.in"),
+    ),
+];
+
 /// One string with each character replaced by its `mappings` entry, if it has one.
 pub(crate) fn mapped(mappings: &[(u32, &str)], text: &str) -> String {
     let mut result: String = String::with_capacity(text.len());

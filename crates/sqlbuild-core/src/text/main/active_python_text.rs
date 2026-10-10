@@ -3,7 +3,7 @@
 use std::sync::OnceLock;
 
 use crate::text::_helpers::alnum_tables::{ALNUM_TABLES, ALPHA_TABLES, DECIMAL_TABLES};
-use crate::text::_helpers::case_tables::{CASEFOLD_TABLES, UPPER_TABLES};
+use crate::text::_helpers::case_tables::{CASEFOLD_TABLES, IGNORECASE_KEY_TABLES, UPPER_TABLES};
 use crate::text::models::{CleandocMargin, PythonText};
 
 static ACTIVE: OnceLock<PythonText> = OnceLock::new();
@@ -21,6 +21,7 @@ pub fn active_python_text() -> PythonText {
         decimal_ranges: DECIMAL_TABLES[0].1,
         casefold_mappings: CASEFOLD_TABLES[0].1,
         upper_mappings: UPPER_TABLES[0].1,
+        ignorecase_keys: IGNORECASE_KEY_TABLES[0].1,
         cleandoc_margin: CleandocMargin::Whitespace,
         minor_version: 12,
     })

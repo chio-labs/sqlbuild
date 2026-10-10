@@ -265,14 +265,16 @@ pub struct SqlTestAssemblyModelPayload {
     pub assertion_target_model_names: Vec<String>,
     pub reference_target_model_names: Vec<String>,
     pub mock_model_names: Vec<String>,
-    pub has_macro_mocks: bool,
 }
 
-/// One test's assembled facts, or why Python assembles it.
+/// One test's assembled facts, or why its assembly raises.
 #[derive(Debug, PartialEq)]
 pub enum SqlTestAssemblyOutcome {
     Assembled(AssembledSqlTestFacts),
-    Deferred(SqlTestAssemblyDeferral),
+    /// Python's decimal context overflows normalizing a case parameter: Python raises
+    /// `decimal.Overflow` after reporting the facts' diagnostics and building macro-mock queries.
+    FingerprintOverflow(AssembledSqlTestFacts),
+    Failed(SqlTestAssemblyFailure),
 }
 
 /// The facts Python's `_assemble_compiled_sql_test` computes for one test.
@@ -299,36 +301,11 @@ pub struct SqlTestHelperDiagnostic {
     pub help: String,
 }
 
-/// Why one test is assembled by Python instead.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SqlTestAssemblyDeferral {
-    /// Macro mocks re-expand every model, which only Python's macro expansion does.
-    MacroMocks,
-    /// A model's macro call scan raises in Python or meets text Python classifies by Unicode.
-    MacroCallScan,
-    /// The reference scan fails or cannot classify the text as Python does.
-    ReferenceScan,
-    /// Non-ASCII text where Python's case folding or Unicode classes would apply.
-    NonAsciiText,
-    /// A decimal parameter Python's decimal context would round or clamp.
-    DecimalContext,
-    /// A parameter value the JSON encoder cannot encode as Python's does.
-    UnencodableValue,
-    /// A parsed CTE tree too deep, or otherwise unfit, to read as Python's `to_dict` walk does.
-    UnreadableTree,
-}
-
-impl SqlTestAssemblyDeferral {
-    /// The kind recorded for the deferral.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::MacroMocks => "macro_mocks",
-            Self::MacroCallScan => "macro_call_scan",
-            Self::ReferenceScan => "reference_scan",
-            Self::NonAsciiText => "non_ascii_text",
-            Self::DecimalContext => "decimal_context",
-            Self::UnencodableValue => "unencodable_value",
-            Self::UnreadableTree => "unreadable_tree",
-        }
-    }
+/// Why one test's assembly raises, as Python's assembly would.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SqlTestAssemblyFailure {
+    /// The message of the `CompileInputError` Python raises before the test's macro-mock queries.
+    Input(String),
+    /// An internal native failure.
+    Internal(String),
 }

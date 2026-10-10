@@ -6,6 +6,7 @@ use crate::text::main::is_python_space::is_python_space;
 use crate::text::main::is_python_word::is_python_word;
 use crate::text::main::python_casefold::python_casefold;
 use crate::text::main::python_cleandoc::python_cleandoc;
+use crate::text::main::python_ignorecase_key::python_ignorecase_key;
 use crate::text::main::python_text::python_text;
 use crate::text::main::python_upper::python_upper;
 use crate::text::models::PythonText;
@@ -329,6 +330,36 @@ fn given_unicode_versions_when_folding_and_upper_casing_then_python_str_methods_
             ),
             "{}",
             test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_character_pairs_when_matching_ignoring_case_then_python_re_agrees() {
+    // `re.fullmatch(re.escape(pattern), text, re.IGNORECASE)` under Python 3.12.
+    let test_cases: [(char, char, bool); 15] = [
+        ('k', '\u{212a}', true),
+        ('K', '\u{212a}', true),
+        ('s', '\u{17f}', true),
+        ('i', '\u{131}', true),
+        ('I', '\u{130}', true),
+        ('i', '\u{130}', true),
+        ('\u{3c3}', '\u{3c2}', true),
+        ('\u{3a3}', '\u{3c2}', true),
+        ('\u{b5}', '\u{39c}', true),
+        ('\u{df}', '\u{1e9e}', true),
+        ('\u{df}', 'S', false),
+        ('\u{130}', '\u{131}', true),
+        ('a', '\u{e1}', false),
+        ('\u{1c80}', '\u{412}', true),
+        ('\u{fb05}', '\u{fb06}', true),
+    ];
+    let python: PythonText = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
+    for (pattern, text, expected) in test_cases {
+        assert_eq!(
+            python_ignorecase_key(python, pattern) == python_ignorecase_key(python, text),
+            expected,
+            "{pattern:?} against {text:?}"
         );
     }
 }

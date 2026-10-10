@@ -2,17 +2,23 @@
 
 use std::collections::HashSet;
 
+use polyglot_sql::expressions::With;
 use polyglot_sql::{
     ComplexityGuardOptions, Dialect, DialectType, Expression, ExpressionWalk, ParseOptions,
 };
-use serde_json::Value;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::is_python_space::is_python_space;
+use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_core::text::main::python_ignorecase_key::python_ignorecase_key;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::compiler::_helpers::sql_tests::planning::MOCK_CTE_PREFIXES;
 use crate::compiler::models::{
-    SqlTestAssemblyDeferral, SqlTestAssemblyModel, SqlTestAssemblyModelPayload,
+    SqlTestAssemblyFailure, SqlTestAssemblyModel, SqlTestAssemblyModelPayload,
     SqlTestAssemblyReference, SqlTestAssemblyTest, SqlTestCte, SqlTestHelperDiagnostic,
 };
 
@@ -26,12 +32,10 @@ const RELATION_KINDS: [&str; 5] = [
     DBT_REF_KIND,
     TABLE_FUNCTION_KIND,
 ];
-/// Payload nesting past which the parsed tree is left to Python's `to_dict` walk.
-const MAX_TREE_DEPTH: usize = 400;
 /// The function call depth SQLBuild's Polyglot proxy allows `parse_one`.
 const MAX_FUNCTION_CALL_DEPTH: usize = 512;
 
-type Deferrable<T> = Result<T, SqlTestAssemblyDeferral>;
+type Deferrable<T> = Result<T, SqlTestAssemblyFailure>;
 
 /// A reference as compile carries it: the scanner's or a model input's.
 #[derive(Clone)]
@@ -152,13 +156,12 @@ pub(crate) fn mock_reading_helper_diagnostics(
             .into_iter()
             .find(|reference| RELATION_KINDS.contains(&reference.kind.as_str()));
         if let Some(reference) = first {
-            referencing.assign(ascii_fold(&cte.name)?, reference);
+            referencing.assign(fold(&cte.name), reference);
         }
     }
     if referencing.entries.is_empty() {
         return Ok(Vec::new());
     }
-    require_ascii(request.test, payload)?;
     let readers: Vec<&SqlTestCte> = payload
         .expected_ctes
         .iter()
@@ -218,42 +221,19 @@ fn is_mock_name(name: &str) -> bool {
         .any(|prefix| name.starts_with(prefix))
 }
 
-/// Python's `str.casefold`, exact only on ASCII text.
-fn ascii_fold(text: &str) -> Deferrable<String> {
-    if text.is_ascii() {
-        Ok(text.to_ascii_lowercase())
-    } else {
-        Err(SqlTestAssemblyDeferral::NonAsciiText)
-    }
+/// Python's `str.casefold`.
+fn fold(text: &str) -> String {
+    python_casefold(active_python_text(), text)
 }
 
-/// Python's folding, token and header patterns read only ASCII text exactly.
-fn require_ascii(
-    test: &SqlTestAssemblyTest,
-    payload: &SqlTestAssemblyModelPayload,
-) -> Deferrable<()> {
-    let ascii = test.contents.is_ascii()
-        && test.block_sql.is_ascii()
-        && payload
-            .authored_ctes
-            .iter()
-            .chain(&payload.expected_ctes)
-            .chain(&payload.assertion_ctes)
-            .all(|cte| cte.name.is_ascii() && cte.sql_body.is_ascii());
-    if ascii {
-        Ok(())
-    } else {
-        Err(SqlTestAssemblyDeferral::NonAsciiText)
-    }
-}
-
-/// Python's `scan_sql_reference_calls(...).references`; a failing scan is Python's to raise.
+/// Python's `scan_sql_reference_calls(...).references`; a failing scan raises its unlocated
+/// `CompileInputError`.
 fn references(sql: &str, syntax: &LexicalSyntax) -> Deferrable<Vec<Reference>> {
     match extract_sql_references(sql, syntax) {
         ReferenceExtraction::Extracted(scan) => {
             Ok(scan.references.into_iter().map(scanned).collect())
         }
-        ReferenceExtraction::Failed(_) => Err(SqlTestAssemblyDeferral::ReferenceScan),
+        ReferenceExtraction::Failed(failure) => Err(SqlTestAssemblyFailure::Input(failure.message)),
     }
 }
 
@@ -277,7 +257,7 @@ fn model_reference(reference: &SqlTestAssemblyReference) -> Reference {
 fn cte_graph<'a>(authored: &'a [SqlTestCte], readers: &[&SqlTestCte]) -> Deferrable<CteGraph<'a>> {
     let mut ctes: OrderedEntries<&'a SqlTestCte> = OrderedEntries::new();
     for cte in authored {
-        ctes.assign(ascii_fold(&cte.name)?, cte);
+        ctes.assign(fold(&cte.name), cte);
     }
     let keys: Vec<String> = ctes.keys();
     let mut reads: OrderedEntries<Vec<String>> = OrderedEntries::new();
@@ -310,7 +290,7 @@ fn cte_graph<'a>(authored: &'a [SqlTestCte], readers: &[&SqlTestCte]) -> Deferra
 
 /// Python's `_parsed_reads`: unqualified reads of `keys` no nested CTE shadows, or None unparsed.
 fn parsed_reads(sql: &str, keys: &[String]) -> Deferrable<Option<Vec<String>>> {
-    let folded = ascii_fold(sql)?;
+    let folded = fold(sql);
     if !keys.iter().any(|key| folded.contains(key.as_str())) {
         return Ok(Some(Vec::new()));
     }
@@ -323,7 +303,7 @@ fn parsed_reads(sql: &str, keys: &[String]) -> Deferrable<Option<Vec<String>>> {
         return Ok(None);
     }
     let parsed: Expression = statements.remove(0);
-    let nested = defined_cte_keys(&parsed)?;
+    let nested = defined_cte_keys(&parsed);
     let mut reads: Vec<String> = Vec::new();
     for node in parsed.dfs() {
         let Expression::Table(table) = node else {
@@ -332,7 +312,7 @@ fn parsed_reads(sql: &str, keys: &[String]) -> Deferrable<Option<Vec<String>>> {
         if table.schema.is_some() || table.catalog.is_some() {
             continue;
         }
-        let key = ascii_fold(&table.name.name)?;
+        let key = fold(&table.name.name);
         if keys.contains(&key) && !nested.contains(&key) && !reads.contains(&key) {
             reads.push(key);
         }
@@ -345,61 +325,55 @@ fn proxy_parse_options() -> Deferrable<ParseOptions> {
     let guard: ComplexityGuardOptions = serde_json::from_value(serde_json::json!({
         "maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH,
     }))
-    .map_err(|_| SqlTestAssemblyDeferral::UnreadableTree)?;
+    .map_err(|error| SqlTestAssemblyFailure::Internal(error.to_string()))?;
     Ok(ParseOptions {
         complexity_guard: Some(guard),
     })
 }
 
-/// Python's `_defined_cte_keys` over the serialized tree Python's `to_dict` returns.
-fn defined_cte_keys(parsed: &Expression) -> Deferrable<HashSet<String>> {
-    let tree = serde_json::to_value(parsed).map_err(|_| SqlTestAssemblyDeferral::UnreadableTree)?;
+/// Python's `_defined_cte_keys` over `to_dict()`: the folded name of every CTE in a `ctes` list,
+/// which only `WITH` clauses hold, at any depth.
+fn defined_cte_keys(parsed: &Expression) -> HashSet<String> {
     let mut keys: HashSet<String> = HashSet::new();
-    let mut pending: Vec<(&Value, usize)> = vec![(&tree, 0)];
-    while let Some((value, depth)) = pending.pop() {
-        if depth > MAX_TREE_DEPTH {
-            return Err(SqlTestAssemblyDeferral::UnreadableTree);
-        }
-        match value {
-            Value::Array(items) => pending.extend(items.iter().map(|item| (item, depth + 1))),
-            Value::Object(entries) => {
-                if let Some(Value::Array(ctes)) = entries.get("ctes") {
-                    for cte in ctes {
-                        if let Some(Value::String(name)) = cte
-                            .get("alias")
-                            .filter(|alias| alias.is_object())
-                            .and_then(|alias| alias.get("name"))
-                        {
-                            let _ = keys.insert(ascii_fold(name)?);
-                        }
-                    }
-                }
-                pending.extend(entries.values().map(|item| (item, depth + 1)));
-            }
-            _ => {}
+    for node in parsed.dfs() {
+        let with: Option<&With> = match node {
+            Expression::Select(select) => select.with.as_ref(),
+            Expression::Union(union) => union.with.as_ref(),
+            Expression::Intersect(intersect) => intersect.with.as_ref(),
+            Expression::Except(except) => except.with.as_ref(),
+            Expression::Pivot(pivot) => pivot.with.as_ref(),
+            Expression::Insert(insert) => insert.with.as_ref(),
+            Expression::Update(update) => update.with.as_ref(),
+            Expression::Delete(delete) => delete.with.as_ref(),
+            Expression::CreateTable(create) => create.with_cte.as_ref(),
+            Expression::With(with) => Some(with),
+            _ => None,
+        };
+        for cte in with.map_or(&[][..], |with| with.ctes.as_slice()) {
+            let _ = keys.insert(fold(&cte.alias.name));
         }
     }
-    Ok(keys)
+    keys
 }
 
-/// Python's `_token_reads` over `[A-Za-z_][\w$]*` tokens of ASCII text.
+/// Python's `_token_reads` over `[A-Za-z_][\w$]*` tokens.
 fn token_reads(sql: &str, keys: &[String]) -> Vec<String> {
-    let bytes = sql.as_bytes();
+    let python: PythonText = active_python_text();
+    let chars: Vec<(usize, char)> = sql.char_indices().collect();
     let mut tokens: Vec<String> = Vec::new();
     let mut index = 0;
-    while index < bytes.len() {
-        if !(bytes[index].is_ascii_alphabetic() || bytes[index] == b'_') {
+    while index < chars.len() {
+        if !(chars[index].1.is_ascii_alphabetic() || chars[index].1 == '_') {
             index += 1;
             continue;
         }
-        let start = index;
+        let start = chars[index].0;
         index += 1;
-        while index < bytes.len()
-            && (bytes[index].is_ascii_alphanumeric() || matches!(bytes[index], b'_' | b'$'))
-        {
+        while index < chars.len() && is_word_or_dollar(python, chars[index].1) {
             index += 1;
         }
-        let token = sql[start..index].to_ascii_lowercase();
+        let end = chars.get(index).map_or(sql.len(), |(offset, _)| *offset);
+        let token = fold(&sql[start..end]);
         if !tokens.contains(&token) {
             tokens.push(token);
         }
@@ -433,7 +407,7 @@ fn mock_keys(reference: &Reference) -> Deferrable<Vec<String>> {
     }
     names
         .iter()
-        .map(|name| ascii_fold(&format!("{prefix}{name}")))
+        .map(|name| Ok(fold(&format!("{prefix}{name}"))))
         .collect()
 }
 
@@ -526,17 +500,25 @@ fn mock_reference_help(mock_name: &str, call: &str, reference: &Reference) -> St
     format!("Write the rows of '{mock_name}' directly, for example {mock_name} AS (SELECT ...).")
 }
 
-/// Python's `sql_test_cte_location` and `reference_call_location` on ASCII contents.
+/// Python's `sql_test_cte_location` and `reference_call_location`, in code points.
 fn located(test: &SqlTestAssemblyTest, cte_name: &str, call: &str) -> Span {
-    let contents = test.contents.as_str();
-    let block_offset = contents.find(test.block_sql.as_str()).unwrap_or(0);
-    let (start, length) = match cte_header(contents, cte_name, block_offset) {
-        Some((header_start, header_end)) => find_ignoring_case(contents, call, header_end)
-            .map_or((header_start, cte_name.len()), |found| (found, call.len())),
+    let python: PythonText = active_python_text();
+    let contents: Vec<char> = test.contents.chars().collect();
+    let block_offset: usize = test
+        .contents
+        .find(test.block_sql.as_str())
+        .map_or(0, |byte| test.contents[..byte].chars().count());
+    let name: Vec<char> = cte_name.chars().collect();
+    let call: Vec<char> = call.chars().collect();
+    let (start, length) = match cte_header(python, &contents, &name, block_offset) {
+        Some((header_start, header_end)) => {
+            find_ignoring_case(python, &contents, &call, header_end)
+                .map_or((header_start, name.len()), |found| (found, call.len()))
+        }
         None => (block_offset, 0),
     };
-    let (line, column) = line_and_column(contents, start);
-    let (end_line, end_column) = line_and_column(contents, start + length);
+    let (line, column) = line_and_column(&contents, start);
+    let (end_line, end_column) = line_and_column(&contents, start + length);
     Span {
         line,
         column,
@@ -545,75 +527,95 @@ fn located(test: &SqlTestAssemblyTest, cte_name: &str, call: &str) -> Span {
     }
 }
 
-/// Python's `(?<![\w$])NAME["`]?\s+AS\s*\(` search from `from`, case-insensitive.
-fn cte_header(contents: &str, name: &str, from: usize) -> Option<(usize, usize)> {
-    let bytes = contents.as_bytes();
+/// Python's `(?<![\w$])NAME["`]?\s+AS\s*\(` search from `from`, under `re.IGNORECASE`.
+fn cte_header(
+    python: PythonText,
+    contents: &[char],
+    name: &[char],
+    from: usize,
+) -> Option<(usize, usize)> {
+    let space = |index: usize| contents.get(index).is_some_and(|c| is_python_space(*c));
     let mut start = from;
-    while let Some(found) = find_ignoring_case(contents, name, start) {
+    while let Some(found) = find_ignoring_case(python, contents, name, start) {
         start = found + 1;
-        if found > 0 && is_word_or_dollar(bytes[found - 1]) {
+        if found > 0 && is_word_or_dollar(python, contents[found - 1]) {
             continue;
         }
         let mut cursor = found + name.len();
-        if matches!(bytes.get(cursor), Some(b'"' | b'`')) {
+        if matches!(contents.get(cursor), Some('"' | '`')) {
             cursor += 1;
         }
         let spaces = cursor;
-        while bytes
-            .get(cursor)
-            .is_some_and(|byte| is_python_ascii_space(*byte))
-        {
+        while space(cursor) {
             cursor += 1;
         }
-        if cursor == spaces
-            || !bytes
-                .get(cursor..cursor + 2)
-                .is_some_and(|keyword| keyword.eq_ignore_ascii_case(b"AS"))
-        {
+        if cursor == spaces || !matches_ignoring_case(python, contents, &['a', 's'], cursor) {
             continue;
         }
         cursor += 2;
-        while bytes
-            .get(cursor)
-            .is_some_and(|byte| is_python_ascii_space(*byte))
-        {
+        while space(cursor) {
             cursor += 1;
         }
-        if bytes.get(cursor) == Some(&b'(') {
+        if contents.get(cursor) == Some(&'(') {
             return Some((found, cursor + 1));
         }
     }
     None
 }
 
-fn find_ignoring_case(contents: &str, needle: &str, from: usize) -> Option<usize> {
-    let haystack = contents.as_bytes();
-    let needle = needle.as_bytes();
-    if needle.is_empty() {
-        return (from <= haystack.len()).then_some(from);
-    }
-    (from..=haystack.len().checked_sub(needle.len())?)
-        .find(|&index| haystack[index..index + needle.len()].eq_ignore_ascii_case(needle))
+/// Python's `re.compile(re.escape(needle), re.IGNORECASE).search(contents, from)`.
+fn find_ignoring_case(
+    python: PythonText,
+    contents: &[char],
+    needle: &[char],
+    from: usize,
+) -> Option<usize> {
+    let needle: Vec<char> = needle
+        .iter()
+        .map(|character| python_ignorecase_key(python, *character))
+        .collect();
+    (from..=contents.len().checked_sub(needle.len())?)
+        .find(|&index| keys_at(python, contents, &needle, index))
 }
 
-fn is_word_or_dollar(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$')
+/// Whether `needle` matches at `at` under `re.IGNORECASE`.
+fn matches_ignoring_case(
+    python: PythonText,
+    contents: &[char],
+    needle: &[char],
+    at: usize,
+) -> bool {
+    let keys: Vec<char> = needle
+        .iter()
+        .map(|character| python_ignorecase_key(python, *character))
+        .collect();
+    keys_at(python, contents, &keys, at)
 }
 
-/// Python's `\s` on ASCII text, which includes the information separators.
-fn is_python_ascii_space(byte: u8) -> bool {
-    matches!(
-        byte,
-        b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c | 0x1c..=0x1f
-    )
+fn keys_at(python: PythonText, contents: &[char], keys: &[char], at: usize) -> bool {
+    contents.get(at..at + keys.len()).is_some_and(|window| {
+        window
+            .iter()
+            .zip(keys)
+            .all(|(character, key)| python_ignorecase_key(python, *character) == *key)
+    })
 }
 
-fn line_and_column(contents: &str, offset: usize) -> (usize, usize) {
-    let before = &contents.as_bytes()[..offset];
-    let line = before.iter().filter(|byte| **byte == b'\n').count() + 1;
+/// Python's `[\w$]`.
+fn is_word_or_dollar(python: PythonText, character: char) -> bool {
+    character == '$' || is_python_word(python, character)
+}
+
+fn line_and_column(contents: &[char], offset: usize) -> (usize, usize) {
+    let before = &contents[..offset];
+    let line = before
+        .iter()
+        .filter(|character| **character == '\n')
+        .count()
+        + 1;
     let line_start = before
         .iter()
-        .rposition(|byte| *byte == b'\n')
+        .rposition(|character| *character == '\n')
         .map_or(0, |index| index + 1);
     (line, offset - line_start + 1)
 }

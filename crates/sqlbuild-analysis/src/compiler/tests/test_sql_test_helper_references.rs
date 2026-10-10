@@ -3,10 +3,9 @@ use serde_json::{Value, json};
 use crate::compiler::_helpers::sql_tests::extraction::generic_syntax;
 use crate::compiler::main::sql_test_assembly::assemble_sql_test_batch;
 use crate::compiler::models::{
-    AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyDeferral, SqlTestAssemblyModel,
-    SqlTestAssemblyModelPayload, SqlTestAssemblyOutcome, SqlTestAssemblyPayload,
-    SqlTestAssemblyReference, SqlTestAssemblyTest, SqlTestCte, SqlTestHelperDiagnostic,
-    SqlTestParameterValue,
+    AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyModel, SqlTestAssemblyModelPayload,
+    SqlTestAssemblyOutcome, SqlTestAssemblyPayload, SqlTestAssemblyReference, SqlTestAssemblyTest,
+    SqlTestCte, SqlTestHelperDiagnostic, SqlTestParameterValue,
 };
 use crate::compiler::tests::helpers::{
     chain_helper_reference_case, defined_before, plan_helper_reference_case,
@@ -45,6 +44,12 @@ __expected__customer_totals AS (SELECT 1 AS customer_id)\nSELECT 1\n";
 /// Python's `build_sql_test_case_fingerprint` of the parameterized case below.
 const PYTHON_CASE_FINGERPRINT: &str =
     "8f2adcab557ba4476fcb70de1fc11014acda9f1b597a3ca5c3245afb632e5d0f";
+/// Python's fingerprint of the case with 29 ones, which its decimal context rounds to 28 digits.
+const PYTHON_ROUNDED_CASE_FINGERPRINT: &str =
+    "58f918fcd3fa8df50c2b10a9e8671c1f3b49eb80af3d48b7eb609392e255ccb4";
+/// Python's fingerprint of the case with 29 nines, whose rounding carries into a new digit.
+const PYTHON_CARRIED_CASE_FINGERPRINT: &str =
+    "6da8c843ce65781616436ca7665394b9495efc3881955fbe3b58be610e3faa7a";
 
 #[test]
 fn given_helper_cte_references_when_planning_then_references_resolve_in_dependency_order() {
@@ -509,14 +514,14 @@ fn given_unresolvable_reader_references_when_planning_directly_then_planner_reje
 }
 
 #[test]
-fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python_or_defer() {
+fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python() {
     let cte = |name: &str, sql_body: &str| SqlTestCte {
         name: name.to_owned(),
         sql_body: sql_body.to_owned(),
     };
     let strings =
         |names: &[&str]| -> Vec<String> { names.iter().map(|n| (*n).to_owned()).collect() };
-    let model_test = |contents: &str, has_macro_mocks: bool| SqlTestAssemblyTest {
+    let model_test = |contents: &str| SqlTestAssemblyTest {
         block_name: Some("mock_reads_helper".to_owned()),
         file_stem: "test_customer_totals".to_owned(),
         relative_path: "tests/unit/test_customer_totals.sql".to_owned(),
@@ -545,7 +550,6 @@ fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python_or_def
             assertion_target_model_names: Vec::new(),
             reference_target_model_names: Vec::new(),
             mock_model_names: strings(&["stg_orders"]),
-            has_macro_mocks,
         }),
     };
     let model = |name: &str, macro_deps: &[&str], source: Option<&str>, refs: &[(&str, &str)]| {
@@ -592,7 +596,7 @@ fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python_or_def
             mode: "macro".to_owned(),
             tested_resource_names: strings(&["dollars"]),
         },
-        ..model_test(MOCK_READS_HELPER_TEST, false)
+        ..model_test(MOCK_READS_HELPER_TEST)
     };
     let case_test = |decimal_digits: Vec<u8>| SqlTestAssemblyTest {
         relative_path: "tests/unit/test_cases.sql".to_owned(),
@@ -624,14 +628,26 @@ fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python_or_def
             assertion_target_model_names: strings(&["orders"]),
             reference_target_model_names: Vec::new(),
             mock_model_names: Vec::new(),
-            has_macro_mocks: false,
         }),
-        ..model_test(MOCK_READS_HELPER_TEST, false)
+        ..model_test(MOCK_READS_HELPER_TEST)
+    };
+    let rounded_case = |fingerprint: &str| {
+        SqlTestAssemblyOutcome::Assembled(AssembledSqlTestFacts {
+            name: "mock_reads_helper [first]".to_owned(),
+            scope_deps: vec![
+                ("model", "orders".to_owned()),
+                ("model", "customers".to_owned()),
+            ],
+            target_model_names: strings(&["orders", "customers"]),
+            case_fingerprint: Some(fingerprint.to_owned()),
+            diagnostic_resource_name: "mock_reads_helper".to_owned(),
+            diagnostics: Vec::new(),
+        })
     };
     let test_cases = [
         SqlTestAssemblyTestCase {
             description: "a mock reading a helper that calls a source reports P013 at the call",
-            batch: batch(vec![model_test(MOCK_READS_HELPER_TEST, false)]),
+            batch: batch(vec![model_test(MOCK_READS_HELPER_TEST)]),
             expected_outcomes: vec![SqlTestAssemblyOutcome::Assembled(AssembledSqlTestFacts {
                 name: "mock_reads_helper".to_owned(),
                 scope_deps: vec![("model", "customer_totals".to_owned())],
@@ -657,16 +673,38 @@ fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python_or_def
             })],
         },
         SqlTestAssemblyTestCase {
-            description: "macro mocks, non-ASCII text and out-of-context decimals defer",
+            description: "non-ASCII contents and decimals Python's context rounds assemble as Python",
             batch: batch(vec![
-                model_test(MOCK_READS_HELPER_TEST, true),
-                model_test(&format!("-- caf\u{e9}\n{MOCK_READS_HELPER_TEST}"), false),
+                model_test(&format!("-- caf\u{e9}\n{MOCK_READS_HELPER_TEST}")),
                 case_test(vec![1; 29]),
+                case_test(vec![9; 29]),
             ]),
             expected_outcomes: vec![
-                SqlTestAssemblyOutcome::Deferred(SqlTestAssemblyDeferral::MacroMocks),
-                SqlTestAssemblyOutcome::Deferred(SqlTestAssemblyDeferral::NonAsciiText),
-                SqlTestAssemblyOutcome::Deferred(SqlTestAssemblyDeferral::DecimalContext),
+                SqlTestAssemblyOutcome::Assembled(AssembledSqlTestFacts {
+                    name: "mock_reads_helper".to_owned(),
+                    scope_deps: vec![("model", "customer_totals".to_owned())],
+                    target_model_names: strings(&["customer_totals"]),
+                    case_fingerprint: None,
+                    diagnostic_resource_name: "mock_reads_helper".to_owned(),
+                    diagnostics: vec![SqlTestHelperDiagnostic {
+                        line: 5,
+                        column: 31,
+                        end_line: 5,
+                        end_column: 53,
+                        message: "SQL test mock '__ref__stg_orders' reads helper CTE \
+                                  'orders_feed', which calls __source(\"raw_orders\"); mocks \
+                                  and fixtures are defined before the models the test runs, so \
+                                  the helper cannot be resolved for them"
+                            .to_owned(),
+                        help: "Read a mock by its CTE name instead, for example FROM \
+                               __source__raw_orders rather than FROM __source(\"raw_orders\"), \
+                               defining __source__raw_orders AS (SELECT ...) if the test does \
+                               not mock it, or write the rows of '__ref__stg_orders' directly."
+                            .to_owned(),
+                    }],
+                }),
+                rounded_case(PYTHON_ROUNDED_CASE_FINGERPRINT),
+                rounded_case(PYTHON_CARRIED_CASE_FINGERPRINT),
             ],
         },
         SqlTestAssemblyTestCase {
