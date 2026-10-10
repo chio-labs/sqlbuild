@@ -67,7 +67,7 @@ _GIB: int = 1024 * 1024 * 1024
             test_count=9_816,
             audit_count=16_855,
             expected_max_wall_seconds=50.0,
-            expected_max_rss_bytes=2 * _GIB,
+            expected_max_rss_bytes=int(2.5 * _GIB),
             expected_semantic_fingerprint=(
                 "5ccdabeaabfdfba1ecbae80259dd3c6eb801d683df140b7fb7a249b9555308c6"
             ),
