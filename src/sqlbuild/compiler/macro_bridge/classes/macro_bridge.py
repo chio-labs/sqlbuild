@@ -14,8 +14,6 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.frontier.main.report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     digest_module_files,
     module_digests_metadata,
@@ -30,7 +28,13 @@ from sqlbuild.compiler.macro_bridge._helpers.store_keys import (
     macro_store_token,
 )
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
-from sqlbuild.compiler.macro_bridge.models import MacroCallClass, MacroCallSite, ModuleSources
+from sqlbuild.compiler.macro_bridge.models import (
+    MacroCallClass,
+    MacroCallScan,
+    MacroCallSite,
+    MacroScanFailure,
+    ModuleSources,
+)
 from sqlbuild.compiler.macro_bridge.types import MacroCallEvent, MacroCallRecord
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.python_nodes.models import SqlResourceRef
@@ -132,24 +136,28 @@ class MacroBridge:
         self._module_digests.update(digests)
         return True
 
-    def scan(self, sql: str) -> tuple[MacroCallSite, ...] | None:
-        """Return the top-level call sites of `sql`, or None when Python must expand it."""
+    def scan(self, sql: str) -> MacroCallScan:
+        """The complete top-level call sites of `sql`, and where its scan raises, if it does."""
 
-        rows: list[tuple[int, int, str, list[str], bool]] | None = _native.scan_macro_call_sites(
+        rows: list[tuple[int, int, str, list[str] | None, bool]]
+        failure: tuple[int | None, str] | None
+        rows, failure = _native.scan_macro_call_sites(
             sql, self._python_version, self._unicode_version
         )
-        if rows is None:
-            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_SCAN)
-            return None
-        return tuple(
-            MacroCallSite(
-                start=start,
-                end=end,
-                name=name,
-                tree_names=tuple(tree_names),
-                typed_reference_text=typed_reference_text,
-            )
-            for start, end, name, tree_names, typed_reference_text in rows
+        return MacroCallScan(
+            sites=tuple(
+                MacroCallSite(
+                    start=start,
+                    end=end,
+                    name=name,
+                    tree_names=None if tree_names is None else tuple(tree_names),
+                    typed_reference_text=typed_reference_text,
+                )
+                for start, end, name, tree_names, typed_reference_text in rows
+            ),
+            failure=None
+            if failure is None
+            else MacroScanFailure(call_start=failure[0], message=failure[1]),
         )
 
     def call_class(
@@ -162,6 +170,8 @@ class MacroBridge:
     ) -> MacroCallClass | None:
         """Return what a call's result may depend on besides its text, or None if unresolvable."""
 
+        if site.tree_names is None:
+            return None
         owner: object = loaded_macros if declarations is None else declarations
         macros: Mapping[str, LoadedMacro] = (
             loaded_macros if declarations is None else declarations.macros

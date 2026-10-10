@@ -1,10 +1,11 @@
-//! Byte offset port of the Python macro call scanner; unsure or rejected text defers to Python.
+//! Byte offset port of the Python macro call scanner, with the errors Python's scan raises.
 
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
+use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::models::PythonText;
 
-use crate::macro_calls::models::ScanDeferral;
+use crate::macro_calls::models::ScanError;
 
 const TYPED_REFERENCE_NAMES: [&str; 3] = ["__ref", "__source", "__seed"];
 
@@ -16,26 +17,51 @@ pub(crate) struct ScannedCall {
     pub(crate) name: String,
 }
 
-/// Return every top-level call of `text` in order.
+/// Where Python's scan of the text raises: in the call starting at a byte offset, or between
+/// calls.
+pub(crate) struct ScannedFailure {
+    pub(crate) call_start: Option<usize>,
+    pub(crate) error: ScanError,
+}
+
+/// Every top-level call of `text` in order, up to the first error Python's scan raises.
 pub(crate) fn top_level_calls(
     python: PythonText,
     text: &str,
-) -> Result<Vec<ScannedCall>, ScanDeferral> {
+) -> (Vec<ScannedCall>, Option<ScannedFailure>) {
     let mut calls: Vec<ScannedCall> = Vec::new();
     let mut cursor = 0;
     while cursor < text.len() {
-        let Some(start) = next_macro_start(python, text, cursor)? else {
-            break;
+        let start = match next_macro_start(python, text, cursor) {
+            Ok(Some(start)) => start,
+            Ok(None) => break,
+            Err(error) => {
+                let failure = ScannedFailure {
+                    call_start: None,
+                    error,
+                };
+                return (calls, Some(failure));
+            }
         };
-        let call = call_at(python, text, start)?;
-        cursor = call.close + 1;
-        calls.push(call);
+        match call_at(python, text, start) {
+            Ok(call) => {
+                cursor = call.close + 1;
+                calls.push(call);
+            }
+            Err(error) => {
+                let failure = ScannedFailure {
+                    call_start: Some(start),
+                    error,
+                };
+                return (calls, Some(failure));
+            }
+        }
     }
-    Ok(calls)
+    (calls, None)
 }
 
 /// Names of every call nested in `args` in source order, in one pass without recursion.
-pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>, ScanDeferral> {
+pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>, ScanError> {
     let bytes: &[u8] = args.as_bytes();
     let mut names: Vec<String> = Vec::new();
     let mut open_call_depths: Vec<usize> = Vec::new();
@@ -47,7 +73,7 @@ pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>
             b'$' => index = dollar_quote_end(bytes, index)?.unwrap_or(index + 1),
             b'-' if bytes.get(index + 1) == Some(&b'-') => index = line_comment_end(bytes, index),
             b'/' if bytes.get(index + 1) == Some(&b'*') => index = block_comment_end(bytes, index)?,
-            b'@' if macro_call_starts_at(python, args, index)? => {
+            b'@' if macro_call_starts_at(python, args, index) => {
                 let (name, open) = call_header(python, args, index)?;
                 names.push(name);
                 depth += 1;
@@ -62,7 +88,7 @@ pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>
                 if open_call_depths.last() == Some(&depth) {
                     let _ = open_call_depths.pop();
                 }
-                depth = depth.checked_sub(1).ok_or(ScanDeferral)?;
+                depth = depth.checked_sub(1).ok_or(ScanError::UnclosedParenthesis)?;
                 index += 1;
             }
             _ => index += 1,
@@ -71,7 +97,7 @@ pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>
     if open_call_depths.is_empty() {
         Ok(names)
     } else {
-        Err(ScanDeferral)
+        Err(ScanError::UnclosedParenthesis)
     }
 }
 
@@ -80,7 +106,7 @@ pub(crate) fn mentions_typed_reference(args: &str) -> bool {
     TYPED_REFERENCE_NAMES.iter().any(|name| args.contains(name))
 }
 
-fn call_at(python: PythonText, text: &str, start: usize) -> Result<ScannedCall, ScanDeferral> {
+fn call_at(python: PythonText, text: &str, start: usize) -> Result<ScannedCall, ScanError> {
     let (name, open) = call_header(python, text, start)?;
     let close = matching_paren(text.as_bytes(), open)?;
     Ok(ScannedCall {
@@ -91,15 +117,11 @@ fn call_at(python: PythonText, text: &str, start: usize) -> Result<ScannedCall, 
     })
 }
 
-fn call_header(
-    python: PythonText,
-    text: &str,
-    start: usize,
-) -> Result<(String, usize), ScanDeferral> {
+fn call_header(python: PythonText, text: &str, start: usize) -> Result<(String, usize), ScanError> {
     let name_end = identifier_end(python, text, start + 1);
     let open = skip_whitespace(text, name_end);
     if text.as_bytes().get(open) != Some(&b'(') {
-        return Err(ScanDeferral);
+        return Err(ScanError::MissingParenthesis);
     }
     Ok((text[start + 1..name_end].to_owned(), open))
 }
@@ -108,7 +130,7 @@ fn next_macro_start(
     python: PythonText,
     text: &str,
     from: usize,
-) -> Result<Option<usize>, ScanDeferral> {
+) -> Result<Option<usize>, ScanError> {
     let bytes = text.as_bytes();
     let mut index = from;
     while index < bytes.len() {
@@ -118,7 +140,7 @@ fn next_macro_start(
             b'-' if bytes.get(index + 1) == Some(&b'-') => index = line_comment_end(bytes, index),
             b'/' if bytes.get(index + 1) == Some(&b'*') => index = block_comment_end(bytes, index)?,
             b'@' => {
-                if macro_call_starts_at(python, text, index)? {
+                if macro_call_starts_at(python, text, index) {
                     return Ok(Some(index));
                 }
                 index += 1;
@@ -129,24 +151,21 @@ fn next_macro_start(
     Ok(None)
 }
 
-fn macro_call_starts_at(python: PythonText, text: &str, at: usize) -> Result<bool, ScanDeferral> {
+fn macro_call_starts_at(python: PythonText, text: &str, at: usize) -> bool {
     let Some(first) = char_at(text, at + 1) else {
-        return Ok(false);
+        return false;
     };
-    if !first.is_ascii() {
-        return Err(ScanDeferral);
+    if !(first == '_' || is_python_alpha(python, first)) {
+        return false;
     }
-    if !(first.is_ascii_alphabetic() || first == '_') {
-        return Ok(false);
-    }
-    let mut cursor = at + 2;
+    let mut cursor = at + 1 + first.len_utf8();
     while let Some(character) = char_at(text, cursor) {
         if !is_identifier_continue(python, character) {
             break;
         }
         cursor = skip_whitespace(text, cursor + character.len_utf8());
     }
-    Ok(text.as_bytes().get(cursor) == Some(&b'('))
+    text.as_bytes().get(cursor) == Some(&b'(')
 }
 
 fn identifier_end(python: PythonText, text: &str, from: usize) -> usize {
@@ -179,7 +198,7 @@ fn char_at(text: &str, index: usize) -> Option<char> {
     text.get(index..).and_then(|rest| rest.chars().next())
 }
 
-fn matching_paren(bytes: &[u8], open: usize) -> Result<usize, ScanDeferral> {
+fn matching_paren(bytes: &[u8], open: usize) -> Result<usize, ScanError> {
     let mut depth = 1usize;
     let mut index = open + 1;
     while index < bytes.len() {
@@ -213,10 +232,10 @@ fn matching_paren(bytes: &[u8], open: usize) -> Result<usize, ScanDeferral> {
         }
         index += 1;
     }
-    Err(ScanDeferral)
+    Err(ScanError::UnclosedParenthesis)
 }
 
-fn quote_end(bytes: &[u8], start: usize) -> Result<usize, ScanDeferral> {
+fn quote_end(bytes: &[u8], start: usize) -> Result<usize, ScanError> {
     let quote = bytes[start];
     let doubled_escapes = quote == b'\'' || quote == b'"';
     let mut index = start + 1;
@@ -224,7 +243,7 @@ fn quote_end(bytes: &[u8], start: usize) -> Result<usize, ScanDeferral> {
         let offset = bytes[index.min(bytes.len())..]
             .iter()
             .position(|byte| *byte == quote)
-            .ok_or(ScanDeferral)?;
+            .ok_or(ScanError::UnclosedQuote)?;
         index += offset;
         if doubled_escapes && bytes.get(index + 1) == Some(&quote) {
             index += 2;
@@ -234,7 +253,7 @@ fn quote_end(bytes: &[u8], start: usize) -> Result<usize, ScanDeferral> {
     }
 }
 
-fn dollar_quote_end(bytes: &[u8], start: usize) -> Result<Option<usize>, ScanDeferral> {
+fn dollar_quote_end(bytes: &[u8], start: usize) -> Result<Option<usize>, ScanError> {
     if start
         .checked_sub(1)
         .is_some_and(|previous| continues_dollar_word(bytes[previous]))
@@ -254,7 +273,7 @@ fn dollar_quote_end(bytes: &[u8], start: usize) -> Result<Option<usize>, ScanDef
         .windows(delimiter.len())
         .position(|window| window == delimiter)
         .map(|offset| Some(tag_end + 1 + offset + delimiter.len()))
-        .ok_or(ScanDeferral)
+        .ok_or(ScanError::UnclosedQuote)
 }
 
 fn continues_dollar_word(byte: u8) -> bool {
@@ -268,10 +287,10 @@ fn line_comment_end(bytes: &[u8], start: usize) -> usize {
         .map_or(bytes.len(), |offset| start + offset + 1)
 }
 
-fn block_comment_end(bytes: &[u8], start: usize) -> Result<usize, ScanDeferral> {
+fn block_comment_end(bytes: &[u8], start: usize) -> Result<usize, ScanError> {
     bytes[start + 2..]
         .windows(2)
         .position(|pair| pair == b"*/")
         .map(|offset| start + 2 + offset + 2)
-        .ok_or(ScanDeferral)
+        .ok_or(ScanError::UnclosedComment)
 }

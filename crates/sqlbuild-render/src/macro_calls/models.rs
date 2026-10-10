@@ -18,15 +18,49 @@ pub struct MacroCallSite {
     pub end: usize,
     /// The called macro's name.
     pub name: String,
-    /// Every macro name in the call, the top-level name first, then nested calls once each.
-    pub tree_names: Vec<String>,
+    /// Every macro name in the call, the top-level name first, then nested calls once each;
+    /// None where a nested call is not one Python's scan completes.
+    pub tree_names: Option<Vec<String>>,
     /// The arguments mention `__ref`, `__source` or `__seed`, so typed references may be passed.
     pub typed_reference_text: bool,
 }
 
-/// The scan met text Python reports or classifies differently; Python must expand the string.
+/// An error Python's macro call scan raises.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ScanDeferral;
+pub enum ScanError {
+    UnclosedQuote,
+    UnclosedComment,
+    UnclosedParenthesis,
+    /// A call start whose name is not followed by its parenthesis.
+    MissingParenthesis,
+}
+
+impl ScanError {
+    /// The message of the `CompileInputError` Python's scan raises.
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::UnclosedQuote => "Macro expansion contains an unclosed quoted string",
+            Self::UnclosedComment => "Macro expansion contains an unclosed block comment",
+            Self::UnclosedParenthesis => "Macro expansion contains an unclosed parenthesis",
+            Self::MissingParenthesis => "expected opening parenthesis",
+        }
+    }
+}
+
+/// Where a scan stops: inside the call at a code point offset, or between calls.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MacroScanFailure {
+    /// Offset of the `@` of the call Python's evaluation raises in, if any.
+    pub call_start: Option<usize>,
+    pub error: ScanError,
+}
+
+/// A string's complete top-level call sites in order, and where the scan stopped, if it did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MacroCallScan {
+    pub sites: Vec<MacroCallSite>,
+    pub failure: Option<MacroScanFailure>,
+}
 
 /// One consumer-independent fact a macro call produced, replayed for every consumer in order.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

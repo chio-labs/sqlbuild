@@ -5,16 +5,22 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::{FromPyObject, PyErr, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiler::main::sql_test_assembly::assemble_sql_test_batch;
 use sqlbuild_analysis::compiler::models::{
-    AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyModel, SqlTestAssemblyModelPayload,
-    SqlTestAssemblyOutcome, SqlTestAssemblyPayload, SqlTestAssemblyReference, SqlTestAssemblyTest,
-    SqlTestCte, SqlTestParameterValue,
+    AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyFailure, SqlTestAssemblyModel,
+    SqlTestAssemblyModelPayload, SqlTestAssemblyOutcome, SqlTestAssemblyPayload,
+    SqlTestAssemblyReference, SqlTestAssemblyTest, SqlTestCte, SqlTestParameterValue,
 };
+
+use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
 
 const MACRO_TOKEN: char = '@';
+const INPUT_FAILURE: &str = "input";
+const INTERNAL_FAILURE: &str = "internal";
+const DECIMAL_OVERFLOW: &str = "decimal_overflow";
+const SQL_TEST_ASSEMBLY_CONTEXT: &str = "native SQL test assembly";
 
 /// `(line, column, end line, end column, message, help)` of one P013 diagnostic.
 type DiagnosticRow = (usize, usize, usize, usize, String, String);
@@ -27,8 +33,9 @@ type FactsRow = (
     String,
     Vec<DiagnosticRow>,
 );
-/// The test's facts, or the deferral kind of a test Python assembles.
-type AssemblyRow = (Option<FactsRow>, Option<&'static str>);
+/// The test's facts, and the `(kind, message)` of the error its assembly raises, if any: kind
+/// `input` (no facts), `internal` (no facts) or `decimal_overflow` (after the facts).
+type AssemblyRow = (Option<FactsRow>, Option<(&'static str, String)>);
 
 /// The Python assembly request: the project's model inputs and the SQL test inputs.
 #[derive(FromPyObject)]
@@ -41,7 +48,7 @@ struct AssemblyRequest<'py> {
     lexical_syntax: LexicalSyntaxInput,
 }
 
-/// Each test input's assembled facts, or the deferral of a test Python must assemble.
+/// Each test input's assembled facts, or the error its assembly raises.
 #[pyfunction]
 fn assemble_compiled_sql_tests(
     py: Python<'_>,
@@ -120,7 +127,6 @@ fn assembly_test(test: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyTest> {
                 .getattr("reference_target_model_names")?
                 .extract()?,
             mock_model_names: payload.getattr("mock_model_names")?.extract()?,
-            has_macro_mocks: payload.getattr("macro_mocks")?.is_truthy()?,
         })
     };
     Ok(SqlTestAssemblyTest {
@@ -219,7 +225,20 @@ fn parameter_values(items: &Bound<'_, PyAny>) -> PyResult<Vec<SqlTestParameterVa
 fn assembly_row(outcome: SqlTestAssemblyOutcome) -> AssemblyRow {
     match outcome {
         SqlTestAssemblyOutcome::Assembled(facts) => (Some(facts_row(facts)), None),
-        SqlTestAssemblyOutcome::Deferred(deferral) => (None, Some(deferral.as_str())),
+        SqlTestAssemblyOutcome::FingerprintOverflow(facts) => (
+            Some(facts_row(facts)),
+            Some((DECIMAL_OVERFLOW, String::new())),
+        ),
+        SqlTestAssemblyOutcome::Failed(SqlTestAssemblyFailure::Input(message)) => {
+            (None, Some((INPUT_FAILURE, message)))
+        }
+        SqlTestAssemblyOutcome::Failed(SqlTestAssemblyFailure::Internal(reason)) => (
+            None,
+            Some((
+                INTERNAL_FAILURE,
+                native_failure(SQL_TEST_ASSEMBLY_CONTEXT, &reason),
+            )),
+        ),
     }
 }
 

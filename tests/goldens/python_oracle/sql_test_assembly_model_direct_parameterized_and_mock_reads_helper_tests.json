@@ -1,0 +1,34 @@
+[
+[
+"sql_test_assembly",
+{
+"diagnostics": "4b16299f17e60e58f2790f5d",
+"raised": "74234e98afe7498fb5daf1f3",
+"sql_tests": "571161f404b1e68fb08c2be8"
+}
+],
+[
+"sql_test_assembly",
+{
+"diagnostics": "2f09ddab1196ed38909b55d2",
+"raised": "74234e98afe7498fb5daf1f3",
+"sql_tests": "b1fde08fd97d16270d71db00"
+}
+],
+[
+"sql_test_assembly",
+{
+"diagnostics": "775db3dd642a88a84b585e70",
+"raised": "74234e98afe7498fb5daf1f3",
+"sql_tests": "eb8781590978f943d4cda3a2"
+}
+],
+[
+"sql_test_assembly",
+{
+"diagnostics": "1a90c1b182791e84c6f3df11",
+"raised": "74234e98afe7498fb5daf1f3",
+"sql_tests": "9a64536c2908bed9e46d362e"
+}
+]
+]

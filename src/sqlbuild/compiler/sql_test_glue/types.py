@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 type CtePairRow = tuple[str, str]
 type NativeChainStepRow = tuple[
     str,
@@ -31,4 +33,7 @@ type NativeSqlTestFactsRow = tuple[
     str,
     list[NativeSqlTestDiagnosticRow],
 ]
-type NativeSqlTestAssemblyRow = tuple[NativeSqlTestFactsRow | None, str | None]
+type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
+type NativeSqlTestAssemblyRow = tuple[
+    NativeSqlTestFactsRow | None, tuple[SqlTestAssemblyFailureKind, str] | None
+]

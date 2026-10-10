@@ -17,6 +17,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
+    CompiledSqlTest,
     CompileProjectInputs,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -28,6 +29,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import (
     NativeSqlTestAssemblyRow,
 )
+from tests.integration.src.sqlbuild.compiler.golden_views import GoldenEntry, golden_entry
 
 
 @dataclass(frozen=True)
@@ -186,20 +188,7 @@ def generated_sql_test_files(
 ) -> dict[str, str]:
     """A project of mocked, expected, asserted, helper, direct and failing SQL tests."""
 
-    files: dict[str, str] = {
-        "sqlbuild_project.toml": _PROJECT_TOML,
-        "sources/raw.yml": _SOURCES,
-        "seeds/regions.yml": _SEEDS,
-        "seeds/regions.csv": "region,label\neast,East\n",
-        "macros/amounts.py": _MACROS,
-        "functions/sql/udf__is_big.sql": _UDF,
-        "functions/sql/table_fn__customer_orders.sql": _TABLE_FUNCTION,
-        "models/daily_orders.sql": _DAILY_ORDERS,
-    }
-    files.update(
-        (f"models/{name}.sql", f'MODEL (description "Model {name}.");\n\n{sql}\n')
-        for name, sql in _BASE_MODELS.items()
-    )
+    files: dict[str, str] = _project_files()
     files.update(
         (f"tests/unit/test_generated_{index}.sql", _model_test(rng=rng, index=index, shape=shape))
         for index in range(test_count)
@@ -214,6 +203,81 @@ def generated_sql_test_files(
         )
     )
     return files
+
+
+def _project_files() -> dict[str, str]:
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "sources/raw.yml": _SOURCES,
+        "seeds/regions.yml": _SEEDS,
+        "seeds/regions.csv": "region,label\neast,East\n",
+        "macros/amounts.py": _MACROS,
+        "functions/sql/udf__is_big.sql": _UDF,
+        "functions/sql/table_fn__customer_orders.sql": _TABLE_FUNCTION,
+        "models/daily_orders.sql": _DAILY_ORDERS,
+    }
+    files.update(
+        (f"models/{name}.sql", f'MODEL (description "Model {name}.");\n\n{sql}\n')
+        for name, sql in _BASE_MODELS.items()
+    )
+    return files
+
+
+def edge_sql_test_files(*, extra_files: dict[str, str]) -> dict[str, str]:
+    """The planning project's models, sources and functions plus `extra_files`."""
+
+    return {**_project_files(), **extra_files}
+
+
+_DEEP_SUBQUERIES: int = 100
+EDGE_UNICODE_CONTENTS: str = (
+    'TEST (name "unicode_contents");\n\nWITH\n'
+    "-- r\u00e9sum\u00e9: \u212aelvin_rows AS (a comment, not the header)\n"
+    "kelvin_rows AS (\n"
+    "  SELECT order_id, amount, 'caf\u00e9 \u2603' AS note "
+    'FROM __source("raw_orders")\n),\n'
+    "via_rows AS (SELECT *, '\u017f' AS long_s FROM kelvin_rows),\n"
+    "__source__raw_orders AS (SELECT * FROM via_rows),\n"
+    "__expected__stg_orders AS (SELECT order_id FROM KELVIN_ROWS)\nSELECT 1\n"
+)
+EDGE_DEEP_HELPER: str = (
+    'TEST (name "deep_helper");\n\nWITH\n'
+    "deep_rows AS (SELECT * FROM "
+    + "(SELECT * FROM " * _DEEP_SUBQUERIES
+    + "(WITH shadow AS (SELECT 1 AS order_id) SELECT * FROM shadow) AS s"
+    + ") AS d" * _DEEP_SUBQUERIES
+    + "),\n"
+    'shadow AS (SELECT order_id, amount FROM __source("raw_orders")),\n'
+    "__source__raw_orders AS (SELECT * FROM deep_rows),\n"
+    "__expected__stg_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+)
+EDGE_DECIMAL_CONTEXT: str = (
+    'TEST (name "decimal_context", parameters (p_decimal (type decimal, nullable true)), '
+    'cases (rounded (p_decimal "1.23456789012345678901234567895"), '
+    'carried (p_decimal "9.99999999999999999999999999995E+999998"), '
+    'subnormal (p_decimal "123456E-1000030"), '
+    'flushed (p_decimal "-6E-1000028"), '
+    'half_even (p_decimal "5E-1000027")));\n\n'
+    'WITH\n__source__raw_orders AS (SELECT 1 AS order_id, @param("p_decimal") AS p),\n'
+    '__assert__stg_orders_rows AS (SELECT * FROM __ref("stg_orders") WHERE 1 = 0)\nSELECT 1\n'
+)
+EDGE_DECIMAL_OVERFLOW: str = EDGE_DECIMAL_CONTEXT.replace(
+    '"5E-1000027"', '"9.99999999999999999999999999995E+999999"'
+)
+EDGE_UNICODE_MACRO_SCOPE: dict[str, str] = {
+    "models/weird_amounts.sql": (
+        'MODEL (description "Model weird_amounts.");\n\n'
+        'WITH o AS (SELECT amount FROM __source("raw_orders"))\nSELECT amount@\u00f6re FROM o\n'
+    ),
+    "tests/unit/test_direct_macro.sql": _DIRECT_TESTS[0],
+}
+EDGE_INVALID_UNREAD_HELPER: str = (
+    'TEST (name "invalid_unread_helper");\n\nWITH\n'
+    "bad_rows AS (SELECT * FROM __ref(1)),\n"
+    'source_rows AS (SELECT order_id FROM __source("raw_orders")),\n'
+    "__source__raw_orders AS (SELECT * FROM source_rows),\n"
+    "__expected__stg_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+)
 
 
 def _model_test(*, rng: random.Random, index: int, shape: SqlTestCorpusShape) -> str:
@@ -393,21 +457,6 @@ def assembly_outcome(*, project_dir: Path) -> PlanningCallOutcome:
     return _outcome(lambda: _compiled_tests_and_diagnostics(project_dir=project_dir))
 
 
-def python_assembly_outcome(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> PlanningCallOutcome:
-    """The compiled SQL tests and diagnostics with every test deferred to Python's assembly, or
-    what it raises."""
-
-    with monkeypatch.context() as patch:
-        patch.setattr(
-            sql_test_stage,
-            "assemble_native_sql_tests",
-            lambda *, inputs: (None,) * len(inputs.test_inputs),
-        )
-        return _outcome(lambda: _compiled_tests_and_diagnostics(project_dir=project_dir))
-
-
 def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, object]:
     project: CompiledProject = build_project_graph(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
@@ -417,41 +466,50 @@ def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, objec
 
 
 def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count tests compile takes from the native assembly, with diagnostics, cases, or defers.
+    """Count tests compile takes from the native assembly, with diagnostics, cases or failures.
 
-    `native_assembled` counts only assemblies the stage seam hands compile; a deferred test
-    counts under `deferred_<kind>` and is assembled by Python, so it never counts as native work.
+    A test whose assembly raises counts under `failed_<kind>`.
     """
 
     answers: Counter[str] = Counter()
     assemble: Callable[[NativeSqlTestAssemblyRequest], list[NativeSqlTestAssemblyRow]] = (
         native_module.assemble_compiled_sql_tests
     )
-    seam: Callable[..., tuple[NativeSqlTestAssembly | None, ...]] = (
+    seam: Callable[..., tuple[NativeSqlTestAssembly, ...]] = (
         sql_test_stage.assemble_native_sql_tests
     )
 
-    def counted_deferrals(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
+    def counted_failures(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
         rows: list[NativeSqlTestAssemblyRow] = assemble(request)
-        deferrals: list[str] = list(filter(None, (row[1] for row in rows)))
-        answers.update(f"deferred_{kind}" for kind in deferrals)
+        answers.update(f"failed_{failure[0]}" for _, failure in rows if failure is not None)
         return rows
 
-    def counted_assemblies(
-        *, inputs: CompileProjectInputs
-    ) -> tuple[NativeSqlTestAssembly | None, ...]:
-        assemblies: tuple[NativeSqlTestAssembly | None, ...] = seam(inputs=inputs)
-        native: list[NativeSqlTestAssembly] = list(filter(None, assemblies))
+    def counted_assemblies(*, inputs: CompileProjectInputs) -> tuple[NativeSqlTestAssembly, ...]:
+        assemblies: tuple[NativeSqlTestAssembly, ...] = seam(inputs=inputs)
+        native: list[CompiledSqlTest] = [item.test for item in assemblies if item.test is not None]
         answers["native_assembled"] += len(native)
-        answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in native)
+        answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in assemblies)
         answers["native_case_fingerprints"] += sum(
-            item.test.case_fingerprint is not None for item in native
+            test.case_fingerprint is not None for test in native
         )
         return assemblies
 
-    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted_deferrals)
+    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted_failures)
     monkeypatch.setattr(sql_test_stage, "assemble_native_sql_tests", counted_assemblies)
     return answers
+
+
+def assembly_golden_entry(*, outcome: PlanningCallOutcome, project_dir: Path) -> GoldenEntry:
+    """One project's compiled SQL tests, diagnostics and raised error as a golden entry."""
+
+    tests, diagnostics = cast(
+        tuple[object, object], outcome.value if outcome.raised is None else (None, None)
+    )
+    return golden_entry(
+        "sql_test_assembly",
+        {"sql_tests": tests, "diagnostics": diagnostics, "raised": outcome.raised},
+        masked=(str(project_dir),),
+    )
 
 
 def outcome_kind(outcome: object) -> str:

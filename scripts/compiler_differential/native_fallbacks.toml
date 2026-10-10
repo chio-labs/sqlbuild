@@ -22,24 +22,10 @@ counts = { failure = 1 }
 
 [[entry]]
 engine = "native"
-stage = "analysis"
-site = "sql_test_assembly"
-kind = "macro_mocks"
-counts = { seed = 29 }
-
-[[entry]]
-engine = "native"
 stage = "macro_calls"
 site = "macro_calls.mocked_evaluation"
 kind = "test_mock"
 counts = { seed = 29 }
-
-[[entry]]
-engine = "native"
-stage = "macro_calls"
-site = "macro_calls.resolution"
-kind = "deferred"
-counts = { failure = 4, seed = 3 }
 
 [[entry]]
 engine = "native"
@@ -51,8 +37,8 @@ counts = { failure = 4 }
 [[entry]]
 engine = "native"
 stage = "sql_test_glue"
-site = "sql_test_glue.assembly"
-kind = "deferred"
+site = "sql_test_glue.macro_mock_queries"
+kind = "extension_callback"
 counts = { seed = 29 }
 
 [[entry]]
@@ -71,24 +57,10 @@ counts = { failure = 1 }
 
 [[entry]]
 engine = "native-preview"
-stage = "analysis"
-site = "sql_test_assembly"
-kind = "macro_mocks"
-counts = { seed = 29 }
-
-[[entry]]
-engine = "native-preview"
 stage = "macro_calls"
 site = "macro_calls.mocked_evaluation"
 kind = "test_mock"
 counts = { seed = 29 }
-
-[[entry]]
-engine = "native-preview"
-stage = "macro_calls"
-site = "macro_calls.resolution"
-kind = "deferred"
-counts = { failure = 4, seed = 3 }
 
 [[entry]]
 engine = "native-preview"
@@ -100,8 +72,8 @@ counts = { failure = 4 }
 [[entry]]
 engine = "native-preview"
 stage = "sql_test_glue"
-site = "sql_test_glue.assembly"
-kind = "deferred"
+site = "sql_test_glue.macro_mock_queries"
+kind = "extension_callback"
 counts = { seed = 29 }
 
 [[entry]]

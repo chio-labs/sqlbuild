@@ -3,13 +3,13 @@
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::compiler::_helpers::sql_tests::case_identity::case_fingerprint;
+use crate::compiler::_helpers::sql_tests::case_identity::{FingerprintFailure, case_fingerprint};
 use crate::compiler::_helpers::sql_tests::macro_call_names::macro_call_names;
 use crate::compiler::_helpers::sql_tests::mock_reads::{
     MockReadsRequest, mock_reading_helper_diagnostics,
 };
 use crate::compiler::models::{
-    AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyDeferral, SqlTestAssemblyModel,
+    AssembledSqlTestFacts, SqlTestAssemblyBatch, SqlTestAssemblyFailure, SqlTestAssemblyModel,
     SqlTestAssemblyOutcome, SqlTestAssemblyPayload, SqlTestAssemblyTest, SqlTestHelperDiagnostic,
 };
 
@@ -19,7 +19,7 @@ const MACRO_MODE: &str = "macro";
 const UDF_MODE: &str = "udf";
 const UDF_REFERENCE_KIND: &str = "udf";
 
-/// Each test's facts in request order, or the reason Python assembles it.
+/// Each test's facts in request order, or why its assembly raises.
 pub(crate) fn assemble_batch(batch: &SqlTestAssemblyBatch) -> Vec<SqlTestAssemblyOutcome> {
     let tests_macros = batch.tests.iter().any(|test| {
         matches!(&test.payload, SqlTestAssemblyPayload::Direct { mode, .. } if mode == MACRO_MODE)
@@ -42,14 +42,15 @@ pub(crate) fn assemble_batch(batch: &SqlTestAssemblyBatch) -> Vec<SqlTestAssembl
         .tests
         .par_iter()
         .map(|test| match assemble(test, &project) {
-            Ok(facts) => SqlTestAssemblyOutcome::Assembled(facts),
-            Err(deferral) => SqlTestAssemblyOutcome::Deferred(deferral),
+            Ok(outcome) => outcome,
+            Err(failure) => SqlTestAssemblyOutcome::Failed(failure),
         })
         .collect()
 }
 
-/// A model's macro dependencies, or Python's scan of its pre-macro SQL when none were recorded.
-type MacroNames = Result<Vec<String>, SqlTestAssemblyDeferral>;
+/// A model's macro dependencies, or Python's scan of its pre-macro SQL when none were recorded:
+/// the names, or the message of the `CompileInputError` the scan raises.
+type MacroNames = Result<Vec<String>, String>;
 
 struct Project<'a> {
     models: &'a [SqlTestAssemblyModel],
@@ -60,7 +61,7 @@ struct Project<'a> {
 fn assemble(
     test: &SqlTestAssemblyTest,
     project: &Project<'_>,
-) -> Result<AssembledSqlTestFacts, SqlTestAssemblyDeferral> {
+) -> Result<SqlTestAssemblyOutcome, SqlTestAssemblyFailure> {
     let models = project.models;
     let syntax = project.syntax;
     let mut target_model_names: Vec<String> = Vec::new();
@@ -78,9 +79,6 @@ fn assemble(
             direct_scope_deps(mode, tested_resource_names, project)?
         }
         SqlTestAssemblyPayload::Model(payload) => {
-            if payload.has_macro_mocks {
-                return Err(SqlTestAssemblyDeferral::MacroMocks);
-            }
             for name in payload
                 .expected_model_names
                 .iter()
@@ -104,16 +102,23 @@ fn assemble(
                 .collect()
         }
     };
+    let mut overflow = false;
     let case_fingerprint = match &test.case_name {
-        Some(case_name) => Some(case_fingerprint(
-            test,
-            case_name,
-            &scope_deps,
-            &tested_resources,
-        )?),
+        Some(case_name) => {
+            match case_fingerprint(test, case_name, &scope_deps, &tested_resources) {
+                Ok(fingerprint) => Some(fingerprint),
+                Err(FingerprintFailure::DecimalOverflow) => {
+                    overflow = true;
+                    None
+                }
+                Err(FingerprintFailure::Internal(reason)) => {
+                    return Err(SqlTestAssemblyFailure::Internal(reason));
+                }
+            }
+        }
         None => None,
     };
-    Ok(AssembledSqlTestFacts {
+    let facts = AssembledSqlTestFacts {
         name: test_name(test),
         scope_deps,
         target_model_names,
@@ -122,6 +127,11 @@ fn assemble(
             .unwrap_or(&test.relative_stem)
             .to_owned(),
         diagnostics,
+    };
+    Ok(if overflow {
+        SqlTestAssemblyOutcome::FingerprintOverflow(facts)
+    } else {
+        SqlTestAssemblyOutcome::Assembled(facts)
     })
 }
 
@@ -143,12 +153,14 @@ fn direct_scope_deps(
     mode: &str,
     tested_names: &[String],
     project: &Project<'_>,
-) -> Result<Vec<(&'static str, String)>, SqlTestAssemblyDeferral> {
+) -> Result<Vec<(&'static str, String)>, SqlTestAssemblyFailure> {
     let mut scope_deps: Vec<(&'static str, String)> = Vec::new();
     match mode {
         MACRO_MODE => {
             for (model, names) in project.models.iter().zip(project.macro_names) {
-                let names = names.as_ref().map_err(|deferral| *deferral)?;
+                let names = names
+                    .as_ref()
+                    .map_err(|message| SqlTestAssemblyFailure::Input(message.clone()))?;
                 if names.iter().any(|name| tested_names.contains(name)) {
                     scope_deps.push((MODEL_RESOURCE, model.name.clone()));
                 }

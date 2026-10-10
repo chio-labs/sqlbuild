@@ -21,13 +21,13 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeFallback
             description="counts_per_site_and_kind_sorted",
             recorded=(
                 (NativeFallbackSite.PROJECT_ASSEMBLY, "deferred"),
-                (NativeFallbackSite.MACRO_CALL_RESOLUTION, "deferred"),
+                (NativeFallbackSite.MACRO_CALL_MOCKED, "deferred"),
                 (NativeFallbackSite.PROJECT_ASSEMBLY, "deferred"),
                 (NativeFallbackSite.PROJECT_ASSEMBLY, "error"),
             ),
             expected_files=[
                 [
-                    ["macro_calls.resolution", "deferred", 1],
+                    ["macro_calls.mocked_evaluation", "deferred", 1],
                     ["project_assembly.assembly", "deferred", 2],
                     ["project_assembly.assembly", "error", 1],
                 ]

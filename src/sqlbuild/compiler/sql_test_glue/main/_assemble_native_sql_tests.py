@@ -12,10 +12,8 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow
 
 
-def assemble_native_sql_tests(
-    *, inputs: CompileProjectInputs
-) -> tuple[NativeSqlTestAssembly | None, ...]:
-    """Return one assembly per test input, or None for each test Python must assemble."""
+def assemble_native_sql_tests(*, inputs: CompileProjectInputs) -> tuple[NativeSqlTestAssembly, ...]:
+    """Return one assembly per test input, with the error its assembly raises, if any."""
 
     rows: list[NativeSqlTestAssemblyRow] = native_module.assemble_compiled_sql_tests(
         NativeSqlTestAssemblyRequest(

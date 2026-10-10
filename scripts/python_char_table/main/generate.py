@@ -9,7 +9,10 @@ from pathlib import Path
 from scripts.python_char_table._helpers.table import (
     character_mappings,
     character_ranges,
+    ignorecase_key_path,
+    ignorecase_keys,
     mapping_path,
+    render_ignorecase_keys,
     render_mapping,
     render_table,
     table_path,
@@ -35,4 +38,8 @@ def generate_python_char_table() -> int:
             encoding="utf-8",
         )
         print(f"wrote {path} (Unicode {unicodedata.unidata_version})", file=sys.stderr)
+    path = ignorecase_key_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ = path.write_text(render_ignorecase_keys(ignorecase_keys()), encoding="utf-8")
+    print(f"wrote {path} (Unicode {unicodedata.unidata_version})", file=sys.stderr)
     return 0

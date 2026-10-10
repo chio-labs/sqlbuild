@@ -6,7 +6,6 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.render.macros import (
     _evaluate_macro_call,
-    _expand_resolved_sql_macros,
     _expansion_declarations,
     _record_macro_declaration_usage,
     _record_macro_use,
@@ -30,7 +29,12 @@ from sqlbuild.compiler.macro_bridge.constants import (
     GENERATED_SQL_EVENT,
     MACRO_USE_EVENT,
 )
-from sqlbuild.compiler.macro_bridge.models import MacroCallClass, MacroCallSite
+from sqlbuild.compiler.macro_bridge.models import (
+    MacroCallClass,
+    MacroCallScan,
+    MacroCallSite,
+    MacroScanFailure,
+)
 from sqlbuild.compiler.macro_bridge.types import MacroCallEvent, MacroCallRecord
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.compiler.scopes.types import DeclarationKind
@@ -45,35 +49,53 @@ def expand_bridged_sql_macros(
     state: MacroExpansionState,
     bridge: MacroBridge,
 ) -> tuple[str, tuple[ExpansionSpan, ...]]:
-    """Expand one string, replaying memoized calls and running the rest in Python in order."""
+    """Expand one string, replaying memoized calls and running the rest in Python in order.
+
+    Where a call's macro tree does not resolve, or the scan raises, no call of the string touches
+    the memo: each is evaluated in order, so errors and side effects keep the plain expansion's
+    order.
+    """
 
     if MACRO_TOKEN not in sql:
         return sql, ()
     declarations: DeclarationResolutionContext | None = _expansion_declarations(
         state=state, consumer_path=consumer_path
     )
-    sites: tuple[MacroCallSite, ...] | None = bridge.scan(sql)
-    call_classes: list[MacroCallClass] = []
-    for site in sites or ():
-        call_class: MacroCallClass | None = bridge.call_class(
-            site=site,
-            declarations=declarations,
-            loaded_macros=state.loaded_macros,
-            macro_context=state.macro_context,
-        )
-        if call_class is None:
-            report_native_fallback(site=NativeFallbackSite.MACRO_CALL_RESOLUTION)
-            sites = None
-            break
-        call_classes.append(call_class)
-    if sites is None:
-        return _expand_resolved_sql_macros(
-            sql=sql,
-            consumer_path=consumer_path,
-            state=state,
-            declarations=declarations,
-            stack=(),
-        )
+    scan: MacroCallScan = bridge.scan(sql)
+    sites: tuple[MacroCallSite, ...] = scan.sites
+    call_classes: list[MacroCallClass | None] = (
+        []
+        if scan.failure is not None
+        else [
+            bridge.call_class(
+                site=site,
+                declarations=declarations,
+                loaded_macros=state.loaded_macros,
+                macro_context=state.macro_context,
+            )
+            for site in sites
+        ]
+    )
+    if scan.failure is not None or None in call_classes:
+        unmemoised: list[str] = [
+            _evaluated_call_output(
+                sql=sql,
+                consumer_path=consumer_path,
+                state=state,
+                declarations=declarations,
+                site=site,
+            )
+            for site in sites
+        ]
+        if scan.failure is not None:
+            _raise_scan_failure(
+                sql=sql,
+                consumer_path=consumer_path,
+                state=state,
+                declarations=declarations,
+                failure=scan.failure,
+            )
+        return bridge.splice(sql=sql, sites=sites, outputs=unmemoised)
     outputs: list[str] = [
         _bridged_call_output(
             sql=sql,
@@ -85,6 +107,7 @@ def expand_bridged_sql_macros(
             call_class=call_class,
         )
         for site, call_class in zip(sites, call_classes, strict=True)
+        if call_class is not None
     ]
     return bridge.splice(sql=sql, sites=sites, outputs=outputs)
 
@@ -100,7 +123,7 @@ def _bridged_call_output(  # noqa: PLR0913
     call_class: MacroCallClass,
 ) -> str:
     facts: MacroExpansionFacts = state.facts
-    if state.macro_overrides.keys() & set(site.tree_names):
+    if state.macro_overrides.keys() & set(site.tree_names or ()):
         return _mocked_call_output(sql=sql, consumer_path=consumer_path, state=state, site=site)
     call_text: str = sql[site.start : site.end]
     prior_relations: tuple[SqlResourceRef, ...] | None = (
@@ -161,12 +184,57 @@ def _bridged_call_output(  # noqa: PLR0913
     return facts.render_relation_placeholders(macro_result)
 
 
+def _raise_scan_failure(
+    *,
+    sql: str,
+    consumer_path: Path,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    failure: MacroScanFailure,
+) -> None:
+    """Raise where Python's scan raises: from the failing call's evaluation, or between calls."""
+
+    if failure.call_start is None:
+        raise CompileInputError(failure.message)
+    _ = _evaluate_macro_call(
+        sql=sql,
+        call_start_index=failure.call_start,
+        file_path=consumer_path,
+        state=state,
+        declarations=declarations,
+        stack=(),
+        top_level=True,
+    )
+    raise NativeStageMismatchError(
+        f"Native macro call scan of '{consumer_path}' found no complete call at "
+        f"{failure.call_start}; Python evaluated one"
+    )
+
+
 def _mocked_call_output(
     *, sql: str, consumer_path: Path, state: MacroExpansionState, site: MacroCallSite
 ) -> str:
     """Run a call whose tree a test mocks; its output differs from the shared memo's, so skip it."""
 
     report_native_fallback(site=NativeFallbackSite.MACRO_CALL_MOCKED, kind="test_mock")
+    return _evaluated_call_output(
+        sql=sql,
+        consumer_path=consumer_path,
+        state=state,
+        declarations=_expansion_declarations(state=state, consumer_path=consumer_path),
+        site=site,
+    )
+
+
+def _evaluated_call_output(
+    *,
+    sql: str,
+    consumer_path: Path,
+    state: MacroExpansionState,
+    declarations: DeclarationResolutionContext | None,
+    site: MacroCallSite,
+) -> str:
+    """Evaluate one natively scanned call in Python without the memo."""
 
     macro_result: object
     next_index: int
@@ -175,7 +243,7 @@ def _mocked_call_output(
         call_start_index=site.start,
         file_path=consumer_path,
         state=state,
-        declarations=_expansion_declarations(state=state, consumer_path=consumer_path),
+        declarations=declarations,
         stack=(),
         top_level=True,
     )
