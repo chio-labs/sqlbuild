@@ -104,3 +104,74 @@ pub struct DynamicProofFact {
     /// `(family key, inferred type)` per declared family.
     pub families: Vec<(String, Option<String>)>,
 }
+
+/// What the native model loop knows about one model before deciding who finishes it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlainModelCheck {
+    /// The effective config's top-level keys.
+    pub config_keys: Vec<String>,
+    pub description: DescriptionShape,
+    pub analysis_override: AnalysisOverride,
+    /// The variable-interpolated query, absent when interpolation failed.
+    pub interpolated_sql: Option<String>,
+    pub has_declaration_references: bool,
+    pub settings: ModelLoopSettings,
+}
+
+/// The project-wide switches the model loop reads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ModelLoopSettings {
+    pub sql_analysis: bool,
+    pub no_sql_validation: bool,
+    pub defer_sql_validation: bool,
+    pub legacy_schema_files: bool,
+}
+
+/// The `description` config value's shape.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum DescriptionShape {
+    #[default]
+    Absent,
+    Text(String),
+    /// Present but not a non-blank string; the Python attachment reports it.
+    Invalid,
+}
+
+/// The per-model `sql_analysis` / legacy `sql_validation` override.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AnalysisOverride {
+    #[default]
+    Inherit,
+    Enabled,
+    Disabled,
+    /// Both keys are set; the Python attachment decides whether they conflict.
+    Ambiguous,
+}
+
+/// Why a model's input is finished by the Python attachment callback instead of natively.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlainModelBlocker {
+    Interpolation,
+    Declarations,
+    Macros,
+    CallbackConfig,
+    HeaderMetadata,
+    SqlAnalysisDisabled,
+    ImmediateSqlValidation,
+    LegacySchemaFiles,
+}
+
+/// A plain model's finished facts, before its schema entry is derived from the description.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PlainModel {
+    pub name: String,
+    pub relative_path: String,
+    pub query_sql: String,
+    pub authored_query_sql: String,
+    pub authored_sql: String,
+    pub config: ModelConfigFacts,
+    pub description: Option<String>,
+    pub references: Vec<ModelReferenceFact>,
+    pub enum_declarations: Vec<DeclarationFact>,
+    pub constant_declarations: Vec<DeclarationFact>,
+}

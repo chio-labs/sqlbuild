@@ -72,6 +72,14 @@ SELECT order_id FROM __source("raw_orders")
 """.strip()
     + "\n",
 }
+# The native model loop scans plain models itself; header columns keep this model on the
+# attachment path, whose reference scans the reference cache serves.
+_REFERENCE_CACHE_REPO_FILES: dict[str, str] = _CACHE_REPO_FILES | {
+    "models/orders.sql": (
+        'MODEL (description "Test model orders.", columns (order_id (type INTEGER)));\n\n'
+        'SELECT order_id FROM __source("raw_orders")\n'
+    )
+}
 _SELECTION_REPO_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "selection_demo"\nadapter = "duckdb"\n',
     "models/root.sql": "MODEL (description 'Test model root.');\n\nSELECT 1 AS id\n",
@@ -126,7 +134,7 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    write_repo_files(tmp_path, _REFERENCE_CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     analyzer: Mock = Mock(
         side_effect=AssertionError("Polyglot analysis must not run on a cache hit")
@@ -384,7 +392,7 @@ def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_t
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    write_repo_files(tmp_path, _REFERENCE_CACHE_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
         (compiler_cache_directory(tmp_path) / "references-v3").glob("*.sqlite3")
@@ -424,7 +432,7 @@ def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    write_repo_files(tmp_path, _CACHE_REPO_FILES)
+    write_repo_files(tmp_path, _REFERENCE_CACHE_REPO_FILES)
     _ = compile_project_with_cache(project_dir=tmp_path)
     cache_path: Path = next(
         (compiler_cache_directory(tmp_path) / "references-v3").glob("*.sqlite3")

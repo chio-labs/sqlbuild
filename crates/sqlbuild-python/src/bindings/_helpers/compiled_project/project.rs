@@ -37,11 +37,11 @@ type SchemaPy = (u32, Vec<SchemaColumnPy>, Vec<DynamicFamilyPy>);
 type ProofPy = (bool, bool, Vec<NamedType>);
 
 /// Encoded config values and the encoder's error, if any.
-type ConfigValues = (BTreeMap<String, Value>, Option<String>);
+pub(crate) type ConfigValues = (BTreeMap<String, Value>, Option<String>);
 
 /// One model as the compile-input stage produced it.
 #[derive(FromPyObject)]
-struct ModelInputPy<'py>(
+pub(crate) struct ModelInputPy<'py>(
     (String, String, String, String, String),
     (Bound<'py, PyDict>, Vec<String>, Option<String>),
     Vec<(String, String, Option<String>)>,
@@ -52,7 +52,7 @@ struct ModelInputPy<'py>(
 
 /// Name, relative path, members, value, value type and rendering of one declaration.
 #[derive(FromPyObject)]
-struct DeclarationPy<'py>(
+pub(crate) struct DeclarationPy<'py>(
     String,
     String,
     Vec<(String, Bound<'py, PyAny>)>,
@@ -72,6 +72,11 @@ impl NativeCompiledProject {
     /// The facts recorded so far, for native consumers such as the rules request.
     pub(crate) fn facts(&self) -> &CompiledProjectFacts {
         &self.facts
+    }
+
+    /// Retain facts a producer finished natively.
+    pub(crate) fn retain(&mut self, facts: CompiledModelFacts) {
+        record_model(&mut self.facts, facts);
     }
 }
 
@@ -111,6 +116,11 @@ impl NativeCompiledProject {
         record_model_analysis(&mut self.facts, name, analysis)
     }
 
+    /// Whether both projects retained the same facts.
+    fn __eq__(&self, other: &Self) -> bool {
+        self.facts == other.facts
+    }
+
     /// The recorded models' names, in production order.
     fn model_names(&self) -> Vec<String> {
         project_models(&self.facts)
@@ -120,7 +130,7 @@ impl NativeCompiledProject {
     }
 }
 
-fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFacts> {
+pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFacts> {
     let ModelInputPy(
         (name, relative_path, query_sql, authored_query_sql, authored_sql),
         (values, header_keys, layer_schema),
@@ -159,7 +169,7 @@ fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFacts> {
 }
 
 /// The config values, or the encoder's error, kept for the consumer that reads them.
-fn config_values(values: &Bound<'_, PyDict>) -> ConfigValues {
+pub(crate) fn config_values(values: &Bound<'_, PyDict>) -> ConfigValues {
     match object_value(values) {
         Ok(Value::Object(entries)) => (entries.into_iter().collect(), None),
         Ok(_) => (BTreeMap::new(), None),
@@ -199,7 +209,7 @@ fn family_fact(
     }
 }
 
-fn declarations(rows: Vec<DeclarationPy<'_>>) -> PyResult<Vec<DeclarationFact>> {
+pub(crate) fn declarations(rows: Vec<DeclarationPy<'_>>) -> PyResult<Vec<DeclarationFact>> {
     rows.into_iter().map(declaration).collect()
 }
 

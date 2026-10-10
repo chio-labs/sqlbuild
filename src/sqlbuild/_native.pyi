@@ -61,6 +61,22 @@ class NativeCompiledProject:
         dynamic_proof: tuple[bool, bool, list[tuple[str, str | None]]] | None,
     ) -> bool: ...
     def model_names(self) -> list[str]: ...
+    def __eq__(self, other: object) -> bool: ...
+
+class NativeModelLoop:
+    def __init__(
+        self,
+        validator: object,
+        syntax: dict[str, object],
+        cursor: tuple[list[str], tuple[tuple[int, int], str]],
+        settings: tuple[bool, bool, bool, bool],
+    ) -> None: ...
+    def run(
+        self,
+        project: NativeCompiledProject,
+        host: object,
+        models: list[tuple[tuple[str, str, str], str, str, str | None, bool]],
+    ) -> tuple[list[Any], int]: ...
 
 class NativeProjectGraph:
     @staticmethod

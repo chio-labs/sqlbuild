@@ -9,14 +9,20 @@ import pytest
 
 from sqlbuild.cli.entry.main.entry import main
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
+    ModelLoopParityTestCase,
     RetainedRulesRowsTestCase,
     UnretainedRulesRowsTestCase,
     ZeroMaterializationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     LEGACY_PROJECT_TYPES,
+    PARITY_FILES,
     TYPE_PROOF_FILES,
+    WAFFLE_SHOP_NATIVE_MODELS,
+    build_inputs_with_native_loop,
+    copy_project,
     count_legacy_constructions,
+    expansions,
     forbid_hand_built_projects,
     skip_model_retention,
 )
@@ -78,6 +84,47 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
 
     assert exit_code == 1
     assert test_case.expected_error in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModelLoopParityTestCase(
+            description="plain, interpolated, seeded, incremental and attachment-bound models",
+            fixtures=(),
+            files=PARITY_FILES,
+            expected_native_models=3,
+        ),
+        ModelLoopParityTestCase(
+            description="neutral fixture with macros, enums and declared columns",
+            fixtures=("tests/e2e/fixtures/waffle_shop",),
+            files={},
+            expected_native_models=WAFFLE_SHOP_NATIVE_MODELS,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_when_running_native_model_loop_then_inputs_and_facts_match_attachment(
+    test_case: ModelLoopParityTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = copy_project(
+        fixtures=test_case.fixtures, files=test_case.files, project_dir=tmp_path / "project"
+    )
+
+    native, native_counts = build_inputs_with_native_loop(
+        project_dir=project_dir, native=True, monkeypatch=monkeypatch
+    )
+    attached, attached_counts = build_inputs_with_native_loop(
+        project_dir=project_dir, native=False, monkeypatch=monkeypatch
+    )
+
+    assert native_counts == [test_case.expected_native_models]
+    assert attached_counts == [0]
+    assert native.model_inputs == attached.model_inputs
+    assert expansions(native) == expansions(attached)
+    assert native.native_project == attached.native_project
 
 
 @pytest.mark.xfail(

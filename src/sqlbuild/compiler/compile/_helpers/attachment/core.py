@@ -10,6 +10,7 @@ from inspect import Parameter, Signature
 from pathlib import Path
 from typing import Any, cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.attachments.main._pair_native_seed_files import pair_native_seed_files
 from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
@@ -53,6 +54,7 @@ from sqlbuild.compiler.compile._helpers.render.context_templates import (
     build_model_context_values,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
+    cursor_intrinsic_semantics,
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
     reject_cursor_intrinsics,
@@ -111,6 +113,9 @@ from sqlbuild.compiler.compile.models import (
     SqlReferenceSourceMap,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceExtractor
+from sqlbuild.compiler.compiled_project.main._model_input_row import model_input_row
+from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
+from sqlbuild.compiler.compiled_project.models import PlainModelFacts
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.main._model_query_start import get_model_query_start
 from sqlbuild.compiler.discovery.models import (
@@ -388,6 +393,63 @@ class _ReusableModelConfigCache:
         return reusable
 
 
+@dataclass
+class _ModelLoopHost:
+    """The attachment steps the native model loop calls back into, one model index at a time."""
+
+    loop: _ModelInputLoop
+    interpolations: dict[Path, SqlInterpolation]
+    declarations: dict[int, _VisibleModelDeclarations] = field(default_factory=dict)
+    configs: dict[int, CompileModelConfig] = field(default_factory=dict)
+
+    def config(self, *, index: int) -> CompileModelConfig:
+        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
+        self.declarations[index] = self.loop.declaration_cache.for_model(
+            model_file=model_file,
+            consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
+        )
+        config: CompileModelConfig = _effective_model_config(loop=self.loop, model_file=model_file)
+        self.configs[index] = config
+        return config
+
+    def fallback(self, *, index: int) -> CompileModelInput:
+        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
+        return _build_model_input(
+            loop=self.loop,
+            model_file=model_file,
+            interpolation=self.interpolations[model_file.file_path],
+            declarations=self.declarations.pop(index),
+            effective_config=self.configs.pop(index),
+        )
+
+    def plain_input(
+        self,
+        *,
+        index: int,
+        values: dict[str, object],
+        references: list[tuple[str, str, str | None, int | None]],
+        query_sql: str,
+        description: str | None,
+    ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
+        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
+        declarations: _VisibleModelDeclarations = self.declarations.pop(index)
+        return plain_model_input(
+            model_file=model_file,
+            interpolation=self.interpolations[model_file.file_path],
+            facts=PlainModelFacts(
+                config=self.configs.pop(index),
+                values=values,
+                references=references,
+                query_sql=query_sql,
+                description=description,
+            ),
+            declarations=(declarations.local_enums, declarations.local_constants),
+        )
+
+    def model_row(self, *, model_input: CompileModelInput) -> tuple[object, ...]:
+        return model_input_row(model_input)
+
+
 def _contains_mutable_nested_config(values: dict[str, object]) -> bool:
     if any(key in values for key in _MODEL_HOOK_KEYS):
         return True
@@ -423,6 +485,7 @@ def build_model_inputs(
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     reference_cache_dir: Path | None = None,
+    native_project: _native.NativeCompiledProject,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
@@ -440,6 +503,7 @@ def build_model_inputs(
             external_sql_reference_resolver=external_sql_reference_resolver,
             extract_references=extract_references,
             legacy_schema_files=legacy_schema_files,
+            native_project=native_project,
         )
 
 
@@ -452,6 +516,7 @@ def _build_model_inputs(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     extract_references: SqlReferenceExtractor,
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
+    native_project: _native.NativeCompiledProject,
 ) -> tuple[CompileModelInput, ...]:
     effective_vars: dict[str, object] = context.effective_vars
     effective_settings: SettingsConfig = context.effective_settings
@@ -551,17 +616,9 @@ def _build_model_inputs(
             )
         ),
     )
-    model_inputs: list[CompileModelInput] = []
-    model_file: DiscoveredSqlModelFile
-    for model_file in discovered_inputs.model_files:
-        model_inputs.append(
-            _build_model_input(
-                loop=loop,
-                model_file=model_file,
-                interpolation=interpolations[model_file.file_path],
-            )
-        )
-
+    model_inputs: list[CompileModelInput] = _run_native_model_loop(
+        loop=loop, interpolations=interpolations, native_project=native_project
+    )
     validate_declared_schema_models_are_attached(
         model_inputs=tuple(model_inputs),
         schema_files=discovered_inputs.schema_files,
@@ -569,31 +626,64 @@ def _build_model_inputs(
     return tuple(model_inputs)
 
 
-def _build_model_input(
+def _run_native_model_loop(
     *,
     loop: _ModelInputLoop,
-    model_file: DiscoveredSqlModelFile,
-    interpolation: SqlInterpolation,
-) -> CompileModelInput:
-    discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
-    context: ModelInputBuildContext = loop.context
-    validation_context: _ModelValidationContext = loop.validation_context
-    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = loop.sql_hook_definitions
-    legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = loop.legacy_schema_files
+    interpolations: dict[Path, SqlInterpolation],
+    native_project: _native.NativeCompiledProject,
+) -> list[CompileModelInput]:
+    """Run the model loop natively; models it cannot finish yet call back into the attachment."""
+
+    files: tuple[DiscoveredSqlModelFile, ...] = loop.discovered_inputs.model_files
+    settings: SettingsConfig = loop.validation_context.effective_settings
+    native_loop: _native.NativeModelLoop = _native.NativeModelLoop(
+        loop.validation_context.validators.native_config.validator,
+        loop.context.sql_lexical_syntax.native_mapping,
+        cursor_intrinsic_semantics(),
+        (
+            settings.sql_analysis,
+            loop.validation_context.no_sql_validation,
+            loop.validation_context.defer_model_sql_validation,
+            bool(loop.legacy_schema_files),
+        ),
+    )
+    host: _ModelLoopHost = _ModelLoopHost(loop=loop, interpolations=interpolations)
+    inputs, finished_natively = native_loop.run(
+        native_project,
+        host,
+        [
+            (
+                (
+                    model_file.file_path.stem,
+                    model_file.relative_path.as_posix(),
+                    str(model_file.relative_path),
+                ),
+                model_file.query_sql,
+                model_file.contents,
+                interpolations[model_file.file_path].sql,
+                _scans_declarations(loop=loop, model_file=model_file),
+            )
+            for model_file in files
+        ],
+    )
+    report_native_answer(
+        stage=NativeStage.MODEL_LOOP, kind="native_model_inputs", units=finished_natively
+    )
+    return list(inputs)
+
+
+def _scans_declarations(*, loop: _ModelInputLoop, model_file: DiscoveredSqlModelFile) -> bool:
+    scan: NativeDeclarationScan | None = loop.native_declaration_references.get(
+        model_file.file_path
+    )
+    return scan is not None and (bool(scan[0]) or scan[1] is not None)
+
+
+def _effective_model_config(
+    *, loop: _ModelInputLoop, model_file: DiscoveredSqlModelFile
+) -> CompileModelConfig:
     reusable_config_cache: _ReusableModelConfigCache = loop.reusable_config_cache
-    declaration_cache: _VisibleModelDeclarationCache = loop.declaration_cache
-    effective_vars: dict[str, object] = context.effective_vars
-    effective_target_name: str | None = context.effective_target_name
-    run_id: str = context.run_id
-    macro_context: MacroContext = context.macro_context
-    loaded_macros: dict[str, LoadedMacro] = context.loaded_macros
-    model_identity: ResourceIdentity = ResourceIdentity(
-        ResourceKind.MODEL, model_file.file_path.stem
-    )
-    declarations: _VisibleModelDeclarations = declaration_cache.for_model(
-        model_file=model_file, consumer=model_identity
-    )
-    native_config: NativeModelConfigSession = validation_context.validators.native_config
+    native_config: NativeModelConfigSession = loop.validation_context.validators.native_config
     matched_path_default: str | None = native_path_default(
         session=native_config, model_file=model_file
     )
@@ -612,6 +702,30 @@ def _build_model_input(
             model_header_values=model_file.header_values,
             config=effective_config,
         )
+    return effective_config
+
+
+def _build_model_input(
+    *,
+    loop: _ModelInputLoop,
+    model_file: DiscoveredSqlModelFile,
+    interpolation: SqlInterpolation,
+    declarations: _VisibleModelDeclarations,
+    effective_config: CompileModelConfig,
+) -> CompileModelInput:
+    discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
+    context: ModelInputBuildContext = loop.context
+    validation_context: _ModelValidationContext = loop.validation_context
+    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = loop.sql_hook_definitions
+    legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = loop.legacy_schema_files
+    effective_vars: dict[str, object] = context.effective_vars
+    effective_target_name: str | None = context.effective_target_name
+    run_id: str = context.run_id
+    macro_context: MacroContext = context.macro_context
+    loaded_macros: dict[str, LoadedMacro] = context.loaded_macros
+    model_identity: ResourceIdentity = ResourceIdentity(
+        ResourceKind.MODEL, model_file.file_path.stem
+    )
     model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
         values=effective_config.values,
         model_name=model_file.file_path.stem,

@@ -86,3 +86,9 @@ def _replaced(*, sql: str, context: str, start_sql: str, end_sql: str) -> tuple[
     if error is not None:
         raise CompileInputError(error)
     return replaced, found
+
+
+def cursor_intrinsic_semantics() -> tuple[list[str], tuple[tuple[int, int], str]]:
+    """The reserved markers and Python release native cursor-intrinsic validation reads."""
+
+    return list(_RESERVED_MARKERS), _PYTHON

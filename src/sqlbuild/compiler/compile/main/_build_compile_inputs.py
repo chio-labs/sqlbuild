@@ -64,7 +64,6 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     ModelInputScopeBuild,
 )
-from sqlbuild.compiler.compiled_project.main._record_model_inputs import record_model_inputs
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
@@ -308,6 +307,7 @@ def _build_models_with_declarations(
         enums=public_enums,
         constants=public_constants,
     )
+    native_project: _native.NativeCompiledProject = _native.NativeCompiledProject()
     model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
         discovered_inputs=discovered_inputs,
         context=replace(
@@ -320,9 +320,8 @@ def _build_models_with_declarations(
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
         reference_cache_dir=reference_cache_dir,
+        native_project=native_project,
     )
-    native_project: _native.NativeCompiledProject = _native.NativeCompiledProject()
-    _ = record_model_inputs(project=native_project, model_inputs=model_inputs)
     return ModelInputScopeBuild(
         inputs=model_inputs,
         native_project=native_project,

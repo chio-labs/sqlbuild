@@ -29,3 +29,13 @@ class ZeroMaterializationTestCase:
     description: str
     arguments: tuple[str, ...]
     expected_constructions: dict[str, int]
+
+
+@dataclass(frozen=True)
+class ModelLoopParityTestCase:
+    """A project whose models the native loop must build exactly as the attachment does."""
+
+    description: str
+    fixtures: tuple[str, ...]
+    files: dict[str, str]
+    expected_native_models: int
