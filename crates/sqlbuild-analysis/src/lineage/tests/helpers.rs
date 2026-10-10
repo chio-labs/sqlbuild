@@ -2,6 +2,7 @@ use polyglot_sql::{DialectType, SchemaValidationOptions};
 
 use crate::lineage::main::build_fast_lineage::build_fast_lineage;
 use crate::lineage::main::build_rich_lineage::build_rich_lineage;
+use crate::lineage::models::RelationFingerprint;
 use crate::lineage::models::{
     FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageColumn, LineageResourceType,
     LineageSchemaResource, RichLineageColumn, RichLineageRequest, RichSchemaResource,
@@ -210,4 +211,12 @@ fn typed(columns: &[(&str, Option<&str>)]) -> Vec<(String, Option<String>)> {
         .iter()
         .map(|(name, column_type)| ((*name).to_owned(), column_type.map(str::to_owned)))
         .collect()
+}
+
+/// `digest`, `uncacheable` or `failed: <message>` for a fingerprint outcome.
+pub(crate) fn fingerprint_status(outcome: RelationFingerprint) -> String {
+    outcome.into_digest().map_or_else(
+        |message| format!("failed: {message}"),
+        |digest| digest.map_or("uncacheable", |_| "digest").to_owned(),
+    )
 }

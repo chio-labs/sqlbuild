@@ -1,23 +1,27 @@
 from __future__ import annotations
 
+import contextlib
 import sys
 from pathlib import Path
 
 import pytest
 
-import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.lineage.cache import (
     _INTERRUPTED_LISTING_UNCACHEABLE,
+    _fingerprint_prefix,
     relation_lineage_fingerprint,
 )
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
+    FingerprintedFilesTestCase,
     InterruptedListingFingerprintTestCase,
     LineageFingerprintAvailabilityTestCase,
     LineageFingerprintEnvironmentTestCase,
-    NativeFingerprintParityTestCase,
+    UncacheableFingerprintTestCase,
 )
-from tests.unit.src.sqlbuild.cli.commands._helpers.lineage.helpers import interrupt_listing
+from tests.unit.src.sqlbuild.cli.commands._helpers.lineage.helpers import (
+    expected_fingerprint,
+    interrupt_listing,
+)
 
 _LAYOUT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\nschema = "${ENV:ORDERS_SCHEMA}"\n',
@@ -45,6 +49,23 @@ _LAYOUT_LINKS: dict[str, str] = {
     "linked_dir": "models",
     "models/broken.sql": "models/missing.sql",
 }
+_LAYOUT_UNLINKED_HASHED_FILES: tuple[str, ...] = (
+    ".gitignore",
+    ".hidden/notes.yaml",
+    "macros/helpers.py",
+    "models/Z.SQL",
+    "models/a/b.sql",
+    "models/a-c.sql",
+    "models/a.sql",
+    "models/é.sql",
+    "nested/.sqlbuildignore",
+    "nested/target/kept.sql",
+    "seeds/customers.csv",
+    "sources/raw.YML",
+    "sqlbuild_project.toml",
+)
+_LAYOUT_HASHED_FILES: tuple[str, ...] = (*_LAYOUT_UNLINKED_HASHED_FILES, "models/linked.sql")
+_LAYOUT_ENVIRONMENT_NAMES: tuple[str, ...] = ("ORDERS_REGION", "ORDERS_SCHEMA")
 
 
 @pytest.mark.parametrize(
@@ -128,61 +149,27 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
 @pytest.mark.parametrize(
     "test_case",
     (
-        NativeFingerprintParityTestCase(
+        FingerprintedFilesTestCase(
             description="sorting, suffixes, exclusions, links and environment values",
             files=_LAYOUT_FILES,
             links=_LAYOUT_LINKS,
             unreadable_directories=(),
             environment={"ORDERS_SCHEMA": "orders_dev"},
             cli_vars={"region": "north", "limits": [1, 2.5, None], "label": "café"},
-            expected_available=True,
+            expected_hashed_files=_LAYOUT_HASHED_FILES,
+            expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
-        NativeFingerprintParityTestCase(
-            description="an environment marker without a name",
-            files={**_LAYOUT_FILES, "models/bad.sql": "SELECT 'ENV: ' AS broken\n"},
-            links={},
-            unreadable_directories=(),
-            environment={},
-            cli_vars=None,
-            expected_available=False,
-        ),
-        NativeFingerprintParityTestCase(
-            description="an environment name followed by a non-ASCII byte",
-            files={"models/bad.sql": "SELECT '${ENV:ORDERSÉ}' AS broken\n"},
-            links={},
-            unreadable_directories=(),
-            environment={},
-            cli_vars=None,
-            expected_available=False,
-        ),
-        NativeFingerprintParityTestCase(
-            description="overlapping markers inside one matched name",
-            files={"models/bad.sql": "SELECT 'ENV: ENV:X' AS broken\n"},
-            links={},
-            unreadable_directories=(),
-            environment={},
-            cli_vars=None,
-            expected_available=False,
-        ),
-        NativeFingerprintParityTestCase(
-            description="dynamic context in Python source",
-            files={"macros/run.py": "RUN = 'CTX:run_id'\n", "models/a.sql": "SELECT 1\n"},
-            links={},
-            unreadable_directories=(),
-            environment={},
-            cli_vars=None,
-            expected_available=False,
-        ),
-        NativeFingerprintParityTestCase(
+        FingerprintedFilesTestCase(
             description="an unreadable directory is skipped as rglob skips it",
             files={**_LAYOUT_FILES, "models/locked/hidden.sql": "SELECT 5 AS order_id\n"},
             links={},
             unreadable_directories=("models/locked",),
             environment={"ORDERS_SCHEMA": "orders_dev"},
             cli_vars=None,
-            expected_available=True,
+            expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES,
+            expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
-        NativeFingerprintParityTestCase(
+        FingerprintedFilesTestCase(
             description="undecodable names that are never hashed",
             files={
                 **_LAYOUT_FILES,
@@ -193,40 +180,24 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             unreadable_directories=(),
             environment={"ORDERS_SCHEMA": "orders_dev"},
             cli_vars=None,
-            expected_available=True,
+            expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES,
+            expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
-        NativeFingerprintParityTestCase(
-            description="an undecodable hashed file name",
-            files={**_LAYOUT_FILES, "models/orders_\udcff.sql": "SELECT 6 AS order_id\n"},
-            links={},
-            unreadable_directories=(),
-            environment={},
-            cli_vars=None,
-            expected_available=False,
-        ),
-        NativeFingerprintParityTestCase(
-            description="a hashed file below an undecodable directory",
-            files={**_LAYOUT_FILES, "models/\udcfe_dir/orders.sql": "SELECT 7 AS order_id\n"},
-            links={},
-            unreadable_directories=(),
-            environment={},
-            cli_vars=None,
-            expected_available=False,
-        ),
-        NativeFingerprintParityTestCase(
+        FingerprintedFilesTestCase(
             description="an undecodable hashed file inside an excluded directory",
             files={**_LAYOUT_FILES, "target/orders_\udcff.sql": "SELECT 8 AS order_id\n"},
             links={},
             unreadable_directories=(),
             environment={"ORDERS_SCHEMA": "orders_dev"},
             cli_vars=None,
-            expected_available=True,
+            expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES,
+            expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_authored_files_when_fingerprinting_natively_then_matches_python(
-    test_case: NativeFingerprintParityTestCase,
+def test_given_authored_files_when_fingerprinting_then_hashes_exactly_the_expected_inputs(
+    test_case: FingerprintedFilesTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -241,23 +212,68 @@ def test_given_authored_files_when_fingerprinting_natively_then_matches_python(
     for name, value in test_case.environment.items():
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("ORDERS_REGION", raising=False)
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "native")
-    python_digest: str | None = relation_lineage_fingerprint(
-        project_dir=tmp_path, cli_vars=test_case.cli_vars
-    )
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "native-preview")
 
-    native_digest: str | None = relation_lineage_fingerprint(
+    observed: str | None = relation_lineage_fingerprint(
         project_dir=tmp_path, cli_vars=test_case.cli_vars
     )
 
-    native_status: str = _native.relation_lineage_fingerprint(tmp_path, b"", True)[0]
     for relative_path in test_case.unreadable_directories:
         (tmp_path / relative_path).chmod(0o755)
+    assert observed == expected_fingerprint(
+        project_dir=tmp_path,
+        prefix=_fingerprint_prefix(cli_vars=test_case.cli_vars),
+        hashed_files=test_case.expected_hashed_files,
+        environment_names=test_case.expected_environment_names,
+    )
 
-    assert native_digest == python_digest
-    assert (native_digest is not None) is test_case.expected_available
-    assert native_status != "deferred"
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        UncacheableFingerprintTestCase(
+            description="an environment marker without a name",
+            files={**_LAYOUT_FILES, "models/bad.sql": "SELECT 'ENV: ' AS broken\n"},
+            expected_fingerprint=None,
+        ),
+        UncacheableFingerprintTestCase(
+            description="an environment name followed by a non-ASCII byte",
+            files={"models/bad.sql": "SELECT '${ENV:ORDERSÉ}' AS broken\n"},
+            expected_fingerprint=None,
+        ),
+        UncacheableFingerprintTestCase(
+            description="overlapping markers inside one matched name",
+            files={"models/bad.sql": "SELECT 'ENV: ENV:X' AS broken\n"},
+            expected_fingerprint=None,
+        ),
+        UncacheableFingerprintTestCase(
+            description="dynamic context in Python source",
+            files={"macros/run.py": "RUN = 'CTX:run_id'\n", "models/a.sql": "SELECT 1\n"},
+            expected_fingerprint=None,
+        ),
+        UncacheableFingerprintTestCase(
+            description="an undecodable hashed file name",
+            files={**_LAYOUT_FILES, "models/orders_\udcff.sql": "SELECT 6 AS order_id\n"},
+            expected_fingerprint=None,
+        ),
+        UncacheableFingerprintTestCase(
+            description="a hashed file below an undecodable directory",
+            files={**_LAYOUT_FILES, "models/\udcfe_dir/orders.sql": "SELECT 7 AS order_id\n"},
+            expected_fingerprint=None,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unhashable_inputs_when_fingerprinting_then_the_cache_is_disabled(
+    test_case: UncacheableFingerprintTestCase, tmp_path: Path
+) -> None:
+    for relative_path, contents in test_case.files.items():
+        path: Path = tmp_path / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+
+    observed: str | None = relation_lineage_fingerprint(project_dir=tmp_path, cli_vars=None)
+
+    assert observed is test_case.expected_fingerprint
 
 
 @pytest.mark.parametrize(
@@ -272,7 +288,7 @@ def test_given_authored_files_when_fingerprinting_natively_then_matches_python(
     ),
     ids=lambda case: case.description,
 )
-def test_given_interrupted_listing_when_python_fingerprints_then_native_policy_matches_python(
+def test_given_interrupted_listing_when_python_globs_then_native_policy_matches_rglob(
     test_case: InterruptedListingFingerprintTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -281,10 +297,11 @@ def test_given_interrupted_listing_when_python_fingerprints_then_native_policy_m
         path: Path = tmp_path / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         _ = path.write_text(contents, encoding="utf-8")
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "native")
     interrupt_listing(monkeypatch=monkeypatch, directory=tmp_path / test_case.interrupted_directory)
+    listed: list[Path] = []
 
-    python_digest: str | None = relation_lineage_fingerprint(project_dir=tmp_path, cli_vars=None)
+    with contextlib.suppress(OSError):
+        listed = list(tmp_path.rglob("*"))
 
-    assert (python_digest is None) is (sys.version_info < test_case.expected_uncacheable_before)
-    assert (python_digest is None) is _INTERRUPTED_LISTING_UNCACHEABLE
+    assert (not listed) is (sys.version_info < test_case.expected_uncacheable_before)
+    assert (not listed) is _INTERRUPTED_LISTING_UNCACHEABLE

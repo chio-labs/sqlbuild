@@ -137,8 +137,8 @@ class SharedSelectorDepthTestCase:
 
 
 @dataclass(frozen=True)
-class NativeFingerprintParityTestCase:
-    """Authored files whose relation lineage fingerprint both engines must compute alike."""
+class FingerprintedFilesTestCase:
+    """Authored files whose relation lineage fingerprint hashes exactly the expected inputs."""
 
     description: str
     files: dict[str, str]
@@ -146,7 +146,17 @@ class NativeFingerprintParityTestCase:
     unreadable_directories: tuple[str, ...]
     environment: dict[str, str]
     cli_vars: dict[str, object] | None
-    expected_available: bool
+    expected_hashed_files: tuple[str, ...]
+    expected_environment_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UncacheableFingerprintTestCase:
+    """Authored files whose relation lineage fingerprint is unavailable."""
+
+    description: str
+    files: dict[str, str]
+    expected_fingerprint: None
 
 
 @dataclass(frozen=True)

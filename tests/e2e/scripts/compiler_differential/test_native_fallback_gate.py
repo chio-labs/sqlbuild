@@ -220,16 +220,6 @@ def test_given_committed_allow_list_when_fallback_only_stage_is_switched_off_the
                 "unsupported_dialect (seed): ",
             ),
         ),
-        NativeFallbackGateTestCase(
-            description="preview_relation_fingerprint_switched_to_python_fails",
-            perturbation=stage_disable_sabotage(("relation_fingerprint",)),
-            appended_entries="",
-            expected_exit_code=1,
-            expected_lines=(
-                "Native fallback allow-list: native-preview relation_fingerprint "
-                f"relation_fingerprint.native fingerprints (seed): {_ANSWER_VANISHED}",
-            ),
-        ),
     ],
     ids=lambda case: case.description,
 )

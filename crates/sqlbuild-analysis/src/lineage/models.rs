@@ -258,17 +258,17 @@ pub enum RelationFingerprint {
     Digest(String),
     /// Python returns `None`: dynamic context, malformed environment markers or unreadable input.
     Uncacheable,
-    /// Discovery's snapshot could not be read (its walk reports no such failure today).
-    Deferred,
+    /// Discovery's walk failed internally: a native compiler failure, not a Python `None`.
+    Failed(String),
 }
 
 impl RelationFingerprint {
-    /// `(status, digest)`.
-    pub fn into_parts(self) -> (&'static str, Option<String>) {
+    /// The digest, `None` where Python returns `None`, or the internal failure.
+    pub fn into_digest(self) -> Result<Option<String>, String> {
         match self {
-            Self::Digest(digest) => ("digest", Some(digest)),
-            Self::Uncacheable => ("uncacheable", None),
-            Self::Deferred => ("deferred", None),
+            Self::Digest(digest) => Ok(Some(digest)),
+            Self::Uncacheable => Ok(None),
+            Self::Failed(message) => Err(message),
         }
     }
 }

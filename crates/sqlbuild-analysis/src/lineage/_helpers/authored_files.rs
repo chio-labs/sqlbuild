@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
+use sqlbuild_discovery::models::StageFailure;
 use sqlbuild_discovery::tree::main::interrupted_listings::interrupted_listings;
 use sqlbuild_discovery::tree::main::rglob::rglob;
 use sqlbuild_discovery::tree::models::{ProjectTree, TreeEntry};
@@ -34,15 +35,16 @@ pub(crate) enum AuthoredFiles {
     },
     /// A hashed path whose name is not valid UTF-8 (or UTF-16): Python returns `None`.
     Undecodable,
-    /// Discovery's snapshot could not be read; it lists unreadable directories as empty.
-    Unavailable,
+    /// Discovery's walk could not run; it lists unreadable directories as empty.
+    Unavailable(StageFailure),
 }
 
 /// `sorted(rglob("*"))`: no links to directories, unreadable directories empty, `PurePath` order.
 pub(crate) fn authored_files(project_dir: &Path) -> AuthoredFiles {
     let tree = ProjectTree::new(project_dir);
-    let Ok(paths) = rglob(&tree, "", is_hashed_entry) else {
-        return AuthoredFiles::Unavailable;
+    let paths = match rglob(&tree, "", is_hashed_entry) {
+        Ok(paths) => paths,
+        Err(failure) => return AuthoredFiles::Unavailable(failure),
     };
     let mut files: Vec<AuthoredFile> = Vec::new();
     for relative_path in paths {

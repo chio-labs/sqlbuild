@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import glob
+import hashlib
 import inspect
 import os
 from collections.abc import Callable, Iterable, Iterator
@@ -310,3 +311,26 @@ def interrupt_listing(*, monkeypatch: pytest.MonkeyPatch, directory: Path) -> No
     }
     monkeypatch.setattr(os, "scandir", scandir)
     monkeypatch.setattr(globber, "scandir", replacements[bound_early], raising=False)
+
+
+def expected_fingerprint(
+    *,
+    project_dir: Path,
+    prefix: bytes,
+    hashed_files: tuple[str, ...],
+    environment_names: tuple[str, ...],
+) -> str:
+    """The cache key over exactly `hashed_files`, in this platform's path order."""
+
+    digest: hashlib._Hash = hashlib.sha256(prefix)
+    for path in sorted(project_dir / relative_path for relative_path in hashed_files):
+        relative_path: str = path.relative_to(project_dir).as_posix()
+        contents: bytes = path.read_bytes()
+        digest.update(len(relative_path).to_bytes(8, byteorder="big"))
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(len(contents).to_bytes(8, byteorder="big"))
+        digest.update(contents)
+    for name in sorted(environment_names):
+        digest.update(name.encode("ascii"))
+        digest.update(os.environ.get(name, "<missing>").encode("utf-8"))
+    return digest.hexdigest()

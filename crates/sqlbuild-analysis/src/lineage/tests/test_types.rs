@@ -1,4 +1,5 @@
 use crate::lineage::models::InterruptedListingPolicy;
+use sqlbuild_discovery::models::StageFailure;
 
 pub(crate) struct ReferenceTestCase {
     pub(crate) description: &'static str,
@@ -65,4 +66,10 @@ pub(crate) struct RichPanicTestCase {
     pub(crate) models: &'static [&'static str],
     /// The answered models' SQL in order, or the request's error.
     pub(crate) expected_outcome: Result<&'static [&'static str], &'static str>,
+}
+
+pub(crate) struct UnavailableWalkTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) failure: fn() -> StageFailure,
+    pub(crate) expected_status: &'static str,
 }

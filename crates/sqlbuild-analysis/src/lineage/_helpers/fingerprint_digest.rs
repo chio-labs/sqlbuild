@@ -5,6 +5,7 @@ use std::fmt::Write;
 
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
+use sqlbuild_discovery::models::StageFailure;
 
 use crate::lineage::_helpers::authored_files::{AuthoredFile, AuthoredFiles};
 use crate::lineage::_helpers::environment_markers::environment_names;
@@ -33,7 +34,12 @@ pub(crate) fn fingerprint_outcome(
             RelationFingerprint::Digest,
         ),
         AuthoredFiles::Undecodable => RelationFingerprint::Uncacheable,
-        AuthoredFiles::Unavailable => RelationFingerprint::Deferred,
+        AuthoredFiles::Unavailable(StageFailure::Unlistable { .. }) => {
+            RelationFingerprint::Uncacheable
+        }
+        AuthoredFiles::Unavailable(StageFailure::Internal(message)) => {
+            RelationFingerprint::Failed(message)
+        }
     }
 }
 
