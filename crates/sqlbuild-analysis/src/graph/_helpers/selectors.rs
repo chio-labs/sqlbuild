@@ -1,0 +1,377 @@
+//! Python's planner selector grammar and resolution over the project graph.
+
+use std::collections::BTreeSet;
+
+use crate::assembly::project::types::ObjectKey;
+use crate::graph::_helpers::close_matches::close_matches;
+use crate::graph::_helpers::closure::Direction;
+use crate::graph::constants::{
+    EMPTY_SELECTOR_CODE, EMPTY_VALUE_CODE, EXPANSION_MARKER, FOLDER_SEPARATOR,
+    INTERSECTION_SEPARATOR, KIND_SEPARATOR, MISPLACED_MARKER_CODE, MISSING_NAME_CODE, MODEL_ROOT,
+    MODEL_ROOT_PREFIX, PATH_KIND, PATH_ROOT_CODE, PATH_ROOT_ERROR, PATH_SELECTOR_CODE,
+    PATH_SEPARATOR, PATTERN_CHARACTERS, PLANNER_DEFAULT_CODE, SEED_RESOURCE, SOURCE_RESOURCE,
+    SQL_FILE_SUFFIX, SUGGESTION_CUTOFF, SUGGESTION_LIMIT, TABLE_FUNCTION_RESOURCE, TAG_KIND,
+    TEST_KIND, UDF_RESOURCE, UNIT_TEST_CODE, UNIT_TEST_ONLY_TEST_AND_BUILD, UNKNOWN_KIND_CODE,
+    UNKNOWN_NAME_CODE, UNKNOWN_PATH_CODE, UNKNOWN_TAG_CODE, UNMAPPED_KIND_CODE, UNMAPPED_KINDS,
+};
+use crate::graph::models::{ProjectGraph, SelectorError};
+
+type Keys = BTreeSet<ObjectKey>;
+type Resolved = Result<Keys, SelectorError>;
+
+/// One parsed selector: `kind:value` (kind `name` when bare) or `start~end`, with `+` markers.
+enum Parsed<'raw> {
+    Kind {
+        kind: &'raw str,
+        value: &'raw str,
+        upstream: bool,
+        downstream: bool,
+    },
+    Path {
+        start: &'raw str,
+        end: &'raw str,
+        upstream: bool,
+        downstream: bool,
+    },
+}
+
+fn error(code: &'static str, message: String) -> SelectorError {
+    SelectorError {
+        code,
+        message,
+        help: None,
+    }
+}
+
+pub(crate) fn resolve(
+    graph: &ProjectGraph,
+    select: &[String],
+    exclude: &[String],
+) -> Result<Vec<ObjectKey>, SelectorError> {
+    let all: Keys = graph.names.iter().map(|(_, key)| key.clone()).collect();
+    if select.is_empty() && exclude.is_empty() {
+        return Ok(all.into_iter().collect());
+    }
+    let selected: Keys = if select.is_empty() {
+        all
+    } else {
+        tokens(graph, select)?
+    };
+    let excluded: Keys = tokens(graph, exclude)?;
+    let scoped: Keys = selected.difference(&excluded).cloned().collect();
+    let mut expanded: Keys = scoped.clone();
+    for key in &scoped {
+        expanded.extend(
+            graph
+                .closure(key, Direction::Upstream)
+                .into_iter()
+                .filter(|upstream| {
+                    upstream.0 == UDF_RESOURCE || upstream.0 == TABLE_FUNCTION_RESOURCE
+                }),
+        );
+    }
+    Ok(expanded.into_iter().collect())
+}
+
+/// The union of whitespace-separated tokens across `selectors`, without build expansion.
+fn tokens(graph: &ProjectGraph, selectors: &[String]) -> Resolved {
+    let mut resolved: Keys = Keys::new();
+    for selector in selectors {
+        for token in selector
+            .split(python_space)
+            .filter(|token| !token.is_empty())
+        {
+            resolved.extend(intersection(graph, token)?);
+        }
+    }
+    Ok(resolved)
+}
+
+fn intersection(graph: &ProjectGraph, token: &str) -> Resolved {
+    let mut parts = token.split(INTERSECTION_SEPARATOR);
+    let mut result: Keys = single(graph, parts.next().unwrap_or_default())?;
+    for part in parts {
+        let next: Keys = single(graph, part)?;
+        result = result.intersection(&next).cloned().collect();
+    }
+    Ok(result)
+}
+
+fn single(graph: &ProjectGraph, raw: &str) -> Resolved {
+    match parse(raw)? {
+        Parsed::Path {
+            start,
+            end,
+            upstream,
+            downstream,
+        } => path(graph, (start, end), (upstream, downstream)),
+        Parsed::Kind {
+            kind,
+            value,
+            upstream,
+            downstream,
+        } => {
+            let keys: Keys = matched(graph, kind, value)?;
+            let mut result: Keys = keys.clone();
+            for key in &keys {
+                if upstream {
+                    result.extend(graph.closure(key, Direction::Upstream));
+                }
+                if downstream {
+                    result.extend(graph.closure(key, Direction::Downstream));
+                }
+            }
+            Ok(result)
+        }
+    }
+}
+
+fn path(graph: &ProjectGraph, names: (&str, &str), expand: (bool, bool)) -> Resolved {
+    let start: ObjectKey = named(graph, names.0)?;
+    let end: ObjectKey = named(graph, names.1)?;
+    let Some(mut result) = graph.path_nodes(&start, &end) else {
+        return Err(error(
+            PLANNER_DEFAULT_CODE,
+            format!(
+                "'{}:{}' is not downstream of '{}:{}'",
+                end.0, end.1, start.0, start.1
+            ),
+        ));
+    };
+    if expand.0 {
+        result.extend(graph.closure(&start, Direction::Upstream));
+    }
+    if expand.1 {
+        result.extend(graph.closure(&end, Direction::Downstream));
+    }
+    Ok(result)
+}
+
+fn named(graph: &ProjectGraph, name: &str) -> Result<ObjectKey, SelectorError> {
+    graph
+        .key_named(name)
+        .cloned()
+        .ok_or_else(|| error(UNKNOWN_NAME_CODE, format!("unknown selector name '{name}'")))
+}
+
+fn parse(raw: &str) -> Result<Parsed<'_>, SelectorError> {
+    let stripped: &str = raw.trim_matches(python_space);
+    if stripped.is_empty() {
+        return Err(error(EMPTY_SELECTOR_CODE, "empty selector".to_owned()));
+    }
+    let upstream: bool = stripped.starts_with(EXPANSION_MARKER);
+    let downstream: bool = stripped.ends_with(EXPANSION_MARKER);
+    let core: &str = stripped
+        .trim_start_matches(EXPANSION_MARKER)
+        .trim_end_matches(EXPANSION_MARKER);
+    if core.is_empty() {
+        return Err(error(
+            MISSING_NAME_CODE,
+            format!("selector '{stripped}' has no name after removing '+' markers"),
+        ));
+    }
+    if core.contains(EXPANSION_MARKER) {
+        return Err(error(
+            MISPLACED_MARKER_CODE,
+            format!("selector '{stripped}' contains '+' in an unsupported position"),
+        ));
+    }
+    if let Some((start, end)) = core.split_once(PATH_SEPARATOR) {
+        let (start, end) = (
+            start.trim_matches(python_space),
+            end.trim_matches(python_space),
+        );
+        if start.is_empty() || end.is_empty() {
+            return Err(error(
+                PATH_SELECTOR_CODE,
+                format!("path selector '{stripped}' requires names on both sides of '~'"),
+            ));
+        }
+        return Ok(Parsed::Path {
+            start,
+            end,
+            upstream,
+            downstream,
+        });
+    }
+    let (kind, value): (&str, &str) = match core.split_once(KIND_SEPARATOR) {
+        Some((prefix, value)) => {
+            if !is_selector_kind(prefix) {
+                return Err(error(
+                    UNKNOWN_KIND_CODE,
+                    format!("unknown selector type '{prefix}' in '{stripped}'"),
+                ));
+            }
+            if value.is_empty() {
+                return Err(error(
+                    EMPTY_VALUE_CODE,
+                    format!("selector '{stripped}' has empty value after ':'"),
+                ));
+            }
+            (prefix, value)
+        }
+        None if core.contains(FOLDER_SEPARATOR) => (PATH_KIND, core.trim_matches(FOLDER_SEPARATOR)),
+        None => (NAME_KIND, core),
+    };
+    Ok(Parsed::Kind {
+        kind,
+        value,
+        upstream,
+        downstream,
+    })
+}
+
+const NAME_KIND: &str = "name";
+
+fn is_selector_kind(prefix: &str) -> bool {
+    [
+        SEED_RESOURCE,
+        SOURCE_RESOURCE,
+        TAG_KIND,
+        PATH_KIND,
+        TEST_KIND,
+    ]
+    .contains(&prefix)
+        || UNMAPPED_KINDS.contains(&prefix)
+}
+
+/// Python's `match_selector_keys`: the keys one parsed selector names before `+` expansion.
+fn matched(graph: &ProjectGraph, kind: &str, value: &str) -> Resolved {
+    match kind {
+        TAG_KIND => {
+            let keys: Keys = graph.tagged(value);
+            if keys.is_empty() {
+                return Err(error(
+                    UNKNOWN_TAG_CODE,
+                    format!("no models found with tag '{value}'"),
+                ));
+            }
+            Ok(keys)
+        }
+        PATH_KIND => folder(graph, value),
+        TEST_KIND => Err(error(
+            UNIT_TEST_CODE,
+            format!(
+                "selector '{TEST_KIND}{KIND_SEPARATOR}{value}' selects a unit test; \
+                 {UNIT_TEST_ONLY_TEST_AND_BUILD}"
+            ),
+        )),
+        _ => {
+            let keys: Keys = lookup(graph, kind, value)?;
+            if !keys.is_empty() {
+                return Ok(keys);
+            }
+            let pattern: bool = is_pattern(value);
+            let names: Vec<&str> = graph.names.iter().map(|(name, _)| name.as_str()).collect();
+            Err(SelectorError {
+                code: UNKNOWN_NAME_CODE,
+                message: format!(
+                    "unknown selector {} '{value}'",
+                    if pattern { "pattern" } else { "name" }
+                ),
+                help: (!pattern).then(|| suggestion(value, names)).flatten(),
+            })
+        }
+    }
+}
+
+fn suggestion(value: &str, mut names: Vec<&str>) -> Option<String> {
+    names.sort_unstable();
+    let matches: Vec<String> = close_matches(value, &names, SUGGESTION_LIMIT, SUGGESTION_CUTOFF);
+    if matches.is_empty() {
+        return None;
+    }
+    let quoted: Vec<String> = matches.iter().map(|name| format!("'{name}'")).collect();
+    Some(format!("did you mean {}?", quoted.join(", ")))
+}
+
+fn lookup(graph: &ProjectGraph, kind: &str, value: &str) -> Resolved {
+    let resource: Option<&str> = match kind {
+        NAME_KIND => None,
+        SEED_RESOURCE | SOURCE_RESOURCE => Some(kind),
+        _ => {
+            return Err(error(
+                UNMAPPED_KIND_CODE,
+                format!("selector type '{kind}' does not map to a resource type yet"),
+            ));
+        }
+    };
+    let kind_matches = |key: &ObjectKey| resource.is_none_or(|resource| key.0 == resource);
+    if !is_pattern(value) {
+        return Ok(graph
+            .key_named(value)
+            .filter(|key| kind_matches(key))
+            .cloned()
+            .into_iter()
+            .collect());
+    }
+    Ok(graph
+        .names
+        .iter()
+        .filter(|(name, key)| kind_matches(key) && glob_matches(value, name))
+        .map(|(_, key)| key.clone())
+        .collect())
+}
+
+fn folder(graph: &ProjectGraph, value: &str) -> Resolved {
+    let folder: String = value.replace('\\', "/").trim_matches('/').to_owned();
+    let selector: &str = if folder == MODEL_ROOT {
+        ""
+    } else if let Some(rest) = folder.strip_prefix(MODEL_ROOT_PREFIX) {
+        rest
+    } else {
+        return Err(error(PATH_ROOT_CODE, PATH_ROOT_ERROR.to_owned()));
+    };
+    let keys: Keys = graph
+        .paths
+        .iter()
+        .filter(|(_, indexed)| {
+            selector.is_empty()
+                || indexed == selector
+                || indexed.starts_with(&format!("{selector}/"))
+        })
+        .map(|(key, _)| key.clone())
+        .collect();
+    if keys.is_empty() {
+        let hint: &str = if folder.ends_with(SQL_FILE_SUFFIX) {
+            " Path selectors match folders; select a single model by its name."
+        } else {
+            ""
+        };
+        return Err(error(
+            UNKNOWN_PATH_CODE,
+            format!("no models found under path '{folder}'.{hint}"),
+        ));
+    }
+    Ok(keys)
+}
+
+/// Python's `str.isspace`, which also counts the information separators U+001C..U+001F.
+fn python_space(character: char) -> bool {
+    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
+}
+
+fn is_pattern(value: &str) -> bool {
+    value.contains(PATTERN_CHARACTERS)
+}
+
+impl ProjectGraph {
+    pub(crate) fn key_named(&self, name: &str) -> Option<&ObjectKey> {
+        self.name_index
+            .get(name)
+            .map(|&position| &self.names[position].1)
+    }
+
+    fn tagged(&self, tag: &str) -> Keys {
+        self.tags
+            .iter()
+            .find(|(name, _)| name == tag)
+            .map(|(_, keys)| keys.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+}
+
+/// Python's `fnmatch.fnmatchcase`: `*`, `?`, `[seq]` and `[!seq]` over characters.
+fn glob_matches(pattern: &str, name: &str) -> bool {
+    crate::graph::_helpers::glob::fnmatch(pattern, name)
+}
