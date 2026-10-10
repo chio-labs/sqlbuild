@@ -48,7 +48,7 @@ def metric_verdicts(*, comparison: CommandComparison) -> tuple[MetricVerdict, ..
             metric="peak RSS",
             baseline=float(baseline.peak_rss_bytes),
             candidate=float(candidate.peak_rss_bytes),
-            max_ratio=MAX_RSS_RATIO,
+            max_ratio=comparison.max_rss_ratio or MAX_RSS_RATIO,
             floor=float(MIN_RSS_REGRESSION_BYTES),
         ),
     )

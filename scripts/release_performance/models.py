@@ -15,6 +15,7 @@ class BenchmarkCommand:
     edits_model: bool = False
     removes_target: bool = False
     max_time_ratio: float | None = None
+    max_rss_ratio: float | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class CommandComparison:
     baseline: tuple[CommandSample, ...]
     candidate: tuple[CommandSample, ...]
     max_time_ratio: float | None = None
+    max_rss_ratio: float | None = None
 
 
 @dataclass(frozen=True)

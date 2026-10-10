@@ -2,7 +2,14 @@
 
 from dataclasses import dataclass
 
-from scripts.release_performance.models import CommandComparison, SkippedCommand
+from scripts.release_performance.models import BenchmarkCommand, CommandComparison, SkippedCommand
+
+
+@dataclass(frozen=True)
+class ConfiguredRssLimitTestCase:
+    description: str
+    command: BenchmarkCommand
+    expected_rss_ratio: float
 
 
 @dataclass(frozen=True)

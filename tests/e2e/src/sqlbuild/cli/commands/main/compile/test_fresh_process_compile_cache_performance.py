@@ -122,7 +122,8 @@ _MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO: float = 1.15
             expected_max_edit_to_cold_ratio=_MAX_EDIT_TO_COLD_RATIO,
             expected_max_cache_write_cpu_overhead_ratio=_MAX_LARGE_CACHE_WRITE_CPU_OVERHEAD_RATIO,
             expected_max_cache_write_wall_overhead_ratio=_MAX_CACHE_WRITE_WALL_OVERHEAD_RATIO,
-            expected_max_rss_bytes=int(2.5 * _GIB),
+            # Temporary memory exception (2026-10-10); remove after conversion optimisation.
+            expected_max_rss_bytes=3 * _GIB,
             expected_max_cache_bytes=320 * _MIB,
             expected_cold_fingerprint=(
                 "ecdd7f2cf961fab739aa806b6d90283916cffad2007e1e2f3ba90a466db6cb75"

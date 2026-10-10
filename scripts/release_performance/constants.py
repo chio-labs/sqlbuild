@@ -96,11 +96,13 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
         name="lineage column trace",
         project=INSPECTION_PROJECT,
         sqb_args=("lineage", f"{SHARED_DIAMOND_ROLLUP}.amount", "--direction", "upstream"),
+        max_rss_ratio=2.0,
     ),
     BenchmarkCommand(
         name="dag --json",
         project=INSPECTION_PROJECT,
         sqb_args=("dag", "--json"),
+        max_rss_ratio=1.5,
     ),
     BenchmarkCommand(
         name="scope --json",

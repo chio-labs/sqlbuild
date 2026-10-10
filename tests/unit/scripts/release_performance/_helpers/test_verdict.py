@@ -8,8 +8,9 @@ from scripts.release_performance._helpers.verdict import (
     skip_reason,
 )
 from scripts.release_performance.constants import BENCHMARK_COMMANDS
-from scripts.release_performance.models import BenchmarkCommand, MetricVerdict
+from scripts.release_performance.models import BenchmarkCommand, CommandComparison, MetricVerdict
 from tests.unit.scripts.release_performance._helpers._test_types import (
+    ConfiguredRssLimitTestCase,
     ConfiguredTimeLimitTestCase,
     MetricVerdictTestCase,
     SkipReasonTestCase,
@@ -279,6 +280,50 @@ def test_given_configured_command_when_judging_time_then_its_own_limit_applies(
     assert (verdicts[0].regressed, verdicts[1].regressed) == (
         test_case.expected_regressed,
         test_case.expected_regressed,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConfiguredRssLimitTestCase(
+            description=f"{command.name} enforces its RSS allowance and time limits",
+            command=command,
+            expected_rss_ratio={"lineage column trace": 2.0, "dag --json": 1.5}.get(
+                command.name, 1.25
+            ),
+        )
+        for command in BENCHMARK_COMMANDS
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_configured_command_when_judging_rss_then_only_scoped_allowances_apply(
+    test_case: ConfiguredRssLimitTestCase,
+) -> None:
+    command: BenchmarkCommand = test_case.command
+    at_limit: int = int(400 * test_case.expected_rss_ratio)
+    allowed: CommandComparison = comparison(
+        name=command.name,
+        baseline=((10.0, 10.0, 400),) * 3,
+        candidate=((10.0, 10.0, at_limit),) * 3,
+        max_time_ratio=command.max_time_ratio,
+        max_rss_ratio=command.max_rss_ratio,
+    )
+    verdicts: tuple[MetricVerdict, ...] = metric_verdicts(comparison=allowed)
+    assert verdicts[2].max_ratio == test_case.expected_rss_ratio
+    assert not regression_messages(commands=(allowed,))
+
+    excessive: CommandComparison = comparison(
+        name=command.name,
+        baseline=((10.0, 10.0, 400),) * 3,
+        candidate=((14.0, 14.0, at_limit + 1),) * 3,
+        max_time_ratio=command.max_time_ratio,
+        max_rss_ratio=command.max_rss_ratio,
+    )
+    assert all(verdict.regressed for verdict in metric_verdicts(comparison=excessive))
+    assert (
+        f"exceeds {test_case.expected_rss_ratio:.2f}x"
+        in regression_messages(commands=(excessive,))[2]
     )
 
 
