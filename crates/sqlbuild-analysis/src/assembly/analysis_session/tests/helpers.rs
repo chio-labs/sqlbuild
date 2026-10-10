@@ -12,15 +12,13 @@ use crate::assembly::analysis_session::main::attach_analysis_cache::attach_analy
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
 use crate::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
 use crate::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
-use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::main::take_analysis_cache::take_analysis_cache;
 use crate::assembly::analysis_session::models::{
-    AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis,
-    DynamicFamily, FinishedSession, LineageRow, ModelOutcome, ModelReference, ModelRequest,
-    PivotBatchRequest, PivotModel, PivotOutcome, PivotTables, SessionModelFacts, SessionOutcome,
-    SessionRequest, SessionStep,
+    AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, DynamicFamily, FinishedSession,
+    LineageRow, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest, PivotModel,
+    PivotOutcome, PivotTables, SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::tests::test_types::{CachedRun, ModelSpec, RecoveredFacts};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -136,37 +134,24 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
 
 pub(crate) fn started(request: SessionRequest) -> AnalysisSession {
     let catalog: ProjectCatalog = catalog(&request.dialect, &request.catalog_schemas);
-    start_analysis_session(request, &catalog).expect("the models form no cycle")
+    start_analysis_session(request, &catalog).expect("the session starts")
 }
 
-/// Run to completion, answering every deferral with `answer`: the steps, outcomes and session.
+/// Run to completion: the step, outcomes and session.
 pub(crate) fn completed(
     session: AnalysisSession,
-    answer: fn(&Deferral) -> DeferredAnalysis,
 ) -> (Vec<SessionStep>, Vec<ModelOutcome>, FinishedSession) {
-    let (steps, outcome, finished, ()) = completed_with(session, answer, |_| ());
+    let (steps, outcome, finished, ()) = completed_with(session, |_| ());
     (steps, outcome.models, finished)
 }
 
 /// [`completed`], reading the session with `before_finish` once every wave has run.
 pub(crate) fn completed_with<T>(
     mut session: AnalysisSession,
-    answer: fn(&Deferral) -> DeferredAnalysis,
     before_finish: impl FnOnce(&mut AnalysisSession) -> T,
 ) -> (Vec<SessionStep>, SessionOutcome, FinishedSession, T) {
-    let mut done: bool = false;
-    let steps: Vec<SessionStep> = std::iter::from_fn(|| {
-        (!done).then(|| {
-            let step: SessionStep = run_analysis_session(&mut session).expect("the session runs");
-            let answers: Vec<DeferredAnalysis> = step.deferrals.iter().map(answer).collect();
-            done = answers.is_empty();
-            (!done).then(|| {
-                provide_deferred_analyses(&mut session, answers).expect("the answers match")
-            });
-            step
-        })
-    })
-    .collect();
+    let steps: Vec<SessionStep> =
+        vec![run_analysis_session(&mut session).expect("the session runs")];
     let read: T = before_finish(&mut session);
     let (outcome, finished) = finish_analysis_session(session).expect("the session finished");
     (steps, outcome, finished, read)
@@ -177,7 +162,7 @@ pub(crate) fn cached_run(request: SessionRequest, store: NativeStore) -> CachedR
     let mut session: AnalysisSession = started(request);
     attach_analysis_cache(&mut session, store);
     let (steps, outcome, finished, (keys, hits, (store, stats))) =
-        completed_with(session, empty_answer, |session| {
+        completed_with(session, |session| {
             let (keys, hits) = session
                 .cache
                 .as_ref()
@@ -201,7 +186,7 @@ pub(crate) fn cached_run(request: SessionRequest, store: NativeStore) -> CachedR
 
 /// The catalog changes and fact models of `request` run without a cache.
 pub(crate) fn uncached_catalog(request: SessionRequest) -> (Shapes, Vec<String>, Vec<String>) {
-    let (_, outcome, finished, ()) = completed_with(started(request), empty_answer, |_| ());
+    let (_, outcome, finished, ()) = completed_with(started(request), |_| ());
     catalog_changes(outcome, &finished)
 }
 
@@ -245,20 +230,7 @@ pub(crate) fn described(outcome: &ModelOutcome) -> Vec<String> {
     lines
 }
 
-/// A successful Python answer with no columns and no star.
-pub(crate) fn empty_answer(deferral: &Deferral) -> DeferredAnalysis {
-    DeferredAnalysis {
-        model: deferral.model(),
-        analysis_succeeded: true,
-        columns: None,
-        has_star: false,
-        star_resolved: false,
-        binding_diagnostics: Vec::new(),
-        binding_validated: true,
-    }
-}
-
-/// `publish name col:TYPE ...` per publication, then `defer kind model` per deferral.
+/// `publish name col:TYPE ...` per publication.
 pub(crate) fn step_lines(step: &SessionStep) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for (name, shape) in &step.publications {
@@ -268,11 +240,6 @@ pub(crate) fn step_lines(step: &SessionStep) -> Vec<String> {
             .collect();
         lines.push(format!("publish {name} {}", columns.join(" ")));
     }
-    lines.extend(
-        step.deferrals
-            .iter()
-            .map(|deferral| format!("defer {} {}", deferral.kind(), deferral.model())),
-    );
     lines
 }
 
@@ -285,10 +252,7 @@ pub(crate) fn model_requests(models: &[ModelSpec]) -> Vec<ModelRequest> {
 
 /// Run `models` over the orders request: each step's lines and each model's description.
 pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
-    let (steps, outcomes, _) = completed(
-        started(orders_request(model_requests(models))),
-        empty_answer,
-    );
+    let (steps, outcomes, _) = completed(started(orders_request(model_requests(models))));
     (
         steps.iter().map(step_lines).collect(),
         outcomes.iter().map(described).collect(),
@@ -297,10 +261,7 @@ pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<
 
 /// Run `models` and describe the facts the finished session kept for each, or `none`.
 pub(crate) fn fact_lines(models: &[ModelSpec]) -> Vec<String> {
-    let (_, _, finished) = completed(
-        started(orders_request(model_requests(models))),
-        empty_answer,
-    );
+    let (_, _, finished) = completed(started(orders_request(model_requests(models))));
     models
         .iter()
         .map(|(name, ..)| {

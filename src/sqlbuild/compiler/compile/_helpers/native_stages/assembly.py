@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import Any
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -119,33 +118,10 @@ def expression_source_shapes_by_engine(
     return get_expression_source_shapes(expressions=expressions, profile=profile)
 
 
-def analyze_model_sql_by_engine(
-    *,
-    python_analysis: partial[dict[str, ModelSqlAnalysis]],
-    dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]],
+def analyze_model_sql(
+    request: NativeModelAnalysisRequest,
 ) -> tuple[dict[str, ModelSqlAnalysis], Any | None]:
-    """Analyze models natively, or with Python; also return the finished native session."""
+    """Analyze models natively; also return the finished session."""
 
-    native: NativeModelAnalyses | None = analyze_native_model_sql(
-        request=NativeModelAnalysisRequest(
-            **python_analysis.keywords, dynamic_families_by_table=dynamic_families_by_table
-        )
-    )
-    if native is not None:
-        return native.analyses, native.session
-    return python_analysis(), None
-
-
-def dynamic_column_contract_by_engine(
-    *,
-    sql_analysis: ModelSqlAnalysis | None,
-    native_proof: DynamicColumnContractProof | None,
-    python_proof: partial[DynamicColumnContractProof | None],
-) -> DynamicColumnContractProof | None:
-    """Return the proof native analysis carries or proved alone, or prove it in Python."""
-
-    if sql_analysis is not None and sql_analysis.dynamic_column_contract is not None:
-        return sql_analysis.dynamic_column_contract
-    if native_proof is not None:
-        return native_proof
-    return python_proof()
+    native: NativeModelAnalyses = analyze_native_model_sql(request=request)
+    return native.analyses, native.session

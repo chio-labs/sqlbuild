@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import random
 from collections import Counter
-from dataclasses import replace
 from itertools import product
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
@@ -29,27 +29,28 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullabili
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AdapterRuleCallbackTestCase,
-    AnalysisFallbackTestCase,
     CyclicAnalysisTestCase,
     CyclicCompileTestCase,
-    GeneratedAnalysisParityTestCase,
+    GeneratedAnalysisTestCase,
+    InternalFailureTestCase,
     SharedAnalysisTestCase,
     StandalonePivotProofTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     ADAPTER_RULE_MODELS,
-    AnalysisParity,
+    NativeAnalysisRuns,
     NativePivotProofs,
+    analyse_natively,
     analysis_request,
-    compare_analyses,
     compile_inputs,
     compiled_project_view,
     custom_nullability_rule,
     deferral_kinds,
+    duplicate_analysed_model_names,
     generated_analysis_files,
     native_pivot_proofs,
     pivot_project_files,
-    python_compiled_project_view,
+    record_python_model_analyses,
     shared_analysis_files,
     started_sessions,
 )
@@ -107,7 +108,7 @@ _ORDERS_PROJECT: dict[str, str] = {
 @pytest.mark.parametrize(
     "test_case",
     [
-        GeneratedAnalysisParityTestCase(
+        GeneratedAnalysisTestCase(
             description="stars, CTEs, CTE facts, set operations, untyped inputs, contracts, pivots",
             seed=20261008,
             count=6,
@@ -118,14 +119,10 @@ _ORDERS_PROJECT: dict[str, str] = {
             expected_minimum_native=500,
             expected_minimum_expression_shapes=40,
             expected_minimum_pivot_proofs=80,
-            expected_minimum_python_cte_recoveries=39,
-            expected_minimum_legacy_analyses=152,
-            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=12,
-            expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=90,
         ),
-        GeneratedAnalysisParityTestCase(
+        GeneratedAnalysisTestCase(
             description="rich lineage over untyped inputs, CTE facts and contracts",
             seed=20261008,
             count=6,
@@ -136,14 +133,10 @@ _ORDERS_PROJECT: dict[str, str] = {
             expected_minimum_native=500,
             expected_minimum_expression_shapes=40,
             expected_minimum_pivot_proofs=80,
-            expected_minimum_python_cte_recoveries=27,
-            expected_minimum_legacy_analyses=95,
-            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=12,
-            expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=90,
         ),
-        GeneratedAnalysisParityTestCase(
+        GeneratedAnalysisTestCase(
             description="snowflake and duckdb adapter rules, fast lineage",
             seed=20261010,
             count=3,
@@ -154,14 +147,10 @@ _ORDERS_PROJECT: dict[str, str] = {
             expected_minimum_native=200,
             expected_minimum_expression_shapes=15,
             expected_minimum_pivot_proofs=30,
-            expected_minimum_python_cte_recoveries=4,
-            expected_minimum_legacy_analyses=52,
-            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=10,
-            expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=30,
         ),
-        GeneratedAnalysisParityTestCase(
+        GeneratedAnalysisTestCase(
             description="snowflake and duckdb adapter rules, rich lineage",
             seed=20261010,
             count=3,
@@ -172,14 +161,10 @@ _ORDERS_PROJECT: dict[str, str] = {
             expected_minimum_native=190,
             expected_minimum_expression_shapes=15,
             expected_minimum_pivot_proofs=30,
-            expected_minimum_python_cte_recoveries=4,
-            expected_minimum_legacy_analyses=62,
-            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=10,
-            expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=20,
         ),
-        GeneratedAnalysisParityTestCase(
+        GeneratedAnalysisTestCase(
             description="a project-local adapter's own nullability rules, called back natively",
             seed=20261011,
             count=3,
@@ -190,25 +175,21 @@ _ORDERS_PROJECT: dict[str, str] = {
             expected_minimum_native=1,
             expected_minimum_expression_shapes=1,
             expected_minimum_pivot_proofs=1,
-            expected_minimum_python_cte_recoveries=0,
-            expected_minimum_legacy_analyses=1,
-            expected_legacy_analysis_deferrals=0,
             expected_minimum_proven_pivots=1,
-            expected_maximum_enrichment_deferrals=0,
             expected_minimum_native_enrichments=1,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_projects_when_analysing_natively_then_matches_python(
-    test_case: GeneratedAnalysisParityTestCase,
+def test_given_generated_projects_when_analysing_natively_then_cached_and_proven_runs_agree(
+    test_case: GeneratedAnalysisTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     rng: random.Random = random.Random(test_case.seed)
-    parity: AnalysisParity = AnalysisParity()
+    runs: NativeAnalysisRuns = NativeAnalysisRuns()
     for index in range(test_case.count):
         inputs: CompileProjectInputs = compile_inputs(
             project_dir=tmp_path / f"project_{index}",
@@ -217,39 +198,28 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
                 **test_case.extra_files,
             },
         )
-        for profile in test_case.inference_profiles:
-            compare_analyses(
+        for profile_index, profile in enumerate(test_case.inference_profiles):
+            analyse_natively(
                 inputs=inputs,
                 inference_profile=profile,
                 lineage_mode=test_case.lineage_mode,
-                parity=parity,
+                runs=runs,
+                cache_root=tmp_path / f"cache_{index}_{profile_index}",
                 monkeypatch=monkeypatch,
             )
     kinds: Counter[str] = deferral_kinds(record_dir)
+    kinds.pop("analysis_session:adapter_nullability_callback", None)
 
-    assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
-    assert kinds["analysis_session:session"] == kinds["analysis_session:expression_shapes"] == 0
-    assert kinds["analysis_session:dynamic_pivot"] == 0
-    assert kinds["analysis_session:legacy_analysis"] == test_case.expected_legacy_analysis_deferrals
-    assert parity.legacy_analyses >= test_case.expected_minimum_legacy_analyses
-    assert parity.python_cte_recoveries >= test_case.expected_minimum_python_cte_recoveries
-    assert (
-        parity.analysed_models
-        - kinds["analysis_session:legacy_analysis"]
-        - kinds["analysis_session:input_enrichment"]
-        >= test_case.expected_minimum_native
-    )
-    assert parity.expression_shapes >= test_case.expected_minimum_expression_shapes
-    assert parity.pivot_proofs >= test_case.expected_minimum_pivot_proofs
-    assert parity.standalone_proofs >= test_case.expected_minimum_pivot_proofs
-    assert parity.session_proofs >= test_case.expected_minimum_pivot_proofs
-    assert parity.proven_pivots >= test_case.expected_minimum_proven_pivots
-    assert (
-        kinds["analysis_session:input_enrichment"]
-        <= test_case.expected_maximum_enrichment_deferrals
-    )
-    assert parity.native_enrichments >= test_case.expected_minimum_native_enrichments
-    assert parity.native_column_objects == parity.native_column_values > 0
+    assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
+    assert kinds == Counter()
+    assert runs.analysed_models >= test_case.expected_minimum_native
+    assert runs.expression_shapes >= test_case.expected_minimum_expression_shapes
+    assert runs.pivot_proofs >= test_case.expected_minimum_pivot_proofs
+    assert runs.standalone_proofs >= test_case.expected_minimum_pivot_proofs
+    assert runs.session_proofs >= test_case.expected_minimum_pivot_proofs
+    assert runs.proven_pivots >= test_case.expected_minimum_proven_pivots
+    assert runs.native_enrichments >= test_case.expected_minimum_native_enrichments
+    assert runs.native_column_objects == runs.native_column_values > 0
 
 
 @pytest.mark.parametrize(
@@ -269,7 +239,7 @@ def test_given_generated_projects_when_analysing_natively_then_matches_python(
     ],
     ids=lambda case: case.description,
 )
-def test_given_equal_model_queries_when_analysing_natively_then_shares_and_matches_python(
+def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cached_runs_agree(
     test_case: SharedAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     record_dir: Path = tmp_path / "records"
@@ -281,30 +251,32 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
         ),
     )
     sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
-    parity: AnalysisParity = AnalysisParity()
+    runs: NativeAnalysisRuns = NativeAnalysisRuns()
 
     _ = [
-        compare_analyses(
+        analyse_natively(
             inputs=inputs,
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
             lineage_mode=ColumnLineageMode.FAST,
-            parity=parity,
+            runs=runs,
+            cache_root=tmp_path / f"cache_{dialect}",
             monkeypatch=monkeypatch,
         )
         for dialect in test_case.dialects
     ]
 
-    shared: int = sum(session.sharing[0] for session in sessions)
+    uncached: list[Any] = sessions[2::3]
+    shared: int = sum(session.sharing[0] for session in uncached)
 
-    assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
+    assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
     assert (
-        parity.analysed_models,
+        runs.analysed_models,
         shared,
-        sum(session.sharing[1] for session in sessions),
-        parity.analysed_models - shared,
+        sum(session.sharing[1] for session in uncached),
+        runs.analysed_models - shared,
         deferral_kinds(record_dir),
-        parity.native_column_objects,
-        parity.native_column_values,
+        runs.native_column_objects,
+        runs.native_column_values,
     ) == (
         test_case.expected_analysed,
         test_case.expected_shared,
@@ -329,7 +301,7 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_match
     ],
     ids=lambda case: case.description,
 )
-def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_matches_python(
+def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_cached_runs_agree(
     test_case: CyclicAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     record_dir: Path = tmp_path / "records"
@@ -338,23 +310,24 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ma
         project_dir=tmp_path / "project", files=test_case.files
     )
     sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
-    parity: AnalysisParity = AnalysisParity()
+    runs: NativeAnalysisRuns = NativeAnalysisRuns()
 
     _ = [
-        compare_analyses(
+        analyse_natively(
             inputs=inputs,
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=dialect),
             lineage_mode=lineage_mode,
-            parity=parity,
+            runs=runs,
+            cache_root=tmp_path / f"cache_{dialect}_{lineage_mode.value}",
             monkeypatch=monkeypatch,
         )
         for dialect, lineage_mode in product(test_case.dialects, test_case.lineage_modes)
     ]
 
-    assert mismatches(inputs=parity.names, expected=parity.python, actual=parity.native) == []
+    assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
     assert (
-        parity.analysed_models,
-        len(sessions),
+        runs.analysed_models,
+        len(sessions) // 3,
         None in sessions,
         deferral_kinds(record_dir),
     ) == (
@@ -382,7 +355,7 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ma
     ],
     ids=lambda case: case.description,
 )
-def test_given_cyclic_project_when_compiling_then_native_output_equals_python_analysis(
+def test_given_cyclic_project_when_compiling_then_native_output_is_complete_and_repeatable(
     test_case: CyclicCompileTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -396,14 +369,11 @@ def test_given_cyclic_project_when_compiling_then_native_output_equals_python_an
     )
     native_deferrals: Counter[str] = deferral_kinds(record_dir)
 
-    python: tuple[int, object, object, dict[str, str]] = python_compiled_project_view(
-        project_dir=tmp_path / "python" / "orders_cycle",
-        files=test_case.files,
-        capsys=capsys,
-        monkeypatch=monkeypatch,
+    repeated: tuple[int, object, object, dict[str, str]] = compiled_project_view(
+        project_dir=tmp_path / "repeated" / "orders_cycle", files=test_case.files, capsys=capsys
     )
 
-    assert native == python
+    assert native == repeated
     assert (native[0], tuple(native[3]), native_deferrals) == (
         test_case.expected_exit_code,
         test_case.expected_compiled,
@@ -414,46 +384,38 @@ def test_given_cyclic_project_when_compiling_then_native_output_equals_python_an
 @pytest.mark.parametrize(
     "test_case",
     [
-        AnalysisFallbackTestCase(
-            description="lineage disabled, so compact analysis is off",
+        InternalFailureTestCase(
+            description="two analysed models sharing a name break the session's invariant",
             files=_ORDERS_PROJECT,
-            allow_compact_analysis=False,
-            keeps_catalog=True,
-            expected_kind="no_compact_analysis",
-        ),
-        AnalysisFallbackTestCase(
-            description="an inference profile without a binding catalog",
-            files=_ORDERS_PROJECT,
-            allow_compact_analysis=True,
-            keeps_catalog=False,
-            expected_kind="no_analysis_catalog",
+            expected_message=(
+                "NativeCompilerError: native model analysis: two analysed models share a name"
+            ),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_unsupported_analysis_when_analysing_natively_then_python_analyses_and_records(
-    test_case: AnalysisFallbackTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_given_internal_native_failure_when_assembling_then_raises_without_python_analysis(
+    test_case: InternalFailureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     record_dir: Path = tmp_path / "records"
-    request: NativeModelAnalysisRequest = analysis_request(
-        inputs=compile_inputs(project_dir=tmp_path / "project", files=test_case.files),
-        monkeypatch=monkeypatch,
-    )
-    profile: ExpressionInferenceProfile = request.inference_profile
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
-
-    analyses: object = analyze_native_model_sql(
-        request=replace(
-            request,
-            allow_compact_analysis=test_case.allow_compact_analysis,
-            inference_profile=replace(
-                profile, binding_catalog=(None, profile.binding_catalog)[test_case.keeps_catalog]
-            ),
-        )
+    inputs: CompileProjectInputs = compile_inputs(
+        project_dir=tmp_path / "project", files=test_case.files
     )
+    python_analyses: list[object] = record_python_model_analyses(monkeypatch=monkeypatch)
+    duplicate_analysed_model_names(monkeypatch=monkeypatch)
 
-    assert analyses is None
-    assert deferral_kinds(record_dir) == Counter({f"analysis_session:{test_case.expected_kind}": 1})
+    with pytest.raises(native_module.NativeCompilerError) as raised:
+        _ = assemble_compiled_project(
+            inputs=inputs,
+            inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+        )
+
+    assert (str(raised.value), python_analyses, deferral_kinds(record_dir)) == (
+        test_case.expected_message,
+        [],
+        Counter(),
+    )
 
 
 @pytest.mark.parametrize(
@@ -569,7 +531,7 @@ def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_cal
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
 
     if test_case.raised is None:
-        assert analyze_native_model_sql(request=request) is not None
+        assert analyze_native_model_sql(request=request).analyses
     else:
         with pytest.raises(test_case.raised, match="adapter rule failed"):
             _ = analyze_native_model_sql(request=request)

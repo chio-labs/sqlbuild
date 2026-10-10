@@ -14,7 +14,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ExpressionMemoCase,
 )
 
-pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("deferred_native_analysis")
+pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("deferred_native_expression_shapes")
 
 
 @pytest.mark.parametrize(

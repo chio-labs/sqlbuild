@@ -1,4 +1,4 @@
-"""Python's half of native model analysis: per-model request rows and deferred analyses."""
+"""Python's half of native model analysis: per-model request rows and cache metrics."""
 
 from __future__ import annotations
 
@@ -7,9 +7,6 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import record_analysis_ca
 from sqlbuild.compiler.compile._helpers.analysis.columns import (
     substitute_placeholder_defaults,
     table_function_analysis_name,
-)
-from sqlbuild.compiler.compile._helpers.analysis.compact import (
-    analyze_columns_and_lineage_with_polyglot,
 )
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import names_set_operation
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
@@ -24,22 +21,18 @@ from sqlbuild.compiler.compile.models import (
     CompileModelInput,
     CompileSqlReference,
     ModelSqlAnalysisRequest,
-    NativeCompactAnalysis,
-    PolyglotAnalysisResult,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
     SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
 class PythonModelAnalysis:
-    """The analysed models' request facts, and today's Python analysis where native defers."""
+    """The analysed models' request facts."""
 
     def __init__(
         self,
@@ -70,51 +63,6 @@ class PythonModelAnalysis:
 
         return [_model_row(request) for request in self.requests]
 
-    def analyze_deferred(
-        self,
-        *,
-        model: int,
-        precomputed: NativeCompactAnalysis,
-        binding_schema: dict[str, dict[str, str]],
-        column_types_by_table: dict[str, dict[str, str]],
-        column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    ) -> PolyglotAnalysisResult:
-        """Python's legacy analysis of a model the native engine handed back."""
-
-        request: ModelSqlAnalysisRequest = self.requests[model]
-        return analyze_columns_and_lineage_with_polyglot(
-            query_sql=request.query_sql,
-            references=request.model_input.references,
-            placeholders=request.placeholders,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=self._profile,
-            allow_compact_analysis=True,
-            binding_schema=binding_schema,
-            recover_cte_facts=_recovers_cte_facts(request.model_input),
-            precomputed=precomputed,
-        )
-
-    def enrich(
-        self, *, model: int, input_schemas: dict[str, dict[str, str]]
-    ) -> PolyglotAnalysisResult:
-        """Python's re-analysis of a model with its known input shapes."""
-
-        request: ModelSqlAnalysisRequest = self.requests[model]
-        return analyze_columns_and_lineage_with_polyglot(
-            query_sql=request.query_sql,
-            references=request.model_input.references,
-            placeholders=request.placeholders,
-            column_types_by_table=input_schemas,
-            column_nullability_by_table={
-                table: dict.fromkeys(columns, InferredNullability.UNKNOWN)
-                for table, columns in input_schemas.items()
-            },
-            inference_profile=self._profile,
-            allow_compact_analysis=True,
-            recover_cte_facts=_recovers_cte_facts(request.model_input),
-        )
-
     @staticmethod
     def family_row(family: SchemaDynamicColumnFamily) -> tuple[str, str, str, str, str, str | None]:
         """One declared dynamic column family as the native request row."""
@@ -126,44 +74,6 @@ class PythonModelAnalysis:
             family.aggregate,
             family.type,
             family.name_pattern,
-        )
-
-    @staticmethod
-    def legacy_precomputed(
-        *,
-        cleaned_sql: str,
-        binding_diagnostics: tuple[SqlBindingDiagnostic, ...],
-        lineage: list[tuple[str, int, int, list[tuple[str, str, str]]]] | None,
-    ) -> NativeCompactAnalysis:
-        """The native result Python's legacy analysis reads, with lineage rows when kept."""
-
-        if lineage is None:
-            return NativeCompactAnalysis(
-                cleaned_sql=cleaned_sql,
-                analysis=None,
-                projected=False,
-                binding_diagnostics=binding_diagnostics,
-            )
-        pool: dict[str, int] = {}
-        facts: list[object] = []
-        for output_column, transform_code, confidence_code, sources in lineage:
-            name_index: int = pool.setdefault(output_column, len(pool))
-            source_indexes: list[list[int]] = []
-            for source in sources:
-                source_indexes.append([pool.setdefault(value, len(pool)) for value in source])
-            facts.append([name_index, None, 0, transform_code, confidence_code, source_indexes])
-        return NativeCompactAnalysis(
-            cleaned_sql=cleaned_sql,
-            analysis=None,
-            projected=False,
-            binding_diagnostics=binding_diagnostics,
-            compact_rows=list(range(len(facts))),
-            compact_fact_rows=facts,
-            string_pool=tuple(pool),
-            compact_column_cache={},
-            compact_template_index=0,
-            compact_fact_cache={},
-            compact_decoded_fact_cache={},
         )
 
     def record_cached(self, *, hits: int, misses: int) -> None:

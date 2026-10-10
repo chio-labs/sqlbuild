@@ -20,19 +20,6 @@ class HarnessRunTestCase:
 
 
 @dataclass(frozen=True)
-class SharedAnalysisSeedTestCase:
-    """A generated seed that must compile cleanly and reuse shared analyses."""
-
-    description: str
-    seed: int
-    expected_lines: tuple[str, ...]
-    expected_capture_sides: tuple[str, ...]
-    expected_compile_exit_code: int
-    expected_minimum_shareable_members: int
-    expected_minimum_shared_reuse: int
-
-
-@dataclass(frozen=True)
 class ProjectExpectationTestCase:
     """A broken project run with one --expect value and the verdict the harness must reach."""
 

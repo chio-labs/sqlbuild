@@ -1,8 +1,8 @@
-//! Advance a native model analysis session to its next deferrals.
+//! Run a native model analysis session over every wave.
 
 use crate::assembly::analysis_session::models::{AnalysisSession, SessionStep};
 
-/// Advance until Python must answer deferrals; a step without deferrals means done.
+/// Analyse every wave; any internal native failure fails the whole analysis.
 pub fn run_analysis_session(session: &mut AnalysisSession) -> Result<SessionStep, String> {
     session.run()
 }

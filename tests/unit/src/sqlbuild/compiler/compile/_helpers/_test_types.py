@@ -13,8 +13,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
 from sqlbuild.compiler.lineage.types import (
-    ColumnLineageConfidence,
-    ColumnTransformKind,
     InferredNullability,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
@@ -82,12 +80,6 @@ class AuditFactoryAttachmentTestCase:
     expected_error_fragment: str | None = None
     expected_audit_names: tuple[str, ...] = ()
     expected_warning_code: str | None = None
-
-
-@dataclass(frozen=True)
-class AnalysisCacheTestCase:
-    description: str
-    expected_count: int
 
 
 @dataclass(frozen=True)
@@ -885,14 +877,6 @@ class ExpectedCountTestCase:
 
 
 @dataclass(frozen=True)
-class CachedLineageRoundTripTestCase:
-    description: str
-    transform_kind: ColumnTransformKind
-    confidence: ColumnLineageConfidence
-    expected_compact: bool
-
-
-@dataclass(frozen=True)
 class ClassifyDirectLogicSqlTestCtesErrorTestCase:
     description: str
     mode: SqlTestMode
@@ -1100,14 +1084,6 @@ class QualifiedReferenceScanTestCase:
     query_sql: str
     reference_names: tuple[str, ...]
     expected_names: frozenset[str]
-
-
-@dataclass(frozen=True)
-class CompactLineageCacheEncodingTestCase:
-    description: str
-    output_column: str
-    resource_names: dict[int, str]
-    expected_lineage_columns: int = 2
 
 
 @dataclass(frozen=True)

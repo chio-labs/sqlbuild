@@ -1,5 +1,6 @@
 use crate::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
 use crate::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
+use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
@@ -7,12 +8,20 @@ use crate::assembly::analysis_session::tests::helpers::{
     orders_request, pivot_request, proven, recovered_facts, session_lines,
 };
 use crate::assembly::analysis_session::tests::test_types::{
-    CteRecoveryTestCase, LegacyAnalysisTestCase, PivotTestCase, SessionFactsTestCase,
-    SessionTestCase, UnscheduledTestCase,
+    CteRecoveryTestCase, LegacyAnalysisTestCase, ModelSpec, PivotTestCase, SessionFactsTestCase,
+    SessionFailureTestCase, SessionTestCase, UnscheduledTestCase,
 };
 
+/// A model whose missing column stays untyped over a known input, so completion re-analyses it.
+const UNTYPED_ORDERS: ModelSpec = (
+    "orders_untyped",
+    "SELECT order_id, missing_column FROM __source(\"raw_orders\")",
+    &["raw_orders"],
+    &[],
+);
+
 #[test]
-fn given_models_when_running_the_session_then_defers_and_publishes_as_python_does() {
+fn given_models_when_running_the_session_then_publishes_as_python_does() {
     let test_cases = [
         SessionTestCase {
             description: "typed producers publish closed shapes their consumers bind",
@@ -245,7 +254,7 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
 }
 
 #[test]
-fn given_models_when_starting_then_only_duplicate_names_leave_analysis_to_python() {
+fn given_models_when_starting_then_only_duplicate_names_fail_as_an_internal_error() {
     let test_cases = [
         UnscheduledTestCase {
             description: "models that reference each other analyse in one unordered wave",
@@ -263,7 +272,7 @@ fn given_models_when_starting_then_only_duplicate_names_leave_analysis_to_python
                     &["orders"],
                 ),
             ],
-            expected_started: true,
+            expected_error: None,
         },
         UnscheduledTestCase {
             description: "two models with one name",
@@ -271,7 +280,9 @@ fn given_models_when_starting_then_only_duplicate_names_leave_analysis_to_python
                 ("orders", "SELECT 1 AS order_id", &[], &[]),
                 ("orders", "SELECT 2 AS order_id", &[], &[]),
             ],
-            expected_started: false,
+            expected_error: Some(
+                "NativeCompilerError: native model analysis: two analysed models share a name",
+            ),
         },
     ];
     for test_case in test_cases {
@@ -279,8 +290,45 @@ fn given_models_when_starting_then_only_duplicate_names_leave_analysis_to_python
         let catalog = catalog(&request.dialect, &request.catalog_schemas);
 
         assert_eq!(
-            start_analysis_session(request, &catalog).is_some(),
-            test_case.expected_started,
+            start_analysis_session(request, &catalog).err().as_deref(),
+            test_case.expected_error,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_enrichment_dialect_when_running_then_answers_or_raises_python_value_error() {
+    let test_cases = [
+        SessionFailureTestCase {
+            description: "an analysis dialect name the query analysis reads",
+            dialect: "duckdb",
+            models: &[UNTYPED_ORDERS],
+            expected_error: None,
+        },
+        SessionFailureTestCase {
+            description: "an adapter dialect alias Python's analyze_query options reject",
+            dialect: "postgres",
+            models: &[UNTYPED_ORDERS],
+            expected_error: Some(
+                "ValueError: Invalid analyze_query options object: unknown variant `postgres`",
+            ),
+        },
+    ];
+    for test_case in test_cases {
+        let mut request = orders_request(model_requests(test_case.models));
+        request.dialect = test_case.dialect.to_owned();
+        let catalog = catalog(&request.dialect, &request.catalog_schemas);
+        let mut session = start_analysis_session(request, &catalog).expect("the session starts");
+
+        let error: Option<String> = run_analysis_session(&mut session).err();
+
+        assert_eq!(
+            error
+                .as_deref()
+                .map(|error| error.split(',').next().unwrap_or(error)),
+            test_case.expected_error,
             "{}",
             test_case.description
         );

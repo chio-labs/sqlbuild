@@ -105,11 +105,10 @@ pub struct SessionModelFacts {
     pub lineage: OutputSources,
 }
 
-/// A model's dynamic pivot proof: none declared, left to Python, or proven natively.
+/// A model's dynamic pivot proof: none declared, or proven natively.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PivotOutcome {
     Absent,
-    Deferred,
     Proof(ContractProof),
 }
 
@@ -158,10 +157,6 @@ pub struct LineageRow {
 pub enum LineageFacts {
     /// Native compact rows.
     Native(Vec<LineageRow>),
-    /// The lineage of the analysis Python returned for this model's analysis deferral.
-    PythonAnalysis,
-    /// The lineage of the analysis Python returned for this model's enrichment deferral.
-    PythonEnrichment,
     /// Plain lineage facts of a native re-analysis or legacy analysis.
     NativeFacts(Vec<LineageRow>),
 }
@@ -187,40 +182,11 @@ pub struct ModelOutcome {
     pub fused_binding_validated: bool,
 }
 
-/// Work native analysis hands back to Python for one model.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Deferral {
-    /// The native engine asked for Python's legacy analysis of this model.
-    Analysis {
-        model: usize,
-        cleaned_sql: String,
-        binding_schema: Shapes,
-        binding_diagnostics: Vec<DiagnosticRow>,
-        /// Lineage Python projects from native rows, when the engine kept them.
-        lineage: Option<Vec<LineageRow>>,
-    },
-    /// Re-analysis with the model's known input shapes.
-    Enrichment { model: usize, input_schemas: Shapes },
-}
-
-/// Python's answer to one deferral, without the lineage Python keeps.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeferredAnalysis {
-    pub model: usize,
-    pub analysis_succeeded: bool,
-    pub columns: Option<Vec<ColumnFact>>,
-    pub has_star: bool,
-    pub star_resolved: bool,
-    pub binding_diagnostics: Vec<DiagnosticRow>,
-    pub binding_validated: bool,
-}
-
-/// One phase of the session: the deferrals Python must answer, or none when it is done.
+/// The finished run of the session: what Python records from it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SessionStep {
-    /// Shapes published since the previous step, in publication order.
+    /// Shapes published by the run, in publication order.
     pub publications: Shapes,
-    pub deferrals: Vec<Deferral>,
     /// Native analysis failures Python logs at debug level.
     pub failures: Vec<String>,
 }
@@ -254,26 +220,12 @@ pub struct ExpressionShapeRequest {
     pub expressions: Vec<String>,
 }
 
-/// Deferrals the session waits on before it continues a wave.
-#[derive(Debug)]
-pub(crate) enum Awaiting {
-    Analyses {
-        wave: usize,
-        models: Vec<usize>,
-    },
-    Enrichments {
-        wave: usize,
-        star_pending: HashMap<usize, bool>,
-    },
-}
-
 /// Where the session is within its waves.
 #[derive(Debug)]
 pub(crate) enum Phase {
     Analyze,
     Complete(usize),
     Finish(usize),
-    Await(Awaiting),
     Done,
 }
 
@@ -294,13 +246,12 @@ pub struct AnalysisCache {
     pub(crate) keys: Vec<Option<ContentDigest>>,
     pub(crate) hits: Vec<bool>,
     /// Models whose outcome must not be stored: a logged failure or Python's answer.
-    pub(crate) uncacheable: Vec<bool>,
     /// The whole-table digest each legacy analysis read; its entry also requires it.
     pub(crate) legacy_tables: Vec<Option<ContentDigest>>,
     pub(crate) stats: AnalysisCacheStats,
 }
 
-/// One compile's model analysis, advanced phase by phase and resumed with Python's answers.
+/// One compile's model analysis, advanced phase by phase.
 #[derive(Debug)]
 pub struct AnalysisSession {
     pub(crate) request: SessionRequest,

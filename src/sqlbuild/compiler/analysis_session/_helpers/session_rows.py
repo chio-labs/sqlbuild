@@ -20,7 +20,6 @@ from sqlbuild.compiler.analysis_session.constants import (
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.analysis_session.types import (
     ColumnRow,
-    DeferredRow,
     DiagnosticRow,
     FamilyRow,
     LineageItem,
@@ -35,7 +34,6 @@ from sqlbuild.compiler.compile.models import (
     DynamicColumnContractProof,
     DynamicColumnFamilyProof,
     InferredColumn,
-    PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.sql_analysis.constants import CASE_SENSITIVE_BINDING_DIALECTS
@@ -49,18 +47,13 @@ _NULLABILITY_RULE_IDS: dict[FunctionNullabilityRule, str] = {
 }
 
 
-def shape_rows(shapes: Mapping[str, Mapping[str, object]]) -> ShapeRows | None:
-    """`{relation: {column: value}}` as ordered rows, or None when a value is not text."""
+def shape_rows(shapes: Mapping[str, Mapping[str, str]]) -> ShapeRows:
+    """`{relation: {column: value}}` as ordered rows; discovery rejects non-text names and types."""
 
-    rows: ShapeRows = []
-    for name, shape in shapes.items():
-        columns: list[tuple[str, str]] = []
-        for column, value in shape.items():
-            if not isinstance(column, str) or not isinstance(value, str):
-                return None
-            columns.append((column, str(value)))
-        rows.append((name, columns))
-    return rows
+    return [
+        (name, [(column, str(value)) for column, value in shape.items()])
+        for name, shape in shapes.items()
+    ]
 
 
 def session_request(
@@ -68,18 +61,16 @@ def session_request(
     request: NativeModelAnalysisRequest,
     python: PythonModelAnalysis,
     schemas: Mapping[str, Mapping[str, str]],
-) -> tuple[object, ...] | None:
-    """The session request, or None when a shape cannot cross as text."""
+) -> tuple[object, ...]:
+    """The session request."""
 
     profile: ExpressionInferenceProfile = request.inference_profile
-    shapes: tuple[ShapeRows | None, ...] = (
+    shapes: tuple[ShapeRows, ...] = (
         shape_rows(request.column_types_by_table),
         shape_rows(request.column_nullability_by_table),
         shape_rows(request.complete_binding_schemas),
         shape_rows(schemas),
     )
-    if any(rows is None for rows in shapes):
-        return None
     return (
         profile.sql_analysis_dialect or "generic",
         case_sensitive_shapes(profile=profile, dialect=profile.sql_analysis_dialect),
@@ -114,7 +105,7 @@ def adapter_nullability_rules(
 
 
 def contract_proof(row: ProofRow | None) -> DynamicColumnContractProof | None:
-    """A native dynamic pivot proof as Python's, None when absent or left to Python."""
+    """A native dynamic pivot proof as Python's, None when absent."""
 
     if row is None:
         return None
@@ -157,20 +148,6 @@ def diagnostic_rows(diagnostics: tuple[SqlBindingDiagnostic, ...]) -> list[Diagn
         )
         for diagnostic in diagnostics
     ]
-
-
-def deferred_row(*, model: int, analysis: PolyglotAnalysisResult) -> DeferredRow:
-    """Python's answer to one deferral, without the lineage Python keeps."""
-
-    return (
-        model,
-        analysis.analysis_succeeded,
-        column_rows(analysis.columns),
-        analysis.has_star,
-        analysis.star_resolved,
-        diagnostic_rows(analysis.binding_diagnostics),
-        analysis.binding_validated,
-    )
 
 
 def inferred_columns(rows: list[ColumnRow] | None) -> tuple[InferredColumn, ...] | None:

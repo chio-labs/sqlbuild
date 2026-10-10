@@ -2,40 +2,21 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from functools import partial
-from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
-    build_compact_analysis_cache_plan,
-    compact_analysis_batch_response_writer,
-    model_analysis_cache_key,
-    model_analysis_output_signature,
-    read_compact_analysis_cache_candidate,
-    read_model_analyses,
-    record_analysis_cache_metrics,
-    write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.analysis.compact import (
-    NativeCompactAnalysis,
     analyze_columns_and_lineage_with_polyglot,
-    analyze_queries_with_compact_polyglot_batch,
     get_complete_schema_binding_request,
     infer_columns_with_sql_analysis,
-)
-from sqlbuild.compiler.compile._helpers.analysis.dynamic_pivot import (
-    analyze_dynamic_column_contract,
-)
-from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import (
-    model_dynamic_families,
-    model_pivot_sql,
 )
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import (
     model_placeholders as _model_placeholders,
@@ -48,27 +29,16 @@ from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_location,
     query_line_offset,
 )
-from sqlbuild.compiler.compile._helpers.assembly.binding_waves import analyze_binding_dataflow
-from sqlbuild.compiler.compile._helpers.assembly.binding_waves import (
-    downstream_model_names as _downstream_model_names,
-)
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    binding_required_names,
-    binding_schema_for_model,
     build_column_nullability_by_table,
     build_complete_binding_schemas,
-    published_model_shape,
-    upstream_signatures,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     build_declared_column_types as _build_column_types_by_table,
-)
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    referenced_model_names as _referenced_model_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.targets import (
     build_model_relation_target,
@@ -86,8 +56,7 @@ from sqlbuild.compiler.compile._helpers.deps.dependencies import (
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
 from sqlbuild.compiler.compile._helpers.native_stages.assembly import (
-    analyze_model_sql_by_engine,
-    dynamic_column_contract_by_engine,
+    analyze_model_sql,
     expression_source_shapes_by_engine,
     project_facts_by_engine,
 )
@@ -107,7 +76,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import expand_template_data
-from sqlbuild.compiler.compile._helpers.sharing.binding import shareable_binding_prekeys
 from sqlbuild.compiler.compile._helpers.sql_tests.helper_ctes import (
     report_mocks_reading_referencing_helpers,
 )
@@ -122,11 +90,6 @@ from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
 )
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
-    CompactAnalysisCacheCandidate,
-    CompactAnalysisCacheModel,
-    CompactAnalysisCachePlan,
-    CompactBatchExecutionOptions,
-    CompactBatchPreparation,
     CompileAuditInput,
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
@@ -161,12 +124,8 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis as _ModelSqlAnalysis,
 )
-from sqlbuild.compiler.compile.models import (
-    ModelSqlAnalysisRequest as _ModelSqlAnalysisRequest,
-)
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
-    CompactBatchResponseCallback,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -187,14 +146,10 @@ from sqlbuild.compiler.sql_analysis.constants import (
     BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
     NATIVE_DIALECT_ALIASES,
 )
-from sqlbuild.compiler.sql_analysis.exceptions import SqlAnalysisBoundaryError
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
-from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingDiagnostic,
-    SqlBindingResult,
-    SqlSchemaValidationRequest,
 )
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -344,32 +299,30 @@ def assemble_compiled_project(
             record_compile_timing("model_analysis_ms"),
             record_compile_cpu_timing("model_analysis_cpu_ms"),
         ):
-            python_analysis: partial[dict[str, _ModelSqlAnalysis]] = partial(
-                _analyze_model_sql_in_parallel,
-                known_functions=known_function_names(inputs.sql_function_inputs),
-                known_types=known_declared_types(
-                    functions=inputs.sql_function_inputs, column_types=column_types_by_table
-                ),
-                model_inputs=tuple(
-                    model_input
-                    for model_input in inputs.model_inputs
-                    if model_input.sql_validation_enabled
-                    and (
-                        analysis_model_names is None
-                        or _model_name(model_input) in analysis_model_names
-                    )
-                ),
-                column_nullability_by_table=column_nullability_by_table,
-                column_types_by_table=column_types_by_table,
-                inference_profile=profile,
-                allow_compact_analysis=allow_compact_analysis,
-                rich_type_inference=rich_type_inference,
-                analysis_cache=analysis_cache,
-                complete_binding_schemas=complete_binding_schemas,
-            )
-            model_sql_analysis_by_name, native_session = analyze_model_sql_by_engine(
-                python_analysis=python_analysis,
-                dynamic_families_by_table=dynamic_families_by_table,
+            model_sql_analysis_by_name, native_session = analyze_model_sql(
+                NativeModelAnalysisRequest(
+                    known_functions=known_function_names(inputs.sql_function_inputs),
+                    known_types=known_declared_types(
+                        functions=inputs.sql_function_inputs, column_types=column_types_by_table
+                    ),
+                    model_inputs=tuple(
+                        model_input
+                        for model_input in inputs.model_inputs
+                        if model_input.sql_validation_enabled
+                        and (
+                            analysis_model_names is None
+                            or _model_name(model_input) in analysis_model_names
+                        )
+                    ),
+                    column_nullability_by_table=column_nullability_by_table,
+                    column_types_by_table=column_types_by_table,
+                    inference_profile=profile,
+                    allow_compact_analysis=allow_compact_analysis,
+                    rich_type_inference=rich_type_inference,
+                    analysis_cache=analysis_cache,
+                    complete_binding_schemas=complete_binding_schemas,
+                    dynamic_families_by_table=dynamic_families_by_table,
+                )
             )
     native: NativeProjectFacts | None = project_facts_by_engine(
         inputs=inputs,
@@ -614,27 +567,12 @@ def _assemble_compiled_model(
             placeholders=placeholders,
             dialect=profile.sql_analysis_dialect,
         )
-    dynamic_column_contract: DynamicColumnContractProof | None = dynamic_column_contract_by_engine(
-        sql_analysis=sql_analysis,
-        native_proof=native_model.dynamic_contract if native_model else None,
-        python_proof=partial(
-            analyze_dynamic_column_contract,
-            query_sql=model_pivot_sql(query_sql=analysis_query_sql, placeholders=placeholders),
-            dialect=profile.sql_analysis_dialect,
-            families=model_dynamic_families(model_input),
-            column_types_by_table=column_types_by_table or {},
-            authoritative_column_types_by_table=(
-                dynamic_contract_analysis_inputs.authoritative_column_types_by_table
-                if dynamic_contract_analysis_inputs is not None
-                else {}
-            ),
-            column_nullability_by_table=column_nullability_by_table or {},
-            dynamic_families_by_table=(
-                dynamic_contract_analysis_inputs.families_by_table
-                if dynamic_contract_analysis_inputs is not None
-                else {}
-            ),
-        ),
+    dynamic_column_contract: DynamicColumnContractProof | None = (
+        sql_analysis.dynamic_column_contract
+        if sql_analysis is not None and sql_analysis.dynamic_column_contract is not None
+        else native_model.dynamic_contract
+        if native_model is not None
+        else None
     )
     if dynamic_column_contract is not None and dynamic_column_contract.output_proven:
         inferred_columns = dynamic_column_contract.fixed_columns
@@ -674,734 +612,6 @@ def _assemble_compiled_model(
         binding_validated=(polyglot_analysis.binding_validated if sql_analysis_enabled else False),
         dynamic_column_contract=dynamic_column_contract,
         rejected_sql_analysis_opt_out=model_input.rejected_sql_analysis_opt_out,
-    )
-
-
-def _analyze_model_sql_in_parallel(
-    *,
-    known_functions: tuple[str, ...],
-    known_types: tuple[str, ...],
-    model_inputs: tuple[CompileModelInput, ...],
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
-    inference_profile: ExpressionInferenceProfile,
-    allow_compact_analysis: bool,
-    rich_type_inference: bool,
-    analysis_cache: AnalysisCacheContext | None,
-    complete_binding_schemas: dict[str, dict[str, str]],
-) -> dict[str, _ModelSqlAnalysis]:
-    if not model_inputs:
-        return {}
-    analyzed_model_names: frozenset[str] = frozenset(
-        _model_name(model_input) for model_input in model_inputs
-    )
-    requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
-        _model_sql_analysis_request(
-            model_input=model_input,
-            analysis_cache=analysis_cache,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            complete_binding_schemas=complete_binding_schemas,
-        )
-        for model_input in model_inputs
-    )
-    request_cache_keys: tuple[str, ...] = tuple(
-        request.cache_key for request in requests if request.cache_key is not None
-    )
-    dependency_ordered: bool = allow_compact_analysis and any(
-        request.binding_schema is not None and not all(request.binding_schema.values())
-        for request in requests
-    )
-    compact_batch_plan: CompactAnalysisCachePlan | None = None
-    if analysis_cache is not None:
-        compact_batch_plan = build_compact_analysis_cache_plan(
-            context=analysis_cache,
-            models=tuple(
-                CompactAnalysisCacheModel(
-                    name=_model_name(request.model_input),
-                    cache_key=request.cache_key,
-                    upstream_names=_referenced_model_names(
-                        model_input=request.model_input,
-                        available_names=analyzed_model_names,
-                    ),
-                )
-                for request in requests
-            ),
-            min_model_count=_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT,
-        )
-    compact_cached_analyses: dict[str, PolyglotAnalysisResult] = {}
-    compact_batch_hit_count: int = 0
-    compact_candidate: CompactAnalysisCacheCandidate | None = (
-        read_compact_analysis_cache_candidate(
-            plan=compact_batch_plan,
-            expected_count=len(requests),
-            min_model_count=_COMPACT_BATCH_CACHE_MIN_MODEL_COUNT,
-        )
-        if compact_batch_plan is not None and not dependency_ordered
-        else None
-    )
-    if compact_candidate is not None:
-        completed_analyses: dict[str, PolyglotAnalysisResult] = {}
-        if analysis_cache is not None:
-            completed_analyses, _, _ = read_model_analyses(
-                context=analysis_cache,
-                cache_keys=request_cache_keys,
-                model_names=tuple(_model_name(request.model_input) for request in requests),
-                upstream_model_names_by_key={
-                    request.cache_key: _referenced_model_names(
-                        model_input=request.model_input,
-                        available_names=analyzed_model_names,
-                    )
-                    for request in requests
-                    if request.cache_key is not None
-                },
-            )
-            if all(key in completed_analyses for key in request_cache_keys):
-                record_analysis_cache_metrics(
-                    batch_hits=len(requests), entry_hits=0, misses=0, bypasses=0
-                )
-                return {
-                    _model_name(request.model_input): _ModelSqlAnalysis(
-                        polyglot_analysis=completed_analyses[cache_key],
-                        placeholders=request.placeholders,
-                    )
-                    for request, cache_key in zip(requests, request_cache_keys, strict=True)
-                }
-        try:
-            compact_analyses: tuple[_ModelSqlAnalysis, ...] = _analyze_model_sql_requests(
-                requests=requests,
-                cached_analyses=completed_analyses,
-                column_nullability_by_table=column_nullability_by_table,
-                column_types_by_table=column_types_by_table,
-                inference_profile=inference_profile,
-                allow_compact_analysis=allow_compact_analysis,
-                rich_type_inference=rich_type_inference,
-                cached_compact_batch=(
-                    compact_candidate.preparation,
-                    compact_candidate.response,
-                ),
-            )
-        except SqlAnalysisBoundaryError:
-            pass
-        else:
-            compact_cached_analyses = {
-                request_cache_keys[index]: compact_analyses[index].polyglot_analysis
-                for index in compact_candidate.matching_indexes
-            }
-            compact_batch_hit_count = len(compact_candidate.matching_indexes)
-            if compact_batch_hit_count == len(requests):
-                record_analysis_cache_metrics(
-                    batch_hits=compact_batch_hit_count,
-                    entry_hits=0,
-                    misses=0,
-                    bypasses=0,
-                )
-                compact_analyses = _complete_inferred_bindings(
-                    known_functions=known_functions,
-                    known_types=known_types,
-                    requests=requests,
-                    analyses=compact_analyses,
-                    complete_binding_schemas=complete_binding_schemas,
-                    inference_profile=inference_profile,
-                )
-                return {
-                    _model_name(model_input): analysis
-                    for model_input, analysis in zip(model_inputs, compact_analyses, strict=True)
-                }
-    entry_cache_keys: tuple[str, ...] = tuple(
-        cache_key for cache_key in request_cache_keys if cache_key not in compact_cached_analyses
-    )
-    cached_analyses: dict[str, PolyglotAnalysisResult]
-    previous_signatures: dict[str, str]
-    cached_output_signatures_by_key: dict[str, str]
-    cached_analyses, previous_signatures, cached_output_signatures_by_key = (
-        read_model_analyses(
-            context=analysis_cache,
-            cache_keys=entry_cache_keys,
-            model_names=tuple(_model_name(request.model_input) for request in requests),
-            upstream_model_names_by_key={
-                request.cache_key: _referenced_model_names(
-                    model_input=request.model_input,
-                    available_names=analyzed_model_names,
-                )
-                for request in requests
-                if request.cache_key is not None
-                and request.cache_key not in compact_cached_analyses
-            },
-        )
-        if analysis_cache is not None
-        else ({}, {}, {})
-    )
-    entry_cache_hit_count: int = sum(
-        request.cache_key is not None and request.cache_key in cached_analyses
-        for request in requests
-    )
-    if (
-        compact_batch_plan is not None
-        and compact_batch_hit_count == 0
-        and entry_cache_hit_count > 0
-        and entry_cache_hit_count * 100 < len(requests) * _COMPACT_BATCH_ENTRY_REUSE_MIN_PERCENT
-    ):
-        cached_analyses.clear()
-        cached_output_signatures_by_key.clear()
-        entry_cache_hit_count = 0
-    cached_analyses.update(compact_cached_analyses)
-    cached_output_signatures_by_key.update(
-        {
-            cache_key: model_analysis_output_signature(analysis)
-            for cache_key, analysis in compact_cached_analyses.items()
-        }
-    )
-    analyses: tuple[_ModelSqlAnalysis, ...]
-    if dependency_ordered:
-        analyses, cached_analyses = analyze_binding_dataflow(
-            requests=requests,
-            names=tuple(_model_name(request.model_input) for request in requests),
-            cached=cached_analyses,
-            previous_signatures=previous_signatures,
-            shapes=complete_binding_schemas,
-            types=column_types_by_table,
-            nullability=column_nullability_by_table,
-            profile=inference_profile,
-            analyze=partial(
-                _analyze_model_sql_requests,
-                inference_profile=inference_profile,
-                allow_compact_analysis=allow_compact_analysis,
-                rich_type_inference=rich_type_inference,
-                shareable_prekeys=shareable_binding_prekeys(requests=requests),
-            ),
-            complete=partial(
-                _complete_inferred_bindings,
-                known_functions=known_functions,
-                known_types=known_types,
-                inference_profile=inference_profile,
-            ),
-        )
-        if compact_batch_plan is not None:
-            compact_batch_hit_count = sum(analysis.cached for analysis in analyses)
-            entry_cache_hit_count -= compact_batch_hit_count
-    else:
-        analyses = _analyze_model_sql_requests(
-            requests=requests,
-            cached_analyses=cached_analyses,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=inference_profile,
-            allow_compact_analysis=allow_compact_analysis,
-            rich_type_inference=rich_type_inference,
-            on_compact_response=(
-                compact_analysis_batch_response_writer(
-                    plan=compact_batch_plan,
-                    count=len(requests),
-                )
-                if compact_batch_plan is not None and not cached_analyses
-                else None
-            ),
-            shareable_prekeys=shareable_binding_prekeys(requests=requests),
-        )
-        analyses = _complete_inferred_bindings(
-            known_functions=known_functions,
-            known_types=known_types,
-            requests=requests,
-            analyses=analyses,
-            complete_binding_schemas=complete_binding_schemas,
-            inference_profile=inference_profile,
-        )
-    record_analysis_cache_metrics(
-        batch_hits=compact_batch_hit_count,
-        entry_hits=entry_cache_hit_count,
-        misses=(
-            len(requests) - compact_batch_hit_count - entry_cache_hit_count
-            if analysis_cache is not None
-            else 0
-        ),
-        bypasses=(len(requests) if analysis_cache is None else 0),
-    )
-    if analysis_cache is None:
-        return {
-            _model_name(model_input): analysis
-            for model_input, analysis in zip(model_inputs, analyses, strict=True)
-        }
-    current_analyses_by_name: dict[str, PolyglotAnalysisResult] = {
-        _model_name(request.model_input): analysis.polyglot_analysis
-        for request, analysis in zip(requests, analyses, strict=True)
-    }
-    current_signatures_by_name: dict[str, str] = {
-        _model_name(request.model_input): (
-            cached_output_signatures_by_key[request.cache_key]
-            if request.cache_key is not None and request.cache_key in cached_analyses
-            else model_analysis_output_signature(analysis.polyglot_analysis)
-        )
-        for request, analysis in zip(requests, analyses, strict=True)
-    }
-    analyses_to_record_by_name: dict[str, PolyglotAnalysisResult] = {
-        _model_name(request.model_input): analysis.polyglot_analysis
-        for request, analysis in zip(requests, analyses, strict=True)
-        if request.cache_key is None or request.cache_key not in cached_analyses
-    }
-    changed_signature_names: set[str] = {
-        _model_name(request.model_input)
-        for request, analysis in zip(requests, analyses, strict=True)
-        if (
-            previous_signatures.get(_model_name(request.model_input))
-            != current_signatures_by_name[_model_name(request.model_input)]
-            or (
-                not analysis.polyglot_analysis.analysis_succeeded
-                and request.cache_key not in cached_analyses
-            )
-        )
-    }
-    analyses_to_record_by_name.update(
-        {model_name: current_analyses_by_name[model_name] for model_name in changed_signature_names}
-    )
-    invalidated_names: set[str] = _downstream_model_names(
-        model_inputs=model_inputs,
-        changed_names=changed_signature_names,
-    )
-    if invalidated_names and not dependency_ordered:
-        invalidated_requests: tuple[_ModelSqlAnalysisRequest, ...] = tuple(
-            request
-            for request in requests
-            if (
-                _model_name(request.model_input) in invalidated_names
-                and request.cache_key is not None
-                and request.cache_key in cached_analyses
-            )
-        )
-        invalidated_analyses_by_name: dict[str, _ModelSqlAnalysis] = {
-            _model_name(request.model_input): analysis
-            for request, analysis in zip(
-                invalidated_requests,
-                _analyze_model_sql_requests(
-                    requests=invalidated_requests,
-                    cached_analyses={},
-                    column_nullability_by_table=column_nullability_by_table,
-                    column_types_by_table=column_types_by_table,
-                    inference_profile=inference_profile,
-                    allow_compact_analysis=allow_compact_analysis,
-                    rich_type_inference=rich_type_inference,
-                ),
-                strict=True,
-            )
-        }
-        analyses = tuple(
-            invalidated_analyses_by_name.get(_model_name(request.model_input), analysis)
-            for request, analysis in zip(requests, analyses, strict=True)
-        )
-        analyses = _complete_inferred_bindings(
-            known_functions=known_functions,
-            known_types=known_types,
-            requests=requests,
-            analyses=analyses,
-            complete_binding_schemas=complete_binding_schemas,
-            inference_profile=inference_profile,
-        )
-        invalidated_analyses_by_name = {
-            _model_name(request.model_input): analysis
-            for request, analysis in zip(requests, analyses, strict=True)
-            if _model_name(request.model_input) in invalidated_names
-        }
-        analyses_to_record_by_name.update(
-            {
-                _model_name(request.model_input): analysis.polyglot_analysis
-                for request, analysis in zip(requests, analyses, strict=True)
-                if _model_name(request.model_input) in invalidated_names
-            }
-        )
-        current_analyses_by_name = {
-            _model_name(request.model_input): analysis.polyglot_analysis
-            for request, analysis in zip(requests, analyses, strict=True)
-        }
-        current_signatures_by_name.update(
-            {
-                model_name: model_analysis_output_signature(invalidated_analysis.polyglot_analysis)
-                for model_name, invalidated_analysis in invalidated_analyses_by_name.items()
-            }
-        )
-    with record_compile_timing("cache_publication_ms"):
-        write_model_analyses(
-            context=analysis_cache,
-            analyses_by_key={
-                request.cache_key: analysis.polyglot_analysis
-                for request, analysis in zip(requests, analyses, strict=True)
-                if request.cache_key is not None
-                and (
-                    request.cache_key not in cached_analyses
-                    or _model_name(request.model_input) in invalidated_names
-                )
-            },
-            latest_analyses_by_model=analyses_to_record_by_name,
-            dependency_signatures_by_key={
-                request.cache_key: upstream_signatures(
-                    model_input=request.model_input,
-                    signatures=current_signatures_by_name,
-                    available_names=analyzed_model_names,
-                )
-                for request in requests
-                if request.cache_key is not None
-                and (
-                    request.cache_key not in cached_analyses
-                    or _model_name(request.model_input) in invalidated_names
-                )
-            },
-        )
-    return {
-        _model_name(model_input): analysis
-        for model_input, analysis in zip(model_inputs, analyses, strict=True)
-    }
-
-
-def _analyze_model_sql_requests(
-    *,
-    requests: tuple[_ModelSqlAnalysisRequest, ...],
-    cached_analyses: dict[str, PolyglotAnalysisResult],
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
-    inference_profile: ExpressionInferenceProfile,
-    allow_compact_analysis: bool,
-    rich_type_inference: bool,
-    cached_compact_batch: tuple[CompactBatchPreparation, object] | None = None,
-    on_compact_response: CompactBatchResponseCallback | None = None,
-    shareable_prekeys: frozenset[str] | None = None,
-) -> tuple[_ModelSqlAnalysis, ...]:
-    if allow_compact_analysis:
-        uncached: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = tuple(
-            (index, request)
-            for index, request in enumerate(requests)
-            if request.cache_key is None or request.cache_key not in cached_analyses
-        )
-        prepared_by_index: dict[int, NativeCompactAnalysis] = {}
-        diagnostics_by_index: dict[int, tuple[SqlBindingDiagnostic, ...]] = {}
-        if uncached:
-            batch_requests: tuple[tuple[int, _ModelSqlAnalysisRequest], ...] = (
-                tuple(enumerate(requests)) if cached_compact_batch is not None else uncached
-            )
-            prepared: tuple[NativeCompactAnalysis, ...] = (
-                analyze_queries_with_compact_polyglot_batch(
-                    query_sqls=tuple(request.query_sql for _, request in batch_requests),
-                    references=tuple(
-                        request.model_input.references for _, request in batch_requests
-                    ),
-                    placeholders=tuple(request.placeholders for _, request in batch_requests),
-                    column_nullability_by_table=column_nullability_by_table,
-                    column_types_by_table=column_types_by_table,
-                    inference_profile=inference_profile,
-                    recover_cte_facts=tuple(
-                        _should_recover_cte_facts(request.model_input)
-                        for _, request in batch_requests
-                    ),
-                    rich_type_inference=rich_type_inference,
-                    cached_batch=cached_compact_batch,
-                    execution=CompactBatchExecutionOptions(
-                        on_response=(
-                            on_compact_response if len(uncached) == len(requests) else None
-                        ),
-                        binding_schemas=tuple(
-                            request.binding_schema for _, request in batch_requests
-                        ),
-                        shareable_prekeys=shareable_prekeys,
-                    ),
-                )
-            )
-            prepared_by_index = {
-                index: value for (index, _), value in zip(batch_requests, prepared, strict=True)
-            }
-            validation_indices: tuple[int, ...] = tuple(
-                index
-                for index, request in uncached
-                if request.binding_schema is not None
-                and prepared_by_index[index].binding_diagnostics is None
-            )
-            with record_compile_timing("binding_validation_ms"):
-                validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
-                    requests=tuple(
-                        SqlSchemaValidationRequest(
-                            sql=prepared_by_index[index].cleaned_sql,
-                            dialect=inference_profile.sql_analysis_dialect,
-                            schema=requests[index].binding_schema or {},
-                            known_functions=inference_profile.semantic_known_functions,
-                            known_types=inference_profile.semantic_known_types,
-                            quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
-                            catalog=inference_profile.binding_catalog,
-                        )
-                        for index in validation_indices
-                    )
-                )
-            diagnostics_by_index = {
-                index: result.diagnostics
-                for index, result in zip(validation_indices, validation_results, strict=True)
-            }
-        return tuple(
-            _analyze_model_sql(
-                request=request,
-                cached_analysis=(
-                    cached_analyses.get(request.cache_key)
-                    if request.cache_key is not None
-                    else None
-                ),
-                column_nullability_by_table=column_nullability_by_table,
-                column_types_by_table=column_types_by_table,
-                inference_profile=inference_profile,
-                allow_compact_analysis=True,
-                precomputed=(
-                    replace(
-                        prepared_by_index[index],
-                        binding_diagnostics=diagnostics_by_index.get(
-                            index, prepared_by_index[index].binding_diagnostics
-                        ),
-                    )
-                    if index in prepared_by_index
-                    else None
-                ),
-            )
-            for index, request in enumerate(requests)
-        )
-
-    def analyze(request: _ModelSqlAnalysisRequest) -> _ModelSqlAnalysis:
-        return _analyze_model_sql(
-            request=request,
-            cached_analysis=(
-                cached_analyses.get(request.cache_key) if request.cache_key is not None else None
-            ),
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            inference_profile=inference_profile,
-            allow_compact_analysis=allow_compact_analysis,
-        )
-
-    return tuple(analyze(request) for request in requests)
-
-
-def _complete_inferred_bindings(
-    *,
-    known_functions: tuple[str, ...],
-    known_types: tuple[str, ...],
-    requests: tuple[_ModelSqlAnalysisRequest, ...],
-    analyses: tuple[_ModelSqlAnalysis, ...],
-    complete_binding_schemas: dict[str, dict[str, str]],
-    inference_profile: ExpressionInferenceProfile,
-    supplied_relations: frozenset[str] = frozenset(),
-) -> tuple[_ModelSqlAnalysis, ...]:
-    """Bind each scope independently, preserving open inputs as empty tables."""
-
-    complete_schemas: dict[str, dict[str, str]] = dict(complete_binding_schemas)
-    results: list[_ModelSqlAnalysis] = list(analyses)
-    indexes: dict[str, int] = {
-        _model_name(request.model_input): index for index, request in enumerate(requests)
-    }
-    available_names: frozenset[str] = frozenset(indexes)
-    graph: dict[str, tuple[str, ...]] = {
-        name: _referenced_model_names(
-            model_input=requests[index].model_input, available_names=available_names
-        )
-        for name, index in indexes.items()
-    }
-    try:
-        ordered_names: tuple[str, ...] = tuple(TopologicalSorter(graph).static_order())
-    except CycleError:
-        return analyses
-    for name in ordered_names:
-        index: int = indexes[name]
-        request: _ModelSqlAnalysisRequest = requests[index]
-        required_names: frozenset[str] | None = binding_required_names(request.model_input)
-        if required_names is None:
-            continue
-        analysis: PolyglotAnalysisResult = results[index].polyglot_analysis
-        inputs_known: bool = bool(required_names) and required_names <= complete_schemas.keys()
-        star_pending: bool = analysis.has_star and not analysis.star_resolved and inputs_known
-        stars_expanded_natively: bool = required_names <= supplied_relations
-        if star_pending and analysis.columns and stars_expanded_natively:
-            analysis = replace(analysis, star_resolved=True)
-            results[index] = replace(results[index], polyglot_analysis=analysis)
-            star_pending = False
-        if (
-            not results[index].cached
-            and required_names
-            and (any(column.type is None for column in analysis.columns or ()) or star_pending)
-            and not re.search(r"\b(?:UNION|INTERSECT|EXCEPT)\b", request.query_sql, re.IGNORECASE)
-        ):
-            input_schemas: dict[str, dict[str, str]] = {
-                table: complete_schemas[table]
-                for table in required_names
-                if table in complete_schemas
-            }
-            nullability: dict[str, dict[str, InferredNullability]] = {
-                table: dict.fromkeys(columns, InferredNullability.UNKNOWN)
-                for table, columns in input_schemas.items()
-            }
-            enriched: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-                query_sql=request.query_sql,
-                references=request.model_input.references,
-                placeholders=request.placeholders,
-                column_types_by_table=input_schemas,
-                column_nullability_by_table=nullability,
-                inference_profile=inference_profile,
-                allow_compact_analysis=True,
-                recover_cte_facts=_should_recover_cte_facts(request.model_input),
-            )
-            recovered_types: dict[str, str | None] = {
-                column.name: column.type
-                for column in (*(enriched.columns or ()), *(analysis.columns or ()))
-                if column.type is not None
-            }
-            star_expanded: bool = star_pending and enriched.analysis_succeeded
-            if (not analysis.columns or star_expanded) and enriched.analysis_succeeded:
-                analysis = replace(
-                    enriched,
-                    binding_diagnostics=analysis.binding_diagnostics,
-                    binding_validated=analysis.binding_validated,
-                )
-            analysis = replace(
-                analysis,
-                columns=tuple(
-                    replace(column, type=column.type or recovered_types.get(column.name))
-                    for column in analysis.columns or ()
-                ),
-                star_resolved=analysis.star_resolved or star_expanded,
-            )
-            results[index] = replace(results[index], polyglot_analysis=analysis)
-        star_known: bool = not analysis.has_star or (analysis.star_resolved and inputs_known)
-        if analysis.columns and star_known and name not in complete_schemas:
-            complete_schemas.setdefault(
-                name,
-                published_model_shape(
-                    sql=results[index].cleaned_sql or request.query_sql,
-                    profile=inference_profile,
-                    columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
-                    inputs={table: complete_schemas.get(table, {}) for table in required_names},
-                    config_values=request.model_input.config.values,
-                ),
-            )
-    deferred_validation_indices: list[int] = []
-    deferred_validation_requests: list[SqlSchemaValidationRequest] = []
-    for index, request in enumerate(requests):
-        if results[index].cached:
-            continue
-        required_names = binding_required_names(request.model_input)
-        if required_names is None:
-            continue
-        if results[index].fused_binding_validated and (
-            results[index].validated_schema or request.binding_schema
-        ) == {name: complete_schemas.get(name, {}) for name in required_names}:
-            continue
-        deferred_validation_indices.append(index)
-        deferred_validation_requests.append(
-            replace(
-                get_complete_schema_binding_request(
-                    query_sql=request.query_sql,
-                    cleaned_sql=results[index].cleaned_sql,
-                    known_functions=known_functions,
-                    known_types=known_types,
-                    placeholders=request.placeholders,
-                    dialect=inference_profile.sql_analysis_dialect,
-                    binding_schema={
-                        name: complete_schemas.get(name, {}) for name in required_names
-                    },
-                ),
-                quoted_identifiers_ignore_case=inference_profile.quoted_identifiers_ignore_case,
-                catalog=inference_profile.binding_catalog,
-            )
-        )
-    with record_compile_timing("binding_validation_ms"):
-        validation_results: tuple[SqlBindingResult, ...] = get_schema_validations(
-            requests=tuple(deferred_validation_requests)
-        )
-    for index, validation_result in zip(
-        deferred_validation_indices, validation_results, strict=True
-    ):
-        current: _ModelSqlAnalysis = results[index]
-        results[index] = replace(
-            current,
-            polyglot_analysis=replace(
-                current.polyglot_analysis,
-                binding_diagnostics=validation_result.diagnostics,
-                binding_validated=True,
-            ),
-        )
-    return tuple(results)
-
-
-def _analyze_model_sql(
-    *,
-    request: _ModelSqlAnalysisRequest,
-    cached_analysis: PolyglotAnalysisResult | None,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
-    inference_profile: ExpressionInferenceProfile,
-    allow_compact_analysis: bool,
-    precomputed: NativeCompactAnalysis | None = None,
-) -> _ModelSqlAnalysis:
-    if cached_analysis is not None:
-        return _ModelSqlAnalysis(
-            polyglot_analysis=cached_analysis,
-            placeholders=request.placeholders,
-            cached=True,
-        )
-    polyglot_analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-        query_sql=request.query_sql,
-        references=request.model_input.references,
-        placeholders=request.placeholders,
-        column_nullability_by_table=column_nullability_by_table,
-        column_types_by_table=column_types_by_table,
-        inference_profile=inference_profile,
-        allow_compact_analysis=allow_compact_analysis,
-        binding_schema=request.binding_schema,
-        recover_cte_facts=_should_recover_cte_facts(request.model_input),
-        precomputed=precomputed,
-    )
-    return _ModelSqlAnalysis(
-        polyglot_analysis=polyglot_analysis,
-        cleaned_sql=precomputed.cleaned_sql if precomputed is not None else None,
-        placeholders=request.placeholders,
-        validated_schema=request.binding_schema,
-        fused_binding_validated=precomputed is not None
-        and precomputed.binding_diagnostics is not None,
-    )
-
-
-def _model_sql_analysis_request(
-    *,
-    model_input: CompileModelInput,
-    analysis_cache: AnalysisCacheContext | None,
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]],
-    column_types_by_table: dict[str, dict[str, str]],
-    complete_binding_schemas: dict[str, dict[str, str]],
-) -> _ModelSqlAnalysisRequest:
-    placeholders: dict[str, str] | None = _model_placeholders(model_input)
-    query_sql: str = cursor_intrinsics_analysis_sql(
-        sql=model_input.query_sql,
-        cursor_type=model_input.config.values.get("cursor_type"),
-    )
-    binding_schema: dict[str, dict[str, str]] | None = binding_schema_for_model(
-        model_input=model_input,
-        complete_binding_schemas=complete_binding_schemas,
-    )
-    cache_key: str | None = (
-        model_analysis_cache_key(
-            context=analysis_cache,
-            query_sql=query_sql,
-            references=model_input.references,
-            placeholders=placeholders,
-            column_nullability_by_table=column_nullability_by_table,
-            column_types_by_table=column_types_by_table,
-            binding_schema=binding_schema,
-            recover_cte_facts=_should_recover_cte_facts(model_input),
-        )
-        if analysis_cache is not None
-        else None
-    )
-    return _ModelSqlAnalysisRequest(
-        model_input=model_input,
-        query_sql=query_sql,
-        placeholders=placeholders,
-        cache_key=cache_key,
-        binding_schema=binding_schema,
-    )
-
-
-def _should_recover_cte_facts(model_input: CompileModelInput) -> bool:
-    return model_input.config.values.get("contract") == ContractPolicy.ENFORCED or (
-        model_input.schema_entry is not None and bool(model_input.schema_entry.type_enforcement)
     )
 
 

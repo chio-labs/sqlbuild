@@ -35,7 +35,6 @@ import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
-import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_waves
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
@@ -3879,13 +3878,6 @@ def twin_header_changed(root: Path) -> None:
         "'Every chained order column.'",
         "'Every chained order column, twice.'",
     )
-
-
-def analyze_one_model_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run the binding dataflow with one worker taking one model at a time."""
-
-    for name in ("_DATAFLOW_WORKERS", "_DATAFLOW_BATCH_MIN", "_DATAFLOW_BATCH_LIMIT"):
-        monkeypatch.setattr(binding_waves, name, 1)
 
 
 def analyze_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:
