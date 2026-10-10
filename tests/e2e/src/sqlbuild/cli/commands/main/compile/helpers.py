@@ -3547,6 +3547,31 @@ def compare_incremental_compile(*, project_dir: Path) -> IncrementalEditComparis
     return IncrementalEditComparison(incremental=incremental, reference=reference)
 
 
+def record_metadata_text_characters(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record the file-text characters each native semantic metadata request carries."""
+
+    sizes: list[int] = []
+    check: Callable[..., object] = cast(
+        Callable[..., object], native_module.check_semantic_metadata_rows
+    )
+
+    def recorded(catalog: object, request: tuple[object, ...]) -> object:
+        sizes.append(sum(len(text) for text in cast(list[str], request[5])))
+        return check(catalog, request)
+
+    monkeypatch.setattr(native_module, "check_semantic_metadata_rows", recorded)
+    return sizes
+
+
+def project_text_characters(project_dir: Path) -> int:
+    """Characters in every file of a project that has not compiled yet."""
+
+    return sum(
+        len(path.read_text(encoding="utf-8"))
+        for path in filter(Path.is_file, project_dir.rglob("*"))
+    )
+
+
 def in_process_reuse_run(
     *, project_dir: Path, capsys: pytest.CaptureFixture[str], args: tuple[str, ...] = ()
 ) -> CompileReuseRun:

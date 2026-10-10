@@ -249,6 +249,15 @@ class DenseCompileGuardTestCase:
 
 
 @dataclass(frozen=True)
+class DenseMetadataTextGuardTestCase:
+    """A dense project whose semantic metadata request may carry each file's text only once."""
+
+    description: str
+    model_count: int
+    expected_requests: int = 1
+
+
+@dataclass(frozen=True)
 class DenseWarmEditCompileGuardTestCase:
     description: str
     model_count: int
