@@ -609,22 +609,22 @@ jobs:
           - kind: fresh
             max_ratio: "1.10"
           - kind: dense
-            label: native-preview contracts vs python
+            label: native contracts vs python
             base_engine: python
-            head_engine: native-preview
+            head_engine: native
             gate_phase: contracts_cpu_ms
             max_ratio: "1.00"
           - kind: dense
-            label: native-preview model analysis vs python
+            label: native model analysis vs python
             base_engine: python
-            head_engine: native-preview
+            head_engine: native
             gate_phase: model_analysis_cpu_ms
             compile_args: --compile-arg=--select=*
             max_ratio: "1.50"
           - kind: dense
-            label: native-preview custom rules vs python
+            label: native custom rules vs python
             base_engine: python
-            head_engine: native-preview
+            head_engine: native
             gate_phase: custom_rules_cpu_ms
             max_ratio: "1.25"
     steps:
@@ -653,7 +653,7 @@ jobs:
       - name: Install base dependencies
         working-directory: base
         run: uv sync --locked --all-groups --all-extras
-      - name: Compare python and native-preview phase CPU on head
+      - name: Compare python and native phase CPU on head
         if: matrix.gate_phase
         env:
           KIND: ${{ matrix.kind }}
