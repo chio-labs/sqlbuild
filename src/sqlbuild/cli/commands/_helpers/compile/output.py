@@ -299,10 +299,10 @@ def _selected_resource_count(
     selected_keys: frozenset[CompiledObjectKey] | None,
     resource_types: set[CompiledResourceType],
 ) -> int:
-    effective_keys: frozenset[CompiledObjectKey] = (
-        frozenset(graph.all_keys.values()) if selected_keys is None else selected_keys
-    )
-    return sum(key.resource_type in resource_types for key in effective_keys)
+    if selected_keys is None:
+        type_names: frozenset[str] = frozenset(map(str, resource_types))
+        return sum(kind in type_names for kind, _ in graph.native.keys())
+    return sum(key.resource_type in resource_types for key in selected_keys)
 
 
 def _resources(*, graph: ProjectGraph, lineage: ProjectColumnLineage | None) -> dict[str, object]:
@@ -331,7 +331,10 @@ def _model_resource(
         "relative_path": str(model.relative_path),
         "materialized": str(model.config.values.get("materialized", "view")),
         "column_count": _column_count(model),
-        "depends_on": [_serialize_key(dep) for dep in graph.upstream_deps.get(model.key, ())],
+        "depends_on": [
+            {"resource_type": kind, "name": name}
+            for kind, name in graph.native.upstream((str(model.key.resource_type), model.key.name))
+        ],
         "lineage": _lineage_summary(lineage=lineage, model=model),
         "query_sql": model.query_sql,
     }
@@ -714,47 +717,8 @@ def _style_diagnostic(*, text: str, diagnostic: CompilerDiagnostic, style: CliSt
     return style.muted(text)
 
 
-def _serialize_key(key: CompiledObjectKey) -> dict[str, str]:
-    return {"resource_type": str(key.resource_type), "name": key.name}
-
-
 def _execution_layer_count(graph: ProjectGraph) -> int:
-    model_keys: set[CompiledObjectKey] = {model.key for model in graph.project.models}
-    if not model_keys:
-        return 0
-    remaining_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {}
-    downstream_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {}
-    for key in model_keys:
-        upstream_models: set[CompiledObjectKey] = set()
-        for dependency in graph.upstream_deps.get(key, ()):
-            if dependency in model_keys:
-                upstream_models.add(dependency)
-        remaining_model_deps[key] = upstream_models
-        downstream_models: set[CompiledObjectKey] = set()
-        for dependency in graph.downstream_deps.get(key, ()):
-            if dependency in model_keys:
-                downstream_models.add(dependency)
-        downstream_model_deps[key] = downstream_models
-    current_layer: set[CompiledObjectKey] = {
-        key for key, deps in remaining_model_deps.items() if not deps
-    }
-    visited: set[CompiledObjectKey] = set()
-    layer_count: int = 0
-    while current_layer:
-        layer_count += 1
-        next_layer: set[CompiledObjectKey] = set()
-        for key in current_layer:
-            visited.add(key)
-            for downstream_key in downstream_model_deps.get(key, set()):
-                if downstream_key in visited:
-                    continue
-                remaining_model_deps[downstream_key].discard(key)
-                if not remaining_model_deps[downstream_key]:
-                    next_layer.add(downstream_key)
-        current_layer = next_layer
-    if len(visited) != len(model_keys):
-        return max(layer_count, 1)
-    return layer_count
+    return graph.native.model_layer_count()
 
 
 def _relative_target_path(path: Path) -> str:

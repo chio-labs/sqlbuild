@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 
 use crate::assembly::project::types::ObjectKey;
 use crate::graph::_helpers::close_matches::close_matches;
-use crate::graph::_helpers::closure::Direction;
 use crate::graph::constants::{
     EMPTY_SELECTOR_CODE, EMPTY_VALUE_CODE, EXPANSION_MARKER, FOLDER_SEPARATOR,
     INTERSECTION_SEPARATOR, KIND_SEPARATOR, MISPLACED_MARKER_CODE, MISSING_NAME_CODE,
@@ -16,7 +15,9 @@ use crate::graph::constants::{
     UNKNOWN_TAG_CODE, UNMAPPED_KIND_CODE, UNMAPPED_KINDS,
 };
 use crate::graph::errors::SelectorError;
-use crate::graph::models::{BuildResources, ParsedSelector, ProjectGraph};
+use crate::graph::models::{
+    BuildResources, EdgeDirection as Direction, ParsedSelector, ProjectGraph,
+};
 
 pub(crate) type Keys = BTreeSet<ObjectKey>;
 type Resolved = Result<Keys, SelectorError>;

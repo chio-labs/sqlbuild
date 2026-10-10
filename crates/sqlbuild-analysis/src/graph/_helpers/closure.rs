@@ -3,14 +3,7 @@
 use std::collections::{BTreeSet, HashSet, VecDeque};
 
 use crate::assembly::project::types::ObjectKey;
-use crate::graph::models::ProjectGraph;
-
-/// Which edge direction a closure follows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Direction {
-    Upstream,
-    Downstream,
-}
+use crate::graph::models::{EdgeDirection as Direction, ProjectGraph};
 
 impl ProjectGraph {
     pub(crate) fn edges(&self, key: &ObjectKey, direction: Direction) -> &[ObjectKey] {

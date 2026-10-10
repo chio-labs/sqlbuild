@@ -15,8 +15,8 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.graph.main._attached_audit_gate_edges import attached_audit_gate_edges
 from sqlbuild.compiler.graph.main._hook_read_edges import hook_read_edges
+from sqlbuild.compiler.graph.main._native_graph_key import native_graph_key
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
-from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -74,12 +74,9 @@ def build_execution_edge_origins(
             origins[(target_key, test.key)] = (
                 f"SQL test '{test.name}' runs before '{target_key.name}'"
             )
-    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        project_lineage_views(project).upstream_deps
-    )
     edge: AttachedAuditGateEdge
     for edge in attached_audit_gate_edges(project=project):
-        if edge.read in lineage_upstream.get(edge.gated, ()):
+        if _is_lineage_edge(project=project, gated=edge.gated, read=edge.read):
             continue
         origins.setdefault(
             (edge.gated, edge.read),
@@ -87,13 +84,19 @@ def build_execution_edge_origins(
         )
     hook_edge: HookReadEdge
     for hook_edge in hook_read_edges(project=project):
-        if hook_edge.read in lineage_upstream.get(hook_edge.gated, ()):
+        if _is_lineage_edge(project=project, gated=hook_edge.gated, read=hook_edge.read):
             continue
         origins.setdefault(
             (hook_edge.gated, hook_edge.read),
             f"{hook_edge.label} on '{hook_edge.gated.name}' reads '{hook_edge.read.name}'",
         )
     return origins
+
+
+def _is_lineage_edge(
+    *, project: CompiledProject, gated: CompiledObjectKey, read: CompiledObjectKey
+) -> bool:
+    return native_graph_key(read) in project.lineage_graph.upstream(native_graph_key(gated))
 
 
 def _function_scope_deps_for_test(*, test: CompiledSqlTest) -> tuple[CompiledObjectKey, ...]:

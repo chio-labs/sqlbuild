@@ -33,6 +33,7 @@ from tests.unit.src.sqlbuild.compiler.dag.main._test_types import (
     DagResourceNamespaceTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact_test_graph
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 
 @pytest.mark.parametrize(
@@ -236,7 +237,7 @@ seeds:
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
     project: CompiledProject = assemble_compiled_project(inputs=inputs)
-    graph: ProjectGraph = ProjectGraph(
+    graph: ProjectGraph = project_graph_from_indexes(
         project=project,
         upstream_deps={},
         downstream_deps={},

@@ -41,6 +41,7 @@ from sqlbuild.spec.contracts.models import (
     SourceColumnEntry,
     SourceEntry,
 )
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 
 def build_dag_artifact_test_graph() -> ProjectGraph:
@@ -242,7 +243,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         function_key: (),
         model_key: (source_key, seed_key, function_key),
     }
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=project,
         upstream_deps=upstream_deps,
         downstream_deps={

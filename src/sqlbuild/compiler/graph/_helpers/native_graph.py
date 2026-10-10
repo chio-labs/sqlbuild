@@ -90,6 +90,13 @@ def lineage_graph_views_impl(graph: _native.NativeProjectGraph) -> LineageGraphV
     )
 
 
+def lineage_graph_names_impl(graph: _native.NativeProjectGraph) -> dict[str, CompiledObjectKey]:
+    """Selector name to key, converted from the native names only."""
+
+    keys: _KeyCache = _KeyCache()
+    return {name: keys.key(key) for name, key in graph.names()}
+
+
 def python_keys(keys: Iterable[NativeKey]) -> frozenset[CompiledObjectKey]:
     """`CompiledObjectKey`s for native pairs."""
 

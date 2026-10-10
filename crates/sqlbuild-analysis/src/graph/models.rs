@@ -75,3 +75,10 @@ pub struct GraphIndexes {
     pub tags: Vec<(String, Vec<ObjectKey>)>,
     pub paths: Vec<(ObjectKey, String)>,
 }
+
+/// Which edge direction a graph query follows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EdgeDirection {
+    Upstream,
+    Downstream,
+}

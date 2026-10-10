@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
+from sqlbuild.compiler.graph.main._lineage_graph_views import lineage_graph_views
+from sqlbuild.compiler.graph.models import LineageGraphViews
 from sqlbuild.compiler.planner.models import (
     CloneSourcePlanEntry,
     CursorOverrides,
@@ -30,15 +33,46 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 
 @dataclass(frozen=True)
 class ProjectGraph:
-    """Static compiled project graph without warehouse state."""
+    """Static compiled project graph held natively; dict views are built only when read."""
 
     project: CompiledProject
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    tag_index: dict[str, frozenset[CompiledObjectKey]]
-    path_index: dict[CompiledObjectKey, str]
-    all_keys: dict[str, CompiledObjectKey]
-    native: _native.NativeProjectGraph | None = field(default=None, compare=False, repr=False)
+    native: _native.NativeProjectGraph = field(compare=False, repr=False)
+
+    @cached_property
+    def lineage_views(self) -> LineageGraphViews:
+        """Lineage edges and selector indexes as dicts, converted from the native graph once."""
+
+        return lineage_graph_views(self.native)
+
+    @property
+    def upstream_deps(self) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
+        """Lineage upstream edges, SQL tests stripped."""
+
+        return self.lineage_views.upstream_deps
+
+    @property
+    def downstream_deps(self) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
+        """Lineage downstream edges sorted by `(resource type, name)`."""
+
+        return self.lineage_views.downstream_deps
+
+    @property
+    def tag_index(self) -> dict[str, frozenset[CompiledObjectKey]]:
+        """Tag to tagged models, seeds and functions."""
+
+        return self.lineage_views.tag_index
+
+    @property
+    def path_index(self) -> dict[CompiledObjectKey, str]:
+        """Model key to its folder below `models/`."""
+
+        return self.lineage_views.path_index
+
+    @property
+    def all_keys(self) -> dict[str, CompiledObjectKey]:
+        """Selector name to key."""
+
+        return self.lineage_views.all_keys
 
 
 @dataclass(frozen=True)

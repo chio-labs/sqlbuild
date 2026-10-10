@@ -26,6 +26,7 @@ from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineage
 from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.spec.contracts.models import SchemaSeedEntry, SettingsConfig, SourceEntry
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 
 def build_lineage_test_graph() -> ProjectGraph:
@@ -123,7 +124,7 @@ def build_lineage_test_graph() -> ProjectGraph:
         fact_orders_key: (daily_rollup_key,),
         daily_rollup_key: (),
     }
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=project,
         upstream_deps=upstream_deps,
         downstream_deps=downstream_deps,
