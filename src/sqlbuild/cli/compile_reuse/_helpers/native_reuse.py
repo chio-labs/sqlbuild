@@ -12,10 +12,10 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild._native import NativeReuseAttempt
-from sqlbuild.cli.compile_reuse._helpers.project_files import redirected_output_files
 from sqlbuild.cli.compile_reuse._helpers.provider_settings import provider_settings_inputs
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import (
     invocation_identity,
+    redirected_output_files,
     runtime_identity,
 )
 from sqlbuild.cli.compile_reuse._helpers.timings import elapsed_ms, reuse_timings
@@ -35,9 +35,9 @@ from sqlbuild.cli.compile_reuse.constants import (
     PROJECT_CONFIG_FILENAMES,
     PROJECT_ROOT_PATH_MTIME_NS,
     RACY_WINDOW_NS,
+    RETIRED_REUSE_DIRECTORY_NAME,
     REUSE_DISABLE_ENV_VAR,
     REUSE_DISABLE_VALUE,
-    REUSE_ENTRY_DIRECTORY_NAME,
     REUSE_HIT_MESSAGE,
     REUSE_LOGGER_NAME,
     REUSE_MAX_ENTRY_BYTES,
@@ -81,10 +81,10 @@ _SKIPPED: str = "skipped"
 
 def native_attempt(
     *, request: CompileReuseRequest, project_dir: str, started: float
-) -> CompileReuseAttempt | None:
-    """Check reuse natively, replaying on a hit; `None` when Python must check instead."""
+) -> CompileReuseAttempt:
+    """Check reuse natively, replaying on a hit."""
 
-    attempt: NativeReuseAttempt | None = _native.check_compile_reuse(
+    attempt: NativeReuseAttempt = _native.check_compile_reuse(
         {
             "project_dir": project_dir,
             "store_directory": compiler_cache_directory(Path(project_dir))
@@ -105,8 +105,6 @@ def native_attempt(
             "rules": reuse_rules(),
         }
     )
-    if attempt is None:
-        return None
     outcome: CompileReuseOutcome = _OUTCOMES[attempt.outcome()]
     base: CompileReuseAttempt = CompileReuseAttempt(
         outcome=outcome, project_dir=Path(project_dir), started=started
@@ -268,7 +266,7 @@ def reuse_rules() -> dict[str, object]:
         "excluded": sorted(EXCLUDED_DIRECTORIES),
         "excluded_root": sorted(EXCLUDED_ROOT_DIRECTORIES),
         "presence_suffixes": list(PRESENCE_ONLY_FILE_SUFFIXES),
-        "output_files": sorted(redirected_output_files()),
+        "output_files": redirected_output_files(),
         "tracked_prefixes": list(TRACKED_ENVIRONMENT_PREFIXES),
         "untracked_names": sorted(UNTRACKED_ENVIRONMENT_NAMES),
         "disabling_variables": [
@@ -284,7 +282,7 @@ def reuse_rules() -> dict[str, object]:
         "missing_path_mtime_ns": MISSING_PATH_MTIME_NS,
         "project_root_path_mtime_ns": PROJECT_ROOT_PATH_MTIME_NS,
         "compiled_root": os.path.join(TARGET_DIRECTORY_NAME, COMPILED_DIRECTORY_NAME),
-        "retired_directories": [REUSE_ENTRY_DIRECTORY_NAME],
+        "retired_directories": [RETIRED_REUSE_DIRECTORY_NAME],
     }
 
 

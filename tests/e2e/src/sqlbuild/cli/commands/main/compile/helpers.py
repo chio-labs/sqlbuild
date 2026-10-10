@@ -32,10 +32,7 @@ import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
-import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
-import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
-import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
 import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_waves
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
@@ -54,22 +51,12 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.cli.compile_reuse._helpers.entry_file import (
-    read_entry_header,
-    read_entry_stdout,
-    write_entry,
-)
 from sqlbuild.cli.compile_reuse.constants import (
+    EXCLUDED_ROOT_DIRECTORIES,
     NATIVE_REUSE_DIRECTORY_NAME,
     NATIVE_REUSE_SUFFIX,
+    RETIRED_REUSE_DIRECTORY_NAME,
     REUSE_DISABLE_ENV_VAR,
-    REUSE_ENTRY_DIRECTORY_NAME,
-    REUSE_ENTRY_SUFFIX,
-)
-from sqlbuild.cli.compile_reuse.models import (
-    ProjectFilesComparison,
-    StoredCompileHeader,
-    StoredCompileInputs,
 )
 from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
@@ -83,6 +70,7 @@ from sqlbuild.compiler.frontier.constants import (
     ENGINE_CACHE_NAMESPACE_SUFFIXES,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
@@ -3003,6 +2991,7 @@ COMPILE_REUSE_ENV: dict[str, str] = {
     COMPILE_REUSE_REGION_ENV_VAR: "north",
 }
 COMPILE_REUSE_HIT_LINE: str = "Inputs unchanged; reused the previous compile"
+REUSE_DIGESTED_FILES_KIND: str = "reuse_digested_files"
 _COMPILE_REUSE_RULES_CONFIG: str = (
     '\n[rules]\nselect = ["XSQBR"]\n\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n'
 )
@@ -3180,61 +3169,14 @@ def recorded_events(*, path: Path) -> list[dict[str, object]]:
 
 
 def compile_reuse_entry_paths(*, project_dir: Path) -> tuple[Path, ...]:
-    """Return every stored compile reuse entry of a project, in either engine's store."""
+    """Return every stored compile reuse slot of a project."""
 
-    cache_directory: Path = compiler_cache_directory(project_dir)
     return tuple(
         sorted(
-            [
-                *(cache_directory / REUSE_ENTRY_DIRECTORY_NAME).glob(f"*{REUSE_ENTRY_SUFFIX}"),
-                *(cache_directory / NATIVE_REUSE_DIRECTORY_NAME).glob(f"*{NATIVE_REUSE_SUFFIX}"),
-            ]
+            (compiler_cache_directory(project_dir) / NATIVE_REUSE_DIRECTORY_NAME).glob(
+                f"*{NATIVE_REUSE_SUFFIX}"
+            )
         )
-    )
-
-
-def _rewrite_compile_reuse_entries(
-    *, project_dir: Path, rewrite: Callable[[StoredCompileInputs], StoredCompileInputs]
-) -> None:
-    for path in compile_reuse_entry_paths(project_dir=project_dir):
-        header: StoredCompileHeader | None = read_entry_header(path=path)
-        assert header is not None
-        stdout: str | None = read_entry_stdout(path=path, header=header)
-        assert stdout is not None
-        write_entry(path=path, inputs=rewrite(header.inputs), output=header.output, stdout=stdout)
-
-
-def simulate_native_build_change(project_dir: Path) -> None:
-    """Simulate an upgraded SQLBuild version and native build in the stored identity."""
-
-    _rewrite_compile_reuse_entries(
-        project_dir=project_dir,
-        rewrite=lambda inputs: replace(
-            inputs, runtime={**inputs.runtime, "native_build": "0.0.0+simulated"}
-        ),
-    )
-
-
-def simulate_python_version_change(project_dir: Path) -> None:
-    """Simulate a different Python interpreter in the stored identity."""
-
-    _rewrite_compile_reuse_entries(
-        project_dir=project_dir,
-        rewrite=lambda inputs: replace(
-            inputs, runtime={**inputs.runtime, "python": "3.0.0 (simulated)"}
-        ),
-    )
-
-
-def simulate_installed_module_change(project_dir: Path) -> None:
-    """Simulate reinstalled packages by aging every recorded module file stamp."""
-
-    _rewrite_compile_reuse_entries(
-        project_dir=project_dir,
-        rewrite=lambda inputs: replace(
-            inputs,
-            modules=tuple((path, mtime_ns - 1, size) for path, mtime_ns, size in inputs.modules),
-        ),
     )
 
 
@@ -3364,27 +3306,6 @@ def write_orders_api_timeout_file(project_dir: Path) -> None:
     )
 
 
-def stored_stdout_path(entry_path: Path) -> Path:
-    """Return the stored stdout file that one entry references."""
-
-    header: StoredCompileHeader | None = read_entry_header(path=entry_path)
-    assert header is not None
-    return entry_path.parent / header.output.stdout_file
-
-
-def flip_stored_stdout_bytes(entry_path: Path) -> None:
-    """Corrupt the stored stdout without changing its length."""
-
-    path: Path = stored_stdout_path(entry_path)
-    path.write_bytes(path.read_bytes()[:-3] + b"xyz")
-
-
-def remove_stored_stdout(entry_path: Path) -> None:
-    """Delete the stored stdout while keeping the entry that references it."""
-
-    stored_stdout_path(entry_path).unlink()
-
-
 def enable_compile_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
     """Enable compile reuse and the fixture environment for in-process compiles."""
 
@@ -3431,24 +3352,23 @@ def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
     path.write_bytes(path.read_bytes())
 
 
-def record_digested_paths(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Record every project file compile reuse reads to compute a content digest."""
+def record_digested_files(*, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, int]]:
+    """Record every native reuse answer, among them the project files read for digests."""
 
-    paths: list[str] = []
-    original: Callable[..., str | None] = reuse_project_files.file_digest
+    reads: list[dict[str, int]] = []
+    original: Callable[..., None] = native_reuse.report_native_answer
 
-    def recording_digest(*, path: str) -> str | None:
-        paths.append(path)
-        return original(path=path)
+    def recording(*, stage: NativeStage, kind: str, units: int = 1) -> None:
+        reads.append({kind: units})
+        original(stage=stage, kind=kind, units=units)
 
-    monkeypatch.setattr(reuse_project_files, "file_digest", recording_digest)
-    return paths
+    monkeypatch.setattr(native_reuse, "report_native_answer", recording)
+    return reads
 
 
 def settle_racy_window(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Treat files written before a compile starts as settled instead of waiting two seconds."""
 
-    monkeypatch.setattr(reuse_project_files, "RACY_WINDOW_NS", 0)
     monkeypatch.setattr(native_reuse, "RACY_WINDOW_NS", 0)
 
 
@@ -3489,15 +3409,16 @@ def compile_in_process_reused(
 
 
 def in_process_compile_reads(
-    *, project_dir: Path, digested: list[str], path: Path, capsys: pytest.CaptureFixture[str]
+    *, project_dir: Path, digested: list[dict[str, int]], capsys: pytest.CaptureFixture[str]
 ) -> tuple[int, int, bool]:
-    """Compile in this process; return its exit code, reads of path, and whether it reused."""
+    """Compile in this process; return its exit code, project files read, and whether it reused."""
 
     start: int = len(digested)
     _ = capsys.readouterr()
     code: int = compile_in_process(project_dir=project_dir)
     reused: bool = COMPILE_REUSE_HIT_LINE in capsys.readouterr().err
-    return code, digested[start:].count(str(path)), reused
+    reads: int = sum(answer.get(REUSE_DIGESTED_FILES_KIND, 0) for answer in digested[start:])
+    return code, reads, reused
 
 
 def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -> None:
@@ -3506,7 +3427,6 @@ def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -
     def raise_error(**_kwargs: Any) -> None:
         raise error
 
-    monkeypatch.setattr(reuse_store, "provider_settings_inputs", raise_error)
     monkeypatch.setattr(native_reuse, "provider_settings_inputs", raise_error)
 
 
@@ -4230,7 +4150,7 @@ def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
         for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values()
     ]
     written.extend(
-        compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME / name
+        compiler_cache_directory(project_dir) / RETIRED_REUSE_DIRECTORY_NAME / name
         for name in RETIRED_RENDER_FILES
     )
     for path in written:
@@ -4296,12 +4216,10 @@ def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make compile reuse believe no project file changed since the stored compile."""
+    """Make compile reuse stop watching the models folder, so a model edit goes unseen."""
 
     monkeypatch.setattr(
-        reuse_attempt,
-        "compare_project_files",
-        lambda **_kwargs: ProjectFilesComparison(unchanged=True, verified={}),
+        native_reuse, "EXCLUDED_ROOT_DIRECTORIES", EXCLUDED_ROOT_DIRECTORIES | {"models"}
     )
 
 

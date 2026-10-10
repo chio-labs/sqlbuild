@@ -4,8 +4,11 @@ use crate::project_reuse::tests::helpers::{
     damage, slot_names, store_aged_slots, stored_inputs, stored_output,
 };
 use crate::project_reuse::tests::test_types::{
-    EntryReadTestCase, SlotPruneTestCase, TimingsSpanTestCase,
+    EntryReadTestCase, NonUnicodeNameTestCase, SlotPruneTestCase, TimingsSpanTestCase,
 };
+use crate::project_snapshot::main::snapshot_project_files::snapshot_project_files;
+use crate::project_snapshot::main::text_path::text_path;
+use crate::project_snapshot::models::SnapshotRules;
 
 #[test]
 fn given_stored_compile_when_reading_then_only_an_intact_slot_round_trips() {
@@ -117,6 +120,48 @@ fn given_report_when_replaying_then_only_a_flat_top_level_timings_object_is_repl
         assert_eq!(
             replayed.as_deref(),
             test_case.expected_replayed,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn given_file_names_when_snapshotting_then_each_stamp_names_its_exact_file() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let test_cases = [
+        NonUnicodeNameTestCase {
+            description: "unicode name",
+            name: "orders_é.sql".as_bytes(),
+            expected_escaped: false,
+        },
+        NonUnicodeNameTestCase {
+            description: "name that is not UTF-8",
+            name: b"orders_\xff.sql",
+            expected_escaped: true,
+        },
+    ];
+
+    for test_case in test_cases {
+        let folder = tempfile::tempdir().expect("project folder");
+        let name = std::ffi::OsStr::from_bytes(test_case.name);
+        std::fs::write(folder.path().join(name), b"SELECT 1").expect("model file");
+
+        let stamps = snapshot_project_files(folder.path(), &SnapshotRules::default());
+
+        assert_eq!(stamps.len(), 1, "{}", test_case.description);
+        assert_eq!(
+            stamps[0].relative_path.starts_with('\0'),
+            test_case.expected_escaped,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            std::fs::read(folder.path().join(text_path(&stamps[0].relative_path)))
+                .expect("file named by the stamp"),
+            b"SELECT 1",
             "{}",
             test_case.description
         );

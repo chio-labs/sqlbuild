@@ -326,7 +326,7 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
     "test_case",
     [
         DefaultEngineStageTestCase(
-            description="discovery_rendering_and_analysis_native_compile_outputs_preview",
+            description="discovery_rendering_and_analysis_native",
             expected_enabled=frozenset(
                 {
                     NativeStage.DISCOVERY,
@@ -345,15 +345,12 @@ def test_given_engine_when_checking_native_stage_then_only_its_tiers_run(
                     NativeStage.LINEAGE_FACTS,
                     NativeStage.SQL_TEST_GLUE,
                     NativeStage.PROJECT_ASSEMBLY,
-                }
-            ),
-            expected_disabled=frozenset(
-                {
                     NativeStage.COMPILE_LINT_INPUTS,
                     NativeStage.RULES_REQUEST,
                     NativeStage.COMPILE_OUTPUTS,
                 }
             ),
+            expected_disabled=frozenset(),
         )
     ],
     ids=lambda case: case.description,

@@ -41,14 +41,8 @@ _PUBLICATION_ERROR: str = (
     "test_case",
     [
         CompileOutputsSequenceTestCase(
-            description="the shipped engine writes outputs in Python",
+            description="the default engine writes outputs and reuses compiles natively",
             engine="native",
-            expected_exit_codes=(0, 0, 0, 0, 0, 0),
-            expected_work=({}, {}, {}, {}, {}, {}),
-        ),
-        CompileOutputsSequenceTestCase(
-            description="the preview engine writes outputs and reuses compiles natively",
-            engine="native-preview",
             expected_exit_codes=(0, 0, 0, 0, 0, 0),
             expected_work=(
                 {
@@ -118,14 +112,14 @@ def test_given_cached_edit_sequence_when_compiling_then_each_step_matches_uncach
     "test_case",
     [
         PublicationFailureTestCase(
-            description="the shipped engine reports the blocked move and recovers",
+            description="the default engine reports the blocked move and recovers",
             engine="native",
             expected_error=_PUBLICATION_ERROR,
-            expected_published_files=0,
+            expected_published_files=9,
         ),
         PublicationFailureTestCase(
-            description="the preview engine reports the same blocked move and recovers",
-            engine="native-preview",
+            description="the python engine publishes natively too",
+            engine="python",
             expected_error=_PUBLICATION_ERROR,
             expected_published_files=9,
         ),

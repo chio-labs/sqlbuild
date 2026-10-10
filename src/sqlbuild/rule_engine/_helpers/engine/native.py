@@ -4,54 +4,29 @@ from __future__ import annotations
 
 import inspect
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 from functools import partial
 from pathlib import Path
-from typing import Any, cast
-
-import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledModelSqlTestPayload,
     CompiledProject,
-    CompiledSqlScenario,
-    CompiledSqlTest,
-    CompileSqlTestCte,
-    DynamicColumnContractProof,
-    InferredColumn,
 )
-from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
-from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
     custom_rule_import_closure,
     custom_rule_test_evidence,
 )
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
-from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
-from sqlbuild.rule_engine._helpers.run.native_memo import (
-    native_payload_digests,
-    native_request_identity,
-    read_native_response,
-    write_native_response,
-)
 from sqlbuild.rule_engine._helpers.run.native_rows import (
     build_rules_request,
     evaluate_rules_request,
     finalize_rules_rows,
-    typed_value_payload,
 )
 from sqlbuild.rule_engine.constants import (
-    NATIVE_RULES_CACHE_FILE,
     RULES_NATIVE_API_VERSION,
     TYPE_PROOF_RULE_CODES,
 )
@@ -64,20 +39,6 @@ from sqlbuild.rule_engine.models import (
     RulesConfig,
     RulesResult,
 )
-
-
-@dataclass(frozen=True)
-class _EncodedNativeRequest:
-    request_json: bytes
-    model_jsons: list[bytes]
-    model_digests: list[str]
-
-
-@dataclass(frozen=True)
-class _PreparedNativeRequest:
-    identity: str | None
-    reused: str | None
-    parsed: _native.ParsedRulesRequest | None
 
 
 def evaluate_native(
@@ -100,48 +61,19 @@ def evaluate_native(
         if custom_payloads is None
         else custom_payloads
     )
-    if native_stage_enabled(NativeStage.RULES_REQUEST):
-        return _evaluate_native_rows(
-            project=project,
-            config=config,
-            project_dir=project_dir,
-            dialect=dialect,
-            initial_findings=initial_findings,
-            defer_suppressions=defer_suppressions,
-            custom_payloads=payloads,
-            start_custom=(
-                (lambda **_: custom_outcome)
-                if custom_payloads is not None
-                else partial(
-                    start_custom_rules,
-                    project=project,
-                    config=config,
-                    project_dir=project_dir,
-                    catalogue=catalogue,
-                    custom_payloads=payloads,
-                    dialect=dialect,
-                    verify_determinism=verify_determinism,
-                )
-            ),
-        )
-    prepared: _PreparedNativeRequest = _prepare_native_request(
-        encoded=_encode_native_request(
-            project=project,
-            config=config,
-            project_dir=project_dir,
-            dialect=dialect,
-            initial_findings=initial_findings,
-            custom_payloads=payloads,
-        ),
+    return _evaluate_native_rows(
+        project=project,
+        config=config,
         project_dir=project_dir,
-        cache_enabled=config.cache.enabled,
-    )
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="sqlbuild-custom-rules") as pool:
-        custom_future: Future[CustomRulesOutcome] | None = (
-            custom_outcome
+        dialect=dialect,
+        initial_findings=initial_findings,
+        defer_suppressions=defer_suppressions,
+        custom_payloads=payloads,
+        start_custom=(
+            (lambda **_: custom_outcome)
             if custom_payloads is not None
-            else start_custom_rules(
-                executor=pool,
+            else partial(
+                start_custom_rules,
                 project=project,
                 config=config,
                 project_dir=project_dir,
@@ -150,49 +82,7 @@ def evaluate_native(
                 dialect=dialect,
                 verify_determinism=verify_determinism,
             )
-        )
-        reused: bool = prepared.reused is not None
-        try:
-            response: object = orjson.loads(
-                _evaluate_request(prepared=prepared, project_dir=project_dir)
-            )
-        except (ValueError, TypeError) as error:
-            raise RulesError(str(error)) from error
-        del prepared
-        custom: CustomRulesOutcome = (
-            CustomRulesOutcome(findings=(), cache_hits=0, cache_misses=0, custom_ms=0)
-            if custom_future is None
-            else custom_future.result()
-        )
-    if not isinstance(response, dict):
-        raise RulesError("native rules engine returned an invalid response")
-    payload: dict[str, Any] = response
-    if payload.get("version") != RULES_NATIVE_API_VERSION:
-        raise RulesError("native rules engine returned an unsupported response version")
-    raw_findings: object = payload.get("faults")
-    selected_codes: object = payload.get("selected_codes")
-    if not isinstance(raw_findings, list) or not isinstance(selected_codes, list):
-        raise RulesError("native rules engine returned invalid findings")
-    findings: tuple[Finding, ...] = tuple(
-        decode_rule_finding(value) for value in (*raw_findings, *custom.findings)
-    )
-    if not defer_suppressions:
-        findings = finalize_native_findings(
-            config=config,
-            project_dir=project_dir,
-            evaluated_codes=tuple(str(code) for code in selected_codes),
-            findings=findings,
-        )
-    native_hits: int = int(payload.get("cache_hits", 0))
-    native_misses: int = int(payload.get("cache_misses", 0))
-    return RulesResult(
-        findings=findings,
-        evaluated_models=int(payload.get("evaluated_models", 0)),
-        cache_hits=(native_hits + native_misses if reused else native_hits) + custom.cache_hits,
-        cache_misses=(0 if reused else native_misses) + custom.cache_misses,
-        built_in_ms=0 if reused else int(payload.get("built_in_ms", 0)),
-        custom_ms=custom.custom_ms,
-        custom_cpu_ms=custom.custom_cpu_ms,
+        ),
     )
 
 
@@ -250,76 +140,6 @@ def _evaluate_native_rows(
     )
 
 
-def _encode_native_request(
-    *,
-    project: CompiledProject,
-    config: RulesConfig,
-    project_dir: Path,
-    dialect: str,
-    initial_findings: tuple[Finding, ...],
-    custom_payloads: list[dict[str, object]],
-) -> _EncodedNativeRequest:
-    """Encode each model separately so its digest keys cached findings without a second pass."""
-
-    include_type_proof: bool = any(
-        _rule_selected(config=config, code=code) for code in TYPE_PROOF_RULE_CODES
-    )
-    model_jsons: list[bytes] = [
-        _serialise_native_request(payload)
-        for payload in _model_payloads(
-            project=project, dialect=dialect, include_type_proof=include_type_proof
-        )
-    ]
-    return _EncodedNativeRequest(
-        request_json=_serialise_native_request(
-            _native_request(
-                project=project,
-                config=config,
-                project_dir=project_dir,
-                dialect=dialect,
-                initial_findings=initial_findings,
-                custom_payloads=custom_payloads,
-            )
-        ),
-        model_jsons=model_jsons,
-        model_digests=native_payload_digests(model_jsons),
-    )
-
-
-def _native_request(
-    *,
-    project: CompiledProject,
-    config: RulesConfig,
-    project_dir: Path,
-    dialect: str,
-    initial_findings: tuple[Finding, ...],
-    custom_payloads: list[dict[str, object]],
-) -> dict[str, object]:
-    return {
-        "version": RULES_NATIVE_API_VERSION,
-        "project_dir": str(project_dir.resolve()),
-        "dialect": dialect,
-        "config": _config_payload(config),
-        "sql_tests": _sql_test_payloads(project),
-        "sql_scenarios": _sql_scenario_payloads(project),
-        "public_enums": [
-            _enum_payload(declaration) for declaration in project.public_enums.values()
-        ],
-        "public_constants": [
-            _constant_payload(declaration) for declaration in project.public_constants.values()
-        ],
-        "scope_index": scope_metadata_projection(index=project.scope_index),
-        "initial_findings": [_finding_payload(finding) for finding in initial_findings],
-        "defer_suppressions": True,
-        "custom_rules": custom_payloads,
-        "rules_cache_path": str(
-            rules_bulk_cache_path(
-                project_dir=project_dir.resolve(), file_name=NATIVE_RULES_CACHE_FILE
-            )
-        ),
-    }
-
-
 def start_custom_rules(
     *,
     executor: Executor,
@@ -369,59 +189,6 @@ def _selected_custom_rules(
     return tuple(rule for rule in catalogue if rule.custom and rule.code in selected)
 
 
-def _serialise_native_request(request: dict[str, object]) -> bytes:
-    """Encode one native request part, reporting values the encoder rejects as rules errors."""
-
-    try:
-        return orjson.dumps(request, option=orjson.OPT_SORT_KEYS, default=str)
-    except orjson.JSONEncodeError as error:
-        raise RulesError(str(error)) from error
-
-
-def _prepare_native_request(
-    *, encoded: _EncodedNativeRequest, project_dir: Path, cache_enabled: bool
-) -> _PreparedNativeRequest:
-    """Resolve the memo, else decode natively so the encoded payloads die when this returns."""
-
-    identity: str | None = (
-        native_request_identity(
-            request_json=encoded.request_json, model_digests=encoded.model_digests
-        )
-        if cache_enabled
-        else None
-    )
-    reused: str | None = (
-        read_native_response(project_dir=project_dir, identity=identity)
-        if identity is not None
-        else None
-    )
-    return _PreparedNativeRequest(
-        identity=identity,
-        reused=reused,
-        parsed=_parse_native_request(encoded) if reused is None else None,
-    )
-
-
-def _parse_native_request(encoded: _EncodedNativeRequest) -> _native.ParsedRulesRequest:
-    try:
-        return _native.parse_rules_parts(
-            encoded.request_json, encoded.model_jsons, encoded.model_digests
-        )
-    except (ValueError, TypeError) as error:
-        raise RulesError(str(error)) from error
-
-
-def _evaluate_request(*, prepared: _PreparedNativeRequest, project_dir: Path) -> str:
-    if prepared.reused is not None:
-        return prepared.reused
-    response: str = _native.evaluate_parsed_rules(cast(_native.ParsedRulesRequest, prepared.parsed))
-    if prepared.identity is not None:
-        write_native_response(
-            project_dir=project_dir, identity=prepared.identity, response=response
-        )
-    return response
-
-
 def finalize_native_findings(
     *,
     config: RulesConfig,
@@ -431,34 +198,14 @@ def finalize_native_findings(
 ) -> tuple[Finding, ...]:
     """Apply exception policy once to completed SQL, native, and custom findings."""
 
-    if native_stage_enabled(NativeStage.RULES_REQUEST):
-        return _with_fixable(
-            original=findings,
-            finalized=finalize_rules_rows(
-                config=config,
-                project_dir=project_dir,
-                evaluated_codes=evaluated_codes,
-                findings=findings,
-            ),
-        )
-    request: dict[str, object] = {
-        "version": RULES_NATIVE_API_VERSION,
-        "project_dir": str(project_dir.resolve()),
-        "config": _config_payload(config),
-        "evaluated_codes": evaluated_codes,
-        "findings": [_finding_payload(finding) for finding in findings],
-    }
-    try:
-        payload: object = orjson.loads(
-            _native.finalize_rule_findings_json(orjson.dumps(request).decode())
-        )
-    except (ValueError, TypeError) as error:
-        raise RulesError(str(error)) from error
-    if not isinstance(payload, list):
-        raise RulesError("native rules engine returned invalid finalized findings")
     return _with_fixable(
         original=findings,
-        finalized=tuple(decode_rule_finding(value) for value in payload),
+        finalized=finalize_rules_rows(
+            config=config,
+            project_dir=project_dir,
+            evaluated_codes=evaluated_codes,
+            findings=findings,
+        ),
     )
 
 
@@ -575,244 +322,6 @@ def _rule_selected(*, config: RulesConfig, code: str) -> bool:
     selected: bool = any(code.startswith(selector) for selector in config.select)
     ignored: bool = any(code.startswith(selector) for selector in config.ignore)
     return selected and not ignored
-
-
-def _model_payloads(
-    *, project: CompiledProject, dialect: str, include_type_proof: bool
-) -> Iterator[dict[str, object]]:
-    audit_counts: dict[str, int] = {}
-    for audit in project.audits:
-        if audit.attached_target_name is not None:
-            audit_counts[audit.attached_target_name] = (
-                audit_counts.get(audit.attached_target_name, 0) + 1
-            )
-    test_counts: dict[str, int] = {}
-    for test in project.sql_tests:
-        if test.mode is not SqlTestMode.MODEL:
-            continue
-        for name in test.target_model_names:
-            test_counts[name] = test_counts.get(name, 0) + 1
-    return (
-        dict(
-            _model_payload(
-                model=model,
-                compiled_audit_count=audit_counts.get(model.name, 0),
-                targeting_test_count=test_counts.get(model.name, 0),
-                dialect=dialect,
-                include_type_proof=include_type_proof,
-            ),
-            sql_analysis_disabled=not project.settings.sql_analysis
-            or model.config.values.get("sql_analysis") is False,
-        )
-        for model in project.models
-    )
-
-
-def _sql_test_payloads(project: CompiledProject) -> list[dict[str, object]]:
-    return [_sql_test_payload(test) for test in project.sql_tests]
-
-
-def _sql_test_payload(test: CompiledSqlTest) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "source_path": (test.source_path or test.test_file.relative_path).as_posix(),
-        "ownership_root": (test.ownership_root or test.test_file.ownership_root).as_posix(),
-        "block_index": test.block_index or test.test_block.test_index,
-        "name": test.name,
-        "explicit_name": test.explicit_name,
-        "mode": test.mode.value,
-        "expected_model_names": list(test.expected_model_names),
-        "assertion_names": list(test.assertion_names),
-        "assertion_target_model_names": list(test.assertion_target_model_names),
-        "target_model_names": list(test.target_model_names),
-        "tested_resources": [
-            {"kind": resource.kind.value, "name": resource.name}
-            for resource in test.tested_resources
-        ],
-    }
-    if isinstance(test.payload, CompiledModelSqlTestPayload):
-        payload.update(
-            {
-                "authored_ctes": _sql_test_cte_payloads(test.payload.authored_ctes),
-                "expected_ctes": _sql_test_cte_payloads(test.payload.expected_ctes),
-                "assertion_ctes": _sql_test_cte_payloads(test.payload.assertion_ctes),
-                "has_macro_mocks": bool(test.payload.macro_mocks),
-                "has_model_query_overrides": bool(test.payload.model_query_overrides),
-            }
-        )
-    if test.case_name is not None:
-        parameter_types: dict[str, str] = {
-            parameter.name: parameter.value_type.value for parameter in test.parameter_schema
-        }
-        payload.update(
-            {
-                "parent_name": test.parent_name,
-                "case_name": test.case_name,
-                "case_index": test.case_index,
-                "case_fingerprint": test.case_fingerprint,
-                "parameter_schema": [
-                    {
-                        "name": parameter.name,
-                        "type": parameter.value_type.value,
-                        "nullable": parameter.nullable,
-                    }
-                    for parameter in test.parameter_schema
-                ],
-                "parameters": [
-                    {
-                        "name": name,
-                        "type": parameter_types[name],
-                        "value": typed_value_payload(value),
-                    }
-                    for name, value in test.parameter_values
-                ],
-            }
-        )
-    return payload
-
-
-def _sql_test_cte_payloads(ctes: tuple[CompileSqlTestCte, ...]) -> list[dict[str, str]]:
-    return [{"name": cte.name, "sql": cte.sql_body} for cte in ctes]
-
-
-def _sql_scenario_payloads(project: CompiledProject) -> list[dict[str, object]]:
-    return [_sql_scenario_payload(scenario) for scenario in project.sql_scenarios]
-
-
-def _sql_scenario_payload(scenario: CompiledSqlScenario) -> dict[str, object]:
-    description: object | None = scenario.scenario_file.header_values.get("description")
-    return {
-        "source_path": (scenario.source_path or scenario.scenario_file.relative_path).as_posix(),
-        "ownership_root": (
-            scenario.ownership_root or scenario.scenario_file.ownership_root
-        ).as_posix(),
-        "name": scenario.name,
-        "description": description if isinstance(description, str) else None,
-        "expected_model_names": list(scenario.expected_model_names),
-        "assertion_names": list(scenario.assertion_names),
-        "assertion_target_model_names": list(scenario.assertion_target_model_names),
-        "target_model_names": list(scenario.target_model_names),
-    }
-
-
-def _model_payload(
-    *,
-    model: CompiledModel,
-    compiled_audit_count: int,
-    targeting_test_count: int,
-    dialect: str,
-    include_type_proof: bool,
-) -> dict[str, object]:
-    schema_audit_count: int = 0
-    columns: list[dict[str, object]] = []
-    if model.schema_entry is not None:
-        inferred_by_name: dict[str, InferredColumn] = {
-            column.name: column for column in (model.inferred_columns or ())
-        }
-        schema_audit_count = len(model.schema_entry.audits) + sum(
-            len(column.audits) for column in model.schema_entry.columns
-        )
-        for column in model.schema_entry.columns:
-            payload: dict[str, object] = {
-                "name": column.name,
-                "type": column.type or "",
-                "nullable": column.nullable,
-                "audit_count": len(column.audits),
-            }
-            if include_type_proof:
-                payload["type_proven"] = bool(
-                    column.type
-                    and (inferred := inferred_by_name.get(column.name)) is not None
-                    and inferred.type
-                    and types_equal(
-                        left=column.type,
-                        right=inferred.type,
-                        dialect=dialect,
-                    )
-                )
-            columns.append(payload)
-    dynamic_columns: list[dict[str, object]] = []
-    dynamic_columns_proven: bool = False
-    if model.schema_entry is not None and model.schema_entry.dynamic_columns:
-        proof: DynamicColumnContractProof | None = model.dynamic_column_contract
-        dynamic_columns_proven = bool(proof is not None and proof.output_proven)
-        proof_types: dict[str, str | None] = (
-            {family.name.casefold(): family.inferred_type for family in proof.families}
-            if proof is not None
-            else {}
-        )
-        for family in model.schema_entry.dynamic_columns:
-            inferred_type: str | None = proof_types.get(family.name.casefold())
-            dynamic_columns.append(
-                {
-                    "name": family.name,
-                    "pivot_column": family.pivot_column,
-                    "value_column": family.value_column,
-                    "aggregate": family.aggregate,
-                    "type": family.type,
-                    "name_pattern": family.name_pattern,
-                    "type_proven": bool(
-                        include_type_proof
-                        and inferred_type
-                        and types_equal(
-                            left=family.type,
-                            right=inferred_type,
-                            dialect=dialect,
-                        )
-                    ),
-                }
-            )
-    return {
-        "name": model.name,
-        "relative_path": model.relative_path.as_posix(),
-        "query_sql": model.query_sql,
-        "authored_sql": model.authored_query_sql or model.authored_sql,
-        "config": model.config.values,
-        "authored_config_keys": list(model.config.model_header_keys),
-        "logical_schema": model.config.layer_schema,
-        "references": [
-            {
-                "ref_kind": str(reference.ref_kind),
-                "ref_name": reference.ref_name,
-                "ref_package": reference.ref_package,
-            }
-            for reference in model.references
-        ],
-        "columns": columns,
-        "dynamic_columns": dynamic_columns,
-        "dynamic_columns_proven": dynamic_columns_proven,
-        "bare_dynamic_pivot": bool(
-            model.dynamic_column_contract is not None
-            and model.dynamic_column_contract.bare_dynamic_pivot
-        ),
-        "enum_columns": list(model.enum_columns),
-        "enum_declarations": [
-            _enum_payload(declaration) for declaration in model.enum_declarations
-        ],
-        "constant_declarations": [
-            _constant_payload(declaration) for declaration in model.constant_declarations
-        ],
-        "declared_audit_count": max(schema_audit_count, compiled_audit_count),
-        "targeting_test_count": targeting_test_count,
-    }
-
-
-def _enum_payload(declaration: EnumDeclaration) -> dict[str, object]:
-    return {
-        "name": declaration.name,
-        "relative_path": declaration.relative_path.as_posix(),
-        "members": [{"name": member.name, "value": member.value} for member in declaration.members],
-    }
-
-
-def _constant_payload(declaration: ConstantDeclaration) -> dict[str, object]:
-    return {
-        "name": declaration.name,
-        "relative_path": declaration.relative_path.as_posix(),
-        "members": [],
-        "value": typed_value_payload(declaration.value),
-        "value_type": declaration.logical_type.display_name,
-        "render_as": declaration.render_as.value if declaration.render_as is not None else None,
-    }
 
 
 def custom_rule_payloads(

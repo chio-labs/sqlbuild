@@ -1,8 +1,4 @@
-"""Externally visible outcomes of the natively built rules request under the preview engine.
-
-The Python-encoder tests in `engine/test_native_request.py`, `test_native_memo.py`,
-`test_scope_facts.py` and `test_native_facts.py` describe the shipped engine's encoder only.
-"""
+"""Externally visible outcomes of the natively built rules request."""
 
 from pathlib import Path
 
@@ -13,14 +9,13 @@ from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import evaluate_contract_rule
 from tests.unit.src.sqlbuild.rule_engine._helpers.run._test_types import (
-    PreviewRowsEncodeErrorTestCase,
-    PreviewRowsMemoTestCase,
+    NativeRowsEncodeErrorTestCase,
+    NativeRowsMemoTestCase,
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.run.helpers import (
     rebuild_identity,
     record_custom_starts,
     record_reuse,
-    use_preview_engine,
 )
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
@@ -28,7 +23,7 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
 @pytest.mark.parametrize(
     "test_case",
     [
-        PreviewRowsEncodeErrorTestCase(
+        NativeRowsEncodeErrorTestCase(
             description="integer beyond 64 bits", rejected_value=2**70, expected_message="64-bit"
         ),
     ],
@@ -37,9 +32,8 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
 def test_given_config_value_the_encoder_rejects_when_building_natively_then_rules_error_is_raised(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    test_case: PreviewRowsEncodeErrorTestCase,
+    test_case: NativeRowsEncodeErrorTestCase,
 ) -> None:
-    use_preview_engine(monkeypatch=monkeypatch)
     started: list[str] = record_custom_starts(monkeypatch=monkeypatch)
     project: CompiledProject = build_project(
         name="orders",
@@ -61,15 +55,14 @@ def test_given_config_value_the_encoder_rejects_when_building_natively_then_rule
 
 @pytest.mark.parametrize(
     "test_case",
-    [PreviewRowsMemoTestCase("memoized response follows the native build", (False, False, True))],
+    [NativeRowsMemoTestCase("memoized response follows the native build", (False, False, True))],
     ids=lambda case: case.description,
 )
 def test_given_memoized_response_from_another_build_when_evaluating_natively_then_rules_rerun(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    test_case: PreviewRowsMemoTestCase,
+    test_case: NativeRowsMemoTestCase,
 ) -> None:
-    use_preview_engine(monkeypatch=monkeypatch)
     reused: list[bool] = record_reuse(monkeypatch=monkeypatch)
     config_values: dict[str, object] = {"materialized": "table"}
 

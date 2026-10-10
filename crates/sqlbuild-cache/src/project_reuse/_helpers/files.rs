@@ -7,6 +7,7 @@ use crate::digest::main::digest_files::digest_files;
 use crate::digest::main::hex_digest::hex_digest;
 use crate::project_reuse::constants::NATIVE_DIGEST_PREFIX;
 use crate::project_reuse::models::{ReuseAttempt, StoredProjectFile};
+use crate::project_snapshot::main::text_path::text_path;
 use crate::project_snapshot::models::PathStamp;
 
 const FILE: &str = "f";
@@ -79,7 +80,7 @@ pub(crate) fn compare_project_files(
             return (false, verified, read);
         };
         read += 1;
-        match file_digest(&project_dir.join(&stamp.relative_path)) {
+        match file_digest(&project_dir.join(text_path(&stamp.relative_path))) {
             Some(digest) if digest == *previous_digest => {
                 let _ = verified.insert(stamp.relative_path.clone(), digest);
             }
@@ -178,7 +179,7 @@ pub(crate) fn with_missing_digests(
         .collect();
     let files: Vec<PathBuf> = missing
         .iter()
-        .map(|stamp| attempt.project_dir.join(&stamp.relative_path))
+        .map(|stamp| attempt.project_dir.join(text_path(&stamp.relative_path)))
         .collect();
     for (stamp, digest) in missing.iter().zip(file_digests(&files)) {
         if let Some(digest) = digest {

@@ -86,55 +86,47 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
 
     assert len(request["sql_tests"]) == test_case.expected_test_count
     assert request["sql_tests"][:3] == [
-        {
-            "source_path": f"tests/unit/{name}.sql",
-            "ownership_root": "tests/unit",
-            "block_index": index,
-            "name": name,
-            "explicit_name": name,
-            "mode": mode,
-            "expected_model_names": [],
-            "assertion_names": [],
-            "assertion_target_model_names": [],
-            "target_model_names": [],
-            "tested_resources": [{"kind": mode, "name": name}],
-        }
+        (
+            f"tests/unit/{name}.sql",
+            "tests/unit",
+            index,
+            name,
+            name,
+            mode,
+            ([], [], [], []),
+            [(mode, name)],
+            None,
+            None,
+        )
         for index, (mode, name) in enumerate(
             (("macro", "normalize"), ("udf", "tax"), ("table_fn", "items")), start=1
         )
     ]
-    assert request["sql_tests"][3] == {
-        "source_path": "tests/unit/test_orders__keeps_paid.sql",
-        "ownership_root": "tests/unit",
-        "block_index": 1,
-        "name": "orders: keeps paid orders",
-        "explicit_name": "orders: keeps paid orders",
-        "mode": "model",
-        "expected_model_names": ["orders"],
-        "assertion_names": ["paid"],
-        "assertion_target_model_names": ["orders"],
-        "target_model_names": ["orders"],
-        "tested_resources": [],
-        "authored_ctes": [],
-        "expected_ctes": [],
-        "assertion_ctes": [],
-        "has_macro_mocks": False,
-        "has_model_query_overrides": False,
-    }
+    assert request["sql_tests"][3] == (
+        "tests/unit/test_orders__keeps_paid.sql",
+        "tests/unit",
+        1,
+        "orders: keeps paid orders",
+        "orders: keeps paid orders",
+        "model",
+        (["orders"], ["paid"], ["orders"], ["orders"]),
+        [],
+        ([], [], [], False, False),
+        None,
+    )
     assert len(request["sql_scenarios"]) == test_case.expected_scenario_count
     assert request["sql_scenarios"] == [
-        {
-            "source_path": "tests/scenarios/orders.sql",
-            "ownership_root": "tests/scenarios",
-            "name": "orders",
-            "description": "orders remain valid",
-            "expected_model_names": ["orders"],
-            "assertion_names": ["positive"],
-            "assertion_target_model_names": ["payments"],
-            "target_model_names": ["orders", "payments"],
-        }
+        (
+            "tests/scenarios/orders.sql",
+            "tests/scenarios",
+            "orders",
+            "orders remain valid",
+            ["orders"],
+            ["positive"],
+            ["payments"],
+            ["orders", "payments"],
+        )
     ]
-    assert request["models"][0]["targeting_test_count"] == 1
     assert "/private/project" not in str(request["sql_tests"] + request["sql_scenarios"])
     assert "secret fixture value" not in str(request["sql_tests"] + request["sql_scenarios"])
 

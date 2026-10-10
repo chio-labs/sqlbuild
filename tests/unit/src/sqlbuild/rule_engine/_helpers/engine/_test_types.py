@@ -214,23 +214,6 @@ class NativeBuildIdentityTestCase:
 
 
 @dataclass(frozen=True)
-class NativeRequestBuildErrorTestCase:
-    """One programming error raised while building the native rules request."""
-
-    description: str
-    expected_error: Exception
-
-
-@dataclass(frozen=True)
-class NativeRequestEncodeErrorTestCase:
-    """One request value the JSON encoder rejects."""
-
-    description: str
-    rejected_value: object
-    expected_message: str
-
-
-@dataclass(frozen=True)
 class IncrementalRulesModeTestCase:
     """Evaluation options under which incremental results must equal full evaluation."""
 

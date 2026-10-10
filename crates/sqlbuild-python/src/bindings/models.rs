@@ -3,16 +3,8 @@
 use pyo3::{FromPyObject, pyclass};
 use sqlbuild_analysis::semantic_validation::models as validation;
 use sqlbuild_analysis::semantic_validation::types::{Expansion, Relations};
-use sqlbuild_rules::models::EvaluateRequest;
 use std::collections::HashMap;
 use std::sync::Mutex;
-
-/// A decoded rules request held natively so the caller can release its encoded payloads.
-#[pyclass(module = "sqlbuild._native")]
-#[derive(Debug)]
-pub(crate) struct ParsedRulesRequest {
-    pub(crate) request: Mutex<Option<EvaluateRequest>>,
-}
 
 #[derive(FromPyObject, Debug)]
 #[pyo3(from_item_all)]

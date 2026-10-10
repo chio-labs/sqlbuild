@@ -32,9 +32,9 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.LINEAGE_FACTS: NativeStageTier.SHIPPED,
     NativeStage.SQL_TEST_GLUE: NativeStageTier.SHIPPED,
     NativeStage.PROJECT_ASSEMBLY: NativeStageTier.SHIPPED,
-    NativeStage.COMPILE_LINT_INPUTS: NativeStageTier.PREVIEW,
-    NativeStage.RULES_REQUEST: NativeStageTier.PREVIEW,
-    NativeStage.COMPILE_OUTPUTS: NativeStageTier.PREVIEW,
+    NativeStage.COMPILE_LINT_INPUTS: NativeStageTier.SHIPPED,
+    NativeStage.RULES_REQUEST: NativeStageTier.SHIPPED,
+    NativeStage.COMPILE_OUTPUTS: NativeStageTier.SHIPPED,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
     CompilerEngine.PYTHON: frozenset(),
@@ -74,7 +74,6 @@ STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.compile.models:DeclarationScopeResolver": frozenset({"native_contexts"}),
     "sqlbuild.compiler.compile.models:DeclarationScopeBuild": frozenset({"sql_test_scans"}),
     "sqlbuild.compiler.compile.models:CompiledProject": frozenset({"native_session"}),
-    "sqlbuild.compiler.compile.models:CompileModelInput": frozenset({"lint_expansion"}),
 }
 STAGE_CAPTURE_DECODED_SEQUENCES: frozenset[str] = frozenset(
     {"sqlbuild.compiler.compile.models:CompactLineageFacts"}

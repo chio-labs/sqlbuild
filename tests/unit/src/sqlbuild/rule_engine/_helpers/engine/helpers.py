@@ -1,7 +1,6 @@
 """Test helpers for native rules engine boundaries."""
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from operator import attrgetter
 from pathlib import Path
@@ -24,11 +23,13 @@ from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
+from sqlbuild.rule_engine._helpers.run import native_rows
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
     Finding,
+    NativeRulesEvaluation,
     Rule,
     RuleExemption,
     RuleIgnore,
@@ -57,31 +58,33 @@ def project_with_scope(*, index: ScopeIndex) -> CompiledProject:
 def captured_native_request(
     *, monkeypatch: pytest.MonkeyPatch, project: CompiledProject, project_dir: Path
 ) -> dict[str, Any]:
-    """Evaluate through the Python boundary and capture the serialized request."""
+    """Evaluate through the Python boundary and capture the header and rows handed to Rust."""
 
     captured: dict[str, Any] = {}
 
-    def parse_rules_parts(
-        request_json: bytes, model_jsons: list[bytes], model_digests: list[str]
-    ) -> object:
-        captured.update(cast(dict[str, Any], json.loads(request_json)))
-        captured["models"] = [json.loads(model_json) for model_json in model_jsons]
-        return object()
+    def build_rules_request(
+        project_rows: dict[str, Any],
+        models: list[tuple[object, ...]],
+        sql_tests: list[tuple[object, ...]],
+        sql_scenarios: list[tuple[object, ...]],
+    ) -> tuple[object, tuple[int, int, int]]:
+        captured.update(cast(dict[str, Any], json.loads(project_rows["header_json"])))
+        captured.update(models=models, sql_tests=sql_tests, sql_scenarios=sql_scenarios)
+        return object(), (len(models), len(sql_tests), len(sql_scenarios))
 
-    def evaluate_parsed_rules(parsed: object) -> str:
-        return json.dumps(
-            {
-                "version": 1,
-                "faults": [],
-                "evaluated_models": 0,
-                "cache_hits": 0,
-                "cache_misses": 0,
-                "selected_codes": [],
-            }
+    def evaluate_rules_request(request: object) -> NativeRulesEvaluation:
+        return NativeRulesEvaluation(
+            findings=(),
+            selected_codes=(),
+            evaluated_models=0,
+            cache_hits=0,
+            cache_misses=0,
+            built_in_ms=0,
+            reused=False,
         )
 
-    monkeypatch.setattr(native._native, "parse_rules_parts", parse_rules_parts)
-    monkeypatch.setattr(native._native, "evaluate_parsed_rules", evaluate_parsed_rules)
+    monkeypatch.setattr(native_rows._native, "build_rules_request", build_rules_request)
+    monkeypatch.setattr(native, "evaluate_rules_request", evaluate_rules_request)
     native.evaluate_native(
         project=project,
         config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
@@ -311,20 +314,6 @@ def evaluate_contract_rule(
         config_values=config_values,
     )
     return evaluate(project=project, config=config, project_dir=project_dir)
-
-
-def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[object]:
-    """Count every request that reaches the native built-in rules engine."""
-
-    requests: list[object] = []
-    evaluate_parsed_rules: Callable[[Any], str] = native._native.evaluate_parsed_rules
-
-    def recording(parsed: Any) -> str:
-        requests.append(parsed)
-        return evaluate_parsed_rules(parsed)
-
-    monkeypatch.setattr(native._native, "evaluate_parsed_rules", recording)
-    return requests
 
 
 @dataclass(frozen=True)

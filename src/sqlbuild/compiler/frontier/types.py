@@ -56,8 +56,6 @@ class NativeFallbackSite(StrEnum):
     SCOPE_REBIND_LOOKUP = "declaration_scopes.rebind_lookup"
     LINT_EXPANSION = "model_loop.lint_expansion"
     COMPILE_JSON_REPORT = "compile_outputs.json_report"
-    COMPILE_ARTIFACT_WRITES = "compile_outputs.artifact_writes"
-    COMPILE_REUSE_SNAPSHOT = "compile_outputs.reuse_snapshot"
     MACRO_CALL_SCAN = "macro_calls.scan"
     MACRO_CALL_RESOLUTION = "macro_calls.resolution"
     MACRO_UNBRIDGED_EXPANSION = "macro_calls.unbridged_expansion"

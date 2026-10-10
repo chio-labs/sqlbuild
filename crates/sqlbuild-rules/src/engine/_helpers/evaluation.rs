@@ -17,9 +17,9 @@ use fensu_policy::lifecycle::errors::LifecycleError;
 use fensu_policy::lifecycle::models::{
     ApplySuppressionsRequest, ExactSuppression, Finding, FindingSeverity, ScopedIgnore,
 };
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
-};
+#[cfg(test)]
+use rayon::iter::IndexedParallelIterator;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -178,6 +178,7 @@ fn evaluate_pending_models(
     }))
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
     let request: EvaluateRequest = serde_json::from_str(request_json)
         .map_err(|error| format!("invalid rules request: {error}"))?;
@@ -185,6 +186,7 @@ pub(crate) fn evaluate_json(request_json: &str) -> Result<String, String> {
 }
 
 /// Decode a request whose models arrive as separate payloads, each with its exact digest.
+#[cfg(test)]
 pub(crate) fn parse_parts(
     request_json: &[u8],
     model_jsons: &[&[u8]],
@@ -202,6 +204,7 @@ pub(crate) fn parse_parts(
     Ok(request)
 }
 
+#[cfg(test)]
 fn parse_model_payloads(
     model_jsons: &[&[u8]],
     model_digests: &[String],
@@ -452,24 +455,6 @@ fn suppress_faults(
         .map(|rule| rule.code.clone())
         .collect::<Vec<_>>();
     apply_fault_policy(request, &evaluated_codes, faults)
-}
-
-pub(crate) fn finalize_findings_json(request_json: &str) -> Result<String, String> {
-    let input: crate::models::FinalizeFindingsRequest = serde_json::from_str(request_json)
-        .map_err(|error| format!("invalid findings request: {error}"))?;
-    if input.version != API_VERSION {
-        return Err(format!(
-            "unsupported rules native API version {}; expected {API_VERSION}",
-            input.version
-        ));
-    }
-    let faults = finalize_findings(
-        input.project_dir,
-        input.config,
-        &input.evaluated_codes,
-        input.findings,
-    )?;
-    serde_json::to_string(&faults).map_err(|error| error.to_string())
 }
 
 /// Apply the exception policy once to completed built-in, SQL and custom findings.

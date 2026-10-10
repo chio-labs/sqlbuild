@@ -949,15 +949,15 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
     "test_case",
     [
         EarlyLintInputsTestCase(
-            description="the shipped engine expands variable and macro models again in Python",
+            description="the default engine lints every model from the compile's expansion",
             engine="native",
             expected_findings=_EARLY_LINT_FINDINGS,
-            expected_compile_expansions=0,
-            expected_python_expansions=1,
+            expected_compile_expansions=2,
+            expected_python_expansions=0,
         ),
         EarlyLintInputsTestCase(
-            description="the preview engine lints every model from the compile's expansion",
-            engine="native-preview",
+            description="the python engine lints every model from the compile's expansion too",
+            engine="python",
             expected_findings=_EARLY_LINT_FINDINGS,
             expected_compile_expansions=2,
             expected_python_expansions=0,

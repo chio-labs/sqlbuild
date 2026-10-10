@@ -43,16 +43,16 @@ _TYPE_PROOF_FINDINGS: tuple[FindingKey, ...] = (
     "test_case",
     [
         NativeRulesRequestTestCase(
-            description="the shipped engine encodes the request in Python",
+            description="the default engine builds every request row natively",
             engine="native",
-            expected_built_rows=(0, 0, 0),
+            expected_built_rows=(39, 15, 9),
             expected_cold_cache=(0, 26),
             expected_warm_cache=(26, 0),
             expected_edited_cache=(24, 2),
         ),
         NativeRulesRequestTestCase(
-            description="the preview engine builds every request row natively",
-            engine="native-preview",
+            description="the python engine builds every request row natively too",
+            engine="python",
             expected_built_rows=(39, 15, 9),
             expected_cold_cache=(0, 26),
             expected_warm_cache=(26, 0),
@@ -61,22 +61,24 @@ _TYPE_PROOF_FINDINGS: tuple[FindingKey, ...] = (
     ],
     ids=lambda case: case.description,
 )
-def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_match_shipped(
+def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_match_fresh(
     test_case: NativeRulesRequestTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    shipped_dir: Path = tmp_path / "shipped"
+    fresh_dir: Path = tmp_path / "fresh"
+    fresh_edited_dir: Path = tmp_path / "fresh_edited"
     project_dir: Path = tmp_path / "project"
-    write_rules_fixture(project_dir=shipped_dir)
+    write_rules_fixture(project_dir=fresh_dir)
+    write_rules_fixture(project_dir=fresh_edited_dir)
+    edit_model(project_dir=fresh_edited_dir)
     write_rules_fixture(project_dir=project_dir)
-    _ = record_built_rows(monkeypatch=monkeypatch, engine="native")
-    shipped: tuple[FindingKey, ...] = compile_rules(project_dir=shipped_dir, capsys=capsys)[0]
-    edit_model(project_dir=shipped_dir)
-    shipped_edited: tuple[FindingKey, ...] = compile_rules(project_dir=shipped_dir, capsys=capsys)[
-        0
-    ]
+    _ = record_built_rows(monkeypatch=monkeypatch, engine=test_case.engine)
+    fresh: tuple[FindingKey, ...] = compile_rules(project_dir=fresh_dir, capsys=capsys)[0]
+    fresh_edited: tuple[FindingKey, ...] = compile_rules(
+        project_dir=fresh_edited_dir, capsys=capsys
+    )[0]
     built: Counter[str] = record_built_rows(monkeypatch=monkeypatch, engine=test_case.engine)
 
     cold: tuple[tuple[FindingKey, ...], tuple[int, int]] = compile_rules(
@@ -90,7 +92,7 @@ def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_m
         project_dir=project_dir, capsys=capsys
     )
 
-    assert (cold[0], warm[0], edited[0]) == (shipped, shipped, shipped_edited)
+    assert (cold[0], warm[0], edited[0]) == (fresh, fresh, fresh_edited)
     assert (cold[1], warm[1], edited[1]) == (
         test_case.expected_cold_cache,
         test_case.expected_warm_cache,
@@ -103,14 +105,14 @@ def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_m
     "test_case",
     [
         NativeTypeProofTestCase(
-            description="the shipped engine proves passthrough types in Python",
+            description="the default engine proves passthrough types natively",
             engine="native",
             expected_findings=_TYPE_PROOF_FINDINGS,
-            expected_built_rows=(0, 0, 0),
+            expected_built_rows=(2, 0, 0),
         ),
         NativeTypeProofTestCase(
-            description="the preview engine proves passthrough types natively",
-            engine="native-preview",
+            description="the python engine proves passthrough types natively too",
+            engine="python",
             expected_findings=_TYPE_PROOF_FINDINGS,
             expected_built_rows=(2, 0, 0),
         ),

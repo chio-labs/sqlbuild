@@ -10,6 +10,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cache::artifacts::errors::ArtifactError;
 use sqlbuild_cache::artifacts::main::publish_staged::publish_staged;
 use sqlbuild_cache::artifacts::main::remove_stale::remove_stale;
+use sqlbuild_cache::artifacts::main::staged_files::staged_files;
 use sqlbuild_cache::artifacts::main::write_artifacts::write_artifacts;
 use sqlbuild_cache::artifacts::models::{Publication, WrittenArtifacts};
 
@@ -73,6 +74,15 @@ fn publish_staged_artifacts(
     })
 }
 
+/// Every staged artifact's path relative to `staged_dir`.
+#[pyfunction]
+fn staged_artifact_files(py: Python<'_>, staged_dir: PathBuf) -> PyResult<Vec<String>> {
+    compiler_guard(|| {
+        let files: Vec<PathBuf> = py.detach(|| staged_files(&staged_dir));
+        Ok(files.iter().map(|path| lossy(path)).collect())
+    })
+}
+
 fn lossy(path: &std::path::Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -122,6 +132,7 @@ fn existing_decode_error(py: Python<'_>, path: &PathBuf) -> PyErr {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(staged_artifact_files, module)?)?;
     module.add_function(wrap_pyfunction!(write_compiled_artifacts, module)?)?;
     module.add_function(wrap_pyfunction!(remove_stale_artifacts, module)?)?;
     module.add_function(wrap_pyfunction!(publish_staged_artifacts, module)?)
