@@ -117,7 +117,7 @@ def _needs_star_expansion(model: CompiledModelView) -> bool:
 def _native_request(model: CompiledModelView) -> tuple[bool, str, list[str]] | None:
     columns: Sequence[CompiledLineageColumnFact] | None = model.fast_lineage_columns
     if columns is None:
-        return (False, model.query_sql, [column.name for column in model.inferred_columns or ()])
+        return (False, model.query_sql, [name for name, _, _ in model.inferred_rows or ()])
     if not _needs_star_expansion(model):
         return None
     if isinstance(columns, CompactLineageFacts):
@@ -128,9 +128,8 @@ def _native_request(model: CompiledModelView) -> tuple[bool, str, list[str]] | N
 def _schema_resources(project: CompiledProjectView) -> list[tuple[str, str, list[str]]]:
     resources: list[tuple[str, str, list[str]]] = []
     for model in project.models:
-        columns: list[str] = [column.name for column in model.inferred_columns or ()]
-        if model.schema_entry is not None:
-            columns.extend(column.name for column in model.schema_entry.columns)
+        columns: list[str] = [name for name, _, _ in model.inferred_rows or ()]
+        columns.extend(name for name, _ in model.schema_column_rows or ())
         resources.append((CompiledResourceType.MODEL.value, model.name, columns))
     for source in project.sources:
         resources.append(

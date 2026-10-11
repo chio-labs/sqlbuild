@@ -6,12 +6,13 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple, PyTupleMethods};
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::model_input_view::{
-    InputViewClasses, ModelInputRecord, read_input, references, rejected_opt_out, schema_entry,
-    view_classes,
+    InputViewClasses, ModelInputRecord, model_relation_key_row, read_input, references,
+    rejected_opt_out, schema_entry, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
+use crate::bindings::_helpers::rules::relation_keys::RelationKeyRow;
 
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
@@ -365,6 +366,12 @@ impl NativeCompiledModel {
     #[getter]
     fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
         self.read(py, |record, _| Ok(record.references.clone()))
+    }
+
+    /// The model's declared key facts, for deriving its unique keys.
+    #[getter]
+    fn relation_key_row(&self, py: Python<'_>) -> PyResult<RelationKeyRow> {
+        self.read(py, model_relation_key_row)
     }
 
     /// `(resource type, name)` of the model's key.

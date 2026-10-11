@@ -11,6 +11,9 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
+use crate::bindings::_helpers::rules::relation_keys::{RelationKeyRow, relation_key_row};
+
+const MODEL_RELATION_KIND: &str = "ref";
 
 /// The Python classes a model input's projected attributes are built with.
 #[derive(FromPyObject)]
@@ -173,6 +176,12 @@ impl NativeModelInput {
         self.read(py, |record, _| Ok(record.references.clone()))
     }
 
+    /// The model's declared key facts, for deriving its unique keys.
+    #[getter]
+    fn relation_key_row(&self, py: Python<'_>) -> PyResult<RelationKeyRow> {
+        self.read(py, model_relation_key_row)
+    }
+
     /// The name of the schema entry attached to the model, or `None`.
     #[getter]
     fn attached_schema_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
@@ -332,6 +341,30 @@ pub(crate) fn references(
             Ok::<_, pyo3::PyErr>(PyTuple::new(py, references)?.unbind())
         })
         .map(|references| references.clone_ref(py))
+}
+
+/// The model's declared key facts: its config and attached schema columns and audits.
+pub(crate) fn model_relation_key_row(
+    record: &ModelInputRecord,
+    py: Python<'_>,
+) -> PyResult<RelationKeyRow> {
+    let values: Bound<'_, PyAny> = record.config.bind(py).getattr("values")?;
+    relation_key_row(
+        MODEL_RELATION_KIND,
+        record
+            .model_file
+            .bind(py)
+            .getattr("file_path")?
+            .getattr("stem")?
+            .extract()?,
+        values.downcast::<PyDict>()?,
+        record.schema.as_ref().map(|schema| {
+            (
+                schema.columns.bind(py).as_any(),
+                schema.audits.bind(py).as_any(),
+            )
+        }),
+    )
 }
 
 /// The name of the model's attached schema entry, its file stem, or `None`.

@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
     from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+    from sqlbuild.lint.types import RelationKeyRow
     from sqlbuild.spec.contracts.models import (
         LocalConfig,
         ProjectConfig,
@@ -259,6 +260,8 @@ class CompiledModelView(Protocol):
     @property
     def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]: ...
     @property
+    def relation_key_row(self) -> RelationKeyRow: ...
+    @property
     def key_row(self) -> tuple[str, str]: ...
     @property
     def dep_rows(self) -> list[tuple[str, str]]: ...
@@ -315,6 +318,8 @@ class ModelInput(Protocol):
     def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]: ...
     @property
     def attached_schema_name(self) -> str | None: ...
+    @property
+    def relation_key_row(self) -> RelationKeyRow: ...
 
 
 class TypedSqlValueRenderer(Protocol):

@@ -52,6 +52,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
+from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -111,6 +112,8 @@ class NativeModelInput:
     @property
     def attached_schema_name(self) -> str | None: ...
     @property
+    def relation_key_row(self) -> RelationKeyRow: ...
+    @property
     def model_file(self) -> DiscoveredSqlModelFile: ...
     @property
     def config(self) -> CompileModelConfig: ...
@@ -159,6 +162,8 @@ class NativeModelInput:
 class NativeCompiledModel:
     @property
     def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]: ...
+    @property
+    def relation_key_row(self) -> RelationKeyRow: ...
     @property
     def key_row(self) -> tuple[str, str]: ...
     @property
@@ -426,6 +431,11 @@ class NativeModelLoop:
         host: object,
         models: list[tuple[object, ...]],
     ) -> tuple[list[NativeModelInput], tuple[int, int, int, int, int]]: ...
+
+def relation_key_row(
+    kind: str, name: str, values: dict[str, object], entry: object
+) -> RelationKeyRow: ...
+def declared_relation_keys(rows: list[RelationKeyRow]) -> dict[str, list[list[str]]]: ...
 
 class NativeProjectGraph:
     @staticmethod

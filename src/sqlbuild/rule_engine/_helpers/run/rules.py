@@ -39,9 +39,6 @@ from sqlbuild.lint.constants import (
     DEFAULT_MAX_RANKING_ORDER_BY,
     MAX_LITERAL_LENGTH_THRESHOLD,
     MAX_RANKING_ORDER_BY_THRESHOLD,
-    RELATION_KIND_REF,
-    RELATION_KIND_SEED,
-    RELATION_KIND_SOURCE,
     SAFE_RULE_FIX_CODES,
     TEMPLATE_INTERPOLATION_START,
 )
@@ -311,30 +308,9 @@ def prepare_sql_rules(
                 thresholds=config.thresholds,
                 allow_suppressions=config.allow_exceptions,
                 relation_keys=declared_relation_keys(
-                    relations=(
-                        *(
-                            (
-                                RELATION_KIND_REF,
-                                model.model_file.file_path.stem,
-                                model.schema_entry,
-                                model.config.values,
-                            )
-                            for model in inputs.model_inputs
-                        ),
-                        *(
-                            (RELATION_KIND_SEED, seed.schema_entry.name, seed.schema_entry, {})
-                            for seed in inputs.seed_inputs
-                        ),
-                        *(
-                            (
-                                RELATION_KIND_SOURCE,
-                                source.source_entry.name,
-                                source.source_entry,
-                                {},
-                            )
-                            for source in inputs.source_inputs
-                        ),
-                    )
+                    model_rows=(model.relation_key_row for model in inputs.model_inputs),
+                    seeds=(seed.schema_entry for seed in inputs.seed_inputs),
+                    sources=(source.source_entry for source in inputs.source_inputs),
                 ),
             ),
             discovered_inputs=inputs.discovered_inputs,

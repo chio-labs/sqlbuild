@@ -3,6 +3,8 @@
 pub mod constants;
 #[path = "_helpers/cte_columns.rs"]
 mod cte_columns;
+#[path = "_helpers/declared_keys.rs"]
+mod declared_keys;
 #[path = "_helpers/json_parses.rs"]
 mod json_parses;
 #[path = "_helpers/keys.rs"]

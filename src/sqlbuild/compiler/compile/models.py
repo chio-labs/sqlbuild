@@ -68,6 +68,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
+from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -809,6 +810,14 @@ class CompileModelInput:
         ]
 
     @property
+    def relation_key_row(self) -> RelationKeyRow:
+        """The model's declared key facts, for deriving its unique keys."""
+
+        return _native.relation_key_row(
+            "ref", self.model_file.file_path.stem, self.config.values, self.schema_entry
+        )
+
+    @property
     def attached_schema_name(self) -> str | None:
         """The name of the schema entry attached to the model, or `None`."""
 
@@ -1002,6 +1011,12 @@ class CompiledModel:
             (str(ref.ref_kind), ref.ref_name, ref.ref_package, ref.call_argument_count)
             for ref in self.references
         ]
+
+    @property
+    def relation_key_row(self) -> RelationKeyRow:
+        """The model's declared key facts, for deriving its unique keys."""
+
+        return _native.relation_key_row("ref", self.name, self.config.values, self.schema_entry)
 
     @property
     def key_row(self) -> tuple[str, str]:
