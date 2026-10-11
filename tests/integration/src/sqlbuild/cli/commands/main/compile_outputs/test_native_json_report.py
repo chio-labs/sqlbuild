@@ -178,9 +178,7 @@ def test_given_lone_surrogate_in_full_report_when_compiling_json_then_native_wri
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=SURROGATE_HOOK_FILES)
-    counts: Counter[str] = record_output_work(
-        monkeypatch=monkeypatch, engine="native", reuse_disabled="1"
-    )
+    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
 
     text: str = compile_json_text(project_dir=tmp_path, args=test_case.args, capsys=capsys)
 
@@ -212,7 +210,7 @@ def test_given_lone_surrogate_in_error_report_when_compiling_json_then_orjson_er
 ) -> None:
     caplog.set_level(logging.CRITICAL, logger=CLI_LOGGER)
     write_files(project_dir=tmp_path, files=SURROGATE_HOOK_FILES)
-    _ = record_output_work(monkeypatch=monkeypatch, engine="native", reuse_disabled="1")
+    _ = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
 
     with pytest.raises(TypeError) as raised:
         _ = compile_json_text(project_dir=tmp_path, args=test_case.args, capsys=capsys)
@@ -239,9 +237,7 @@ def test_given_deeply_nested_hook_payload_when_compiling_json_then_orjson_writes
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=nested_payload_hook_files(depth=test_case.depth))
-    counts: Counter[str] = record_output_work(
-        monkeypatch=monkeypatch, engine="native", reuse_disabled="1"
-    )
+    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
 
     exit_code: int = main_compile_json(project_dir=tmp_path)
     text: str = capsys.readouterr().out

@@ -11,6 +11,7 @@ from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.scopes.exceptions import InvalidQualifiedIdentityError
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
+    ImmediateSyntaxErrorTestCase,
     ModelLoopErrorTestCase,
     ModelLoopParityTestCase,
     ModelPathScopeErrorTestCase,
@@ -31,8 +32,9 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     build_inputs_with_native_loop,
     copy_project,
     count_legacy_constructions,
-    expansions,
+    expected_summary,
     forbid_hand_built_projects,
+    inputs_summary,
     skip_model_retention,
 )
 from tests.integration.src.sqlbuild.compiler.graph.helpers import ORDERS_PROJECT_FILES, write_files
@@ -42,13 +44,7 @@ from tests.integration.src.sqlbuild.compiler.graph.helpers import ORDERS_PROJECT
     "test_case",
     [
         RetainedRulesRowsTestCase(
-            description="default engine proves the passthrough from retained facts",
-            engine="native",
-            expected_codes=("K002", "SQBRCONTRACT105"),
-        ),
-        RetainedRulesRowsTestCase(
-            description="python engine reads the same retained facts",
-            engine="python",
+            description="compile proves the passthrough from retained facts",
             expected_codes=("K002", "SQBRCONTRACT105"),
         ),
     ],
@@ -61,7 +57,7 @@ def test_given_compiled_project_when_evaluating_rules_then_retained_model_facts_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=TYPE_PROOF_FILES)
-    forbid_hand_built_projects(monkeypatch=monkeypatch, engine=test_case.engine)
+    forbid_hand_built_projects(monkeypatch=monkeypatch)
 
     _ = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
@@ -103,41 +99,47 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
             fixtures=(),
             files=PARITY_FILES,
             expected_native_models=9,
+            expected_summary="parity",
         ),
         ModelLoopParityTestCase(
             description="dynamic columns, audit factories and enforced enum columns",
             fixtures=(),
             files=HEADER_CONTRACT_FILES,
             expected_native_models=3,
+            expected_summary="header_contract",
         ),
         ModelLoopParityTestCase(
             description="accepted and rejected analysis opt-outs and invalid reference calls",
             fixtures=(),
             files=OPT_OUT_FILES,
             expected_native_models=4,
+            expected_summary="opt_out",
         ),
         ModelLoopParityTestCase(
             description="named model schemas, augmented and out of scope",
             fixtures=(),
             files=MODEL_SCHEMA_FILES,
             expected_native_models=2,
+            expected_summary="model_schema",
         ),
         ModelLoopParityTestCase(
             description="python hooks, checked and scoped",
             fixtures=(),
             files=PYTHON_HOOK_PARITY_FILES,
             expected_native_models=3,
+            expected_summary="python_hooks",
         ),
         ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",
             fixtures=("tests/e2e/fixtures/waffle_shop",),
             files={},
             expected_native_models=WAFFLE_SHOP_NATIVE_MODELS,
+            expected_summary="waffle_shop",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_project_when_running_native_model_loop_then_inputs_and_facts_match_attachment(
+def test_given_project_when_running_native_model_loop_then_inputs_match_recorded_attachment(
     test_case: ModelLoopParityTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -147,18 +149,13 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
     )
 
     native, native_counts = build_inputs_with_native_loop(
-        project_dir=project_dir, native=True, monkeypatch=monkeypatch
-    )
-    attached, attached_counts = build_inputs_with_native_loop(
-        project_dir=project_dir, native=False, monkeypatch=monkeypatch
+        project_dir=project_dir, monkeypatch=monkeypatch
     )
 
     assert native_counts == [test_case.expected_native_models]
-    assert attached_counts == [0]
-    assert native.model_inputs == attached.model_inputs
-    assert native.diagnostics == attached.diagnostics
-    assert expansions(native) == expansions(attached)
-    assert native.native_project == attached.native_project
+    assert inputs_summary(inputs=native, project_dir=project_dir) == expected_summary(
+        test_case.expected_summary
+    )
 
 
 @pytest.mark.parametrize(
@@ -342,14 +339,64 @@ def test_given_invalid_model_when_running_native_model_loop_then_attachment_erro
     )
 
     with pytest.raises(CompileInputError) as raised:
-        _ = build_inputs_with_native_loop(
-            project_dir=project_dir, native=True, monkeypatch=monkeypatch
-        )
+        _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
 
     assert raised.value.message == test_case.expected_message.format(
         model_path=project_dir / "models" / "orders.sql"
     )
     assert raised.value.code == test_case.expected_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ImmediateSyntaxErrorTestCase(
+            description="query the parser rejects",
+            model_sql="MODEL ();\nSELECT FROM WHERE (\n",
+            expected_message=(
+                "SQL syntax error in model 'orders' ({model_path}): "
+                "Expected table name or subquery, got Where"
+            ),
+            expected_help_fragment="skip SQL analysis for this model",
+        ),
+        ImmediateSyntaxErrorTestCase(
+            description="incremental query with cursor intrinsics the parser rejects",
+            model_sql=(
+                "MODEL (materialized incremental, incremental_strategy append, cursor order_id,"
+                " cursor_type integer);\n"
+                "SELECT 1 AS order_id FROM t WHERE order_id >= __cursor_start() AND (\n"
+            ),
+            expected_message=(
+                "SQL syntax error in model 'orders' ({model_path}): Unexpected token: LParen"
+            ),
+            expected_help_fragment="skip SQL analysis for this model",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unparseable_model_when_validating_immediately_then_syntax_error_is_raised(
+    test_case: ImmediateSyntaxErrorTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = copy_project(
+        fixtures=(),
+        files={
+            "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+            "models/orders.sql": test_case.model_sql,
+        },
+        project_dir=tmp_path / "project",
+    )
+
+    with pytest.raises(CompileInputError) as raised:
+        _ = build_inputs_with_native_loop(
+            project_dir=project_dir, monkeypatch=monkeypatch, defer_validation=False
+        )
+
+    assert raised.value.message == test_case.expected_message.format(
+        model_path=project_dir / "models" / "orders.sql"
+    )
+    assert test_case.expected_help_fragment in (raised.value.help or "")
 
 
 @pytest.mark.xfail(
@@ -418,9 +465,7 @@ def test_given_model_path_scope_rejects_when_running_native_model_loop_then_scop
     )
 
     with pytest.raises(InvalidQualifiedIdentityError) as raised:
-        _ = build_inputs_with_native_loop(
-            project_dir=project_dir, native=True, monkeypatch=monkeypatch
-        )
+        _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
 
     assert (str(raised.value), raised.value.code) == (
         test_case.expected_message,

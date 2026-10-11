@@ -949,15 +949,7 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
     "test_case",
     [
         EarlyLintInputsTestCase(
-            description="the default engine lints every model from the compile's expansion",
-            engine="native",
-            expected_findings=_EARLY_LINT_FINDINGS,
-            expected_compile_expansions=2,
-            expected_python_expansions=0,
-        ),
-        EarlyLintInputsTestCase(
-            description="the python engine lints every model from the compile's expansion too",
-            engine="python",
+            description="compile lints every model from the compile's expansion",
             expected_findings=_EARLY_LINT_FINDINGS,
             expected_compile_expansions=2,
             expected_python_expansions=0,
@@ -972,9 +964,7 @@ def test_given_variable_and_macro_models_when_compiling_then_early_lint_findings
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_project_files(project_dir=tmp_path, files=EARLY_LINT_PROJECT_FILES)
-    counts: Counter[str] = record_early_lint_expansions(
-        monkeypatch=monkeypatch, engine=test_case.engine
-    )
+    counts: Counter[str] = record_early_lint_expansions(monkeypatch=monkeypatch)
 
     findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
         project_dir=tmp_path, capsys=capsys

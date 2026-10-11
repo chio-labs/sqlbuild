@@ -1,5 +1,41 @@
 //! The compile-input model loop: each model's steps run in the attachment's order, natively.
 
+use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
+use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
+use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
+use crate::bindings::_helpers::compiled_project::model_loop_header::{
+    AttachedHeader, HeaderSource, header_schema,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_hooks::expanded_hooks;
+use crate::bindings::_helpers::compiled_project::model_loop_host::{
+    FinishedModel, ModelLoopRow, ReferenceRow, callback, plain_input,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
+    analysis_override, hook_presence, reference_row,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_named::{
+    SCHEMA_DECLARATION, named_usages,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
+    OptOut, OptOutModel, reject_unparseable_query, rejected_opt_out,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_python_hooks::{
+    HookClasses, HookSignatures,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_schema::{
+    ModelSchema, model_schema, schema_column_names,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_visibility::{
+    ModelVisibility, VisibilityClasses, VisibilityModel,
+};
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::discovery::project_files::python_semantics;
+use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
+use crate::bindings::_helpers::render::declaration_expansion::{
+    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
+    expand_declarations, span_rows,
+};
+use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
 };
@@ -19,44 +55,6 @@ use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
-use std::cell::RefCell;
-
-use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
-use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
-use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
-use crate::bindings::_helpers::compiled_project::model_loop_header::{
-    AttachedHeader, HeaderSource, header_schema,
-};
-use crate::bindings::_helpers::compiled_project::model_loop_hooks::expanded_hooks;
-use crate::bindings::_helpers::compiled_project::model_loop_host::{
-    FinishedModel, ModelLoopRow, ReferenceRow, attached_input, callback, plain_input,
-};
-use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
-    analysis_override, hook_presence, reference_row,
-};
-use crate::bindings::_helpers::compiled_project::model_loop_named::{
-    SCHEMA_DECLARATION, named_usages,
-};
-use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
-    OptOut, OptOutModel, rejected_opt_out,
-};
-use crate::bindings::_helpers::compiled_project::model_loop_python_hooks::{
-    HookClasses, HookSignatures,
-};
-use crate::bindings::_helpers::compiled_project::model_loop_schema::{
-    ModelSchema, model_schema, schema_column_names,
-};
-use crate::bindings::_helpers::compiled_project::model_loop_visibility::{
-    ModelVisibility, VisibilityClasses, VisibilityModel,
-};
-use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::discovery::project_files::python_semantics;
-use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
-use crate::bindings::_helpers::render::declaration_expansion::{
-    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
-    expand_declarations, span_rows,
-};
-use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 const MATERIALIZED_KEY: &str = "materialized";
 const CURSOR_KEY: &str = "cursor";
@@ -70,7 +68,6 @@ const VALIDATE_METHOD: &str = "validate";
 const CONFIG_ARGUMENT: &str = "config";
 const VISIBLE_ARGUMENT: &str = "visible";
 const FILE_PATH_ARGUMENT: &str = "file_path";
-const PYTHON_HOOKS_ARGUMENT: &str = "python_hooks";
 const EXPAND_MACROS_CALLBACK: &str = "expand_macros";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const INDEX_ARGUMENT: &str = "index";
@@ -89,7 +86,6 @@ type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
 /// `(analysis switches, native syntax, (project config path, legacy schema files))`.
 type LoopSettingsInput = (
     (bool, bool, bool, bool),
-    bool,
     (String, Vec<(String, Vec<String>)>),
 );
 
@@ -131,6 +127,10 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) visibility: VisibilityClasses<'py>,
     /// What a model's Python hooks are checked against.
     pub(crate) hooks: HookClasses<'py>,
+    /// `sql_analysis_opt_out_help(model_owned=True)`, the help of a model's syntax error.
+    pub(crate) syntax_help: String,
+    /// `InvalidScopePathError`.
+    pub(crate) scope_path_error: Bound<'py, PyAny>,
 }
 
 /// The ordered model loop of one compile-input stage.
@@ -141,8 +141,6 @@ pub(crate) struct NativeModelLoop {
     pub(crate) reserved_markers: Vec<String>,
     pub(crate) python: PythonText,
     pub(crate) settings: ModelLoopSettings,
-    /// Whether project assembly answers SQL syntax natively in this compile.
-    pub(crate) native_syntax: bool,
     pub(crate) project_config_path: String,
     legacy_schema_files: Vec<LegacySchemaFile>,
     contract_classes: Py<PyDict>,
@@ -169,8 +167,6 @@ struct LoopModel<'a, 'py> {
     visible: &'a VisibleDeclarations<'py>,
     /// The index, config and declarations every host callback for the model receives.
     arguments: &'a [(&'static str, Bound<'py, PyAny>)],
-    /// The model's checked Python hook usages, once its hooks are checked.
-    python_hooks: &'a RefCell<Option<Vec<Bound<'py, PyAny>>>>,
     signatures: &'a HookSignatures,
 }
 
@@ -187,7 +183,6 @@ impl NativeModelLoop {
         let (reserved_markers, (python_version, unicode_version)) = cursor;
         let (
             (sql_analysis, no_sql_validation, defer_sql_validation, require_sql_analysis),
-            native_syntax,
             (project_config_path, legacy_schema_files),
         ) = settings;
         Ok(Self {
@@ -201,7 +196,6 @@ impl NativeModelLoop {
                 defer_sql_validation,
                 require_sql_analysis,
             },
-            native_syntax,
             project_config_path,
             legacy_schema_files: legacy_schema_files
                 .into_iter()
@@ -253,29 +247,16 @@ impl NativeModelLoop {
                 (CONFIG_ARGUMENT, config.clone()),
                 (VISIBLE_ARGUMENT, visible.declarations.clone()),
             ];
-            let python_hooks: RefCell<Option<Vec<Bound<'py, PyAny>>>> = RefCell::new(None);
             let model: LoopModel<'_, 'py> = LoopModel {
                 row: &row,
                 config,
                 visible: &visible,
                 arguments: &arguments,
-                python_hooks: &python_hooks,
                 signatures: &signatures,
             };
-            let (input, facts) = match self.finish(py, &context, model)? {
-                Some(finished) => {
-                    finished_natively += 1;
-                    plain_input(&host, &arguments, row, finished)?
-                }
-                None => {
-                    let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = arguments.to_vec();
-                    arguments.push((
-                        PYTHON_HOOKS_ARGUMENT,
-                        python_hooks.into_inner().into_pyobject(py)?.into_any(),
-                    ));
-                    attached_input(&host, &arguments)?
-                }
-            };
+            let finished: FinishedModel<'py> = self.finish(py, &context, model)?;
+            finished_natively += 1;
+            let (input, facts) = plain_input(&host, &arguments, row, finished)?;
             project.retain(facts);
             inputs.push(input);
         }
@@ -293,13 +274,12 @@ impl NativeModelLoop {
         py: Python<'py>,
         context: &LoopContext<'_, 'py>,
         model: LoopModel<'_, 'py>,
-    ) -> PyResult<Option<FinishedModel<'py>>> {
+    ) -> PyResult<FinishedModel<'py>> {
         let LoopModel {
             row,
             config,
             visible,
             arguments,
-            python_hooks,
             signatures,
         } = model;
         let ModelLoopRow(
@@ -313,26 +293,20 @@ impl NativeModelLoop {
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
         let hooked: bool = hook_presence(&values)?;
-        if hooked {
-            match signatures.checked(context, &values, &visible.consumer, (name, relative_path))? {
-                Some(usages) => *python_hooks.borrow_mut() = Some(usages),
-                None => return Ok(None),
-            }
+        let python_hooks: Vec<Bound<'py, PyAny>> = if hooked {
+            signatures.checked(context, &values, &visible.consumer, (name, relative_path))?
         } else {
-            *python_hooks.borrow_mut() = Some(Vec::new());
-        }
+            Vec::new()
+        };
         let schema_usages: Vec<Bound<'py, PyAny>> = match &schema {
             Some(schema) => {
                 let declaration = (&SCHEMA_DECLARATION, schema.name.as_str());
-                match named_usages(
+                named_usages(
                     context,
                     declaration,
                     &visible.consumer,
                     (name, relative_path),
-                )? {
-                    Some(usages) => usages,
-                    None => return Ok(None),
-                }
+                )?
             }
             None => Vec::new(),
         };
@@ -398,15 +372,15 @@ impl NativeModelLoop {
             .canonical_query(name, &macro_sql, &values)?
             .map_err(|message| compile_error(context.classes, &message, None))?;
         let opt_out_model: OptOutModel<'_, 'py> = OptOutModel {
+            name,
+            file_path,
             config: &config,
             values: &values,
             query_sql: &query_sql,
             relative_path,
             contents,
         };
-        let Some((analysed, rejected_opt_out)) = self.analysis(context, &opt_out_model)? else {
-            return Ok(None);
-        };
+        let (analysed, rejected_opt_out) = self.analysis(context, &opt_out_model)?;
         let scanned = match extract_sql_references(&query_sql, &self.syntax) {
             ReferenceExtraction::Extracted(scanned) => scanned,
             ReferenceExtraction::Failed(failure) => {
@@ -468,8 +442,8 @@ impl NativeModelLoop {
             return Err(compile_error(context.classes, &message, None));
         }
         let mut named_usages: Vec<Bound<'py, PyAny>> = schema_usages;
-        named_usages.extend(python_hooks.borrow_mut().take().unwrap_or_default());
-        Ok(Some(FinishedModel {
+        named_usages.extend(python_hooks);
+        Ok(FinishedModel {
             config,
             values,
             query_sql,
@@ -479,15 +453,15 @@ impl NativeModelLoop {
             hook_statements,
             analysis,
             named_usages,
-        }))
+        })
     }
 
-    /// Whether the model's SQL is analysed and its rejected opt-out; `None` hands it over.
+    /// Whether the model's SQL is analysed and its rejected opt-out; syntax is checked unless deferred.
     fn analysis<'py>(
         &self,
         context: &LoopContext<'_, 'py>,
         model: &OptOutModel<'_, 'py>,
-    ) -> PyResult<Option<(bool, Option<Bound<'py, PyAny>>)>> {
+    ) -> PyResult<(bool, Option<Bound<'py, PyAny>>)> {
         let (analysed, rejected) =
             match analysis_gate(self.settings, analysis_override(model.values)?) {
                 AnalysisGate::Conflict => {
@@ -501,13 +475,12 @@ impl NativeModelLoop {
                 AnalysisGate::Disabled => match rejected_opt_out(self, context, model)? {
                     OptOut::Accepted => (false, None),
                     OptOut::Rejected(location) => (true, Some(location)),
-                    OptOut::Deferred => return Ok(None),
                 },
             };
         if analysed && !self.settings.defer_sql_validation {
-            return Ok(None);
+            reject_unparseable_query(self, context, model)?;
         }
-        Ok(Some((analysed, rejected)))
+        Ok((analysed, rejected))
     }
 
     /// The query with canonical cursor intrinsics, or the message the attachment raises.

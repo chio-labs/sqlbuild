@@ -2,11 +2,12 @@
 
 use std::path::Path;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::path_visible::path_visible;
 use sqlbuild_scopes::scope_index::models::{
-    DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
+    DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind, ScopePathFailure,
 };
 
 use crate::bindings::_helpers::compiled_project::model_loop::LoopContext;
@@ -45,23 +46,24 @@ pub(crate) const PYTHON_HOOK_DECLARATION: NamedKind = NamedKind {
     role: "hooks/python",
 };
 
-/// The usage of the indexed declaration `name`, if any; `None` defers to Python's path error.
+/// The usage of the indexed declaration `name`, if any, reporting S006 when it is hidden.
 pub(crate) fn named_usages<'py>(
     context: &LoopContext<'_, 'py>,
     declaration: (&NamedKind, &str),
     consumer: &Bound<'py, PyAny>,
     model: (&str, &str),
-) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let (kind, name) = declaration;
     let (model_name, relative_path) = model;
     let py: Python<'py> = consumer.py();
     let key: Bound<'py, PyTuple> = PyTuple::new(py, [kind.value, name])?;
     let Some(record) = context.classes.named_records.get_item(key)? else {
-        return Ok(Some(Vec::new()));
+        return Ok(Vec::new());
     };
     let label: String = relative_path.replace(std::path::MAIN_SEPARATOR, "/");
-    let Ok(visible) = path_visible(&declared_scope(&record)?, &label) else {
-        return Ok(None);
+    let declared: DeclaredScope = declared_scope(&record)?;
+    let Ok(visible) = path_visible(&declared, &label) else {
+        return Err(path_error(context, &declared, &label));
     };
     if !visible {
         report_inaccessible(context, &record, (kind, name), (model_name, &label))?;
@@ -69,9 +71,33 @@ pub(crate) fn named_usages<'py>(
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item(CONSUMER_FIELD, consumer)?;
     fields.set_item(DECLARATION_FIELD, record.getattr(IDENTITY_FIELD)?)?;
-    Ok(Some(vec![
-        context.classes.usage_record.call((), Some(&fields))?,
-    ]))
+    Ok(vec![context.classes.usage_record.call((), Some(&fields))?])
+}
+
+/// `InvalidScopePathError` for the consumer path or owner folder Python normalizes first.
+fn path_error(context: &LoopContext<'_, '_>, declared: &DeclaredScope, label: &str) -> PyErr {
+    let owner: &str = declared
+        .owning_path
+        .as_deref()
+        .filter(|path| !path.is_empty())
+        .unwrap_or(CURRENT_FOLDER);
+    let (path, failure) = match normalize_scope_path(label) {
+        Err(failure) => (label, failure),
+        Ok(_) => match normalize_scope_path(owner) {
+            Err(failure) => (owner, failure),
+            Ok(_) => (label, ScopePathFailure::NotProjectRelative),
+        },
+    };
+    let message: String = match failure {
+        ScopePathFailure::NotProjectRelative => {
+            format!("Scope path must be project-relative: {path}")
+        }
+        ScopePathFailure::EscapesProject => format!("Scope path escapes the project: {path}"),
+    };
+    match context.classes.scope_path_error.call1((message,)) {
+        Ok(instance) => PyErr::from_value(instance),
+        Err(failure) => failure,
+    }
 }
 
 /// The scope facts of a Python `DeclarationRecord`.

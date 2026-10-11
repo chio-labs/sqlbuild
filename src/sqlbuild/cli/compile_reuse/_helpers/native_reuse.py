@@ -63,8 +63,8 @@ from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_ENV_VAR,
     COMPILE_CACHE_DISABLE_VALUE,
 )
-from sqlbuild.compiler.frontier.main._report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.main.macro_store_module_paths import (
     macro_store_module_paths,

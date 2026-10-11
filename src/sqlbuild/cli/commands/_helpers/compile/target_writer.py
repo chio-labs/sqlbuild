@@ -47,7 +47,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     FunctionLanguage,
 )
-from sqlbuild.compiler.frontier.main._report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_model_chain import (

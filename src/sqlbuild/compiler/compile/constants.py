@@ -65,18 +65,6 @@ MIGRATE_FROM_CONFIG_KEY: str = "migrate_from"
 MIGRATE_FORCE_CONFIG_KEY: str = "migrate_force"
 COLUMN_MIGRATE_FROM_KEY: str = "migrate_from"
 MAX_MICROBATCHES_CONFIG_KEY: str = "max_microbatches"
-MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
-    {
-        "description",
-        "columns",
-        "dynamic_columns",
-        "model_schema",
-        "audits",
-        "audit_factories",
-        "enums",
-        "constants",
-    }
-)
 
 SQL_OPEN_PAREN_TOKEN: str = "("
 SQL_ARGUMENT_SEPARATOR_TOKEN: str = ","

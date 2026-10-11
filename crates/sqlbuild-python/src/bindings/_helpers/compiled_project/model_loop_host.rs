@@ -15,18 +15,15 @@ use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     reference_fact, stripped_values,
 };
 use crate::bindings::_helpers::compiled_project::project::{
-    DeclarationPy, ModelInputPy, config_values, declarations, model_facts,
+    DeclarationPy, config_values, declarations,
 };
 use crate::bindings::_helpers::render::declaration_expansion::{
     ExpandedDeclarations, ScannedReference, span_rows,
 };
 
 const PLAIN_INPUT_CALLBACK: &str = "plain_input";
-const FALLBACK_CALLBACK: &str = "fallback";
-const MODEL_ROW_CALLBACK: &str = "model_row";
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
 const LAYER_SCHEMA_ATTRIBUTE: &str = "layer_schema";
-const MODEL_INPUT_ARGUMENT: &str = "model_input";
 const VALUES_ARGUMENT: &str = "values";
 const REFERENCES_ARGUMENT: &str = "references";
 const QUERY_SQL_ARGUMENT: &str = "query_sql";
@@ -174,21 +171,6 @@ pub(crate) fn plain_input<'py>(
         constant_declarations: declarations(constants)?,
     });
     Ok((input, facts))
-}
-
-/// The attachment's model input, after all its callbacks ran, and the facts read from it.
-pub(crate) fn attached_input<'py>(
-    host: &Bound<'py, PyAny>,
-    model_arguments: &[(&str, Bound<'py, PyAny>)],
-) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
-    let input: Bound<'py, PyAny> = callback(host, FALLBACK_CALLBACK, model_arguments)?;
-    let row: ModelInputPy<'_> = callback(
-        host,
-        MODEL_ROW_CALLBACK,
-        &[(MODEL_INPUT_ARGUMENT, input.clone())],
-    )?
-    .extract()?;
-    Ok((input, model_facts(row)?))
 }
 
 /// The schema argument the host builds its `SchemaModelEntry` from.

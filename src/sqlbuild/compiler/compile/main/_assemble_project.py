@@ -50,9 +50,7 @@ def assemble_project(
     )
     project: CompiledProject = _with_native_project(
         project=(
-            run_with_macro_bridge(stage=assemble)
-            if active_macro_bridge() is None
-            else assemble()
+            run_with_macro_bridge(stage=assemble) if active_macro_bridge() is None else assemble()
         ),
         native_project=inputs.native_project,
     )

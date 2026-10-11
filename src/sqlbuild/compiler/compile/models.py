@@ -1689,16 +1689,3 @@ class ModelValidatorContext:
     settings: SettingsConfig
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
     native_config: NativeModelConfigSession
-
-
-@dataclass(frozen=True)
-class SqlAnalysisOptOutRequest:
-    """One model's opt-out, with what is needed to prove its SQL parses."""
-
-    model_file: DiscoveredSqlModelFile
-    config: CompileModelConfig
-    settings: SettingsConfig
-    no_sql_validation: bool
-    query_sql: str
-    placeholders: dict[str, str] | None
-    project_config_path: Path

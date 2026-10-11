@@ -11,7 +11,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompileModelConfig,
-    CompileModelInput,
     CompileSqlReference,
     DynamicColumnContractProof,
 )
@@ -26,28 +25,6 @@ class _ModelDeclarations:
     enum_columns: tuple[str, ...]
     enums: tuple[EnumDeclaration, ...]
     constants: tuple[ConstantDeclaration, ...]
-
-
-def model_input_row_impl(model_input: CompileModelInput) -> tuple[object, ...]:
-    """The native project row for one model the compile-input stage produced."""
-
-    return _model_row(
-        identity=(
-            model_input.model_file.file_path.stem,
-            model_input.model_file.relative_path.as_posix(),
-            model_input.query_sql,
-            model_input.model_file.query_sql,
-            model_input.model_file.contents,
-        ),
-        config=model_input.config,
-        references=model_input.references,
-        schema_entry=model_input.schema_entry,
-        declarations=_ModelDeclarations(
-            enum_columns=tuple(model_input.enum_columns),
-            enums=model_input.enum_declarations,
-            constants=model_input.constant_declarations,
-        ),
-    )
 
 
 def record_model_analyses_impl(

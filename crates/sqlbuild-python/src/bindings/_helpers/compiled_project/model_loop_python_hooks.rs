@@ -55,14 +55,14 @@ struct HookSite<'a> {
 }
 
 impl HookSignatures {
-    /// `_checked_python_hooks`: validate each Python hook, then its usages; `None` defers.
+    /// `_checked_python_hooks`: validate each Python hook, then return their usages in order.
     pub(crate) fn checked<'py>(
         &self,
         context: &LoopContext<'_, 'py>,
         values: &Bound<'py, PyDict>,
         consumer: &Bound<'py, PyAny>,
         model: (&str, &str),
-    ) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+    ) -> PyResult<Vec<Bound<'py, PyAny>>> {
         let (model_name, _) = model;
         let entries: Vec<(&str, usize, Bound<'py, PyAny>)> = python_entries(context, values)?;
         let functions: &Bound<'py, PyDict> = &context.classes.hooks.functions;
@@ -103,12 +103,14 @@ impl HookSignatures {
         let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
         for (_, _, entry) in &entries {
             let name: String = entry.getattr(NAME_FIELD)?.extract()?;
-            match named_usages(context, (&PYTHON_HOOK_DECLARATION, &name), consumer, model)? {
-                Some(found) => usages.extend(found),
-                None => return Ok(None),
-            }
+            usages.extend(named_usages(
+                context,
+                (&PYTHON_HOOK_DECLARATION, &name),
+                consumer,
+                model,
+            )?);
         }
-        Ok(Some(usages))
+        Ok(usages)
     }
 
     /// The hook function's parameters, read through `inspect.signature` the first time.

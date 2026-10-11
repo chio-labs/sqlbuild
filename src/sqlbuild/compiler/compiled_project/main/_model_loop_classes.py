@@ -27,6 +27,7 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
+from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import UsageKind
 
@@ -51,6 +52,8 @@ def model_loop_classes(
     return {
         "usage_record": UsageRecord,
         "compile_error": CompileInputError,
+        "syntax_help": host_inputs["syntax_help"],
+        "scope_path_error": InvalidScopePathError,
         "sql_hook_entry": SqlHookEntry,
         "config_error": native_config_error,
         "audit_factories": {factory.name: factory for factory in audit_factories},

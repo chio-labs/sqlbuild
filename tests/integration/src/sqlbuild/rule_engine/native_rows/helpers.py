@@ -7,7 +7,6 @@ from typing import Any, cast
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.rule_engine._helpers.run import native_rows as native_rows_module
 
@@ -26,11 +25,10 @@ def write_rules_fixture(*, project_dir: Path) -> None:
     _ = config.write_text(config.read_text(encoding="utf-8") + RULES_CONFIG, encoding="utf-8")
 
 
-def record_built_rows(*, monkeypatch: pytest.MonkeyPatch, engine: str) -> Counter[str]:
+def record_built_rows(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     """Count the rules request rows the native builder reports it built."""
 
     built: Counter[str] = Counter()
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
 
     def counted(*, stage: NativeStage, kind: str, units: int = 1) -> None:
         built[f"{stage.value}:{kind}"] += units

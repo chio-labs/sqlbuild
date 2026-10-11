@@ -41,8 +41,7 @@ _PUBLICATION_ERROR: str = (
     "test_case",
     [
         CompileOutputsSequenceTestCase(
-            description="the default engine writes outputs and reuses compiles natively",
-            engine="native",
+            description="compile writes outputs and reuses compiles natively",
             expected_exit_codes=(0, 0, 0, 0, 0, 0),
             expected_work=(
                 {
@@ -87,9 +86,7 @@ def test_given_cached_edit_sequence_when_compiling_then_each_step_matches_uncach
 ) -> None:
     project_dir: Path = tmp_path / "project"
     write_files(project_dir=project_dir, files=OUTPUT_PROJECT_FILES)
-    counts: Counter[str] = record_output_work(
-        monkeypatch=monkeypatch, engine=test_case.engine, reuse_disabled="0"
-    )
+    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="0")
     work: list[dict[str, int]] = []
     exit_codes: list[int] = []
 
@@ -112,14 +109,7 @@ def test_given_cached_edit_sequence_when_compiling_then_each_step_matches_uncach
     "test_case",
     [
         PublicationFailureTestCase(
-            description="the default engine reports the blocked move and recovers",
-            engine="native",
-            expected_error=_PUBLICATION_ERROR,
-            expected_published_files=9,
-        ),
-        PublicationFailureTestCase(
-            description="the python engine publishes natively too",
-            engine="python",
+            description="compile reports the blocked move and recovers",
             expected_error=_PUBLICATION_ERROR,
             expected_published_files=9,
         ),
@@ -133,9 +123,7 @@ def test_given_artifact_path_blocked_when_publishing_staged_artifacts_then_compi
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=OUTPUT_PROJECT_FILES)
-    counts: Counter[str] = record_output_work(
-        monkeypatch=monkeypatch, engine=test_case.engine, reuse_disabled="1"
-    )
+    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
     published: CompileOutcome = compile_outputs(
         project_dir=tmp_path, args=("--no-cache",), capsys=capsys
     )

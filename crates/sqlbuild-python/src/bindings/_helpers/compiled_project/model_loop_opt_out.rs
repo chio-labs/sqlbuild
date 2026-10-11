@@ -2,10 +2,9 @@
 
 use std::path::Path;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyBoolMethods, PyDict, PyDictMethods, PyList, PyString, PyTuple};
-use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
-use sqlbuild_analysis::assembly::project::models::SyntaxCheck;
+use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 use sqlbuild_analysis::compiled_project::main::opt_out_position::opt_out_position;
 use sqlbuild_analysis::compiled_project::models::TextPosition;
 use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
@@ -14,6 +13,7 @@ use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, compile_error,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{HOOK_KEYS, present};
+use crate::bindings::_helpers::project_assembly::resources::{syntax_error_message, syntax_valid};
 
 const OPT_OUT_KEYS: [&str; 2] = ["sql_analysis", "sql_validation"];
 const CURSOR_TYPE_KEY: &str = "cursor_type";
@@ -31,17 +31,18 @@ const PATH_CLASS: &str = "Path";
 const PATH_FIELD: &str = "path";
 const LINE_FIELD: &str = "line";
 const COLUMN_FIELD: &str = "column";
+const HELP_ARGUMENT: &str = "help";
 
 /// Where the opt-out was authored, or a check the attachment still answers.
 pub(crate) enum OptOut<'py> {
     Accepted,
     Rejected(Bound<'py, PyAny>),
-    /// Native syntax checking deferred or is disabled for this compile.
-    Deferred,
 }
 
 /// The model the opt-out is checked for.
 pub(crate) struct OptOutModel<'a, 'py> {
+    pub(crate) name: &'a str,
+    pub(crate) file_path: &'a str,
     pub(crate) config: &'a Bound<'py, PyAny>,
     pub(crate) values: &'a Bound<'py, PyDict>,
     pub(crate) query_sql: &'a str,
@@ -63,21 +64,7 @@ pub(crate) fn rejected_opt_out<'py>(
     {
         return Ok(OptOut::Accepted);
     }
-    if !model_loop.native_syntax {
-        return Ok(OptOut::Deferred);
-    }
-    let literal: &str = match model.values.get_item(CURSOR_TYPE_KEY)? {
-        Some(value) if value.eq(INTEGER_CURSOR)? => INTEGER_LITERAL,
-        _ => TIMESTAMP_LITERAL,
-    };
-    let (analysis_sql, _) = replace_intrinsics(
-        model_loop.python,
-        model.query_sql,
-        INTRINSIC_CONTEXT,
-        |_| literal.to_owned(),
-    )
-    .map_err(|message| compile_error(context.classes, &message, None))?;
-    let mut statements: Vec<String> = vec![analysis_sql];
+    let mut statements: Vec<String> = vec![analysis_sql(model_loop, context, model)?];
     for key in HOOK_KEYS {
         if let Some(hooks) = model.values.get_item(key)? {
             statements.extend(hook_statements(context, &hooks)?);
@@ -91,11 +78,64 @@ pub(crate) fn rejected_opt_out<'py>(
             placeholders: placeholders.clone(),
         })
         .collect();
-    match check_sql_syntax(GENERIC_DIALECT, &checks) {
-        Err(_) => Ok(OptOut::Deferred),
-        Ok(false) => Ok(OptOut::Accepted),
-        Ok(true) => Ok(OptOut::Rejected(location(model_loop, context, model)?)),
+    if syntax_valid(model.config.py(), GENERIC_DIALECT, &checks)? {
+        Ok(OptOut::Rejected(location(model_loop, context, model)?))
+    } else {
+        Ok(OptOut::Accepted)
     }
+}
+
+/// `validate_sql_syntax`: raise the model's SQL syntax error before its references are scanned.
+pub(crate) fn reject_unparseable_query(
+    model_loop: &NativeModelLoop,
+    context: &LoopContext<'_, '_>,
+    model: &OptOutModel<'_, '_>,
+) -> PyResult<()> {
+    let check: SyntaxCheck = SyntaxCheck {
+        sql: analysis_sql(model_loop, context, model)?,
+        placeholders: placeholders(model.values)?,
+    };
+    let Some(error) = syntax_error_message(
+        model.config.py(),
+        &check,
+        GENERIC_DIALECT,
+        SyntaxMode::Validate,
+    )?
+    else {
+        return Ok(());
+    };
+    let message: String = format!(
+        "SQL syntax error in model '{}' ({}): {error}",
+        model.name, model.file_path
+    );
+    let keywords: Bound<'_, PyDict> = PyDict::new(model.config.py());
+    keywords.set_item(HELP_ARGUMENT, &context.classes.syntax_help)?;
+    Err(PyErr::from_value(
+        context
+            .classes
+            .compile_error
+            .call((message,), Some(&keywords))?,
+    ))
+}
+
+/// `cursor_intrinsics_analysis_sql`: the query with each cursor intrinsic as a typed literal.
+fn analysis_sql(
+    model_loop: &NativeModelLoop,
+    context: &LoopContext<'_, '_>,
+    model: &OptOutModel<'_, '_>,
+) -> PyResult<String> {
+    let literal: &str = match model.values.get_item(CURSOR_TYPE_KEY)? {
+        Some(value) if value.eq(INTEGER_CURSOR)? => INTEGER_LITERAL,
+        _ => TIMESTAMP_LITERAL,
+    };
+    let (analysis_sql, _) = replace_intrinsics(
+        model_loop.python,
+        model.query_sql,
+        INTRINSIC_CONTEXT,
+        |_| literal.to_owned(),
+    )
+    .map_err(|message| compile_error(context.classes, &message, None))?;
+    Ok(analysis_sql)
 }
 
 /// Whether either opt-out key is exactly `False`.

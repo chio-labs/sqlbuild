@@ -33,14 +33,13 @@ from sqlbuild.compiler.discovery.models import (
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.frontier.main._native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main._report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
 from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
-from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -59,7 +58,7 @@ from sqlbuild.compiler.scopes.types import (
 from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
 from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
 from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn, SchemaModelEntry
+from sqlbuild.spec.contracts.models import SchemaColumn
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError, SqlValueValidationError
 from sqlbuild.sql_values.main.validate_rendered_size import validate_rendered_sql_value_size
 from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
@@ -408,38 +407,6 @@ def usage_visibility(
         record for record in visibility if record.through is not None
     )
     return relationship_visibility or visibility
-
-
-def resolve_enum_contract_columns(
-    *,
-    schema_entry: SchemaModelEntry | None,
-    config_values: dict[str, object],
-    enums: dict[str, EnumDeclaration],
-) -> tuple[SchemaModelEntry | None, dict[str, EnumDeclaration]]:
-    """Resolve enum column types and synthesize enforced accepted-values audits."""
-
-    if schema_entry is None:
-        return None, {}
-    contract_enforced: bool = config_values.get("contract") == ContractPolicy.ENFORCED
-    enum_columns: dict[str, EnumDeclaration] = {}
-    columns: list[SchemaColumn] = []
-    column: SchemaColumn
-    for column in schema_entry.columns:
-        declaration: EnumDeclaration | None = enums.get(column.type or "")
-        if declaration is None:
-            columns.append(column)
-            continue
-        enum_columns[column.name] = declaration
-        audits: tuple[SchemaAuditInstance, ...] = column.audits
-        if contract_enforced:
-            generated_audit: SchemaAuditInstance = SchemaAuditInstance(
-                definition_name=_ACCEPTED_VALUES_AUDIT,
-                arguments={"values": tuple(member.value for member in declaration.members)},
-            )
-            if generated_audit not in audits:
-                audits = (*audits, generated_audit)
-        columns.append(replace(column, type=declaration.scalar_type, audits=audits))
-    return replace(schema_entry, columns=tuple(columns)), enum_columns
 
 
 def _with_declaration[T: EnumDeclaration | ConstantDeclaration](

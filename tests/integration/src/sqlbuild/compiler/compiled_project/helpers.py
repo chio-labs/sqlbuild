@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from collections import Counter
 from collections.abc import Callable
@@ -19,7 +20,6 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
 
@@ -43,10 +43,8 @@ TYPE_PROOF_FILES: dict[str, str] = {
 }
 
 
-def forbid_hand_built_projects(*, monkeypatch: pytest.MonkeyPatch, engine: str) -> None:
+def forbid_hand_built_projects(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Fail if a consumer records a project from `CompiledProject` instead of the compile's."""
-
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
 
     def refuse(project: object) -> object:
         raise AssertionError(f"rules rebuilt project facts from {type(project).__name__}")
@@ -261,20 +259,18 @@ PYTHON_HOOK_PARITY_FILES: dict[str, str] = PYTHON_HOOK_FILES | {
 
 
 def build_inputs_with_native_loop(
-    *, project_dir: Path, native: bool, monkeypatch: pytest.MonkeyPatch
+    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, defer_validation: bool = True
 ) -> tuple[CompileProjectInputs, list[int]]:
-    """Build compile inputs; without `native`, the attachment builds every model itself."""
+    """Build compile inputs, counting the models the native loop finishes."""
 
     finished: list[int] = []
     native_loop_type: type = _native.NativeModelLoop
 
-    loops: dict[bool, Callable[..., object]] = {
-        True: lambda *arguments: _CountingLoop(native_loop_type(*arguments), finished),
-        False: lambda *arguments: _AttachmentLoop(native_loop_type(*arguments), finished),
-    }
+    def counting_loop(*arguments: Any) -> _CountingLoop:
+        return _CountingLoop(native_loop_type(*arguments), finished)
 
     with monkeypatch.context() as patch:
-        patch.setattr(_native, "NativeModelLoop", loops[native])
+        patch.setattr(_native, "NativeModelLoop", counting_loop)
         inputs: CompileProjectInputs = build_compile_inputs(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),
             adapter_context=CompileAdapterContext(
@@ -283,7 +279,7 @@ def build_inputs_with_native_loop(
                 python_functions_inherit_default_namespace=True,
                 sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
             ),
-            defer_model_sql_validation=True,
+            defer_model_sql_validation=defer_validation,
             no_cache=True,
         )
     return inputs, finished
@@ -300,52 +296,59 @@ class _CountingLoop:
         return inputs, counts
 
 
-@dataclass(frozen=True)
-class _AttachmentLoop:
-    """The model loop with every model built by the attachment from its native config.
-
-    The native loop still resolves each model's config and visible declarations and runs the
-    steps before a model is finished, as a handed-over model's do; the attachment then builds the
-    model input, and the project retains facts read back from that input.
-    """
-
-    native_loop: Any
-    finished: list[int]
-
-    def run(
-        self, project: _native.NativeCompiledProject, host: Any, models: list[object]
-    ) -> tuple[list[object], tuple[int, int, int]]:
-        inputs, counts = self.native_loop.run(
-            _native.NativeCompiledProject(), _FallbackHost(host), models
-        )
-        for model_input in inputs:
-            project.record_model(host.model_row(model_input=model_input))
-        self.finished.append(0)
-        return inputs, (0, counts[1], counts[2])
+_SUMMARY_FIELDS: tuple[str, ...] = (
+    "config",
+    "query_sql",
+    "macro_source_sql",
+    "references",
+    "schema_entry",
+    "sql_validation_enabled",
+    "rejected_sql_analysis_opt_out",
+    "enum_declarations",
+    "constant_declarations",
+    "enum_columns",
+    "macro_deps",
+    "macro_usages",
+    "declaration_usages",
+    "sql_expansion",
+    "lint_expansion",
+)
 
 
-@dataclass(frozen=True)
-class _FallbackHost:
-    """A host whose natively finished models are built by the attachment instead."""
+def inputs_summary(*, inputs: CompileProjectInputs, project_dir: Path) -> dict[str, object]:
+    """Each model input's fields and the diagnostics, as text with the project path elided."""
 
-    host: Any
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self.host, name)
-
-    def plain_input(
-        self, *, index: int, config: object, visible: object, **_: object
-    ) -> tuple[object, tuple[list[object], list[object]]]:
-        attached: object = self.host.fallback(
-            index=index, config=config, visible=visible, python_hooks=None
-        )
-        return attached, ([], [])
+    return {
+        "models": {
+            model_input.model_file.relative_path.as_posix(): _model_input_fields(
+                model_input=model_input, project_dir=project_dir
+            )
+            for model_input in inputs.model_inputs
+        },
+        "diagnostics": [
+            _elided(value=item, project_dir=project_dir) for item in inputs.diagnostics
+        ],
+    }
 
 
-def expansions(inputs: CompileProjectInputs) -> list[tuple[object, object]]:
-    """Each model's SQL expansion evidence, which model-input equality does not compare."""
+def _model_input_fields(*, model_input: object, project_dir: Path) -> dict[str, str]:
+    return {
+        field_name: _elided(value=getattr(model_input, field_name), project_dir=project_dir)
+        for field_name in _SUMMARY_FIELDS
+    }
 
-    return [(item.sql_expansion, item.lint_expansion) for item in inputs.model_inputs]
+
+def _elided(*, value: object, project_dir: Path) -> str:
+    return repr(value).replace(str(project_dir), "<project>")
+
+
+def expected_summary(name: str) -> dict[str, object]:
+    """The recorded summary of the attachment's compile inputs for one parity project."""
+
+    return json.loads((EXPECTED_SUMMARIES / f"{name}.json").read_text(encoding="utf-8"))
+
+
+EXPECTED_SUMMARIES: Path = Path(__file__).parent / "expected"
 
 
 WAFFLE_SHOP_NATIVE_MODELS: int = 13

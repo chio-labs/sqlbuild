@@ -2,28 +2,18 @@
 
 from __future__ import annotations
 
-import inspect
 import re
 from dataclasses import dataclass, field, fields, replace
-from functools import partial
-from inspect import Parameter, Signature
 from pathlib import Path
 from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.attachments.main._pair_native_seed_files import pair_native_seed_files
-from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_syntax
+from sqlbuild.compiler.compile._helpers.analysis.validation import sql_analysis_opt_out_help
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
-    _model_sql_validation_gate,
-    _resolve_model_schema,
-    build_model_header_schema_entry,
-    find_schema_model_match,
     legacy_schema_rows,
     native_model_config_session,
-    strip_model_header_metadata_from_config,
     validate_declared_schema_models_are_attached,
-    validate_model_config,
-    validate_model_references,
 )
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_function_names,
@@ -33,9 +23,6 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_table_function_names,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
-from sqlbuild.compiler.compile._helpers.diagnostics.sql_analysis_opt_outs import (
-    rejected_sql_analysis_opt_out,
-)
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     merge_call_site_references,
     resource_references,
@@ -43,13 +30,8 @@ from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments impo
 from sqlbuild.compiler.compile._helpers.named_declarations.core import (
     named_declaration_usages,
 )
-from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import (
-    model_schema_enum_declarations,
-)
 from sqlbuild.compiler.compile._helpers.refs.references import (
     extract_sql_references,
-    report_invalid_reference_calls,
-    scan_sql_reference_calls,
 )
 from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
@@ -57,15 +39,10 @@ from sqlbuild.compiler.compile._helpers.render.context_templates import (
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsic_semantics,
-    cursor_intrinsics_analysis_sql,
-    get_validated_model_cursor_intrinsics,
-    reject_cursor_intrinsics,
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
-    expand_scanned_declaration_references,
     render_constant_declaration,
     resolve_declaration_context,
-    resolve_enum_contract_columns,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros_result,
@@ -84,7 +61,6 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroArgumentError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
-    CompiledSqlExpansion,
     CompileModelConfig,
     CompileModelInput,
     CompileSeedInput,
@@ -92,7 +68,6 @@ from sqlbuild.compiler.compile.models import (
     DeclarationExpansionContext,
     DeclarationExpansionResult,
     DeclarationResolutionContext,
-    DeclarationScopeResolver,
     ExpansionSpan,
     HookExpansionResult,
     LoadedMacro,
@@ -101,17 +76,12 @@ from sqlbuild.compiler.compile.models import (
     MappedOffset,
     ModelInputBuildContext,
     ModelResourceNames,
-    ModelValidationRequest,
     ModelValidatorContext,
     NativeModelConfigInputs,
-    SqlAnalysisOptOutRequest,
     SqlInterpolation,
     SqlReferenceOrigin,
-    SqlReferenceScan,
-    SqlReferenceSourceMap,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.compiled_project.main._model_input_row import model_input_row
 from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
 from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
 from sqlbuild.compiler.compiled_project.models import PlainModelFacts
@@ -120,20 +90,17 @@ from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.main._model_query_start import get_model_query_start
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
-    DiscoveredHookFunction,
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
     DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     EnumDeclaration,
-    ModelSchemaDeclaration,
     NamedSqlHookEntry,
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.frontier.main._native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main._report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.model_config.main._native_contract_classes import native_contract_classes
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
@@ -151,15 +118,12 @@ from sqlbuild.compiler.scopes.models import (
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
     ResourceKind,
-    UsageKind,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
-    SchemaColumn,
-    SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
     SourceLocation,
@@ -168,9 +132,6 @@ from sqlbuild.spec.contracts.models import (
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
-    {"ctx", "context", "_ctx", "hook_context"}
-)
 
 
 @dataclass(frozen=True)
@@ -260,26 +221,6 @@ class _ModelLoopHost:
             value_renderer=self.loop.context.value_renderer,
             collection_rendering=self.loop.context.collection_rendering,
             file_path=file_path,
-        )
-
-    def fallback(
-        self,
-        *,
-        index: int,
-        config: CompileModelConfig,
-        visible: _VisibleModelDeclarations,
-        python_hooks: list[UsageRecord] | None,
-    ) -> CompileModelInput:
-        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        return _build_model_input(
-            loop=self.loop,
-            model_file=model_file,
-            interpolation=self.interpolations[model_file.file_path],
-            declarations=visible,
-            effective_config=config,
-            expanded_macros=self.macros.pop(index, None),
-            checked_hooks=None if python_hooks is None else tuple(python_hooks),
-            expanded_hooks=self.hooks.pop(index, None),
         )
 
     def expand_hooks(
@@ -377,9 +318,6 @@ class _ModelLoopHost:
     ) -> tuple[UsageRecord, ...]:
         expansion: HookExpansionResult | None = self.hooks.pop(index, None)
         return (*(() if expansion is None else expansion.usages), *named_usages)
-
-    def model_row(self, *, model_input: CompileModelInput) -> tuple[object, ...]:
-        return model_input_row(model_input)
 
 
 def build_model_inputs(
@@ -539,6 +477,7 @@ def _run_native_model_loop(
                     "record_template_reads": record_template_reads,
                     "visible_declarations": _VisibleModelDeclarations,
                     "config_session": loop.validation_context.validators.native_config,
+                    "syntax_help": sql_analysis_opt_out_help(model_owned=True),
                     "hook_functions": loop.discovered_inputs.hook_functions,
                     "provider_names": frozenset(
                         provider.name for provider in loop.discovered_inputs.providers
@@ -555,7 +494,6 @@ def _run_native_model_loop(
                 loop.validation_context.defer_model_sql_validation,
                 settings.require_sql_analysis,
             ),
-            native_stage_enabled(NativeStage.PROJECT_ASSEMBLY),
             (
                 str(loop.validation_context.project_config_path),
                 legacy_schema_rows(loop.legacy_schema_files),
@@ -613,26 +551,6 @@ def _expansion_spans(rows: list[SpanRow]) -> tuple[ExpansionSpan, ...]:
             output_end=output_end,
         )
         for source_start, source_end, output_start, output_end in rows
-    )
-
-
-def _checked_python_hooks(
-    *, loop: _ModelInputLoop, model_file: DiscoveredSqlModelFile, values: dict[str, object]
-) -> tuple[UsageRecord, ...]:
-    """Check the model's Python hooks against their functions and return their usages."""
-
-    discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
-    validate_python_hook_config(
-        values=values,
-        model_name=model_file.file_path.stem,
-        hook_functions=discovered_inputs.hook_functions,
-        provider_names=frozenset(provider.name for provider in discovered_inputs.providers),
-    )
-    return _python_hook_usages(
-        values=values,
-        resolver=loop.context.declaration_resolver,
-        consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
-        consumer_path=model_file.relative_path,
     )
 
 
@@ -730,382 +648,13 @@ def _macro_expansion(
         raise error.located(location) from None
 
 
-def _build_model_input(
-    *,
-    loop: _ModelInputLoop,
-    model_file: DiscoveredSqlModelFile,
-    interpolation: SqlInterpolation,
-    declarations: _VisibleModelDeclarations,
-    effective_config: CompileModelConfig,
-    expanded_macros: MacroExpansionResult | None,
-    checked_hooks: tuple[UsageRecord, ...] | None,
-    expanded_hooks: HookExpansionResult | None,
-) -> CompileModelInput:
-    discovered_inputs: DiscoveredProjectInputs = loop.discovered_inputs
-    context: ModelInputBuildContext = loop.context
-    validation_context: _ModelValidationContext = loop.validation_context
-    legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = loop.legacy_schema_files
-    model_identity: ResourceIdentity = ResourceIdentity(
-        ResourceKind.MODEL, model_file.file_path.stem
-    )
-    model_schema: ModelSchemaDeclaration | None = _resolve_model_schema(
-        values=effective_config.values,
-        model_name=model_file.file_path.stem,
-        public_model_schemas=context.public_model_schemas,
-    )
-    model_schema_columns: tuple[SchemaColumn, ...] | None = (
-        model_schema.columns if model_schema is not None else None
-    )
-    python_hook_usages: tuple[UsageRecord, ...] = (
-        _checked_python_hooks(loop=loop, model_file=model_file, values=effective_config.values)
-        if checked_hooks is None
-        else checked_hooks
-    )
-    named_usages: tuple[UsageRecord, ...] = (
-        *(
-            named_declaration_usages(
-                resolver=context.declaration_resolver,
-                kind=DeclarationKind.SCHEMA,
-                name=model_schema.name,
-                consumer=model_identity,
-                consumer_path=model_file.relative_path,
-            )
-            if model_schema is not None
-            else ()
-        ),
-        *python_hook_usages,
-    )
-    var_substituted_sql: str = applied_interpolation(interpolation)
-    declaration_context: DeclarationResolutionContext = _declaration_context(
-        declarations=declarations, consumer=model_identity
-    )
-    declaration_expansion: DeclarationExpansionResult = expand_scanned_declaration_references(
-        sql=var_substituted_sql,
-        references=loop.native_declaration_references[model_file.file_path],
-        file_path=model_file.file_path,
-        declarations=declaration_context,
-        value_renderer=context.value_renderer,
-        collection_rendering=context.collection_rendering,
-    )
-    declaration_expanded_sql: str = declaration_expansion.sql
-    macro_expansion: MacroExpansionResult = (
-        _macro_expansion(
-            loop=loop,
-            model_file=model_file,
-            declarations=declaration_context,
-            declaration_expansion=declaration_expansion,
-            interpolated_sql=var_substituted_sql,
-        )
-        if expanded_macros is None
-        else expanded_macros
-    )
-    expanded_query_sql: str = macro_expansion.sql
-    expanded_query_sql = get_validated_model_cursor_intrinsics(
-        sql=expanded_query_sql,
-        config_values=effective_config.values,
-        model_name=model_file.file_path.stem,
-    )
-    raw_placeholders: object | None = effective_config.values.get("placeholders")
-    sql_validation_placeholders: dict[str, str] | None = (
-        {str(k): str(v) for k, v in raw_placeholders.items()}
-        if isinstance(raw_placeholders, dict)
-        else None
-    )
-    sql_validation_enabled, references, rejected_opt_out = _validate_model_input(
-        context=validation_context,
-        model_file=model_file,
-        config=effective_config,
-        expanded_query_sql=expanded_query_sql,
-        sql_validation_placeholders=sql_validation_placeholders,
-        model_schema_columns=model_schema_columns,
-        argument_references=macro_expansion.argument_references,
-        reference_source_map=(
-            SqlReferenceSourceMap(
-                body_start=partial(
-                    get_model_query_start,
-                    contents=model_file.contents,
-                    query_sql=model_file.query_sql,
-                ),
-                passes=(declaration_expansion.spans, macro_expansion.spans),
-            )
-            if var_substituted_sql == model_file.query_sql
-            and expanded_query_sql == macro_expansion.sql
-            else None
-        ),
-    )
-    hook_expansion: HookExpansionResult = (
-        _model_hook_expansion(
-            loop=loop, model_file=model_file, declarations=declarations, config=effective_config
-        )
-        if expanded_hooks is None
-        else expanded_hooks
-    )
-    expanded_config: CompileModelConfig = _hook_expanded_config(
-        config=effective_config,
-        hook_expansion=hook_expansion,
-        model_file=model_file,
-        validation_context=validation_context,
-    )
-    hook_name: str
-    for hook_name in ("pre_hooks", "post_hooks"):
-        hook_value: object | None = expanded_config.values.get(hook_name)
-        if isinstance(hook_value, list | tuple):
-            hook_entry: object
-            for hook_entry in hook_value:
-                if isinstance(hook_entry, SqlHookEntry):
-                    reject_cursor_intrinsics(
-                        sql=hook_entry.statement,
-                        context=f"Model '{model_file.file_path.stem}' {hook_name}",
-                    )
-    header_schema_entry: SchemaModelEntry | None = build_model_header_schema_entry(
-        model_name=model_file.file_path.stem,
-        model_header_values=expanded_config.values,
-        file_path=model_file.relative_path,
-        column_locations=model_file.header_column_locations,
-        model_schema_columns=model_schema_columns,
-        model_schema_name=model_schema.name if model_schema is not None else None,
-        model_schema_description=model_schema.description if model_schema is not None else None,
-        audit_factories=discovered_inputs.audit_factories,
-    )
-    model_config: CompileModelConfig = strip_model_header_metadata_from_config(expanded_config)
-    header_schema_entry, enum_columns = resolve_enum_contract_columns(
-        schema_entry=header_schema_entry,
-        config_values=model_config.values,
-        enums=(
-            declarations.enums
-            if model_schema is None
-            else {
-                **declarations.enums,
-                **model_schema_enum_declarations(
-                    schema=model_schema, resolver=context.declaration_resolver
-                ),
-            }
-        ),
-    )
-    generated_usages: tuple[UsageRecord, ...] = _generated_enum_usages(
-        enum_columns=enum_columns,
-        declarations=declarations,
-        consumer=model_identity,
-    )
-    model_declaration_usages: tuple[UsageRecord, ...] = tuple(
-        dict.fromkeys(
-            (
-                *declaration_expansion.usages,
-                *generated_usages,
-                *hook_expansion.usages,
-                *named_usages,
-            )
-        )
-    )
-    _reject_legacy_schema_match(model_file=model_file, schema_files=legacy_schema_files)
-    lint_expansion: CompiledSqlExpansion = CompiledSqlExpansion(
-        authored_sql=model_file.query_sql,
-        expanded_sql=macro_expansion.sql,
-        passes=(interpolation.spans, declaration_expansion.spans, macro_expansion.spans),
-    )
-    if header_schema_entry is None:
-        return CompileModelInput(
-            sql_expansion=(
-                CompiledSqlExpansion(
-                    authored_sql=model_file.query_sql,
-                    expanded_sql=macro_expansion.sql,
-                    passes=(declaration_expansion.spans, macro_expansion.spans),
-                )
-                if var_substituted_sql == model_file.query_sql
-                else None
-            ),
-            model_file=model_file,
-            config=model_config,
-            query_sql=expanded_query_sql,
-            macro_source_sql=declaration_expanded_sql,
-            references=references,
-            sql_validation_enabled=sql_validation_enabled,
-            rejected_sql_analysis_opt_out=rejected_opt_out,
-            enum_declarations=tuple(declarations.local_enums.values()),
-            constant_declarations=tuple(declarations.local_constants.values()),
-            enum_columns=enum_columns,
-            macro_deps=tuple(item.name for item in macro_expansion.dependencies),
-            macro_usages=macro_expansion.usages,
-            declaration_usages=model_declaration_usages,
-            lint_expansion=lint_expansion,
-        )
-
-    return CompileModelInput(
-        sql_expansion=(
-            CompiledSqlExpansion(
-                authored_sql=model_file.query_sql,
-                expanded_sql=macro_expansion.sql,
-                passes=(declaration_expansion.spans, macro_expansion.spans),
-            )
-            if var_substituted_sql == model_file.query_sql
-            else None
-        ),
-        model_file=model_file,
-        config=model_config,
-        query_sql=expanded_query_sql,
-        macro_source_sql=declaration_expanded_sql,
-        references=references,
-        schema_entry=header_schema_entry,
-        sql_validation_enabled=sql_validation_enabled,
-        rejected_sql_analysis_opt_out=rejected_opt_out,
-        enum_declarations=tuple(declarations.local_enums.values()),
-        constant_declarations=tuple(declarations.local_constants.values()),
-        enum_columns=enum_columns,
-        macro_deps=tuple(item.name for item in macro_expansion.dependencies),
-        macro_usages=macro_expansion.usages,
-        declaration_usages=model_declaration_usages,
-        lint_expansion=lint_expansion,
-    )
-
-
-def _hook_expanded_config(
-    *,
-    config: CompileModelConfig,
-    hook_expansion: HookExpansionResult,
-    model_file: DiscoveredSqlModelFile,
-    validation_context: _ModelValidationContext,
-) -> CompileModelConfig:
-    validate_model_references(
-        context=validation_context.validators,
-        model_file=model_file,
-        references=hook_expansion.references,
-    )
-    return CompileModelConfig(
-        values=hook_expansion.values,
-        model_header_keys=config.model_header_keys,
-        matched_path_default=config.matched_path_default,
-        logical_schema=config.logical_schema,
-        layer_schema=config.layer_schema,
-        logical_database=config.logical_database,
-        time_travel_retention=config.time_travel_retention,
-        table_type=config.table_type,
-    )
-
-
-def _model_reference_origin(
-    *, model_file: DiscoveredSqlModelFile, source_map: SqlReferenceSourceMap | None = None
-) -> SqlReferenceOrigin:
+def _model_reference_origin(*, model_file: DiscoveredSqlModelFile) -> SqlReferenceOrigin:
     return SqlReferenceOrigin(
         file_path=model_file.file_path,
         relative_path=model_file.relative_path,
         contents=model_file.contents,
         resource_type=CompiledResourceType.MODEL,
         resource_name=model_file.file_path.stem,
-        source_map=source_map,
-    )
-
-
-def _validate_model_input(
-    *,
-    context: _ModelValidationContext,
-    model_file: DiscoveredSqlModelFile,
-    config: CompileModelConfig,
-    expanded_query_sql: str,
-    sql_validation_placeholders: dict[str, str] | None,
-    model_schema_columns: tuple[SchemaColumn, ...] | None,
-    argument_references: tuple[CompileSqlReference, ...],
-    reference_source_map: SqlReferenceSourceMap | None,
-) -> tuple[bool, tuple[CompileSqlReference, ...], SourceLocation | None]:
-    model_name: str = model_file.file_path.stem
-    sql_validation_enabled: bool = _model_sql_validation_gate(
-        effective_settings=context.effective_settings,
-        no_sql_validation=context.no_sql_validation,
-        model_config=config,
-    )
-    rejected_opt_out: SourceLocation | None = (
-        None
-        if sql_validation_enabled
-        else rejected_sql_analysis_opt_out(
-            SqlAnalysisOptOutRequest(
-                model_file=model_file,
-                config=config,
-                settings=context.effective_settings,
-                no_sql_validation=context.no_sql_validation,
-                query_sql=cursor_intrinsics_analysis_sql(
-                    sql=expanded_query_sql, cursor_type=config.values.get("cursor_type")
-                ),
-                placeholders=sql_validation_placeholders,
-                project_config_path=context.project_config_path,
-            )
-        )
-    )
-    sql_validation_enabled = sql_validation_enabled or rejected_opt_out is not None
-    if sql_validation_enabled and not context.defer_model_sql_validation:
-        validate_sql_syntax(
-            query_sql=cursor_intrinsics_analysis_sql(
-                sql=expanded_query_sql,
-                cursor_type=config.values.get("cursor_type"),
-            ),
-            model_name=model_name,
-            file_path=model_file.file_path,
-            placeholders=sql_validation_placeholders,
-        )
-    reference_origin: SqlReferenceOrigin = _model_reference_origin(
-        model_file=model_file, source_map=reference_source_map
-    )
-    reference_scan: SqlReferenceScan = scan_sql_reference_calls(
-        sql=expanded_query_sql, syntax=context.sql_lexical_syntax, origin=reference_origin
-    )
-    report_invalid_reference_calls(
-        invalid_calls=reference_scan.invalid_calls,
-        origin=reference_origin,
-        syntax=context.sql_lexical_syntax,
-    )
-    references: tuple[CompileSqlReference, ...] = merge_call_site_references(
-        references=reference_scan.references,
-        argument_references=argument_references,
-    )
-    validate_model_config(
-        context=context.validators,
-        request=ModelValidationRequest(
-            model_file=model_file,
-            config=config,
-            references=references,
-            declared_columns=model_schema_columns,
-            query_sql=expanded_query_sql,
-        ),
-    )
-    return (
-        sql_validation_enabled and not reference_scan.invalid_calls,
-        references,
-        rejected_opt_out,
-    )
-
-
-def _generated_enum_usages(
-    *,
-    enum_columns: dict[str, EnumDeclaration],
-    declarations: _VisibleModelDeclarations,
-    consumer: ResourceIdentity,
-) -> tuple[UsageRecord, ...]:
-    usages: list[UsageRecord] = []
-    for enum in enum_columns.values():
-        for visibility in declarations.enum_visibility.get(enum.name, ()):
-            usages.append(
-                UsageRecord(
-                    consumer=consumer,
-                    declaration=visibility.declaration,
-                    kind=UsageKind.GENERATED,
-                    through=visibility.through,
-                )
-            )
-    return tuple(usages)
-
-
-def _reject_legacy_schema_match(
-    *, model_file: DiscoveredSqlModelFile, schema_files: tuple[DiscoveredSchemaFile, ...]
-) -> None:
-    schema_match: tuple[SchemaModelEntry, DiscoveredSchemaFile] | None = find_schema_model_match(
-        model_file=model_file,
-        schema_files=schema_files,
-    )
-    if schema_match is None:
-        return
-    schema_entry, schema_file = schema_match
-    raise CompileInputError(
-        f"Schema file {schema_file.relative_path} declares model '{schema_entry.name}', "
-        f"but model metadata must live in {model_file.relative_path} MODEL(...). "
-        "Move description, columns, and audits into the model header."
     )
 
 
@@ -1267,173 +816,6 @@ def expand_model_hook_macros_result(
         usages=tuple(dict.fromkeys(facts.usages)),
         references=tuple(dict.fromkeys(facts.references)),
     )
-
-
-def validate_python_hook_config(
-    *,
-    values: dict[str, object],
-    model_name: str,
-    hook_functions: tuple[DiscoveredHookFunction, ...],
-    provider_names: frozenset[str] = frozenset(),
-) -> None:
-    """Validate Python lifecycle hook references and explicit kwargs."""
-
-    hooks_by_name: dict[str, DiscoveredHookFunction] = {
-        hook_function.name: hook_function for hook_function in hook_functions
-    }
-    hook_key: str
-    for hook_key in sorted(_MODEL_HOOK_KEYS):
-        raw_value: object | None = values.get(hook_key)
-        if not isinstance(raw_value, list | tuple):
-            continue
-        hook_index: int
-        hook_entry: object
-        for hook_index, hook_entry in enumerate(raw_value):
-            if not isinstance(hook_entry, PythonHookEntry):
-                continue
-            hook_function: DiscoveredHookFunction | None = hooks_by_name.get(hook_entry.name)
-            if hook_function is None:
-                known_hook_names: str = ", ".join(sorted(hooks_by_name)) or "none discovered"
-                raise CompileInputError(
-                    f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
-                    f"references an unknown hook. Discovered hooks: {known_hook_names}"
-                )
-            validate_python_hook_signature(
-                hook_entry=hook_entry,
-                hook_function=hook_function,
-                model_name=model_name,
-                hook_key=hook_key,
-                hook_index=hook_index,
-                provider_names=provider_names,
-            )
-
-
-def _python_hook_usages(
-    *,
-    values: dict[str, object],
-    resolver: DeclarationScopeResolver | None,
-    consumer: ResourceIdentity,
-    consumer_path: Path,
-) -> tuple[UsageRecord, ...]:
-    usages: list[UsageRecord] = []
-    hook_key: str
-    for hook_key in sorted(_MODEL_HOOK_KEYS):
-        raw_value: object | None = values.get(hook_key)
-        if not isinstance(raw_value, list | tuple):
-            continue
-        hook_entry: object
-        for hook_entry in raw_value:
-            if isinstance(hook_entry, PythonHookEntry):
-                usages.extend(
-                    named_declaration_usages(
-                        resolver=resolver,
-                        kind=DeclarationKind.PYTHON_HOOK,
-                        name=hook_entry.name,
-                        consumer=consumer,
-                        consumer_path=consumer_path,
-                    )
-                )
-    return tuple(usages)
-
-
-def validate_python_hook_signature(
-    *,
-    hook_entry: PythonHookEntry,
-    hook_function: DiscoveredHookFunction,
-    model_name: str,
-    hook_key: str,
-    hook_index: int,
-    provider_names: frozenset[str] = frozenset(),
-) -> None:
-    signature: Signature = inspect.signature(hook_function.function)
-    parameters: tuple[Parameter, ...] = tuple(signature.parameters.values())
-    accepts_var_keyword: bool = any(
-        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters
-    )
-    keyword_parameter_names: frozenset[str] = frozenset(
-        parameter.name
-        for parameter in parameters
-        if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
-        and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
-    )
-
-    context_conflicts: tuple[str, ...] = tuple(
-        sorted(
-            kwarg_name
-            for kwarg_name in hook_entry.kwargs
-            if kwarg_name in _HOOK_CONTEXT_PARAMETER_NAMES
-        )
-    )
-    if context_conflicts:
-        conflict: str = context_conflicts[0]
-        raise CompileInputError(
-            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
-            f"argument '{conflict}' conflicts with reserved context parameter '{conflict}'. "
-            "Rename the hook argument; context parameters are injected by SQLBuild."
-        )
-
-    provider_conflicts: tuple[str, ...] = tuple(
-        sorted(kwarg_name for kwarg_name in hook_entry.kwargs if kwarg_name in provider_names)
-    )
-    if provider_conflicts:
-        conflict = provider_conflicts[0]
-        raise CompileInputError(
-            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
-            f"argument '{conflict}' conflicts with provider injection for parameter "
-            f"'{conflict}'. Rename the hook argument or remove it to let SQLBuild inject "
-            "the provider."
-        )
-
-    unknown_kwargs: tuple[str, ...] = tuple(
-        sorted(
-            kwarg_name
-            for kwarg_name in hook_entry.kwargs
-            if kwarg_name not in keyword_parameter_names and not accepts_var_keyword
-        )
-    )
-    if unknown_kwargs:
-        accepted_kwargs: str = _format_hook_parameter_names(keyword_parameter_names)
-        raise CompileInputError(
-            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
-            f"has unknown argument(s): {', '.join(unknown_kwargs)}. "
-            f"Accepted configured arguments: {accepted_kwargs}"
-        )
-
-    required_positional_only: tuple[str, ...] = tuple(
-        parameter.name
-        for parameter in parameters
-        if parameter.kind is Parameter.POSITIONAL_ONLY
-        and parameter.default is Parameter.empty
-        and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
-    )
-    if required_positional_only:
-        raise CompileInputError(
-            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
-            "cannot be configured because the hook function has required positional-only "
-            f"parameter(s): {', '.join(required_positional_only)}. "
-            "Use keyword-capable parameters for values supplied from MODEL hooks."
-        )
-
-    missing_kwargs: tuple[str, ...] = tuple(
-        parameter.name
-        for parameter in parameters
-        if parameter.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
-        and parameter.default is Parameter.empty
-        and parameter.name not in _HOOK_CONTEXT_PARAMETER_NAMES
-        and parameter.name not in provider_names
-        and parameter.name not in hook_entry.kwargs
-    )
-    if missing_kwargs:
-        raise CompileInputError(
-            f"model '{model_name}' {hook_key}[{hook_index}] python(\"{hook_entry.name}\") "
-            f"is missing required argument(s): {', '.join(missing_kwargs)}"
-        )
-
-
-def _format_hook_parameter_names(parameter_names: frozenset[str]) -> str:
-    if not parameter_names:
-        return "none"
-    return ", ".join(sorted(parameter_names))
 
 
 def expand_sql_macros_in_value(

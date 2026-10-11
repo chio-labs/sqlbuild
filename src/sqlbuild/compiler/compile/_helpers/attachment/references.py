@@ -13,35 +13,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
     DiscoveredSqlFunctionFile,
-    DiscoveredSqlModelFile,
 )
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-
-
-def validate_external_reference(
-    *,
-    reference: CompileSqlReference,
-    model_file: DiscoveredSqlModelFile,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-) -> None:
-    """Validate one `__dbt_ref` against the dbt manifest, which the external resolver owns."""
-
-    if external_sql_reference_resolver is None:
-        raise CompileInputError(
-            f"Model file {model_file.relative_path} uses "
-            f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')} "
-            "but no dbt manifest was found",
-            code="C214",
-            help=(
-                "Run dbt compile or configure dbt target_path so SQLBuild can read manifest.json."
-            ),
-        )
-    external_sql_reference_resolver.validate_reference(
-        ref_kind=reference.ref_kind,
-        ref_name=reference.ref_name,
-        ref_package=reference.ref_package,
-        owner_relative_sql_path=model_file.relative_path,
-    )
+from sqlbuild.compiler.references.types import SqlReferenceKind
 
 
 def validate_table_function_call_arities(

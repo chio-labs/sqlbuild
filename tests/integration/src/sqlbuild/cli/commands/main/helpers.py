@@ -34,7 +34,6 @@ from sqlbuild.compiler.compile.main import expand_sql_with_spans as expand_sql_m
 from sqlbuild.compiler.discovery._helpers.native import (
     model_files as native_model_files_module,
 )
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
@@ -863,11 +862,10 @@ EARLY_LINT_PROJECT_FILES: dict[str, str] = {
 }
 
 
-def record_early_lint_expansions(*, monkeypatch: pytest.MonkeyPatch, engine: str) -> Counter[str]:
+def record_early_lint_expansions(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     """Count model expansions early lint took from the compile and expanded again in Python."""
 
     counts: Counter[str] = Counter()
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
 
     def handed_over(*, stage: NativeStage, kind: str, units: int = 1) -> None:
         counts[f"{stage.value}:{kind}"] += units

@@ -4,15 +4,10 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from pathlib import Path
 
-from sqlbuild.compiler.compile._helpers.analysis.validation import (
-    hook_sql_statements,
-)
 from sqlbuild.compiler.compile.constants import UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
-    SqlAnalysisOptOutRequest,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
@@ -23,22 +18,13 @@ from sqlbuild.compiler.discovery.constants import (
     PROJECT_CONFIG_FILENAME,
     REQUIRE_SQL_ANALYSIS_SETTING_KEY,
     SETTINGS_SECTION,
-    SQL_ANALYSIS_CONFIG_KEY,
-)
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.project_assembly.main._check_native_sql_syntax import (
-    check_native_sql_syntax,
 )
 from sqlbuild.errors.setting_help.main.join_helps import join_helps
 from sqlbuild.errors.setting_help.main.setting_help import setting_help
 from sqlbuild.errors.setting_help.main.setting_note import setting_note
 from sqlbuild.presentation.main.count_noun import format_count_noun
-from sqlbuild.spec.contracts.models import SettingsConfig, SourceLocation
+from sqlbuild.spec.contracts.models import SourceLocation
 
-_LEGACY_KEY: str = "sql_validation"
-_OPT_OUT_KEYS: tuple[str, ...] = (SQL_ANALYSIS_CONFIG_KEY, _LEGACY_KEY)
-_HOOK_KEYS: tuple[str, ...] = ("pre_hooks", "post_hooks")
-_OPT_OUT_KEY_PATTERN: re.Pattern[str] = re.compile(r"\b(?:sql_analysis|sql_validation)\b")
 _FINDING_KINDS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"^B002$"), "unknown column", "unknown columns"),
     (re.compile(r"^B003$"), "ambiguous column", "ambiguous columns"),
@@ -50,34 +36,6 @@ _FINDING_KINDS: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (re.compile(r"^B23[0-2]$"), "grouping or window error", "grouping or window errors"),
     (re.compile(r"^B3\d\d$"), "metadata mismatch", "metadata mismatches"),
 )
-
-
-def rejected_sql_analysis_opt_out(request: SqlAnalysisOptOutRequest) -> SourceLocation | None:
-    """Return where a model turns SQL analysis off when the project forbids it for that model."""
-
-    settings: SettingsConfig = request.settings
-    if (
-        not settings.require_sql_analysis
-        or not settings.sql_analysis
-        or request.no_sql_validation
-        or not any(request.config.values.get(key) is False for key in _OPT_OUT_KEYS)
-    ):
-        return None
-    if not _parses(request):
-        return None
-    return _opt_out_location(request)
-
-
-def _parses(request: SqlAnalysisOptOutRequest) -> bool:
-    """Whether the model query and every hook pass Python's syntax validation."""
-
-    statements: list[str] = [request.query_sql]
-    for hook_name in _HOOK_KEYS:
-        statements.extend(hook_sql_statements(request.config.values.get(hook_name)))
-    return check_native_sql_syntax(
-        checks=tuple((statement, request.placeholders) for statement in statements),
-        dialect=None,
-    )
 
 
 def unneeded_opt_out_diagnostic(
@@ -147,27 +105,3 @@ def _finding_kind(code: str) -> tuple[str, str]:
         if pattern.match(code):
             return singular, plural
     return "other finding", "other findings"
-
-
-def _opt_out_location(request: SqlAnalysisOptOutRequest) -> SourceLocation:
-    model_file: DiscoveredSqlModelFile = request.model_file
-    if any(key in request.config.model_header_keys for key in _OPT_OUT_KEYS):
-        return _text_location(path=model_file.relative_path, text=model_file.contents, start=0)
-    path_key: str | None = request.config.matched_path_default
-    config_text: str = (
-        request.project_config_path.read_text(encoding="utf-8")
-        if request.project_config_path.is_file()
-        else ""
-    )
-    start: int = config_text.find(path_key) if path_key else -1
-    return _text_location(
-        path=Path(request.project_config_path.name), text=config_text, start=max(start, 0)
-    )
-
-
-def _text_location(*, path: Path, text: str, start: int) -> SourceLocation:
-    match: re.Match[str] | None = _OPT_OUT_KEY_PATTERN.search(text, start)
-    offset: int = match.start() if match is not None else 0
-    line: int = text.count("\n", 0, offset) + 1
-    column: int = offset - (text.rfind("\n", 0, offset) + 1) + 1
-    return SourceLocation(path=path, line=line, column=column)

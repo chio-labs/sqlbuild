@@ -10,7 +10,6 @@ class RetainedRulesRowsTestCase:
     """A real compile whose rules request reads model facts the compile-input stage retained."""
 
     description: str
-    engine: str
     expected_codes: tuple[str, ...]
 
 
@@ -33,12 +32,13 @@ class ZeroMaterializationTestCase:
 
 @dataclass(frozen=True)
 class ModelLoopParityTestCase:
-    """A project whose models the native loop must build exactly as the attachment does."""
+    """A project whose model inputs the native loop builds as the attachment recorded them."""
 
     description: str
     fixtures: tuple[str, ...]
     files: dict[str, str]
     expected_native_models: int
+    expected_summary: str
 
 
 @dataclass(frozen=True)
@@ -60,3 +60,13 @@ class ModelPathScopeErrorTestCase:
     model_path: str
     expected_message: str
     expected_code: str
+
+
+@dataclass(frozen=True)
+class ImmediateSyntaxErrorTestCase:
+    """A model the native loop rejects while validating its SQL syntax immediately."""
+
+    description: str
+    model_sql: str
+    expected_message: str
+    expected_help_fragment: str

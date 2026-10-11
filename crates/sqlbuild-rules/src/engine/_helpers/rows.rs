@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use sqlbuild_analysis::type_system::errors::TypeNormalizationError;
 use sqlbuild_analysis::type_system::main::normalize_type::normalize_type;
 use sqlbuild_analysis::type_system::models::NormalizedType;
 
@@ -173,22 +174,22 @@ fn schema_facts(
     Ok((columns, dynamic_columns, proven, audit_count))
 }
 
-/// Python's `types_equal`, normalizing each type once and deferring what it cannot normalize.
+/// Python's `types_equal`, normalizing each type once; Python raises what normalization rejects.
 struct Comparer<'a> {
     dialect: &'a str,
-    normalized: RefCell<HashMap<String, Option<NormalizedType>>>,
+    normalized: RefCell<HashMap<String, Result<NormalizedType, TypeNormalizationError>>>,
     fallback: RefCell<&'a mut TypeEquality<'a>>,
 }
 
 impl Comparer<'_> {
     fn equal(&self, left: &str, right: &str) -> Result<bool, String> {
         match (self.normalized(left), self.normalized(right)) {
-            (Some(left), Some(right)) => Ok(left == right),
+            (Ok(left), Ok(right)) => Ok(left == right),
             _ => (self.fallback.borrow_mut())(left, right),
         }
     }
 
-    fn normalized(&self, type_sql: &str) -> Option<NormalizedType> {
+    fn normalized(&self, type_sql: &str) -> Result<NormalizedType, TypeNormalizationError> {
         let dialect: &str = self.dialect;
         self.normalized
             .borrow_mut()

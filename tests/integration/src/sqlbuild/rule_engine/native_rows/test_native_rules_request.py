@@ -46,16 +46,7 @@ _TYPE_PROOF_FINDINGS: tuple[FindingKey, ...] = (
     "test_case",
     [
         NativeRulesRequestTestCase(
-            description="the default engine builds every request row natively",
-            engine="native",
-            expected_built_rows=(39, 15, 9),
-            expected_cold_cache=(0, 26),
-            expected_warm_cache=(26, 0),
-            expected_edited_cache=(24, 2),
-        ),
-        NativeRulesRequestTestCase(
-            description="the python engine builds every request row natively too",
-            engine="python",
+            description="compile builds every request row natively",
             expected_built_rows=(39, 15, 9),
             expected_cold_cache=(0, 26),
             expected_warm_cache=(26, 0),
@@ -77,12 +68,12 @@ def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_m
     write_rules_fixture(project_dir=fresh_edited_dir)
     edit_model(project_dir=fresh_edited_dir)
     write_rules_fixture(project_dir=project_dir)
-    _ = record_built_rows(monkeypatch=monkeypatch, engine=test_case.engine)
+    _ = record_built_rows(monkeypatch=monkeypatch)
     fresh: tuple[FindingKey, ...] = compile_rules(project_dir=fresh_dir, capsys=capsys)[0]
     fresh_edited: tuple[FindingKey, ...] = compile_rules(
         project_dir=fresh_edited_dir, capsys=capsys
     )[0]
-    built: Counter[str] = record_built_rows(monkeypatch=monkeypatch, engine=test_case.engine)
+    built: Counter[str] = record_built_rows(monkeypatch=monkeypatch)
 
     cold: tuple[tuple[FindingKey, ...], tuple[int, int]] = compile_rules(
         project_dir=project_dir, capsys=capsys
@@ -108,14 +99,7 @@ def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_m
     "test_case",
     [
         NativeTypeProofTestCase(
-            description="the default engine proves passthrough types natively",
-            engine="native",
-            expected_findings=_TYPE_PROOF_FINDINGS,
-            expected_built_rows=(2, 0, 0),
-        ),
-        NativeTypeProofTestCase(
-            description="the python engine proves passthrough types natively too",
-            engine="python",
+            description="compile proves passthrough types natively",
             expected_findings=_TYPE_PROOF_FINDINGS,
             expected_built_rows=(2, 0, 0),
         ),
@@ -129,7 +113,7 @@ def test_given_matching_and_mismatched_passthroughs_when_compiling_then_only_mis
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=TYPE_PROOF_FILES)
-    built: Counter[str] = record_built_rows(monkeypatch=monkeypatch, engine=test_case.engine)
+    built: Counter[str] = record_built_rows(monkeypatch=monkeypatch)
 
     findings: tuple[FindingKey, ...] = compile_rules(project_dir=tmp_path, capsys=capsys)[0]
 
@@ -141,25 +125,16 @@ def test_given_matching_and_mismatched_passthroughs_when_compiling_then_only_mis
     "test_case",
     [
         StructPassthroughTestCase(
-            description="default engine: declared STRUCT equals the passthrough",
-            engine="native",
+            description="declared STRUCT equals the passthrough",
             declared_type='STRUCT("café" INTEGER)',
             expected_exit_code=0,
             expected_codes=(),
         ),
         StructPassthroughTestCase(
-            description="default engine: declared STRUCT differs from the passthrough",
-            engine="native",
+            description="declared STRUCT differs from the passthrough",
             declared_type='STRUCT("café" BIGINT)',
             expected_exit_code=1,
             expected_codes=("K002", "SQBRCONTRACT105"),
-        ),
-        StructPassthroughTestCase(
-            description="python engine: declared STRUCT equals the passthrough",
-            engine="python",
-            declared_type='STRUCT("café" INTEGER)',
-            expected_exit_code=0,
-            expected_codes=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -174,7 +149,7 @@ def test_given_struct_passthrough_when_proving_types_then_adapter_callback_decid
         project_dir=tmp_path,
         files=struct_passthrough_files(declared_type=test_case.declared_type),
     )
-    _ = record_built_rows(monkeypatch=monkeypatch, engine=test_case.engine)
+    _ = record_built_rows(monkeypatch=monkeypatch)
 
     outcome: tuple[int, tuple[str, ...]] = compile_codes(project_dir=tmp_path, capsys=capsys)
 

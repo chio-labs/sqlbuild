@@ -24,7 +24,7 @@ from sqlbuild.cli.compile_reuse.constants import (
     NATIVE_REUSE_SUFFIX,
     REUSE_DISABLE_ENV_VAR,
 )
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.frontier.types import NativeStage
 
@@ -101,13 +101,10 @@ def write_files(*, project_dir: Path, files: dict[str, str]) -> None:
         _ = path.write_text(contents, encoding="utf-8")
 
 
-def record_output_work(
-    *, monkeypatch: pytest.MonkeyPatch, engine: str, reuse_disabled: str
-) -> Counter[str]:
+def record_output_work(*, monkeypatch: pytest.MonkeyPatch, reuse_disabled: str) -> Counter[str]:
     """Count native compile output work, staging small projects and settling file stamps."""
 
     counts: Counter[str] = Counter()
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, reuse_disabled)
     monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
     monkeypatch.setattr(native_reuse_module, "RACY_WINDOW_NS", 0)
