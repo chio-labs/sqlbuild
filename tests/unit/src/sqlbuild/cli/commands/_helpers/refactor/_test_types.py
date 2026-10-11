@@ -58,3 +58,10 @@ class CommandLineQuotingTestCase:
 class LayerFolderMappingTestCase:
     description: str
     expected_layers: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ImportBoundaryTestCase:
+    description: str
+    imported_name: str
+    expected_modules: tuple[str, ...]

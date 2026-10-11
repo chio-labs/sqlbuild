@@ -11,6 +11,7 @@ pub(crate) mod graph;
 pub(crate) mod lineage;
 pub(crate) mod model_config;
 pub(crate) mod project_assembly;
+pub(crate) mod refactor;
 pub(crate) mod render;
 pub(crate) mod rules;
 pub(crate) mod scopes;

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+from itertools import compress
 from pathlib import Path, PurePosixPath
 
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
@@ -60,3 +62,19 @@ def rule_diagnostics(*, codes: tuple[str, ...], path: str) -> tuple[CompilerDiag
         )
         for code in codes
     )
+
+
+def modules_importing(*, package_dir: Path, name: str) -> list[str]:
+    """Return the sorted file names of the package's modules that import `name`."""
+
+    paths: list[Path] = sorted(package_dir.glob("*.py"))
+    flags: list[bool] = [_imports(path=path, name=name) for path in paths]
+    return [path.name for path in compress(paths, flags)]
+
+
+def _imports(*, path: Path, name: str) -> bool:
+    tree: ast.Module = ast.parse(path.read_text(encoding="utf-8"))
+    imported: set[tuple[type[ast.AST], object]] = {
+        (type(node), getattr(node, "name", None)) for node in ast.walk(tree)
+    }
+    return (ast.alias, name) in imported

@@ -36,6 +36,7 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.COMPILE_LINT_INPUTS: NativeStageTier.SHIPPED,
     NativeStage.RULES_REQUEST: NativeStageTier.SHIPPED,
     NativeStage.COMPILE_OUTPUTS: NativeStageTier.SHIPPED,
+    NativeStage.REFACTORING: NativeStageTier.SHIPPED,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
     CompilerEngine.NATIVE: frozenset({NativeStageTier.SHIPPED}),
@@ -60,6 +61,8 @@ STAGE_CAPTURE_RESERVED_KEYS: frozenset[str] = frozenset(
 STAGE_CAPTURE_INVOCATION_ID_PATTERN: re.Pattern[str] = re.compile(r"\b\d{8}T\d{6}Z_[0-9a-f]{12}\b")
 STAGE_CAPTURE_INVOCATION_ID_MASK: str = "<invocation-id>"
 STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN: re.Pattern[str] = re.compile(r"-native(?:-preview)?-v\d+\b")
+STAGE_CAPTURE_REFACTOR_STAGING_PATTERN: re.Pattern[str] = re.compile(r"\bsqb-refactor-[0-9a-z_]+")
+STAGE_CAPTURE_REFACTOR_STAGING_MASK: str = "sqb-refactor-<staging>"
 STAGE_CAPTURE_SKIPPED_SLOTS: frozenset[str] = frozenset({"__dict__", "__weakref__"})
 STAGE_CAPTURE_UNORDERED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog": frozenset(
