@@ -4,18 +4,12 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import record_analysis_cache_metrics
-from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
-    substitute_placeholder_defaults,
-    table_function_analysis_name,
-)
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    binding_relation_row_names,
     binding_schema_for_model,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
-from sqlbuild.compiler.compile._helpers.sharing.binding import lineage_reference_map
 from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysisRequest,
 )
@@ -25,7 +19,6 @@ from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
@@ -95,15 +88,7 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
         model_input.model_file.file_path.stem,
         request.query_sql,
         list((request.placeholders or {}).items()),
-        [
-            (_analysis_name(kind=kind, name=name), kind == SqlReferenceKind.REF)
-            for kind, name, _, _ in rows
-        ],
-        [
-            (name, resource_type.value, resource_name)
-            for name, (resource_type, resource_name) in lineage_reference_map(rows).items()
-        ],
-        sorted(binding_relation_row_names(rows)),
+        [(str(kind), name) for kind, name, _, _ in rows],
         _recovers_cte_facts(model_input),
         (
             (
@@ -112,13 +97,6 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
             )
             if values.get("materialized") == MaterializationType.SNAPSHOT
             else None
-        ),
-        (
-            substitute_placeholder_defaults(
-                query_sql=request.query_sql, placeholders=request.placeholders
-            )
-            if request.placeholders
-            else request.query_sql
         ),
         [
             PythonModelAnalysis.family_row(family)
@@ -129,12 +107,6 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
             )
         ],
     )
-
-
-def _analysis_name(*, kind: str, name: str) -> str:
-    if kind == SqlReferenceKind.TABLE_FUNCTION:
-        return table_function_analysis_name(name)
-    return name
 
 
 def _placeholders(model_input: ModelInput) -> dict[str, str] | None:

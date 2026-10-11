@@ -170,3 +170,10 @@ pub(crate) struct ModelColumnsTestCase {
     pub(crate) poisoned: &'static [&'static str],
     pub(crate) expected_columns: ExpectedModelColumns,
 }
+
+pub(crate) struct ReferenceFactsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) rows: &'static [(&'static str, &'static str)],
+    pub(crate) expected_lineage: &'static [(&'static str, &'static str, &'static str)],
+    pub(crate) expected_required: &'static [&'static str],
+}
