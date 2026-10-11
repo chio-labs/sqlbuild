@@ -22,6 +22,9 @@ type NativeDeclarationRow = tuple[
     list[NativeDeclarationIdentityRow],
 ]
 type NativeQualifiedRow = NativeDeclarationIdentityRow
+type NativeUsageKeyRow = tuple[
+    NativeQualifiedRow, NativeQualifiedRow, str, NativeQualifiedRow | None, str | None
+]
 type NativeRootRow = tuple[str, str, str | None]
 type NativePlacementRows = tuple[
     list[tuple[NativeIdentityRow, str, NativeRootRow]],

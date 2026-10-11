@@ -10,15 +10,12 @@ use sqlbuild_scopes::placement::main::required_declaration_placement::required_d
 use sqlbuild_scopes::placement::models::{
     PlacementDiagnostic, PlacementIndex, PlacementUsage, Relocation, RequiredPlacement,
 };
-use sqlbuild_scopes::scope_index::main::path_visible::path_visible;
 use sqlbuild_scopes::scope_index::models::{
-    DeclarationIdentity, DeclarationKind, DeclarationRecord, DeclaredScope, OwnershipRoot,
-    OwnershipRootKind, QualifiedIdentity, ResourceIdentity, ResourceKind, ResourceRecord,
-    ScopeKind,
+    DeclarationIdentity, DeclarationKind, DeclarationRecord, OwnershipRoot, OwnershipRootKind,
+    QualifiedIdentity, ResourceIdentity, ResourceKind, ResourceRecord, ScopeKind,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
 use crate::bindings::types::CompilerDetach;
 
 type IdentityRow = (String, String);
@@ -195,30 +192,10 @@ fn scope_declaration_directory(kind: &str, scope: &str, path: Option<&str>) -> P
     Ok(declaration_directory(kind, scope_kind(scope)?, path))
 }
 
-/// Whether the declaration is visible from `path`, else the `InvalidScopePathError` message.
-#[pyfunction]
-fn scope_path_visible(
-    scope: &str,
-    owner: Option<IdentityRow>,
-    owning_path: Option<String>,
-    path: &str,
-) -> PyResult<(Option<bool>, Option<String>)> {
-    let declared: DeclaredScope = DeclaredScope {
-        scope: scope_kind(scope)?,
-        owner: owner.map(resource_identity).transpose()?,
-        owning_path,
-    };
-    Ok(match path_visible(&declared, path) {
-        Ok(visible) => (Some(visible), None),
-        Err(_) => (None, Some(scope_path_message(&declared, path))),
-    })
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scope_placement_diagnostics, module)?)?;
     module.add_function(wrap_pyfunction!(scope_required_placement, module)?)?;
     module.add_function(wrap_pyfunction!(scope_relocations, module)?)?;
     module.add_function(wrap_pyfunction!(scope_declaration_directory, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_path_visible, module)?)?;
     Ok(())
 }

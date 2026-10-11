@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::scopes::{
-    declaration_contexts, placement, relationship_names, scope_index,
+    compile_usages, declaration_contexts, placement, relationship_names, scope_index,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -11,5 +11,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     relationship_names::register(module)?;
     declaration_contexts::register(module)?;
     placement::register(module)?;
+    compile_usages::register(module)?;
     Ok(())
 }

@@ -12,6 +12,7 @@ from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     ScopeDiagnostic,
     ScopeIndex,
+    UsageRecord,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
@@ -19,6 +20,7 @@ from sqlbuild.compiler.scopes.types import (
     NativePlacementRows,
     NativeQualifiedRow,
     NativeRootRow,
+    NativeUsageKeyRow,
     OwnershipRootKind,
     ResourceKind,
     ScopeDiagnosticCode,
@@ -34,6 +36,70 @@ _PLACEMENT_CODES: frozenset[ScopeDiagnosticCode] = frozenset(
         ScopeDiagnosticCode.OVER_BROAD_GLOBAL,
     }
 )
+
+
+def merged_usage_index(*, index: ScopeIndex, collected: tuple[UsageRecord, ...]) -> ScopeIndex:
+    """The index with compile usages merged into its usages and macro dependencies."""
+
+    distinct, merged, combined = _native.scope_merged_usages(
+        [_dependency_row(record=record) for record in index.declarations],
+        [_usage_row(usage=usage) for usage in index.usages],
+        [_usage_row(usage=usage) for usage in collected],
+    )
+    usages: list[UsageRecord] = [collected[position] for position in distinct]
+    all_usages: list[UsageRecord] = [*index.usages, *usages]
+    return replace(
+        index,
+        declarations=tuple(
+            _with_dependencies(record=record, sources=sources, usages=usages)
+            for record, sources in zip(index.declarations, merged, strict=True)
+        ),
+        usages=tuple(all_usages[position] for position in combined),
+        completeness=replace(index.completeness, runtime_usage=True, promotion_impact=True),
+    )
+
+
+def _dependency_row(
+    *, record: DeclarationRecord
+) -> tuple[NativeQualifiedRow, list[NativeQualifiedRow] | None]:
+    dependencies: tuple[DeclarationIdentity, ...] | None = (
+        None if record.macro is None else record.macro.dependencies
+    )
+    return (
+        _qualified_row(identity=record.identity),
+        None if dependencies is None else [_qualified_row(identity=item) for item in dependencies],
+    )
+
+
+def _with_dependencies(
+    *,
+    record: DeclarationRecord,
+    sources: list[tuple[bool, int]] | None,
+    usages: list[UsageRecord],
+) -> DeclarationRecord:
+    if record.macro is None or sources is None:
+        return record
+    own: tuple[DeclarationIdentity, ...] = record.macro.dependencies
+    return replace(
+        record,
+        macro=replace(
+            record.macro,
+            dependencies=tuple(
+                own[position] if is_own else usages[position].declaration
+                for is_own, position in sources
+            ),
+        ),
+    )
+
+
+def _usage_row(*, usage: UsageRecord) -> NativeUsageKeyRow:
+    return (
+        _qualified_row(identity=usage.consumer),
+        _qualified_row(identity=usage.declaration),
+        usage.kind.value,
+        None if usage.through is None else _qualified_row(identity=usage.through),
+        usage.enum_member,
+    )
 
 
 def build_placement_validated_index(

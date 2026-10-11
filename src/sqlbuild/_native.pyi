@@ -933,9 +933,20 @@ def scope_relocations(
     destination: str,
 ) -> list[tuple[int, str, str, tuple[str, str, str | None], str | None]] | None: ...
 def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str: ...
-def scope_path_visible(
-    scope: str, owner: tuple[str, str] | None, owning_path: str | None, path: str
-) -> tuple[bool | None, str | None]: ...
+def scope_schema_usages(
+    schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
+    records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],
+) -> tuple[list[tuple[int, int]], list[tuple[list[str], str, str, str]], str | None]: ...
+def scope_merged_usages(
+    declarations: list[
+        tuple[
+            tuple[str, str, tuple[str, str] | None],
+            list[tuple[str, str, tuple[str, str] | None]] | None,
+        ]
+    ],
+    prior: list[Any],
+    collected: list[Any],
+) -> tuple[list[int], list[list[tuple[bool, int]] | None], list[int]]: ...
 def build_native_scope_index(
     resources: list[tuple[str, str, str, str]],
     declarations: list[
