@@ -6,7 +6,7 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, TEMPLATE_OPEN_TOKEN
+from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
@@ -55,18 +55,6 @@ def _reject_lone_surrogates(*, name: str, value: object, path: str) -> None:
                     "value is not shown because it may be a secret"
                 ),
             ) from None
-
-
-def contains_template_data(value: object) -> bool:
-    """Return whether a supported nested value contains a template token."""
-
-    if isinstance(value, str):
-        return TEMPLATE_OPEN_TOKEN in value
-    if isinstance(value, dict):
-        return any(contains_template_data(item) for item in value.values())
-    if isinstance(value, list | tuple):
-        return any(contains_template_data(item) for item in value)
-    return False
 
 
 def expand_template_data(

@@ -1022,6 +1022,9 @@ def typed_constant_record(
     paths: tuple[Path, Path],
     /,
 ) -> object: ...
+def deferred_target_segments(
+    template: str, logical: str, context_keys: list[str], variables: list[str], /
+) -> list[tuple[bool, str]]: ...
 def resource_identity_suggestion(
     name: str, private_identity: bool, /
 ) -> tuple[str, str] | None: ...
