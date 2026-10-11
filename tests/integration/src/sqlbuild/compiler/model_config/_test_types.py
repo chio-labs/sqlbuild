@@ -14,6 +14,7 @@ class HeaderMetadataParityTestCase:
     count: int
     expected_minimum_parsed: int
     expected_minimum_rejected: int
+    expected_maximum_later_validated: int
 
 
 @dataclass(frozen=True)
@@ -23,3 +24,13 @@ class ModelConfigTierTestCase:
     description: str
     engine: str
     expected_native_calls: dict[str, int]
+
+
+@dataclass(frozen=True)
+class ColumnMetadataExpansionTestCase:
+    """A header column field holding a config template or macro, and the loop's outcome."""
+
+    description: str
+    header_column: str
+    expected_type: str | None
+    expected_error: str | None

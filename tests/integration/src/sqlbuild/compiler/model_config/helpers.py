@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -137,6 +138,14 @@ MODEL_CONFIG_PROJECT: dict[str, str] = {
 }
 
 
+LATER_VALIDATION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"is missing argument '[^']+' for generic audit '[^']+'$"),
+    re.compile(r"column '[^']+' migrate_from must name one column of the model's existing table$"),
+    re.compile(
+        r"audit '[^']+': thresholds and minimum_samples are only valid for measurement audits$"
+    ),
+)
+"""Validations the loop runs after parsing a header, which the YAML schema parsers never run."""
 _PARITY_PROJECT: str = 'name = "orders"\nadapter = "duckdb"\n'
 _PARITY_FILES: dict[str, str] = {
     "models/orders.sql": (
@@ -158,6 +167,7 @@ class HeaderMetadataParity:
     mismatches: list[tuple[object, object, object]]
     parsed: int
     rejected: int
+    later_validated: int
 
 
 def generated_header_metadata(*, rng: random.Random, count: int) -> list[tuple[object, object]]:
@@ -254,14 +264,27 @@ def header_metadata_parity(
         mismatches=list(filter(_unexplained, outcomes))[:3],
         parsed=len(actual) - rejected,
         rejected=rejected,
+        later_validated=sum(
+            _later_validation(expected=expected, actual=shape) for _, expected, shape in outcomes
+        ),
     )
 
 
 def _unexplained(outcome: tuple[object, object, object]) -> bool:
-    """A differing outcome other than a parsed header the loop's later validation rejects."""
+    """A differing outcome other than a parsed header a known later loop validation rejects."""
 
     _, expected, actual = outcome
-    return expected != actual and not (isinstance(expected, tuple) and isinstance(actual, list))
+    return expected != actual and not _later_validation(expected=expected, actual=actual)
+
+
+def _later_validation(*, expected: object, actual: object) -> bool:
+    """Whether the parsers accepted the header and the loop rejected it with a known later check."""
+
+    return (
+        isinstance(expected, tuple)
+        and isinstance(actual, list)
+        and any(pattern.search(str(actual[1])) for pattern in LATER_VALIDATION_PATTERNS)
+    )
 
 
 def _loop_shape(
@@ -453,3 +476,44 @@ def _audit(*, rng: random.Random) -> object:
         ),
         weights=(35, 10, 5, 50),
     )[0]
+
+
+def column_metadata_outcome(*, project_dir: Path, header_column: str) -> tuple[object, object]:
+    """Compile a one-model project whose header declares `header_column`; return the attached
+    column's type, or the error the loop raised."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "orders"\nadapter = "duckdb"\n\n[vars]\ncolumn_type = "BIGINT"\n'
+        ),
+        "macros/amounts.py": 'def cents(column: str) -> str:\n    return f"{column} * 100"\n',
+        "models/orders.sql": (
+            f"MODEL (description 'Orders.', columns ({header_column}));\nSELECT 1 AS amount\n"
+        ),
+    }
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    try:
+        inputs: CompileInputsView = build_compile_inputs(
+            discovered_inputs=discovered,
+            adapter_context=CompileAdapterContext(
+                value_renderer=DuckDbAdapter(),
+                collection_rendering=resolve_effective_collection_rendering(
+                    project_config=discovered.project_config, declaration_override=None
+                ),
+                python_functions_inherit_default_namespace=True,
+                sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
+            ),
+            no_sql_validation=True,
+            defer_model_sql_validation=True,
+            no_cache=True,
+        )
+    except Exception as error:  # noqa: BLE001 - the exact loop outcome, whatever it is
+        return None, str(error)
+    columns: tuple[object, ...] = cast(
+        tuple[object, ...], _entry_metadata(inputs.model_inputs[0].schema_entry)[0]
+    )
+    return getattr(columns[0], "type", None), None
