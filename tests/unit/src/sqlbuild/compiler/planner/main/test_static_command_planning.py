@@ -9,8 +9,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledSeed, CompileModelConfig
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledSeedView
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSeedFile
@@ -209,7 +209,7 @@ def test_given_selected_seed_without_state_table_when_reading_reason_then_only_s
     seed_path: Path = tmp_path / "countries.csv"
     seed_path.write_text("code\nGB\n", encoding="utf-8")
     project: CompiledProjectView = build_test_project(seed_names=("countries",))
-    seed: CompiledSeed = replace(
+    seed: CompiledSeedView = replace(
         project.seeds[0],
         seed_file=DiscoveredSeedFile(
             file_path=seed_path,

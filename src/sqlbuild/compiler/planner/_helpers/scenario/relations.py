@@ -19,7 +19,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSeed,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
@@ -27,6 +26,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
@@ -711,14 +711,14 @@ def build_scenario_seed_entries(
 ) -> tuple[SeedPlanEntry, ...]:
     """Build project seed load entries for required seeds not overridden by fixtures."""
 
-    seeds_by_name: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    seeds_by_name: dict[str, CompiledSeedView] = {seed.name: seed for seed in project.seeds}
     seed_fixture_names: frozenset[str] = frozenset(graph_plan.seed_fixture_names)
     seed_entries: list[SeedPlanEntry] = []
     seed_name: str
     for seed_name in graph_plan.seed_names:
         if seed_name in seed_fixture_names:
             continue
-        seed: CompiledSeed | None = seeds_by_name.get(seed_name)
+        seed: CompiledSeedView | None = seeds_by_name.get(seed_name)
         if seed is None:
             raise PlannerInputError(
                 f"Scenario '{graph_plan.name}' requires unknown seed '{seed_name}'",

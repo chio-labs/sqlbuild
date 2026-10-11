@@ -30,6 +30,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
     FunctionLanguage,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
@@ -117,7 +118,7 @@ def build_project_from_test_case(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name, target_schema in test_case.seed_locations.items():
         seed_file_path: Path = _ensure_test_seed_file(seed_name)
@@ -386,7 +387,7 @@ def build_project_from_format_test_case(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name, target_schema in test_case.seed_locations.items():
         seed_file_path: Path = _ensure_test_seed_file(seed_name)

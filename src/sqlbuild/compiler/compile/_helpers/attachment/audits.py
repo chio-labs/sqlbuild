@@ -48,7 +48,6 @@ from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileAuditInput,
     CompilerDiagnostic,
-    CompileSeedInput,
     CompileSourceInput,
     CompileSqlReference,
     DeclarationExpansionContext,
@@ -63,6 +62,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
     ModelInput,
+    SeedInput,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -131,7 +131,7 @@ def build_project_audit_inputs(
     context: ModelInputBuildContext,
     model_inputs: tuple[ModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
-    seed_inputs: tuple[CompileSeedInput, ...],
+    seed_inputs: tuple[SeedInput, ...],
 ) -> tuple[tuple[CompileAuditInput, ...], tuple[CompilerDiagnostic, ...]]:
     """Resolve built-in-aware generic audits and build every project audit input."""
 
@@ -159,7 +159,7 @@ def build_audit_inputs(
     source_inputs: tuple[CompileSourceInput, ...],
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
-    seed_inputs: tuple[CompileSeedInput, ...] = (),
+    seed_inputs: tuple[SeedInput, ...] = (),
 ) -> tuple[CompileAuditInput, ...]:
     """Build compile-time audit inputs from discovered SQL audit blocks."""
 
@@ -373,7 +373,7 @@ def _build_singular_audit_inputs(
 def _build_source_and_seed_audit_inputs(
     *,
     source_inputs: tuple[CompileSourceInput, ...],
-    seed_inputs: tuple[CompileSeedInput, ...],
+    seed_inputs: tuple[SeedInput, ...],
     context: _AuditAttachmentContext,
 ) -> tuple[CompileAuditInput, ...]:
     audit_inputs: list[CompileAuditInput] = []
@@ -385,7 +385,7 @@ def _build_source_and_seed_audit_inputs(
                 context=context,
             )
         )
-    seed_input: CompileSeedInput
+    seed_input: SeedInput
     for seed_input in seed_inputs:
         audit_inputs.extend(
             build_seed_attached_audit_inputs(seed_input=seed_input, context=context)
@@ -530,7 +530,7 @@ def build_source_attached_audit_inputs(
 
 def build_seed_attached_audit_inputs(
     *,
-    seed_input: CompileSeedInput,
+    seed_input: SeedInput,
     context: _AuditAttachmentContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render seed-attached table and column audits into compile audit inputs."""

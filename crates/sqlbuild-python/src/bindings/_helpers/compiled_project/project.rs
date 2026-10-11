@@ -22,6 +22,9 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
+use crate::bindings::_helpers::compiled_project::seed_views::{
+    NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
+};
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
@@ -87,6 +90,8 @@ pub(crate) struct NativeCompiledProject {
     input_classes: Option<Py<PyAny>>,
     /// Lineage graphs its project views built.
     graph_builds: usize,
+    /// Each attached seed, in attachment order.
+    seeds: Vec<SeedRecord>,
 }
 
 impl NativeCompiledProject {
@@ -114,6 +119,11 @@ impl NativeCompiledProject {
     /// Count one lineage graph a project view built.
     pub(crate) fn record_graph_build(&mut self) {
         self.graph_builds += 1;
+    }
+
+    /// Every attached seed, in attachment order.
+    pub(crate) fn seeds(&self) -> &[SeedRecord] {
+        &self.seeds
     }
 
     /// Every model's input record, in loop order.
@@ -201,6 +211,40 @@ impl NativeCompiledProject {
         fields: Bound<'_, PyDict>,
     ) -> PyResult<NativeProjectView> {
         NativeProjectView::new(slf.unbind(), &fields)
+    }
+
+    /// Pair seed declarations with their CSV files and keep them; return each seed's view.
+    fn attach_seeds(
+        slf: &Bound<'_, Self>,
+        declarations: Vec<(Py<PyAny>, Py<PyAny>)>,
+        seed_files: Vec<Py<PyAny>>,
+        compile_error: &Bound<'_, PyAny>,
+    ) -> PyResult<Vec<NativeSeedInput>> {
+        let seeds: Vec<SeedRecord> = paired_seeds(declarations, &seed_files, compile_error)?;
+        let count: usize = seeds.len();
+        slf.borrow_mut().seeds = seeds;
+        Ok((0..count)
+            .map(|index| NativeSeedInput::new(slf.clone().unbind(), index))
+            .collect())
+    }
+
+    /// Keep the destinations native project assembly resolved, in seed order.
+    fn record_seed_namespaces(&mut self, namespaces: Vec<SeedNamespace>) -> PyResult<()> {
+        for (index, namespace) in namespaces.into_iter().enumerate() {
+            self.seeds
+                .get_mut(index)
+                .ok_or_else(|| PyIndexError::new_err(index))?
+                .set_namespace(namespace);
+        }
+        Ok(())
+    }
+
+    /// The assembled seed at `index`.
+    fn compiled_seed(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledSeed> {
+        if index >= slf.borrow().seeds.len() {
+            return Err(PyIndexError::new_err(index));
+        }
+        Ok(NativeCompiledSeed::new(slf.clone().unbind(), index))
     }
 
     /// How many lineage graphs this owner's project views built.
@@ -351,5 +395,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeCompiledModel>()?;
     module.add_class::<NativeProjectView>()?;
     module.add_class::<NativeInputsView>()?;
+    module.add_class::<NativeSeedInput>()?;
+    module.add_class::<NativeCompiledSeed>()?;
     module.add_class::<NativeCompiledProject>()
 }

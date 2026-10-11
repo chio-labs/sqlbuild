@@ -13,7 +13,6 @@ from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_effective_settings,
     build_effective_vars,
     build_model_inputs,
-    build_seed_inputs,
 )
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
@@ -50,7 +49,6 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
     CompilerDiagnostic,
-    CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
@@ -63,7 +61,8 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     ModelInputScopeBuild,
 )
-from sqlbuild.compiler.compile.types import CompileInputsView, ModelInput
+from sqlbuild.compiler.compile.types import CompileInputsView, ModelInput, SeedInput
+from sqlbuild.compiler.compiled_project.main._attach_seeds import attach_seeds
 from sqlbuild.compiler.compiled_project.main._compile_inputs_view import compile_inputs_view
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -156,7 +155,9 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     model_context = model_build.context
-    seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
+    seed_inputs: tuple[SeedInput, ...] = attach_seeds(
+        discovered_inputs=discovered_inputs, native_project=model_build.native_project
+    )
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = _build_sql_functions(
         discovered_inputs=discovered_inputs,
         context=model_context,

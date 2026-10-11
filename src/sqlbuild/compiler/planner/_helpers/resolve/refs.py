@@ -13,9 +13,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSeed,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledSeedView
 from sqlbuild.compiler.planner.constants import (
     SQL_ALIAS_BOUNDARY_CHARACTERS,
     SQL_ALIAS_KEYWORD,
@@ -374,7 +373,7 @@ def build_model_locations(
 
 
 def build_seed_locations(
-    seeds: tuple[CompiledSeed, ...],
+    seeds: tuple[CompiledSeedView, ...],
 ) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of seed name to compiled relation location."""
 

@@ -13,7 +13,7 @@ from sqlbuild.cli.commands.models import (
     SeedInvocation,
 )
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.compiler.compile.models import CompiledSeed
+from sqlbuild.compiler.compile.types import CompiledSeedView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.static_command import compile_static_command_context
 from sqlbuild.compiler.pipeline.main.static_result import build_static_pipeline_result
@@ -56,7 +56,7 @@ def prepare_seed_execution(
         adapter=invocation.adapter,
         options=options,
     )
-    selected_seeds: tuple[CompiledSeed, ...] = tuple(
+    selected_seeds: tuple[CompiledSeedView, ...] = tuple(
         seed for seed in context.project.seeds if seed.key in context.scope.selected_keys
     )
     hooks: ConnectionHooks = ConnectionHooks(

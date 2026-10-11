@@ -22,6 +22,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
@@ -158,7 +159,7 @@ def build_project_with_targets(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name, target_schema in (seed_locations or {}).items():
         seeds.append(

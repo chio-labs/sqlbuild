@@ -11,12 +11,12 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledSeed,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
     CompileInputsView,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -696,7 +696,7 @@ seeds:
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
 
-    seeds: dict[str, CompiledSeed] = {
+    seeds: dict[str, CompiledSeedView] = {
         seed.name: seed for seed in assemble_compiled_project(inputs=compile_inputs).seeds
     }
 
@@ -720,7 +720,7 @@ seeds:
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         selected_target="physical",
     )
-    physical_seeds: tuple[CompiledSeed, ...] = assemble_compiled_project(
+    physical_seeds: tuple[CompiledSeedView, ...] = assemble_compiled_project(
         inputs=physical_inputs
     ).seeds
     assert {(seed.destination.database, seed.destination.schema) for seed in physical_seeds} == {

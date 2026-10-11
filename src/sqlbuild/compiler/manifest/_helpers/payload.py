@@ -6,10 +6,9 @@ from datetime import UTC, datetime
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
-    CompiledSeed,
     CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
 from sqlbuild.compiler.manifest._helpers.macros import (
     build_manifest_macro_nodes,
 )
@@ -78,7 +77,7 @@ def build_manifest_payload(
             auto_load=source.name in source_load_names,
         )
 
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         unique_id = f"seed.{project_name}.{seed.name}"
         nodes[unique_id] = build_seed_node(

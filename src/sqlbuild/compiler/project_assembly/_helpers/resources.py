@@ -10,8 +10,6 @@ from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledRelationLocation,
-    CompileSeedInput,
     CompileSourceInput,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, CompileInputsView
@@ -24,7 +22,6 @@ from sqlbuild.compiler.project_assembly.constants import (
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources, NativeResourceFailure
 from sqlbuild.compiler.project_assembly.types import (
     FailureRow,
-    NamespaceRow,
     ObjectKeyRow,
     ProjectResourcesRow,
 )
@@ -57,12 +54,7 @@ def project_resources(
                 inputs.source_inputs[: len(source_namespaces)], source_namespaces, strict=True
             )
         ),
-        seed_destinations=tuple(
-            _seed_destination(seed_input=seed_input, namespace=namespace)
-            for seed_input, namespace in zip(
-                inputs.seed_inputs[: len(seed_namespaces)], seed_namespaces, strict=True
-            )
-        ),
+        seed_namespaces=tuple(seed_namespaces),
         function_deps=tuple(_keys(keys) for keys in function_deps),
         audit_scope_deps=tuple(_keys(keys) for keys in audit_deps),
         failure=None if failure is None else _failure(row=failure, held=held),
@@ -105,17 +97,3 @@ def _source_entry(
     if namespace is None:
         return source_input.source_entry
     return replace(source_input.source_entry, database=namespace[0], schema=namespace[1])
-
-
-def _seed_destination(
-    *, seed_input: CompileSeedInput, namespace: NamespaceRow
-) -> CompiledRelationLocation:
-    database, schema, logical_database, logical_schema = namespace
-    return CompiledRelationLocation(
-        database=database,
-        schema=schema,
-        name=seed_input.schema_entry.name,
-        qualified_name=None,
-        logical_schema=logical_schema,
-        logical_database=logical_database,
-    )

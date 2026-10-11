@@ -45,12 +45,12 @@ pub(crate) struct CompiledViewClasses<'py> {
 /// A compiled relation location's parts.
 #[derive(Clone)]
 pub(crate) struct DestinationFact {
-    database: Option<String>,
-    schema: Option<String>,
-    name: String,
-    qualified_name: Option<String>,
-    logical_schema: Option<String>,
-    logical_database: Option<String>,
+    pub(crate) database: Option<String>,
+    pub(crate) schema: Option<String>,
+    pub(crate) name: String,
+    pub(crate) qualified_name: Option<String>,
+    pub(crate) logical_schema: Option<String>,
+    pub(crate) logical_database: Option<String>,
 }
 
 /// What assembly and the semantic checks finished for one compiled model.
@@ -187,7 +187,7 @@ fn text_value(values: &Bound<'_, PyDict>, key: &str) -> PyResult<Option<String>>
 }
 
 /// The destination with adapter defaults filled in; `render` renders its qualified name.
-fn defaulted_destination(
+pub(crate) fn defaulted_destination(
     current: &DestinationFact,
     defaults: (Option<String>, Option<String>),
     render: &Bound<'_, PyAny>,
@@ -337,20 +337,7 @@ impl NativeCompiledModel {
                         .destination
                         .as_ref()
                         .unwrap_or(&compiled.destination);
-                    let fields: Bound<'_, PyDict> = PyDict::new(py);
-                    fields.set_item(DATABASE_KEY, &destination.database)?;
-                    fields.set_item(SCHEMA_KEY, &destination.schema)?;
-                    fields.set_item("name", &destination.name)?;
-                    fields.set_item("qualified_name", &destination.qualified_name)?;
-                    fields.set_item(LOGICAL_SCHEMA_ATTRIBUTE, &destination.logical_schema)?;
-                    fields.set_item(LOGICAL_DATABASE_ATTRIBUTE, &destination.logical_database)?;
-                    Ok::<_, pyo3::PyErr>(
-                        classes
-                            .compiled
-                            .relation_location
-                            .call((), Some(&fields))?
-                            .unbind(),
-                    )
+                    relation_location(&classes.compiled, destination)
                 })
                 .map(|destination| destination.clone_ref(py))
         })
@@ -679,7 +666,26 @@ fn model_name(record: &ModelInputRecord, py: Python<'_>) -> PyResult<String> {
         .extract()
 }
 
-fn object_key(classes: &CompiledViewClasses<'_>, kind: &str, name: &str) -> PyResult<Py<PyAny>> {
+/// The `CompiledRelationLocation` of a destination.
+pub(crate) fn relation_location(
+    classes: &CompiledViewClasses<'_>,
+    destination: &DestinationFact,
+) -> PyResult<Py<PyAny>> {
+    let fields: Bound<'_, PyDict> = PyDict::new(classes.relation_location.py());
+    fields.set_item(DATABASE_KEY, &destination.database)?;
+    fields.set_item(SCHEMA_KEY, &destination.schema)?;
+    fields.set_item("name", &destination.name)?;
+    fields.set_item("qualified_name", &destination.qualified_name)?;
+    fields.set_item(LOGICAL_SCHEMA_ATTRIBUTE, &destination.logical_schema)?;
+    fields.set_item(LOGICAL_DATABASE_ATTRIBUTE, &destination.logical_database)?;
+    Ok(classes.relation_location.call((), Some(&fields))?.unbind())
+}
+
+pub(crate) fn object_key(
+    classes: &CompiledViewClasses<'_>,
+    kind: &str,
+    name: &str,
+) -> PyResult<Py<PyAny>> {
     let fields: Bound<'_, PyDict> = PyDict::new(classes.object_key.py());
     fields.set_item("resource_type", kind)?;
     fields.set_item("name", name)?;

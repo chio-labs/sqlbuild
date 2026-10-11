@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
     CompiledSqlTest,
@@ -22,6 +21,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
 )
 from sqlbuild.compiler.dag.constants import REQUIRED_DAG_COLLECTION_KEYS
 from sqlbuild.compiler.dag.models import (
@@ -173,7 +173,7 @@ def _build_python_node(node: DiscoveredPythonNode) -> DagNode:
     )
 
 
-def _build_seed_node(seed: CompiledSeed) -> DagNode:
+def _build_seed_node(seed: CompiledSeedView) -> DagNode:
     return DagNode(
         id=_node_id(seed.key),
         kind=NodeKind.SEED.value,

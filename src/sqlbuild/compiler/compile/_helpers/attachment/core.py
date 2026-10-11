@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.attachments.main._pair_native_seed_files import pair_native_seed_files
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile._helpers.analysis.validation import sql_analysis_opt_out_help
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
@@ -44,7 +43,6 @@ from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnviron
 from sqlbuild.compiler.compile.constants import EXPLICIT_REFERENCE_KINDS
 from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroArgumentError
 from sqlbuild.compiler.compile.models import (
-    CompileSeedInput,
     DeclarationResolutionContext,
     LoadedMacro,
     ModelInputBuildContext,
@@ -61,7 +59,6 @@ from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
-    DiscoveredSeedFile,
     DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     EnumDeclaration,
@@ -90,7 +87,6 @@ from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
-    SchemaSeedEntry,
     SettingsConfig,
     TargetConfig,
 )
@@ -414,48 +410,6 @@ def _interpolation_row(
             (span.source_start, span.source_end, span.output_start, span.output_end)
             for span in interpolation.spans
         ],
-    )
-
-
-def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[CompileSeedInput, ...]:
-    """Attach seed declarations to discovered seed CSV files."""
-
-    seed_declarations: list[tuple[SchemaSeedEntry, DiscoveredSchemaFile]] = []
-    schema_file: DiscoveredSchemaFile
-    for schema_file in discovered_inputs.schema_files:
-        seed_entry: SchemaSeedEntry
-        for seed_entry in schema_file.seed_entries:
-            seed_declarations.append((seed_entry, schema_file))
-
-    return _native_seed_inputs(
-        seed_declarations=seed_declarations, seed_files=discovered_inputs.seed_files
-    )
-
-
-def _native_seed_inputs(
-    *,
-    seed_declarations: list[tuple[SchemaSeedEntry, DiscoveredSchemaFile]],
-    seed_files: tuple[DiscoveredSeedFile, ...],
-) -> tuple[CompileSeedInput, ...]:
-    pairs: list[int] | None
-    missing: int | None
-    pairs, missing = pair_native_seed_files(
-        declaration_names=[seed_entry.name for seed_entry, _ in seed_declarations],
-        file_stems=[seed_file.file_path.stem for seed_file in seed_files],
-    )
-    if pairs is None:
-        seed_entry, seed_schema_file = seed_declarations[cast(int, missing)]
-        raise CompileInputError(
-            f"Seed declaration '{seed_entry.name}' in {seed_schema_file.relative_path} "
-            "has no matching CSV file under seeds/",
-        )
-    return tuple(
-        CompileSeedInput(
-            seed_file=seed_files[file_index],
-            schema_entry=seed_entry,
-            schema_file=seed_schema_file,
-        )
-        for (seed_entry, seed_schema_file), file_index in zip(seed_declarations, pairs, strict=True)
     )
 
 

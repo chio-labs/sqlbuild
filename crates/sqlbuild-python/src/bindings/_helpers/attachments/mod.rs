@@ -4,6 +4,5 @@ pub(crate) mod ceremonial_select;
 pub(crate) mod cursor_intrinsics;
 pub(crate) mod function_headers;
 pub(crate) mod registration;
-pub(crate) mod seed_pairing;
 pub(crate) mod test_parameters;
 pub(crate) mod test_targets;

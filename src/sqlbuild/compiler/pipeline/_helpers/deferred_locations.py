@@ -12,9 +12,8 @@ from sqlbuild.compiler.authored_values.main._project_var_values import render_pr
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
-    CompiledSeed,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.constants import DEFERRED_TARGET_CONTEXT_KEYS
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -46,7 +45,7 @@ def build_deferred_locations(
             default_database=default_database,
             render_qualified_name=render_qualified_name,
         )
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         locations[seed.name] = _resolve_deferred_location(
             target=seed.destination,

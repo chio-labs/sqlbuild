@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSeed,
     CompilerDiagnostic,
     CompileSqlReference,
     CursorInputRoles,
@@ -28,6 +27,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
 )
 from sqlbuild.compiler.discovery.main.microbatch_guidance import microbatch_guidance
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -1052,7 +1052,7 @@ def _get_on_schema_change(model: CompiledModelView) -> OnSchemaChange | None:
     raise PlannerInputError(f"model '{model.name}': unknown on_schema_change '{raw}'")
 
 
-def extract_seed_columns(seed: CompiledSeed) -> tuple[ColumnInfo, ...]:
+def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]:
     """Extract declared columns from seed schema entry."""
 
     columns: list[ColumnInfo] = []

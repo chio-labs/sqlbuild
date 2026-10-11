@@ -20,11 +20,13 @@ from sqlbuild.compiler.compile.types import (
     CompactBatchResponseCallback,
     CompiledModelView,
     CompiledResourceType,
+    CompiledSeedView,
     CompileInputsReadyCallback,
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
     ModelInput,
+    SeedInput,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
@@ -495,10 +497,8 @@ class ModelInputScopeBuild:
     inputs: tuple[ModelInput, ...]
     declarations: DeclarationResolutionContext
     context: ModelInputBuildContext
+    native_project: _native.NativeCompiledProject = field(repr=False, compare=False)
     diagnostics: tuple[CompilerDiagnostic, ...] = ()
-    native_project: _native.NativeCompiledProject | None = field(
-        default=None, repr=False, compare=False
-    )
 
 
 @dataclass(frozen=True)
@@ -945,7 +945,7 @@ class CompileProjectInputs:
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     model_inputs: tuple[ModelInput, ...] = field(default_factory=tuple)
-    seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
+    seed_inputs: tuple[SeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
@@ -1209,7 +1209,7 @@ class CompiledProject:
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     models: tuple[CompiledModelView, ...] = field(default_factory=tuple)
     sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
-    seeds: tuple[CompiledSeed, ...] = field(default_factory=tuple)
+    seeds: tuple[CompiledSeedView, ...] = field(default_factory=tuple)
     functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
     audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)

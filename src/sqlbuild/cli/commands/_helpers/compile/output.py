@@ -21,7 +21,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledSeed,
     CompiledSource,
     CompiledSqlTest,
     CompilerDiagnostic,
@@ -31,6 +30,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -384,7 +384,7 @@ def _source_resource(source: CompiledSource) -> dict[str, object]:
     }
 
 
-def _seed_resource(seed: CompiledSeed) -> dict[str, object]:
+def _seed_resource(seed: CompiledSeedView) -> dict[str, object]:
     item: dict[str, object] = {
         "name": seed.name,
         "relative_path": str(seed.seed_file.relative_path),

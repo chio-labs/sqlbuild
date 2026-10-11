@@ -30,7 +30,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSeed,
     CompiledSource,
     CompileSqlReference,
 )
@@ -38,6 +37,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
 )
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_TABLE_NAME,
@@ -469,7 +469,7 @@ def _resolve_database(
             continue
         if model.destination.database is not None:
             return model.destination.database
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         if selected_keys is not None and seed.key not in selected_keys:
             continue
@@ -498,7 +498,7 @@ def _collect_target_schemas(
             continue
         if model.destination.schema is not None:
             schemas.add(model.destination.schema)
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         if selected_keys is not None and seed.key not in selected_keys:
             continue
@@ -525,13 +525,13 @@ def _build_metadata_name_filter(
         model: CompiledModelView
         for model in project.models:
             names.add(model.destination.name)
-        seed: CompiledSeed
+        seed: CompiledSeedView
         for seed in project.seeds:
             names.add(seed.destination.name)
     else:
         selected_names: frozenset[str] = frozenset(key.name for key in selected_keys)
         model_map: dict[str, CompiledModelView] = {model.name: model for model in project.models}
-        seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+        seed_map: dict[str, CompiledSeedView] = {seed.name: seed for seed in project.seeds}
         source_map: dict[str, SourceEntry] = {
             source.source_entry.name: source.source_entry for source in project.sources
         }
@@ -549,7 +549,7 @@ def _build_metadata_name_filter(
                     )
                 )
                 continue
-            selected_seed: CompiledSeed | None = seed_map.get(key.name)
+            selected_seed: CompiledSeedView | None = seed_map.get(key.name)
             if selected_seed is not None:
                 names.add(selected_seed.destination.name)
                 continue
@@ -575,7 +575,7 @@ def _model_upstream_names(
     *,
     model: CompiledModelView,
     model_map: dict[str, CompiledModelView],
-    seed_map: dict[str, CompiledSeed],
+    seed_map: dict[str, CompiledSeedView],
     selected_names: frozenset[str],
 ) -> frozenset[str]:
     names: set[str] = set()
@@ -596,7 +596,7 @@ def _model_upstream_names(
                 names.add(upstream_model.destination.name)
             continue
         if reference.ref_kind == SqlReferenceKind.SEED:
-            upstream_seed: CompiledSeed | None = seed_map.get(reference.ref_name)
+            upstream_seed: CompiledSeedView | None = seed_map.get(reference.ref_name)
             if upstream_seed is not None:
                 names.add(upstream_seed.destination.name)
             continue
@@ -622,7 +622,7 @@ def _gather_relations(
     model: CompiledModelView
     for model in project.models:
         logical_names_by_identity[_location_identity(model.destination)] = model.name
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         logical_names_by_identity[_location_identity(seed.destination)] = seed.name
     function: CompiledFunction
@@ -876,7 +876,7 @@ def _collect_cursor_models(
         if effective_runtime_producer_keys is not None
         else None
     )
-    seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    seed_map: dict[str, CompiledSeedView] = {seed.name: seed for seed in project.seeds}
     function_map: dict[str, CompiledFunction] = {
         function.name: function for function in project.functions
     }
@@ -1589,7 +1589,7 @@ def _resolve_upstream_qualified_name(
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModelView],
     source_map: dict[str, CompiledSource],
-    seed_map: dict[str, CompiledSeed],
+    seed_map: dict[str, CompiledSeedView],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     selected_names: frozenset[str] | None = None,
 ) -> str | None:
@@ -1607,11 +1607,11 @@ def _resolve_upstream_qualified_name(
         upstream_model: CompiledModelView | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
             return upstream_model.destination.qualified_name
-        upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        upstream_seed: CompiledSeedView | None = seed_map.get(ref.ref_name)
         if upstream_seed is not None:
             return upstream_seed.destination.qualified_name
     elif ref.ref_kind == SqlReferenceKind.SEED:
-        seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        seed: CompiledSeedView | None = seed_map.get(ref.ref_name)
         if seed is not None:
             return seed.destination.qualified_name
     elif ref.ref_kind == SqlReferenceKind.SOURCE:
@@ -1649,7 +1649,7 @@ def _validate_watermark_contract_column(
     cursor_column: str,
     model_map: dict[str, CompiledModelView],
     source_map: dict[str, CompiledSource],
-    seed_map: dict[str, CompiledSeed],
+    seed_map: dict[str, CompiledSeedView],
 ) -> None:
     """Validate reliable watermark column contracts before warehouse inspection."""
 
@@ -1707,7 +1707,7 @@ def _validate_watermark_contract_column(
             if column.type is not None
         }
     elif ref.ref_kind == SqlReferenceKind.SEED:
-        upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
+        upstream_seed: CompiledSeedView | None = seed_map.get(ref.ref_name)
         if upstream_seed is None:
             return
         declared_names = tuple(column.name for column in upstream_seed.schema_entry.columns)

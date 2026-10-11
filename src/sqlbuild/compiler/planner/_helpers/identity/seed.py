@@ -8,19 +8,19 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.compile.models import CompiledSeed
+from sqlbuild.compiler.compile.types import CompiledSeedView
 from sqlbuild.compiler.planner._helpers.identity.hashing import stable_version_identity_hash
 from sqlbuild.spec.contracts.models import SchemaColumn, SeedCsvSettings
 
 
-def build_seed_identity(seed: CompiledSeed) -> tuple[str, str]:
+def build_seed_identity(seed: CompiledSeedView) -> tuple[str, str]:
     """Return ``(identity_hash, metadata_json)`` for one compiled seed."""
 
     metadata_json: str = build_seed_identity_metadata_json(seed)
     return stable_version_identity_hash(metadata_json), metadata_json
 
 
-def build_seed_identity_metadata_json(seed: CompiledSeed) -> str:
+def build_seed_identity_metadata_json(seed: CompiledSeedView) -> str:
     """Build deterministic seed identity metadata from content and load-affecting config."""
 
     payload: dict[str, object] = {

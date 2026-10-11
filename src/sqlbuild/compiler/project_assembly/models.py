@@ -6,10 +6,9 @@ from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledRelationLocation,
     DynamicColumnContractProof,
 )
-from sqlbuild.compiler.project_assembly.types import ObjectKeyRow
+from sqlbuild.compiler.project_assembly.types import NamespaceRow, ObjectKeyRow
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -20,7 +19,7 @@ class NativeProjectResources:
     model_deps: tuple[list[ObjectKeyRow], ...]
     model_syntax_valid: tuple[bool, ...]
     source_entries: tuple[SourceEntry, ...]
-    seed_destinations: tuple[CompiledRelationLocation, ...]
+    seed_namespaces: tuple[NamespaceRow, ...]
     function_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     failure: NativeResourceFailure | None = None

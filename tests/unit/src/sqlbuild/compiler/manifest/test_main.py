@@ -8,11 +8,10 @@ import pytest
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledSeed,
     CompiledSource,
     LoadedMacro,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEntry
 from sqlbuild.compiler.manifest._helpers.shared import build_fqn
@@ -559,7 +558,7 @@ def test_given_source_when_building_manifest_then_produces_correct_node(
 def test_given_seed_when_building_manifest_then_produces_correct_node(
     test_case: ManifestSeedNodeTestCase,
 ) -> None:
-    seed: CompiledSeed = build_test_seed(name="country_codes", tags=test_case.expected_tags)
+    seed: CompiledSeedView = build_test_seed(name="country_codes", tags=test_case.expected_tags)
     project: CompiledProjectView = build_test_project(seeds=(seed,))
     plan_output: PlanOutput = build_test_plan_output()
 
@@ -949,7 +948,7 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         schema="public",
         table="orders",
     )
-    seed: CompiledSeed = build_test_seed(name="codes")
+    seed: CompiledSeedView = build_test_seed(name="codes")
     project: CompiledProjectView = build_test_project(
         models=(model,),
         sources=(source,),

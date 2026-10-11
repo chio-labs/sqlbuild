@@ -67,6 +67,17 @@ STAGE_CAPTURE_UNORDERED_ATTRIBUTES: dict[str, frozenset[str]] = {
     )
 }
 STAGE_CAPTURE_PROJECTED_ATTRIBUTES: dict[str, tuple[str, ...]] = {
+    "sqlbuild._native:NativeSeedInput": ("seed_file", "schema_entry", "schema_file"),
+    "sqlbuild._native:NativeCompiledSeed": (
+        "key",
+        "deps",
+        "name",
+        "seed_file",
+        "schema_entry",
+        "schema_file",
+        "destination",
+        "external",
+    ),
     "sqlbuild._native:NativeInputsView": (
         "project_config",
         "local_config",

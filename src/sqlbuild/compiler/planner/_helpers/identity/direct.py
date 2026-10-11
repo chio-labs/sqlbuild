@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledFunction, CompiledSeed
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledFunction
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledResourceType,
+    CompiledSeedView,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
     build_model_local_identity_hash,
@@ -34,7 +38,7 @@ from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_ident
 def build_direct_model_version_identities(
     *,
     functions: tuple[CompiledFunction, ...],
-    seeds: tuple[CompiledSeed, ...] = (),
+    seeds: tuple[CompiledSeedView, ...] = (),
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
@@ -51,7 +55,7 @@ def build_direct_model_version_identities(
     }
     seed_version_hashes: dict[str, str] = {}
     seed_metadata_jsons: dict[str, str] = {}
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in seeds:
         seed_hash: str
         seed_metadata_json: str

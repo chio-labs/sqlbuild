@@ -41,6 +41,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
     SqlTestMode,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
@@ -417,7 +418,7 @@ def build_test_project(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name in seed_names:
         seeds.append(
@@ -1427,7 +1428,7 @@ def build_seed_identity_compiled_seed(
     file_path: Path,
     *,
     csv_settings: SeedCsvSettings | None = None,
-) -> CompiledSeed:
+) -> CompiledSeedView:
     resolved_csv_settings: SeedCsvSettings = csv_settings or SeedCsvSettings()
     schema_entry: SchemaSeedEntry = SchemaSeedEntry(
         name="orders", csv_settings=resolved_csv_settings

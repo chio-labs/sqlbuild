@@ -10,10 +10,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import (
-    CompiledSeed,
     CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
 from sqlbuild.executor.janitor.constants import QUALIFIED_ORIGIN_PARTS
 from sqlbuild.executor.janitor.models import JanitorRelationKey
 
@@ -31,7 +30,7 @@ def collect_desired_keys(project: CompiledProjectView) -> set[JanitorRelationKey
                 name=model.destination.name,
             )
         )
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         keys.add(
             JanitorRelationKey(
@@ -103,7 +102,7 @@ def collect_target_schemas(project: CompiledProjectView) -> set[tuple[str | None
     model: CompiledModelView
     for model in project.models:
         schemas.append((model.destination.database, model.destination.schema))
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         schemas.append((seed.destination.database, seed.destination.schema))
     return _dedupe_schema_keys(schemas)

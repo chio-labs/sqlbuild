@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SettingsConfig
@@ -23,7 +24,7 @@ from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, Settin
 def make_compiled_project(
     *,
     models: tuple[CompiledModelView, ...],
-    seeds: tuple[CompiledSeed, ...] = (),
+    seeds: tuple[CompiledSeedView, ...] = (),
     sql_analysis_enabled: bool = True,
 ) -> CompiledProjectView:
     return CompiledProject(
@@ -63,7 +64,7 @@ def make_compiled_model(
     )
 
 
-def make_compiled_seed(*, name: str, columns: tuple[str, ...]) -> CompiledSeed:
+def make_compiled_seed(*, name: str, columns: tuple[str, ...]) -> CompiledSeedView:
     return CompiledSeed(
         key=CompiledObjectKey(CompiledResourceType.SEED, name),
         deps=(),

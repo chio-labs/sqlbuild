@@ -80,12 +80,10 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
     CompileModelSqlTestInputPayload,
     CompilerDiagnostic,
-    CompileSeedInput,
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
@@ -104,6 +102,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
     CompileInputsView,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -377,18 +376,7 @@ def assemble_compiled_project(
             )
             for index, source_input in enumerate(inputs.source_inputs)
         ),
-        seeds=tuple(
-            _assemble_compiled_seed(
-                seed_input=seed_input,
-                native_destination=native_resource(
-                    resources=resources,
-                    slot=SEED_SLOT,
-                    items=resources.seed_destinations,
-                    index=index,
-                ),
-            )
-            for index, seed_input in enumerate(inputs.seed_inputs)
-        ),
+        seeds=_compiled_seeds(inputs=inputs, resources=resources),
         functions=tuple(
             _assemble_compiled_function(
                 function_input=function_input,
@@ -746,20 +734,24 @@ def _assemble_compiled_source(
     )
 
 
-def _assemble_compiled_seed(
-    *, seed_input: CompileSeedInput, native_destination: CompiledRelationLocation
-) -> CompiledSeed:
-    return CompiledSeed(
-        key=CompiledObjectKey(
-            resource_type=CompiledResourceType.SEED, name=seed_input.schema_entry.name
-        ),
-        deps=(),
-        name=seed_input.schema_entry.name,
-        seed_file=seed_input.seed_file,
-        schema_entry=seed_input.schema_entry,
-        schema_file=seed_input.schema_file,
-        destination=native_destination,
+def _compiled_seeds(
+    *, inputs: CompileInputsView, resources: NativeProjectResources
+) -> tuple[CompiledSeedView, ...]:
+    """Each seed's view over the compile's native project, raising assembly's error at its seed."""
+
+    if not inputs.seed_inputs:
+        return ()
+    owner: _native.NativeCompiledProject = cast(
+        _native.NativeCompiledProject, inputs.native_project
     )
+    owner.record_seed_namespaces(list(resources.seed_namespaces))
+    seeds: list[CompiledSeedView] = []
+    for index in range(len(inputs.seed_inputs)):
+        _ = native_resource(
+            resources=resources, slot=SEED_SLOT, items=resources.seed_namespaces, index=index
+        )
+        seeds.append(owner.compiled_seed(index))
+    return tuple(seeds)
 
 
 def _assemble_compiled_function(

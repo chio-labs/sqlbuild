@@ -13,7 +13,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSeedView,
+    FunctionLanguage,
+)
 from sqlbuild.compiler.compiled_project.main._with_target_defaults import with_target_defaults
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 
@@ -37,17 +42,14 @@ def apply_target_defaults(
         )
         for model in project.models
     )
-    seeds: tuple[CompiledSeed, ...] = tuple(
-        replace(
-            s,
-            destination=_resolve_target(
-                target=s.destination,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-            ),
+    seeds: tuple[CompiledSeedView, ...] = tuple(
+        _seed_with_defaults(
+            seed=seed,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
         )
-        for s in project.seeds
+        for seed in project.seeds
     )
     functions: tuple[CompiledFunction, ...] = tuple(
         replace(
@@ -97,6 +99,26 @@ def _model_with_defaults(
         model,
         destination=_resolve_target(
             target=model.destination,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
+        ),
+    )
+
+
+def _seed_with_defaults(
+    *,
+    seed: CompiledSeedView,
+    default_schema: str | None,
+    default_database: str | None,
+    render_qualified_name: Callable[..., str | None],
+) -> CompiledSeedView:
+    if isinstance(seed, _native.NativeCompiledSeed):
+        return seed.with_target_defaults((default_schema, default_database), render_qualified_name)
+    return replace(
+        cast(CompiledSeed, seed),
+        destination=_resolve_target(
+            target=seed.destination,
             default_schema=default_schema,
             default_database=default_database,
             render_qualified_name=render_qualified_name,

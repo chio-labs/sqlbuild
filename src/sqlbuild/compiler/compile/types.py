@@ -46,6 +46,7 @@ if TYPE_CHECKING:
         DiscoveredMaterializationFile,
         DiscoveredProjectInputs,
         DiscoveredSchemaFile,
+        DiscoveredSeedFile,
         DiscoveredSqlHookFile,
         DiscoveredSqlModelFile,
         EnumDeclaration,
@@ -60,10 +61,43 @@ if TYPE_CHECKING:
         ProjectConfig,
         ScenarioConfig,
         SchemaModelEntry,
+        SchemaSeedEntry,
         SettingsConfig,
         SourceLocation,
         TargetConfig,
     )
+
+
+class SeedInput(Protocol):
+    """One seed paired with its declaration: a native owner view, or a `CompileSeedInput`."""
+
+    @property
+    def seed_file(self) -> DiscoveredSeedFile: ...
+    @property
+    def schema_entry(self) -> SchemaSeedEntry: ...
+    @property
+    def schema_file(self) -> DiscoveredSchemaFile: ...
+
+
+class CompiledSeedView(Protocol):
+    """One assembled seed: a native owner view, or a hand-built `CompiledSeed`."""
+
+    @property
+    def key(self) -> CompiledObjectKey: ...
+    @property
+    def deps(self) -> tuple[CompiledObjectKey, ...]: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def seed_file(self) -> DiscoveredSeedFile: ...
+    @property
+    def schema_entry(self) -> SchemaSeedEntry: ...
+    @property
+    def schema_file(self) -> DiscoveredSchemaFile: ...
+    @property
+    def destination(self) -> CompiledRelationLocation: ...
+    @property
+    def external(self) -> bool: ...
 
 
 class CompileInputsView(Protocol):

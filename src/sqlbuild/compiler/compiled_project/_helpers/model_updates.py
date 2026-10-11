@@ -10,6 +10,7 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
+    CompiledSeed,
     CompileProjectInputs,
     CompilerDiagnostic,
     InferredColumn,
@@ -17,6 +18,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
+    CompiledSeedView,
     CompileInputsView,
 )
 
@@ -85,7 +87,24 @@ def compiled_project_record_impl(project: CompiledProjectView) -> CompiledProjec
 
     if isinstance(project, CompiledProject):
         return project
-    return CompiledProject(**cast(_native.NativeProjectView, project).fields())
+    fields: dict[str, Any] = cast(_native.NativeProjectView, project).fields()
+    fields["seeds"] = tuple(map(_seed_record, fields["seeds"]))
+    return CompiledProject(**fields)
+
+
+def _seed_record(seed: CompiledSeedView) -> CompiledSeed:
+    if isinstance(seed, CompiledSeed):
+        return seed
+    return CompiledSeed(
+        key=seed.key,
+        deps=seed.deps,
+        name=seed.name,
+        seed_file=seed.seed_file,
+        schema_entry=seed.schema_entry,
+        schema_file=seed.schema_file,
+        destination=seed.destination,
+        external=seed.external,
+    )
 
 
 def project_with_impl(*, project: CompiledProjectView, **changes: Any) -> CompiledProjectView:
