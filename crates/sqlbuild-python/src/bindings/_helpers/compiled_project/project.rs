@@ -17,6 +17,11 @@ use sqlbuild_analysis::compiled_project::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 
+pub(crate) const CONTRACT_KEY: &str = "contract";
+pub(crate) const INCREMENTAL_MODE_KEY: &str = "incremental_mode";
+const MATERIALIZED_KEY: &str = "materialized";
+const TABLE_MATERIALIZATION: &str = "table";
+
 /// `(name, type)`.
 type NamedType = (String, Option<String>);
 /// `(name, type, nullable, audit count, declared outside the model)`.
@@ -163,7 +168,9 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
             encoding_error: config_values.1,
             header_keys,
             layer_schema,
-            contract: contract_policy(&values)?,
+            contract: text_value(&values, CONTRACT_KEY)?,
+            materialized: materialization(&values)?,
+            incremental_mode: text_value(&values, INCREMENTAL_MODE_KEY)?,
         },
         references: references
             .into_iter()
@@ -190,9 +197,17 @@ pub(crate) fn config_values(values: &Bound<'_, PyDict>) -> ConfigValues {
     }
 }
 
-/// The model's `contract` config value when it is text.
-pub(crate) fn contract_policy(values: &Bound<'_, PyDict>) -> PyResult<Option<String>> {
-    match values.get_item("contract")? {
+/// The `materialized` config value when it is text, `table` when it is absent.
+pub(crate) fn materialization(values: &Bound<'_, PyDict>) -> PyResult<Option<String>> {
+    if values.get_item(MATERIALIZED_KEY)?.is_none() {
+        return Ok(Some(TABLE_MATERIALIZATION.to_owned()));
+    }
+    text_value(values, MATERIALIZED_KEY)
+}
+
+/// A config value when it is text.
+pub(crate) fn text_value(values: &Bound<'_, PyDict>, key: &str) -> PyResult<Option<String>> {
+    match values.get_item(key)? {
         Some(value) if value.is_instance_of::<PyString>() => Ok(Some(value.extract()?)),
         _ => Ok(None),
     }

@@ -687,6 +687,7 @@ ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
 )
 ANALYSIS_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "crates/sqlbuild-analysis/src/contracts/constants.rs",
+    "crates/sqlbuild-python/src/bindings/_helpers/compiled_project/model_loop.rs",
 )
 NATIVE_CODE_CONSTANT_PATTERN: re.Pattern[str] = re.compile(
     r'const [A-Z0-9_]*_CODE: &str = "([A-Z][0-9]{3})";'

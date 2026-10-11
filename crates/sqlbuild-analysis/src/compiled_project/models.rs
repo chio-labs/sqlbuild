@@ -42,6 +42,10 @@ pub struct ModelConfigFacts {
     pub layer_schema: Option<String>,
     /// The `contract` value when it is text.
     pub contract: Option<String>,
+    /// The `materialized` value when it is text; `table` when it is absent.
+    pub materialized: Option<String>,
+    /// The `incremental_mode` value when it is text.
+    pub incremental_mode: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

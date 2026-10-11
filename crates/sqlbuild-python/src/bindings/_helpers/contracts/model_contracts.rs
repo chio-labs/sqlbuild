@@ -32,8 +32,6 @@ type DiagnosticRow = (
     Option<(String, String)>,
     String,
 );
-/// `(name, contract, materialized, incremental_mode)`.
-type PromotionModelRow = (String, Option<String>, Option<String>, Option<String>);
 
 /// Evaluate the column contract of every model the compile's owner recorded, in its order.
 #[pyfunction]
@@ -137,28 +135,32 @@ fn fact_dynamic_proof(proof: &DynamicProofFact) -> DynamicContractProof {
     }
 }
 
-/// The K011 conflicts of enforced contracts under immediate table promotion.
+/// `(model name, model path, code, message, help)`.
+type ConflictRow = (String, String, &'static str, String, String);
+
+/// The K011 conflicts of enforced contracts under immediate table promotion, by model name.
 #[pyfunction]
-fn native_promotion_conflicts(
+fn project_promotion_conflicts(
     py: Python<'_>,
-    request: (Option<String>, String, String, Vec<PromotionModelRow>),
-) -> PyResult<Vec<(usize, &'static str, String, String)>> {
-    let (explicit_mode, adapter_default, settings_file, models) = request;
+    settings: (Option<String>, String, String),
+    project: PyRef<'_, NativeCompiledProject>,
+) -> PyResult<Vec<ConflictRow>> {
+    let (explicit_mode, adapter_default, settings_file) = settings;
+    let models: &[CompiledModelFacts] = project_models(project.facts());
+    let mut rows: Vec<PromotionModel> = Vec::with_capacity(models.len());
+    for model in models {
+        rows.push(PromotionModel {
+            name: model.name.clone(),
+            contract: model.config.contract.clone(),
+            materialized: model.config.materialized.clone(),
+            incremental_mode: model.config.incremental_mode.clone(),
+        });
+    }
     let request = PromotionRequest {
         explicit_mode,
         adapter_default,
         settings_file,
-        models: models
-            .into_iter()
-            .map(
-                |(name, contract, materialized, incremental_mode)| PromotionModel {
-                    name,
-                    contract,
-                    materialized,
-                    incremental_mode,
-                },
-            )
-            .collect(),
+        models: rows,
     };
     let conflicts: Vec<PromotionConflict> = py
         .compiler_detach(|| Ok(promotion_conflicts(&request)))
@@ -166,8 +168,10 @@ fn native_promotion_conflicts(
     Ok(conflicts
         .into_iter()
         .map(|conflict| {
+            let model: &CompiledModelFacts = &models[conflict.model_index];
             (
-                conflict.model_index,
+                model.name.clone(),
+                model.relative_path.clone(),
                 conflict.code,
                 conflict.message,
                 conflict.help,
@@ -194,6 +198,6 @@ fn diagnostic_row(diagnostic: ContractDiagnostic) -> DiagnosticRow {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(evaluate_project_model_contracts, module)?)?;
-    module.add_function(wrap_pyfunction!(native_promotion_conflicts, module)?)?;
+    module.add_function(wrap_pyfunction!(project_promotion_conflicts, module)?)?;
     Ok(())
 }

@@ -38,6 +38,7 @@ import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_rec
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
+import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
 import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
 import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
@@ -49,6 +50,7 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
 )
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
+from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse.constants import (
     EXCLUDED_ROOT_DIRECTORIES,
@@ -64,6 +66,8 @@ from sqlbuild.compiler.compile.constants import (
     RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
     SQL_TEST_SCAN_STORE_FILE_NAME,
 )
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
     COMPILER_ENGINE_ENV_VAR,
@@ -87,9 +91,7 @@ from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     MACRO_CALL_LOG_ENV_VAR,
 )
 from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
-    NativeContractOutcome,
-    NativeContractRequest,
-    native_contract_statuses,
+    contract_statuses,
 )
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -4931,10 +4933,10 @@ def type_system_engine_compile(
     """Compile in this process under `engine`; return the run and what native types answered."""
 
     normalized: list[bool] = []
-    contract_statuses: Counter[str] = Counter()
+    statuses: Counter[str] = Counter()
     normalize: Callable[[str, str], object] = native_module.normalize_type
-    evaluate_contracts: Callable[..., list[NativeContractOutcome]] = (
-        native_module.evaluate_native_model_contracts
+    evaluate_contracts: Callable[..., ContractValidationResult] = (
+        contract_entry.native_model_contracts
     )
 
     def recorded(type_sql: str, dialect: str) -> object:
@@ -4942,24 +4944,25 @@ def type_system_engine_compile(
         normalized.append(result is not None)
         return result
 
-    def recorded_contracts(request: NativeContractRequest) -> list[NativeContractOutcome]:
-        outcomes: list[NativeContractOutcome] = evaluate_contracts(request)
-        contract_statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
-        contract_statuses["handbacks"] += sum(deferral is not None for deferral, _ in outcomes)
-        return outcomes
+    def recorded_contracts(
+        *, project: CompiledProject, dialect: TypeDialect | str | None
+    ) -> ContractValidationResult:
+        result: ContractValidationResult = evaluate_contracts(project=project, dialect=dialect)
+        statuses.update(contract_statuses(project=project, result=result))
+        return result
 
     type_normalization.normalize_type.cache_clear()
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
-        patch.setattr(native_module, "evaluate_native_model_contracts", recorded_contracts)
+        patch.setattr(contract_entry, "native_model_contracts", recorded_contracts)
         for name, value in {COMPILER_ENGINE_ENV_VAR: engine, REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     type_normalization.normalize_type.cache_clear()
     return run, NativeTypeAnswers(
         normalized=normalized,
-        typed_comparisons=contract_statuses["typed_comparisons"],
-        handbacks=contract_statuses["handbacks"],
+        typed_comparisons=statuses["typed_comparisons"],
+        handbacks=statuses["handbacks"],
     )
 
 

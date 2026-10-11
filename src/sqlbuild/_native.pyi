@@ -742,12 +742,9 @@ def evaluate_project_model_contracts(
         ],
     ]
 ]: ...
-def native_promotion_conflicts(
-    request: tuple[str | None, str, str, list[tuple[str, str | None, str | None, str | None]]],
-    /,
-) -> list[tuple[int, str, str, str]]: ...
-
-# Native analysis: column lineage facts.
+def project_promotion_conflicts(
+    settings: tuple[str | None, str, str], project: NativeCompiledProject
+) -> list[tuple[str, str, str, str, str]]: ...
 def build_fast_column_lineage(
     catalog: object | None,
     request: tuple[str | None, list[tuple[str, str, list[str]]], list[tuple[bool, str, list[str]]]],

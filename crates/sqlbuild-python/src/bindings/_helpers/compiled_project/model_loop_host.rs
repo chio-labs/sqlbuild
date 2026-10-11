@@ -14,7 +14,9 @@ use crate::bindings::_helpers::compiled_project::model_loop_header::{
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     reference_fact, stripped_values,
 };
-use crate::bindings::_helpers::compiled_project::project::contract_policy;
+use crate::bindings::_helpers::compiled_project::project::{
+    CONTRACT_KEY, INCREMENTAL_MODE_KEY, materialization, text_value,
+};
 use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
@@ -176,7 +178,9 @@ pub(crate) fn plain_input<'py>(
             encoding_error,
             header_keys: finished.config.getattr(HEADER_KEYS_ATTRIBUTE)?.extract()?,
             layer_schema: finished.config.getattr(LAYER_SCHEMA_ATTRIBUTE)?.extract()?,
-            contract: contract_policy(&stripped)?,
+            contract: text_value(&stripped, CONTRACT_KEY)?,
+            materialized: materialization(&stripped)?,
+            incremental_mode: text_value(&stripped, INCREMENTAL_MODE_KEY)?,
         },
         schema: finished.header.schema.map(|schema| schema.fact),
         references: finished

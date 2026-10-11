@@ -7,7 +7,7 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeGuard
 
 import pytest
 
@@ -323,14 +323,7 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
         *, project: CompiledProject, dialect: TypeDialect | str | None
     ) -> ContractValidationResult:
         result: ContractValidationResult = evaluate(project=project, dialect=dialect)
-        request: NativeContractRequest = (
-            "",
-            project.settings.column_contract_mode == ColumnContractMode.IMPLICIT,
-            [_status_row(model) for model in project.models],
-        )
-        record.statuses.update(
-            native_contract_statuses(request=request, diagnostics=len(result.diagnostics))
-        )
+        record.statuses.update(contract_statuses(project=project, result=result))
         record.codes.update(diagnostic.code for diagnostic in result.diagnostics)
         return result
 
@@ -338,17 +331,30 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
     return record
 
 
+def contract_statuses(
+    *, project: CompiledProject, result: ContractValidationResult
+) -> Counter[str]:
+    """Counts of evaluated models, typed comparisons and diagnostics for one contract run."""
+
+    request: NativeContractRequest = (
+        "",
+        project.settings.column_contract_mode == ColumnContractMode.IMPLICIT,
+        [_status_row(model) for model in project.models],
+    )
+    return native_contract_statuses(request=request, diagnostics=len(result.diagnostics))
+
+
 def _status_row(model: CompiledModel) -> tuple[object, ...]:
     contract: object = model.config.values.get("contract")
     return (
         model.name,
         (None, contract)[isinstance(contract, str)],
-        next(map(_status_schema, filter(None, (model.schema_entry,))), None),
+        next(map(_status_schema, filter(_present, (model.schema_entry,))), None),
         next(map(_status_columns, filter(_present, (model.inferred_columns,))), None),
     )
 
 
-def _present(value: object) -> bool:
+def _present[T](value: T | None) -> TypeGuard[T]:
     return value is not None
 
 
