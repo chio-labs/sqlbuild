@@ -798,6 +798,22 @@ class CompileModelInput:
     macro_deps: tuple[str, ...] = field(default_factory=tuple)
     macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+    @property
+    def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]:
+        """Each reference as `(kind, name, package, call argument count)`."""
+
+        return [
+            (str(ref.ref_kind), ref.ref_name, ref.ref_package, ref.call_argument_count)
+            for ref in self.references
+        ]
+
+    @property
+    def attached_schema_name(self) -> str | None:
+        """The name of the schema entry attached to the model, or `None`."""
+
+        return self.schema_entry.name if self.schema_entry is not None else None
+
     sql_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
     lint_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
     """The compile's whole expansion, variables included, which early SQL lint reuses."""
@@ -977,6 +993,65 @@ class CompiledModel:
     dynamic_column_contract: DynamicColumnContractProof | None = None
     unchecked_output_columns: frozenset[str] = frozenset()
     rejected_sql_analysis_opt_out: SourceLocation | None = None
+
+    @property
+    def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]:
+        """Each reference as `(kind, name, package, call argument count)`."""
+
+        return [
+            (str(ref.ref_kind), ref.ref_name, ref.ref_package, ref.call_argument_count)
+            for ref in self.references
+        ]
+
+    @property
+    def key_row(self) -> tuple[str, str]:
+        """`(resource type, name)` of the model's key."""
+
+        return (str(self.key.resource_type), self.key.name)
+
+    @property
+    def dep_rows(self) -> list[tuple[str, str]]:
+        """`(resource type, name)` of each dependency."""
+
+        return [(str(dep.resource_type), dep.name) for dep in self.deps]
+
+    @property
+    def destination_row(self) -> tuple[str | None, str | None, str]:
+        """`(database, schema, name)` of the model's destination."""
+
+        return (self.destination.database, self.destination.schema, self.destination.name)
+
+    @property
+    def inferred_rows(self) -> list[tuple[str, str | None, str]] | None:
+        """Each inferred column as `(name, type, nullability)`, or `None`."""
+
+        if self.inferred_columns is None:
+            return None
+        return [
+            (column.name, column.type, str(column.nullability)) for column in self.inferred_columns
+        ]
+
+    @property
+    def schema_column_rows(self) -> list[tuple[str, str | None]] | None:
+        """Each declared column of the attached schema as `(name, type)`, or `None`."""
+
+        if self.schema_entry is None:
+            return None
+        return [(column.name, column.type) for column in self.schema_entry.columns]
+
+    @property
+    def has_dynamic_columns(self) -> bool:
+        """Whether the attached schema declares dynamic columns."""
+
+        return self.schema_entry is not None and bool(self.schema_entry.dynamic_columns)
+
+    @property
+    def output_column_count(self) -> int:
+        """Inferred columns, else the attached schema's declared columns, else zero."""
+
+        if self.inferred_columns is not None:
+            return len(self.inferred_columns)
+        return len(self.schema_entry.columns) if self.schema_entry is not None else 0
 
 
 @dataclass(frozen=True)

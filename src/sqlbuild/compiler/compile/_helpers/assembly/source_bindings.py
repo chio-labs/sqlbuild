@@ -22,7 +22,7 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_function_names,
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    binding_relation_names,
+    binding_relation_row_names,
     published_model_shape,
     semantic_shapes,
 )
@@ -56,7 +56,7 @@ from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaVal
 def _model_shapes(
     *, model: CompiledModelView, shapes: dict[str, dict[str, str]]
 ) -> dict[str, dict[str, str]]:
-    return {name: shapes.get(name, {}) for name in binding_relation_names(model.references)}
+    return {name: shapes.get(name, {}) for name in binding_relation_row_names(model.reference_rows)}
 
 
 def get_source_binding_diagnostics(

@@ -293,10 +293,8 @@ def validate_declared_schema_models_are_attached(
 ) -> None:
     """Ensure every declared schema.yml model entry attaches within its directory scope."""
 
-    attached_model_names: set[str] = {
-        model_input.schema_entry.name
-        for model_input in model_inputs
-        if model_input.schema_entry is not None
+    attached_model_names: set[str | None] = {
+        model_input.attached_schema_name for model_input in model_inputs
     }
     schema_file: DiscoveredSchemaFile
     for schema_file in schema_files:

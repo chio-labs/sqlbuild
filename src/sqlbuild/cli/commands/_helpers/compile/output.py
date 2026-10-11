@@ -94,7 +94,7 @@ def format_compile_text(
         lines.append(
             f"{connector} {style.object_name(model_name)} "
             f"{format_status_cell(style=style, status=status, width=4)} "
-            f"{style.muted(f'{_column_count(model)} columns')}"
+            f"{style.muted(f'{model.output_column_count} columns')}"
         )
     hidden_model_count: int = len(visible_project_models) - len(visible_models)
     if hidden_model_count > 0:
@@ -330,7 +330,7 @@ def _model_resource(
         "name": model.name,
         "relative_path": str(model.relative_path),
         "materialized": str(model.config.values.get("materialized", "view")),
-        "column_count": _column_count(model),
+        "column_count": model.output_column_count,
         "depends_on": [
             {"resource_type": kind, "name": name}
             for kind, name in graph.native.upstream((str(model.key.resource_type), model.key.name))
@@ -480,7 +480,7 @@ def _lineage_summary(
         return {"available": False}
     return {
         "available": True,
-        "column_count": _column_count(model),
+        "column_count": model.output_column_count,
         "edge_count": lineage.edge_count_targeting(model.name),
         "has_star": lineage.model_has_star(model.name),
     }
@@ -491,14 +491,6 @@ def _artifacts(*, written: WrittenTarget, manifest: bool) -> dict[str, object]:
         "compiled_sql_dir": _relative_target_path(_compiled_sql_dir(written)) + "/",
         "manifest": "target/manifest.json" if manifest else None,
     }
-
-
-def _column_count(model: CompiledModelView) -> int:
-    if model.inferred_columns is not None:
-        return len(model.inferred_columns)
-    if model.schema_entry is not None:
-        return len(model.schema_entry.columns)
-    return 0
 
 
 def _model_name_width(models: tuple[CompiledModelView, ...]) -> int:

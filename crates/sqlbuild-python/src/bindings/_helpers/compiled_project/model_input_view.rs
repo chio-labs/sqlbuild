@@ -167,6 +167,18 @@ impl NativeModelInput {
         self.read(py, |record, _| schema_entry(&classes, record))
     }
 
+    /// Each reference as `(kind, name, package, call argument count)`.
+    #[getter]
+    fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
+        self.read(py, |record, _| Ok(record.references.clone()))
+    }
+
+    /// The name of the schema entry attached to the model, or `None`.
+    #[getter]
+    fn attached_schema_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        self.read(py, |record, py| attached_schema_name(record, py))
+    }
+
     #[getter]
     fn schema_file(&self, py: Python<'_>) -> Py<PyAny> {
         py.None()
@@ -320,6 +332,24 @@ pub(crate) fn references(
             Ok::<_, pyo3::PyErr>(PyTuple::new(py, references)?.unbind())
         })
         .map(|references| references.clone_ref(py))
+}
+
+/// The name of the model's attached schema entry, its file stem, or `None`.
+pub(crate) fn attached_schema_name(
+    record: &ModelInputRecord,
+    py: Python<'_>,
+) -> PyResult<Option<String>> {
+    if record.schema.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(
+        record
+            .model_file
+            .bind(py)
+            .getattr("file_path")?
+            .getattr("stem")?
+            .extract()?,
+    ))
 }
 
 /// The model's attached `SchemaModelEntry`, or `None`, built once.

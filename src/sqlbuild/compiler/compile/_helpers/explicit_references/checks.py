@@ -110,7 +110,10 @@ def explicit_reference_report(
                     ],
                     "sources": [_source_row(source) for source in project.sources],
                     "seeds": [
-                        {"name": seed.name, "relation": _location_row(seed.destination)}
+                        {
+                            "name": seed.name,
+                            "relation": _location_row(seed.destination),
+                        }
                         for seed in project.seeds
                     ],
                     "audits": [_audit_row(audit) for audit in project.audits],
@@ -195,9 +198,16 @@ def _owner_row(
 
 def _resource_rows(project: CompiledProjectView) -> list[dict[str, object]]:
     return [
-        {"key": _key_row(resource.key), "deps": _key_rows(resource.deps)}
-        for resource in (*project.models, *project.sources, *project.seeds, *project.functions)
+        *(_graph_row(key=model.key_row, deps=model.dep_rows) for model in project.models),
+        *(
+            _graph_row(key=_key_row(resource.key), deps=_key_rows(resource.deps))
+            for resource in (*project.sources, *project.seeds, *project.functions)
+        ),
     ]
+
+
+def _graph_row(*, key: tuple[str, str], deps: list[tuple[str, str]]) -> dict[str, object]:
+    return {"key": key, "deps": deps}
 
 
 def _key_row(key: CompiledObjectKey) -> tuple[str, str]:
@@ -219,7 +229,7 @@ def _model_row(*, model: CompiledModelView, old_name_retention: str | None) -> d
     return {
         "name": model.name,
         "path": str(model.relative_path),
-        "destination": _location_row(model.destination),
+        "destination": _destination_row(model.destination_row),
         "python_hooks": list(model_python_hook_names(model=model)),
         "sql_hooks": list(
             chain.from_iterable(
@@ -277,7 +287,12 @@ def _audit_row(audit: CompiledAudit) -> dict[str, object]:
 
 
 def _location_row(location: CompiledRelationLocation) -> dict[str, str | None]:
-    return {"name": location.name, "schema": location.schema, "database": location.database}
+    return _destination_row((location.database, location.schema, location.name))
+
+
+def _destination_row(row: tuple[str | None, str | None, str]) -> dict[str, str | None]:
+    database, schema, name = row
+    return {"name": name, "schema": schema, "database": database}
 
 
 def _ref_rows(refs: tuple[SqlResourceRef, ...]) -> list[tuple[str, str]]:

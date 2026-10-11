@@ -31,8 +31,8 @@ def validate_table_function_call_arities(
     }
     model_input: ModelInput
     for model_input in model_inputs:
-        validate_table_function_reference_arities(
-            references=model_input.references,
+        _validate_table_function_row_arities(
+            rows=model_input.reference_rows,
             argument_counts=argument_counts,
             owner=f"Model file {model_input.model_file.relative_path}",
         )
@@ -51,17 +51,34 @@ def validate_table_function_reference_arities(
     argument_counts: dict[str, int],
     owner: str,
 ) -> None:
-    reference: CompileSqlReference
-    for reference in references:
-        if reference.ref_kind != SqlReferenceKind.TABLE_FUNCTION:
+    _validate_table_function_row_arities(
+        rows=[
+            (str(reference.ref_kind), reference.ref_name, None, reference.call_argument_count)
+            for reference in references
+        ],
+        argument_counts=argument_counts,
+        owner=owner,
+    )
+
+
+def _validate_table_function_row_arities(
+    *,
+    rows: list[tuple[str, str, str | None, int | None]],
+    argument_counts: dict[str, int],
+    owner: str,
+) -> None:
+    """Validate `(kind, name, package, argument count)` reference rows against declared counts."""
+
+    for kind, name, _, received in rows:
+        if kind != SqlReferenceKind.TABLE_FUNCTION:
             continue
-        expected_count: int | None = argument_counts.get(reference.ref_name)
-        if expected_count is None or reference.call_argument_count == expected_count:
+        expected_count: int | None = argument_counts.get(name)
+        if expected_count is None or received == expected_count:
             continue
         expected_label: str = "argument" if expected_count == 1 else "arguments"
         raise CompileInputError(
-            f"{owner} table function '{reference.ref_name}' expects {expected_count} "
-            f"{expected_label} but received {reference.call_argument_count}"
+            f"{owner} table function '{name}' expects {expected_count} "
+            f"{expected_label} but received {received}"
         )
 
 

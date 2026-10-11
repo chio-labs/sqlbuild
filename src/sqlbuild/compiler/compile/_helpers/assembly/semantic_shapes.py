@@ -41,19 +41,27 @@ from sqlbuild.spec.contracts.models import (
 
 
 def binding_relation_names(references: tuple[CompileSqlReference, ...]) -> frozenset[str]:
+    return binding_relation_row_names(
+        [(str(reference.ref_kind), reference.ref_name, None, None) for reference in references]
+    )
+
+
+def binding_relation_row_names(
+    rows: list[tuple[str, str, str | None, int | None]],
+) -> frozenset[str]:
+    """The analysis names `(kind, name, package, count)` reference rows bind, UDFs excluded."""
+
     return frozenset(
-        table_function_analysis_name(reference.ref_name)
-        if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
-        else reference.ref_name
-        for reference in references
-        if reference.ref_kind != SqlReferenceKind.UDF
+        table_function_analysis_name(name) if kind == SqlReferenceKind.TABLE_FUNCTION else name
+        for kind, name, _, _ in rows
+        if kind != SqlReferenceKind.UDF
     )
 
 
 def binding_required_names(model_input: ModelInput) -> frozenset[str] | None:
     if not model_input.sql_validation_enabled:
         return None
-    return binding_relation_names(model_input.references)
+    return binding_relation_row_names(model_input.reference_rows)
 
 
 def published_model_shape(
@@ -266,44 +274,29 @@ def semantic_shapes(
     while pending:
         remaining: list[CompiledModelView] = []
         for model in pending:
+            declared: list[tuple[str, str | None]] | None = model.schema_column_rows
+            inferred: list[tuple[str, str | None, str]] | None = model.inferred_rows
+            rows: list[tuple[str, str, str | None, int | None]] = model.reference_rows
+            relations: frozenset[str] = binding_relation_row_names(rows)
             if (
                 model.config.values.get("contract") == ContractPolicy.ENFORCED
-                and model.schema_entry
-                and not model.schema_entry.dynamic_columns
+                and declared is not None
+                and not model.has_dynamic_columns
             ):
+                unchecked: frozenset[str] = model.unchecked_output_columns
                 shapes[model.name] = {
-                    column.name: "UNKNOWN"
-                    if column.name in model.unchecked_output_columns
-                    else column.type or "UNKNOWN"
-                    for column in model.schema_entry.columns
+                    name: "UNKNOWN" if name in unchecked else column_type or "UNKNOWN"
+                    for name, column_type in declared
                 }
-            elif model.inferred_columns and (
+            elif inferred and (
                 not model.fast_lineage_has_star
-                or (
-                    model.fast_lineage_star_resolved
-                    and model.references
-                    and all(
-                        (
-                            table_function_analysis_name(reference.ref_name)
-                            if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION
-                            else reference.ref_name
-                        )
-                        in shapes
-                        for reference in model.references
-                        if reference.ref_kind != SqlReferenceKind.UDF
-                    )
-                )
+                or (model.fast_lineage_star_resolved and rows and relations <= shapes.keys())
             ):
                 shapes[model.name] = published_model_shape(
                     sql=model.query_sql,
                     profile=replace(profile, binding_catalog=project.binding_catalog),
-                    columns={
-                        column.name: column.type or "UNKNOWN" for column in model.inferred_columns
-                    },
-                    inputs={
-                        name: shapes.get(name, {})
-                        for name in binding_relation_names(model.references)
-                    },
+                    columns={name: column_type or "UNKNOWN" for name, column_type, _ in inferred},
+                    inputs={name: shapes.get(name, {}) for name in relations},
                     config_values=model.config.values,
                 )
             else:

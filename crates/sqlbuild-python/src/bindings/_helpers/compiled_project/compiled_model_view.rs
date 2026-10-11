@@ -2,13 +2,14 @@
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple, PyTupleMethods};
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, ModelInputRecord, read_input, references, rejected_opt_out, schema_entry,
     view_classes,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 
@@ -23,6 +24,12 @@ const TAGS_KEY: &str = "tags";
 
 /// `(name, type, nullability)` of one inferred output column.
 pub(crate) type InferredRow = (String, Option<String>, String);
+
+/// `(name, type)` of a declared column.
+pub(crate) type DeclaredRow = (String, Option<String>);
+
+/// `(database, schema, name)` of a relation.
+pub(crate) type DestinationRow = (Option<String>, Option<String>, String);
 
 /// The Python classes a compiled model's projected attributes are built with.
 #[derive(FromPyObject)]
@@ -352,6 +359,103 @@ impl NativeCompiledModel {
     fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, _| references(&classes, record))
+    }
+
+    /// Each reference as `(kind, name, package, call argument count)`.
+    #[getter]
+    fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
+        self.read(py, |record, _| Ok(record.references.clone()))
+    }
+
+    /// `(resource type, name)` of the model's key.
+    #[getter]
+    fn key_row(&self, py: Python<'_>) -> PyResult<(String, String)> {
+        self.read(py, |record, py| {
+            Ok((MODEL_RESOURCE.to_owned(), model_name(record, py)?))
+        })
+    }
+
+    /// `(resource type, name)` of each dependency.
+    #[getter]
+    fn dep_rows(&self, py: Python<'_>) -> PyResult<Vec<(String, String)>> {
+        self.compiled(py, |compiled, _| Ok(compiled.deps.clone()))
+    }
+
+    /// `(database, schema, name)` of the model's destination.
+    #[getter]
+    fn destination_row(&self, py: Python<'_>) -> PyResult<DestinationRow> {
+        self.compiled(py, |compiled, _| {
+            let destination: &DestinationFact = self
+                .overlay
+                .destination
+                .as_ref()
+                .unwrap_or(&compiled.destination);
+            Ok((
+                destination.database.clone(),
+                destination.schema.clone(),
+                destination.name.clone(),
+            ))
+        })
+    }
+
+    /// Each inferred column as `(name, type, nullability)`, or `None` when none were inferred.
+    #[getter]
+    fn inferred_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<InferredRow>>> {
+        self.compiled(py, |compiled, _| {
+            let Some(rows) = &compiled.inferred else {
+                return Ok(None);
+            };
+            let mut shown: Vec<InferredRow> = Vec::with_capacity(rows.len());
+            for (name, column_type, nullability) in rows {
+                let poisoned: bool = self.overlay.poisoned.contains(name);
+                let column_type: Option<String> = if poisoned { None } else { column_type.clone() };
+                shown.push((name.clone(), column_type, nullability.clone()));
+            }
+            Ok(Some(shown))
+        })
+    }
+
+    /// Each declared column of the attached schema as `(name, type)`, or `None` without one.
+    #[getter]
+    fn schema_column_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<DeclaredRow>>> {
+        self.read(py, |record, py| {
+            let Some(schema) = &record.schema else {
+                return Ok(None);
+            };
+            let mut rows: Vec<DeclaredRow> = Vec::new();
+            for column in schema.columns.bind(py).iter() {
+                rows.push((
+                    column.getattr("name")?.extract()?,
+                    column.getattr("type")?.extract()?,
+                ));
+            }
+            Ok(Some(rows))
+        })
+    }
+
+    /// Whether the attached schema declares dynamic columns.
+    #[getter(has_dynamic_columns)]
+    fn dynamic_columns_declared(&self, py: Python<'_>) -> PyResult<bool> {
+        self.read(py, |record, py| {
+            Ok(record
+                .schema
+                .as_ref()
+                .is_some_and(|schema| !schema.dynamic_columns.bind(py).is_empty()))
+        })
+    }
+
+    /// Inferred columns, else the attached schema's declared columns, else zero.
+    #[getter]
+    fn output_column_count(&self, py: Python<'_>) -> PyResult<usize> {
+        self.read(py, |record, py| {
+            if let Some(rows) = &compiled_of(record)?.inferred {
+                return Ok(rows.len());
+            }
+            Ok(record
+                .schema
+                .as_ref()
+                .map_or(0, |schema| schema.columns.bind(py).len()))
+        })
     }
 
     #[getter]
