@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -83,3 +84,22 @@ def compile_timings(stdout: bytes) -> dict[str, int]:
     """The `compile_timings` of a JSON compile report."""
 
     return json.loads(stdout)["compile_timings"]
+
+
+def counting_install(directory: Path, marker: Path) -> Path:
+    """Install `sqb` beside a `sqlbuild-python` that logs each start to `marker`; return `sqb`."""
+
+    directory.mkdir(parents=True)
+    program: Path = Path(shutil.copy2(NATIVE_SQB, directory / NATIVE_SQB.name))
+    script: Path = directory / PYTHON_CLI.name
+    _ = script.write_text(
+        f'#!/bin/sh\necho started >> "{marker}"\nexec "{PYTHON_CLI}" "$@"\n', encoding="utf-8"
+    )
+    script.chmod(0o755)
+    return program
+
+
+def python_starts(marker: Path) -> int:
+    """How many times the logging `sqlbuild-python` started."""
+
+    return len(marker.read_text(encoding="utf-8").splitlines())

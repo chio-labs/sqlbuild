@@ -84,6 +84,18 @@ fn complete_captures(root: &Path) -> Option<Vec<(StoredCapture, PathBuf)>> {
     Some(complete)
 }
 
+/// Python `filelock`'s `fcntl.flock` exclusive lock, released when the file closes.
+#[cfg(unix)]
+fn lock_exclusive(file: &std::fs::File) -> std::io::Result<()> {
+    rustix::fs::flock(file, rustix::fs::FlockOperation::LockExclusive).map_err(std::io::Error::from)
+}
+
+/// Captures are never published here, as in Python, whose directory `fsync` fails on Windows.
+#[cfg(not(unix))]
+fn lock_exclusive(_file: &std::fs::File) -> std::io::Result<()> {
+    Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+}
+
 /// Delete all but the `retain` most recently completed captures; any fault leaves them all.
 pub(crate) fn prune(root: &Path, retain: usize) {
     let Ok(lock) = OpenOptions::new()
@@ -95,7 +107,7 @@ pub(crate) fn prune(root: &Path, retain: usize) {
     else {
         return;
     };
-    if lock.lock().is_err() {
+    if lock_exclusive(&lock).is_err() {
         return;
     }
     if let Some(mut complete) = complete_captures(root) {
@@ -109,5 +121,5 @@ pub(crate) fn prune(root: &Path, retain: usize) {
             }
         }
     }
-    let _ = lock.unlock();
+    drop(lock);
 }

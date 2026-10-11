@@ -37,3 +37,10 @@ class SelectorFileTestCase:
     description: str
     selectors: str
     expected_records: int
+
+
+@dataclass(frozen=True)
+class PythonStartsTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_python_starts: tuple[int, int, int]

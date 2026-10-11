@@ -803,6 +803,7 @@ dependencies = [
  "blake3",
  "ctrlc",
  "getrandom",
+ "rustix",
  "serde",
  "serde_json",
  "sqlbuild-cache",

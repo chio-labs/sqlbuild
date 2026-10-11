@@ -15,11 +15,15 @@ fn elapsed_ms(started: Instant) -> i64 {
     i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX)
 }
 
-/// The stored output on a hit, or `None` when the check misses, bypasses or cannot replay.
+/// The stored output on a hit, or `None` when the slot was evicted or the check misses or bypasses.
 pub(crate) fn stored_output(record: &LaunchRecord, rules: &ReuseRules) -> Option<StoredOutput> {
+    let store_path = PathBuf::from(&record.store_path);
+    if !store_path.is_file() {
+        return None;
+    }
     let attempt = check_reuse(ReuseCheck {
         project_dir: PathBuf::from(&record.project_dir),
-        store_path: PathBuf::from(&record.store_path),
+        store_path,
         identity: host_identity(record),
         bypass_requested: false,
         json_output: record.json_output,

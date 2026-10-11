@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ from tests.integration.src.sqlbuild.cli.entry._test_types import (
     EditedProjectTestCase,
     HandoffTestCase,
     JsonReuseTestCase,
+    PythonStartsTestCase,
     SelectorFileTestCase,
     TextReuseTestCase,
 )
@@ -16,7 +18,9 @@ from tests.integration.src.sqlbuild.cli.entry.helpers import (
     capture_metadata,
     compile_timings,
     compute_log_captures,
+    counting_install,
     launch_records,
+    python_starts,
     run,
     without_seconds,
     write_project,
@@ -168,3 +172,43 @@ def test_given_selector_file_when_compiling_through_sqb_then_no_launch_record_is
 
     assert first[0] == second[0] == 0
     assert len(launch_records(project_dir)) == test_case.expected_records
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the logging handoff is a POSIX shell script")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonStartsTestCase(
+            description="text compile",
+            args=("compile",),
+            expected_python_starts=(1, 1, 2),
+        ),
+        PythonStartsTestCase(
+            description="json compile",
+            args=("compile", "--json"),
+            expected_python_starts=(1, 1, 2),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unchanged_project_when_sqb_serves_the_hit_then_python_never_starts(
+    test_case: PythonStartsTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "project")
+    marker: Path = tmp_path / "python-starts.log"
+    program: Path = counting_install(tmp_path / "bin", marker)
+
+    first: LauncherRun = run(program, args=test_case.args, cwd=project_dir)
+    after_first: int = python_starts(marker)
+    served: LauncherRun = run(program, args=test_case.args, cwd=project_dir)
+    after_served: int = python_starts(marker)
+    model: Path = project_dir / "models" / "orders.sql"
+    _ = model.write_text(
+        model.read_text(encoding="utf-8").replace("1 AS order_id", "2 AS order_id"),
+        encoding="utf-8",
+    )
+    edited: LauncherRun = run(program, args=test_case.args, cwd=project_dir)
+
+    assert (first[0], served[0], edited[0]) == (0, 0, 0)
+    assert without_seconds(served[2]).startswith(b"Inputs unchanged; reused the previous compile")
+    assert (after_first, after_served, python_starts(marker)) == test_case.expected_python_starts
