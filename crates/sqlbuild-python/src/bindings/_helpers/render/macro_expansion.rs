@@ -23,6 +23,9 @@ use crate::bindings::_helpers::render::macro_call_rows::{
 };
 use crate::bindings::_helpers::render::macro_evaluation::{CallText, Evaluation, evaluate_call};
 use crate::bindings::_helpers::render::macro_expansion_facts::{ExpansionFacts, ResourceRef};
+use crate::bindings::_helpers::render::macro_generated_references::{
+    GeneratedOrigin, GeneratedReferenceClasses, report_generated_references,
+};
 
 const RELATION_PREFIX: &str = "__sqlbuild_relation_";
 const RELATION_SUFFIX: &str = "__";
@@ -62,9 +65,8 @@ pub(crate) struct ExpansionClasses<'py> {
     pub(crate) relation_renderer: Bound<'py, PyAny>,
     /// Builds the `MacroContext` a macro is called with from the visible declarations.
     pub(crate) invocation_context: Bound<'py, PyAny>,
-    /// Reports reference calls a macro returned and the references it generated.
-    report_generated: Bound<'py, PyAny>,
-    generated_markers: Vec<String>,
+    /// What reference calls a macro returned are reported with.
+    generated: GeneratedReferenceClasses<'py>,
     /// Counts a call run outside the memo because a test mocks its macro.
     report_mocked: Bound<'py, PyAny>,
     pub(crate) int_type: Bound<'py, PyAny>,
@@ -475,11 +477,7 @@ impl NativeMacroExpansion {
         loaded_macro: &Bound<'_, PyAny>,
         result: &str,
     ) -> PyResult<()> {
-        if classes
-            .generated_markers
-            .iter()
-            .any(|marker| result.contains(marker.as_str()))
-        {
+        if result_has_markers(classes, result) {
             self.facts
                 .borrow_mut()
                 .note_event(MacroCallEvent::GeneratedSql {
@@ -488,14 +486,12 @@ impl NativeMacroExpansion {
                 });
         }
         let py: Python<'_> = loaded_macro.py();
-        let arguments: Bound<'_, PyDict> = PyDict::new(py);
-        arguments.set_item("loaded_macro", loaded_macro)?;
-        arguments.set_item("macro_result", result)?;
-        arguments.set_item("file_path", self.file_path.bind(py))?;
-        arguments.set_item("consumer", self.consumer.bind(py))?;
-        arguments.set_item("enforce_explicit", self.enforce_explicit)?;
-        let _ = classes.report_generated.call((), Some(&arguments))?;
-        Ok(())
+        let origin: GeneratedOrigin<'_, '_> = GeneratedOrigin {
+            file_path: self.file_path.bind(py),
+            consumer: self.consumer.bind(py),
+            enforce_explicit: self.enforce_explicit,
+        };
+        report_generated_references(&classes.generated, &origin, loaded_macro, result)
     }
 
     /// `_replay_macro_call_event`: one recorded fact, recorded again for this consumer.
@@ -780,4 +776,12 @@ pub(crate) fn raised(class: &Bound<'_, PyAny>, message: &str) -> PyErr {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeMacroExpansion>()?;
     Ok(())
+}
+
+/// Whether a macro's result calls any reference function.
+fn result_has_markers(classes: &ExpansionClasses<'_>, result: &str) -> bool {
+    classes
+        .generated
+        .markers()
+        .any(|marker| result.contains(marker))
 }

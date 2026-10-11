@@ -16,10 +16,9 @@ from types import MappingProxyType, ModuleType
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     call_site_sql_references,
-    reject_macro_generated_references,
-    report_macro_reference_call_syntax,
     typed_reference_kinds,
 )
 from sqlbuild.compiler.compile.constants import (
@@ -32,6 +31,7 @@ from sqlbuild.compiler.compile.exceptions import (
     MacroDeclarationLookupError,
 )
 from sqlbuild.compiler.compile.models import (
+    CompilerDiagnostic,
     DeclarationResolutionContext,
     DeclarationScopeResolver,
     ExpansionSpan,
@@ -42,6 +42,7 @@ from sqlbuild.compiler.compile.models import (
     StaticMacroFault,
     StaticMacroInventory,
 )
+from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_references_help
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredMacroFile,
@@ -62,8 +63,10 @@ from sqlbuild.compiler.scopes.models import (
     UsageRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind, UsageKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.python_nodes.models import RELATION_RENDERER, SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
+from sqlbuild.spec.contracts.models import SourceLocation
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
@@ -1240,39 +1243,21 @@ def macro_expansion_classes() -> dict[str, object]:
         "macro_call_site": MacroCallSite,
         "relation_renderer": RELATION_RENDERER,
         "invocation_context": macro_invocation_context,
-        "report_generated": report_macro_generated_references,
-        "generated_markers": list(GENERATED_REFERENCE_MARKERS),
+        "generated": {
+            "compiler_diagnostic": CompilerDiagnostic,
+            "report_diagnostic": report_compile_diagnostic,
+            "source_location": SourceLocation,
+            "resource_identity": ResourceIdentity,
+            "generic_syntax": SqlLexicalSyntax().native_mapping,
+            "generated_help": explicit_references_help(allowed="macro-generated references"),
+            "all_markers": list(GENERATED_REFERENCE_MARKERS),
+        },
         "report_mocked": partial(
             report_native_fallback, site=NativeFallbackSite.MACRO_CALL_MOCKED, kind="test_mock"
         ),
         "int_type": int,
         "float_type": float,
     }
-
-
-def report_macro_generated_references(
-    *,
-    loaded_macro: LoadedMacro,
-    macro_result: str,
-    file_path: Path,
-    consumer: ResourceIdentity | DeclarationIdentity | None,
-    enforce_explicit: bool,
-) -> None:
-    """Report reference calls a macro returned, and references it generated when enforced."""
-
-    report_macro_reference_call_syntax(
-        loaded_macro=loaded_macro,
-        macro_result=macro_result,
-        file_path=file_path,
-        consumer=consumer,
-    )
-    if enforce_explicit:
-        reject_macro_generated_references(
-            loaded_macro=loaded_macro,
-            macro_result=macro_result,
-            file_path=file_path,
-            consumer=consumer,
-        )
 
 
 def _inventory_project_macros(
