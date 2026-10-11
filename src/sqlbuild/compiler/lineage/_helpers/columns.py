@@ -71,10 +71,10 @@ def _build_schema_mapping(project: CompiledProjectView) -> dict[str, dict[str, s
     schema: dict[str, dict[str, str]] = {}
     for model in project.models:
         columns: dict[str, str] = {}
-        for column in model.inferred_columns or ():
-            columns[column.name] = column.type or "UNKNOWN"
-        for column in model.schema_entry.columns if model.schema_entry is not None else ():
-            columns.setdefault(column.name, column.type or "UNKNOWN")
+        for name, column_type, _ in model.inferred_rows or ():
+            columns[name] = column_type or "UNKNOWN"
+        for name, column_type in model.schema_column_rows or ():
+            columns.setdefault(name, column_type or "UNKNOWN")
         if columns:
             schema[
                 _physical_resource_name(

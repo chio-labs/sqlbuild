@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
 )
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import names_set_operation
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    binding_relation_names,
+    binding_relation_row_names,
     binding_schema_for_model,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 )
 from sqlbuild.compiler.compile._helpers.sharing.binding import lineage_reference_map
 from sqlbuild.compiler.compile.models import (
-    CompileSqlReference,
     ModelSqlAnalysisRequest,
 )
 from sqlbuild.compiler.compile.types import ModelInput
@@ -91,21 +90,21 @@ class PythonModelAnalysis:
 
 def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
     model_input: ModelInput = request.model_input
-    references: tuple[CompileSqlReference, ...] = model_input.references
+    rows: list[tuple[str, str, str | None, int | None]] = model_input.reference_rows
     values: dict[str, object] = model_input.config.values
     return (
         model_input.model_file.file_path.stem,
         request.query_sql,
         list((request.placeholders or {}).items()),
         [
-            (_analysis_name(reference), reference.ref_kind == SqlReferenceKind.REF)
-            for reference in references
+            (_analysis_name(kind=kind, name=name), kind == SqlReferenceKind.REF)
+            for kind, name, _, _ in rows
         ],
         [
             (name, resource_type.value, resource_name)
-            for name, (resource_type, resource_name) in lineage_reference_map(references).items()
+            for name, (resource_type, resource_name) in lineage_reference_map(rows).items()
         ],
-        sorted(binding_relation_names(references)),
+        sorted(binding_relation_row_names(rows)),
         _recovers_cte_facts(model_input),
         names_set_operation(request.query_sql),
         (
@@ -134,10 +133,10 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
     )
 
 
-def _analysis_name(reference: CompileSqlReference) -> str:
-    if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
-        return table_function_analysis_name(reference.ref_name)
-    return reference.ref_name
+def _analysis_name(*, kind: str, name: str) -> str:
+    if kind == SqlReferenceKind.TABLE_FUNCTION:
+        return table_function_analysis_name(name)
+    return name
 
 
 def _placeholders(model_input: ModelInput) -> dict[str, str] | None:

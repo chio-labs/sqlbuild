@@ -580,7 +580,7 @@ def _assemble_compiled_model(
     if isinstance(model_input, _native.NativeModelInput):
         return model_input.compiled_model(
             (
-                [(str(key.resource_type), key.name) for key in native_model.deps],
+                native_model.deps,
                 None
                 if inferred_columns is None
                 else [
@@ -595,7 +595,10 @@ def _assemble_compiled_model(
         )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
-        deps=native_model.deps,
+        deps=tuple(
+            CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
+            for kind, name in native_model.deps
+        ),
         name=model_name,
         relative_path=model_input.model_file.relative_path,
         query_sql=model_input.query_sql,

@@ -49,7 +49,7 @@ def project_resources(
     ) = row
     _ = [_replay_read(kind=kind, name=name) for kind, name in reads]
     return NativeProjectResources(
-        model_deps=tuple(_keys(keys) for keys in model_deps),
+        model_deps=tuple(model_deps),
         model_syntax_valid=tuple(syntax),
         source_entries=tuple(
             _source_entry(source_input=source_input, namespace=namespace)

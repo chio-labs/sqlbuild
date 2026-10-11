@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
     DynamicColumnContractProof,
-    InferredColumn,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
@@ -37,13 +36,14 @@ def record_model_analyses_impl(
     transferred: int = 0
     for model in models:
         proof: DynamicColumnContractProof | None = model.dynamic_column_contract
-        columns: tuple[InferredColumn, ...] = model.inferred_columns or ()
+        inferred: list[tuple[str, str | None, str]] | None = model.inferred_rows
+        columns: list[tuple[str, str | None, str]] = inferred or []
         transferred += project.record_model_analysis(
             model.name,
             (
-                model.inferred_columns is not None,
-                [(column.name, column.type) for column in columns],
-                [column.nullability == InferredNullability.NULLABLE for column in columns],
+                inferred is not None,
+                [(name, column_type) for name, column_type, _ in columns],
+                [nullability == InferredNullability.NULLABLE for _, _, nullability in columns],
                 bool(model.fast_lineage_has_star),
                 list(model.unchecked_output_columns),
             ),

@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     DynamicColumnContractProof,
 )
+from sqlbuild.compiler.project_assembly.types import ObjectKeyRow
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
@@ -16,7 +17,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 class NativeProjectResources:
     """Per-resource facts in input order, and whether each model's SQL passed syntax validation."""
 
-    model_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    model_deps: tuple[list[ObjectKeyRow], ...]
     model_syntax_valid: tuple[bool, ...]
     source_entries: tuple[SourceEntry, ...]
     seed_destinations: tuple[CompiledRelationLocation, ...]
@@ -36,9 +37,9 @@ class NativeResourceFailure:
 
 @dataclass(frozen=True, slots=True)
 class NativeModelFacts:
-    """One model's native facts."""
+    """One model's native facts; its dependencies as `(resource type, name)` rows."""
 
-    deps: tuple[CompiledObjectKey, ...]
+    deps: list[ObjectKeyRow]
     dynamic_contract: DynamicColumnContractProof | None
     syntax_valid: bool = False
 

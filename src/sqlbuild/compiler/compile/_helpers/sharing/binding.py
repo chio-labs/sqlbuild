@@ -3,26 +3,31 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
-    _analysis_reference_name,
-    _lineage_resource_type,
-)
-from sqlbuild.compiler.compile.models import (
-    CompileSqlReference,
+    table_function_analysis_name,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.references.types import SqlReferenceKind
+
+_LINEAGE_RESOURCE_TYPES: dict[str, CompiledResourceType] = {
+    SqlReferenceKind.REF: CompiledResourceType.MODEL,
+    SqlReferenceKind.SOURCE: CompiledResourceType.SOURCE,
+    SqlReferenceKind.SEED: CompiledResourceType.SEED,
+    SqlReferenceKind.TABLE_FUNCTION: CompiledResourceType.TABLE_FN,
+}
 
 
 def lineage_reference_map(
-    references: tuple[CompileSqlReference, ...],
+    rows: list[tuple[str, str, str | None, int | None]],
 ) -> dict[str, tuple[CompiledResourceType, str]]:
+    """Each lineage reference's analysis name, from `(kind, name, package, count)` rows."""
+
     reference_map: dict[str, tuple[CompiledResourceType, str]] = {}
-    reference: CompileSqlReference
-    for reference in references:
-        resource_type: CompiledResourceType | None = _lineage_resource_type(reference)
+    for kind, name, _, _ in rows:
+        resource_type: CompiledResourceType | None = _LINEAGE_RESOURCE_TYPES.get(kind)
         if resource_type is None:
             continue
-        reference_map[_analysis_reference_name(reference)] = (
-            resource_type,
-            reference.ref_name,
+        analysis_name: str = (
+            table_function_analysis_name(name) if kind == SqlReferenceKind.TABLE_FUNCTION else name
         )
+        reference_map[analysis_name] = (resource_type, name)
     return reference_map
