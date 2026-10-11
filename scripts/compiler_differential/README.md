@@ -142,3 +142,11 @@ failure_case(
 ```
 
 Then it runs `make compiler-baselines` to record the new case's golden.
+
+## Timing-dependent native metrics
+
+Raw captures retain `reuse_digested_files`, but the exact native-ownership gate excludes it.
+The number of physical hashes depends on whether a file timestamp falls within the cache's
+racy-write verification window. Different execution speeds can therefore change the count
+without changing cache validity or output. Deterministic reuse and snapshot counters remain
+gated, as do all actual Python fallback records.

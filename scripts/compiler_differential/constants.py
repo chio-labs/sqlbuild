@@ -24,6 +24,9 @@ BASELINES_HINT: str = (
 NATIVE_FALLBACK_MAX_COUNTS_FIELD: str = "max_counts"
 NATIVE_FALLBACK_COUNTS_FIELD: str = "counts"
 NATIVE_FALLBACK_PROJECT_CORPUS: str = "project"
+NATIVE_TIMING_DEPENDENT_METRICS: frozenset[tuple[str, str]] = frozenset(
+    {("compile_outputs.native", "reuse_digested_files")}
+)
 NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
     "analysis_session": "model_analysis",
     "contracts/columns.py": "contracts",

@@ -97,7 +97,40 @@ _VARIABLES_ENTRY: str = (
                 },
                 _SESSION: {"seed": 1},
             },
-        )
+        ),
+        FallbackRecordsTestCase(
+            description="racy_timestamp_hash_counts_are_metrics_not_exact_ownership_counts",
+            project="seed/3",
+            records=(
+                AnalysisRecords(
+                    fallbacks={
+                        ("compile_outputs.native", "reuse_digested_files"): 1,
+                        ("compile_outputs.native", "reuse_replays"): 1,
+                    }
+                ),
+                AnalysisRecords(
+                    fallbacks={
+                        ("compile_outputs.native", "reuse_digested_files"): 1000,
+                        ("compile_outputs.native", "reuse_replays"): 1,
+                        ("compile_outputs.rescue", "reuse_digested_files"): 1,
+                    }
+                ),
+            ),
+            expected_observed={
+                ("native", "compile_outputs", "compile_outputs.native", "reuse_replays"): {
+                    "seed": 1
+                },
+                ("native-preview", "compile_outputs", "compile_outputs.native", "reuse_replays"): {
+                    "seed": 1
+                },
+                (
+                    "native-preview",
+                    "compile_outputs",
+                    "compile_outputs.rescue",
+                    "reuse_digested_files",
+                ): {"seed": 1},
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )

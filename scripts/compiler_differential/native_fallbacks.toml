@@ -38,13 +38,6 @@ counts = { example = 9, failure = 349, fixture = 9, seed = 40 }
 engine = "native"
 stage = "compile_outputs"
 site = "compile_outputs.native"
-kind = "reuse_digested_files"
-counts = { example = 6, fixture = 45, seed = 92 }
-
-[[entry]]
-engine = "native"
-stage = "compile_outputs"
-site = "compile_outputs.native"
 kind = "reuse_records"
 counts = { example = 3, fixture = 2, seed = 11 }
 
@@ -187,13 +180,6 @@ stage = "compile_outputs"
 site = "compile_outputs.native"
 kind = "json_reports"
 counts = { example = 9, failure = 349, fixture = 9, seed = 40 }
-
-[[entry]]
-engine = "native-preview"
-stage = "compile_outputs"
-site = "compile_outputs.native"
-kind = "reuse_digested_files"
-counts = { example = 43, fixture = 45, seed = 92 }
 
 [[entry]]
 engine = "native-preview"
