@@ -20,6 +20,8 @@ use crate::bindings::_helpers::compiled_project::project::{
 use crate::bindings::_helpers::render::declaration_expansion::{
     ExpandedDeclarations, ScannedReference, span_rows,
 };
+use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
+use crate::bindings::_helpers::render::macro_expansion::ExpansionOutput;
 
 const PLAIN_INPUT_CALLBACK: &str = "plain_input";
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
@@ -66,6 +68,8 @@ pub(crate) struct FinishedModel<'py> {
     pub(crate) analysis: (bool, Option<Bound<'py, PyAny>>),
     /// The usages of the model's named schema and Python hooks, recorded after its hook usages.
     pub(crate) named_usages: Vec<Bound<'py, PyAny>>,
+    /// The query's macro expansion, when it calls macros.
+    pub(crate) macros: Option<ExpansionOutput>,
 }
 
 /// Call a host callback with keyword arguments, as its keyword-only signature requires.
@@ -140,6 +144,18 @@ pub(crate) fn plain_input<'py>(
                 span_rows(&finished.declarations.spliced),
                 usages,
                 finished.named_usages,
+                finished.macros.map(|macros| {
+                    (
+                        macros.sql,
+                        macros
+                            .spans
+                            .into_iter()
+                            .map(span_row)
+                            .collect::<Vec<SpanRow>>(),
+                        macros.dependencies,
+                        macros.usages,
+                    )
+                }),
             )
                 .into_pyobject(py)?
                 .into_any(),

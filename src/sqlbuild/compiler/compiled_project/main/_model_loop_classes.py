@@ -53,6 +53,7 @@ def model_loop_classes(
         "usage_record": UsageRecord,
         "compile_error": CompileInputError,
         "syntax_help": host_inputs["syntax_help"],
+        "macros": host_inputs["macros"],
         "scope_path_error": InvalidScopePathError,
         "sql_hook_entry": SqlHookEntry,
         "config_error": native_config_error,

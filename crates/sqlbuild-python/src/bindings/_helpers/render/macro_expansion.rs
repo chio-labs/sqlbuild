@@ -4,8 +4,7 @@ use std::cell::RefCell;
 
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::{
-    Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef,
-    PyResult, Python,
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTuple};
 use pyo3::{FromPyObject, pyclass, pymethods};
@@ -15,7 +14,7 @@ use sqlbuild_core::text::models::PythonText;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
 use sqlbuild_render::macro_calls::models::{
-    MacroCallEvent, MacroCallScan, MacroCallSite, MacroScanFailure,
+    MacroCallEvent, MacroCallScan, MacroCallSite, MacroScanFailure, MacroSpliceSpan,
 };
 
 use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
@@ -96,7 +95,7 @@ type StateInput = (Py<PyDict>, Py<PyDict>, Py<PyAny>, Py<PyAny>, Py<PyAny>);
 #[pymethods]
 impl NativeMacroExpansion {
     #[new]
-    fn new(
+    pub(crate) fn new(
         file_path: &Bound<'_, PyAny>,
         state: StateInput,
         enforce_explicit: bool,
@@ -120,53 +119,17 @@ impl NativeMacroExpansion {
 
     /// Expand `sql`, through the bridge's memo when one is active.
     fn expand<'py>(
-        this: PyRef<'py, Self>,
+        slf: &Bound<'py, Self>,
         sql: &Bound<'py, PyString>,
         bridge: &Bound<'py, PyAny>,
     ) -> PyResult<ExpansionRow<'py>> {
-        let py: Python<'py> = sql.py();
-        let classes: ExpansionClasses<'py> = this.classes.bind(py).extract()?;
-        let handle: Bound<'py, PyAny> = (&this).into_pyobject(py)?.as_any().clone();
-        let run: Evaluation<'_, 'py> = Evaluation {
-            expansion: &this,
-            handle: &handle,
-            classes: &classes,
-        };
-        let text: CallText<'_> = CallText::new(sql.to_str()?);
-        let scan: MacroCallScan = scan_sites(this.python, text.text);
-        let call_classes: Option<Vec<Bound<'py, PyAny>>> = if bridge.is_none() {
-            None
-        } else {
-            this.call_classes(&classes, bridge, &scan)?
-        };
-        let outputs: Vec<String> = match call_classes {
-            Some(call_classes) => {
-                let mut outputs: Vec<String> = Vec::with_capacity(scan.sites.len());
-                for (site, call_class) in scan.sites.iter().zip(call_classes) {
-                    outputs.push(this.bridged_output(&run, bridge, (&text, site), &call_class)?);
-                }
-                outputs
-            }
-            None => this.unmemoised_outputs(&run, &text, &scan)?,
-        };
-        let bounds: Vec<(usize, usize)> = scan
-            .sites
-            .iter()
-            .map(|site| (site.start, site.end))
-            .collect();
-        let (rendered, spans) = splice_calls(text.text, &bounds, &outputs)
-            .ok_or_else(|| PyValueError::new_err("macro call sites do not fit the SQL"))?;
-        let facts = this.facts.borrow();
+        let output: ExpansionOutput = expanded(slf, sql.to_str()?, bridge)?;
         Ok((
-            rendered,
-            spans.into_iter().map(span_row).collect(),
-            facts.argument_references.clone(),
-            facts
-                .dependencies
-                .iter()
-                .map(|item| item.clone_ref(py))
-                .collect(),
-            facts.usages.iter().map(|item| item.clone_ref(py)).collect(),
+            output.sql,
+            output.spans.into_iter().map(span_row).collect(),
+            output.argument_references,
+            output.dependencies,
+            output.usages,
         ))
     }
 
@@ -630,6 +593,68 @@ impl NativeMacroExpansion {
         rendered.push_str(&sql[cursor..]);
         Ok(rendered)
     }
+}
+
+/// One expansion's SQL, substitution spans, call-site references, dependencies and usages.
+pub(crate) struct ExpansionOutput {
+    pub(crate) sql: String,
+    pub(crate) spans: Vec<MacroSpliceSpan>,
+    pub(crate) argument_references: Vec<ResourceRef>,
+    pub(crate) dependencies: Vec<Py<PyAny>>,
+    pub(crate) usages: Vec<Py<PyAny>>,
+}
+
+/// Expand `sql` with the expansion's inputs, through the bridge's memo when one is active.
+pub(crate) fn expanded<'py>(
+    expansion: &Bound<'py, NativeMacroExpansion>,
+    sql: &str,
+    bridge: &Bound<'py, PyAny>,
+) -> PyResult<ExpansionOutput> {
+    let py: Python<'py> = expansion.py();
+    let this: PyRef<'py, NativeMacroExpansion> = expansion.borrow();
+    let classes: ExpansionClasses<'py> = this.classes.bind(py).extract()?;
+    let handle: Bound<'py, PyAny> = expansion.as_any().clone();
+    let run: Evaluation<'_, 'py> = Evaluation {
+        expansion: &this,
+        handle: &handle,
+        classes: &classes,
+    };
+    let text: CallText<'_> = CallText::new(sql);
+    let scan: MacroCallScan = scan_sites(this.python, text.text);
+    let call_classes: Option<Vec<Bound<'py, PyAny>>> = if bridge.is_none() {
+        None
+    } else {
+        this.call_classes(&classes, bridge, &scan)?
+    };
+    let outputs: Vec<String> = match call_classes {
+        Some(call_classes) => {
+            let mut outputs: Vec<String> = Vec::with_capacity(scan.sites.len());
+            for (site, call_class) in scan.sites.iter().zip(call_classes) {
+                outputs.push(this.bridged_output(&run, bridge, (&text, site), &call_class)?);
+            }
+            outputs
+        }
+        None => this.unmemoised_outputs(&run, &text, &scan)?,
+    };
+    let bounds: Vec<(usize, usize)> = scan
+        .sites
+        .iter()
+        .map(|site| (site.start, site.end))
+        .collect();
+    let (rendered, spans) = splice_calls(text.text, &bounds, &outputs)
+        .ok_or_else(|| PyValueError::new_err("macro call sites do not fit the SQL"))?;
+    let facts = this.facts.borrow();
+    Ok(ExpansionOutput {
+        sql: rendered,
+        spans,
+        argument_references: facts.argument_references.clone(),
+        dependencies: facts
+            .dependencies
+            .iter()
+            .map(|item| item.clone_ref(py))
+            .collect(),
+        usages: facts.usages.iter().map(|item| item.clone_ref(py)).collect(),
+    })
 }
 
 /// One top-level call's SQL.

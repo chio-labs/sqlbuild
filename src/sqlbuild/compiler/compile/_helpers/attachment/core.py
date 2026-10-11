@@ -45,11 +45,9 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
     resolve_declaration_context,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
-    expand_sql_macros_result,
+    macro_expansion_classes,
 )
-from sqlbuild.compiler.compile._helpers.render.spans import map_through_passes
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    applied_interpolation,
     expand_authored_sql_result,
     interpolate_sql_batch,
 )
@@ -66,14 +64,12 @@ from sqlbuild.compiler.compile.models import (
     CompileSeedInput,
     CompileSqlReference,
     DeclarationExpansionContext,
-    DeclarationExpansionResult,
     DeclarationResolutionContext,
     ExpansionSpan,
     HookExpansionResult,
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
-    MappedOffset,
     ModelInputBuildContext,
     ModelResourceNames,
     ModelValidatorContext,
@@ -87,7 +83,6 @@ from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_mod
 from sqlbuild.compiler.compiled_project.models import PlainModelFacts
 from sqlbuild.compiler.compiled_project.types import PlainSchemaRow, ReferenceRow, SpanRow
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
-from sqlbuild.compiler.discovery.main._model_query_start import get_model_query_start
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
@@ -102,6 +97,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
+from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.model_config.main._native_contract_classes import native_contract_classes
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
@@ -212,7 +208,6 @@ class _ModelLoopHost:
 
     loop: _ModelInputLoop
     interpolations: dict[Path, SqlInterpolation]
-    macros: dict[int, MacroExpansionResult] = field(default_factory=dict)
     hooks: dict[int, HookExpansionResult] = field(default_factory=dict)
 
     def constant_text(self, *, declaration: ConstantDeclaration, file_path: Path) -> str:
@@ -238,35 +233,6 @@ class _ModelLoopHost:
             for item in expansion.references
         ]
 
-    def expand_macros(
-        self, *, index: int, visible: _VisibleModelDeclarations, sql: str, spans: list[SpanRow]
-    ) -> tuple[str, list[ReferenceRow], list[SpanRow]]:
-        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        expansion: MacroExpansionResult = _macro_expansion(
-            loop=self.loop,
-            model_file=model_file,
-            declarations=_declaration_context(
-                declarations=visible,
-                consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
-            ),
-            declaration_expansion=DeclarationExpansionResult(
-                sql=sql, spans=_expansion_spans(spans), usages=()
-            ),
-            interpolated_sql=applied_interpolation(self.interpolations[model_file.file_path]),
-        )
-        self.macros[index] = expansion
-        return (
-            expansion.sql,
-            [
-                (str(item.ref_kind), item.ref_name, item.ref_package, item.call_argument_count)
-                for item in expansion.argument_references
-            ],
-            [
-                (span.source_start, span.source_end, span.output_start, span.output_end)
-                for span in expansion.spans
-            ],
-        )
-
     def plain_input(
         self,
         *,
@@ -279,7 +245,13 @@ class _ModelLoopHost:
         header: tuple[str | None, PlainSchemaRow | None, dict[str, EnumDeclaration]],
         analysis: tuple[bool, SourceLocation | None],
         hook_statements: int,
-        declarations: tuple[str, list[SpanRow], list[UsageRecord], list[UsageRecord]],
+        declarations: tuple[
+            str,
+            list[SpanRow],
+            list[UsageRecord],
+            list[UsageRecord],
+            tuple[str, list[SpanRow], list[DeclarationIdentity], list[UsageRecord]] | None,
+        ],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         report_native_answer(
@@ -300,7 +272,7 @@ class _ModelLoopHost:
                 rejected_sql_analysis_opt_out=analysis[1],
                 declaration_sql=declarations[0],
                 declaration_spans=_expansion_spans(declarations[1]),
-                macro_expansion=self.macros.pop(index, None),
+                macro_expansion=_native_macro_expansion(declarations[4]),
                 declaration_usages=tuple(
                     dict.fromkeys(
                         (
@@ -478,6 +450,16 @@ def _run_native_model_loop(
                     "visible_declarations": _VisibleModelDeclarations,
                     "config_session": loop.validation_context.validators.native_config,
                     "syntax_help": sql_analysis_opt_out_help(model_owned=True),
+                    "macros": {
+                        "loaded_macros": loop.context.loaded_macros,
+                        "macro_context": loop.context.macro_context,
+                        "bridge": active_macro_bridge(),
+                        "scoped": loop.context.declaration_resolver is not None,
+                        "declaration_context": DeclarationResolutionContext,
+                        "macro_argument_error": MacroArgumentError,
+                        "expansion": macro_expansion_classes(),
+                        "generic_syntax": SqlLexicalSyntax().native_mapping,
+                    },
                     "hook_functions": loop.discovered_inputs.hook_functions,
                     "provider_names": frozenset(
                         provider.name for provider in loop.discovered_inputs.providers
@@ -554,6 +536,20 @@ def _expansion_spans(rows: list[SpanRow]) -> tuple[ExpansionSpan, ...]:
     )
 
 
+def _native_macro_expansion(
+    row: tuple[str, list[SpanRow], list[DeclarationIdentity], list[UsageRecord]] | None,
+) -> MacroExpansionResult | None:
+    if row is None:
+        return None
+    sql, spans, dependencies, usages = row
+    return MacroExpansionResult(
+        sql=sql,
+        spans=_expansion_spans(spans),
+        dependencies=tuple(dict.fromkeys(dependencies)),
+        usages=tuple(dict.fromkeys(usages)),
+    )
+
+
 def _model_hook_expansion(
     *,
     loop: _ModelInputLoop,
@@ -592,60 +588,6 @@ def _model_hook_expansion(
         sql_hook_definitions=loop.sql_hook_definitions,
         consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
     )
-
-
-def _declaration_context(
-    *, declarations: _VisibleModelDeclarations, consumer: ResourceIdentity
-) -> DeclarationResolutionContext:
-    return DeclarationResolutionContext(
-        enums=declarations.enums,
-        constants=declarations.constants,
-        inaccessible_enums=declarations.inaccessible_enums,
-        inaccessible_constants=declarations.inaccessible_constants,
-        enum_visibility=declarations.enum_visibility,
-        constant_visibility=declarations.constant_visibility,
-        macros=declarations.macros,
-        macro_records=declarations.macro_records,
-        inaccessible_macros=declarations.inaccessible_macros,
-        consumer=consumer,
-    )
-
-
-def _macro_expansion(
-    *,
-    loop: _ModelInputLoop,
-    model_file: DiscoveredSqlModelFile,
-    declarations: DeclarationResolutionContext,
-    declaration_expansion: DeclarationExpansionResult,
-    interpolated_sql: str,
-) -> MacroExpansionResult:
-    """Expand the model's macro calls, locating argument errors in the authored query."""
-
-    context: ModelInputBuildContext = loop.context
-    try:
-        return expand_sql_macros_result(
-            sql=declaration_expansion.sql,
-            file_path=model_file.file_path,
-            loaded_macros=context.loaded_macros,
-            macro_context=context.macro_context,
-            declaration_resolver=context.declaration_resolver,
-            declarations=declarations if context.declaration_resolver is not None else None,
-            consumer=declarations.consumer,
-        )
-    except MacroArgumentError as error:
-        location: SourceLocation | None = (
-            _authored_model_location(
-                model_file=model_file,
-                sql=declaration_expansion.sql,
-                offset=error.offset,
-                passes=(declaration_expansion.spans,),
-            )
-            if interpolated_sql == model_file.query_sql
-            else None
-        )
-        if location is None:
-            raise
-        raise error.located(location) from None
 
 
 def _model_reference_origin(*, model_file: DiscoveredSqlModelFile) -> SqlReferenceOrigin:
@@ -1024,35 +966,3 @@ def _index_sql_hook_definitions(
             )
         definitions[hook_file.name] = hook_file
     return definitions
-
-
-def _authored_model_location(
-    *,
-    model_file: DiscoveredSqlModelFile,
-    sql: str,
-    offset: int,
-    passes: tuple[tuple[ExpansionSpan, ...], ...],
-) -> SourceLocation | None:
-    """Map an offset in expanded model SQL to its authored file location, if it is authored."""
-
-    contents: str = model_file.contents
-    body_start: int | None = get_model_query_start(
-        contents=contents, query_sql=model_file.query_sql
-    )
-    if body_start is None and contents.lstrip().startswith(model_file.query_sql):
-        body_start = len(contents) - len(contents.lstrip())
-    mapped: MappedOffset = map_through_passes(offset=offset, passes=passes)
-    authored_offset: int = (body_start or 0) + mapped.offset
-    if (
-        body_start is None
-        or mapped.generated
-        or offset >= len(sql)
-        or authored_offset >= len(contents)
-        or contents[authored_offset] != sql[offset]
-    ):
-        return None
-    return SourceLocation(
-        path=model_file.relative_path,
-        line=contents.count("\n", 0, authored_offset) + 1,
-        column=authored_offset - (contents.rfind("\n", 0, authored_offset) + 1) + 1,
-    )

@@ -7,6 +7,7 @@ pub(crate) mod model_loop_header;
 pub(crate) mod model_loop_hooks;
 pub(crate) mod model_loop_host;
 pub(crate) mod model_loop_inputs;
+pub(crate) mod model_loop_macros;
 pub(crate) mod model_loop_named;
 pub(crate) mod model_loop_opt_out;
 pub(crate) mod model_loop_python_hooks;

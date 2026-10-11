@@ -8,10 +8,13 @@ use crate::bindings::_helpers::compiled_project::model_loop_header::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_hooks::expanded_hooks;
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
-    FinishedModel, ModelLoopRow, ReferenceRow, callback, plain_input,
+    FinishedModel, ModelLoopRow, ReferenceRow, plain_input,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     analysis_override, hook_presence, reference_row,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_macros::{
+    ExpandedMacros, MacroClasses, MacroModel, expanded_macros,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_named::{
     SCHEMA_DECLARATION, named_usages,
@@ -33,8 +36,9 @@ use crate::bindings::_helpers::discovery::project_files::python_semantics;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
-    expand_declarations, span_rows,
+    expand_declarations,
 };
+use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
@@ -68,11 +72,8 @@ const VALIDATE_METHOD: &str = "validate";
 const CONFIG_ARGUMENT: &str = "config";
 const VISIBLE_ARGUMENT: &str = "visible";
 const FILE_PATH_ARGUMENT: &str = "file_path";
-const EXPAND_MACROS_CALLBACK: &str = "expand_macros";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const INDEX_ARGUMENT: &str = "index";
-const SQL_ARGUMENT: &str = "sql";
-const SPANS_ARGUMENT: &str = "spans";
 const ERROR_ARGUMENT: &str = "error";
 const VALUES_ARGUMENT: &str = "values";
 const CODE_ARGUMENT: &str = "code";
@@ -127,6 +128,8 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) visibility: VisibilityClasses<'py>,
     /// What a model's Python hooks are checked against.
     pub(crate) hooks: HookClasses<'py>,
+    /// What each model's macro calls are expanded with.
+    pub(crate) macros: MacroClasses<'py>,
     /// `sql_analysis_opt_out_help(model_owned=True)`, the help of a model's syntax error.
     pub(crate) syntax_help: String,
     /// `InvalidScopePathError`.
@@ -338,35 +341,40 @@ impl NativeModelLoop {
             render_constant: &render_constant,
             classes: &expansion_classes,
         })?;
+        let macros: Option<ExpandedMacros> = if calls_macros(&declarations.spliced.sql) {
+            let model: MacroModel<'_> = MacroModel {
+                file_path,
+                relative_path,
+                contents,
+                authored_query,
+                authored: &interpolated == authored_query,
+                declaration_spans: &declarations.spliced.spans,
+            };
+            Some(expanded_macros(
+                context,
+                visible,
+                &declarations.spliced.sql,
+                &model,
+            )?)
+        } else {
+            None
+        };
         let (macro_sql, argument_references, macro_spans): (
             String,
             Vec<ReferenceRow>,
             Vec<SpanRow>,
-        ) = if calls_macros(&declarations.spliced.sql) {
-            callback(
-                context.host,
-                EXPAND_MACROS_CALLBACK,
-                &[
-                    arguments[0].clone(),
-                    arguments[2].clone(),
-                    (
-                        SQL_ARGUMENT,
-                        declarations
-                            .spliced
-                            .sql
-                            .as_str()
-                            .into_pyobject(py)?
-                            .into_any(),
-                    ),
-                    (
-                        SPANS_ARGUMENT,
-                        span_rows(&declarations.spliced).into_pyobject(py)?,
-                    ),
-                ],
-            )?
-            .extract()?
-        } else {
-            (declarations.spliced.sql.clone(), Vec::new(), Vec::new())
+        ) = match &macros {
+            Some(macros) => (
+                macros.output.sql.clone(),
+                macros.references.clone(),
+                macros
+                    .output
+                    .spans
+                    .iter()
+                    .map(|span| span_row(*span))
+                    .collect(),
+            ),
+            None => (declarations.spliced.sql.clone(), Vec::new(), Vec::new()),
         };
         let query_sql: String = self
             .canonical_query(name, &macro_sql, &values)?
@@ -453,6 +461,7 @@ impl NativeModelLoop {
             hook_statements,
             analysis,
             named_usages,
+            macros: macros.map(|macros| macros.output),
         })
     }
 

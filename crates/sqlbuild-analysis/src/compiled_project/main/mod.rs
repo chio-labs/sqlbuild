@@ -1,4 +1,5 @@
 pub mod analysis_gate;
+pub mod authored_model_offset;
 pub mod calls_macros;
 pub mod declaration_error_message;
 pub mod enum_member_literal;

@@ -1185,7 +1185,7 @@ def expand_sql_macros_result(
             consumer,
         ),
         macro_context._enforce_explicit_references,
-        _expansion_classes(),
+        macro_expansion_classes(),
     )
     expanded_sql, spans, argument_references, dependencies, usages = expansion.expand(
         sql, active_macro_bridge()
@@ -1213,7 +1213,7 @@ def expand_sql_macros_result(
 
 
 @cache
-def _expansion_classes() -> dict[str, object]:
+def macro_expansion_classes() -> dict[str, object]:
     """The classes, enums and helpers the native expansion builds facts and errors from."""
 
     from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError

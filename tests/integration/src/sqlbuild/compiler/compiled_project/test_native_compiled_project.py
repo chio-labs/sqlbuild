@@ -22,6 +22,7 @@ from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     HEADER_CONTRACT_FILES,
     LEGACY_PROJECT_TYPES,
+    MACRO_FILES,
     MODEL_SCHEMA_FILES,
     OPT_OUT_FILES,
     PARITY_FILES,
@@ -301,6 +302,38 @@ def test_given_project_when_running_native_model_loop_then_inputs_match_recorded
             ),
             expected_code="P001",
             files=PYTHON_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="macro arguments located in the authored model",
+            model_sql="MODEL ();\nSELECT @cents(1 +) AS amount\n",
+            expected_message=(
+                "Macro arguments of '@cents' in '{model_path}' must use only Python literals, "
+                "nested macro calls, and __ref(), __source(), or __seed() references at line 2, "
+                "column 17"
+            ),
+            expected_code="P001",
+            files=MACRO_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="unary sign over a nested macro returning text",
+            model_sql="MODEL ();\nSELECT @cents(-@word()) AS amount\n",
+            expected_message=(
+                "Macro arguments of '@cents' in '{model_path}' apply unary - to the value of a "
+                "nested macro call, which is a str and not a number at line 2, column 16"
+            ),
+            expected_code="P001",
+            files=MACRO_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="macro arguments in interpolated SQL stay relative to the call",
+            model_sql="MODEL ();\nSELECT '@@region' AS region, @cents(1 +) AS amount\n",
+            expected_message=(
+                "Macro arguments in '{model_path}' must use only Python literals, nested macro "
+                "calls, and __ref(), __source(), or __seed() references at line 1, column 3 of "
+                "the '@cents' arguments"
+            ),
+            expected_code="P001",
+            files=MACRO_FILES,
         ),
         ModelLoopErrorTestCase(
             description="unknown enum member",

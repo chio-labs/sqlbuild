@@ -258,6 +258,16 @@ PYTHON_HOOK_PARITY_FILES: dict[str, str] = PYTHON_HOOK_FILES | {
 }
 
 
+MACRO_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "eu"\n',
+    "macros/amounts.py": (
+        '"""Amount macros."""\n\n\n'
+        'def cents(value):\n    """Cents."""\n    return f"{value} * 100"\n\n\n'
+        'def word():\n    """A word."""\n    return "x"\n'
+    ),
+}
+
+
 def build_inputs_with_native_loop(
     *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, defer_validation: bool = True
 ) -> tuple[CompileProjectInputs, list[int]]:
