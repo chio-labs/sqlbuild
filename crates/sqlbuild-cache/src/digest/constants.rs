@@ -30,3 +30,8 @@ pub const PRESENCE_ONLY_FILE_SUFFIXES: &[&str] = &[".duckdb", ".duckdb.wal"];
 pub const CONTENT_TAG: &[u8] = b"content";
 /// Digest tag of a file that counts only by presence.
 pub const PRESENCE_TAG: &[u8] = b"presence";
+
+/// File suffixes whose sizes and modification times identify an editable install's code.
+pub(crate) const CODE_SOURCE_SUFFIXES: &[&str] = &["py", "so", "pyd"];
+/// The bytecode folder an editable install's code walk skips.
+pub(crate) const BYTECODE_CACHE_DIRECTORY: &str = "__pycache__";

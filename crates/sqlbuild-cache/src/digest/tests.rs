@@ -1,3 +1,5 @@
+#[path = "tests/test_code_identity.rs"]
+mod code_identity;
 #[path = "tests/test_content_digest.rs"]
 mod content_digest;
 #[path = "tests/test_digest_files.rs"]

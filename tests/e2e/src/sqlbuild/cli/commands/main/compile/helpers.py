@@ -62,7 +62,6 @@ from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_F
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
     RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
-    SQL_TEST_SCAN_STORE_FILE_NAME,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.contracts.models import ContractValidationResult
@@ -4131,7 +4130,7 @@ def upgrade_native_build(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def corrupt_sql_test_scan_store(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
     """Overwrite the stored SQL-test scans with bytes that are not a store file."""
 
-    path: Path = compiler_cache_directory(root) / SQL_TEST_SCAN_STORE_FILE_NAME
+    path: Path = compiler_cache_directory(root) / native_module.SQL_TEST_SCAN_STORE_FILE_NAME
     assert path.is_file()
     _ = path.write_bytes(b"not a native store")
 
@@ -4182,7 +4181,7 @@ def _stored_scan_values_replaced(
     def change(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
         """Rewrite every stored scan value on disk, keeping a valid store frame and checksum."""
 
-        path: Path = compiler_cache_directory(root) / SQL_TEST_SCAN_STORE_FILE_NAME
+        path: Path = compiler_cache_directory(root) / native_module.SQL_TEST_SCAN_STORE_FILE_NAME
         frame: bytes = path.read_bytes()
         header: bytes = frame[:_STORE_PREFIX_LENGTH]
         body: bytes = frame[_STORE_PREFIX_LENGTH + _STORE_CHECKSUM_LENGTH :]

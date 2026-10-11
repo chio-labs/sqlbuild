@@ -3,10 +3,12 @@
 use pyo3::exceptions::{PyOSError, PyRuntimeError};
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_cache::digest::main::compiled_code_identity::compiled_code_identity as compiled;
 use sqlbuild_cache::digest::main::content_digest::content_digest as digest;
 use sqlbuild_cache::digest::main::digest_files::digest_files as digest_each;
 use sqlbuild_cache::digest::main::fingerprint_project_files::fingerprint_project_files as fingerprint;
 use sqlbuild_cache::digest::main::hex_digest::hex_digest;
+use sqlbuild_cache::digest::main::installed_code_identity::installed_code_identity as installed;
 use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::main::open_native_store::open_native_store;
 use sqlbuild_cache::store::models::NativeStore;
@@ -80,7 +82,26 @@ pub(crate) fn save_store(
         .map_err(|error| PyOSError::new_err(error.to_string()))
 }
 
+/// Digest of the installed code's facts and, for an editable install, its source files.
+#[pyfunction]
+pub(crate) fn installed_code_identity(
+    py: Python<'_>,
+    facts: Vec<String>,
+    package_root: Option<PathBuf>,
+) -> PyResult<String> {
+    py.compiler_detach(|| Ok(installed(&facts, package_root.as_deref())))
+        .map_err(PyRuntimeError::new_err)
+}
+
+/// Digest of the installed code's identity and the native build's identity.
+#[pyfunction]
+pub(crate) fn compiled_code_identity(installed: &str, build_identity: &str) -> String {
+    compiled(installed, build_identity)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(installed_code_identity, module)?)?;
+    module.add_function(wrap_pyfunction!(compiled_code_identity, module)?)?;
     module.add_function(wrap_pyfunction!(content_digest, module)?)?;
     module.add_function(wrap_pyfunction!(fingerprint_project_files, module)?)?;
     module.add_function(wrap_pyfunction!(digest_files, module)?)?;
