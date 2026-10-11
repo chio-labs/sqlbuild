@@ -3,6 +3,7 @@
 use pyo3::exceptions::PyValueError;
 use sqlbuild_discovery::yaml_files::main::yaml_entry_lines::yaml_entry_lines;
 use sqlbuild_sqltext::compiler::main::model_header_entry_span::model_header_entry_span;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use pyo3::FromPyObject;
@@ -70,6 +71,7 @@ pub(crate) type ResourceDiagnostics<'py> = (
 struct Diagnostics<'a, 'py> {
     py: Python<'py>,
     settings: &'a DiagnosticSettings,
+    yaml_lines: RefCell<HashMap<String, HashMap<String, usize>>>,
 }
 
 impl<'py> Diagnostics<'_, 'py> {
@@ -118,10 +120,17 @@ impl<'py> Diagnostics<'_, 'py> {
         contents: &str,
         name: &str,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let line: usize = yaml_entry_lines(contents)
-            .into_iter()
-            .find(|(entry, _)| entry == name)
-            .map_or(1, |(_, line)| line);
+        let line: usize = {
+            let mut files = self.yaml_lines.borrow_mut();
+            let entries = files.entry(relative_path.to_owned()).or_insert_with(|| {
+                let mut entries: HashMap<String, usize> = HashMap::new();
+                for (entry, line) in yaml_entry_lines(contents) {
+                    entries.entry(entry).or_insert(line);
+                }
+                entries
+            });
+            entries.get(name).copied().unwrap_or(1)
+        };
         self.location(relative_path, (line, 1), None)
     }
 
@@ -178,7 +187,11 @@ pub(crate) fn resource_diagnostics<'py>(
     py: Python<'py>,
     settings: &DiagnosticSettings,
 ) -> PyResult<ResourceDiagnostics<'py>> {
-    let diagnostics = Diagnostics { py, settings };
+    let diagnostics = Diagnostics {
+        py,
+        settings,
+        yaml_lines: RefCell::new(HashMap::new()),
+    };
     Ok((
         orphaned_factories(&diagnostics)?,
         missing_descriptions(project, &diagnostics)?,
@@ -295,11 +308,12 @@ fn missing_descriptions<'py>(
         let name: String = entry.getattr("name")?.extract()?;
         let description: Option<String> = entry.getattr("description")?.extract()?;
         let path: String = schema_file.getattr("relative_path")?.str()?.extract()?;
-        let contents: String = schema_file.getattr("contents")?.extract()?;
+        let contents_value = schema_file.getattr("contents")?;
+        let contents = contents_value.downcast::<PyString>()?.to_str()?;
         found.push(diagnostics.described(
             ("seed", &name, Some("seed")),
             description.as_deref(),
-            || diagnostics.yaml_location(&path, &contents, &name),
+            || diagnostics.yaml_location(&path, contents, &name),
             &yaml_help("seed", &name, &posix(&path)),
         )?);
     }
@@ -355,7 +369,8 @@ fn source_description<'py>(
     let name: &str = &attached.name;
     let source_file: &Bound<'py, PyAny> = attached.source_file.bind(py);
     let path: String = source_file.getattr("relative_path")?.str()?.extract()?;
-    let contents: String = source_file.getattr("contents")?.extract()?;
+    let contents_value = source_file.getattr("contents")?;
+    let contents = contents_value.downcast::<PyString>()?.to_str()?;
     let loader_name: Option<String> = attached.entry.bind(py).getattr("loader")?.extract()?;
     let loader: Option<(&String, &LoaderRow)> = loader_name
         .as_ref()
@@ -383,7 +398,7 @@ fn source_description<'py>(
     diagnostics.described(
         ("source", name, Some("source")),
         description.as_deref(),
-        || diagnostics.yaml_location(&path, &contents, name),
+        || diagnostics.yaml_location(&path, contents, name),
         &help,
     )
 }
