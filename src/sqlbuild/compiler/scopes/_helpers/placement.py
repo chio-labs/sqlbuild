@@ -139,22 +139,6 @@ def build_placement_validated_index(
     )
 
 
-def resolve_required_placement(
-    *, index: ScopeIndex, declaration: DeclarationIdentity
-) -> tuple[ScopeKind, str | None, tuple[str, ...]] | None:
-    """Return exact required placement using the validation anchor semantics."""
-
-    if not index.completeness.runtime_usage:
-        return None
-    required: tuple[str, str | None, list[str]] | None = _native.scope_required_placement(
-        _rows(index=index), qualified_row(identity=declaration)
-    )
-    if required is None:
-        return None
-    scope, path, consumers = required
-    return ScopeKind(scope), path, tuple(consumers)
-
-
 def declaration_directory(*, kind: DeclarationKind, scope: ScopeKind, path: str | None) -> str:
     """Return the project-relative folder where a declaration with this placement lives."""
 

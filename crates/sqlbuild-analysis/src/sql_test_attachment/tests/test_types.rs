@@ -73,3 +73,26 @@ pub(crate) struct AttachmentCheckTestCase {
 
 /// `[A-Za-z_][\\w$]*` matches for ASCII SQL, standing in for the host's Python `re`.
 pub(crate) struct AsciiMatcher;
+
+pub(super) struct TokensTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) expected_tokens: &'static [&'static str],
+}
+
+pub(super) struct ReadsWordTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) word: &'static str,
+    pub(super) expected_reads: bool,
+}
+
+pub(super) struct CteLocationTestCase {
+    pub(super) description: &'static str,
+    pub(super) contents: &'static str,
+    pub(super) sql_body: &'static str,
+    pub(super) cte_name: &'static str,
+    pub(super) call: Option<&'static str>,
+    /// Line, column, end line and end column.
+    pub(super) expected_location: (usize, usize, usize, usize),
+}

@@ -7,7 +7,6 @@ from pathlib import Path
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.main._builtins import builtin_audit_definitions
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
-from sqlbuild.compiler.compile.classes.sql_test_cte_locator import SqlTestCteLocator
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import SQL_TEST_CTE_SCAN_ALGORITHM
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -26,7 +25,7 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.compiled_project._helpers import resource_locators, sql_test_text
+from sqlbuild.compiler.compiled_project._helpers import resource_locators
 from sqlbuild.compiler.compiled_project._helpers.resource_rows import (
     loader_rows,
     python_resource_rows,
@@ -74,8 +73,7 @@ def attach_sql_tests_impl(
                 "runtime_usage": UsageKind.RUNTIME,
                 "render_parameter": _parameter_renderer(value_renderer),
                 "adapter_name": value_renderer.adapter_name,
-                "text_patterns": sql_test_text,
-                "cte_locator": SqlTestCteLocator,
+                "source_location": SourceLocation,
                 "scan_store": scan_cache.opened(),
                 "scan_key": (SQL_TEST_CTE_SCAN_ALGORITHM, syntax.cache_key),
             },

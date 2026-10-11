@@ -6,6 +6,7 @@ pub mod constants;
 pub mod json;
 pub mod models;
 pub mod panics;
+pub mod posix_path;
 pub mod text;
 
 #[cfg(test)]

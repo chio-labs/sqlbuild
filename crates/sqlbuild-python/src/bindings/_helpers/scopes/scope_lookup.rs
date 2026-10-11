@@ -1,18 +1,17 @@
 //! The scope lookup of a full scope index: canonical orders, mappings, targets and visibility.
 
-use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyString, PyStringMethods};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
-use sqlbuild_scopes::scope_index::main::classify_report_resource::classify_report_resource;
-use sqlbuild_scopes::scope_index::main::explain_report_declaration::explain_report_declaration;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::python_str_repr::python_str_repr;
+use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::report_lookup::report_lookup;
 use sqlbuild_scopes::scope_index::main::report_target::report_target;
 use sqlbuild_scopes::scope_index::main::resolve_report_visibility::resolve_report_visibility;
 use sqlbuild_scopes::scope_index::models::{
-    DeclarationStanding, GrantKind, IdentityFailure, KeyedGroups, RejectedPath,
-    ReportClassification, ReportDiagnosticKey, ReportGrant, ReportLookup, ReportRecords,
-    ReportTarget, ReportUsage, ResolvedVisibility, ResolvedVisible, ScopePathFailure,
-    TargetFailure, TargetMatch,
+    GrantKind, IdentityFailure, KeyedGroups, RejectedPath, ReportDiagnosticKey, ReportGrant,
+    ReportLookup, ReportRecords, ReportTarget, ReportUsage, ResolvedVisibility, ResolvedVisible,
+    ScopePathFailure, TargetFailure, TargetMatch,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
@@ -37,7 +36,7 @@ type RecordRows = (
     Vec<GrantRow>,
     Vec<DiagnosticKeyRow>,
 );
-type GroupRows = (Vec<Vec<usize>>, bool);
+type GroupRows = Vec<Vec<usize>>;
 /// Roots, resources, declarations, usages, grants and diagnostics in canonical order.
 type OrderRows = (
     Vec<usize>,
@@ -71,14 +70,6 @@ type LookupRows = (
 );
 /// `(declarations, canonical positions)` matched, else identity and path error messages.
 type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);
-/// Direct, relationship and unavailable declarations, else the rejected path's message.
-type ClassificationRows = (
-    Vec<(usize, &'static str)>,
-    Vec<(usize, &'static str, String)>,
-    Vec<(usize, &'static str)>,
-    Option<String>,
-);
-
 /// Visible `(position, reason, grant)`, inaccessible `(position, reason)`, else the path error.
 type ResolvedRows = (
     Vec<(usize, &'static str, Option<usize>)>,
@@ -86,20 +77,11 @@ type ResolvedRows = (
     Option<String>,
 );
 
-/// `(visible reason, granted reason, through, inaccessible reason, rejected path message)`.
-type StandingRows = (
-    Option<&'static str>,
-    Option<&'static str>,
-    Option<String>,
-    Option<&'static str>,
-    Option<String>,
-);
-
 /// One full scope index's records and lookup, kept for targets and classification.
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct NativeScopeLookup {
-    records: ReportRecords,
-    lookup: ReportLookup,
+    pub(crate) records: ReportRecords,
+    pub(crate) lookup: ReportLookup,
     /// Each input resource, declaration and grant's canonical position.
     canonical: CanonicalPositions,
 }
@@ -119,7 +101,7 @@ fn inverse(order: &[usize]) -> Vec<usize> {
     positions
 }
 
-fn grant_kind(value: &str) -> PyResult<GrantKind> {
+pub(crate) fn grant_kind(value: &str) -> PyResult<GrantKind> {
     match value {
         "expected_model" => Ok(GrantKind::ExpectedModel),
         "tested_macro" => Ok(GrantKind::TestedMacro),
@@ -169,7 +151,7 @@ fn report_records(rows: RecordRows) -> PyResult<ReportRecords> {
 }
 
 /// Python's `InvalidScopePathError` message for a rejected path.
-fn path_message(rejected: &RejectedPath) -> String {
+pub(crate) fn path_message(rejected: &RejectedPath) -> String {
     match rejected.failure {
         ScopePathFailure::NotProjectRelative => {
             format!("Scope path must be project-relative: {}", rejected.path)
@@ -181,13 +163,8 @@ fn path_message(rejected: &RejectedPath) -> String {
 }
 
 /// Python's `InvalidQualifiedIdentityError` message for a rejected identity.
-fn identity_message(py: Python<'_>, failure: &IdentityFailure, value: &str) -> String {
-    let shown = |text: &str| -> String {
-        PyString::new(py, text).repr().map_or_else(
-            |_| text.to_owned(),
-            |repr| repr.to_string_lossy().into_owned(),
-        )
-    };
+pub(crate) fn identity_message(failure: &IdentityFailure, value: &str) -> String {
+    let shown = |text: &str| -> String { python_str_repr(active_python_text(), text) };
     match failure {
         IdentityFailure::NoName => format!("Qualified identity has no name: {}", shown(value)),
         IdentityFailure::UnknownKind(kind) => {
@@ -202,7 +179,7 @@ fn identity_message(py: Python<'_>, failure: &IdentityFailure, value: &str) -> S
 }
 
 fn group_rows(groups: KeyedGroups) -> GroupRows {
-    (groups.groups, groups.repr_ordered)
+    groups.groups
 }
 
 fn lookup_rows(lookup: &ReportLookup) -> (OrderRows, MappingRows, VisibilityRows) {
@@ -247,37 +224,10 @@ fn canonical(order: &[usize], positions: Vec<usize>) -> Vec<usize> {
         .collect()
 }
 
-fn classification_rows(classified: ReportClassification, order: &[usize]) -> ClassificationRows {
-    let relationships: Vec<(usize, &'static str, String)> = classified
-        .relationships
-        .into_iter()
-        .map(|entry| (order[entry.position], entry.reason.as_str(), entry.through))
-        .collect();
-    (
-        classified
-            .direct
-            .into_iter()
-            .map(|(position, reason)| (order[position], reason.as_str()))
-            .collect(),
-        relationships,
-        classified
-            .unavailable
-            .into_iter()
-            .map(|(position, reason)| (order[position], reason.as_str()))
-            .collect(),
-        None,
-    )
-}
-
 #[pymethods]
 impl NativeScopeLookup {
     /// The records `target` names: an identity row, else qualified identity or path text.
-    fn target(
-        &self,
-        py: Python<'_>,
-        identity: Option<QualifiedRow>,
-        text: &str,
-    ) -> PyResult<TargetRows> {
+    fn target(&self, identity: Option<QualifiedRow>, text: &str) -> PyResult<TargetRows> {
         let target: ReportTarget = match identity {
             Some(row) => ReportTarget::Identity(qualified_identity(row)?),
             None => ReportTarget::Text(text.to_owned()),
@@ -298,7 +248,7 @@ impl NativeScopeLookup {
             Err(TargetFailure::Identity(failure)) => (
                 false,
                 Vec::new(),
-                Some(identity_message(py, &failure, text)),
+                Some(identity_message(&failure, text)),
                 None,
             ),
             Err(TargetFailure::Path(rejected)) => {
@@ -317,44 +267,6 @@ impl NativeScopeLookup {
         Ok(match resolved {
             Ok(resolved) => resolved_rows(resolved, &self.canonical.grants),
             Err(rejected) => (Vec::new(), Vec::new(), Some(path_message(&rejected))),
-        })
-    }
-
-    /// How the declaration at canonical `position` stands for one resource.
-    fn explain(&self, resource: ResourceRow, position: usize) -> PyResult<StandingRows> {
-        let resource = resource_record(resource)?;
-        let declaration = &self.records.declarations[self.lookup.declarations[position]];
-        Ok(
-            match explain_report_declaration(&self.records, &self.lookup, &resource, declaration) {
-                Ok(DeclarationStanding::Visible(reason)) => {
-                    (Some(reason.as_str()), None, None, None, None)
-                }
-                Ok(DeclarationStanding::Granted(reason, through)) => {
-                    (None, Some(reason.as_str()), Some(through), None, None)
-                }
-                Ok(DeclarationStanding::Inaccessible(reason)) => {
-                    (None, None, None, Some(reason.as_str()), None)
-                }
-                Err(rejected) => (None, None, None, None, Some(path_message(&rejected))),
-            },
-        )
-    }
-
-    /// The report's direct, relationship and unavailable declarations for one resource.
-    fn classify(&self, py: Python<'_>, resource: ResourceRow) -> PyResult<ClassificationRows> {
-        let resource = resource_record(resource)?;
-        let (records, lookup) = (&self.records, &self.lookup);
-        let classified = py
-            .compiler_detach(|| Ok(classify_report_resource(records, lookup, &resource)))
-            .map_err(compiler_error)?;
-        Ok(match classified {
-            Ok(classified) => classification_rows(classified, &self.canonical.declarations),
-            Err(rejected) => (
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Some(path_message(&rejected)),
-            ),
         })
     }
 }
@@ -410,8 +322,24 @@ fn build_native_scope_lookup(
     })
 }
 
+/// Python's scope `normalize_path`, else the `InvalidScopePathError` message.
+#[pyfunction]
+fn scope_normalize_path(path: &str) -> (Option<String>, Option<String>) {
+    match normalize_scope_path(path) {
+        Ok(normalized) => (Some(normalized), None),
+        Err(failure) => (
+            None,
+            Some(path_message(&RejectedPath {
+                failure,
+                path: path.to_owned(),
+            })),
+        ),
+    }
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeScopeLookup>()?;
     module.add_function(wrap_pyfunction!(build_native_scope_lookup, module)?)?;
+    module.add_function(wrap_pyfunction!(scope_normalize_path, module)?)?;
     Ok(())
 }

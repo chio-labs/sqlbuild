@@ -6,7 +6,6 @@ from collections.abc import Callable, Hashable, Sequence
 from types import MappingProxyType
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes._helpers.placement import qualified_row, root_row
 from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import (
@@ -22,7 +21,7 @@ from sqlbuild.compiler.scopes.models import (
 )
 from sqlbuild.compiler.scopes.types import ResourceKind
 
-type _Groups = tuple[list[list[int]], bool]
+type _Groups = list[list[int]]
 type _Mappings = tuple[_Groups, _Groups, _Groups, _Groups, _Groups, _Groups, list[str]]
 type _Visibility = tuple[
     list[int],
@@ -148,12 +147,6 @@ def project_lookup(
     )
 
 
-def identity_key(identity: ResourceIdentity | DeclarationIdentity) -> str:
-    """The qualified identity text the scope reports sort and print."""
-
-    return format_identity(identity=identity)
-
-
 def _resource_identity(record: ResourceRecord) -> ResourceIdentity:
     return record.identity
 
@@ -177,23 +170,17 @@ def _grant_resource(record: GrantRecord) -> ResourceIdentity:
 def _path_mapping(
     *, groups: _Groups, records: Sequence[ResourceRecord], paths: list[str]
 ) -> MappingProxyType[str, tuple[ResourceRecord, ...]]:
-    members, repr_ordered = groups
     items: list[tuple[str, tuple[ResourceRecord, ...]]] = []
-    for group in members:
+    for group in groups:
         items.append((paths[group[0]], tuple(records[member] for member in group)))
-    if not repr_ordered:
-        items.sort(key=lambda item: repr(item[0]))
     return MappingProxyType(dict(items))
 
 
 def _mapping[Record, Key: Hashable](
     *, groups: _Groups, records: Sequence[Record], key: Callable[[Record], Key]
 ) -> MappingProxyType[Key, tuple[Record, ...]]:
-    members, repr_ordered = groups
     items: list[tuple[Key, tuple[Record, ...]]] = []
-    for group in members:
+    for group in groups:
         grouped: tuple[Record, ...] = tuple(records[member] for member in group)
         items.append((key(grouped[0]), grouped))
-    if not repr_ordered:
-        items.sort(key=lambda item: repr(item[0]))
     return MappingProxyType(dict(items))

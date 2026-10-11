@@ -43,3 +43,14 @@ class ScopeBareTargetE2eCase:
     target: str
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class ScopeUnicodeE2eCase:
+    description: str
+    macro_names: tuple[str, ...]
+    glob: str
+    expected_available: tuple[str, ...]
+    expected_matched: tuple[str, ...]
+    expected_kind_counts: dict[str, int]
+    expected_exit_code: int

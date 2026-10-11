@@ -130,20 +130,17 @@ pub(super) fn grant_texts(test_case: &GrantTestCase) -> Vec<String> {
         .collect()
 }
 
-/// The first resource identity of each resource group of a lookup case, and its repr flag.
-pub(super) fn resource_groups(test_case: &LookupTestCase) -> (Vec<String>, bool) {
+/// The first resource identity of each resource group of a lookup case.
+pub(super) fn resource_groups(test_case: &LookupTestCase) -> Vec<String> {
     let index: ScopeIndex = built_index(test_case.resources, test_case.declarations);
     let lookup: ReportLookup = report_lookup(&report_records(&index)).expect("valid paths");
-    (
-        lookup
-            .groups
-            .resources
-            .groups
-            .iter()
-            .map(|group| resource_text(&index.resources[group[0]].identity))
-            .collect(),
-        lookup.groups.resources.repr_ordered,
-    )
+    lookup
+        .groups
+        .resources
+        .groups
+        .iter()
+        .map(|group| resource_text(&index.resources[group[0]].identity))
+        .collect()
 }
 
 /// A built index's records as a full scope index's records.

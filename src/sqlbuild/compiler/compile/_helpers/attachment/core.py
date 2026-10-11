@@ -423,23 +423,11 @@ def build_effective_connection(
 ) -> dict[str, object]:
     """Merge base project connection with the selected environment overrides."""
 
-    connection: dict[str, object] = dict(project_config.connection)
-    if target_config is not None:
-        connection_name: str | None = target_config.connection_name
-        if connection_name is not None:
-            if (
-                connection_name not in project_config.connections
-                and connection_name not in local_config.connections
-            ):
-                raise CompileInputError(
-                    f"Unknown connection '{connection_name}' selected by target. Define "
-                    f"[connections.{connection_name}] in sqlbuild_project.toml or "
-                    "sqlbuild_local.toml."
-                )
-            connection.update(project_config.connections.get(connection_name, {}))
-            connection.update(local_config.connections.get(connection_name, {}))
-        connection.update(target_config.connection)
-    connection.update(local_config.connection)
+    connection, error = _native.effective_config_connection(
+        project_config, local_config, target_config
+    )
+    if connection is None:
+        raise CompileInputError(error or "")
     return cast(
         dict[str, object],
         expand_template_data(
@@ -459,12 +447,11 @@ def build_effective_settings(
 ) -> SettingsConfig:
     """Merge project settings with local developer overrides."""
 
-    values: dict[str, object] = {
-        field.name: getattr(project_config.settings, field.name) for field in fields(SettingsConfig)
-    }
-    setting_name: str
-    for setting_name in local_config.setting_overrides:
-        values[setting_name] = getattr(local_config.settings, setting_name)
+    values: dict[str, object] = _native.effective_config_settings(
+        (project_config.settings, local_config.settings),
+        local_config.setting_overrides,
+        [field.name for field in fields(SettingsConfig)],
+    )
     return SettingsConfig(**cast(dict[str, Any], values))
 
 
@@ -477,12 +464,9 @@ def build_effective_vars(
 ) -> dict[str, object]:
     """Merge effective vars using the locked precedence order."""
 
-    values: dict[str, object] = dict(project_config.vars)
-    if target_config is not None:
-        values.update(target_config.vars)
-    values.update(local_config.vars)
-    values.update(cli_vars)
-    return expand_effective_vars(values)
+    return expand_effective_vars(
+        _native.effective_config_vars((project_config, local_config), target_config, cli_vars)
+    )
 
 
 def _index_sql_hook_definitions(

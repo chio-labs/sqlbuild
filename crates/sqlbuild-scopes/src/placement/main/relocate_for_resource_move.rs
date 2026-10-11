@@ -5,7 +5,6 @@ use std::collections::{HashMap, HashSet};
 use crate::placement::_helpers::anchors::{
     AnchorSets, UsagesByDeclaration, anchor_sets, usages_by_declaration,
 };
-use crate::placement::_helpers::posix_paths::name;
 use crate::placement::_helpers::required::required_placement;
 use crate::placement::main::declaration_directory::declaration_directory;
 use crate::placement::main::placement_diagnostics::placement_diagnostics;
@@ -14,6 +13,7 @@ use crate::scope_index::models::{
     DeclarationIdentity, DeclarationRecord, OwnershipRoot, OwnershipRootKind, ResourceIdentity,
     ScopeKind,
 };
+use sqlbuild_core::posix_path::main::posix_name::posix_name;
 
 /// Python's `relocate_for_resource_move`: each moved declaration, or `None` when unsettled.
 #[must_use]
@@ -86,7 +86,7 @@ fn relocated_record(
         },
     };
     Some(DeclarationRecord {
-        path: format!("{directory}/{}", name(&record.path)),
+        path: format!("{directory}/{}", posix_name(&record.path)),
         scope,
         ownership_root,
         owning_path: if scope == ScopeKind::Global {

@@ -1,6 +1,6 @@
 """Public canonical scope report serialization operation."""
 
-from sqlbuild.compiler.scopes._helpers.report_operations import serialize_result
+from sqlbuild.compiler.scopes._helpers.report_rows import serialize_result
 from sqlbuild.compiler.scopes.models import ScopeBrowseResult, ScopeListResult, ScopeReport
 
 

@@ -11,8 +11,12 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.scope._test_types import (
     ScopeBareTargetE2eCase,
     ScopeE2eCase,
+    ScopeUnicodeE2eCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.scope.helpers import run_scope_alias
+from tests.e2e.src.sqlbuild.cli.commands.main.scope.helpers import (
+    run_scope_alias,
+    write_unicode_macro_project,
+)
 
 
 @pytest.mark.parametrize(
@@ -129,6 +133,56 @@ def test_given_bare_name_that_is_not_a_resource_when_running_scope_then_fails_cl
     assert result.returncode == test_case.expected_exit_code
     assert "C960" in result.stderr
     assert test_case.expected_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScopeUnicodeE2eCase(
+            description="non-ASCII macro names",
+            macro_names=("zeta", "caf\u00e9", "alpha", "cafe"),
+            glob="caf?",
+            expected_available=("macro:alpha", "macro:cafe", "macro:caf\u00e9", "macro:zeta"),
+            expected_matched=("macro:cafe", "macro:caf\u00e9"),
+            expected_kind_counts={"macro": 4},
+            expected_exit_code=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_non_ascii_declarations_when_running_scope_then_order_and_globs_follow_code_points(
+    tmp_path: Path, test_case: ScopeUnicodeE2eCase
+) -> None:
+    project_dir: Path = tmp_path / "project"
+    write_unicode_macro_project(project_dir=project_dir, macro_names=test_case.macro_names)
+
+    report: subprocess.CompletedProcess[str] = run_scope_alias(
+        alias="sqb", project_dir=project_dir, args=("model:orders", "--json", "--globals", "all")
+    )
+    matched: subprocess.CompletedProcess[str] = run_scope_alias(
+        alias="sqb",
+        project_dir=project_dir,
+        args=("model:orders", "--json", "--globals", "all", "--match", test_case.glob),
+    )
+    browsed: subprocess.CompletedProcess[str] = run_scope_alias(
+        alias="sqb",
+        project_dir=project_dir,
+        args=("model:orders", "--browse", "global", "--json"),
+    )
+
+    assert report.returncode == test_case.expected_exit_code, report.stderr
+    assert report.stdout.isascii()
+    assert (
+        tuple(item["identity"] for item in json.loads(report.stdout)["available"])
+        == test_case.expected_available
+    )
+    assert (
+        tuple(item["identity"] for item in json.loads(matched.stdout)["available"])
+        == test_case.expected_matched
+    )
+    assert json.loads(browsed.stdout)["folders"][0]["kind_counts"] == (
+        test_case.expected_kind_counts
+    )
 
 
 if __name__ == "__main__":

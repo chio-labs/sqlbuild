@@ -6,7 +6,13 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sqlbuild.compiler.scopes.models import DeclarationRecord
+    from pathlib import PurePath
+
+    from sqlbuild.compiler.scopes.models import (
+        DeclarationIdentity,
+        DeclarationRecord,
+        ResourceIdentity,
+    )
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type NativeIdentityRow = tuple[str, str]
@@ -34,6 +40,72 @@ type ScopeDeclarationPairs[Value] = tuple[tuple[DeclarationRecord, Value], ...]
 type NativeResolvedRows = tuple[
     list[tuple[int, str, int | None]], list[tuple[int, str]], str | None
 ]
+type ScopeQueryTarget = str | PurePath | ResourceIdentity | DeclarationIdentity
+type NativeScopeTargetRow = tuple[NativeQualifiedRow | None, str, bool]
+type NativeScopeFiltersRow = tuple[
+    list[str], bool, str | None, list[str], str | None, bool, int, str, str | None, int, int, str
+]
+type NativeScopeValuesRow = tuple[
+    tuple[list[str], list[NativeQualifiedRow], str] | None,
+    tuple[list[str], str] | None,
+    tuple[str, str | None, int | None, bool, str | None] | None,
+]
+type NativeScopeCompletenessRow = tuple[bool, bool, bool, bool, bool, bool]
+type NativeScopeDiagnosticRow = tuple[
+    str,
+    str,
+    str,
+    str | None,
+    int | None,
+    int | None,
+    NativeQualifiedRow | None,
+    NativeIdentityRow | None,
+]
+type NativeScopeRaisedRow = tuple[int | None, tuple[str, str, str | None] | None]
+type NativeScopeDeclarationRow = tuple[
+    tuple[str, str, str, str | None, tuple[str, int, int], str, str | None],
+    tuple[tuple[str, str | None] | None, str | None, list[tuple[str, object]]],
+    tuple[list[str], list[str], list[str], str | None, str | None, list[str]],
+]
+type NativeScopeSectionRow = tuple[
+    str, int, int, bool, int, bool, bool, str | None, str | None, int
+]
+type NativeScopeResourceReportRow = tuple[str, str | None, str | None, bool, bool, int]
+type NativeScopeExplanationRow = tuple[NativeScopeDeclarationRow | None, bool]
+type NativeScopeMoveRow = tuple[
+    str,
+    str,
+    str | None,
+    list[NativeScopeDeclarationRow],
+    list[NativeScopeDeclarationRow],
+    list[NativeScopeDeclarationRow],
+    list[str],
+    list[NativeScopeDeclarationRow],
+    list[NativeScopeDeclarationRow],
+    bool,
+]
+type NativeScopeFolderRow = tuple[str, str, int, int, int, list[tuple[str, int]]]
+type NativeScopeReportRow[Diagnostic] = tuple[
+    NativeScopeResourceReportRow,
+    list[tuple[str, str, int]],
+    list[NativeScopeDeclarationRow],
+    list[NativeScopeDeclarationRow],
+    list[NativeScopeDeclarationRow],
+    list[NativeScopeDeclarationRow],
+    NativeScopeFiltersRow,
+    list[NativeScopeSectionRow],
+    NativeScopeExplanationRow | None,
+    NativeScopeMoveRow | None,
+    list[Diagnostic],
+    bool,
+]
+type NativeScopeBrowseRow[Diagnostic] = tuple[
+    str, list[NativeScopeFolderRow], list[Diagnostic], bool
+]
+type NativeScopeListRow[Diagnostic] = tuple[
+    str, list[NativeScopeDeclarationRow], NativeScopeSectionRow, list[Diagnostic]
+]
+type NativeScopeFailureRow = tuple[str, str] | None
 type NativePlacementRows = tuple[
     list[tuple[NativeIdentityRow, str, NativeRootRow]],
     list[tuple[NativeQualifiedRow, str, int, int, str, NativeRootRow, str | None]],

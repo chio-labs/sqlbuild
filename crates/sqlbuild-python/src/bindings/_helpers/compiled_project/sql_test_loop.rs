@@ -1,6 +1,7 @@
 //! `build_test_inputs`: SQL test blocks expanded, classified and checked natively.
 
 use std::collections::{HashMap, HashSet};
+use std::convert::Infallible;
 
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -12,14 +13,15 @@ use sqlbuild_analysis::compiler::models::{
     SqlTestClassification, SqlTestCteText, SqlTestExtractionFailure, SqlTestRequest,
 };
 use sqlbuild_analysis::sql_test_attachment::main::authored_test_offset::authored_test_offset;
+use sqlbuild_analysis::sql_test_attachment::main::sql_test_cte_location::sql_test_cte_location;
 use sqlbuild_analysis::sql_test_attachment::main::sql_test_reads::sql_test_reads;
 use sqlbuild_analysis::sql_test_attachment::main::stored_sql_tests::stored_sql_tests;
 use sqlbuild_analysis::sql_test_attachment::main::test_without_target_model::test_without_target_model;
 use sqlbuild_analysis::sql_test_attachment::main::unresolvable_test_references::unresolvable_test_references;
 use sqlbuild_analysis::sql_test_attachment::models::{
-    ModelTestCtes, SqlTestCheckFailure, SqlTestHelperProblem, SqlTestReadFacts,
+    CteLocation, ModelTestCtes, PythonTextMatcher, SqlTestCheckFailure, SqlTestHelperProblem,
+    SqlTestReadFacts,
 };
-use sqlbuild_analysis::sql_test_attachment::types::SqlTestTextMatcher;
 use sqlbuild_attachments::ceremonial_select::main::omitted_select_offset::omitted_select_offset;
 use sqlbuild_attachments::ceremonial_select::models::OmittedSelect;
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
@@ -101,10 +103,8 @@ pub(crate) struct SqlTestSettings {
     /// The adapter's typed scalar renderer, returning `(text, None)` or `(None, error)`.
     pub(crate) render_parameter: Py<PyAny>,
     pub(crate) adapter_name: String,
-    /// Python `re` matches the helper checks read: `identifier_tokens` and `reads_word`.
-    pub(crate) text_patterns: Py<PyAny>,
-    /// `SqlTestCteLocator`, shared with the planner's located test diagnostics.
-    pub(crate) cte_locator: Py<PyAny>,
+    /// `SourceLocation`, for helper problems located natively.
+    pub(crate) source_location: Py<PyAny>,
     /// The shared scan store with the scan algorithm and lexical rules keying it, if any.
     pub(crate) scan_store: Option<Py<SqlTestScanStore>>,
     pub(crate) scan_key: (String, String),
@@ -135,26 +135,6 @@ pub(crate) type AttachedSqlTests = (Vec<Py<PyAny>>, Vec<Py<PyAny>>);
 
 /// `(file path, relative path, contents)` of an authored test or scenario file.
 pub(crate) type FileOrigin<'a> = (&'a str, &'a str, &'a str);
-
-/// The Python `re` matches of the helper checks, raising Python's own errors.
-struct PythonPatterns<'py>(Bound<'py, PyAny>);
-
-impl SqlTestTextMatcher for PythonPatterns<'_> {
-    type Error = PyErr;
-
-    fn identifier_tokens(&self, sql: &str) -> Result<Vec<String>, PyErr> {
-        self.0.call_method1("identifier_tokens", (sql,))?.extract()
-    }
-
-    fn reads_word(&self, sql: &str, word: &str) -> Result<bool, PyErr> {
-        let keywords: Bound<'_, PyDict> = PyDict::new(self.0.py());
-        keywords.set_item("sql", sql)?;
-        keywords.set_item("word", word)?;
-        self.0
-            .call_method("reads_word", (), Some(&keywords))?
-            .extract()
-    }
-}
 
 impl<'py> TestScope<'_, 'py> {
     fn py(&self) -> Python<'py> {
@@ -788,8 +768,7 @@ impl<'py> TestScope<'_, 'py> {
                     mock_dbt_refs,
                     mock_table_functions,
                 };
-                let patterns: PythonPatterns<'py> =
-                    PythonPatterns(self.settings.text_patterns.bind(py).clone());
+                let patterns: PythonTextMatcher = PythonTextMatcher;
                 let problems: Vec<SqlTestHelperProblem> =
                     self.checked_helpers(unresolvable_test_references(
                         &ctes,
@@ -903,12 +882,15 @@ impl<'py> TestScope<'_, 'py> {
         ))
     }
 
-    fn checked_helpers<T>(&self, outcome: Result<T, SqlTestCheckFailure<PyErr>>) -> PyResult<T> {
+    fn checked_helpers<T>(
+        &self,
+        outcome: Result<T, SqlTestCheckFailure<Infallible>>,
+    ) -> PyResult<T> {
         outcome.map_err(|failure| match failure {
             SqlTestCheckFailure::Internal(message) | SqlTestCheckFailure::Scan(message) => {
                 self.error(&message)
             }
-            SqlTestCheckFailure::Matcher(error) => error,
+            SqlTestCheckFailure::Matcher(never) => match never {},
         })
     }
 
@@ -921,18 +903,24 @@ impl<'py> TestScope<'_, 'py> {
         problem: &SqlTestHelperProblem,
     ) -> PyResult<()> {
         let py: Python<'py> = self.py();
+        let located: CteLocation = sql_test_cte_location(
+            &file.4,
+            &block.2,
+            &problem.cte_name,
+            problem.call.as_deref(),
+        );
+        let (line, column) = (located.line, located.column);
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
-        arguments.set_item("test_file", file.3.bind(py))?;
-        arguments.set_item("test_block", block.0.bind(py))?;
-        arguments.set_item("cte_name", &problem.cte_name)?;
-        arguments.set_item("call", &problem.call)?;
-        let location: Bound<'py, PyAny> =
-            self.settings
-                .cte_locator
-                .bind(py)
-                .call_method("locate", (), Some(&arguments))?;
-        let line: usize = location.getattr("line")?.extract()?;
-        let column: usize = location.getattr("column")?.extract()?;
+        arguments.set_item("path", file.3.bind(py).getattr("relative_path")?)?;
+        arguments.set_item("line", line)?;
+        arguments.set_item("column", column)?;
+        arguments.set_item("end_line", located.end_line)?;
+        arguments.set_item("end_column", located.end_column)?;
+        let location: Bound<'py, PyAny> = self
+            .settings
+            .source_location
+            .bind(py)
+            .call((), Some(&arguments))?;
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         fields.set_item("phase", "compile")?;
         fields.set_item("severity", "error")?;

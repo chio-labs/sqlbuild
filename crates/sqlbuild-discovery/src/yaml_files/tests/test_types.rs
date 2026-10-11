@@ -12,3 +12,10 @@ pub(super) struct YamlTextTestCase {
     /// The failure message and help, or `None` when the document loads.
     pub(super) expected_failure: Option<(&'static str, Option<&'static str>)>,
 }
+
+pub(super) struct EntryLinesTestCase {
+    pub(super) description: &'static str,
+    pub(super) contents: &'static str,
+    /// The line of each named entry the case checks; `None` where no entry has the name.
+    pub(super) expected_lines: &'static [(&'static str, Option<usize>)],
+}

@@ -898,10 +898,6 @@ class NativeScopeIndex:
 def scope_placement_diagnostics(
     rows: tuple[list[Any], list[Any], list[Any]],
 ) -> list[tuple[int, str, str]]: ...
-def scope_required_placement(
-    rows: tuple[list[Any], list[Any], list[Any]],
-    declaration: tuple[str, str, tuple[str, str] | None],
-) -> tuple[str, str | None, list[str]] | None: ...
 def scope_relocations(
     rows: tuple[list[Any], list[Any], list[Any]],
     resource: tuple[str, str],
@@ -912,7 +908,7 @@ def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str:
 type _ScopeQualified = tuple[str, str, tuple[str, str] | None]
 type _ScopeRoot = tuple[str, str, str | None]
 type _ScopeResource = tuple[tuple[str, str], str, _ScopeRoot]
-type _ScopeGroups = tuple[list[list[int]], bool]
+type _ScopeGroups = list[list[int]]
 
 class NativeScopeLookup:
     def target(
@@ -921,14 +917,6 @@ class NativeScopeLookup:
     def resolve(
         self, resource: _ScopeResource, /
     ) -> tuple[list[tuple[int, str, int | None]], list[tuple[int, str]], str | None]: ...
-    def explain(
-        self, resource: _ScopeResource, position: int, /
-    ) -> tuple[str | None, str | None, str | None, str | None, str | None]: ...
-    def classify(
-        self, resource: _ScopeResource, /
-    ) -> tuple[
-        list[tuple[int, str]], list[tuple[int, str, str]], list[tuple[int, str]], str | None
-    ]: ...
 
 def build_native_scope_lookup(
     rows: tuple[
@@ -965,6 +953,41 @@ def build_native_scope_lookup(
         str | None,
     ],
 ]: ...
+
+class NativeScopeReports:
+    def report(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
+    def explain(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
+    def browse(self, request: tuple[Any, ...], /) -> Any: ...
+    def list(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
+    def move_preview(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
+
+def build_native_scope_reports(
+    lookup: NativeScopeLookup,
+    values: tuple[list[Any], tuple[bool, bool, bool, bool, bool, bool]],
+    /,
+) -> NativeScopeReports: ...
+def serialize_scope_result_row(kind: str, row: object, /) -> str: ...
+def scope_metadata_projection_rows(rows: tuple[Any, ...], /) -> Any: ...
+def effective_config_target_name(
+    project_config: object, local_config: object, selected: str | None, /
+) -> tuple[str | None, str | None]: ...
+def effective_config_target_fields(
+    configs: tuple[object, object], target_name: str, default_target: object, /
+) -> tuple[list[tuple[str | None, str, object]] | None, str | None]: ...
+def effective_config_vars(
+    configs: tuple[object, object], target_config: object | None, cli_vars: dict[str, object], /
+) -> dict[str, object]: ...
+def effective_config_connection(
+    project_config: object, local_config: object, target_config: object | None, /
+) -> tuple[dict[str, object] | None, str | None]: ...
+def effective_config_settings(
+    settings: tuple[object, object], overrides: frozenset[str], names: list[str], /
+) -> dict[str, object]: ...
+def yaml_entry_line_index(contents: str, /) -> list[tuple[str, int]]: ...
+def sql_test_cte_span(
+    contents: str, sql_body: str, cte_name: str, call: str | None, /
+) -> tuple[int, int, int, int]: ...
+def scope_normalize_path(path: str, /) -> tuple[str | None, str | None]: ...
 def scope_index_fingerprint(
     project_dir: Path,
     inputs: tuple[list[str], list[str], list[str], list[str], str],

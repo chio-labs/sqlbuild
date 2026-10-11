@@ -11,6 +11,7 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     DefaultConnectionCliTestCase,
     InferredFreshnessCliTestCase,
+    LocalOverrideCliTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     execute_duckdb_sql,
@@ -41,6 +42,20 @@ _SEVERAL_CONNECTIONS_PROJECT: str = (
 )
 _NO_CONNECTION_PROJECT: str = (
     'name = "shop"\nadapter = "duckdb"\ndefault_target = "dev"\n\n[targets.dev]\nschema = "dev"\n'
+)
+_TEMPLATED_CONNECTION_PROJECT: str = (
+    'name = "shop"\n'
+    'adapter = "duckdb"\n'
+    'default_target = "dev"\n\n'
+    "[vars]\n"
+    'db_name = "shop"\n\n'
+    "[connections.local]\n"
+    'database = "${db_name}.duckdb"\n\n'
+    "[connections.archive]\n"
+    'database = "archive.duckdb"\n\n'
+    "[targets.dev]\n"
+    'connection = "local"\n'
+    'schema = "dev"\n'
 )
 _MEMORY_CONNECTION_PROJECT: str = (
     'name = "shop"\n'
@@ -83,6 +98,54 @@ def test_given_target_without_connection_when_building_then_only_named_connectio
         query_duckdb_rows(db_path=tmp_path / "shop.duckdb", sql="SELECT order_id FROM dev.orders")
         == test_case.expected_order_rows
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LocalOverrideCliTestCase(
+            description="local vars rename the templated database and local schema wins",
+            local_toml='[vars]\ndb_name = "mine"\n\n[targets.dev]\nschema = "staging"\n',
+            argv=("build",),
+            expected_exit_code=0,
+            expected_database="mine.duckdb",
+            expected_schema="staging",
+            expected_order_rows=((1,),),
+        ),
+        LocalOverrideCliTestCase(
+            description="CLI vars beat local vars and a local target switches connection",
+            local_toml='[vars]\ndb_name = "mine"\n\n[targets.dev]\nconnection = "archive"\n',
+            argv=("build", "--vars", '{"db_name": "cli"}'),
+            expected_exit_code=0,
+            expected_database="archive.duckdb",
+            expected_schema="dev",
+            expected_order_rows=((1,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_local_and_cli_overrides_when_building_then_precedence_picks_the_relation(
+    test_case: LocalOverrideCliTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_default_connection_project(
+        project_dir=tmp_path, project_toml=_TEMPLATED_CONNECTION_PROJECT
+    )
+    _ = (tmp_path / "sqlbuild_local.toml").write_text(test_case.local_toml, encoding="utf-8")
+
+    exit_code: int = main(["--no-color", "--project-dir", str(tmp_path), *test_case.argv])
+
+    output: str = "".join(capsys.readouterr())
+    assert exit_code == test_case.expected_exit_code, output
+    assert (
+        query_duckdb_rows(
+            db_path=tmp_path / test_case.expected_database,
+            sql=f"SELECT order_id FROM {test_case.expected_schema}.orders",
+        )
+        == test_case.expected_order_rows
+    )
+    assert not (tmp_path / "shop.duckdb").exists()
 
 
 @pytest.mark.parametrize(

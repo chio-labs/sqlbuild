@@ -95,6 +95,20 @@ impl DeclarationKind {
         }
     }
 
+    /// Python's `DECLARATION_ROLE_PARTS`: the folders a declaration of this kind lives under.
+    pub fn role_parts(self) -> &'static [&'static str] {
+        match self {
+            Self::Macro => &["macros"],
+            Self::Enum => &["enums"],
+            Self::Constant => &["constants"],
+            Self::Audit => &["audits", "generic"],
+            Self::SingularAudit => &["audits", "singular"],
+            Self::Schema => &["schemas"],
+            Self::SqlHook => &["hooks", "sql"],
+            Self::PythonHook => &["hooks", "python"],
+        }
+    }
+
     /// The kind with Python's enum value `value`.
     pub fn parse(value: &str) -> Option<Self> {
         [
@@ -361,9 +375,8 @@ pub struct GrantRecord {
 /// One lookup mapping's groups; members index the records the mapping groups.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KeyedGroups {
+    /// Groups in Python's `repr(key)` order.
     pub groups: Vec<Vec<usize>>,
-    /// Whether `groups` follow Python's `repr(key)` order; otherwise first-occurrence order.
-    pub repr_ordered: bool,
 }
 
 /// Python's `DeclarationVisibilityIndex` positions over the canonical declarations.

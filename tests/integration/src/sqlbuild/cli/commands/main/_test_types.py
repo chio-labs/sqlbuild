@@ -1054,6 +1054,19 @@ class DefaultConnectionCliTestCase:
 
 
 @dataclass(frozen=True)
+class LocalOverrideCliTestCase:
+    """One build whose target, vars and connection the local file and CLI override."""
+
+    description: str
+    local_toml: str
+    argv: tuple[str, ...]
+    expected_exit_code: int
+    expected_database: str
+    expected_schema: str
+    expected_order_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class InferredFreshnessCliTestCase:
     """One source whose freshness strategy and type come from its declaration."""
 
