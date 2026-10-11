@@ -15,7 +15,11 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::scopes::relationship_scan::{
+    RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
+};
 use crate::bindings::types::CompilerDetach;
+use sqlbuild_scopes::relationship_names::models::RelationshipScan;
 
 type IdentityRow = (String, String);
 type DeclarationIdentityRow = (String, String, Option<IdentityRow>);
@@ -32,7 +36,6 @@ type DeclarationRow = (
     Option<String>,
     Vec<DeclarationIdentityRow>,
 );
-type FactRow = (String, String, Vec<String>, Vec<String>, Vec<String>);
 type DeclarationRecordRow = (
     String,
     String,
@@ -60,6 +63,8 @@ type IndexRows = (
 );
 type GrantRow = (&'static str, String, usize, ThroughRow, &'static str);
 type GroupRows = (Vec<Vec<usize>>, bool);
+/// The grants, or `None` when the index cannot place them, and each `(path, message)` fault.
+type GrantedRelationships = (Option<Vec<GrantRow>>, Vec<(String, String)>);
 type VisibilityRows = (
     Vec<usize>,
     Vec<(IdentityRow, Vec<usize>)>,
@@ -120,25 +125,26 @@ impl NativeScopeIndex {
         )
     }
 
-    /// Resolve and keep the relationship grants of `facts`; `None` when Python must run.
-    fn grant(&mut self, py: Python<'_>, facts: Vec<FactRow>) -> PyResult<Option<Vec<GrantRow>>> {
-        let Some(facts) = facts
-            .into_iter()
-            .map(relationship_fact)
-            .collect::<Option<Vec<RelationshipFact>>>()
-        else {
-            return Ok(None);
-        };
+    /// Read every test's and scenario's relationship facts, then resolve and keep their grants.
+    fn grant_relationships(
+        &mut self,
+        py: Python<'_>,
+        files: Vec<TestFileRow>,
+        scenarios: Vec<ScenarioRow>,
+        settings: RelationshipScanSettings,
+    ) -> PyResult<GrantedRelationships> {
+        let scan: RelationshipScan = scanned_relationships(py, &files, &scenarios, settings)?;
         let index: &ScopeIndex = &self.index;
+        let facts: &[RelationshipFact] = &scan.facts;
         let grants: Result<Vec<GrantRecord>, ScopeDeferral> = py
-            .compiler_detach(|| Ok(relationship_grants(index, &facts)))
+            .compiler_detach(|| Ok(relationship_grants(index, facts)))
             .map_err(compiler_error)?;
         let Ok(grants) = grants else {
-            return Ok(None);
+            return Ok((None, scan.faults));
         };
         let rows: Vec<GrantRow> = grants.iter().map(grant_row).collect();
         self.grants = grants;
-        Ok(Some(rows))
+        Ok((Some(rows), scan.faults))
     }
 
     /// The lookup orders and groups of the index with its kept grants; `None` when Python must run.
@@ -275,17 +281,6 @@ fn declaration_identity(
             Some(owner) => Some(resource_identity(owner)?),
             None => None,
         },
-    })
-}
-
-fn relationship_fact(
-    (kind, name, expected_models, called_macros, tested_macros): FactRow,
-) -> Option<RelationshipFact> {
-    Some(RelationshipFact {
-        resource: resource_identity((kind, name))?,
-        expected_models,
-        called_macros,
-        tested_macros,
     })
 }
 

@@ -2,5 +2,7 @@
 mod expected_model_names;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_relationship_facts.rs"]
+mod relationship_facts;
 #[path = "tests/test_types.rs"]
 mod test_types;

@@ -7,9 +7,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from types import CodeType
 
-from sqlbuild.compiler.compile._helpers.attachment.scope_relationships import (
-    extract_scope_relationship_facts,
-)
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_declaration_scope_resolver,
 )
@@ -18,6 +15,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.extraction_errors import (
     validate_authored_test_cte_names,
 )
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
+from sqlbuild.compiler.compile.constants import SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationScopeBuild,
@@ -28,7 +26,7 @@ from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
-from sqlbuild.compiler.scopes.models import RelationshipFact, ScopeIndex, ScopeLookup
+from sqlbuild.compiler.scopes.models import ScopeIndex, ScopeLookup
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
@@ -76,16 +74,13 @@ def _build_native_declaration_scope(
     if native.has_scoped_relationship_declarations and (
         discovered_inputs.test_files or discovered_inputs.scenario_files
     ):
-        facts: tuple[RelationshipFact, ...]
-        fault: str | None
-        facts, fault = extract_scope_relationship_facts(
+        faults: tuple[tuple[Path, str], ...] = native.grant_relationships(
             discovered_inputs=discovered_inputs,
-            sql_lexical_syntax=sql_lexical_syntax,
-            scan_cache=scan_cache,
+            syntax=sql_lexical_syntax,
+            scan_store=(scan_cache.opened(), SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM),
         )
-        if fault is not None:
-            raise CompileInputError(fault)
-        native.grant(facts)
+        if faults:
+            raise CompileInputError(faults[0][1])
     index: ScopeIndex = native.index_with_relationships()
     lookup: ScopeLookup = native.lookup(index=index)
     return DeclarationScopeBuild(

@@ -880,9 +880,12 @@ class NativeScopeIndex:
         list[tuple[str, str, str | None, int | None, int | None, int | None, int | None]],
         bool,
     ]: ...
-    def grant(
-        self, facts: list[tuple[str, str, list[str], list[str], list[str]]]
-    ) -> list[tuple[str, str, int, str | int, str]] | None: ...
+    def grant_relationships(
+        self,
+        files: list[tuple[str, list[tuple[str, str, str]]]],
+        scenarios: list[tuple[str, str, str]],
+        settings: dict[str, object],
+    ) -> tuple[list[tuple[str, str, int, str | int, str]] | None, list[tuple[str, str]]]: ...
     def lookup(
         self,
     ) -> (

@@ -68,7 +68,6 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, Sql
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
-    GrantRecord,
     ResourceIdentity,
     ScopeIndex,
     ScopeLookup,
@@ -288,22 +287,6 @@ class StaticMacroInventory:
 
     exports: tuple[StaticMacroExport, ...] = field(default_factory=tuple)
     faults: tuple[StaticMacroFault, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class ScopeRelationshipFault:
-    """One test or scenario relationship extraction fault."""
-
-    relative_path: Path
-    message: str
-
-
-@dataclass(frozen=True)
-class ScopeRelationshipBuild:
-    """Expected-model grants and independently retained relationship faults."""
-
-    grants: tuple[GrantRecord, ...] = field(default_factory=tuple)
-    faults: tuple[ScopeRelationshipFault, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

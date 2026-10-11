@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Protocol, cast
 
 import orjson
@@ -28,19 +27,6 @@ _SYNTAX_FIELDS: dict[str, str] = {
     "line_comment_prefixes": "lineCommentPrefixes",
 }
 _AUTHORED_CTE_LENGTH: int = 3
-
-
-def native_sql_test_ctes(
-    *, texts: Sequence[tuple[str, str]], syntax: SqlLexicalSyntax
-) -> list[tuple[tuple[str, str], ...] | str]:
-    """Return each `(sql, file label)` test body's CTEs or the scanner's error."""
-
-    if not texts:
-        return []
-    outcomes: list[tuple[str | None, list[tuple[str, str]]]] = _native.scope_test_ctes(
-        list(texts), syntax.native_mapping
-    )
-    return [outcome[0] if outcome[0] is not None else tuple(outcome[1]) for outcome in outcomes]
 
 
 def authored_sql_test_cte_batch(

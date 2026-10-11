@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.models import (
     ExpansionSpan,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompileInputsView, SqlTestMode
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompileInputsView
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
@@ -22,25 +22,10 @@ from sqlbuild.sql_values.models import SqlValue
 
 
 @dataclass(frozen=True)
-class UnexpectedAnalysisFailureTestCase:
-    description: str
-    expected_error: str
-
-
-@dataclass(frozen=True)
 class SqlReferenceExtractionTestCase:
     description: str
     sql: str
     expected_references: tuple[tuple[SqlReferenceKind, str, str | None], ...]
-
-
-@dataclass(frozen=True)
-class DialectCteScanTestCase:
-    description: str
-    syntax: SqlLexicalSyntax
-    sql: str
-    expected_cte_names: tuple[str, ...]
-    expected_assertion_targets: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -78,30 +63,6 @@ class AuditFactoryAttachmentTestCase:
     expected_error_fragment: str | None = None
     expected_audit_names: tuple[str, ...] = ()
     expected_warning_code: str | None = None
-
-
-@dataclass(frozen=True)
-class NativeSqlTestExtractionParityTestCase:
-    description: str
-    sql: str
-    mode: SqlTestMode
-    expected_matches: bool = True
-
-
-@dataclass(frozen=True)
-class QualifiedReferenceAnalysisTestCase:
-    description: str
-    query_sql: str
-    expected_matches: bool = True
-
-
-@dataclass(frozen=True)
-class NativeTypeInferenceModeTestCase:
-    description: str
-    query_sql: str
-    column_types: dict[str, str]
-    expected_fast_types: tuple[str | None, ...]
-    expected_rich_types: tuple[str | None, ...]
 
 
 @dataclass(frozen=True)
@@ -370,66 +331,6 @@ class DynamicModelSchemaTestCase:
     description: str
     expected_codes: tuple[str, ...] = ()
     expected_fixed_columns: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class ExtractSqlTestCtesTestCase:
-    description: str
-    sql: str
-    expected_authored_cte_names: tuple[str, ...]
-    expected_mock_model_names: tuple[str, ...]
-    expected_mock_source_names: tuple[str, ...]
-    expected_expected_model_names: tuple[str, ...]
-    expected_mock_seed_names: tuple[str, ...] = ()
-    expected_mock_dbt_ref_names: tuple[str, ...] = ()
-    expected_mock_table_function_names: tuple[str, ...] = ()
-    expected_assertion_names: tuple[str, ...] = ()
-    expected_macro_mocks: dict[str, str] = field(default_factory=dict)
-    mode: SqlTestMode = SqlTestMode.MODEL
-    expected_macro_actual_cte_name: str | None = None
-    expected_macro_expected_cte_name: str | None = None
-
-
-@dataclass(frozen=True)
-class ExtractSqlTestCtesErrorTestCase:
-    description: str
-    sql: str
-    expected_error_fragment: str
-    mode: SqlTestMode = SqlTestMode.MODEL
-
-
-@dataclass(frozen=True)
-class ExtractSqlScenarioCtesTestCase:
-    description: str
-    sql: str
-    expected_authored_cte_names: tuple[str, ...]
-    expected_source_fixture_names: tuple[str, ...]
-    expected_ref_fixture_names: tuple[str, ...]
-    expected_expected_model_names: tuple[str, ...]
-    expected_assertion_names: tuple[str, ...]
-    expected_seed_fixture_names: tuple[str, ...] = ()
-    expected_dbt_ref_fixture_names: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class ExtractSqlScenarioCtesErrorTestCase:
-    description: str
-    sql: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class ExtractSqlAnalysisExpectedBranchesTestCase:
-    description: str
-    sql: str
-    expected_branch_column_names: tuple[tuple[str, ...], ...] | None
-
-
-@dataclass(frozen=True)
-class ExtractSqlAnalysisExpectedBranchesErrorTestCase:
-    description: str
-    sql: str
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -778,50 +679,6 @@ class ExpectedCountTestCase:
 
 
 @dataclass(frozen=True)
-class ClassifyDirectLogicSqlTestCtesErrorTestCase:
-    description: str
-    mode: SqlTestMode
-    ctes: tuple[tuple[str, str], ...]
-    expected_message: str
-
-
-@dataclass(frozen=True)
-class CteScannerMessageTestCase:
-    description: str
-    sql: str
-    expected_message: str
-
-
-@dataclass(frozen=True)
-class CompleteCeremonialSelectTestCase:
-    description: str
-    sql: str
-    expected_sql: str
-
-
-@dataclass(frozen=True)
-class SetOperationExpectedKind:
-    """One SQL-test kind whose expected CTE accepts set operations."""
-
-    description: str
-    mode: SqlTestMode
-    support_ctes: tuple[tuple[str, str], ...]
-    expected_cte_name: str
-    payload_type: str
-
-
-@dataclass(frozen=True)
-class SetOperationExpectedTestCase:
-    """One expected-CTE set operation in one SQL-test kind."""
-
-    description: str
-    kind: SetOperationExpectedKind
-    sql: str
-    expected_payload_type: str = ""
-    expected_error_template: str = ""
-
-
-@dataclass(frozen=True)
 class NamedDeclarationAcceptedTestCase:
     """A valid audit, schema, or hook layout."""
 
@@ -980,14 +837,6 @@ class RebindDeclarationScopeTestCase:
 
 
 @dataclass(frozen=True)
-class QualifiedReferenceScanTestCase:
-    description: str
-    query_sql: str
-    reference_names: tuple[str, ...]
-    expected_names: frozenset[str]
-
-
-@dataclass(frozen=True)
 class DescriptionInputClassificationCase:
     """Discovered input fields split between required and exempt description kinds."""
 
@@ -1003,14 +852,6 @@ class CollectedReferenceCallSyntaxTestCase:
     contents: str
     sql: str
     expected_diagnostics: tuple[tuple[str, str, Path, SourceLocation | None], ...]
-
-
-@dataclass(frozen=True)
-class AuthoredOffsetTestCase:
-    description: str
-    contents: str
-    marker: str
-    expected_line_column: tuple[int, int]
 
 
 @dataclass(frozen=True)

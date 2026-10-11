@@ -1283,16 +1283,6 @@ def find_macro_call_names(sql: str) -> tuple[str, ...]:
     )
 
 
-def find_nested_macro_call_names(sql: str) -> tuple[str, ...]:
-    """Return unique macro call names, including calls inside other calls' arguments."""
-
-    return tuple(
-        name
-        for name in _native_macro_call_names(sql=sql, nested=True)
-        if name not in DECLARATION_REFERENCE_NAMES
-    )
-
-
 def _native_macro_call_names(*, sql: str, nested: bool) -> tuple[str, ...]:
     """Every call name Python's scan finds, declaration calls included."""
 

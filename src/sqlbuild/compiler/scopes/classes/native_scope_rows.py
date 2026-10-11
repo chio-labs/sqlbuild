@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import inspect
 from collections.abc import Mapping
 from pathlib import Path
+from types import CodeType
 
-from sqlbuild.compiler.compile.models import LoadedMacro
+from sqlbuild.compiler.compile.models import LoadedMacro, StaticMacroExport
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredAuditFile,
@@ -16,15 +19,13 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlHookFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.scopes._helpers.builder import (
-    constant_metadata,
-    enum_metadata,
-    macro_line,
-    macro_metadata,
-)
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
 from sqlbuild.compiler.scopes.models import (
+    ConstantMetadata,
     DeclarationIdentity,
+    EnumMemberMetadata,
+    EnumMetadata,
+    MacroMetadata,
     NativeDeclarationValues,
     ResourceIdentity,
 )
@@ -36,6 +37,7 @@ from sqlbuild.compiler.scopes.types import (
     ResourceKind,
     ScopeKind,
 )
+from sqlbuild.sql_values.types import SqlValueKind
 
 _KIND_ROOT: str = "kind"
 _SEED_ROOT: str = "seed"
@@ -44,6 +46,9 @@ _PRIVATE_ROOT: str = "models"
 _MACRO_FALLBACK: str = "macros"
 _ENUM_FALLBACK: str = "enums"
 _CONSTANT_FALLBACK: str = "constants"
+_COLLECTION_KINDS: frozenset[SqlValueKind] = frozenset(
+    {SqlValueKind.LIST, SqlValueKind.SET, SqlValueKind.OBJECT}
+)
 
 
 class NativeScopeRows:
@@ -54,6 +59,7 @@ class NativeScopeRows:
         *,
         discovered_inputs: DiscoveredProjectInputs,
         loaded_macros: Mapping[str, LoadedMacro],
+        static_macros: tuple[StaticMacroExport, ...] = (),
     ) -> None:
         self.resources: list[NativeResourceRow] = []
         self.resource_identities: list[ResourceIdentity] = []
@@ -65,6 +71,7 @@ class NativeScopeRows:
         self._add_declaration_files(discovered_inputs=discovered_inputs)
         self._add_named_declarations(discovered_inputs=discovered_inputs)
         self._add_macros(discovered_inputs=discovered_inputs, loaded_macros=loaded_macros)
+        self._add_static_macros(discovered_inputs=discovered_inputs, static_macros=static_macros)
 
     def _add_resource(self, *, kind: ResourceKind, name: str, path: Path, root: str) -> None:
         self.resources.append((kind.value, name, str(path), root))
@@ -129,14 +136,14 @@ class NativeScopeRows:
                 identity=DeclarationIdentity(DeclarationKind.ENUM, declaration.name, owner),
                 line=1,
                 scope=ScopeKind.PRIVATE,
-                enum=enum_metadata(declaration),
+                enum=_enum_metadata(declaration),
             )
             if isinstance(declaration, EnumDeclaration)
             else NativeDeclarationValues(
                 identity=DeclarationIdentity(DeclarationKind.CONSTANT, declaration.name, owner),
                 line=1,
                 scope=ScopeKind.PRIVATE,
-                constant=constant_metadata(declaration),
+                constant=_constant_metadata(declaration),
             )
         )
         self._add_declaration(
@@ -204,7 +211,7 @@ class NativeScopeRows:
                         identity=DeclarationIdentity(DeclarationKind.ENUM, enum.name),
                         line=1,
                         scope=enum_file.scope_kind,
-                        enum=enum_metadata(enum),
+                        enum=_enum_metadata(enum),
                     ),
                     path=enum_file.relative_path,
                     ownership_root=enum_file.ownership_root,
@@ -218,7 +225,7 @@ class NativeScopeRows:
                         identity=DeclarationIdentity(DeclarationKind.CONSTANT, constant.name),
                         line=1,
                         scope=constant_file.scope_kind,
-                        constant=constant_metadata(constant),
+                        constant=_constant_metadata(constant),
                     ),
                     path=constant_file.relative_path,
                     ownership_root=constant_file.ownership_root,
@@ -303,12 +310,43 @@ class NativeScopeRows:
             self._add_declaration(
                 values=NativeDeclarationValues(
                     identity=DeclarationIdentity(DeclarationKind.MACRO, loaded.name),
-                    line=macro_line(loaded),
+                    line=_macro_line(loaded),
                     scope=discovered.scope_kind if discovered is not None else ScopeKind.GLOBAL,
-                    macro=macro_metadata(loaded),
+                    macro=_macro_metadata(loaded),
                     dependencies=loaded.dependencies,
                 ),
                 path=loaded.relative_path,
+                ownership_root=discovered.ownership_root if discovered is not None else None,
+                root_fallback=_MACRO_FALLBACK,
+                owning_path=discovered.owning_path if discovered is not None else None,
+            )
+
+    def _add_static_macros(
+        self,
+        *,
+        discovered_inputs: DiscoveredProjectInputs,
+        static_macros: tuple[StaticMacroExport, ...],
+    ) -> None:
+        macro_files: dict[str, DiscoveredMacroFile] = {
+            normalize_path(path=item.relative_path): item for item in discovered_inputs.macro_files
+        }
+        for export in static_macros:
+            discovered: DiscoveredMacroFile | None = macro_files.get(
+                normalize_path(path=export.relative_path)
+            )
+            self._add_declaration(
+                values=NativeDeclarationValues(
+                    identity=DeclarationIdentity(DeclarationKind.MACRO, export.name),
+                    line=export.line,
+                    scope=discovered.scope_kind if discovered is not None else ScopeKind.GLOBAL,
+                    macro=MacroMetadata(
+                        parameters=export.parameters,
+                        dependencies=export.dependencies,
+                        source_digest=export.source_digest,
+                    ),
+                    dependencies=export.dependencies,
+                ),
+                path=export.relative_path,
                 ownership_root=discovered.ownership_root if discovered is not None else None,
                 root_fallback=_MACRO_FALLBACK,
                 owning_path=discovered.owning_path if discovered is not None else None,
@@ -321,3 +359,44 @@ def _identity_row(identity: ResourceIdentity | None) -> NativeIdentityRow | None
 
 def _name_or_stem(*, value: object, path: Path) -> str:
     return value if isinstance(value, str) and value else path.stem
+
+
+def _enum_metadata(declaration: EnumDeclaration) -> EnumMetadata:
+    """Return the member names and scalar type of one enum."""
+
+    return EnumMetadata(
+        members=tuple(EnumMemberMetadata(item.name) for item in declaration.members),
+        scalar_type=declaration.scalar_type,
+    )
+
+
+def _constant_metadata(declaration: ConstantDeclaration) -> ConstantMetadata:
+    """Return the logical type and collection shape of one constant."""
+
+    is_collection: bool = declaration.value.kind in _COLLECTION_KINDS
+    payload: object = declaration.value.value
+    item_count: int | None = len(payload) if is_collection and isinstance(payload, tuple) else None
+    return ConstantMetadata(
+        logical_type=declaration.logical_type.display_name,
+        collection_kind=declaration.value.kind.value if is_collection else None,
+        item_count=item_count,
+        nullable=declaration.value.kind is SqlValueKind.NULL,
+        render_as=declaration.render_as.value if declaration.render_as is not None else None,
+    )
+
+
+def _macro_metadata(loaded: LoadedMacro) -> MacroMetadata:
+    """Return the parameters, dependencies and source digest of one loaded macro."""
+
+    return MacroMetadata(
+        parameters=tuple(inspect.signature(loaded.function).parameters),
+        dependencies=loaded.dependencies,
+        source_digest=hashlib.sha256(loaded.raw_source.encode()).hexdigest(),
+    )
+
+
+def _macro_line(loaded: LoadedMacro) -> int:
+    """Return the first line of a loaded macro's function, or 1 without code."""
+
+    code: object = getattr(loaded.function, "__code__", None)
+    return code.co_firstlineno if isinstance(code, CodeType) else 1

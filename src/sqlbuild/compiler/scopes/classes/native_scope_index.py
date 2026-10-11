@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import replace
+from pathlib import Path
 from types import MappingProxyType
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
 from sqlbuild.compiler.scopes.classes.native_scope_rows import NativeScopeRows
 from sqlbuild.compiler.scopes.exceptions import UnindexableScopeError
 from sqlbuild.compiler.scopes.models import (
@@ -15,7 +17,6 @@ from sqlbuild.compiler.scopes.models import (
     GrantRecord,
     NativeDeclarationValues,
     OwnershipRoot,
-    RelationshipFact,
     ResourceIdentity,
     ResourceRecord,
     ScopeCompleteness,
@@ -31,6 +32,7 @@ from sqlbuild.compiler.scopes.types import (
     ScopeDiagnosticCode,
     UsageKind,
 )
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 type _Groups = tuple[list[list[int]], bool]
 type _IndexRows = tuple[
@@ -133,20 +135,27 @@ class NativeScopeIndex:
             completeness=_STATIC_COMPLETENESS,
         )
 
-    def grant(self, facts: Sequence[RelationshipFact]) -> None:
-        """Attach the relationship grants of `facts`."""
+    def grant_relationships(
+        self,
+        *,
+        discovered_inputs: DiscoveredProjectInputs,
+        syntax: SqlLexicalSyntax,
+        scan_store: tuple[_native.SqlTestScanStore | None, str],
+    ) -> tuple[tuple[Path, str], ...]:
+        """Grant every test's and scenario's relationships; return each extraction fault."""
 
-        rows: _GrantRows | None = self._native.grant(
+        store, algorithm = scan_store
+        rows, faults = self._native.grant_relationships(
+            [_test_file_row(test_file) for test_file in discovered_inputs.test_files],
             [
-                (
-                    fact.resource.kind.value,
-                    fact.resource.name,
-                    list(fact.expected_models),
-                    list(fact.called_macros),
-                    list(fact.tested_macros),
-                )
-                for fact in facts
-            ]
+                (scenario.name, str(scenario.relative_path), scenario.sql_body)
+                for scenario in discovered_inputs.scenario_files
+            ],
+            {
+                "syntax": syntax.native_mapping,
+                "store": store,
+                "scan_key": (algorithm, syntax.cache_key),
+            },
         )
         if rows is None:
             raise UnindexableScopeError
@@ -166,6 +175,7 @@ class NativeScopeIndex:
             )
             for kind, name, declaration, through, grant_kind in rows
         ]
+        return tuple((Path(path), message) for path, message in faults)
 
     def index_with_relationships(self) -> ScopeIndex:
         """Return the index with its grants attached and relationships complete."""
@@ -254,6 +264,16 @@ class NativeScopeIndex:
                 ),
             ),
         )
+
+
+def _test_file_row(
+    test_file: DiscoveredSqlTestFile,
+) -> tuple[str, list[tuple[str, str, str]]]:
+    stem: str = test_file.relative_path.stem
+    return (
+        str(test_file.relative_path),
+        [(block.name or stem, block.sql_body, block.mode.value) for block in test_file.blocks],
+    )
 
 
 def _resource_root(*, identity: ResourceIdentity, root: str) -> OwnershipRoot:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from collections import defaultdict
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, fields, replace
 from itertools import chain
 from pathlib import Path
@@ -12,12 +12,12 @@ from typing import cast
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
 from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_context
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
-from sqlbuild.compiler.compile._helpers.sql_tests.native import native_sql_test_ctes
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
@@ -37,9 +37,6 @@ from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
-from sqlbuild.compiler.scopes.main._native_expected_model_names import (
-    native_expected_model_names,
-)
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
     resolve_scope_declaration_visibility,
@@ -505,6 +502,13 @@ def _generated_expected_model_sql(*, rng: random.Random) -> str:
     return f"{rng.choice(_LEADING)}{rng.choice(_WITH)}{','.join(ctes)}{rng.choice(_TRAILING)}"
 
 
+def _scan_outcome(outcome: tuple[str | None, Sequence[object]]) -> tuple[object, ...] | str:
+    """A scan's error, or its values as a tuple."""
+
+    error, values = outcome
+    return {True: lambda: tuple(values), False: lambda: cast(str, error)}[error is None]()
+
+
 def relationship_scans(*, sqls: list[str], syntax: SqlLexicalSyntax) -> RelationshipScans:
     """Scan each SQL text's test names, scenario names and test CTEs natively."""
 
@@ -512,9 +516,15 @@ def relationship_scans(*, sqls: list[str], syntax: SqlLexicalSyntax) -> Relation
     scenario_texts: list[tuple[str, str]] = [(sql, _SCENARIO_LABEL) for sql in sqls]
     outcomes: list[tuple[object, object, object]] = list(
         zip(
-            native_expected_model_names(texts=test_texts, scenario=False, syntax=syntax),
-            native_expected_model_names(texts=scenario_texts, scenario=True, syntax=syntax),
-            native_sql_test_ctes(texts=test_texts, syntax=syntax),
+            map(
+                _scan_outcome,
+                _native.scope_expected_model_names(test_texts, False, syntax.native_mapping),
+            ),
+            map(
+                _scan_outcome,
+                _native.scope_expected_model_names(scenario_texts, True, syntax.native_mapping),
+            ),
+            map(_scan_outcome, _native.scope_test_ctes(test_texts, syntax.native_mapping)),
             strict=True,
         )
     )

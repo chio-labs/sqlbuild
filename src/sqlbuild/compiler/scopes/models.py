@@ -142,16 +142,6 @@ class NativeDeclarationValues:
 
 
 @dataclass(frozen=True)
-class RelationshipFact:
-    """Relationship names one test block or scenario authors, before grants are resolved."""
-
-    resource: ResourceIdentity
-    expected_models: tuple[str, ...] = field(default_factory=tuple)
-    called_macros: tuple[str, ...] = field(default_factory=tuple)
-    tested_macros: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class VisibilityRecord:
     """A resolved positive visibility fact with stable provenance."""
 
