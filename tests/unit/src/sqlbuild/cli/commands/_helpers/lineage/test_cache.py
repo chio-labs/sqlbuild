@@ -160,13 +160,14 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
         FingerprintedFilesTestCase(
-            description="an unreadable directory is skipped as rglob skips it",
+            description="chmod permissions follow the platform directory semantics",
             files={**_LAYOUT_FILES, "models/locked/hidden.sql": "SELECT 5 AS order_id\n"},
             links={},
             unreadable_directories=("models/locked",),
             environment={"ORDERS_SCHEMA": "orders_dev"},
             cli_vars=None,
-            expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES,
+            expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES
+            + (("models/locked/hidden.sql",) if sys.platform == "win32" else ()),
             expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
         FingerprintedFilesTestCase(

@@ -6,5 +6,5 @@ pub(crate) mod projections;
 pub(crate) mod python_payload;
 pub(crate) mod references;
 pub(crate) mod rich_lineage;
-pub(crate) mod stars;
 pub(crate) mod semantic_uses;
+pub(crate) mod stars;

@@ -627,6 +627,7 @@ RENDER_UNREACHABLE_CODES: dict[str, str] = {
 }
 ANALYSIS_STAGE_CAPTURE_SUFFIX: str = "-compiled_project.json"
 COMPILED_PROJECT_CAPTURE_TYPE: str = "sqlbuild.compiler.compile.models:CompiledProject"
+COMPILE_INPUTS_CAPTURE_TYPE: str = "sqlbuild.compiler.compile.models:CompileProjectInputs"
 ANALYSIS_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
     {
         "native_project",

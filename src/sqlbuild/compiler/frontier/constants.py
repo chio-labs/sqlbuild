@@ -295,6 +295,7 @@ STAGE_CAPTURE_PROJECTED_ATTRIBUTES: dict[str, tuple[str, ...]] = {
     ),
 }
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
+    "sqlbuild.compiler.scopes.models:ScopeLookup": frozenset({"native"}),
     "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog": frozenset(
         {"shared_analyses"}
     ),
@@ -305,6 +306,16 @@ STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.compile.models:CompiledProject": frozenset(
         {"native_session", "native_project", "lineage_graph"}
     ),
+}
+STAGE_CAPTURE_CANONICAL_TYPES: dict[str, str] = {
+    "sqlbuild._native:NativeInputsView": "sqlbuild.compiler.compile.models:CompileProjectInputs",
+    "sqlbuild._native:NativeProjectView": "sqlbuild.compiler.compile.models:CompiledProject",
+    "sqlbuild._native:NativeModelInput": "sqlbuild.compiler.compile.models:CompileModelInput",
+    "sqlbuild._native:NativeCompiledModel": "sqlbuild.compiler.compile.models:CompiledModel",
+    "sqlbuild._native:NativeCompiledSource": "sqlbuild.compiler.compile.models:CompiledSource",
+    "sqlbuild._native:NativeCompiledSeed": "sqlbuild.compiler.compile.models:CompiledSeed",
+    "sqlbuild._native:NativeCompiledFunction": "sqlbuild.compiler.compile.models:CompiledFunction",
+    "sqlbuild._native:NativeCompiledAudit": "sqlbuild.compiler.compile.models:CompiledAudit",
 }
 STAGE_CAPTURE_DECODED_SEQUENCES: frozenset[str] = frozenset(
     {"sqlbuild.compiler.compile.models:CompactLineageFacts"}

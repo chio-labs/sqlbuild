@@ -44,7 +44,7 @@ class FailureCorpusCodesTestCase:
     """The failure corpus run for real and the codes its cases must emit."""
 
     description: str
-    expected_first_errors: dict[str, str]
+    expected_first_errors: dict[str, str | None]
     expected_first_messages: dict[str, str]
     expected_warnings: dict[str, str]
     expected_discovery_codes: frozenset[str]

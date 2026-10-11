@@ -16,6 +16,7 @@ from scripts.compiler_differential._helpers.corpus.emitted_codes import (
     emitted_failure_codes,
     render_error_codes,
 )
+from scripts.compiler_differential._helpers.refactor_corpus.refactor_cases import refactor_cases
 from scripts.compiler_differential.constants import (
     ANALYSIS_UNREACHABLE_CODES,
     DISCOVERY_UNREACHABLE_CODES,
@@ -34,7 +35,8 @@ _COMPILER_ROOT: Path = Path(compiler_package.__file__).parent
         FailureCorpusCodesTestCase(
             description="native_engine",
             expected_first_errors={
-                f"failure/{case.name}": case.expected_code for case in failure_cases()
+                **{f"failure/{case.name}": case.expected_code for case in failure_cases()},
+                **{project.name: project.expected.error_code for project in refactor_cases()},
             },
             expected_first_messages={
                 f"failure/{case.name}": case.expected_message

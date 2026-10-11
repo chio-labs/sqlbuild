@@ -22,6 +22,7 @@ from scripts.compiler_differential._helpers.coverage.macro_sources import (
 )
 from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
+    COMPILE_INPUTS_CAPTURE_TYPE,
     RENDER_CALLABLE_CAPTURE_FIELDS,
     RENDER_DETAIL_KINDS,
     RENDER_HOOK_KEYS,
@@ -31,6 +32,7 @@ from scripts.compiler_differential.constants import (
 )
 from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_NAMES
 from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_OMITTED_ATTRIBUTES
 
 _MACRO_CALL: re.Pattern[str] = re.compile(r"@([A-Za-z_]\w*)\(")
 _REFERENCE_CALL: re.Pattern[str] = re.compile(r"__(ref|source|seed)\(\s*\"([^\"]+)\"\s*\)")
@@ -96,7 +98,12 @@ def render_capture_problems(capture_text: str) -> tuple[str, ...]:
 
     return capture_problems(
         capture_text=capture_text,
-        fields=tuple(field.name for field in dataclasses.fields(CompileProjectInputs)),
+        fields=tuple(
+            field.name
+            for field in dataclasses.fields(CompileProjectInputs)
+            if field.name
+            not in STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(COMPILE_INPUTS_CAPTURE_TYPE, frozenset())
+        ),
         callable_fields=RENDER_CALLABLE_CAPTURE_FIELDS,
     )
 

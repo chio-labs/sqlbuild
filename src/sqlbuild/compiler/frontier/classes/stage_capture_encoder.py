@@ -18,6 +18,7 @@ from pathlib import PurePath
 from typing import Any
 
 from sqlbuild.compiler.frontier.constants import (
+    STAGE_CAPTURE_CANONICAL_TYPES,
     STAGE_CAPTURE_DECODED_SEQUENCES,
     STAGE_CAPTURE_ENGINE_NAMESPACE_PATTERN,
     STAGE_CAPTURE_INVOCATION_ID_MASK,
@@ -140,7 +141,7 @@ class StageCaptureEncoder:
         unordered: frozenset[str] = STAGE_CAPTURE_UNORDERED_ATTRIBUTES.get(type_name, frozenset())
         omitted: frozenset[str] = STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(type_name, frozenset())
         return {
-            "__type__": type_name,
+            "__type__": STAGE_CAPTURE_CANONICAL_TYPES.get(type_name, type_name),
             **{
                 name: self._encode_attribute(value=item, unordered=name in unordered)
                 for name, item in attributes.items()

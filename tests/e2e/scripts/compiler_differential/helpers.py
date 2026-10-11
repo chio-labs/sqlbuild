@@ -12,6 +12,9 @@ _SITECUSTOMIZE: str = f'''
 import dataclasses
 import sys
 
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
+
 import sqlbuild.compiler.frontier.main._compile_frontier as frontier
 from sqlbuild.compiler.frontier.types import CompilerStage
 
@@ -22,11 +25,12 @@ def _perturbed(*, until, **stages):
     result = _original(until=until, **stages)
     if until is not CompilerStage.COMPILED_PROJECT or not result.models:
         return result
-    first = result.models[0]
+    result = compiled_project_record(result)
+    first = compiled_model_record(result.models[0])
     changed = dataclasses.replace(
         first, query_sql=f"SELECT * FROM ({{first.query_sql}}) AS perturbed_by_test"
     )
-    return dataclasses.replace(result, models=(changed, *result.models[1:]))
+    return dataclasses.replace(result, models=(changed, *result.models[1:]), native_project=None)
 
 
 frontier.native_frontier = _perturbed
@@ -55,6 +59,9 @@ frontier.native_frontier = _perturbed
 RENDER_PERTURBATION: str = """
 import dataclasses
 
+from sqlbuild.compiler.compile.models import CompileModelInput
+from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
+
 import sqlbuild.compiler.frontier.main._compile_frontier as frontier
 from sqlbuild.compiler.frontier.types import CompilerStage
 
@@ -65,9 +72,12 @@ def _perturbed(*, until, **stages):
     result = _original(until=until, **stages)
     if until is not CompilerStage.COMPILE_PROJECT_INPUTS or not result.model_inputs:
         return result
-    first = result.model_inputs[0]
+    first = CompileModelInput(**{
+        field.name: getattr(result.model_inputs[0], field.name)
+        for field in dataclasses.fields(CompileModelInput)
+    })
     changed = dataclasses.replace(first, macro_deps=(*first.macro_deps, "perturbed_by_test"))
-    return dataclasses.replace(result, model_inputs=(changed, *result.model_inputs[1:]))
+    return inputs_with(inputs=result, model_inputs=(changed, *result.model_inputs[1:]))
 
 
 frontier.native_frontier = _perturbed
