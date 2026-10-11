@@ -15,15 +15,15 @@ pub(crate) enum Piece {
 }
 
 impl Piece {
-    /// Whether this one-character piece matches `character`.
-    pub(crate) fn matches(&self, character: char) -> bool {
+    /// Whether this one-character piece matches the code point `character`, surrogates included.
+    pub(crate) fn matches(&self, character: u32) -> bool {
         match self {
             Self::Star | Self::Any => true,
-            Self::Literal(literal) => *literal == character,
+            Self::Literal(literal) => u32::from(*literal) == character,
             Self::Set { negated, members } => {
-                let member: bool = members
-                    .iter()
-                    .any(|(low, high)| *low <= character && character <= *high);
+                let member: bool = members.iter().any(|(low, high)| {
+                    u32::from(*low) <= character && character <= u32::from(*high)
+                });
                 member != *negated
             }
             Self::Never => false,
@@ -158,4 +158,37 @@ fn atom_character(atom: SetAtom) -> char {
         SetAtom::Character(character) => character,
         SetAtom::RangeHyphen => '-',
     }
+}
+
+/// Whether the code points of `name` match `pattern`, as `re.match` of `fnmatch.translate` does.
+pub(crate) fn code_points_match(name: &[u32], pattern: &str) -> bool {
+    let pieces: Vec<Piece> = translate(&pattern.chars().collect::<Vec<char>>());
+    if pieces.contains(&Piece::Never) {
+        return false;
+    }
+    let (mut piece, mut character) = (0_usize, 0_usize);
+    let mut resume: Option<(usize, usize)> = None;
+    while character < name.len() {
+        match pieces.get(piece) {
+            Some(Piece::Star) => {
+                resume = Some((piece, character));
+                piece += 1;
+            }
+            Some(single) if single.matches(name[character]) => {
+                piece += 1;
+                character += 1;
+            }
+            _ => match resume {
+                Some((star, consumed)) => {
+                    piece = star + 1;
+                    character = consumed + 1;
+                    resume = Some((star, consumed + 1));
+                }
+                None => return false,
+            },
+        }
+    }
+    pieces[piece..]
+        .iter()
+        .all(|remaining| *remaining == Piece::Star)
 }

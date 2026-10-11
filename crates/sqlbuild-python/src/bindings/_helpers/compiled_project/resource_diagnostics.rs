@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods};
 use sqlbuild_analysis::compiled_project::main::text_position::text_position;
 use sqlbuild_analysis::compiled_project::models::TextPosition;
 use sqlbuild_analysis::contracts::main::join_helps::join_helps;
@@ -32,8 +32,8 @@ const PYTHON_UDF_DECORATOR: &str = "udf";
 /// A loader's description, relative path and whether that path is a YAML file.
 type LoaderRow = (Option<String>, String, bool);
 
-/// A Python-defined resource's kind, name, description, location callback and help.
-type PythonResourceRow = (String, String, Option<String>, Py<PyAny>, String);
+/// A Python resource's kind, name, description (a `str` that may hold surrogates), location, help.
+type PythonResourceRow = (String, String, Option<Py<PyString>>, Py<PyAny>, String);
 
 /// What the resource diagnostics read beyond the owner, and the Python values they build.
 #[derive(FromPyObject)]
@@ -327,14 +327,22 @@ fn missing_descriptions<'py>(
         )?);
     }
     for (kind, name, description, location, help) in &diagnostics.settings.python_resources {
+        let text = description
+            .as_ref()
+            .map(|description| docstring_text(description.bind(py)));
         found.push(diagnostics.described(
             (kind, name, None),
-            description.as_deref(),
+            text.as_deref(),
             || location.bind(py).call0(),
             help,
         )?);
     }
     Ok(found.into_iter().flatten().collect())
+}
+
+/// A docstring's text; a lone surrogate becomes U+FFFD, which `str.strip` keeps as it would.
+fn docstring_text(description: &Bound<'_, PyString>) -> String {
+    description.to_string_lossy().into_owned()
 }
 
 /// A source's P010, falling back to its loader's description and naming the loader in help.
