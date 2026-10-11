@@ -912,6 +912,19 @@ class NativeScopeIndex:
         | None
     ): ...
 
+def scope_placement_diagnostics(
+    rows: tuple[list[Any], list[Any], list[Any]],
+) -> list[tuple[int, str, str]]: ...
+def scope_required_placement(
+    rows: tuple[list[Any], list[Any], list[Any]],
+    declaration: tuple[str, str, tuple[str, str] | None],
+) -> tuple[str, str | None, list[str]] | None: ...
+def scope_relocations(
+    rows: tuple[list[Any], list[Any], list[Any]],
+    resource: tuple[str, str],
+    destination: str,
+) -> list[tuple[int, str, str, tuple[str, str, str | None], str | None]] | None: ...
+def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str: ...
 def build_native_scope_index(
     resources: list[tuple[str, str, str, str]],
     declarations: list[

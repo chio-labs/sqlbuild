@@ -21,6 +21,13 @@ type NativeDeclarationRow = tuple[
     str | None,
     list[NativeDeclarationIdentityRow],
 ]
+type NativeQualifiedRow = NativeDeclarationIdentityRow
+type NativeRootRow = tuple[str, str, str | None]
+type NativePlacementRows = tuple[
+    list[tuple[NativeIdentityRow, str, NativeRootRow]],
+    list[tuple[NativeQualifiedRow, str, int, int, str, NativeRootRow, str | None]],
+    list[tuple[NativeQualifiedRow, NativeQualifiedRow, NativeQualifiedRow | None]],
+]
 
 
 class ScopeCacheIdentityType(StrEnum):

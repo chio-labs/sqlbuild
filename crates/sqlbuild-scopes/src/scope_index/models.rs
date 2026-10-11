@@ -155,6 +155,13 @@ impl OwnershipRootKind {
             Self::Global => "global",
         }
     }
+
+    /// The kind with Python's enum `value`.
+    pub fn parse(value: &str) -> Option<Self> {
+        [Self::Resource, Self::Global]
+            .into_iter()
+            .find(|kind| kind.as_str() == value)
+    }
 }
 
 /// Python's `GrantKind`.
@@ -466,7 +473,7 @@ pub struct DeclaredScope {
 }
 
 /// A qualified identity as Python's `parse_identity` reads it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum QualifiedIdentity {
     Resource(ResourceIdentity),
     Declaration(DeclarationIdentity),

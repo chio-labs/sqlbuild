@@ -2,5 +2,6 @@
 
 #![forbid(unsafe_code)]
 
+pub mod placement;
 pub mod relationship_names;
 pub mod scope_index;
