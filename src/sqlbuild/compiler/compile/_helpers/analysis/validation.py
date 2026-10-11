@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
-from sqlbuild.compiler.compile._helpers.analysis.columns import (
-    _replace_refs_with_stubs,
-    substitute_placeholder_defaults,
-)
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import SQL_ANALYSIS_OPT_OUT_ENTRY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.constants import (
@@ -17,7 +13,6 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_ANALYSIS_CONFIG_KEY,
 )
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
-from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.errors.setting_help.main.join_helps import join_helps
 from sqlbuild.errors.setting_help.main.model_header_help import model_header_help
 from sqlbuild.errors.setting_help.main.setting_help import setting_help
@@ -33,34 +28,13 @@ def validate_sql_syntax(
 ) -> None:
     """Validate that the model query SQL is parseable by Polyglot."""
 
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
-    if placeholders:
-        cleaned_sql = substitute_placeholder_defaults(
-            query_sql=cleaned_sql, placeholders=placeholders
-        )
-
-    error_message: str | None = _validate_sql_with_polyglot(sql=cleaned_sql, dialect=dialect)
+    error_message: str | None = _native.sql_syntax_error(query_sql, placeholders, dialect)
     if error_message is None:
         return
     raise CompileInputError(
         f"SQL syntax error in model '{model_name}' ({file_path}): {error_message}",
         help=sql_analysis_opt_out_help(model_owned=True),
     ) from None
-
-
-def _validate_sql_with_polyglot(*, sql: str, dialect: str | None) -> str | None:
-    polyglot_module: Any = import_polyglot_sql()
-    try:
-        result: Any = polyglot_module.validate(sql, dialect=dialect or "generic")
-    except polyglot_module.PolyglotError as error:
-        return str(error)
-    if result:
-        return None
-    error_message: str = "invalid SQL"
-    errors: object = getattr(result, "errors", ())
-    if isinstance(errors, list) and errors:
-        error_message = str(getattr(errors[0], "message", error_message))
-    return error_message
 
 
 def validate_function_sql_syntax(
@@ -187,17 +161,9 @@ def _validate_sql_syntax_with_message(
 ) -> None:
     """Parse one SQL expression with Polyglot and raise a contextual error."""
 
-    cleaned_sql: str = _clean_sql_for_validation(
-        query_sql=query_sql,
-        placeholders=placeholders,
-        dialect=dialect,
+    error_message: str | None = _native.sql_syntax_error(
+        query_sql, placeholders, dialect, parse_one=True
     )
-    polyglot_module: Any = import_polyglot_sql()
-    try:
-        polyglot_module.parse_one(cleaned_sql, dialect=dialect or "generic")
-        error_message: str | None = None
-    except polyglot_module.PolyglotError as error:
-        error_message = str(error)
     if error_message is not None:
         _raise_sql_validation_error(
             error_prefix=error_prefix, error_message=error_message, model_owned=False
@@ -213,31 +179,11 @@ def _validate_hook_sql_with_message(
 ) -> None:
     """Validate a complete hook execution payload with Polyglot."""
 
-    cleaned_sql: str = _clean_sql_for_validation(
-        query_sql=query_sql,
-        placeholders=placeholders,
-        dialect=dialect,
-    )
-    error_message: str | None = _validate_sql_with_polyglot(sql=cleaned_sql, dialect=dialect)
+    error_message: str | None = _native.sql_syntax_error(query_sql, placeholders, dialect)
     if error_message is not None:
         _raise_sql_validation_error(
             error_prefix=error_prefix, error_message=error_message, model_owned=True
         )
-
-
-def _clean_sql_for_validation(
-    *,
-    query_sql: str,
-    placeholders: dict[str, str] | None,
-    dialect: str | None,
-) -> str:
-    cleaned_sql: str = _replace_refs_with_stubs(query_sql=query_sql, dialect=dialect)
-    if placeholders:
-        return substitute_placeholder_defaults(
-            query_sql=cleaned_sql,
-            placeholders=placeholders,
-        )
-    return cleaned_sql
 
 
 def _raise_sql_validation_error(

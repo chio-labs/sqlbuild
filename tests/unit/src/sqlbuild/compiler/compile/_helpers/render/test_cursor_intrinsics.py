@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.compact import infer_columns_with_sql_analysis
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
@@ -154,7 +158,10 @@ def test_given_typed_intrinsic_when_analyzing_then_infers_non_null_column(
         cursor_type=test_case.cursor_type,
     )
 
-    assert infer_columns_with_sql_analysis(query_sql=analysis_sql) == (
+    assert infer_native_query_columns(
+        queries=(NativeColumnQuery(sql=analysis_sql, mode="parse"),),
+        profile=ExpressionInferenceProfile(),
+    )[0].columns == (
         InferredColumn(
             name="batch_start",
             type=test_case.expected_type,

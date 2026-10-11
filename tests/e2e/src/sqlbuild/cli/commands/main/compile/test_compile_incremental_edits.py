@@ -22,7 +22,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     adapter_switched,
     add_external_flavor_macro,
     analyze_in_one_batch,
-    analyze_one_model_at_a_time,
     build_between,
     change_adapter_lexical_rules,
     compare_incremental_compile,
@@ -48,7 +47,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     fact_quantity_type_declared,
     fact_quantity_type_removed,
     ignore_project_changes,
-    ignore_query_in_analysis_key,
     ignore_test_text_in_scan_key,
     in_process_reuse_run,
     keep_invalidation,
@@ -374,12 +372,6 @@ def test_given_random_edit_chain_when_compiling_with_caches_then_each_step_match
             expected_matches_uncached=True,
         ),
         BrokenEditInvalidationTestCase(
-            description="stale_python_analysis_despite_query_edit",
-            edit=fact_error_introduced,
-            sabotage=ignore_query_in_analysis_key,
-            expected_matches_uncached=False,
-        ),
-        BrokenEditInvalidationTestCase(
             description="intact_invalidation_after_test_edit",
             edit=stg_orders_test_edit,
             sabotage=keep_invalidation,
@@ -420,9 +412,6 @@ def test_given_broken_cache_invalidation_when_compiling_an_edit_then_the_oracle_
 @pytest.mark.parametrize(
     "test_case",
     [
-        SharedCacheKeyTestCase(
-            description="dataflow_one_model_at_a_time", schedule=analyze_one_model_at_a_time
-        ),
         SharedCacheKeyTestCase(description="one_batch", schedule=analyze_in_one_batch),
     ],
     ids=lambda case: case.description,

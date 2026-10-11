@@ -10,7 +10,7 @@ use crate::assembly::analysis_session::_helpers::cte_facts::{
     LegacyAnalysis, LegacyInput, Recovery, RecoveryInput, RecoveryProfile, legacy_analysis,
     recovery,
 };
-use crate::assembly::analysis_session::_helpers::dict_walk::truthy;
+use crate::assembly::analysis_session::_helpers::dict_walk::{truthy, upper};
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::constants::{
     CAST_TRANSFORM, CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_UNKNOWN, FILTER_CONTEXT,
@@ -19,6 +19,7 @@ use crate::assembly::analysis_session::constants::{
     TRANSFORM_DIRECT, TRANSFORM_EXPRESSION, TRANSFORM_STAR, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
     WILDCARD,
 };
+use crate::assembly::analysis_session::models::NullabilityCallback;
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow, ModelRequest};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
@@ -30,8 +31,9 @@ pub(crate) struct EnrichmentInput<'a> {
     pub(crate) input_schemas: &'a Shapes,
     pub(crate) dialect: &'a str,
     pub(crate) function_return_types: &'a Pairs,
-    /// Adapter nullability rules by function name; None where one is not a rule Python ships.
+    /// Adapter nullability rules by function name.
     pub(crate) nullability_rules: Option<&'a Pairs>,
+    pub(crate) nullability_callback: Option<&'a NullabilityCallback>,
 }
 
 /// Python's re-analysis: its outcome, columns, plain lineage facts and the star flag.
@@ -43,34 +45,28 @@ pub(crate) struct Enrichment {
     pub(crate) has_star: bool,
 }
 
-/// Python's compact re-analysis: answered, declined to the legacy analysis, or deferred.
+/// Python's compact re-analysis: answered, or declined to the legacy analysis.
 enum Projected {
     Native(Enrichment),
     Declined,
-    Deferred,
 }
 
 /// One projection's upstream sources and confidence code.
 type Upstream = (Vec<(String, String, String)>, u8);
 
-/// Python's compact re-analysis, or None where Python would take another path.
-pub(crate) fn enrichment(input: &EnrichmentInput<'_>) -> Option<Enrichment> {
-    let enrichment: Result<Option<Enrichment>, String> = catch_compiler_panic(|| analysed(input));
-    enrichment.unwrap_or_default()
+/// Python's compact re-analysis. # Errors An internal native failure, panics included.
+pub(crate) fn enrichment(input: &EnrichmentInput<'_>) -> Result<Enrichment, String> {
+    catch_compiler_panic(|| analysed(input))
 }
 
-/// The re-analysis; Ok(None) where Python takes another path, Err for an unexpected failure.
-fn analysed(input: &EnrichmentInput<'_>) -> Result<Option<Enrichment>, String> {
-    let normalized: Result<String, _> = normalize_analysis_sql(NormalizationInput {
+fn analysed(input: &EnrichmentInput<'_>) -> Result<Enrichment, String> {
+    let cleaned: String = normalize_analysis_sql(NormalizationInput {
         sql: input.model.query_sql.clone(),
         dialect: input.dialect.to_owned(),
         stubs: HashMap::new(),
         placeholders: input.model.placeholders.iter().cloned().collect(),
-    });
-    let cleaned: String = match normalized {
-        Ok(cleaned) => cleaned,
-        Err(_) => return Ok(None),
-    };
+    })
+    .map_err(|_| "the analysed SQL no longer normalizes".to_owned())?;
     let mut options: Map<String, Value> = Map::new();
     options.insert(
         "dialect".to_owned(),
@@ -83,22 +79,21 @@ fn analysed(input: &EnrichmentInput<'_>) -> Result<Option<Enrichment>, String> {
         "complexityGuard".to_owned(),
         json!({"maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH}),
     );
-    let options: AnalyzeQueryOptions =
-        serde_json::from_value(Value::Object(options)).map_err(|error| error.to_string())?;
+    let options: AnalyzeQueryOptions = serde_json::from_value(Value::Object(options))
+        .map_err(|error| format!("query analysis options: {error}"))?;
     let analysis = match analyze_query(&cleaned, options) {
         Ok(analysis) => analysis,
-        Err(_) => return Ok(legacy(input, &cleaned)),
+        Err(_) => return legacy(input, &cleaned),
     };
     let analysis: Value = serde_json::to_value(analysis).map_err(|error| error.to_string())?;
-    Ok(match projected(input, &analysis, &cleaned) {
-        Projected::Native(enrichment) => Some(enrichment),
+    match projected(input, &analysis, &cleaned)? {
+        Projected::Native(enrichment) => Ok(enrichment),
         Projected::Declined => legacy(input, &cleaned),
-        Projected::Deferred => None,
-    })
+    }
 }
 
 /// Python's legacy analysis once compact analysis declines, over the input shapes.
-fn legacy(input: &EnrichmentInput<'_>, cleaned: &str) -> Option<Enrichment> {
+fn legacy(input: &EnrichmentInput<'_>, cleaned: &str) -> Result<Enrichment, String> {
     let types: ShapeTable = ShapeTable::from_shapes(input.input_schemas);
     let unknown: Shapes = input
         .input_schemas
@@ -106,22 +101,21 @@ fn legacy(input: &EnrichmentInput<'_>, cleaned: &str) -> Option<Enrichment> {
         .map(|(name, shape)| (name.clone(), unknown_shape(shape)))
         .collect();
     let nullability: ShapeTable = ShapeTable::from_shapes(&unknown);
-    let analysis: LegacyAnalysis = match legacy_analysis(&LegacyInput {
+    let analysis: LegacyAnalysis = legacy_analysis(&LegacyInput {
         cleaned_sql: cleaned,
         lineage_references: &input.model.lineage_references,
         recover: input.model.recover_cte_facts,
+        full_nullability: false,
         types: &types,
         nullability: &nullability,
         profile: RecoveryProfile {
             dialect: input.dialect,
             function_return_types: input.function_return_types,
             rules: input.nullability_rules,
+            callback: input.nullability_callback,
         },
-    }) {
-        Ok(analysis) => analysis,
-        Err(_deferred) => return None,
-    };
-    Some(Enrichment {
+    })?;
+    Ok(Enrichment {
         analysis_succeeded: analysis.succeeded,
         columns: analysis.columns,
         lineage: analysis.lineage,
@@ -167,29 +161,30 @@ fn analysis_schema(input: &EnrichmentInput<'_>) -> Option<Value> {
 }
 
 /// Python's projection of `analyze_query` facts into columns and lineage.
-fn projected(input: &EnrichmentInput<'_>, analysis: &Value, cleaned: &str) -> Projected {
+fn projected(
+    input: &EnrichmentInput<'_>,
+    analysis: &Value,
+    cleaned: &str,
+) -> Result<Projected, String> {
     let Some(projections) = analysis.get("projections").and_then(Value::as_array) else {
-        return Projected::Declined;
+        return Ok(Projected::Declined);
     };
     let shape: Option<&str> = analysis.get("shape").and_then(Value::as_str);
     if !matches!(shape, Some(SELECT_SHAPE | SET_OPERATION_SHAPE)) || !eligible(projections) {
-        return Projected::Declined;
+        return Ok(Projected::Declined);
     }
-    match native_projection(input, analysis, cleaned, projections) {
-        Some(enrichment) => Projected::Native(enrichment),
-        None => Projected::Deferred,
-    }
+    native_projection(input, analysis, cleaned, projections).map(Projected::Native)
 }
 
-/// The compact facts as Python's columns and lineage, None where native defers.
+/// The compact facts as Python's columns and lineage.
 fn native_projection(
     input: &EnrichmentInput<'_>,
     analysis: &Value,
     cleaned: &str,
     projections: &[Value],
-) -> Option<Enrichment> {
+) -> Result<Enrichment, String> {
     let shape: Option<&str> = analysis.get("shape").and_then(Value::as_str);
-    let recovery: Recovery = match recovery(&RecoveryInput {
+    let recovery: Recovery = recovery(&RecoveryInput {
         cleaned_sql: cleaned,
         input_schemas: input.input_schemas,
         recover: recovers_cte_facts(input, analysis),
@@ -198,11 +193,9 @@ fn native_projection(
             dialect: input.dialect,
             function_return_types: input.function_return_types,
             rules: input.nullability_rules,
+            callback: input.nullability_callback,
         },
-    }) {
-        Ok(recovery) => recovery,
-        Err(_deferred) => return None,
-    };
+    })?;
     let resources: HashMap<&str, (&str, &str)> = input
         .model
         .lineage_references
@@ -213,7 +206,9 @@ fn native_projection(
     let mut columns: Vec<ColumnFact> = Vec::new();
     let mut lineage: Vec<LineageRow> = Vec::new();
     for projection in projections {
-        let projection: &Map<String, Value> = projection.as_object()?;
+        let projection: &Map<String, Value> = projection
+            .as_object()
+            .ok_or("an eligible projection that is not an object")?;
         if truthy(projection.get("isStar")) {
             continue;
         }
@@ -225,7 +220,7 @@ fn native_projection(
         let data_type: Option<String> = if direct {
             recovered(&recovery.types, name).cloned()
         } else {
-            projection_type(projection, input.function_return_types)?
+            projection_type(projection, input.function_return_types)
         };
         let nullability: &str = if recovery.non_null_outputs.contains(name) {
             NON_NULL_NULLABILITY
@@ -268,7 +263,7 @@ fn native_projection(
                 .unwrap_or(fallback)
         });
     }
-    Some(Enrichment {
+    Ok(Enrichment {
         analysis_succeeded: true,
         columns: Some(columns),
         lineage,
@@ -326,10 +321,10 @@ fn has_null_filter(analysis: &Value) -> bool {
 fn projection_type(
     projection: &Map<String, Value>,
     function_return_types: &Pairs,
-) -> Option<Option<String>> {
+) -> Option<String> {
     let cast_type: &str = text(projection.get("castType"));
     if !cast_type.is_empty() && cast_type != UNKNOWN_TYPE {
-        return Some(Some(cast_type.to_owned()));
+        return Some(cast_type.to_owned());
     }
     let function_name: Option<&str> = projection
         .get("transformFunction")
@@ -337,22 +332,16 @@ fn projection_type(
         .and_then(|function| function.get("name"))
         .and_then(Value::as_str);
     if let Some(function_name) = function_name {
-        if !function_name.is_ascii() {
-            return None;
-        }
-        let upper: String = function_name.to_ascii_uppercase();
+        let upper: String = upper(function_name);
         if let Some((_, declared)) = function_return_types
             .iter()
             .find(|(name, _)| *name == upper)
         {
-            return Some(Some(declared.clone()));
+            return Some(declared.clone());
         }
     }
     let type_hint: &str = text(projection.get("typeHint"));
-    if !type_hint.is_empty() && type_hint != UNKNOWN_TYPE {
-        return Some(Some(type_hint.to_owned()));
-    }
-    Some(None)
+    (!type_hint.is_empty() && type_hint != UNKNOWN_TYPE).then(|| type_hint.to_owned())
 }
 
 fn projection_nullability(projection: &Map<String, Value>, infer: bool) -> &'static str {

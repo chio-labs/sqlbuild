@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
-from sqlbuild.compiler.graph._helpers.algorithms import transitive_closure_many_impl
-from sqlbuild.compiler.graph._helpers.audit_gates import attached_audit_gate_edges_impl
-from sqlbuild.compiler.graph._helpers.native_graph import project_lineage_views_impl
 from sqlbuild.compiler.graph._helpers.sql_refs import sql_ref_key_impl
 from sqlbuild.compiler.graph.models import HookReadEdge
 from sqlbuild.compiler.graph.types import HookReadType
@@ -77,26 +74,3 @@ def _sql_hook_read_edges(model: CompiledModel) -> tuple[HookReadEdge, ...]:
                 for ref in entry.reads
             )
     return tuple(edges)
-
-
-def hook_read_cycles_impl(*, project: CompiledProject) -> tuple[HookReadEdge, ...]:
-    """Return every declared hook read that depends on the model running the hook."""
-
-    edges: tuple[HookReadEdge, ...] = hook_read_edges_impl(project=project)
-    if not edges:
-        return ()
-    upstream: dict[CompiledObjectKey, list[CompiledObjectKey]] = {
-        key: list(deps) for key, deps in project_lineage_views_impl(project).upstream_deps.items()
-    }
-    for gate in attached_audit_gate_edges_impl(project=project):
-        upstream.setdefault(gate.gated, []).append(gate.read)
-    for edge in edges:
-        upstream.setdefault(edge.gated, []).append(edge.read)
-    return tuple(
-        edge
-        for edge in sorted(
-            edges, key=lambda item: (item.gated.name, item.hook_name, item.read.name)
-        )
-        if edge.gated
-        in transitive_closure_many_impl(starts=(edge.read,), edges=upstream, include_starts=False)
-    )

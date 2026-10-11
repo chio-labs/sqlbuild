@@ -99,35 +99,11 @@ if _directory:
         _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
 """
 
-MACRO_RESOLUTION_SABOTAGE: str = """
-from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
-
-MacroBridge.call_class = lambda self, **_: None
-"""
-
 MODEL_ANALYSIS_SABOTAGE: str = """
 import sqlbuild._native as native
 
 native.start_model_analysis_session = lambda *_args: None
 """
-
-_STAGE_DISABLE_SABOTAGE: str = """
-import sqlbuild.compiler.frontier.main.native_stage_enabled as enabled
-from sqlbuild.compiler.frontier.types import NativeStage
-
-_original = enabled.native_stage_enabled
-_disabled = {{{stages}}}
-enabled.native_stage_enabled = lambda stage: stage not in _disabled and _original(stage)
-"""
-
-
-def stage_disable_sabotage(stages: tuple[str, ...]) -> str:
-    """A perturbation switching these native stages off, so their work runs in Python."""
-
-    return _STAGE_DISABLE_SABOTAGE.format(
-        stages=", ".join(f"NativeStage({stage!r})" for stage in stages)
-    )
-
 
 _BROKEN_REF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
@@ -193,28 +169,3 @@ def perturbation_arguments(directory: Path, *, source: str = _SITECUSTOMIZE) -> 
         "--engine-env",
         f"native-preview:PYTHONPATH={write_native_perturbation(directory, source=source)}",
     )
-
-
-SHARED_ANALYSIS_SEED: int = 34
-COMPILED_PROJECT_CAPTURE: str = "0-compile/003-compiled_project.json"
-
-
-def shared_analysis_seed_arguments(*, work_dir: Path, seed: int) -> list[str]:
-    """Harness arguments comparing one generated seed with itself, capturing every stage."""
-
-    return [
-        "--jobs",
-        "1",
-        "--work-dir",
-        str(work_dir),
-        "--corpus",
-        "seeds",
-        "--seed-start",
-        str(seed),
-        "--seeds",
-        "1",
-        "--engines",
-        "python",
-        "python",
-        "--stage-captures",
-    ]

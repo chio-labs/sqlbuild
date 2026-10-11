@@ -1,4 +1,4 @@
-import sqlite3
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -6,11 +6,16 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,
 )
@@ -25,9 +30,7 @@ from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpand
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
-    AnalysisCacheContext,
     CompileAdapterContext,
-    CompileAnalysisSelection,
     CompiledDirectLogicSqlTestPayload,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
@@ -70,11 +73,14 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
-from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, ColumnTransformKind
+from sqlbuild.compiler.lineage.types import (
+    ColumnLineageConfidence,
+    ColumnTransformKind,
+    InferredNullability,
+)
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner._helpers.graph.core import build_execution_upstream_deps
 from sqlbuild.compiler.planner._helpers.resolve.refs import resolve_ref_references
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
@@ -227,25 +233,6 @@ def compile_project_inputs(*, project_dir: Path) -> CompileProjectInputs:
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
-    )
-
-
-def compile_project_with_cache(
-    *,
-    project_dir: Path,
-    analysis_selection: CompileAnalysisSelection | None = None,
-    no_cache: bool = False,
-) -> CompiledProject:
-    """Compile a discovered DuckDB fixture through the cache-enabled project boundary."""
-
-    effective_selection: CompileAnalysisSelection = replace(
-        analysis_selection or CompileAnalysisSelection(),
-        no_cache=no_cache,
-    )
-    return build_compiled_project(
-        discovered_inputs=discover_project_inputs(project_dir=project_dir),
-        adapter=DuckDbAdapter(),
-        analysis_selection=effective_selection,
     )
 
 
@@ -492,17 +479,6 @@ def write_scoped_macro_orders_project(project_dir: Path) -> None:
         "SELECT 1\n",
         encoding="utf-8",
     )
-
-
-def stored_analysis_contents(*, context: AnalysisCacheContext, cache_key: str) -> str:
-    """Return the raw stored payload of one analysis cache entry."""
-
-    database_path: Path = next(context.root.rglob("model-analysis.sqlite3"))
-    with sqlite3.connect(database_path) as connection:
-        row: tuple[str] = connection.execute(
-            "SELECT payload FROM model_analysis WHERE cache_key = ?", (cache_key,)
-        ).fetchone()
-    return row[0]
 
 
 REQUIRED_DESCRIPTION_BASE_INPUTS: DiscoveredProjectInputs = DiscoveredProjectInputs(
@@ -830,3 +806,29 @@ def usage_consumers(model_input: CompileModelInput) -> set[ResourceIdentity | De
     """The consumers a model input's declaration usages are recorded for."""
 
     return {usage.consumer for usage in model_input.declaration_usages}
+
+
+def reanalysed_columns(
+    *,
+    query_sql: str,
+    references: tuple[CompileSqlReference, ...] = (),
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]] | None = None,
+    column_types_by_table: dict[str, dict[str, str]] | None = None,
+    inference_profile: ExpressionInferenceProfile | None = None,
+    allow_compact_analysis: bool = True,
+    recover_cte_facts: bool = True,
+) -> NativeQueryColumns:
+    """Native compact re-analysis over known input types, as source bindings run it."""
+
+    assert allow_compact_analysis and recover_cte_facts
+    values: list[InferredNullability] = list(
+        itertools.chain.from_iterable(
+            map(dict.values, (column_nullability_by_table or {}).values())
+        )
+    )
+    assert all(value == InferredNullability.UNKNOWN for value in values)
+    return infer_native_query_columns(
+        queries=(NativeColumnQuery(sql=query_sql, mode="reanalysis", references=references),),
+        profile=inference_profile or ExpressionInferenceProfile(),
+        column_types_by_table=column_types_by_table,
+    )[0]

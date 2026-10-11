@@ -36,7 +36,7 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main._report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage

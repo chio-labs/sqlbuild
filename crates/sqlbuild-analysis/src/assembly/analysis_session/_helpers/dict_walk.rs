@@ -4,11 +4,20 @@ use polyglot_sql::expressions::Cte;
 use polyglot_sql::traversal::ExpressionWalk;
 use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions, ast_json};
 use serde_json::{Map, Value, json};
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_core::text::main::python_upper::python_upper;
+use sqlbuild_core::text::models::PythonText;
+
+use crate::assembly::analysis_session::models::ProjectionFacts;
 
 use crate::assembly::analysis_session::constants::{
-    ALIAS_AST_KIND, ANNOTATED_AST_KIND, COLUMN_AST_KIND, DEPENDENCY_FUNCTION_NAMES,
-    FUNCTION_AST_KIND, MAX_FUNCTION_CALL_DEPTH, RENDERED_TYPE_NAMES, STAR_AST_KIND, TABLE_AST_KIND,
-    WILDCARD,
+    ALIAS_AST_KIND, ANNOTATED_AST_KIND, ARRAY_FIXTURE_TYPE, ARRAY_PAYLOAD_KIND, CATALOG_TABLE_ARG,
+    COLUMN_AST_KIND, CTE_ALIAS_PAYLOAD_KEY, CTE_LIST_PAYLOAD_KEY, DEPENDENCY_FUNCTION_NAMES,
+    FUNCTION_AST_KIND, FUNCTION_FIXTURE_TYPES, FUNCTION_PAYLOAD_KIND, HELPER_READS_DIALECT,
+    LITERAL_FIXTURE_TYPES, LITERAL_PAYLOAD_KIND, MAX_FUNCTION_CALL_DEPTH, NAME_PAYLOAD_KEY,
+    NULL_PAYLOAD_KIND, RENDERED_TYPE_NAMES, SCHEMA_TABLE_ARG, SELECT_PAYLOAD_KEY, STAR_AST_KIND,
+    STRUCTURED_PAYLOAD_KINDS, TABLE_AST_KIND, VARIANT_FIXTURE_TYPE, WILDCARD,
 };
 
 /// Python's `bool(value)`.
@@ -130,7 +139,7 @@ pub(crate) fn render_type(node: Option<&Value>) -> Option<String> {
         .iter()
         .find(|(name, _)| *name == folded)
         .map_or_else(
-            || raw_type.replace('_', " ").to_ascii_uppercase(),
+            || upper(&raw_type.replace('_', " ")),
             |(_, rendered)| (*rendered).to_owned(),
         );
     if let Some(length) = python_int(node.get("length")) {
@@ -154,9 +163,14 @@ pub(crate) fn python_int(value: Option<&Value>) -> Option<String> {
     }
 }
 
-/// Python's `str.casefold` for the ASCII text a pivot proof compares.
+/// Python's `str.casefold`.
 pub(crate) fn casefold(text: &str) -> String {
-    text.to_ascii_lowercase()
+    python_casefold(active_python_text(), text)
+}
+
+/// Python's `str.upper`.
+pub(crate) fn upper(text: &str) -> String {
+    python_upper(active_python_text(), text)
 }
 
 /// A value the wheel hands Python for one payload key: an expression, a list of them, or data.
@@ -169,6 +183,17 @@ pub(crate) enum PyValue {
 
 /// The wheel's guarded `parse_one`; Ok(None) is the `PolyglotError` Python catches.
 pub(crate) fn parse_one(sql: &str, dialect: &str) -> Result<Option<Expression>, String> {
+    match parse_one_or_error(sql, dialect)? {
+        Ok(parsed) => Ok(Some(parsed)),
+        Err(_polyglot_error) => Ok(None),
+    }
+}
+
+/// The wheel's guarded `parse_one`, with the message of the `PolyglotError` it raises.
+pub(crate) fn parse_one_or_error(
+    sql: &str,
+    dialect: &str,
+) -> Result<Result<Expression, String>, String> {
     let guard: ComplexityGuardOptions =
         serde_json::from_value(json!({"maxFunctionCallDepth": MAX_FUNCTION_CALL_DEPTH}))
             .map_err(|error| error.to_string())?;
@@ -180,12 +205,15 @@ pub(crate) fn parse_one(sql: &str, dialect: &str) -> Result<Option<Expression>, 
         .parse_with_options(sql, &options);
     let mut expressions: Vec<Expression> = match parsed {
         Ok(expressions) => expressions,
-        Err(_) => return Ok(None),
+        Err(error) => return Ok(Err(error.to_string())),
     };
     if expressions.len() != 1 {
-        return Ok(None);
+        return Ok(Err(format!(
+            "Expected 1 statement, found {}",
+            expressions.len()
+        )));
     }
-    Ok(expressions.pop())
+    Ok(expressions.pop().ok_or_else(|| "no statement".to_owned()))
 }
 
 /// `str(getattr(node, "kind", ""))`.
@@ -390,4 +418,186 @@ pub(crate) fn where_clause(node: &Expression) -> Result<Option<Value>, String> {
         .as_ref()
         .map(|clause| serde_json::to_value(clause).map_err(|error| error.to_string()))
         .transpose()
+}
+
+/// Python's `_simple_projection_facts` of the first `SELECT`; empty where the parse fails.
+pub(crate) fn fixture_projection_facts(
+    sql: &str,
+    dialect: Option<&str>,
+) -> Result<ProjectionFacts, String> {
+    let dialect: &str = dialect.filter(|name| !name.is_empty()).unwrap_or("generic");
+    let Some(parsed) = parse_one(sql, dialect)? else {
+        return Ok(ProjectionFacts::default());
+    };
+    let payload: Value = to_dict(&parsed)?;
+    let Some(select) = first_select(&payload) else {
+        return Ok(ProjectionFacts::default());
+    };
+    let mut facts: ProjectionFacts = collected_facts(select);
+    let direct: bool = matches!(
+        payload
+            .as_object()
+            .and_then(|map| map.get(SELECT_PAYLOAD_KEY)),
+        Some(Value::Object(_))
+    );
+    if !direct {
+        facts.null_literal_names.clear();
+    }
+    Ok(facts)
+}
+
+/// Python's recursive `_first_select`, depth first in payload order, without recursion.
+fn first_select(payload: &Value) -> Option<&Map<String, Value>> {
+    let mut pending: Vec<&Value> = vec![payload];
+    while let Some(node) = pending.pop() {
+        match node {
+            Value::Object(map) => {
+                if let Some(Value::Object(select)) = map.get(SELECT_PAYLOAD_KEY) {
+                    return Some(select);
+                }
+                pending.extend(map.values().rev());
+            }
+            Value::Array(items) => pending.extend(items.iter().rev()),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn collected_facts(select: &Map<String, Value>) -> ProjectionFacts {
+    let python = active_python_text();
+    let mut facts: ProjectionFacts = ProjectionFacts::default();
+    let mut quoted: Vec<String> = Vec::new();
+    let mut nulls: Vec<String> = Vec::new();
+    let expressions: &[Value] = select
+        .get("expressions")
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice);
+    for expression in expressions {
+        let Some(Value::Object(alias_payload)) = expression.get("alias") else {
+            continue;
+        };
+        let (Some(Value::Object(alias)), Some(Value::Object(value))) =
+            (alias_payload.get("alias"), alias_payload.get("this"))
+        else {
+            continue;
+        };
+        let Some(Value::String(name)) = alias.get("name") else {
+            continue;
+        };
+        let folded: String = python_casefold(python, name);
+        if alias.get("quoted") == Some(&Value::Bool(true)) {
+            quoted.push(folded.clone());
+        }
+        let Some((kind, value_payload)) = value.iter().next() else {
+            continue;
+        };
+        if kind == NULL_PAYLOAD_KIND {
+            nulls.push(folded);
+            continue;
+        }
+        if let Some(inferred) = simple_type(kind, value_payload) {
+            facts.types.push((folded, inferred.to_owned()));
+        }
+    }
+    facts.quoted_names = unique(quoted);
+    facts.null_literal_names = unique(nulls);
+    facts
+}
+
+/// Python's `_simple_expression_type`.
+fn simple_type(kind: &str, payload: &Value) -> Option<&'static str> {
+    if kind == LITERAL_PAYLOAD_KIND {
+        let literal_type: &str = payload.get("literal_type")?.as_str()?;
+        return lookup(&LITERAL_FIXTURE_TYPES, literal_type);
+    }
+    if kind == ARRAY_PAYLOAD_KIND {
+        return Some(ARRAY_FIXTURE_TYPE);
+    }
+    if STRUCTURED_PAYLOAD_KINDS.contains(&kind) {
+        return Some(VARIANT_FIXTURE_TYPE);
+    }
+    if kind == FUNCTION_PAYLOAD_KIND {
+        let name: &str = payload
+            .as_object()?
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        return lookup(
+            &FUNCTION_FIXTURE_TYPES,
+            &python_upper(active_python_text(), name),
+        );
+    }
+    None
+}
+
+fn lookup(table: &[(&str, &'static str)], key: &str) -> Option<&'static str> {
+    table
+        .iter()
+        .find(|(candidate, _)| *candidate == key)
+        .map(|(_, value)| *value)
+}
+
+fn unique(names: Vec<String>) -> Vec<String> {
+    let mut kept: Vec<String> = Vec::with_capacity(names.len());
+    for name in names {
+        if !kept.contains(&name) {
+            kept.push(name);
+        }
+    }
+    kept
+}
+
+/// Python's `_parsed_reads`: helper keys `sql` reads, first first; None where `parse_one` raises.
+pub(crate) fn helper_parsed_reads(
+    sql: &str,
+    keys: &[String],
+) -> Result<Option<Vec<String>>, String> {
+    let python: PythonText = active_python_text();
+    let folded: String = python_casefold(python, sql);
+    if !keys.iter().any(|key| folded.contains(key.as_str())) {
+        return Ok(Some(Vec::new()));
+    }
+    let Some(parsed) = parse_one(sql, HELPER_READS_DIALECT)? else {
+        return Ok(None);
+    };
+    let nested: Vec<String> = defined_cte_keys(python, &to_dict(&parsed)?);
+    let mut reads: Vec<String> = Vec::new();
+    for table in find_all(&parsed, TABLE_AST_KIND) {
+        if arg(Some(table), SCHEMA_TABLE_ARG)?.is_some()
+            || arg(Some(table), CATALOG_TABLE_ARG)?.is_some()
+        {
+            continue;
+        }
+        let key: String = python_casefold(python, name(Some(table)));
+        if keys.contains(&key) && !nested.contains(&key) && !reads.contains(&key) {
+            reads.push(key);
+        }
+    }
+    Ok(Some(reads))
+}
+
+/// Python's `_defined_cte_keys`: every CTE alias at any depth, casefolded.
+fn defined_cte_keys(python: PythonText, tree: &Value) -> Vec<String> {
+    let mut keys: Vec<String> = Vec::new();
+    let mut pending: Vec<&Value> = vec![tree];
+    while let Some(value) = pending.pop() {
+        match value {
+            Value::Array(items) => pending.extend(items.iter()),
+            Value::Object(map) => {
+                if let Some(Value::Array(ctes)) = map.get(CTE_LIST_PAYLOAD_KEY) {
+                    keys.extend(ctes.iter().filter_map(|cte| {
+                        let alias: &Value = cte.as_object()?.get(CTE_ALIAS_PAYLOAD_KEY)?;
+                        Some(python_casefold(
+                            python,
+                            alias.as_object()?.get(NAME_PAYLOAD_KEY)?.as_str()?,
+                        ))
+                    }));
+                }
+                pending.extend(map.values());
+            }
+            _ => {}
+        }
+    }
+    keys
 }

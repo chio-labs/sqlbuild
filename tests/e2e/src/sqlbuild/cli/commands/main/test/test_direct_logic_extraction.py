@@ -223,34 +223,6 @@ _UNALIASED_DISTINCT_FROM_FRAGMENTS: tuple[str, ...] = (
     "test_case",
     [
         DirectLogicExtractionE2ETestCase(
-            description="macro, UDF and table-function tests pass on python",
-            engine="python",
-            overrides={},
-            expected_exit_code=0,
-            expected_output_fragments=_PASSING_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a quoted CTE name is a located error on python",
-            engine="python",
-            overrides=_QUOTED_NAME,
-            expected_exit_code=1,
-            expected_output_fragments=_QUOTED_NAME_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a macro-test helper calling a UDF is rejected on python",
-            engine="python",
-            overrides=_HELPER_CALLS_UDF,
-            expected_exit_code=1,
-            expected_output_fragments=_HELPER_CALLS_UDF_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a malformed helper reference is P012 at its call on python",
-            engine="python",
-            overrides=_MALFORMED_SOURCE,
-            expected_exit_code=1,
-            expected_output_fragments=_MALFORMED_SOURCE_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
             description="macro, UDF and table-function tests pass on native",
             engine="native",
             overrides={},
@@ -307,27 +279,6 @@ _UNALIASED_DISTINCT_FROM_FRAGMENTS: tuple[str, ...] = (
             expected_output_fragments=_MALFORMED_SOURCE_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
-            description="a CTE name in an indented model test is located exactly on python",
-            engine="python",
-            overrides=_LOCATED_MODEL_NAME,
-            expected_exit_code=1,
-            expected_output_fragments=_LOCATED_MODEL_NAME_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a CTE name in a test with cases is located exactly on python",
-            engine="python",
-            overrides=_LOCATED_CASE_NAME,
-            expected_exit_code=1,
-            expected_output_fragments=_LOCATED_CASE_NAME_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="each repeated malformed reference is P012 at its own call on python",
-            engine="python",
-            overrides=_REPEATED_MALFORMED_SOURCE,
-            expected_exit_code=1,
-            expected_output_fragments=_REPEATED_MALFORMED_SOURCE_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
             description="a CTE name in an indented model test is located exactly on native",
             engine="native",
             overrides=_LOCATED_MODEL_NAME,
@@ -368,20 +319,6 @@ _UNALIASED_DISTINCT_FROM_FRAGMENTS: tuple[str, ...] = (
             overrides=_REPEATED_MALFORMED_SOURCE,
             expected_exit_code=1,
             expected_output_fragments=_REPEATED_MALFORMED_SOURCE_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="aliased IS [NOT] DISTINCT FROM and list projections pass on python",
-            engine="python",
-            overrides=_ALIASED_OPERATORS,
-            expected_exit_code=0,
-            expected_output_fragments=_PASSING_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="an unaliased IS DISTINCT FROM projection is rejected on python",
-            engine="python",
-            overrides=_UNALIASED_DISTINCT_FROM,
-            expected_exit_code=1,
-            expected_output_fragments=_UNALIASED_DISTINCT_FROM_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="aliased IS [NOT] DISTINCT FROM and list projections pass on native",

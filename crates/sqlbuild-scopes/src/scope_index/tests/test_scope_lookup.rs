@@ -1,6 +1,6 @@
-use crate::scope_index::_helpers::identities::python_str_repr;
 use crate::scope_index::tests::helpers::{resource_groups, visibility_texts};
 use crate::scope_index::tests::test_types::{LookupTestCase, ReprTestCase};
+use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 #[test]
 fn given_identity_keys_when_grouping_then_groups_follow_python_repr_order() {

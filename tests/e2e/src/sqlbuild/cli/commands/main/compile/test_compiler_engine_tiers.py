@@ -1,4 +1,4 @@
-"""The native-preview tier matches Python and never shares stores with the shipped native tier."""
+"""The native-preview tier matches shipped native and never shares stores with it."""
 
 from __future__ import annotations
 
@@ -25,16 +25,16 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     "test_case",
     [
         CompilerEngineParityTestCase(
-            description="python_and_native_preview",
-            left_engine="python",
+            description="native_and_native_preview",
+            left_engine="native",
             right_engine="native-preview",
-            expected_engines=("python", "native-preview"),
+            expected_engines=("native", "native-preview"),
             expected_exit_codes=(0, 0),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_same_project_when_compiling_with_preview_tier_then_outputs_match_python(
+def test_given_same_project_when_compiling_with_preview_tier_then_outputs_match_native(
     test_case: CompilerEngineParityTestCase, tmp_path: Path
 ) -> None:
     prepared_project: Path = tmp_path / "orders"

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 type ReferenceRow = tuple[str, str, str | None]
 type SyntaxCheckRow = tuple[str, list[tuple[str, str]]]
-type VariableRow = tuple[str, str, str]
-type ModelRow = tuple[list[ReferenceRow], list[SyntaxCheckRow]]
+type VariableRow = tuple[str, str, str, tuple[str, str] | None]
+type FailureRow = tuple[str, int, str, str, str | None, int | None]
+type ModelRow = tuple[str, str, list[str], list[ReferenceRow], list[SyntaxCheckRow]]
 type SourceRow = tuple[str, bool, str | None, str | None]
-type SeedRow = tuple[str, str | None, str | None]
+type SeedRow = tuple[str, list[str], str | None, str | None]
+type FunctionRow = tuple[str, str, list[str], list[ReferenceRow]]
 type AuditRow = tuple[list[ReferenceRow], tuple[str, str] | None]
 type TargetRow = tuple[str | None, str | None, str | None]
 type DefaultsRow = tuple[str | None, str | None, str | None, str | None]
@@ -20,7 +22,7 @@ type ProjectRequestRow = tuple[
     list[ModelRow],
     list[SourceRow],
     list[SeedRow],
-    list[list[ReferenceRow]],
+    list[FunctionRow],
     list[AuditRow],
 ]
 type ObjectKeyRow = tuple[str, str]
@@ -32,4 +34,6 @@ type ProjectResourcesRow = tuple[
     list[list[ObjectKeyRow]],
     list[list[ObjectKeyRow]],
     list[tuple[str, str]],
+    list[bool],
+    FailureRow | None,
 ]

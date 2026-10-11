@@ -1,5 +1,4 @@
 use crate::semantic_checks::_helpers::explanation::messages::comparison_help;
-use crate::semantic_checks::models::SemanticDeferral;
 use crate::semantic_checks::tests::helpers::{missing_parts, owned_missing, sentence};
 use crate::semantic_checks::tests::test_types::{ComparisonHelpTestCase, SentenceMessageTestCase};
 
@@ -31,16 +30,30 @@ fn given_binding_messages_when_rewriting_then_matches_python_sentences() {
             expected_missing: Ok(Some(("amonut", None))),
         },
         SentenceMessageTestCase {
-            description: "a non-ASCII column Python's regex classes read differently",
+            description: "a non-ASCII column",
             message: "Unknown column 'stra\u{df}e'",
-            expected_sentence: Err(SemanticDeferral::NonAsciiText),
-            expected_missing: Err(SemanticDeferral::NonAsciiText),
+            expected_sentence: Ok("Unknown column 'stra\u{df}e'"),
+            expected_missing: Ok(Some(("stra\u{df}e", None))),
         },
         SentenceMessageTestCase {
-            description: "a line break Python's end anchor treats specially",
+            description: "a line break before the table",
             message: "Unknown column 'a'\nin table 'b'",
-            expected_sentence: Err(SemanticDeferral::NonAsciiText),
-            expected_missing: Err(SemanticDeferral::NonAsciiText),
+            expected_sentence: Ok("Unknown column 'a'\nin table 'b'"),
+            expected_missing: Ok(Some(("a", None))),
+        },
+        SentenceMessageTestCase {
+            description: "type words Python's ignore-case matches beyond ASCII, before a final newline",
+            message: "Cannot compare \u{130}nteger with \u{131}nterval (context: x)\n",
+            expected_sentence: Ok("Cannot compare \u{130}NTEGER with INTERVAL\n"),
+            expected_missing: Ok(None),
+        },
+        SentenceMessageTestCase {
+            description: "word boundaries next to non-ASCII word characters",
+            message: "\u{e9}integer integer\u{e9} \u{17f}tring va\u{212a}lue 'integer' DATE",
+            expected_sentence: Ok(
+                "\u{e9}integer integer\u{e9} STRING va\u{212a}lue 'integer' DATE",
+            ),
+            expected_missing: Ok(None),
         },
     ];
     for test_case in test_cases {

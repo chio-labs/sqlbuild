@@ -26,7 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     report_without_engine,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 
 
 @pytest.mark.parametrize(
@@ -70,14 +70,12 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
         )
         for engine in _ENGINES
     }
-    python_run, python_seams = outcomes["python"]
     native_run, native_seams = outcomes["native"]
     preview_run, preview_seams = outcomes["native-preview"]
 
-    assert python_run.returncode == 0, python_run.stderr
-    assert python_run.compiled
-    assert (python_seams, native_seams, preview_seams) == (
-        {},
+    assert native_run.returncode == 0, native_run.stderr
+    assert native_run.compiled
+    assert (native_seams, preview_seams) == (
         test_case.expected_native_returns,
         test_case.expected_native_returns,
     )
@@ -102,11 +100,9 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
     assert [
         len(call.args[0].tests) for call in native_sql_test_planning.call_args_list
     ] == planned_counts
-    assert (native_run.returncode, preview_run.returncode) == (0, 0)
-    assert report_without_engine(native_run) == report_without_engine(python_run)
-    assert report_without_engine(preview_run) == report_without_engine(python_run)
-    assert native_run.compiled == python_run.compiled
-    assert preview_run.compiled == python_run.compiled
+    assert preview_run.returncode == 0
+    assert report_without_engine(preview_run) == report_without_engine(native_run)
+    assert preview_run.compiled == native_run.compiled
 
 
 if __name__ == "__main__":

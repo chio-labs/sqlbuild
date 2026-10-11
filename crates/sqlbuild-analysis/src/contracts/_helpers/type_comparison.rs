@@ -1,9 +1,9 @@
-//! Python's `types_equal` over the native type system, deferring where it cannot answer.
+//! Python's `types_equal` over the native type system.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::contracts::models::ContractDeferral;
+use crate::type_system::errors::TypeNormalizationError;
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeNormalization};
 
@@ -17,7 +17,7 @@ pub(crate) enum TypeComparison {
 /// One request's type comparisons, normalizing each type string once as Python's cache does.
 pub(crate) struct TypeComparer<'a> {
     dialect: &'a str,
-    normalized: RefCell<HashMap<String, Option<NormalizedType>>>,
+    normalized: RefCell<HashMap<String, Result<NormalizedType, TypeNormalizationError>>>,
 }
 
 impl<'a> TypeComparer<'a> {
@@ -28,12 +28,12 @@ impl<'a> TypeComparer<'a> {
         }
     }
 
-    /// Compare two types as Python's `types_equal`, or defer when either has no native answer.
+    /// Compare two types as Python's `types_equal`, or Python's normalization error.
     pub(crate) fn types_equal(
         &self,
         left: &str,
         right: &str,
-    ) -> Result<TypeComparison, ContractDeferral> {
+    ) -> Result<TypeComparison, TypeNormalizationError> {
         let left: NormalizedType = self.normalized(left)?;
         let right: NormalizedType = self.normalized(right)?;
         Ok(if left == right {
@@ -43,15 +43,16 @@ impl<'a> TypeComparer<'a> {
         })
     }
 
-    fn normalized(&self, type_sql: &str) -> Result<NormalizedType, ContractDeferral> {
+    fn normalized(&self, type_sql: &str) -> Result<NormalizedType, TypeNormalizationError> {
         if let Some(known) = self.normalized.borrow().get(type_sql) {
-            return known.clone().ok_or(ContractDeferral::TypeNormalization);
+            return known.clone();
         }
-        let normalized: Option<NormalizedType> = normalize_type(type_sql, self.dialect)
-            .map(|TypeNormalization { normalized, .. }| normalized);
+        let normalized: Result<NormalizedType, TypeNormalizationError> =
+            normalize_type(type_sql, self.dialect)
+                .map(|TypeNormalization { normalized, .. }| normalized);
         self.normalized
             .borrow_mut()
             .insert(type_sql.to_owned(), normalized.clone());
-        normalized.ok_or(ContractDeferral::TypeNormalization)
+        normalized
     }
 }

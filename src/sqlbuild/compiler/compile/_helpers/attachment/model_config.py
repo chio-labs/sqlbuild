@@ -52,8 +52,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
     parse_native_header_metadata,
@@ -236,7 +234,6 @@ def build_model_header_schema_entry(
         column_locations=column_locations or {},
         file_path=file_path,
     )
-    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="header_metadata_parses")
     if native.columns_error is not None:
         raise native_config_error(error=native.columns_error)
     local_columns: tuple[SchemaColumn, ...] = native.columns
@@ -706,7 +703,6 @@ def build_native_model_config(
         (matched_path_default, model_file.file_path.stem),
         native_config_classes(session=session, record_template_reads=record_template_reads),
     )
-    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds")
     if isinstance(built, _native.NativeConfigError):
         raise native_config_error(error=built)
     return cast(CompileModelConfig, built)
@@ -765,7 +761,6 @@ def validate_model_config(
         request=request,
         rejected=[error is not None for error in external_errors],
     )
-    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="validations")
     _raise_validation_outcome(
         outcome=outcome, external_errors=external_errors, values=request.config.values
     )

@@ -13,6 +13,9 @@ from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, Nati
 
 BUILD_IDENTITY: str
 
+class NativeCompilerError(RuntimeError):
+    """An internal native compiler failure: a panic or a broken native invariant."""
+
 class LintPreparationRequest(TypedDict):
     expanded: str
     before_expansion: str
@@ -414,6 +417,9 @@ def parse_macro_arguments(text: str, nested: list[tuple[int, int]]) -> tuple[obj
 def scan_sql_declaration_references(
     sqls: list[str], python_version: tuple[int, int], unicode_version: str
 ) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
+def scan_sql_declaration_usages(
+    sqls: list[str], python_version: tuple[int, int], unicode_version: str
+) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
 def interpolate_sql_batch(
     sqls: list[tuple[str, str]],
     sources: tuple[
@@ -429,7 +435,19 @@ def interpolate_sql_batch(
 ]: ...
 def scan_macro_call_sites(
     sql: str, python_version: tuple[int, int], unicode_version: str
-) -> list[tuple[int, int, str, list[str], bool]] | None: ...
+) -> tuple[
+    list[tuple[int, int, int, str, list[str] | None, bool]],
+    tuple[int | None, str | None, str] | None,
+]: ...
+def sql_test_helper_reads(sql: str, keys: list[str], /) -> list[str] | None: ...
+def extract_sql_relation_names(
+    sql: str, dialect: str | None
+) -> tuple[list[tuple[str, str | None, str | None]], list[str]] | None: ...
+def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]], /) -> str: ...
+def fixture_projection_facts(
+    sql: str, dialect: str | None, /
+) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
+def macro_call_names(sql: str, nested: bool, /) -> tuple[list[str] | None, str | None]: ...
 def splice_macro_calls(
     sql: str, sites: list[tuple[int, int]], outputs: list[str]
 ) -> tuple[str, list[tuple[int, int, int, int]]]: ...
@@ -465,7 +483,7 @@ def digest_files(paths: list[str]) -> list[str | None]: ...
 # Native analysis: type system.
 def normalize_type(
     type_sql: str, dialect: str
-) -> tuple[tuple[str, str, int | None, int | None, int | None], str | None] | None: ...
+) -> tuple[tuple[str, str, str | None, str | None, str | None], str | None]: ...
 
 # Native analysis: model analysis session.
 type _AnalysisDiagnosticRow = tuple[str, str, int | None, int | None, int | None, int | None, str]
@@ -488,87 +506,54 @@ class NativeModelAnalysisSession:
     def fact_models(self) -> list[str]: ...
     def run(
         self,
-    ) -> (
-        tuple[
-            list[tuple[str, list[tuple[str, str]]]],
-            list[
-                tuple[
-                    str,
-                    int,
-                    str | None,
-                    list[tuple[str, list[tuple[str, str]]]],
-                    list[_AnalysisDiagnosticRow],
-                    list[tuple[str, int, int, list[tuple[str, str, str]]]] | None,
-                ]
-            ],
-            list[str],
-        ]
-        | None
-    ): ...
-    def provide(
+    ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str]]: ...
+    def finish(
         self,
-        results: list[
+    ) -> tuple[
+        list[
             tuple[
-                int,
                 bool,
                 list[tuple[str, str | None, str]] | None,
+                str,
+                list[tuple[str, int, int, list[tuple[str, str, str]]]],
                 bool,
                 bool,
                 list[_AnalysisDiagnosticRow],
                 bool,
+                str,
             ]
         ],
-        /,
-    ) -> bool: ...
-    def finish(
-        self,
-    ) -> (
-        tuple[
-            list[
+        list[tuple[str, list[tuple[str, str]]]],
+        list[str],
+        list[
+            tuple[
+                str,
                 tuple[
                     bool,
-                    list[tuple[str, str | None, str]] | None,
-                    str,
-                    list[tuple[str, int, int, list[tuple[str, str, str]]]],
+                    list[tuple[str, str | None, str]],
+                    list[tuple[str, str | None]],
+                    list[str],
+                    str | None,
                     bool,
-                    bool,
-                    list[_AnalysisDiagnosticRow],
-                    bool,
-                    str,
                 ]
-            ],
-            list[tuple[str, list[tuple[str, str]]]],
-            list[str],
-            list[
-                tuple[
-                    str,
-                    tuple[
-                        bool,
-                        list[tuple[str, str | None, str]],
-                        list[tuple[str, str | None]],
-                        list[str],
-                        str | None,
-                        bool,
-                    ]
-                    | None,
-                ]
-            ],
-        ]
-        | None
-    ): ...
+                | None,
+            ]
+        ],
+    ]: ...
     def prove_dynamic_contracts(
         self, models: list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]], /
-    ) -> list[_PivotContractRow] | None: ...
-    @property
-    def failure(self) -> str | None: ...
+    ) -> list[_PivotContractRow]: ...
     @property
     def sharing(self) -> tuple[int, int]: ...
     @property
     def cache_stats(self) -> tuple[int, int, int, str | None] | None: ...
 
 def start_model_analysis_session(
-    catalog: object, request: tuple[object, ...], cache: tuple[str, str] | None = None
-) -> NativeModelAnalysisSession | None: ...
+    catalog: object,
+    request: tuple[object, ...],
+    cache: tuple[str, str] | None = None,
+    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+) -> NativeModelAnalysisSession: ...
 def prove_dynamic_column_contracts(
     request: tuple[
         str,
@@ -579,10 +564,25 @@ def prove_dynamic_column_contracts(
         list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
     ],
     /,
-) -> list[_PivotContractRow] | None: ...
+) -> list[_PivotContractRow]: ...
+def infer_query_columns(
+    catalog: object | None,
+    request: tuple[
+        str,
+        list[tuple[str, str]],
+        list[tuple[str, str]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[str, list[tuple[str, str]]]],
+        list[tuple[object, ...]],
+        str,
+    ],
+    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+) -> list[tuple[bool, list[tuple[str, str | None, str]] | None, bool]]: ...
 def infer_expression_source_shapes(
-    catalog: object, request: tuple[str, bool, list[tuple[str, str]], list[str]], /
-) -> tuple[list[tuple[bool, list[tuple[str, str]] | None]], str | None]: ...
+    catalog: object,
+    request: tuple[str, bool, list[tuple[str, str]], list[tuple[str, str]], list[str]],
+    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+) -> list[list[tuple[str, str]] | None]: ...
 def _oracle_cte_fact_recovery(
     request: tuple[
         str,
@@ -601,14 +601,12 @@ class SemanticTypeRecovery:
     @property
     def status(self) -> str: ...
     @property
-    def deferral(self) -> str | None: ...
-    @property
     def poisoned(self) -> list[tuple[str, str]]: ...
     @property
     def revalidated(self) -> list[int]: ...
     def finish(
         self, revised: list[list[tuple[str, int | None, int | None]]], /
-    ) -> tuple[list[tuple[int, str | None]], list[list[int]]] | None: ...
+    ) -> tuple[list[tuple[int, str | None]], list[list[int]]]: ...
 
 def plan_semantic_type_recovery(
     catalog: object,
@@ -656,7 +654,6 @@ def check_semantic_metadata_rows(
     ],
     /,
 ) -> tuple[
-    str | None,
     list[tuple[list[tuple[str, str, int, int]], list[tuple[str, str, int, int]]]],
     list[tuple[int, tuple[str, str, int, int]]],
     list[tuple[int, tuple[str, str, int, int], int]],
@@ -696,7 +693,6 @@ def complete_semantic_checks(
     session: NativeModelAnalysisSession | None = None,
     /,
 ) -> tuple[
-    str | None,
     list[
         tuple[
             int,
@@ -733,20 +729,17 @@ def evaluate_native_model_contracts(
     ],
     /,
 ) -> list[
-    tuple[
-        str | None,
-        list[
-            tuple[
-                str,
-                bool,
-                str,
-                str | None,
-                int | None,
-                str | None,
-                tuple[str, str] | None,
-                str,
-            ]
-        ],
+    list[
+        tuple[
+            str,
+            bool,
+            str,
+            str | None,
+            int | None,
+            str | None,
+            tuple[str, str] | None,
+            str,
+        ]
     ]
 ]: ...
 def native_promotion_conflicts(
@@ -756,7 +749,7 @@ def native_promotion_conflicts(
 
 # Native analysis: column lineage facts.
 def build_fast_column_lineage(
-    catalog: object,
+    catalog: object | None,
     request: tuple[str | None, list[tuple[str, str, list[str]]], list[tuple[bool, str, list[str]]]],
     /,
 ) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
@@ -771,37 +764,48 @@ def assemble_compiled_sql_tests(
 ) -> list[NativeSqlTestAssemblyRow]: ...
 
 # Native analysis: compiled project assembly.
+def sql_syntax_error(
+    sql: str,
+    placeholders: Mapping[str, str] | None,
+    dialect: str | None,
+    parse_one: bool = False,
+) -> str | None: ...
 def check_native_sql_syntax(
     request: tuple[str, list[tuple[str, list[tuple[str, str]]]]], /
-) -> tuple[bool | None, str | None]: ...
+) -> bool: ...
 def assemble_project_resource_facts(
     request: tuple[
         str,
         tuple[str | None, str | None, str | None] | None,
         tuple[str | None, str | None, str | None, str | None],
-        list[tuple[str, str, str]],
+        list[tuple[str, str, str, tuple[str, str] | None]],
         list[tuple[str, str | None]],
-        list[tuple[list[tuple[str, str, str | None]], list[tuple[str, list[tuple[str, str]]]]]],
+        list[
+            tuple[
+                str,
+                str,
+                list[str],
+                list[tuple[str, str, str | None]],
+                list[tuple[str, list[tuple[str, str]]]],
+            ]
+        ],
         list[tuple[str, bool, str | None, str | None]],
-        list[tuple[str, str | None, str | None]],
-        list[list[tuple[str, str, str | None]]],
+        list[tuple[str, list[str], str | None, str | None]],
+        list[tuple[str, str, list[str], list[tuple[str, str, str | None]]]],
         list[tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]],
     ],
     /,
 ) -> tuple[
-    tuple[
-        list[list[tuple[str, str]]],
-        list[tuple[str | None, str | None] | None],
-        list[tuple[str | None, str | None, str | None, str | None]],
-        list[list[tuple[str, str]]],
-        list[list[tuple[str, str]]],
-        list[tuple[str, str]],
-    ]
-    | None,
-    str | None,
+    list[list[tuple[str, str]]],
+    list[tuple[str | None, str | None] | None],
+    list[tuple[str | None, str | None, str | None, str | None]],
+    list[list[tuple[str, str]]],
+    list[list[tuple[str, str]]],
+    list[tuple[str, str]],
+    list[bool],
+    tuple[str, int, str, str, str | None, int | None] | None,
 ]: ...
-
-# Internal oracle hooks for tests that compare native foundations with Python; not an API.
+def check_native_explicit_references(request_json: str, /) -> str: ...
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
 def _oracle_text_positions(
     data: bytes, byte_offsets: list[int]

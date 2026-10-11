@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.types import QueryColumnsMode
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 
 @dataclass(frozen=True)
-class GeneratedAnalysisParityTestCase:
-    """Seeded generated projects whose model analysis both engines must agree on."""
+class GeneratedAnalysisTestCase:
+    """Seeded generated projects whose uncached, cached and re-proven native analyses agree."""
 
     description: str
     seed: int
@@ -20,33 +21,38 @@ class GeneratedAnalysisParityTestCase:
     expected_minimum_native: int
     expected_minimum_expression_shapes: int
     expected_minimum_pivot_proofs: int
-    expected_minimum_python_cte_recoveries: int
-    expected_minimum_legacy_analyses: int
-    expected_legacy_analysis_deferrals: int
     expected_minimum_proven_pivots: int
-    expected_maximum_enrichment_deferrals: int
     expected_minimum_native_enrichments: int
 
 
 @dataclass(frozen=True)
-class AnalysisFallbackTestCase:
-    """A project the native session hands back to Python whole, recording why."""
+class InternalFailureTestCase:
+    """A project whose native analysis fails internally, and the error the compile raises."""
 
     description: str
     files: dict[str, str]
-    allow_compact_analysis: bool
-    keeps_catalog: bool
-    expected_kind: str
+    expected_message: str
 
 
 @dataclass(frozen=True)
-class SessionFailureTestCase:
-    """A session that fails after Python answered deferrals, so Python analyses everything."""
+class CyclicAnalysisTestCase:
+    """Models that `ref` each other, which the native session analyses in one unordered wave."""
 
     description: str
-    seed: int
-    model_count: int
-    expected_kinds: dict[str, int]
+    files: dict[str, str]
+    dialects: tuple[str, ...]
+    lineage_modes: tuple[ColumnLineageMode, ...]
+    expected_analysed: int
+
+
+@dataclass(frozen=True)
+class CyclicCompileTestCase:
+    """A project whose models `ref` each other, compiled through the CLI."""
+
+    description: str
+    files: dict[str, str]
+    expected_exit_code: int
+    expected_compiled: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -84,3 +90,70 @@ class CteFactRecoveryParityTestCase:
     count: int
     expected_minimum_compared: int
     expected_minimum_recovered: dict[str, int]
+
+
+@dataclass(frozen=True)
+class AdapterRuleCallbackTestCase:
+    """A project-local adapter rule the native session calls back into, and what it raises."""
+
+    description: str
+    seed: int
+    model_count: int
+    raised: type[Exception] | None
+    expected_minimum_calls: int
+
+
+@dataclass(frozen=True)
+class SharedQueryOutputTestCase:
+    """Models with equal query shapes over different inputs, and each model's own outputs."""
+
+    description: str
+    models: dict[str, str]
+    expected_lineage: tuple[tuple[str, str, str], ...] = ()
+    expected_findings: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class FallbackColumnsTestCase:
+    """A model native analysis cannot project, and the columns its parsed tree still gives."""
+
+    description: str
+    query_sql: str
+    expected_columns: tuple[tuple[str, str | None, str], ...]
+
+
+@dataclass(frozen=True)
+class TableFunctionColumnsTestCase:
+    """A table function's declared return columns against its body's output columns."""
+
+    description: str
+    returns: str
+    body_sql: str
+    expected_error: str | None
+
+
+@dataclass(frozen=True)
+class MissingSessionAnalysisTestCase:
+    """A broken invariant: the session returns no analysis for a model it was asked about."""
+
+    description: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class ProjectionFactsTestCase:
+    """Fixture queries whose projection facts Python recorded in a golden."""
+
+    description: str
+    queries: tuple[tuple[str, str], ...]
+    expected_differences: list[tuple[int, str, object, object]]
+
+
+@dataclass(frozen=True)
+class NormalizationRejectionTestCase:
+    """Queries outside the session whose analysis SQL Python's normalization rejects."""
+
+    description: str
+    queries: tuple[tuple[str, QueryColumnsMode], ...]
+    dialect: str
+    expected_message: str

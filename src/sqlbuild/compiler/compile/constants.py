@@ -78,26 +78,14 @@ MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
     }
 )
 
-SQL_WILDCARD_TOKEN: str = "*"
 SQL_OPEN_PAREN_TOKEN: str = "("
 SQL_ARGUMENT_SEPARATOR_TOKEN: str = ","
 SQL_STATEMENT_TERMINATOR_TOKEN: str = ";"
-SQL_SINGLE_QUOTE_TOKEN: str = "'"
 SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
-SQL_QUALIFIER_SEPARATOR_TOKEN: str = "."
 SQL_WITH_KEYWORD: str = "WITH"
 SQL_CEREMONIAL_SELECT_VALUE: str = "1"
 OMITTED_CEREMONIAL_SELECT_SQL: str = f"\nSELECT {SQL_CEREMONIAL_SELECT_VALUE}"
-UNKNOWN_SQL_TYPE_NAME: str = "UNKNOWN"
-DECIMAL_SQL_TYPE_NAME: str = "DECIMAL"
-RESOLVED_SOURCE_CONFIDENCE: str = "resolved"
 
-POLYGLOT_SET_OPERATION_EXPRESSION_NAMES: frozenset[str] = frozenset(
-    {"Union", "Intersect", "Except"}
-)
-POLYGLOT_SELECT_EXPRESSION_NAME: str = "Select"
-POLYGLOT_COLUMN_EXPRESSION_NAME: str = "Column"
-POLYGLOT_WRAPPER_EXPRESSION_NAMES: frozenset[str] = frozenset({"Annotated", "Subquery", "Paren"})
 
 TABLE_FUNCTION_RETURN_KEYS: frozenset[str] = frozenset({"table"})
 
@@ -109,10 +97,6 @@ MACRO_ARGUMENT_NESTED_CALL_TAG: str = "c"
 SQL_INTERPOLATION_TOKEN: str = "@@"
 
 TEMPLATE_OPEN_TOKEN: str = "${"
-POLYGLOT_LITERAL_KIND: str = "literal"
-POLYGLOT_ARRAY_KIND: str = "array_func"
-POLYGLOT_STRUCTURED_KINDS: frozenset[str] = frozenset({"parse_json", "struct"})
-POLYGLOT_FUNCTION_KIND: str = "function"
 
 MACRO_CALL_PATTERN: re.Pattern[str] = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(")
 SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
@@ -136,28 +120,9 @@ UDF_EXPECTED_TEST_CTE_NAME: str = "__udf_expected__"
 TABLE_FN_ACTUAL_TEST_CTE_NAME: str = "__table_fn_actual__"
 TABLE_FN_EXPECTED_TEST_CTE_NAME: str = "__table_fn_expected__"
 DEFAULT_SQL_TEST_MODE: SqlTestMode = SqlTestMode.MODEL
-RESERVED_SQL_TEST_CTE_NAMES: frozenset[str] = frozenset(
-    {
-        "__actual",
-        "__expected__typed",
-        "__actual__projected",
-        "__missing__",
-        "__unexpected__",
-    }
-)
 COMPILE_CACHE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_CACHE"
 COMPILE_CACHE_DISABLE_VALUE: str = "1"
 COMPILE_INPUT_READS: CompileInputReadRegistry = CompileInputReadRegistry()
-COMPACT_ANALYSIS_RESPONSE_LENGTH: int = 2
-COMPACT_RELATION_STUB_PREFIX: str = "__sqlbuild_project_input_"
-COMPACT_REFERENCE_MARKER_PATTERN: re.Pattern[str] = re.compile(
-    r'__(ref|seed|source|dbt_ref)\((?:"[^"]+"\s*,\s*)?"([^"]+)"\)'
-)
-COMPACT_UNSTUBBED_REFERENCE_KIND: str = "dbt_ref"
-MIN_SHARED_BINDING_QUERY_MEMBERS: int = 2
-COMPACT_ANALYSIS_LEGACY_RESPONSE_LENGTH: int = 3
-COMPACT_ANALYSIS_FACT_LENGTH: int = 6
-COMPACT_ANALYSIS_SOURCE_LENGTH: int = 3
 SQL_TEST_SCAN_STORE_FILE_NAME: str = "sql-test-scans.bin"
 RETIRED_FACT_CACHE_DIRECTORY_NAME: str = "facts-v1"
 RETIRED_REFERENCE_CACHE_DIRECTORY_NAME: str = "references-v3"

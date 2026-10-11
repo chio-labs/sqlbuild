@@ -18,7 +18,7 @@ _PROJECT_CONFIG: str = 'name = "orders"\nadapter = "duckdb"\n'
 _ORDERS_MODEL: str = "MODEL (description 'Orders.');\n\nSELECT 1 AS order_id\n"
 _COMPILE_TIME_BOUND_SECONDS: float = 120.0
 _NESTING_HELP: str = "help: flatten the value so it nests at most 256 levels deep"
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _CONSTANT_CALL_NESTING: tuple[str, ...] = (
     "error[D013]",
     "constants/limits.sql:3' contains invalid SQLBuild header syntax: "
@@ -31,8 +31,8 @@ _CONSTANT_CALL_NESTING: tuple[str, ...] = (
     "test_case",
     [
         DeepHeaderNestingCompileCase(
-            description="python_model_1k",
-            engine="python",
+            description="native_model_1k",
+            engine="native",
             path="models/orders.sql",
             prefix="MODEL (\n  description 'Orders.',\n  tags ",
             suffix=",\n);\n\nSELECT 1 AS order_id\n",
@@ -61,20 +61,6 @@ _CONSTANT_CALL_NESTING: tuple[str, ...] = (
         DeepHeaderNestingCompileCase(
             description="native_preview_hook_100k",
             engine="native-preview",
-            path="hooks/sql/record_refresh.sql",
-            prefix="HOOK (\n  description ",
-            suffix=",\n);\n\nSELECT 1\n",
-            depth=100_000,
-            expected_fragments=(
-                "error[D014]",
-                "hooks/sql/record_refresh.sql:2' contains invalid SQLBuild header syntax: "
-                "values nest deeper than 256 levels",
-                _NESTING_HELP,
-            ),
-        ),
-        DeepHeaderNestingCompileCase(
-            description="python_hook_100k",
-            engine="python",
             path="hooks/sql/record_refresh.sql",
             prefix="HOOK (\n  description ",
             suffix=",\n);\n\nSELECT 1\n",

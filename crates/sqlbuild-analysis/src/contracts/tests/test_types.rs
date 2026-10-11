@@ -21,3 +21,9 @@ pub(crate) struct PromotionTestCase {
     pub(crate) expected_models: &'static [usize],
     pub(crate) expected_help: Option<&'static str>,
 }
+
+pub(crate) struct UnknownDialectTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) expected_error: &'static str,
+}

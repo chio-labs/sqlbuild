@@ -3,34 +3,68 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_core::panics::main::native_failure::native_failure;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_text::python_text;
+use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names as scan_names;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
-use sqlbuild_render::macro_calls::models::ScanDeferral;
+use sqlbuild_render::macro_calls::models::{MacroCallScan, MacroScanFailure};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::render::macro_call_memo::MacroCallMemo;
 use crate::bindings::_helpers::render::macro_call_rows::{SiteRow, SpanRow, site_row, span_row};
 use crate::bindings::types::CompilerDetach;
 
-/// Every top-level macro call site of `sql`, or `None` when Python must expand the string.
+const MACRO_SCAN_CONTEXT: &str = "native macro call scan";
+
+/// `(call start or None, call name or None, message)` of the error Python's scan raises.
+type FailureRow = (Option<usize>, Option<String>, &'static str);
+
+/// Every complete top-level macro call site of `sql`, and where Python's scan raises, if it does.
 #[pyfunction]
 pub(crate) fn scan_macro_call_sites(
     py: Python<'_>,
     sql: &str,
     python_version: (u8, u8),
     unicode_version: &str,
-) -> PyResult<Option<Vec<SiteRow>>> {
-    let Some(python) = python_text(python_version, unicode_version) else {
-        return Ok(None);
-    };
-    let scanned = py
+) -> PyResult<(Vec<SiteRow>, Option<FailureRow>)> {
+    let python = python_text(python_version, unicode_version).ok_or_else(|| {
+        compiler_error(native_failure(
+            MACRO_SCAN_CONTEXT,
+            "the macro bridge runs on a Python whose text tables are not compiled in",
+        ))
+    })?;
+    let MacroCallScan { sites, failure } = py
         .compiler_detach(|| Ok(scan_sites(python, sql)))
         .map_err(compiler_error)?;
-    match scanned {
-        Ok(sites) => Ok(Some(sites.into_iter().map(site_row).collect())),
-        Err(ScanDeferral) => Ok(None),
-    }
+    Ok((
+        sites.into_iter().map(site_row).collect(),
+        failure.map(
+            |MacroScanFailure {
+                 call_start,
+                 call_name,
+                 error,
+             }| (call_start, call_name, error.message()),
+        ),
+    ))
+}
+
+/// Python's `find_macro_call_names` names, or the `CompileInputError` message of its scan.
+#[pyfunction]
+pub(crate) fn macro_call_names(
+    py: Python<'_>,
+    sql: &str,
+    nested: bool,
+) -> PyResult<(Option<Vec<String>>, Option<&'static str>)> {
+    let python = active_python_text();
+    let names = py
+        .compiler_detach(|| Ok(scan_names(python, sql, nested)))
+        .map_err(compiler_error)?;
+    Ok(match names {
+        Ok(names) => (Some(names), None),
+        Err(error) => (None, Some(error.message())),
+    })
 }
 
 /// Splice rendered macro outputs over their call sites, returning the SQL and substitution spans.
@@ -51,6 +85,7 @@ pub(crate) fn splice_macro_calls(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scan_macro_call_sites, module)?)?;
+    module.add_function(wrap_pyfunction!(macro_call_names, module)?)?;
     module.add_function(wrap_pyfunction!(splice_macro_calls, module)?)?;
     module.add_class::<MacroCallMemo>()?;
     Ok(())

@@ -12,17 +12,18 @@ use crate::assembly::analysis_session::main::attach_analysis_cache::attach_analy
 use crate::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
 use crate::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
 use crate::assembly::analysis_session::main::finished_model_facts::finished_model_facts;
-use crate::assembly::analysis_session::main::provide_deferred_analyses::provide_deferred_analyses;
 use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::main::take_analysis_cache::take_analysis_cache;
 use crate::assembly::analysis_session::models::{
-    AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, Deferral, DeferredAnalysis,
-    DynamicFamily, FinishedSession, LineageRow, ModelOutcome, ModelReference, ModelRequest,
-    PivotBatchRequest, PivotModel, PivotOutcome, PivotTables, SessionModelFacts, SessionOutcome,
+    AnalysisCacheStats, AnalysisSession, ColumnFact, ContractProof, DynamicFamily, FinishedSession,
+    LineageRow, ModelColumns, ModelOutcome, ModelReference, ModelRequest, PivotBatchRequest,
+    PivotModel, PivotOutcome, PivotTables, SessionModelAnalysis, SessionModelFacts, SessionOutcome,
     SessionRequest, SessionStep,
 };
-use crate::assembly::analysis_session::tests::test_types::{CachedRun, ModelSpec, RecoveredFacts};
+use crate::assembly::analysis_session::tests::test_types::{
+    CachedRun, ColumnView, ModelSpec, RecoveredFacts,
+};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::{CatalogInput, ProjectCatalog};
 
@@ -120,6 +121,7 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
         case_sensitive_shapes: false,
         function_return_types: Vec::new(),
         nullability_rules: Some(Vec::new()),
+        nullability_callback: None,
         rich_type_inference: true,
         column_types: raw_orders.clone(),
         column_nullability: shapes(&[(
@@ -135,37 +137,24 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
 
 pub(crate) fn started(request: SessionRequest) -> AnalysisSession {
     let catalog: ProjectCatalog = catalog(&request.dialect, &request.catalog_schemas);
-    start_analysis_session(request, &catalog).expect("the models form no cycle")
+    start_analysis_session(request, &catalog).expect("the session starts")
 }
 
-/// Run to completion, answering every deferral with `answer`: the steps, outcomes and session.
+/// Run to completion: the step, outcomes and session.
 pub(crate) fn completed(
     session: AnalysisSession,
-    answer: fn(&Deferral) -> DeferredAnalysis,
 ) -> (Vec<SessionStep>, Vec<ModelOutcome>, FinishedSession) {
-    let (steps, outcome, finished, ()) = completed_with(session, answer, |_| ());
+    let (steps, outcome, finished, ()) = completed_with(session, |_| ());
     (steps, outcome.models, finished)
 }
 
 /// [`completed`], reading the session with `before_finish` once every wave has run.
 pub(crate) fn completed_with<T>(
     mut session: AnalysisSession,
-    answer: fn(&Deferral) -> DeferredAnalysis,
     before_finish: impl FnOnce(&mut AnalysisSession) -> T,
 ) -> (Vec<SessionStep>, SessionOutcome, FinishedSession, T) {
-    let mut done: bool = false;
-    let steps: Vec<SessionStep> = std::iter::from_fn(|| {
-        (!done).then(|| {
-            let step: SessionStep = run_analysis_session(&mut session).expect("the session runs");
-            let answers: Vec<DeferredAnalysis> = step.deferrals.iter().map(answer).collect();
-            done = answers.is_empty();
-            (!done).then(|| {
-                provide_deferred_analyses(&mut session, answers).expect("the answers match")
-            });
-            step
-        })
-    })
-    .collect();
+    let steps: Vec<SessionStep> =
+        vec![run_analysis_session(&mut session).expect("the session runs")];
     let read: T = before_finish(&mut session);
     let (outcome, finished) = finish_analysis_session(session).expect("the session finished");
     (steps, outcome, finished, read)
@@ -176,7 +165,7 @@ pub(crate) fn cached_run(request: SessionRequest, store: NativeStore) -> CachedR
     let mut session: AnalysisSession = started(request);
     attach_analysis_cache(&mut session, store);
     let (steps, outcome, finished, (keys, hits, (store, stats))) =
-        completed_with(session, empty_answer, |session| {
+        completed_with(session, |session| {
             let (keys, hits) = session
                 .cache
                 .as_ref()
@@ -200,7 +189,7 @@ pub(crate) fn cached_run(request: SessionRequest, store: NativeStore) -> CachedR
 
 /// The catalog changes and fact models of `request` run without a cache.
 pub(crate) fn uncached_catalog(request: SessionRequest) -> (Shapes, Vec<String>, Vec<String>) {
-    let (_, outcome, finished, ()) = completed_with(started(request), empty_answer, |_| ());
+    let (_, outcome, finished, ()) = completed_with(started(request), |_| ());
     catalog_changes(outcome, &finished)
 }
 
@@ -244,20 +233,7 @@ pub(crate) fn described(outcome: &ModelOutcome) -> Vec<String> {
     lines
 }
 
-/// A successful Python answer with no columns and no star.
-pub(crate) fn empty_answer(deferral: &Deferral) -> DeferredAnalysis {
-    DeferredAnalysis {
-        model: deferral.model(),
-        analysis_succeeded: true,
-        columns: None,
-        has_star: false,
-        star_resolved: false,
-        binding_diagnostics: Vec::new(),
-        binding_validated: true,
-    }
-}
-
-/// `publish name col:TYPE ...` per publication, then `defer kind model` per deferral.
+/// `publish name col:TYPE ...` per publication.
 pub(crate) fn step_lines(step: &SessionStep) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for (name, shape) in &step.publications {
@@ -267,11 +243,6 @@ pub(crate) fn step_lines(step: &SessionStep) -> Vec<String> {
             .collect();
         lines.push(format!("publish {name} {}", columns.join(" ")));
     }
-    lines.extend(
-        step.deferrals
-            .iter()
-            .map(|deferral| format!("defer {} {}", deferral.kind(), deferral.model())),
-    );
     lines
 }
 
@@ -284,10 +255,7 @@ pub(crate) fn model_requests(models: &[ModelSpec]) -> Vec<ModelRequest> {
 
 /// Run `models` over the orders request: each step's lines and each model's description.
 pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
-    let (steps, outcomes, _) = completed(
-        started(orders_request(model_requests(models))),
-        empty_answer,
-    );
+    let (steps, outcomes, _) = completed(started(orders_request(model_requests(models))));
     (
         steps.iter().map(step_lines).collect(),
         outcomes.iter().map(described).collect(),
@@ -296,10 +264,7 @@ pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<
 
 /// Run `models` and describe the facts the finished session kept for each, or `none`.
 pub(crate) fn fact_lines(models: &[ModelSpec]) -> Vec<String> {
-    let (_, _, finished) = completed(
-        started(orders_request(model_requests(models))),
-        empty_answer,
-    );
+    let (_, _, finished) = completed(started(orders_request(model_requests(models))));
     models
         .iter()
         .map(|(name, ..)| {
@@ -314,7 +279,56 @@ fn fact_line(facts: &SessionModelFacts) -> String {
         .iter()
         .map(|(output, sources)| format!("{output}<-{sources:?}"))
         .collect();
-    format!("{:?} {}", facts.columns, lineage.join(" "))
+    let columns: Option<Vec<String>> = facts
+        .columns
+        .as_ref()
+        .map(|columns| columns.iter().map(column_line).collect());
+    format!("{columns:?} {}", lineage.join(" "))
+}
+
+/// The proof and published columns a finished session keeps for `pivot_request`'s models.
+pub(crate) fn kept_model_analyses(
+    dialect: &str,
+    sql: &str,
+    family: Option<(&str, &str, &str)>,
+) -> Vec<(PivotOutcome, Option<Vec<String>>)> {
+    let pivots: PivotBatchRequest = pivot_request(dialect, sql, family);
+    let names: [&str; 2] = ["customer_amounts", "plain"];
+    let models: Vec<ModelRequest> = names
+        .iter()
+        .zip(pivots.models)
+        .map(|(name, pivot)| ModelRequest {
+            pivot_sql: pivot.sql.clone(),
+            dynamic_families: pivot.families,
+            ..model(name, &pivot.sql, &["raw_orders"], &[])
+        })
+        .collect();
+    let tables: PivotTables = pivots.tables;
+    let request = SessionRequest {
+        dialect: tables.dialect,
+        column_types: tables.column_types.clone(),
+        column_nullability: tables.column_nullability,
+        complete_schemas: tables.authoritative_types,
+        catalog_schemas: tables.column_types,
+        dynamic_families_by_table: tables.families_by_table,
+        ..orders_request(models)
+    };
+    let (_, _, finished) = completed(started(request));
+    names
+        .iter()
+        .map(|name| kept_line(finished.model_analysis(name)))
+        .collect()
+}
+
+fn kept_line(analysis: SessionModelAnalysis<'_>) -> (PivotOutcome, Option<Vec<String>>) {
+    let proof: PivotOutcome = analysis
+        .dynamic_proof
+        .cloned()
+        .map_or(PivotOutcome::Absent, PivotOutcome::Proof);
+    let columns: Option<Vec<String>> = analysis
+        .columns
+        .map(|columns| columns.iter().map(column_line).collect());
+    (proof, columns)
 }
 
 /// Proofs over typed `raw_orders` and pivot `status_amounts`: the model, then a family-less one.
@@ -369,6 +383,7 @@ pub(crate) fn finished_session(tables: PivotTables) -> FinishedSession {
         tables,
         pool: catalog("duckdb", &Vec::new()).analysis_pool(),
         models: HashMap::new(),
+        dynamic_proofs: HashMap::new(),
     }
 }
 
@@ -439,6 +454,7 @@ pub(crate) fn recovered_facts(sql: &str) -> Option<(Pairs, Pairs, Vec<String>, V
             dialect: "duckdb",
             function_return_types: &Vec::new(),
             rules: Some(&rules),
+            callback: None,
         },
     })
     .ok()?;
@@ -510,12 +526,14 @@ pub(crate) fn legacy_lines(sql: &str) -> Option<Vec<String>> {
         cleaned_sql: sql,
         lineage_references: &references,
         recover: true,
+        full_nullability: false,
         types: &types,
         nullability: &nullability,
         profile: RecoveryProfile {
             dialect: "duckdb",
             function_return_types: &Vec::new(),
             rules: Some(&rules),
+            callback: None,
         },
     })
     .ok()?;
@@ -593,4 +611,46 @@ pub(crate) fn current_model_key(session: &AnalysisSession, name: &str) -> Conten
         .map(|relation| (relation, session.relation_digest(relation)))
         .collect();
     session.model_key(&ContentDigest::default(), model, &Vec::new(), &relations)
+}
+
+/// Owned copies of expected lines.
+pub(crate) fn lines(expected: &[&str]) -> Vec<String> {
+    expected.iter().map(|line| (*line).to_owned()).collect()
+}
+
+/// `(name, type)` pairs as typed columns of unknown nullability.
+pub(crate) fn fact_columns(pairs: &[(&str, &str)]) -> Vec<ColumnFact> {
+    pairs
+        .iter()
+        .map(|(name, data_type)| ColumnFact {
+            name: (*name).to_owned(),
+            data_type: Some((*data_type).to_owned()),
+            nullability: "unknown".to_owned(),
+        })
+        .collect()
+}
+
+/// A pivot proof with these fixed columns.
+pub(crate) fn contract_proof((output_proven, fixed): (bool, &[(&str, &str)])) -> ContractProof {
+    ContractProof {
+        output_proven,
+        fixed_columns: fact_columns(fixed),
+        families: Vec::new(),
+        input_relations: Vec::new(),
+        failure_reason: None,
+        bare_dynamic_pivot: false,
+    }
+}
+
+/// Final columns as `(name, type)` pairs and the forced star, for comparison with expectations.
+pub(crate) fn column_view(finished: &ModelColumns) -> ColumnView<'_> {
+    (
+        finished.columns.as_ref().map(|columns| {
+            columns
+                .iter()
+                .map(|column| (column.name.as_str(), column.data_type.as_deref()))
+                .collect()
+        }),
+        finished.proven_star,
+    )
 }

@@ -7,8 +7,6 @@ SQL_QUOTE_CHARACTERS: frozenset[str] = frozenset({*SQL_ESCAPABLE_QUOTE_CHARACTER
 SQL_TEXT_START_CHARACTERS: frozenset[str] = frozenset({*SQL_QUOTE_CHARACTERS, "$"})
 SQL_OPEN_PARENTHESIS: str = "("
 SQL_CLOSE_PARENTHESIS: str = ")"
-SQL_OPEN_BRACKET: str = "["
-SQL_CLOSE_BRACKET: str = "]"
 SQL_STRING_QUOTE_CHARACTER: str = "'"
 SQL_ESCAPE_CHARACTER: str = "\\"
 SQL_ESCAPE_STRING_PREFIX: str = "e"
@@ -20,10 +18,8 @@ SQL_LINE_COMMENT_PREFIX: str = "--"
 SUPPORTED_SQL_LINE_COMMENT_PREFIXES: frozenset[str] = frozenset({"--", "//", "#"})
 SQL_BLOCK_COMMENT_OPEN: str = "/*"
 SQL_BLOCK_COMMENT_CLOSE: str = "*/"
-SQL_DOLLAR_QUOTE_DELIMITER: str = "$$"
 SQL_DOLLAR_QUOTE_CHARACTER: str = "$"
 SQL_IDENTIFIER_PREFIX: str = "_"
-SQL_NULL_KEYWORD: str = "NULL"
 SNOWFLAKE_DIALECT_NAME: str = "snowflake"
 POLYGLOT_ANALYZE_QUERY_ENTRY_POINT: str = "analyze_query"
 POLYGLOT_ANALYZE_QUERY_OPTIONS_ARGUMENT_COUNT: int = 2
@@ -36,143 +32,35 @@ ANALYSIS_RECORD_DIR_ENV_VAR: str = "SQLBUILD_ANALYSIS_RECORD_DIR"
 POLYGLOT_SITE_RECORD_PREFIX: str = "polyglot-sites-"
 BINDING_UNKNOWN_TABLE_INTERNAL_CODE: str = "B000"
 
-POLYGLOT_KIND_ALIAS: str = "alias"
-POLYGLOT_KIND_AND: str = "and"
 POLYGLOT_KIND_ANNOTATED: str = "annotated"
-POLYGLOT_KIND_ARRAY_AGG: str = "array_agg"
-POLYGLOT_KIND_AVG: str = "avg"
-POLYGLOT_KIND_BOOLEAN: str = "boolean"
-POLYGLOT_KIND_CASE: str = "case"
-POLYGLOT_KIND_CAST: str = "cast"
-POLYGLOT_KIND_COALESCE: str = "coalesce"
 POLYGLOT_KIND_COLUMN: str = "column"
-POLYGLOT_KIND_CONCAT: str = "concat"
-POLYGLOT_KIND_COUNT: str = "count"
 POLYGLOT_KIND_EXCEPT: str = "except"
-POLYGLOT_KIND_FUNCTION: str = "function"
-POLYGLOT_KIND_IF_FUNC: str = "if_func"
 POLYGLOT_KIND_INTERSECT: str = "intersect"
-POLYGLOT_KIND_IS_NULL: str = "is_null"
-POLYGLOT_KIND_LITERAL: str = "literal"
-POLYGLOT_KIND_MAX: str = "max"
-POLYGLOT_KIND_MIN: str = "min"
-POLYGLOT_KIND_NULL: str = "null"
-POLYGLOT_KIND_PAREN: str = "paren"
 POLYGLOT_KIND_SELECT: str = "select"
-POLYGLOT_KIND_STRING_AGG: str = "string_agg"
-POLYGLOT_KIND_SUBSTRING: str = "substring"
-POLYGLOT_KIND_SUM: str = "sum"
 POLYGLOT_KIND_TABLE: str = "table"
-POLYGLOT_KIND_TIMESTAMP: str = "timestamp"
-POLYGLOT_KIND_TRY_CAST: str = "try_cast"
 POLYGLOT_KIND_UNION: str = "union"
-POLYGLOT_KIND_WINDOW_FUNCTION: str = "window_function"
-POLYGLOT_KIND_WITHIN_GROUP: str = "within_group"
-POLYGLOT_BOOLEAN_RESULT_KINDS: frozenset[str] = frozenset(
-    {
-        POLYGLOT_KIND_BOOLEAN,
-        "and",
-        "between",
-        "eq",
-        "exists",
-        "gt",
-        "gte",
-        "ilike",
-        "in",
-        "is",
-        POLYGLOT_KIND_IS_NULL,
-        "like",
-        "lt",
-        "lte",
-        "neq",
-        "not",
-        "or",
-        "regexp_like",
-    }
-)
 POLYGLOT_SET_OPERATION_KINDS: frozenset[str] = frozenset(
     {POLYGLOT_KIND_UNION, POLYGLOT_KIND_INTERSECT, POLYGLOT_KIND_EXCEPT}
 )
-POLYGLOT_CAST_KINDS: frozenset[str] = frozenset({POLYGLOT_KIND_CAST, POLYGLOT_KIND_TRY_CAST})
-POLYGLOT_TYPE_PASSTHROUGH_KINDS: frozenset[str] = frozenset(
-    {
-        POLYGLOT_KIND_MAX,
-        POLYGLOT_KIND_MIN,
-        POLYGLOT_KIND_WINDOW_FUNCTION,
-        POLYGLOT_KIND_WITHIN_GROUP,
-    }
-)
-POLYGLOT_AGGREGATE_KINDS: frozenset[str] = frozenset(
-    {
-        POLYGLOT_KIND_AVG,
-        POLYGLOT_KIND_COUNT,
-        POLYGLOT_KIND_MAX,
-        POLYGLOT_KIND_MIN,
-        POLYGLOT_KIND_SUM,
-        POLYGLOT_KIND_ARRAY_AGG,
-        POLYGLOT_KIND_STRING_AGG,
-    }
-)
-POLYGLOT_PAYLOAD_ALIAS: str = "alias"
 POLYGLOT_PAYLOAD_COLUMN: str = "column"
-POLYGLOT_PAYLOAD_DATA_TYPE: str = "data_type"
-POLYGLOT_VARCHAR_DATA_TYPES: frozenset[str] = frozenset({"var_char", "varchar"})
-POLYGLOT_PAYLOAD_FROM: str = "from"
-POLYGLOT_PAYLOAD_LEFT: str = "left"
-POLYGLOT_PAYLOAD_EXPRESSIONS: str = "expressions"
-POLYGLOT_PAYLOAD_JOINS: str = "joins"
-POLYGLOT_PAYLOAD_KIND: str = "kind"
-POLYGLOT_PAYLOAD_LITERAL_TYPE: str = "literal_type"
 POLYGLOT_PAYLOAD_NAME: str = "name"
-POLYGLOT_PAYLOAD_NOT: str = "not"
-POLYGLOT_PAYLOAD_PRECISION: str = "precision"
-POLYGLOT_PAYLOAD_SCALE: str = "scale"
-POLYGLOT_PAYLOAD_SELECT: str = "select"
-POLYGLOT_PAYLOAD_RIGHT: str = "right"
-POLYGLOT_PAYLOAD_TABLE: str = "table"
-POLYGLOT_PAYLOAD_THIS: str = "this"
-POLYGLOT_PAYLOAD_WHERE_CLAUSE: str = "where_clause"
-POLYGLOT_PAYLOAD_TIMEZONE: str = "timezone"
-POLYGLOT_PAYLOAD_TO: str = "to"
-TIMESTAMP_WITH_TIME_ZONE_SQL_TYPE_NAME: str = "TIMESTAMPTZ"
-POLYGLOT_JOIN_FULL: str = "FULL"
-POLYGLOT_JOIN_LEFT: str = "LEFT"
-POLYGLOT_JOIN_RIGHT: str = "RIGHT"
-POLYGLOT_LITERAL_TYPE_STRING: str = "string"
-POLYGLOT_NULLIF_FUNCTION_NAME: str = "NULLIF"
-POLYGLOT_BINARY_OPERAND_COUNT: int = 2
-POLYGLOT_ANALYSIS_BASE_TABLES: str = "baseTables"
-POLYGLOT_ANALYSIS_CAST_TYPE: str = "castType"
-POLYGLOT_ANALYSIS_COLUMN_USES: str = "columnUses"
-POLYGLOT_ANALYSIS_CONTEXT: str = "context"
-POLYGLOT_ANALYSIS_CONTEXT_FILTER: str = "filter"
-POLYGLOT_ANALYSIS_EXPRESSION_SQL: str = "expressionSql"
 POLYGLOT_ANALYSIS_IS_STAR: str = "isStar"
 POLYGLOT_ANALYSIS_NAME: str = "name"
 POLYGLOT_ANALYSIS_NULLABILITY: str = "nullability"
 POLYGLOT_ANALYSIS_NULLABILITY_NON_NULL: str = "non_null"
 POLYGLOT_ANALYSIS_NULLABILITY_NULLABLE: str = "nullable"
 POLYGLOT_ANALYSIS_PROJECTIONS: str = "projections"
-POLYGLOT_ANALYSIS_RELATIONS: str = "relations"
-POLYGLOT_ANALYSIS_SHAPE: str = "shape"
 POLYGLOT_ANALYSIS_SOURCE_ALIAS: str = "sourceAlias"
 POLYGLOT_ANALYSIS_SOURCE_CONFIDENCE: str = "confidence"
 POLYGLOT_ANALYSIS_SOURCE_NAME: str = "sourceName"
 POLYGLOT_ANALYSIS_TABLE: str = "table"
 POLYGLOT_ANALYSIS_TRANSFORM_KIND: str = "transformKind"
-POLYGLOT_ANALYSIS_TRANSFORM_FUNCTION: str = "transformFunction"
-POLYGLOT_ANALYSIS_FUNCTION_NAME: str = "name"
 POLYGLOT_ANALYSIS_STAR_PROJECTIONS: str = "starProjections"
-POLYGLOT_ANALYSIS_TYPE_HINT: str = "typeHint"
 POLYGLOT_ANALYSIS_UPSTREAM: str = "upstream"
-POLYGLOT_ANALYSIS_SHAPE_SELECT: str = "select"
-POLYGLOT_ANALYSIS_SHAPE_SET_OPERATION: str = "set_operation"
 POLYGLOT_ANALYSIS_TRANSFORM_AGGREGATION: str = "aggregation"
 POLYGLOT_ANALYSIS_TRANSFORM_CAST: str = "cast"
 POLYGLOT_ANALYSIS_TRANSFORM_CONSTANT: str = "constant"
 POLYGLOT_ANALYSIS_TRANSFORM_DIRECT: str = "direct"
-POLYGLOT_ANALYSIS_TRANSFORM_STAR: str = "star"
-POLYGLOT_ANALYSIS_UNSAFE_TRANSFORMS: frozenset[str] = frozenset()
 TYPE_CHECKED_DIALECTS: frozenset[str] = frozenset({"duckdb", "snowflake", "postgresql", "bigquery"})
 SQL_QUOTED_IDENTIFIER_DELIMITER: str = '"'
 CASE_SENSITIVE_BINDING_DIALECTS: frozenset[str] = frozenset({"snowflake", "postgresql"})
@@ -183,3 +71,5 @@ NATIVE_DIALECT_ALIASES: dict[str, str] = {
     "sqlserver": "tsql",
 }
 ANALYSIS_NORMALIZATION_CHUNK_SIZE: int = 256
+TABLE_FUNCTION_ANALYSIS_PREFIX: str = "__sqlbuild_table_function_"
+NATIVE_FAILURE_PREFIX: str = "NativeCompilerError: "

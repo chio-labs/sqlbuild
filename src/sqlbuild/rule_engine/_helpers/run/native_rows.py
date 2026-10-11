@@ -20,8 +20,8 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compiled_project_facts
 from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
 from sqlbuild.compiler.compiled_project.main.plain_typed_value import plain_typed_value
+from sqlbuild.compiler.frontier.main._report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path

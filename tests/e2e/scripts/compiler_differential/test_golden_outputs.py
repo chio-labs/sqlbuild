@@ -15,7 +15,13 @@ from tests.e2e.scripts.compiler_differential.helpers import (
 
 _CASE: str = "engine-error-week-date-cursor-start"
 _PROJECT: str = "orders"
-_ENGINE_ARGUMENTS: tuple[str, ...] = ("--engines", "python", "native", "--expect", "failure:P001")
+_ENGINE_ARGUMENTS: tuple[str, ...] = (
+    "--engines",
+    "native",
+    "native-preview",
+    "--expect",
+    "failure:P001",
+)
 
 
 @pytest.mark.parametrize(
@@ -32,8 +38,8 @@ _ENGINE_ARGUMENTS: tuple[str, ...] = ("--engines", "python", "native", "--expect
             golden_edit=("hour must be in 0..23", "hour must be in 1..24"),
             expected_exit_code=1,
             expected_lines=(
-                "  - golden (python) at /commands/0/diagnostics/0/message",
                 "  - golden (native) at /commands/0/diagnostics/0/message",
+                "  - golden (native-preview) at /commands/0/diagnostics/0/message",
                 "Compiler differential FAILED: 1 of 1 projects differ",
             ),
         ),

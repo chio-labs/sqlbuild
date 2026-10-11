@@ -8,12 +8,12 @@ use polyglot_sql::{Expression, ExpressionWalk};
 use crate::semantic_checks::_helpers::metadata_checks::argument_types::expression_type;
 use crate::semantic_checks::_helpers::metadata_checks::families::Families;
 use crate::semantic_checks::_helpers::sql_text::parsed_sql::parsed_model;
-use crate::semantic_checks::_helpers::sql_text::text::{ascii, casefold};
+use crate::semantic_checks::_helpers::sql_text::text::casefold;
 use crate::semantic_checks::constants::{
     ARGUMENT_COUNT_CODE, NUMBER_LITERAL_TYPE, STRING_LITERAL_TYPE, TYPE_MISMATCH_CODE,
     UDF_NAME_PREFIX, UNKNOWN_TYPE,
 };
-use crate::semantic_checks::models::{MetadataFunction, MetadataModel, SemanticDeferral};
+use crate::semantic_checks::models::{MetadataFunction, MetadataModel, SemanticFailure};
 
 /// One function error before it is located: `(code, located name, message)`.
 pub(crate) type FunctionError = (&'static str, String, String);
@@ -41,7 +41,7 @@ type FoldedShape = HashMap<String, Vec<String>>;
 pub(crate) fn function_errors(
     model: &MetadataModel,
     context: &FunctionContext<'_>,
-) -> Result<Vec<FunctionError>, SemanticDeferral> {
+) -> Result<Vec<FunctionError>, SemanticFailure> {
     if context.functions.is_empty() || !model.calls_functions {
         return Ok(Vec::new());
     }
@@ -101,7 +101,7 @@ fn call_name(call: &Function) -> &str {
 fn declared_calls<'a>(
     root: &'a Expression,
     functions: &HashMap<&str, &'a MetadataFunction>,
-) -> Result<(Vec<DeclaredCall<'a>>, Vec<&'a Select>), SemanticDeferral> {
+) -> Result<(Vec<DeclaredCall<'a>>, Vec<&'a Select>), SemanticFailure> {
     let mut calls: Vec<DeclaredCall<'a>> = Vec::new();
     let mut selects: Vec<&'a Select> = Vec::new();
     let mut pending: Vec<(&'a Expression, Option<usize>)> = vec![(root, None)];
@@ -112,7 +112,7 @@ fn declared_calls<'a>(
                 selects.push(select);
             }
             Expression::Function(call) => {
-                let key: String = casefold(ascii(call_name(call))?);
+                let key: String = casefold(call_name(call));
                 if let Some(function) = functions.get(key.as_str()) {
                     calls.push(DeclaredCall {
                         call,
@@ -169,7 +169,7 @@ fn relation_names(relation: &Expression) -> (&str, &str) {
 fn folded_shapes<'a>(
     relations: &HashMap<usize, Vec<&'a Expression>>,
     shapes: &HashMap<&str, &[(String, String)]>,
-) -> Result<HashMap<&'a str, FoldedShape>, SemanticDeferral> {
+) -> Result<HashMap<&'a str, FoldedShape>, SemanticFailure> {
     let mut folded: HashMap<&'a str, FoldedShape> = HashMap::new();
     for relation in relations.values().flatten() {
         let (table_name, _) = relation_names(relation);
@@ -182,7 +182,7 @@ fn folded_shapes<'a>(
         let mut columns: FoldedShape = HashMap::new();
         for (name, column_type) in *shape {
             columns
-                .entry(casefold(ascii(name)?))
+                .entry(casefold(name))
                 .or_default()
                 .push(column_type.clone());
         }
@@ -197,7 +197,7 @@ fn argument_type_of(
     scope: Option<&[&Expression]>,
     folded: &HashMap<&str, FoldedShape>,
     context: &FunctionContext<'_>,
-) -> Result<String, SemanticDeferral> {
+) -> Result<String, SemanticFailure> {
     match argument {
         Expression::Literal(literal) => Ok(match literal.as_ref() {
             Literal::String(_) => STRING_LITERAL_TYPE,
@@ -216,20 +216,17 @@ fn argument_column_type(
     column: &Column,
     scope: Option<&[&Expression]>,
     folded: &HashMap<&str, FoldedShape>,
-) -> Result<String, SemanticDeferral> {
+) -> Result<String, SemanticFailure> {
     let Some(relations) = scope else {
         return Ok(UNKNOWN_TYPE.to_owned());
     };
-    let qualifier: Option<String> = match &column.table {
-        Some(table) => Some(casefold(ascii(&table.name)?)),
-        None => None,
-    };
-    let name: String = casefold(ascii(&column.name.name)?);
+    let qualifier: Option<String> = column.table.as_ref().map(|table| casefold(&table.name));
+    let name: String = casefold(&column.name.name);
     let mut candidates: Vec<&String> = Vec::new();
     for relation in relations {
         let (table_name, alias) = relation_names(relation);
         if let Some(qualifier) = &qualifier
-            && *qualifier != casefold(ascii(alias)?)
+            && *qualifier != casefold(alias)
         {
             continue;
         }

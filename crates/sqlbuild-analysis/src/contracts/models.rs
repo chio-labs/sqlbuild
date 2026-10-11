@@ -130,44 +130,6 @@ pub struct ContractDiagnostic {
     pub help: String,
 }
 
-/// Why native contract validation hands one model back to Python.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ContractDeferral {
-    /// Native type normalization cannot reproduce Python for a compared type.
-    TypeNormalization,
-    /// A dynamic family name outside ASCII, whose `casefold` native does not reproduce.
-    NonAsciiFamilyName,
-}
-
-impl ContractDeferral {
-    /// The deferral kind recorded for the harness.
-    #[must_use]
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::TypeNormalization => "type_normalization",
-            Self::NonAsciiFamilyName => "non_ascii_family_name",
-        }
-    }
-}
-
-/// One model's contract outcome.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ContractOutcome {
-    Diagnostics(Vec<ContractDiagnostic>),
-    Deferred(ContractDeferral),
-}
-
-impl ContractOutcome {
-    /// `(deferral, diagnostics)`: a deferred model has no diagnostics.
-    #[must_use]
-    pub fn into_parts(self) -> (Option<ContractDeferral>, Vec<ContractDiagnostic>) {
-        match self {
-            Self::Diagnostics(diagnostics) => (None, diagnostics),
-            Self::Deferred(deferral) => (Some(deferral), Vec::new()),
-        }
-    }
-}
-
 /// The inputs to table promotion conflict detection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromotionRequest {

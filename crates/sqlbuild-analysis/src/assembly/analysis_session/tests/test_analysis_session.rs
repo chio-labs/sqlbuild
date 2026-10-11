@@ -1,18 +1,28 @@
 use crate::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
 use crate::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
+use crate::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use crate::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
 use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
-    catalog, expected_facts, fact_lines, failed, finished_session, legacy_lines, model_requests,
-    orders_request, pivot_request, proven, recovered_facts, session_lines,
+    catalog, expected_facts, fact_lines, failed, finished_session, kept_model_analyses,
+    legacy_lines, lines, model_requests, orders_request, pivot_request, proven, recovered_facts,
+    session_lines,
 };
 use crate::assembly::analysis_session::tests::test_types::{
-    CteRecoveryTestCase, LegacyAnalysisTestCase, PivotTestCase, SessionFactsTestCase,
-    SessionTestCase, UnscheduledTestCase,
+    CteRecoveryTestCase, KeptAnalysisTestCase, LegacyAnalysisTestCase, ModelSpec, PivotTestCase,
+    SessionFactsTestCase, SessionFailureTestCase, SessionTestCase, UnscheduledTestCase,
 };
 
+/// A model whose missing column stays untyped over a known input, so completion re-analyses it.
+const UNTYPED_ORDERS: ModelSpec = (
+    "orders_untyped",
+    "SELECT order_id, missing_column FROM __source(\"raw_orders\")",
+    &["raw_orders"],
+    &[],
+);
+
 #[test]
-fn given_models_when_running_the_session_then_defers_and_publishes_as_python_does() {
+fn given_models_when_running_the_session_then_publishes_as_python_does() {
     let test_cases = [
         SessionTestCase {
             description: "typed producers publish closed shapes their consumers bind",
@@ -106,7 +116,7 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
             ],
         },
         SessionTestCase {
-            description: "a non-ASCII filter column Python casefolds still defers to Python",
+            description: "a non-ASCII filter column is analysed natively",
             models: &[
                 (
                     "events",
@@ -122,16 +132,19 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
                     &["events"],
                 ),
             ],
-            expected_steps: &[
-                &["publish events gr\u{f6}\u{df}e:UNKNOWN", "defer analysis 1"],
-                &[],
-            ],
+            expected_steps: &[&[
+                "publish events gr\u{f6}\u{df}e:UNKNOWN",
+                "publish events_mart gr\u{f6}\u{df}e:UNKNOWN",
+            ]],
             expected_outcomes: &[
                 &[
                     "gr\u{f6}\u{df}e - unknown",
                     "succeeded=true star=false/false diagnostics=[]",
                 ],
-                &["succeeded=true star=false/false diagnostics=[]"],
+                &[
+                    "gr\u{f6}\u{df}e - non_null",
+                    "succeeded=true star=false/false diagnostics=[]",
+                ],
             ],
         },
         SessionTestCase {
@@ -165,7 +178,7 @@ fn given_models_when_running_the_session_then_defers_and_publishes_as_python_doe
 fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_successes() {
     let test_cases = [
         SessionFactsTestCase {
-            description: "native lineage keeps output names and sources",
+            description: "native lineage keeps typed output columns and sources",
             models: &[
                 (
                     "stg_orders",
@@ -181,14 +194,14 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
                 ),
             ],
             expected_facts: &[
-                "Some([\"order_id\", \"doubled\"]) \
+                "Some([\"order_id INTEGER non_null\", \"doubled DOUBLE unknown\"]) \
                  order_id<-[(\"raw_orders\", \"order_id\")] \
                  doubled<-[(\"raw_orders\", \"amount\")]",
-                "Some([\"missing_column\"]) missing_column<-[(\"raw_orders\", \"missing_column\")]",
+                "Some([\"missing_column - unknown\"]) missing_column<-[(\"raw_orders\", \"missing_column\")]",
             ],
         },
         SessionFactsTestCase {
-            description: "a native legacy analysis keeps its output names and sources",
+            description: "a native legacy analysis keeps its typed output columns and sources",
             models: &[
                 (
                     "events",
@@ -204,12 +217,12 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
                 ),
             ],
             expected_facts: &[
-                "Some([\"event_id\"]) event_id<-[(\"raw_events\", \"event_id\")]",
-                "Some([\"event_id\", \"one\"]) event_id<-[(\"events\", \"event_id\")] one<-[]",
+                "Some([\"event_id - unknown\"]) event_id<-[(\"raw_events\", \"event_id\")]",
+                "Some([\"event_id - unknown\", \"one INT non_null\"]) event_id<-[(\"events\", \"event_id\")] one<-[]",
             ],
         },
         SessionFactsTestCase {
-            description: "a model Python analysed keeps no session facts",
+            description: "a non-ASCII model analysed natively keeps its session facts",
             models: &[
                 (
                     "events",
@@ -226,8 +239,8 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
                 ),
             ],
             expected_facts: &[
-                "Some([\"gr\u{f6}\u{df}e\"]) gr\u{f6}\u{df}e<-[(\"raw_events\", \"event_id\")]",
-                "none",
+                "Some([\"gr\u{f6}\u{df}e - unknown\"]) gr\u{f6}\u{df}e<-[(\"raw_events\", \"event_id\")]",
+                "Some([\"gr\u{f6}\u{df}e - non_null\"]) gr\u{f6}\u{df}e<-[(\"events\", \"gr\u{f6}\u{df}e\")]",
             ],
         },
     ];
@@ -242,10 +255,10 @@ fn given_finished_sessions_when_reading_model_facts_then_keeps_only_native_succe
 }
 
 #[test]
-fn given_unschedulable_models_when_starting_then_python_analyses() {
+fn given_models_when_starting_then_only_duplicate_names_fail_as_an_internal_error() {
     let test_cases = [
         UnscheduledTestCase {
-            description: "models that reference each other",
+            description: "models that reference each other analyse in one unordered wave",
             models: &[
                 (
                     "orders",
@@ -260,7 +273,7 @@ fn given_unschedulable_models_when_starting_then_python_analyses() {
                     &["orders"],
                 ),
             ],
-            expected_started: false,
+            expected_error: None,
         },
         UnscheduledTestCase {
             description: "two models with one name",
@@ -268,7 +281,9 @@ fn given_unschedulable_models_when_starting_then_python_analyses() {
                 ("orders", "SELECT 1 AS order_id", &[], &[]),
                 ("orders", "SELECT 2 AS order_id", &[], &[]),
             ],
-            expected_started: false,
+            expected_error: Some(
+                "NativeCompilerError: native model analysis: two analysed models share a name",
+            ),
         },
     ];
     for test_case in test_cases {
@@ -276,8 +291,46 @@ fn given_unschedulable_models_when_starting_then_python_analyses() {
         let catalog = catalog(&request.dialect, &request.catalog_schemas);
 
         assert_eq!(
-            start_analysis_session(request, &catalog).is_some(),
-            test_case.expected_started,
+            start_analysis_session(request, &catalog).err().as_deref(),
+            test_case.expected_error,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_enrichment_dialect_when_running_then_answers_natively_or_fails_internally() {
+    let test_cases = [
+        SessionFailureTestCase {
+            description: "the dialect compile passes for the postgres adapter",
+            dialect: "postgresql",
+            models: &[UNTYPED_ORDERS],
+            expected_error: None,
+        },
+        SessionFailureTestCase {
+            description: "an adapter alias compile maps before analysis never reaches the session",
+            dialect: "postgres",
+            models: &[UNTYPED_ORDERS],
+            expected_error: Some(
+                "NativeCompilerError: native model analysis of model 'orders_untyped' enrichment: \
+                 query analysis options: unknown variant `postgres`",
+            ),
+        },
+    ];
+    for test_case in test_cases {
+        let mut request = orders_request(model_requests(test_case.models));
+        request.dialect = test_case.dialect.to_owned();
+        let catalog = catalog(&request.dialect, &request.catalog_schemas);
+        let mut session = start_analysis_session(request, &catalog).expect("the session starts");
+
+        let error: Option<String> = run_analysis_session(&mut session).err();
+
+        assert_eq!(
+            error
+                .as_deref()
+                .map(|error| error.split(',').next().unwrap_or(error)),
+            test_case.expected_error,
             "{}",
             test_case.description
         );
@@ -378,14 +431,20 @@ fn given_dynamic_pivots_when_proving_then_matches_python_or_defers() {
             dialect: "duckdb",
             sql: "PIVOT FROM WHERE",
             family: Some(("status", "amount", "MAX")),
-            expected_outcome: PivotOutcome::Deferred,
+            expected_outcome: failed(
+                "dynamic pivot SQL could not be parsed: Parse error at line 1, column 11: \
+                 Unexpected token: From",
+            ),
         },
         PivotTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             dialect: "duckdb",
             sql: "SELECT * FROM __ref(\"stra\u{df}e\")",
             family: Some(("status", "amount", "MAX")),
-            expected_outcome: PivotOutcome::Deferred,
+            expected_outcome: failed(
+                "dynamic-family passthrough from 'stra\u{df}e' must redeclare the upstream \
+                 families exactly",
+            ),
         },
         PivotTestCase {
             description: "no declared families",
@@ -466,9 +525,9 @@ fn given_cte_reads_when_recovering_facts_then_matches_python_or_defers() {
             expected_facts: Some((&[], &[], &[], &["order_id"])),
         },
         CteRecoveryTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             sql: "WITH b\u{e4}se AS (SELECT order_id FROM orders) SELECT order_id FROM b\u{e4}se",
-            expected_facts: None,
+            expected_facts: Some((&[("order_id", "INTEGER")], &[], &["order_id"], &[])),
         },
     ];
     for test_case in test_cases {
@@ -559,9 +618,13 @@ fn given_handed_back_models_when_analysing_legacy_then_matches_python_or_defers(
             ]),
         },
         LegacyAnalysisTestCase {
-            description: "non-ASCII names Python casefolds differently",
+            description: "non-ASCII names fold as Python casefolds them",
             sql: "SELECT \"gr\u{f6}\u{df}e\" FROM orders WHERE \"gr\u{f6}\u{df}e\" IS NOT NULL",
-            expected_lines: None,
+            expected_lines: Some(&[
+                "succeeded=true star=false",
+                "gr\u{f6}\u{df}e - unknown",
+                "gr\u{f6}\u{df}e direct medium [model:orders:gr\u{f6}\u{df}e]",
+            ]),
         },
     ];
     for test_case in test_cases {
@@ -572,6 +635,42 @@ fn given_handed_back_models_when_analysing_legacy_then_matches_python_or_defers(
             test_case
                 .expected_lines
                 .map(|lines| lines.iter().map(|line| (*line).to_owned()).collect()),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_finished_session_when_reading_model_analyses_then_keeps_typed_columns_and_proofs() {
+    let test_cases = [KeptAnalysisTestCase {
+        description: "a proven pivot publishes its fixed columns; a plain model its analysis",
+        dialect: "duckdb",
+        sql: "PIVOT __source(\"raw_orders\") ON status USING MAX(amount) GROUP BY customer_id",
+        family: Some(("status", "amount", "MAX")),
+        expected_outcome: proven(
+            &[("customer_id", "INTEGER", "non_null")],
+            Some("DOUBLE"),
+            "raw_orders",
+            true,
+        ),
+        expected_columns: [&["customer_id INTEGER non_null"], &["1 - non_null"]],
+    }];
+    for test_case in test_cases {
+        let kept = kept_model_analyses(test_case.dialect, test_case.sql, test_case.family);
+
+        assert_eq!(
+            kept,
+            vec![
+                (
+                    test_case.expected_outcome,
+                    Some(lines(test_case.expected_columns[0]))
+                ),
+                (
+                    PivotOutcome::Absent,
+                    Some(lines(test_case.expected_columns[1]))
+                ),
+            ],
             "{}",
             test_case.description
         );

@@ -1,5 +1,5 @@
 use crate::semantic_checks::_helpers::sql_text::parsed_sql::projection_spans;
-use crate::semantic_checks::models::SemanticDeferral;
+use crate::semantic_checks::models::SemanticFailure;
 use crate::semantic_checks::tests::helpers::{names, pairs, parsed_facts};
 use crate::semantic_checks::tests::test_types::{ParsedFactsTestCase, ProjectionSpanTestCase};
 
@@ -40,13 +40,19 @@ fn given_select_lists_when_finding_projection_spans_then_matches_python_tokens()
             description: "no dialect, which the wheel's tokenizer rejects",
             sql: "SELECT a",
             dialect: None,
-            expected_spans: Err(SemanticDeferral::UnsupportedDialect),
+            expected_spans: Err(SemanticFailure::NoDialect),
         },
         ProjectionSpanTestCase {
-            description: "a dialect outside the native parser build",
+            description: "a dialect the all-dialects parser build added, as the wheel tokenizes it",
             sql: "SELECT a",
             dialect: Some("mysql"),
-            expected_spans: Err(SemanticDeferral::UnsupportedDialect),
+            expected_spans: Ok(&[(6, 8)]),
+        },
+        ProjectionSpanTestCase {
+            description: "a dialect Polyglot does not know",
+            sql: "SELECT a",
+            dialect: Some("nonsense"),
+            expected_spans: Err(SemanticFailure::UnknownDialect("nonsense".to_owned())),
         },
     ];
     for test_case in test_cases {

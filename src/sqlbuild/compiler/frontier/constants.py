@@ -10,11 +10,12 @@ DEFAULT_COMPILER_ENGINE: CompilerEngine = CompilerEngine.NATIVE
 COMPILER_ENGINE_VALUES: tuple[str, ...] = tuple(engine.value for engine in CompilerEngine)
 NATIVE_CACHE_NAMESPACE_SUFFIX: str = "-native-v1"
 NATIVE_PREVIEW_CACHE_NAMESPACE_SUFFIX: str = "-native-preview-v1"
+REMOVED_PYTHON_ENGINE: str = "python"
 ENGINE_CACHE_NAMESPACE_SUFFIXES: dict[CompilerEngine, str] = {
-    CompilerEngine.PYTHON: "",
     CompilerEngine.NATIVE: NATIVE_CACHE_NAMESPACE_SUFFIX,
     CompilerEngine.NATIVE_PREVIEW: NATIVE_PREVIEW_CACHE_NAMESPACE_SUFFIX,
 }
+RETIRED_CACHE_NAMESPACE_SUFFIXES: tuple[str, ...] = ("", *ENGINE_CACHE_NAMESPACE_SUFFIXES.values())
 NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.DISCOVERY: NativeStageTier.SHIPPED,
     NativeStage.DECLARATION_SCOPES: NativeStageTier.SHIPPED,
@@ -37,7 +38,6 @@ NATIVE_STAGE_TIERS: dict[NativeStage, NativeStageTier] = {
     NativeStage.COMPILE_OUTPUTS: NativeStageTier.SHIPPED,
 }
 ENGINE_NATIVE_STAGE_TIERS: dict[CompilerEngine, frozenset[NativeStageTier]] = {
-    CompilerEngine.PYTHON: frozenset(),
     CompilerEngine.NATIVE: frozenset({NativeStageTier.SHIPPED}),
     CompilerEngine.NATIVE_PREVIEW: frozenset({NativeStageTier.SHIPPED, NativeStageTier.PREVIEW}),
 }

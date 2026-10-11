@@ -1,6 +1,7 @@
 //! Plain-data request, deferrals and outcomes of the native model analysis session.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 
 use rayon::ThreadPool;
@@ -9,7 +10,7 @@ use sqlbuild_cache::store::models::NativeStore;
 
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
-use crate::assembly::analysis_session::types::{OutputSources, Pairs, Shapes};
+use crate::assembly::analysis_session::types::{NullabilityRuleFn, OutputSources, Pairs, Shapes};
 use crate::semantic_validation::types::DiagnosticRow;
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
@@ -22,7 +23,7 @@ pub struct ModelReference {
 }
 
 /// One analysed model, with the facts Python derives from its compile input.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ModelRequest {
     pub name: String,
     /// Cursor-intrinsic analysis SQL.
@@ -96,20 +97,50 @@ pub struct FinishedSession {
     pub(crate) tables: PivotTables,
     pub(crate) pool: Result<Arc<ThreadPool>, String>,
     pub(crate) models: HashMap<String, SessionModelFacts>,
+    /// Each model's dynamic pivot proof from the session's own relation facts, by model name.
+    pub(crate) dynamic_proofs: HashMap<String, ContractProof>,
 }
 
-/// A compiled model's output names and lineage from an analysis the session completed natively.
+/// The session's typed result for one compiled model, borrowed from the finished session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionModelAnalysis<'a> {
+    /// Whether the session's analysis of the model succeeded; false also for unanalysed names.
+    pub succeeded: bool,
+    /// A proven pivot's fixed columns, else a successful analysis's; None where later decided.
+    pub columns: Option<&'a [ColumnFact]>,
+    /// The session's dynamic pivot proof, for a model declaring dynamic families.
+    pub dynamic_proof: Option<&'a ContractProof>,
+}
+
+impl FinishedSession {
+    /// The session's typed columns and dynamic proof for model `name`, without re-analysis.
+    #[must_use]
+    pub fn model_analysis(&self, name: &str) -> SessionModelAnalysis<'_> {
+        let dynamic_proof: Option<&ContractProof> = self.dynamic_proofs.get(name);
+        let proven: Option<&[ColumnFact]> = dynamic_proof
+            .filter(|proof| proof.output_proven)
+            .map(|proof| proof.fixed_columns.as_slice());
+        let facts: Option<&SessionModelFacts> = self.models.get(name);
+        let analysed: Option<&[ColumnFact]> = facts.and_then(|facts| facts.columns.as_deref());
+        SessionModelAnalysis {
+            succeeded: facts.is_some(),
+            columns: proven.or(analysed),
+            dynamic_proof,
+        }
+    }
+}
+
+/// A compiled model's typed output columns and lineage from a native session analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionModelFacts {
-    pub columns: Option<Vec<String>>,
+    pub columns: Option<Vec<ColumnFact>>,
     pub lineage: OutputSources,
 }
 
-/// A model's dynamic pivot proof: none declared, left to Python, or proven natively.
+/// A model's dynamic pivot proof: none declared, or proven natively.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PivotOutcome {
     Absent,
-    Deferred,
     Proof(ContractProof),
 }
 
@@ -121,8 +152,10 @@ pub struct SessionRequest {
     /// Whether published shapes keep authored quoting, Python's `inferred_binding_shape` test.
     pub case_sensitive_shapes: bool,
     pub function_return_types: Pairs,
-    /// Adapter nullability rules as `(function name, rule id)`; None where one is not Python's.
+    /// Adapter nullability rules as `(function name, rule id)`.
     pub nullability_rules: Option<Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub nullability_callback: Option<NullabilityCallback>,
     pub rich_type_inference: bool,
     pub column_types: Shapes,
     pub column_nullability: Shapes,
@@ -156,10 +189,6 @@ pub struct LineageRow {
 pub enum LineageFacts {
     /// Native compact rows.
     Native(Vec<LineageRow>),
-    /// The lineage of the analysis Python returned for this model's analysis deferral.
-    PythonAnalysis,
-    /// The lineage of the analysis Python returned for this model's enrichment deferral.
-    PythonEnrichment,
     /// Plain lineage facts of a native re-analysis or legacy analysis.
     NativeFacts(Vec<LineageRow>),
 }
@@ -185,40 +214,11 @@ pub struct ModelOutcome {
     pub fused_binding_validated: bool,
 }
 
-/// Work native analysis hands back to Python for one model.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Deferral {
-    /// The native engine asked for Python's legacy analysis of this model.
-    Analysis {
-        model: usize,
-        cleaned_sql: String,
-        binding_schema: Shapes,
-        binding_diagnostics: Vec<DiagnosticRow>,
-        /// Lineage Python projects from native rows, when the engine kept them.
-        lineage: Option<Vec<LineageRow>>,
-    },
-    /// Re-analysis with the model's known input shapes.
-    Enrichment { model: usize, input_schemas: Shapes },
-}
-
-/// Python's answer to one deferral, without the lineage Python keeps.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeferredAnalysis {
-    pub model: usize,
-    pub analysis_succeeded: bool,
-    pub columns: Option<Vec<ColumnFact>>,
-    pub has_star: bool,
-    pub star_resolved: bool,
-    pub binding_diagnostics: Vec<DiagnosticRow>,
-    pub binding_validated: bool,
-}
-
-/// One phase of the session: the deferrals Python must answer, or none when it is done.
+/// The finished run of the session: what Python records from it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SessionStep {
-    /// Shapes published since the previous step, in publication order.
+    /// Shapes published by the run, in publication order.
     pub publications: Shapes,
-    pub deferrals: Vec<Deferral>,
     /// Native analysis failures Python logs at debug level.
     pub failures: Vec<String>,
 }
@@ -240,7 +240,6 @@ pub struct SessionOutcome {
 pub enum ExpressionShape {
     Inferred(Pairs),
     Absent,
-    Deferred,
 }
 
 /// What expression-source shape inference reads from the inference profile.
@@ -249,20 +248,11 @@ pub struct ExpressionShapeRequest {
     pub dialect: String,
     pub case_sensitive_shapes: bool,
     pub function_return_types: Pairs,
+    /// Adapter nullability rules as `(function name, rule id)`.
+    pub nullability_rules: Option<Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub nullability_callback: Option<NullabilityCallback>,
     pub expressions: Vec<String>,
-}
-
-/// Deferrals the session waits on before it continues a wave.
-#[derive(Debug)]
-pub(crate) enum Awaiting {
-    Analyses {
-        wave: usize,
-        models: Vec<usize>,
-    },
-    Enrichments {
-        wave: usize,
-        star_pending: HashMap<usize, bool>,
-    },
 }
 
 /// Where the session is within its waves.
@@ -271,7 +261,6 @@ pub(crate) enum Phase {
     Analyze,
     Complete(usize),
     Finish(usize),
-    Await(Awaiting),
     Done,
 }
 
@@ -291,19 +280,19 @@ pub struct AnalysisCache {
     pub(crate) session_digest: ContentDigest,
     pub(crate) keys: Vec<Option<ContentDigest>>,
     pub(crate) hits: Vec<bool>,
-    /// Models whose outcome must not be stored: a logged failure or Python's answer.
-    pub(crate) uncacheable: Vec<bool>,
     /// The whole-table digest each legacy analysis read; its entry also requires it.
     pub(crate) legacy_tables: Vec<Option<ContentDigest>>,
     pub(crate) stats: AnalysisCacheStats,
 }
 
-/// One compile's model analysis, advanced phase by phase and resumed with Python's answers.
+/// One compile's model analysis, advanced phase by phase.
 #[derive(Debug)]
 pub struct AnalysisSession {
     pub(crate) request: SessionRequest,
     pub(crate) catalog: SessionCatalog,
     pub(crate) dependency_ordered: bool,
+    /// Whether models `ref` each other in a cycle, so Python's completion pass is skipped.
+    pub(crate) cyclic: bool,
     pub(crate) waves: Vec<Vec<usize>>,
     pub(crate) next_wave: usize,
     pub(crate) available_types: ShapeTable,
@@ -314,6 +303,57 @@ pub struct AnalysisSession {
     pub(crate) publications: Shapes,
     pub(crate) failures: Vec<String>,
     pub(crate) cache: Option<AnalysisCache>,
+}
+
+/// Which of Python's column analyses one query outside the session takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryColumnsMode {
+    /// The precomputed compact batch: a failed analysis has no columns.
+    Batch,
+    /// Compact re-analysis over the input types, then the parsed tree where it declines.
+    Reanalysis,
+    /// `infer_columns_with_sql_analysis`: the parsed tree only.
+    Parse,
+    /// `analyze_columns_and_lineage_with_polyglot` with compact analysis off: the parsed tree.
+    Legacy,
+}
+
+/// One query outside the session whose columns Python inferred.
+#[derive(Debug, Clone)]
+pub struct QueryColumnsInput {
+    /// The model SQL; in `Parse` and `Legacy` modes, already through Python's normalization.
+    pub sql: String,
+    pub placeholders: Pairs,
+    /// Every reference's analysis name, in reference order.
+    pub analysis_names: Vec<String>,
+    /// Python's `lineage_reference_map` items.
+    pub lineage_references: Vec<(String, String, String)>,
+    pub recover_cte_facts: bool,
+    pub mode: QueryColumnsMode,
+}
+
+/// The queries, with the profile settings and relation facts their analysis reads.
+#[derive(Debug, Clone, Default)]
+pub struct QueryColumnsRequest {
+    pub dialect: String,
+    /// The unaliased `profile.sql_analysis_dialect or "generic"` normalization reads.
+    pub normalization_dialect: String,
+    pub function_return_types: Pairs,
+    /// Adapter nullability rules as `(function name, rule id)`.
+    pub nullability_rules: Option<Pairs>,
+    /// Runs the adapter's own rules, those with the `python` rule id.
+    pub nullability_callback: Option<NullabilityCallback>,
+    pub types: Shapes,
+    pub nullability: Shapes,
+    pub queries: Vec<QueryColumnsInput>,
+}
+
+/// One query's analysis: whether it succeeded, its columns and whether it projects a star.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct QueryColumns {
+    pub succeeded: bool,
+    pub columns: Option<Vec<ColumnFact>>,
+    pub has_star: bool,
 }
 
 /// One query's CTE fact recovery, as Python's compact enrichment runs it.
@@ -341,4 +381,86 @@ pub struct CteFacts {
     pub direct_outputs: Vec<String>,
     /// Sorted outputs a filter proves non-null.
     pub non_null_outputs: Vec<String>,
+}
+
+/// The callback that runs project-local adapter nullability rules, the `python` rule id.
+#[derive(Clone)]
+pub struct NullabilityCallback(pub Arc<NullabilityRuleFn>);
+
+impl fmt::Debug for NullabilityCallback {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("NullabilityCallback")
+    }
+}
+
+/// Python's `_simple_projection_facts` of a fixture query; names are casefolded.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProjectionFacts {
+    /// `(name, type)` in projection order; a later projection of a name wins.
+    pub types: Vec<(String, String)>,
+    pub null_literal_names: Vec<String>,
+    pub quoted_names: Vec<String>,
+}
+
+/// One model's analysis results, which `model_columns` applies in `_assemble_model`'s order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelColumnsInput<'a> {
+    /// The model's analysis is enabled (`sql_analysis_enabled` for this model).
+    pub analysis_enabled: bool,
+    /// The finished session's result for the model.
+    pub session: SessionModelAnalysis<'a>,
+    /// The `Parse` mode `query_columns` result, required when enabled and the session failed.
+    pub fallback: Option<&'a QueryColumns>,
+    /// A standalone pivot proof, for a model with families the session did not analyse.
+    pub standalone_proof: Option<&'a ContractProof>,
+    /// Output columns type recovery poisoned for this model (`TypeRecoveryPlan::poisoned`).
+    pub poisoned: &'a [String],
+}
+
+/// A model's final output columns, as `CompiledModel` carries them after type recovery.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ModelColumns {
+    /// `inferred_columns`; a poisoned column has no type.
+    pub columns: Option<Vec<ColumnFact>>,
+    /// A proven pivot forces `fast_lineage_has_star`.
+    pub proven_star: bool,
+    /// `unchecked_output_columns`: every poisoned name, in plan order.
+    pub unchecked: Vec<String>,
+}
+
+impl ModelColumnsInput<'_> {
+    /// `_assemble_model`'s columns, then `_recovered_model`'s; Err where the fallback is missing.
+    pub fn model_columns(&self) -> Result<ModelColumns, String> {
+        let analysed: Option<Vec<ColumnFact>> = if !self.analysis_enabled {
+            None
+        } else if self.session.succeeded {
+            self.session.columns.map(<[ColumnFact]>::to_vec)
+        } else {
+            self.fallback
+                .ok_or("a failed session analysis without its parse fallback")?
+                .columns
+                .clone()
+        };
+        let proven: Option<&ContractProof> = self
+            .session
+            .dynamic_proof
+            .or(self.standalone_proof)
+            .filter(|proof| proof.output_proven);
+        let columns: Option<Vec<ColumnFact>> = proven
+            .map(|proof| proof.fixed_columns.clone())
+            .or(analysed)
+            .map(|mut columns| {
+                for column in &mut columns {
+                    if self.poisoned.contains(&column.name) {
+                        column.data_type = None;
+                    }
+                }
+                columns
+            });
+        Ok(ModelColumns {
+            columns,
+            proven_star: proven.is_some(),
+            unchecked: self.poisoned.to_vec(),
+        })
+    }
 }

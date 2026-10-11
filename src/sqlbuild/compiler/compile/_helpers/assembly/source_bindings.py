@@ -7,8 +7,11 @@ from graphlib import TopologicalSorter
 from typing import Any
 
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.analysis.compact import (
-    analyze_columns_and_lineage_with_polyglot,
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
+from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
     get_complete_schema_binding_request,
 )
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
@@ -32,7 +35,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlExpansion,
     CompilerDiagnostic,
-    PolyglotAnalysisResult,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
@@ -125,16 +127,19 @@ def get_source_binding_diagnostics(
                 table: dict.fromkeys(shape, InferredNullability.UNKNOWN)
                 for table, shape in inputs.items()
             }
-            analysis: PolyglotAnalysisResult = analyze_columns_and_lineage_with_polyglot(
-                query_sql=model.query_sql,
-                references=model.references,
-                placeholders=_placeholders(model),
+            analysis: NativeQueryColumns = infer_native_query_columns(
+                queries=(
+                    NativeColumnQuery(
+                        sql=model.query_sql,
+                        mode="reanalysis",
+                        placeholders=_placeholders(model),
+                        references=model.references,
+                    ),
+                ),
+                profile=profile,
                 column_types_by_table=inputs,
                 column_nullability_by_table=nullability,
-                inference_profile=profile,
-                allow_compact_analysis=True,
-                recover_cte_facts=True,
-            )
+            )[0]
             if analysis.columns and (not analysis.has_star or all(inputs.values())):
                 shapes[model.name] = published_model_shape(
                     sql=model.query_sql,

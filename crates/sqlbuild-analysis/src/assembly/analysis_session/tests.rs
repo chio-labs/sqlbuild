@@ -8,5 +8,7 @@ mod expression_shapes;
 mod helpers;
 #[path = "tests/test_mappings.rs"]
 mod mappings;
+#[path = "tests/test_model_columns.rs"]
+mod model_columns;
 #[path = "tests/test_types.rs"]
 mod test_types;

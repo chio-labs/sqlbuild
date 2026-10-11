@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import replace
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.analysis.compact import get_complete_schema_binding_request
+from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
+    get_complete_schema_binding_request,
+)
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
     _audit_errors,
     _names,
     _sql_test_columns,
-    get_semantic_metadata_diagnostics,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
@@ -54,19 +55,6 @@ class SemanticCompletionInputs:
             quoted_identifiers_ignore_case=ignores_quoted_case(
                 connection=project.effective_connection, dialect=project.sql_analysis_dialect
             ),
-        )
-
-    @staticmethod
-    def metadata_diagnostics(
-        *,
-        project: CompiledProject,
-        profile: ExpressionInferenceProfile,
-        resource_sql_analysis: bool,
-    ) -> tuple[CompilerDiagnostic, ...]:
-        """The semantic metadata checks after type recovery."""
-
-        return get_semantic_metadata_diagnostics(
-            project=project, profile=profile, resource_sql_analysis=resource_sql_analysis
         )
 
     @staticmethod

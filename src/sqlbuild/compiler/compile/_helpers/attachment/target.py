@@ -20,7 +20,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
-    ENGINE_CACHE_NAMESPACE_SUFFIXES,
+    RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
@@ -78,7 +78,7 @@ def compile_cache_root(
 def _remove_retired_caches(*, root: Path) -> None:
     """Delete the fact and reference caches older releases kept under every engine's root."""
 
-    for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values():
+    for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES:
         for name in (RETIRED_FACT_CACHE_DIRECTORY_NAME, RETIRED_REFERENCE_CACHE_DIRECTORY_NAME):
             retired: Path = root.parent / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}" / name
             if retired.is_dir():

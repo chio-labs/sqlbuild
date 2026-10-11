@@ -27,7 +27,14 @@ pub(crate) struct SessionFactsTestCase {
 pub(crate) struct UnscheduledTestCase {
     pub(crate) description: &'static str,
     pub(crate) models: &'static [ModelSpec],
-    pub(crate) expected_started: bool,
+    pub(crate) expected_error: Option<&'static str>,
+}
+
+pub(crate) struct SessionFailureTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) models: &'static [ModelSpec],
+    pub(crate) expected_error: Option<&'static str>,
 }
 
 pub(crate) struct ExpressionShapeTestCase {
@@ -134,4 +141,32 @@ pub(crate) struct CachedRun {
         Vec<String>,
         Vec<String>,
     ),
+}
+
+pub(crate) struct KeptAnalysisTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) family: Option<(&'static str, &'static str, &'static str)>,
+    pub(crate) expected_outcome: PivotOutcome,
+    /// `name type nullability` of each model's published columns: the pivot, then a plain one.
+    pub(crate) expected_columns: [&'static [&'static str]; 2],
+}
+
+/// Final `(name, type)` columns and the forced star.
+pub(crate) type ColumnView<'a> = (Option<Vec<(&'a str, Option<&'a str>)>>, bool);
+
+/// The expected column view, or the internal failure.
+pub(crate) type ExpectedModelColumns = Result<ColumnView<'static>, &'static str>;
+
+pub(crate) struct ModelColumnsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) analysis_enabled: bool,
+    pub(crate) succeeded: bool,
+    pub(crate) session_columns: Option<&'static [(&'static str, &'static str)]>,
+    pub(crate) session_proof: Option<(bool, &'static [(&'static str, &'static str)])>,
+    pub(crate) fallback: Option<Option<&'static [(&'static str, &'static str)]>>,
+    pub(crate) standalone_proof: Option<(bool, &'static [(&'static str, &'static str)])>,
+    pub(crate) poisoned: &'static [&'static str],
+    pub(crate) expected_columns: ExpectedModelColumns,
 }

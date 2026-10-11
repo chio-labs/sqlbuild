@@ -15,12 +15,14 @@ from typing import cast
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.compile._helpers.render.declarations import declaration_usage_records
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros_result
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileProjectInputs,
+    DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
@@ -37,8 +39,8 @@ from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
-from sqlbuild.compiler.scopes.models import ResourceIdentity
-from sqlbuild.compiler.scopes.types import ResourceKind
+from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity, VisibilityRecord
+from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, VisibilityReason
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
@@ -556,3 +558,43 @@ def engine_render_outcome(
         ),
     }[failure is None]
     return outcome, tuple(log_path.read_text(encoding="utf-8").splitlines())
+
+
+_USAGE_CONSUMER: ResourceIdentity = ResourceIdentity(ResourceKind.TEST, "orders_test")
+
+
+def _visible(kind: DeclarationKind, name: str) -> tuple[VisibilityRecord, ...]:
+    return (
+        VisibilityRecord(
+            resource=_USAGE_CONSUMER,
+            declaration=DeclarationIdentity(kind, name),
+            reason=VisibilityReason.GLOBAL,
+        ),
+    )
+
+
+_USAGE_DECLARATIONS: DeclarationResolutionContext = DeclarationResolutionContext(
+    enum_visibility={
+        "status": _visible(DeclarationKind.ENUM, "status"),
+        "size": _visible(DeclarationKind.ENUM, "size"),
+    },
+    constant_visibility={"rate": _visible(DeclarationKind.CONSTANT, "rate")},
+)
+
+
+def declaration_usage_outcome(sql: str) -> tuple[object, ...]:
+    """The names of the declarations `sql` uses, in order, or the error the scan raises."""
+
+    capture: ExpansionFailureCapture = ExpansionFailureCapture()
+    names: list[tuple[object, ...]] = [()]
+    with capture:
+        names[0] = tuple(
+            usage.declaration.name
+            for usage in declaration_usage_records(
+                sql=sql, resource=_USAGE_CONSUMER, declarations=_USAGE_DECLARATIONS
+            )
+        )
+    return {
+        True: names[0],
+        False: (type(capture.failure).__name__, str(capture.failure)),
+    }[capture.failure is None]

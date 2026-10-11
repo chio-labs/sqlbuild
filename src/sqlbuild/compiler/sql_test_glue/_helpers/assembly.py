@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import SQL_TEST_HELPER_REFERENCE_CODE
@@ -21,8 +22,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.sql_test_glue._helpers.deferrals import record_sql_test_assembly_deferral
-from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly
+from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly, NativeSqlTestFailure
 from sqlbuild.compiler.sql_test_glue.types import (
     NativeSqlTestAssemblyRow,
     NativeSqlTestDiagnosticRow,
@@ -33,16 +33,23 @@ from sqlbuild.spec.contracts.models import SourceLocation
 
 def native_sql_test_assemblies(
     *, test_inputs: tuple[CompileSqlTestInput, ...], rows: list[NativeSqlTestAssemblyRow]
-) -> tuple[NativeSqlTestAssembly | None, ...]:
-    """One assembly per test input, or None, recorded, where the native assembly defers."""
+) -> tuple[NativeSqlTestAssembly, ...]:
+    """One assembly per test input, with the error its assembly raises, if any."""
 
-    assemblies: list[NativeSqlTestAssembly | None] = []
-    for test_input, (facts, deferral) in zip(test_inputs, rows, strict=True):
+    assemblies: list[NativeSqlTestAssembly] = []
+    for test_input, (facts, failure_row) in zip(test_inputs, rows, strict=True):
+        failure: NativeSqlTestFailure | None = (
+            None
+            if failure_row is None
+            else NativeSqlTestFailure(kind=failure_row[0], message=failure_row[1])
+        )
         if facts is None:
-            record_sql_test_assembly_deferral(kind=str(deferral))
-            assemblies.append(None)
+            assemblies.append(NativeSqlTestAssembly(test=None, diagnostics=(), failure=failure))
             continue
-        assemblies.append(native_sql_test_assembly(test_input=test_input, facts=facts))
+        assembled: NativeSqlTestAssembly = native_sql_test_assembly(
+            test_input=test_input, facts=facts
+        )
+        assemblies.append(replace(assembled, failure=failure))
     return tuple(assemblies)
 
 

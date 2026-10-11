@@ -18,7 +18,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.main._report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SchemaModelEntry

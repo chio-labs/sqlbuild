@@ -7,6 +7,8 @@ use sqlbuild_cache::store::models::NativeStore;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::macro_calls::errors::ScanError;
+
 use crate::macro_calls::_helpers::entry_codec::{decode_entry, encode_entry};
 
 /// One top-level `@macro(...)` call in an authored SQL string; offsets count code points.
@@ -14,19 +16,34 @@ use crate::macro_calls::_helpers::entry_codec::{decode_entry, encode_entry};
 pub struct MacroCallSite {
     /// Offset of the `@` that starts the call.
     pub start: usize,
+    /// Offset just past the call's opening parenthesis, where its arguments start.
+    pub args_start: usize,
     /// Offset just past the call's closing parenthesis.
     pub end: usize,
     /// The called macro's name.
     pub name: String,
-    /// Every macro name in the call, the top-level name first, then nested calls once each.
-    pub tree_names: Vec<String>,
+    /// Every macro name in the call: the top-level name, then nested calls once each.
+    pub tree_names: Option<Vec<String>>,
     /// The arguments mention `__ref`, `__source` or `__seed`, so typed references may be passed.
     pub typed_reference_text: bool,
 }
 
-/// The scan met text Python reports or classifies differently; Python must expand the string.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ScanDeferral;
+/// Where a scan stops: inside the call at a code point offset, or between calls.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MacroScanFailure {
+    /// Offset of the `@` of the call Python's evaluation raises in, if any.
+    pub call_start: Option<usize>,
+    /// The name of the call Python's evaluation raises in, if any.
+    pub call_name: Option<String>,
+    pub error: ScanError,
+}
+
+/// A string's complete top-level call sites in order, and where the scan stopped, if it did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MacroCallScan {
+    pub sites: Vec<MacroCallSite>,
+    pub failure: Option<MacroScanFailure>,
+}
 
 /// One consumer-independent fact a macro call produced, replayed for every consumer in order.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -23,6 +23,7 @@ sha2.workspace = true
 sqlbuild-cache.workspace = true
 sqlbuild-core.workspace = true
 sqlbuild-model-config.workspace = true
+sqlbuild-render.workspace = true
 sqlbuild-scopes.workspace = true
 sqlbuild-sqltext.workspace = true
 

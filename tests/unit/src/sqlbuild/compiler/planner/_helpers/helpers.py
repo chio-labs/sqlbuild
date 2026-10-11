@@ -10,10 +10,10 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile._helpers.deps.dependencies import audit_scope_deps
 from sqlbuild.compiler.compile._helpers.sql_tests.core import (
     extract_assertion_target_model_names,
 )
@@ -1378,7 +1378,7 @@ def build_scheduling_audit(
     return CompiledAudit(
         key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=name),
         definition_name="test_audit",
-        scope_deps=audit_scope_deps(
+        scope_deps=native_audit_scope_deps(
             references=references,
             attached_target_kind=attached_target_kind,
             attached_target_name=attached_target_name,
@@ -1447,4 +1447,32 @@ def build_seed_identity_compiled_seed(
             name="orders",
             qualified_name="main.orders",
         ),
+    )
+
+
+def native_audit_scope_deps(
+    *,
+    references: tuple[CompileSqlReference, ...],
+    attached_target_kind: AttachedAuditTargetKind | None,
+    attached_target_name: str | None,
+) -> tuple[CompiledObjectKey, ...]:
+    """The audit's scope dependencies as native project assembly derives them."""
+
+    attached: tuple[str, str] | None = {
+        True: None,
+        False: (str(attached_target_kind), str(attached_target_name)),
+    }[attached_target_kind is None or attached_target_name is None]
+    audit_row: tuple[list[tuple[str, str, str | None]], tuple[str, str] | None] = (
+        [
+            (str(reference.ref_kind), reference.ref_name, reference.ref_package)
+            for reference in references
+        ],
+        attached,
+    )
+    audit_deps: list[list[tuple[str, str]]] = _native.assemble_project_resource_facts(
+        ("generic", None, (None, None, None, None), [], [], [], [], [], [], [audit_row])
+    )[4]
+    return tuple(
+        CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
+        for kind, name in audit_deps[0]
     )

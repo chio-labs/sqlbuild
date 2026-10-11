@@ -705,6 +705,7 @@ dependencies = [
  "sqlbuild-cache",
  "sqlbuild-core",
  "sqlbuild-model-config",
+ "sqlbuild-render",
  "sqlbuild-scopes",
  "sqlbuild-sqltext",
 ]

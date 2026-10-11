@@ -1,4 +1,4 @@
-"""Native fast column lineage equals Python's on generated projects, model by model."""
+"""Native fast column lineage: Python-oracle goldens, restored projects and internal failures."""
 
 from __future__ import annotations
 
@@ -10,17 +10,25 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.lineage._helpers.fast_columns import build_fast_project_column_lineage
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
 )
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
+from tests.integration.src.sqlbuild.compiler.helpers import (
+    GoldenEntry,
+    golden_differences,
+    golden_entry,
+    golden_name,
+    mismatches,
+    read_golden,
+)
 from tests.integration.src.sqlbuild.compiler.lineage._test_types import (
-    DeferredLineageTestCase,
+    FormerlyDeferredLineageTestCase,
     GeneratedLineageParityTestCase,
+    ParserPanicLineageTestCase,
     UnparsedLineageTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import (
@@ -51,7 +59,7 @@ _MODEL_COUNT: int = 16
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_projects_when_building_fast_lineage_natively_then_matches_python(
+def test_given_generated_projects_when_building_fast_lineage_then_restored_projects_agree(
     test_case: GeneratedLineageParityTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -59,6 +67,7 @@ def test_given_generated_projects_when_building_fast_lineage_natively_then_match
     rng: random.Random = random.Random(test_case.seed)
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
     differences: list[tuple[object, object, object]] = []
+    golden: list[GoldenEntry] = []
     for index in range(test_case.count):
         project: CompiledProject = compiled_project(
             project_dir=tmp_path / f"project_{index}",
@@ -70,13 +79,35 @@ def test_given_generated_projects_when_building_fast_lineage_natively_then_match
         for variant in (project, without_compact_facts(project)):
             for dialect in test_case.dialects:
                 for model_names in (None, selected):
-                    names, python_views, native_views = lineage_views(
+                    names, with_catalog = lineage_views(
                         project=variant, dialect=dialect, model_names=model_names
                     )
+                    golden.append(
+                        golden_entry(
+                            "lineage",
+                            {
+                                f"{position}:{name}": view
+                                for position, (name, view) in enumerate(
+                                    zip(names, with_catalog, strict=True)
+                                )
+                            },
+                        )
+                    )
+                    _, restored = lineage_views(
+                        project=replace(variant, binding_catalog=None),
+                        dialect=dialect,
+                        model_names=model_names,
+                    )
                     differences.extend(
-                        mismatches(inputs=names, expected=python_views, actual=native_views)
+                        mismatches(inputs=names, expected=with_catalog, actual=restored)
                     )
 
+    assert (
+        golden_differences(
+            read_golden(golden_name("fast_lineage_generated", test_case.description)), golden
+        )
+        == []
+    )
     assert differences == []
     assert statuses["deferred"] == 0
     assert sum(statuses.values()) >= test_case.expected_minimum_native
@@ -102,7 +133,7 @@ def test_given_generated_projects_when_building_fast_lineage_natively_then_match
     ],
     ids=lambda case: case.description,
 )
-def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_like_python(
+def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_it(
     test_case: UnparsedLineageTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -122,44 +153,39 @@ def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_l
     )
 
     with caplog.at_level(logging.DEBUG, logger="sqlbuild.lineage"):
-        python: ProjectColumnLineage | None = build_fast_project_column_lineage(project=broken)
-        python_records: list[tuple[str, str, object]] = lineage_log_records(caplog)
-        caplog.clear()
         native: ProjectColumnLineage | None = build_native_column_lineage(
             project=broken, dialect=None, model_names=None
         )
         native_records: list[tuple[str, str, object]] = lineage_log_records(caplog)
 
-    assert native == python
     assert native is not None
     assert not native.has_model(project.models[0].name)
     assert statuses[test_case.expected_status] == 1
-    assert native_records == python_records
     assert tuple(message for _, message, _ in native_records) == test_case.expected_messages
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeferredLineageTestCase(
-            description="a dialect outside the native parser build",
+        FormerlyDeferredLineageTestCase(
+            description="a dialect outside the old native parser build",
             dialect="mysql",
             keeps_catalog=True,
-            expected_native_statuses={"deferred": _MODEL_COUNT},
-            expected_kind="unsupported_dialect",
+            expected_native_statuses={"built": _MODEL_COUNT},
+            expected_error=None,
         ),
-        DeferredLineageTestCase(
-            description="a project without an analysis catalog to run on",
+        FormerlyDeferredLineageTestCase(
+            description="a project restored without its analysis catalog",
             dialect="duckdb",
             keeps_catalog=False,
-            expected_native_statuses={},
-            expected_kind="no_analysis_catalog",
+            expected_native_statuses={"built": _MODEL_COUNT},
+            expected_error=None,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_deferred_models_when_building_fast_lineage_then_python_builds_and_records(
-    test_case: DeferredLineageTestCase,
+def test_given_formerly_deferred_models_when_building_fast_lineage_then_native_answers(
+    test_case: FormerlyDeferredLineageTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -176,15 +202,84 @@ def test_given_deferred_models_when_building_fast_lineage_then_python_builds_and
         compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
     )
 
-    names, python_views, native_views = lineage_views(
-        project=project, dialect=test_case.dialect, model_names=None
+    _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
+
+    assert statuses == Counter(test_case.expected_native_statuses), test_case.description
+    assert deferral_records(record_dir) == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FormerlyDeferredLineageTestCase(
+            description="a dialect name Polyglot does not know raises Python's error",
+            dialect="nonsense",
+            keeps_catalog=True,
+            expected_native_statuses={"unknown_dialect": _MODEL_COUNT},
+            expected_error="Unknown dialect: nonsense",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_dialect_when_building_fast_lineage_then_python_error_raises(
+    test_case: FormerlyDeferredLineageTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record_dir: Path = tmp_path / "records"
+    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
+    statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
+    compiled: CompiledProject = without_compact_facts(
+        compiled_project(
+            project_dir=tmp_path / "project",
+            files=generated_lineage_files(rng=random.Random(7), model_count=_MODEL_COUNT),
+        )
+    )
+    project: CompiledProject = replace(
+        compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
     )
 
-    assert mismatches(inputs=names, expected=python_views, actual=native_views) == []
-    assert statuses == Counter(test_case.expected_native_statuses)
-    assert deferral_records(record_dir) == (
-        [{"kind": test_case.expected_kind, "site": "fast_columns.py"}] * _MODEL_COUNT
+    with pytest.raises(ValueError, match=test_case.expected_error):
+        _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
+
+    assert statuses == Counter(test_case.expected_native_statuses), test_case.description
+    assert deferral_records(record_dir) == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParserPanicLineageTestCase(
+            description="truncated T-SQL the parser panics on, which crashes the wheel's process",
+            dialect="tsql",
+            query_sql="SELECT IF(region > 1, re",
+            expected_message=(
+                "NativeCompilerError: native SQL compilation panicked "
+                "(native fast lineage of request model 0)"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_parser_panic_when_building_fast_lineage_then_raises_native_compiler_error(
+    test_case: ParserPanicLineageTestCase, tmp_path: Path
+) -> None:
+    project: CompiledProject = compiled_project(
+        project_dir=tmp_path / "project",
+        files=generated_lineage_files(rng=random.Random(11), model_count=_MODEL_COUNT),
     )
+    broken: CompiledProject = replace(
+        project,
+        models=(
+            replace(project.models[0], query_sql=test_case.query_sql, fast_lineage_columns=None),
+            *project.models[1:],
+        ),
+    )
+
+    with pytest.raises(native_module.NativeCompilerError) as raised:
+        _ = build_native_column_lineage(project=broken, dialect=test_case.dialect, model_names=None)
+
+    assert str(raised.value) == test_case.expected_message
 
 
 if __name__ == "__main__":

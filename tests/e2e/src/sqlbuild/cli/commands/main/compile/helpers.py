@@ -33,7 +33,6 @@ import sqlbuild.adapter.type_system._helpers.type_normalization as type_normaliz
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
-import sqlbuild.compiler.compile._helpers.assembly.binding_waves as binding_waves
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
@@ -68,7 +67,7 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
     COMPILER_ENGINE_ENV_VAR,
-    ENGINE_CACHE_NAMESPACE_SUFFIXES,
+    RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.frontier.types import NativeStage
@@ -3838,13 +3837,6 @@ def twin_header_changed(root: Path) -> None:
     )
 
 
-def analyze_one_model_at_a_time(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run the binding dataflow with one worker taking one model at a time."""
-
-    for name in ("_DATAFLOW_WORKERS", "_DATAFLOW_BATCH_MIN", "_DATAFLOW_BATCH_LIMIT"):
-        monkeypatch.setattr(binding_waves, name, 1)
-
-
 def analyze_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:
     """Analyze every model in one batch, without dependency-ordered binding."""
 
@@ -4169,7 +4161,7 @@ def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
     """Leave every engine's fact and reference caches and other slots' render files behind."""
 
     written: list[Path] = []
-    for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values():
+    for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES:
         engine_root: Path = (
             compiler_cache_directory(project_dir).parent
             / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
@@ -4253,20 +4245,6 @@ def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         native_reuse, "EXCLUDED_ROOT_DIRECTORIES", EXCLUDED_ROOT_DIRECTORIES | {"models"}
     )
-
-
-def ignore_query_in_analysis_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Key Python's cached model analyses without their query, so an edited query reads a stale
-    analysis; the Python engine runs, since native analysis keys its own cache."""
-
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, "python")
-    analysis_key: Callable[..., str] = project_assembly.model_analysis_cache_key
-
-    def query_blind_key(**kwargs: Any) -> str:
-        kwargs["query_sql"] = ""
-        return analysis_key(**kwargs)
-
-    monkeypatch.setattr(project_assembly, "model_analysis_cache_key", query_blind_key)
 
 
 EXTERNAL_FLAVOR_MODULE: str = "extflavor"
@@ -4366,23 +4344,6 @@ def engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
     """Compile with reuse enabled under one engine selected by the hidden flag."""
 
     return run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
-
-
-def environment_engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
-    """Compile with reuse enabled under the engine the environment selects; empty means default."""
-
-    return run_reuse_compile(project_dir=project_dir, env={COMPILER_ENGINE_ENV_VAR: engine})
-
-
-def engine_compile_and_rules(*, project_dir: Path, engine: str, rules_selector: str) -> int:
-    """Compile and run Rules under one engine; return the Rules exit code."""
-
-    _ = engine_reuse_compile(project_dir=project_dir, engine=engine)
-    return run_installed_sqb(
-        project_dir=project_dir,
-        args=("--compiler-engine", engine, "rules", "run", rules_selector),
-        env=COMPILE_REUSE_ENV,
-    ).returncode
 
 
 def report_engine(run: CompileReuseRun) -> str:
@@ -5047,20 +5008,6 @@ def fallback_free_preview_compile(
             patch.setenv(variable, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     return run, called
-
-
-def python_engine_compile(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> CompileReuseRun:
-    """Compile under the Python engine in this process."""
-
-    with monkeypatch.context() as patch:
-        for variable, value in {
-            COMPILER_ENGINE_ENV_VAR: "python",
-            REUSE_DISABLE_ENV_VAR: "1",
-        }.items():
-            patch.setenv(variable, value)
-        return in_process_reuse_run(project_dir=project_dir, capsys=capsys)
 
 
 def write_counted_error_project(*, project_dir: Path, files: dict[str, str]) -> None:

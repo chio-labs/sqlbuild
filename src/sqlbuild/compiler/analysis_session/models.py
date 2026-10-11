@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.types import QueryColumnsMode
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompileModelInput,
+    CompileSqlReference,
+    InferredColumn,
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.lineage.types import InferredNullability
@@ -49,3 +52,23 @@ class NativePivotTables:
     authoritative_column_types_by_table: dict[str, dict[str, str]]
     column_nullability_by_table: dict[str, dict[str, InferredNullability]]
     dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]]
+
+
+@dataclass(frozen=True, slots=True)
+class NativeColumnQuery:
+    """One query outside the session whose output columns Python's analysis inferred."""
+
+    sql: str
+    mode: QueryColumnsMode
+    placeholders: dict[str, str] | None = None
+    references: tuple[CompileSqlReference, ...] = ()
+    recover_cte_facts: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class NativeQueryColumns:
+    """One query's analysis: whether it succeeded, its columns and whether it projects a star."""
+
+    succeeded: bool
+    columns: tuple[InferredColumn, ...] | None
+    has_star: bool

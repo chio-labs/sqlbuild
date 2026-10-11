@@ -6,27 +6,8 @@ from tests.integration.src.sqlbuild.compiler.sql_test_glue.helpers import SqlTes
 
 
 @dataclass(frozen=True)
-class GeneratedSqlTestPlanningParityTestCase:
-    """Seeded SQL-test projects the native planning glue and the JSON request must agree on."""
-
-    description: str
-    seed: int
-    count: int
-    test_count: int
-    shape: SqlTestCorpusShape
-    adapter_names: tuple[str, ...]
-    expected_minimum_native_planned: int
-    expected_minimum_native_with_errors: int
-    expected_minimum_native_chains: int
-    expected_minimum_native_raised: int
-    expected_native_raised_kinds: frozenset[str]
-    expected_minimum_answered_batches: int
-    expected_minimum_raised_outcomes: int
-
-
-@dataclass(frozen=True)
 class GeneratedSqlTestAssemblyParityTestCase:
-    """Seeded SQL-test projects native and Python assembly must compile identically."""
+    """Seeded SQL-test projects native assembly must compile as Python's recorded assembly did."""
 
     description: str
     seed: int
@@ -34,3 +15,22 @@ class GeneratedSqlTestAssemblyParityTestCase:
     test_count: int
     shape: SqlTestCorpusShape
     expected_native_assemblies: dict[str, int]
+
+
+@dataclass(frozen=True)
+class EdgeSqlTestAssemblyTestCase:
+    """One project whose SQL test Python's assembly once answered alone, and its outcome kind."""
+
+    description: str
+    files: dict[str, str]
+    expected_outcome: str
+
+
+@dataclass(frozen=True)
+class HelperReadsTestCase:
+    """CTE bodies whose helper-key reads Python's `_parsed_reads` recorded in a golden."""
+
+    description: str
+    keys: frozenset[str]
+    bodies: tuple[str, ...]
+    expected_differences: list[tuple[int, str, object, object]]
