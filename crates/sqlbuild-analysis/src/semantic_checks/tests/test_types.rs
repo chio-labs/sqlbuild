@@ -94,3 +94,10 @@ pub(crate) struct MetadataTestCase {
     pub(crate) mart_shape: &'static [(&'static str, &'static str)],
     pub(crate) expected_outcome: Result<MetadataOutcome, SemanticFailure>,
 }
+
+pub(crate) struct PreparedTestSqlTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql_body: &'static str,
+    pub(crate) expected_sql: &'static str,
+    pub(crate) expected_relations: &'static [&'static str],
+}
