@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Iterable
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import CompileSqlReference
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.project_assembly.constants import (
     BOOLEAN_VARIABLE,
-    ENVIRONMENT_NAME_PATTERN,
     FALSE_TEXT,
     NATIVE_INT_MAX,
     NATIVE_INT_MIN,
@@ -106,11 +105,9 @@ def _tag_rows(value: object) -> list[str]:
 def _environment_rows(values: Iterable[str | None]) -> list[tuple[str, str | None]]:
     """Python's own `os.environ` lookup of every name an `ENV:` template may read."""
 
-    names: dict[str, None] = {}
-    for value in values:
-        if value is not None:
-            names.update(dict.fromkeys(re.findall(ENVIRONMENT_NAME_PATTERN, value)))
-    return [(name, os.environ.get(name)) for name in names]
+    return [
+        (name, os.environ.get(name)) for name in _native.environment_template_names(list(values))
+    ]
 
 
 def _variable_row(

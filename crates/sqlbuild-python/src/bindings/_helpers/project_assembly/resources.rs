@@ -10,6 +10,7 @@ use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 use sqlbuild_analysis::assembly::project::errors::AssemblyError;
 use sqlbuild_analysis::assembly::project::main::assemble_project_resources::assemble_project_resources;
 use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
+use sqlbuild_analysis::assembly::project::main::environment_template_names::environment_template_names as template_names;
 use sqlbuild_analysis::assembly::project::main::sql_syntax_error::sql_syntax_error as check_syntax_error;
 use sqlbuild_analysis::assembly::project::models::{
     AuditFacts, FunctionFacts, InputRead, ModelFacts, Namespace, OpaqueRender, OpaqueVariable,
@@ -390,9 +391,16 @@ fn namespace_row(namespace: Namespace) -> NamespaceRow {
     )
 }
 
+/// The distinct `ENV:` names target templates read, in first-seen order.
+#[pyfunction]
+fn environment_template_names(values: Vec<Option<String>>) -> Vec<String> {
+    template_names(&values)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(assemble_project_resource_facts, module)?)?;
     module.add_function(wrap_pyfunction!(check_native_sql_syntax, module)?)?;
     module.add_function(wrap_pyfunction!(sql_syntax_error, module)?)?;
+    module.add_function(wrap_pyfunction!(environment_template_names, module)?)?;
     Ok(())
 }

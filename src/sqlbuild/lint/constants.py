@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.lint.types import LintSeverity
 
 LINT_ENGINE_SQLBUILD: str = "sqlbuild"
@@ -127,3 +129,10 @@ FIX_COLUMNS_CHANGED: str = "The fix would change output columns, types or nullab
 FIX_DEPENDENCIES_CHANGED: str = "The fix would change model dependencies"
 FIX_LINEAGE_CHANGED: str = "The fix would change column lineage"
 FIX_NEW_DIAGNOSTICS: str = "The fix would add compile diagnostics: "
+
+SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
+    r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
+)
+SQL_ARGUMENT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
+    r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_])(?!\s*\()"
+)

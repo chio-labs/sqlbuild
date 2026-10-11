@@ -8,8 +8,6 @@ from functools import cache
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import (
     MACRO_TOKEN,
-    SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN,
-    SQL_ARGUMENT_RAW_PARAMETER_PATTERN,
     SQL_INTERPOLATION_TOKEN,
 )
 from sqlbuild.compiler.compile.models import ExpansionSpan
@@ -23,6 +21,8 @@ from sqlbuild.lint.constants import (
     OPENING_PAREN_CHARACTER,
     SENTINEL_TEMPLATE,
     SINGLE_QUOTE_CHARACTER,
+    SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN,
+    SQL_ARGUMENT_RAW_PARAMETER_PATTERN,
     SQL_ESCAPE_CHARACTER,
     SQL_QUOTE_CHARACTERS,
     TEMPLATE_INTERPOLATION_END,

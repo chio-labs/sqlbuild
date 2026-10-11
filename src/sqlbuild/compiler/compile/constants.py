@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from sqlbuild.compiler.compile.classes.compile_input_read_registry import (
     CompileInputReadRegistry,
 )
@@ -80,12 +78,6 @@ SQL_INTERPOLATION_TOKEN: str = "@@"
 
 TEMPLATE_OPEN_TOKEN: str = "${"
 
-SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
-    r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
-)
-SQL_ARGUMENT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
-    r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_])(?!\s*\()"
-)
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
 ASSERT_TEST_CTE_PREFIX: str = "__assert__"
 REF_TEST_CTE_PREFIX: str = SqlReferenceKind.REF.fixture_cte_prefix

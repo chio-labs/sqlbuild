@@ -80,3 +80,9 @@ pub(crate) struct SyntaxBatchTestCase {
     /// None where Python raises.
     pub(crate) expected_valid: Option<bool>,
 }
+
+pub(crate) struct EnvironmentNamesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) values: &'static [Option<&'static str>],
+    pub(crate) expected_names: &'static [&'static str],
+}
