@@ -12,7 +12,6 @@ from sqlbuild.compiler.discovery.exceptions import (
     ModelHeaderSyntaxError,
     ModelSqlParseError,
 )
-from sqlbuild.compiler.discovery.models import ModelHeaderColumnSpan, ModelHeaderMatch
 from sqlbuild.spec.contracts.models import SourceLocation
 
 _MODEL_HEADER_TOKEN_CACHE_SIZE: int = 4096
@@ -45,53 +44,6 @@ class _ModelHeaderParseCache:
 
 
 _MODEL_HEADER_PARSE_CACHE: _ModelHeaderParseCache = _ModelHeaderParseCache()
-
-
-def match_model_header(contents: str) -> ModelHeaderMatch | None:
-    """Match the MODEL(...) header once so callers can reuse it for every header projection."""
-
-    offsets: tuple[int, int, int] | None = _native.match_model_headers([contents])[0]
-    if offsets is None:
-        return None
-    header_start, header_end, sql_start = offsets
-    return ModelHeaderMatch(
-        contents=contents, header_start=header_start, header_end=header_end, sql_start=sql_start
-    )
-
-
-def model_header_columns_span(
-    *, contents: str
-) -> tuple[int, int, dict[str, ModelHeaderColumnSpan]] | None:
-    """Return the columns body and column entry spans from the native header tokenizer."""
-
-    columns: tuple[int, int, list[tuple[str, int, int, int, int]]] | None = (
-        _native.model_header_columns(contents)
-    )
-    if columns is None:
-        return None
-    body_start, body_end, entries = columns
-    return (
-        body_start,
-        body_end,
-        {
-            name: ModelHeaderColumnSpan(
-                entry_start=entry_start,
-                entry_end=entry_end,
-                metadata_start=metadata_start,
-                metadata_end=metadata_end,
-            )
-            for name, entry_start, entry_end, metadata_start, metadata_end in entries
-        },
-    )
-
-
-def model_header_body_span(*, contents: str) -> tuple[int, int] | None:
-    """Return authored byte offsets for the MODEL header body."""
-
-    header_match: ModelHeaderMatch | None = match_model_header(contents)
-    if header_match is None:
-        return None
-    return header_match.header_start, header_match.header_end
 
 
 def header_column_locations(

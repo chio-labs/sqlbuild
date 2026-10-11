@@ -9,3 +9,9 @@ pub type DeclarationMoveHost<'a> =
 
 /// Original texts keyed by original path, in plan order.
 pub type Originals = Vec<(String, String)>;
+
+/// One physical column: `(name, type)`.
+pub type PhysicalColumn = (String, String);
+
+/// Replace lines `start..end` with new lines, as contract adoption's YAML source edit plans it.
+pub type LineEdit = (usize, usize, Vec<String>);

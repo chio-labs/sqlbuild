@@ -1,5 +1,5 @@
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
-use crate::refactoring::models::DeclarationPlacement;
+use crate::refactoring::models::{ContractEdit, DeclarationPlacement};
 use crate::refactoring::models::{FileChange, ModelFacts, RefactorRequest, TextEdit};
 
 /// `(start, end, before)` of planned edits.
@@ -183,4 +183,30 @@ pub(super) struct ContentEditsTestCase {
     pub(super) contents: &'static str,
     pub(super) plan: PlanEdits,
     pub(super) expected_contents: &'static str,
+}
+
+pub(crate) struct DeclaredTypeSpanTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static str,
+    pub(crate) declared_type: &'static str,
+    pub(crate) expected_span: Option<(usize, usize)>,
+}
+
+pub(crate) struct ModelContractTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static str,
+    pub(crate) columns: &'static [(&'static str, Option<&'static str>)],
+    pub(crate) dynamic_patterns: &'static [Option<&'static str>],
+    pub(crate) physical: &'static [(&'static str, &'static str)],
+    pub(crate) overwrite: bool,
+    pub(crate) expected_edit: ContractEdit,
+}
+
+pub(crate) struct SourceContractTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static str,
+    pub(crate) columns: &'static [(&'static str, Option<&'static str>)],
+    pub(crate) physical: &'static [(&'static str, &'static str)],
+    pub(crate) overwrite: bool,
+    pub(crate) expected_edit: ContractEdit,
 }

@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::refactoring::types::PhysicalColumn;
+
 /// One supported refactoring.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -290,4 +292,46 @@ pub struct RefactorFacts {
     pub yaml_files: Vec<DiscoveredFile>,
     /// Python strings naming the renamed model or column, found by the Python host.
     pub python_locations: Vec<ManualLocation>,
+}
+
+/// One authored model column: name, declared type and the path of its declaring file.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractModelColumn {
+    pub name: String,
+    pub declared_type: Option<String>,
+    pub location_path: Option<String>,
+}
+
+/// The model facts `edit_model` reads from a compiled model view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractModelRequest {
+    pub contents: String,
+    pub relative_path: String,
+    pub shared_schema: bool,
+    pub columns: Vec<ContractModelColumn>,
+    /// Each dynamic family's optional `name_pattern`.
+    pub dynamic_patterns: Vec<Option<String>>,
+    pub physical_columns: Vec<PhysicalColumn>,
+    pub overwrite: bool,
+}
+
+/// The source facts `edit_source` reads from a compiled source view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContractSourceRequest {
+    /// The text to edit: earlier edits of the same file, or the file as discovered.
+    pub contents: String,
+    /// The file as discovered, whose first lines may mark it as generated.
+    pub discovered_contents: String,
+    pub name: String,
+    /// Declared `(name, type)` columns.
+    pub columns: Vec<(String, Option<String>)>,
+    pub physical_columns: Vec<PhysicalColumn>,
+    pub overwrite: bool,
+}
+
+/// The edited text, or the ownership conflict that prevents a safe edit.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ContractEdit {
+    Edited(String),
+    Conflict(String),
 }

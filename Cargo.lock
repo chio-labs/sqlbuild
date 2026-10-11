@@ -791,13 +791,14 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-refactor"
-version = "0.154.0"
+version = "0.155.0"
 dependencies = [
  "serde",
  "serde_json",
  "sqlbuild-analysis",
  "sqlbuild-config",
  "sqlbuild-core",
+ "sqlbuild-model-config",
  "sqlbuild-sqltext",
  "tempfile",
 ]

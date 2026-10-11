@@ -51,7 +51,6 @@ fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
     })
 }
 
-type ColumnEntry = (String, usize, usize, usize, usize);
 type ColumnLocation = (String, usize, usize, usize, usize);
 
 fn location_rows(
@@ -69,35 +68,6 @@ fn location_rows(
             )
         })
         .collect()
-}
-
-fn entry_row(
-    (name, span): (String, sqlbuild_sqltext::compiler::models::HeaderColumnSpan),
-) -> ColumnEntry {
-    (
-        name,
-        span.entry_start,
-        span.entry_end,
-        span.metadata_start,
-        span.metadata_end,
-    )
-}
-
-/// The MODEL header `columns (...)` body offsets and each entry's offsets, if declared.
-#[pyfunction]
-fn model_header_columns(contents: &str) -> PyResult<Option<(usize, usize, Vec<ColumnEntry>)>> {
-    compiler_guard(|| {
-        let columns =
-            sqlbuild_sqltext::compiler::main::model_header_columns::model_header_columns(contents)
-                .map_err(value_error)?;
-        Ok(columns.map(|columns| {
-            (
-                columns.body_start,
-                columns.body_end,
-                columns.entries.into_iter().map(entry_row).collect(),
-            )
-        }))
-    })
 }
 
 /// Simple top-level SELECT output names and their authored locations.
@@ -158,7 +128,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_model_headers, module)?)?;
     module.add_function(wrap_pyfunction!(match_model_headers, module)?)?;
     module.add_function(wrap_pyfunction!(tokenize_model_header, module)?)?;
-    module.add_function(wrap_pyfunction!(model_header_columns, module)?)?;
     module.add_function(wrap_pyfunction!(model_output_columns, module)?)?;
     module.add_function(wrap_pyfunction!(model_header_column_locations, module)?)?;
     module.add_function(wrap_pyfunction!(model_header_failure, module)?)?;

@@ -58,3 +58,26 @@ pub const INPUT_ERROR_CODE: &str = "C950";
 pub const EDIT_ERROR_CODE: &str = "C957";
 /// `RefactorWriteError`'s code: project files changed between planning and writing.
 pub const WRITE_ERROR_CODE: &str = "C958";
+/// Header whitespace that indents a MODEL `columns` entry.
+pub const CONTRACT_HEADER_WHITESPACE: [char; 2] = [' ', '\t'];
+pub const CONTRACT_DEFAULT_INDENT: &str = "    ";
+pub const CONTRACT_GENERATED_MARKER: &str = "generated";
+pub const CONTRACT_GENERATED_MARKER_LINES: usize = 5;
+pub const CONTRACT_TYPE_KEY: &str = "type";
+pub const CONTRACT_YAML_COLUMNS_KEY: &str = "columns";
+pub const CONTRACT_YAML_LIST_NAME: &str = "- name:";
+pub const CONTRACT_YAML_COMMENT: &str = " #";
+pub const CONTRACT_MODEL_HEADER_ESCAPE: char = '\\';
+pub const CONTRACT_HEADER_WORD_EXTRA: [char; 2] = ['_', '$'];
+pub const CONTRACT_QUOTES: [char; 2] = ['\'', '"'];
+pub const CONTRACT_OPENERS: [char; 3] = ['(', '[', '{'];
+pub const CONTRACT_CLOSERS: [char; 3] = [')', ']', '}'];
+/// `ContractAdoptionError`'s message when two contract edits overlap.
+pub const CONTRACT_OVERLAP_MESSAGE: &str = "overlapping contract source edits";
+pub const SHARED_SCHEMA_CONFLICT: &str = "model uses a shared SCHEMA declaration";
+pub const EXTERNAL_SCHEMA_CONFLICT: &str = "effective columns are owned by an external schema file";
+pub const MODEL_HEADER_CONFLICT: &str = "MODEL header could not be edited safely";
+pub const GENERATED_SOURCE_CONFLICT: &str = "source file is marked as generated";
+pub const SOURCE_BLOCK_CONFLICT: &str = "source declaration has no unambiguous YAML block";
+/// The `ValueError` prefix of a `name_pattern` the native matcher rejects.
+pub const INVALID_NAME_PATTERN_PREFIX: &str = "invalid name_pattern: ";
