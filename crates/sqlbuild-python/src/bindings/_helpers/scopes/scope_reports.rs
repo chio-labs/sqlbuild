@@ -77,6 +77,9 @@ fn failure_row(failure: &ReportFailure) -> PyResult<FailureRow> {
             Ok(Some(("identity", identity_message(failure, text))))
         }
         ReportFailure::Serialization(message) => Err(PyValueError::new_err(message.clone())),
+        ReportFailure::IndexOutOfRange => {
+            Ok(Some(("index", "tuple index out of range".to_owned())))
+        }
     }
 }
 

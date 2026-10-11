@@ -10,7 +10,6 @@ from sqlbuild.compiler.scopes._helpers.placement import qualified_row
 from sqlbuild.compiler.scopes.exceptions import (
     InvalidQualifiedIdentityError,
     InvalidScopePathError,
-    ScopeError,
 )
 from sqlbuild.compiler.scopes.models import (
     ConstantMetadata,
@@ -53,9 +52,10 @@ from sqlbuild.compiler.scopes.types import (
     ScopeQueryTarget,
 )
 
-_FAILURES: dict[str, type[ScopeError]] = {
+_FAILURES: dict[str, type[Exception]] = {
     "identity": InvalidQualifiedIdentityError,
     "path": InvalidScopePathError,
+    "index": IndexError,
 }
 
 

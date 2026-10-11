@@ -205,7 +205,7 @@ def test_given_project_when_running_native_model_loop_then_inputs_match_recorded
             ),
             expected_message=(
                 "model 'orders' dynamic column family 'amounts' has invalid name_pattern: "
-                "missing ), unterminated subpattern at position 0"
+                "unclosed group"
             ),
             expected_code="P001",
         ),

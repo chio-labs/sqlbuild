@@ -1,7 +1,7 @@
 //! Configuration values with the value domain of Python's `tomllib` and PyYAML `safe_load`.
 
 use crate::constants::{
-    FEBRUARY, MAX_HOUR, MAX_MICROSECOND, MAX_MINUTE, MAX_SECOND, MAX_YEAR, MIN_YEAR,
+    DECIMAL_BASE, FEBRUARY, MAX_HOUR, MAX_MICROSECOND, MAX_MINUTE, MAX_SECOND, MAX_YEAR, MIN_YEAR,
     MONTHS_PER_YEAR,
 };
 
@@ -131,4 +131,76 @@ pub struct ComposedYamlNode {
 pub struct ComposedYaml {
     pub nodes: Vec<ComposedYamlNode>,
     pub root: Option<usize>,
+}
+
+/// An exact non-negative integer: its decimal digit values, least significant first.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Natural {
+    digits: Vec<u32>,
+}
+
+impl Natural {
+    /// The integer of decimal digit values, most significant first.
+    pub(crate) fn from_digit_values(values: impl DoubleEndedIterator<Item = u32>) -> Self {
+        Self {
+            digits: values.rev().collect(),
+        }
+        .trimmed()
+    }
+
+    fn trimmed(mut self) -> Self {
+        while self.digits.last() == Some(&0) {
+            self.digits.pop();
+        }
+        self
+    }
+
+    /// Whether the integer is zero.
+    pub(crate) fn is_zero(&self) -> bool {
+        self.digits.is_empty()
+    }
+
+    /// `self * factor + addend`.
+    pub(crate) fn times_plus(&self, factor: u32, addend: u32) -> Self {
+        let base = u64::from(DECIMAL_BASE);
+        let mut carry = u64::from(addend);
+        let mut digits: Vec<u32> = Vec::with_capacity(self.digits.len() + 2);
+        for digit in &self.digits {
+            let value = u64::from(*digit) * u64::from(factor) + carry;
+            digits.push((value % base) as u32);
+            carry = value / base;
+        }
+        while carry > 0 {
+            digits.push((carry % base) as u32);
+            carry /= base;
+        }
+        Self { digits }.trimmed()
+    }
+
+    /// `self + other`.
+    pub(crate) fn plus(&self, other: &Self) -> Self {
+        let mut carry = 0;
+        let mut digits: Vec<u32> = Vec::new();
+        for index in 0..self.digits.len().max(other.digits.len()) {
+            let sum = self.digits.get(index).copied().unwrap_or_default()
+                + other.digits.get(index).copied().unwrap_or_default()
+                + carry;
+            digits.push(sum % DECIMAL_BASE);
+            carry = sum / DECIMAL_BASE;
+        }
+        digits.push(carry);
+        Self { digits }.trimmed()
+    }
+
+    /// The decimal digits, `"0"` for zero.
+    pub(crate) fn decimal(&self) -> String {
+        if self.is_zero() {
+            return "0".to_owned();
+        }
+        self.digits
+            .iter()
+            .rev()
+            .filter_map(|digit| char::from_digit(*digit, DECIMAL_BASE))
+            .collect()
+    }
 }

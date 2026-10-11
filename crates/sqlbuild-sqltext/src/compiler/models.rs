@@ -14,6 +14,18 @@ pub enum AuthoredValue {
     PythonHook(String, Vec<(String, AuthoredValue)>),
 }
 
+/// A bare header word read as Python's header projection reads it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum HeaderWord {
+    Bool(bool),
+    Null,
+    /// A signed integer in ASCII decimal digits.
+    Integer(String),
+    Float(f64),
+    /// Any other word, kept as text.
+    Text,
+}
+
 /// Whether a declaration reference names an enum member or a constant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeclarationReferenceKind {
@@ -58,6 +70,32 @@ pub enum DeclarationReferenceStop {
 pub struct DeclarationReferenceScan {
     pub references: Vec<DeclarationReference>,
     pub stop: Option<DeclarationReferenceStop>,
+}
+
+/// A one-based authored location: start line and column, and the column just past the end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextLocation {
+    pub line: usize,
+    pub column: usize,
+    pub end_line: usize,
+    pub end_column: usize,
+}
+
+/// One `columns (...)` entry of a MODEL header: code-point offsets of the entry and its metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeaderColumnSpan {
+    pub entry_start: usize,
+    pub entry_end: usize,
+    pub metadata_start: usize,
+    pub metadata_end: usize,
+}
+
+/// The `columns (...)` body of a MODEL header and each named entry in it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HeaderColumns {
+    pub body_start: usize,
+    pub body_end: usize,
+    pub entries: Vec<(String, HeaderColumnSpan)>,
 }
 
 /// A header whose values nest deeper than the parser allows, located in its file.

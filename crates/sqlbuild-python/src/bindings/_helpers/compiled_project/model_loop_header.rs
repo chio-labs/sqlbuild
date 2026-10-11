@@ -1,8 +1,6 @@
 //! A model's MODEL header attached as its schema entry, by the native header parser.
 
-use std::cell::RefCell;
-
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::compiled_project::models::ModelSchemaFact;
 use sqlbuild_model_config::header_metadata::main::audit_factory_references::audit_factory_references;
@@ -33,9 +31,6 @@ const COLUMNS_KEY: &str = "columns";
 const AUDITS_KEY: &str = "audits";
 const DYNAMIC_COLUMNS_KEY: &str = "dynamic_columns";
 const AUDIT_FACTORIES_KEY: &str = "audit_factories";
-const RE_MODULE: &str = "re";
-const COMPILE_FUNCTION: &str = "compile";
-const ERROR_CLASS: &str = "error";
 const STRIP_METHOD: &str = "strip";
 const NAME_FIELD: &str = "name";
 const TYPE_FIELD: &str = "type";
@@ -177,31 +172,14 @@ pub(crate) fn header_schema<'py>(
     })
 }
 
-/// The header's dynamic column families, compiling each `name_pattern` with Python's `re`.
+/// The header's dynamic column families, each `name_pattern` compiled natively.
 fn dynamic_families(
     py: Python<'_>,
     context: &LoopContext<'_, '_>,
     raw: &PyNode<'_>,
     model: (&str, &str),
 ) -> PyResult<Vec<DynamicFamily>> {
-    let compile: Bound<'_, PyAny> = py.import(RE_MODULE)?.getattr(COMPILE_FUNCTION)?;
-    let pattern_error_class: Bound<'_, PyAny> = py.import(RE_MODULE)?.getattr(ERROR_CLASS)?;
-    let failure: RefCell<Option<PyErr>> = RefCell::new(None);
-    let pattern_error = |pattern: &str| match compile.call1((pattern,)) {
-        Ok(_) => None,
-        Err(error) if error.is_instance(py, &pattern_error_class) => {
-            Some(error.value(py).to_string())
-        }
-        Err(error) => {
-            failure.replace(Some(error));
-            Some(String::new())
-        }
-    };
-    let parsed = parse_dynamic_columns(raw, model, &pattern_error);
-    if let Some(error) = failure.into_inner() {
-        return Err(error);
-    }
-    parsed.map_err(|error| raised_config_error(py, context, error))
+    parse_dynamic_columns(raw, model).map_err(|error| raised_config_error(py, context, error))
 }
 
 /// The header description: absent, or a non-blank string by Python's `str.strip`.

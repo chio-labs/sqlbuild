@@ -1,34 +1,40 @@
-//! The project configuration fields native discovery reads.
+//! The loaded project configuration, described as the Python objects it projects to.
 
 use crate::models::ConfigValue;
 
-/// Shared settings discovery reads from `[settings]`.
+/// One configuration file a loader reads or names in a message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConfigFile {
+    Project,
+    LegacyProject,
+    Local,
+    LegacyLocal,
+}
+
+/// The paths of the project and local configuration files and their legacy YAML names.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProjectSettings {
-    pub sql_analysis: bool,
-    pub require_sql_analysis: bool,
+pub struct ConfigPaths {
+    pub project: std::path::PathBuf,
+    pub legacy_project: std::path::PathBuf,
+    pub local: std::path::PathBuf,
+    pub legacy_local: std::path::PathBuf,
 }
 
-/// The discovery fields of `sqlbuild_project.toml`, with Python's defaults and stripping.
+/// A loaded value, as the Python value or dataclass instance it projects to.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ProjectConfigFile {
-    pub name: String,
-    pub adapter: String,
-    pub default_target: Option<String>,
-    pub settings: ProjectSettings,
-    pub enforce_placement: bool,
-    pub enforce_explicit_references: bool,
-    pub vars: Vec<(String, String)>,
-    pub path_defaults: Vec<(String, ConfigValue)>,
-    pub target_names: Vec<String>,
-}
-
-/// The discovery fields of `sqlbuild_local.toml`; an absent file reads as the default.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct LocalConfigFile {
-    pub target: Option<String>,
-    pub adapter: Option<String>,
-    pub sql_analysis: Option<bool>,
-    pub vars: Vec<(String, String)>,
-    pub target_names: Vec<String>,
+pub enum Built {
+    /// A plain value, including `None`, booleans, integers and raw authored mappings.
+    Value(ConfigValue),
+    /// A dataclass from `sqlbuild.spec.contracts.models`; omitted fields keep their defaults.
+    Object(&'static str, Vec<(&'static str, Built)>),
+    /// A member of a named `StrEnum`, by value.
+    Enum(&'static str, String),
+    /// A `dict` with string keys, in insertion order.
+    Dict(Vec<(String, Built)>),
+    /// A `tuple` of strings.
+    Tuple(Vec<String>),
+    /// A `frozenset` of strings.
+    FrozenSet(Vec<String>),
+    /// `Decimal(str(value))` of an integer or float.
+    Decimal(ConfigValue),
 }

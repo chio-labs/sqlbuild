@@ -13,7 +13,15 @@ pub fn load_toml(text: &str) -> Result<ConfigValue, ConfigError> {
         ));
     }
     let text = text.replace("\r\n", "\n");
-    crate::toml::_helpers::version::reject_toml_1_1_syntax(&text)?;
+    let large_integers = crate::toml::_helpers::version::reject_toml_1_1_syntax(&text)?;
     crate::toml::_helpers::namespaces::reject_namespace_conflicts(&text)?;
-    crate::toml::_helpers::conversion::parse_document(&text)
+    if large_integers.is_empty() {
+        return crate::toml::_helpers::conversion::parse_document(&text);
+    }
+    let mark = crate::toml::_helpers::integers::placeholder_mark(&text)?;
+    let substituted =
+        crate::toml::_helpers::integers::substitute_large_integers(&text, &large_integers, mark);
+    crate::toml::_helpers::conversion::parse_document(&substituted).map(|value| {
+        crate::toml::_helpers::integers::restore_large_integers(value, &large_integers, mark)
+    })
 }

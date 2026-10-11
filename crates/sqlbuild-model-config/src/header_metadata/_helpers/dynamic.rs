@@ -6,13 +6,13 @@ use crate::header_metadata::constants::{
     DYNAMIC_FAMILY_KEYS, DYNAMIC_NAME_PATTERN_KEY, DYNAMIC_REQUIRED_KEYS,
 };
 use crate::header_metadata::models::DynamicFamily;
+use crate::name_patterns::main::compile_name_pattern::compile_name_pattern;
 use crate::types::{AuthoredNode, NodeKind};
 
-/// Who declares the families, and how a `name_pattern` is compiled into an error, if any.
+/// Who declares the families.
 pub(crate) struct DynamicSource<'a> {
     pub(crate) model_name: &'a str,
     pub(crate) path: &'a str,
-    pub(crate) pattern_error: &'a dyn Fn(&str) -> Option<String>,
 }
 
 pub(crate) fn dynamic_families<N: AuthoredNode>(
@@ -110,7 +110,7 @@ fn dynamic_family<N: AuthoredNode>(
         })?),
     };
     if let Some(pattern) = &name_pattern
-        && let Some(error) = (source.pattern_error)(pattern)
+        && let Err(error) = compile_name_pattern(pattern)
     {
         return Err(ConfigError::compile(format!(
             "model '{model_name}' dynamic column family '{name}' has invalid name_pattern: {error}"

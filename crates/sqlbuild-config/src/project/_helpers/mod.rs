@@ -1,2 +1,10 @@
+pub(crate) mod defaults;
+pub(crate) mod documents;
+pub(crate) mod durations;
 pub(crate) mod fields;
-pub(crate) mod files;
+pub(crate) mod help;
+pub(crate) mod keys;
+pub(crate) mod sections;
+pub(crate) mod sinks;
+pub(crate) mod targets;
+pub(crate) mod values;

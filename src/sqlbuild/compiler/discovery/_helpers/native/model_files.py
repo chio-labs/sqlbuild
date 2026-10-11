@@ -20,7 +20,6 @@ from sqlbuild.compiler.discovery._helpers.sql.declarations import (
     parse_model_constant_declarations,
     parse_model_enum_declarations,
 )
-from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_header_values
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
     REMOVED_SQL_MODEL_HEADER_KEYS,
@@ -87,7 +86,7 @@ def _model_file(
     if error is not None:
         raise error
     _tag, contents, values, header_locations, output_locations, query_sql = payload
-    header_values: dict[str, object] = project_native_header_values(cast(dict[str, object], values))
+    header_values: dict[str, object] = cast(dict[str, object], values)
     return DiscoveredSqlModelFile(
         file_path=file_path,
         relative_path=relative_path,
