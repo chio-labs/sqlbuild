@@ -102,5 +102,12 @@ unused_must_use = "deny"
 [workspace.lints.clippy]
 await_holding_lock = "deny"
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false
+
 [profile.release]
 strip = "symbols"

@@ -29,6 +29,10 @@ type:
 	uv run ty check src tests
 
 
+.PHONY: dev-native
+dev-native:
+	uv run --no-sync maturin develop --profile dev --skip-install
+
 rust-check:
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets --all-features -- -D warnings
