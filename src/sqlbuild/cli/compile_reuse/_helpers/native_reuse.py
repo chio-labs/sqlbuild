@@ -107,7 +107,11 @@ def native_attempt(
     )
     outcome: CompileReuseOutcome = _OUTCOMES[attempt.outcome()]
     base: CompileReuseAttempt = CompileReuseAttempt(
-        outcome=outcome, project_dir=Path(project_dir), started=started
+        outcome=outcome,
+        project_dir=Path(project_dir),
+        started=started,
+        selected_target=request.selected_target,
+        json_output=request.json_output,
     )
     if outcome is CompileReuseOutcome.BYPASS:
         return base
@@ -172,11 +176,11 @@ def record_native(
     artifacts_written: bool,
     dag_artifact_path: Path | None,
     json_output: bool,
-) -> None:
-    """Store a reusable compile natively, or clear the slot when it cannot be reused."""
+) -> bool:
+    """Store a reusable compile natively, or clear the slot; return whether it was stored."""
 
     try:
-        _record(
+        return _record(
             native=native,
             output=output,
             exit_code=exit_code,
@@ -191,6 +195,7 @@ def record_native(
         _LOGGER.debug("Compile reuse did not store this compile", exc_info=True)
         with contextlib.suppress(OSError):
             store_path.unlink(missing_ok=True)
+        return False
 
 
 def _record(
@@ -204,7 +209,7 @@ def _record(
     artifacts_written: bool,
     dag_artifact_path: Path | None,
     json_output: bool,
-) -> None:
+) -> bool:
     settings: SettingsInputsResult = provider_settings_inputs(
         settings_classes=input_reads.settings_classes
     )
@@ -257,6 +262,7 @@ def _record(
         started=notice_started,
         message=REUSE_STORE_SKIPPED_MESSAGE if outcome == _SKIPPED else REUSE_STORE_DONE_MESSAGE,
     )
+    return outcome == _STORED
 
 
 def reuse_rules() -> dict[str, object]:

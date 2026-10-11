@@ -70,3 +70,5 @@ class CompileReuseAttempt:
     entry_path: Path | None = None
     native: NativeReuseAttempt | None = field(default=None, compare=False, repr=False)
     """The natively checked attempt, recorded natively after a miss."""
+    selected_target: str | None = None
+    json_output: bool = False

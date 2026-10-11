@@ -19,6 +19,7 @@ from sqlbuild.cli.commands.constants import (
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode
+from sqlbuild.cli.entry.main._withhold_launch_record import withhold_launch_record
 from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
     CompileCommandRequest,
@@ -53,6 +54,8 @@ def _dispatch_cli_command(*, args: CliNamespace, handlers: CliEntrypointHandlers
     )
     effective_project_dir: Path = project_dir if project_dir is not None else Path.cwd()
     selector_inputs: SelectorInputs = read_selector_file_inputs(args.select_file)
+    if args.select_file:
+        withhold_launch_record()
     select: tuple[str, ...] = (*tuple(args.select), *selector_inputs.selectors)
     compile_exit_code: int | None = _dispatch_compile_or_contract(
         args=args,

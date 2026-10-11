@@ -26,6 +26,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
 type SettingsRow = (bool, Vec<String>, Vec<String>, Vec<String>, Vec<String>);
 type ReplayRow = (String, Vec<String>, i64);
+type LaunchIdentityRow = (String, BTreeMap<String, String>, Vec<String>);
 /// A written artifact's digest, or a kept artifact's size and mtime.
 type ArtifactRow = (Option<String>, Option<u64>, Option<i64>);
 
@@ -164,6 +165,17 @@ impl NativeReuseAttempt {
         let output: &StoredOutput = output;
         Ok(replay_stdout(output, &timings)
             .map(|stdout| (stdout, output.stderr_lines.clone(), output.exit_code)))
+    }
+
+    /// The invocation digest, runtime and search path the check compared, for a launch record.
+    fn launch_identity(&self) -> PyResult<LaunchIdentityRow> {
+        let attempt = self.attempt.lock().map_err(poisoned)?;
+        let identity: &HostIdentity = &attempt.identity;
+        Ok((
+            identity.invocation_digest.clone(),
+            identity.runtime.clone(),
+            identity.search_path.clone(),
+        ))
     }
 
     /// How many project files the check read for content digests.

@@ -1,7 +1,7 @@
 # Native crates
 
 SQLBuild's native code is a Cargo workspace that builds one Python extension module,
-`sqlbuild._native`. Only `sqlbuild-python` knows about Python; every other crate is plain Rust
+`sqlbuild._native`, and the `sqb`/`sqlbuild` executables in the `sqlbuild-cli` wheel. Only `sqlbuild-python` knows about Python; every other crate is plain Rust
 that can be tested and benchmarked with `cargo test` alone.
 
 | Crate | Responsibility |
@@ -18,6 +18,7 @@ that can be tested and benchmarked with `cargo test` alone.
 | `sqlbuild-analysis` | SQL analysis over polyglot: query analysis, binding, semantic validation and usage, column references, type normalization, FAST/RICH lineage, and SQL-test/scenario extraction and compiler-side assembly. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
 | `sqlbuild-refactor` | Native rename/move plans, contract-adoption edits, MODEL/SCHEMA/YAML text edits and atomic staging/commit with rollback. Shared scope placement delegates to the native scope implementation; user Python source inspection remains at the Python AST boundary. |
+| `sqlbuild-cli` | The `sqb` and `sqlbuild` executables: `--version`, unchanged compiles replayed from the shared reuse store with Python's exact streams, exit code and compute log capture, and a handoff of every other invocation to the installed `sqlbuild-python` script. Built as its own wheel (`crates/sqlbuild-cli/pyproject.toml`). |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
 
 ## Layering
@@ -29,6 +30,7 @@ sqlbuild-python
   -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
   -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-render -> sqlbuild-discovery -> sqlbuild-config
   -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-core
+sqlbuild-cli -> sqlbuild-cache, sqlbuild-core
 ```
 
 `sqlbuild-scopes` reuses the macro scanner in `sqlbuild-render`; render itself depends only on

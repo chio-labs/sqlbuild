@@ -1,0 +1,56 @@
+//! Decide how one invocation runs: natively, from a launch record, or in the Python CLI.
+
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::time::{Instant, SystemTime};
+
+use crate::launcher::_helpers::handoff::{hand_off, python_cli};
+use crate::launcher::_helpers::launch_key::{launch_key, launch_record_path};
+use crate::launcher::_helpers::messages::{print_version, report_missing_python_cli};
+use crate::launcher::constants::{
+    HANDOFF_FAILURE_EXIT_CODE, LAUNCH_RECORD_OPTION, VERSION_OPTIONS,
+};
+use crate::replay::main::serve_reused_compile::serve_reused_compile;
+
+/// The launch record path and key for these arguments, when the directory is known.
+fn launch_record(
+    program: &Path,
+    script: &Path,
+    arguments: &[OsString],
+) -> Option<(PathBuf, String)> {
+    let Ok(cwd) = std::env::current_dir() else {
+        return None;
+    };
+    let key = launch_key(program, script, arguments, &cwd);
+    launch_record_path(arguments, &cwd, &key).map(|path| (path, key))
+}
+
+fn exit_code(code: i64) -> i32 {
+    i32::try_from(code).unwrap_or(HANDOFF_FAILURE_EXIT_CODE)
+}
+
+/// Run one invocation started at `started` and return its exit code.
+pub(crate) fn launch(arguments: Vec<OsString>, started: (Instant, SystemTime)) -> i32 {
+    if let [only] = arguments.as_slice()
+        && VERSION_OPTIONS.iter().any(|option| only == option)
+    {
+        print_version();
+        return 0;
+    }
+    let program: PathBuf = std::env::current_exe().unwrap_or_default();
+    let Some(script) = python_cli(&program) else {
+        report_missing_python_cli(&program);
+        return HANDOFF_FAILURE_EXIT_CODE;
+    };
+    let mut handed: Vec<OsString> = Vec::with_capacity(arguments.len() + 1);
+    if let Some((path, key)) = launch_record(&program, &script, &arguments) {
+        if let Some(code) = serve_reused_compile(&path, &key, started) {
+            return exit_code(code);
+        }
+        let mut option = OsString::from(LAUNCH_RECORD_OPTION);
+        option.push(path.as_os_str());
+        handed.push(option);
+    }
+    handed.extend(arguments);
+    hand_off(&script, &handed)
+}

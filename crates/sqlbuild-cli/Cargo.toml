@@ -1,0 +1,34 @@
+[package]
+name = "sqlbuild-cli"
+version.workspace = true
+description = "The native `sqb` executable: reused compiles served without Python, every other command handed to the Python CLI."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+# `File::lock` shares the compute log prune lock with Python's `filelock`.
+rust-version = "1.89"
+
+[[bin]]
+name = "sqb"
+path = "src/bin/sqb.rs"
+
+[[bin]]
+name = "sqlbuild"
+path = "src/bin/sqlbuild.rs"
+
+[dependencies]
+blake3.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlbuild-cache.workspace = true
+sqlbuild-core.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+ctrlc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

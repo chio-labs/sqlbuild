@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild.cli.compile_reuse._helpers.launch_records import write_launch_record
 from sqlbuild.cli.compile_reuse._helpers.native_reuse import record_native
 from sqlbuild.cli.compile_reuse.classes.compile_artifact_writes import CompileArtifactWrites
 from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
@@ -32,7 +33,7 @@ def write_compile_entry(
         or attempt.native is None
     ):
         return
-    record_native(
+    stored: bool = record_native(
         store_path=attempt.entry_path,
         native=attempt.native,
         output=output,
@@ -44,3 +45,5 @@ def write_compile_entry(
         dag_artifact_path=dag_artifact_path,
         json_output=json_output,
     )
+    if stored:
+        write_launch_record(attempt=attempt)

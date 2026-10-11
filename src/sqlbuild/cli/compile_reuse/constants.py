@@ -82,3 +82,8 @@ REUSE_STORE_SKIPPED_MESSAGE: str = (
     "Did not record compile for reuse: files changed while it ran ({seconds:.1f} s)"
 )
 COMPILE_ARTIFACT_WRITES: CompileArtifactWriteRegistry = CompileArtifactWriteRegistry()
+LAUNCH_RECORD_FORMAT: int = 1
+LAUNCH_RECORD_DIRECTORY: tuple[str, ...] = (TARGET_DIRECTORY_NAME, "cache", "launcher-v1")
+LAUNCH_RECORD_LIMIT: int = 32
+COMPUTE_LOG_DIRECTORY_NAME: str = "logs"
+COMPILE_COMMAND_NAME: str = "compile"

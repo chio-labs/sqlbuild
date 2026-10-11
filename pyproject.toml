@@ -57,6 +57,7 @@ rivers = [
 [project.scripts]
 sqb = "sqlbuild.cli.entry.main.entry:main"
 sqlbuild = "sqlbuild.cli.entry.main.entry:main"
+sqlbuild-python = "sqlbuild.cli.entry.main.launched:main"
 
 [dependency-groups]
 dev = [
