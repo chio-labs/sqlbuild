@@ -13,9 +13,9 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
-    CompileModelInput,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
@@ -158,7 +158,7 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
         run_id="test_run",
     )
 
-    model_input: CompileModelInput = compile_inputs.model_inputs[0]
+    model_input: ModelInput = compile_inputs.model_inputs[0]
     assert model_input.schema_entry is not None
     assert model_input.query_sql == test_case.expected_query_sql
     assert tuple(compile_inputs.public_enums) == ("fulfillment_method", "priority")

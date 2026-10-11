@@ -5,10 +5,10 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.constants import TABLE_FUNCTION_RETURN_KEYS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompileModelInput,
     CompileSqlFunctionInput,
     CompileSqlReference,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
@@ -19,7 +19,7 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 
 def validate_table_function_call_arities(
     *,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
 ) -> None:
     """Validate managed table-function calls against declared argument counts."""
@@ -29,7 +29,7 @@ def validate_table_function_call_arities(
         for function_input in sql_function_inputs
         if function_input.return_columns
     }
-    model_input: CompileModelInput
+    model_input: ModelInput
     for model_input in model_inputs:
         validate_table_function_reference_arities(
             references=model_input.references,

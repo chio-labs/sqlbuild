@@ -53,12 +53,12 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompiledLineageColumnFact,
     CompiledModel,
-    CompileModelInput,
     CompileProjectInputs,
     DynamicColumnContractProof,
     InferredColumn,
     ModelSqlAnalysis,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
@@ -755,7 +755,7 @@ def _compare_proofs(
         and model_input.model_file.file_path.stem in analyses
         for model_input in request.model_inputs
     ]
-    pivot_inputs: list[CompileModelInput] = list(itertools.compress(request.model_inputs, proved))
+    pivot_inputs: list[ModelInput] = list(itertools.compress(request.model_inputs, proved))
     for model_input in pivot_inputs:
         families: tuple[SchemaDynamicColumnFamily, ...] = model_dynamic_families(model_input)
         analysis: ModelSqlAnalysis = analyses[model_input.model_file.file_path.stem]

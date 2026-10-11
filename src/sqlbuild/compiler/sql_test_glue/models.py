@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledSqlTest,
-    CompileModelInput,
     CompilerDiagnostic,
     CompileSqlTestInput,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.sql_test_glue.types import SqlTestAssemblyFailureKind
 
 
@@ -45,7 +45,7 @@ class NativeSqlTestChainRequest:
 class NativeSqlTestAssemblyRequest:
     """The project's model inputs and the SQL test inputs whose compiled facts to assemble."""
 
-    model_inputs: tuple[CompileModelInput, ...]
+    model_inputs: tuple[ModelInput, ...]
     test_inputs: tuple[CompileSqlTestInput, ...]
     lexical_syntax: dict[str, object]
 

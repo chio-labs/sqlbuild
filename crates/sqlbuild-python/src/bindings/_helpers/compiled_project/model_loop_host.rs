@@ -1,16 +1,17 @@
 //! The Python host the loop hands finished models and user-code steps to.
 
+use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use pyo3::{FromPyObject, IntoPyObject};
 use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, ModelConfigFacts, PlainModel,
 };
 
-use crate::bindings::_helpers::compiled_project::model_loop_header::{
-    AttachedHeader, HeaderSchema,
+use crate::bindings::_helpers::compiled_project::model_input_view::{
+    ExpansionRecord, ModelInputRecord, SchemaRecord,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_header::AttachedHeader;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     reference_fact, stripped_values,
 };
@@ -26,16 +27,14 @@ use crate::bindings::_helpers::render::declaration_expansion::{
 use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_expansion::ExpansionOutput;
 
-const PLAIN_INPUT_CALLBACK: &str = "plain_input";
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
 const LAYER_SCHEMA_ATTRIBUTE: &str = "layer_schema";
 const VALUES_ARGUMENT: &str = "values";
-const REFERENCES_ARGUMENT: &str = "references";
-const QUERY_SQL_ARGUMENT: &str = "query_sql";
-const HEADER_ARGUMENT: &str = "header";
-const HOOK_STATEMENTS_ARGUMENT: &str = "hook_statements";
-const DECLARATIONS_ARGUMENT: &str = "declarations";
-const ANALYSIS_ARGUMENT: &str = "analysis";
+const ENUMS_ARGUMENT: &str = "enums";
+const CONSTANTS_ARGUMENT: &str = "constants";
+const LOCAL_ENUMS_ATTRIBUTE: &str = "local_enums";
+const LOCAL_CONSTANTS_ATTRIBUTE: &str = "local_constants";
+const NAME_ATTRIBUTE: &str = "name";
 
 /// `((name, POSIX path, relative path, file path), column locations, query, contents, scan)`.
 #[derive(FromPyObject)]
@@ -46,16 +45,15 @@ pub(crate) struct ModelLoopRow(
     pub(crate) String,
     pub(crate) String,
     pub(crate) Option<(Vec<ScannedReference>, Option<u8>)>,
-    /// The `@@`-interpolated query, the template reads it made, or the error that stopped it.
-    pub(crate) (String, Vec<(String, String)>, Option<String>),
+    /// The `@@`-interpolated query, its template reads, its error, and its substitution spans.
+    pub(crate) InterpolationRow,
+    /// The discovered model file, owned by the discovery inputs.
+    pub(crate) Py<PyAny>,
 );
+/// `(interpolated query, template reads, error, substitution spans)`.
+pub(crate) type InterpolationRow = (String, Vec<(String, String)>, Option<String>, Vec<SpanRow>);
 /// `(kind, name, package, call argument count)`.
 pub(crate) type ReferenceRow = (String, String, Option<String>, Option<usize>);
-/// The Python view of the model and its visible local enum and constant declarations.
-type PlainInputPy<'py> = (
-    Bound<'py, PyAny>,
-    (Vec<DeclarationPy<'py>>, Vec<DeclarationPy<'py>>),
-);
 
 /// One model the native loop finished, before the host builds its Python view.
 pub(crate) struct FinishedModel<'py> {
@@ -75,28 +73,39 @@ pub(crate) struct FinishedModel<'py> {
     pub(crate) macros: Option<ExpansionOutput>,
 }
 
-/// Call a host callback with keyword arguments, as its keyword-only signature requires.
-pub(crate) fn callback<'py>(
-    host: &Bound<'py, PyAny>,
-    name: &str,
-    arguments: &[(&str, Bound<'py, PyAny>)],
-) -> PyResult<Bound<'py, PyAny>> {
-    let keywords: Bound<'py, PyDict> = PyDict::new(host.py());
-    for (key, value) in arguments {
-        keywords.set_item(*key, value)?;
-    }
-    host.call_method(name, (), Some(&keywords))
+/// The Python classes a finished model's record is built with.
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+pub(crate) struct RecordClasses<'py> {
+    /// `dataclasses.replace`.
+    replace: Bound<'py, PyAny>,
+    /// `declaration_rows`, the facts rows of the model's local enums and constants.
+    declaration_rows: Bound<'py, PyAny>,
 }
 
-/// The host's Python view of a natively finished model, and the facts the project retains.
-pub(crate) fn plain_input<'py>(
-    host: &Bound<'py, PyAny>,
-    model_arguments: &[(&str, Bound<'py, PyAny>)],
+/// What the loop knows about a finished model besides its loop row.
+pub(crate) struct RecordInputs<'a, 'py> {
+    pub(crate) classes: &'a RecordClasses<'py>,
+    /// The visible declarations, for the model's own enums and constants.
+    pub(crate) visible: &'a Bound<'py, PyAny>,
+}
+
+/// A natively finished model's input record, and the facts the project retains.
+pub(crate) fn finished_record<'py>(
+    inputs: &RecordInputs<'_, 'py>,
     row: ModelLoopRow,
     finished: FinishedModel<'py>,
-) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
-    let py: Python<'py> = host.py();
-    let ModelLoopRow((name, relative_path, _, _), _, authored_query_sql, authored_sql, _, _) = row;
+) -> PyResult<(ModelInputRecord, CompiledModelFacts)> {
+    let py: Python<'py> = inputs.visible.py();
+    let ModelLoopRow(
+        (name, relative_path, _, _),
+        _,
+        authored_query_sql,
+        authored_sql,
+        _,
+        (interpolated_sql, _, _, interpolation_spans),
+        model_file,
+    ) = row;
     let stripped: Bound<'py, PyDict> = stripped_values(py, &finished.values)?;
     let mut usages: Vec<Bound<'py, PyAny>> = finished.declarations.usages;
     if let Some(schema) = &finished.header.schema {
@@ -106,66 +115,101 @@ pub(crate) fn plain_input<'py>(
         Some(schema) => schema.enum_columns.keys().extract()?,
         None => Vec::new(),
     };
-    let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = model_arguments.to_vec();
-    arguments.extend([
-        (VALUES_ARGUMENT, stripped.clone().into_any()),
-        (
-            REFERENCES_ARGUMENT,
-            finished.references.clone().into_pyobject(py)?,
-        ),
-        (
-            QUERY_SQL_ARGUMENT,
-            finished.query_sql.as_str().into_pyobject(py)?.into_any(),
-        ),
-        (
-            HEADER_ARGUMENT,
-            PyTuple::new(
+    let local_enums: Bound<'py, PyTuple> =
+        dict_values(&inputs.visible.getattr(LOCAL_ENUMS_ATTRIBUTE)?)?;
+    let local_constants: Bound<'py, PyTuple> =
+        dict_values(&inputs.visible.getattr(LOCAL_CONSTANTS_ATTRIBUTE)?)?;
+    let rows_arguments: Bound<'py, PyDict> = PyDict::new(py);
+    rows_arguments.set_item(ENUMS_ARGUMENT, &local_enums)?;
+    rows_arguments.set_item(CONSTANTS_ARGUMENT, &local_constants)?;
+    let (enums, constants): (Vec<DeclarationPy<'py>>, Vec<DeclarationPy<'py>>) = inputs
+        .classes
+        .declaration_rows
+        .call((), Some(&rows_arguments))?
+        .extract()?;
+    let replaced: Bound<'py, PyDict> = PyDict::new(py);
+    replaced.set_item(VALUES_ARGUMENT, &stripped)?;
+    let config: Bound<'py, PyAny> = inputs
+        .classes
+        .replace
+        .call((&finished.config,), Some(&replaced))?;
+    let mut declaration_usages: Vec<Bound<'py, PyAny>> = unique(py, usages)?;
+    declaration_usages.extend(finished.named_usages);
+    let (macro_sql, macro_spans, macro_deps, macro_usages) = match finished.macros {
+        Some(macros) => {
+            let mut names: Vec<String> = Vec::new();
+            for dependency in unique(
                 py,
-                [
-                    finished.header.description.as_deref().into_pyobject(py)?,
-                    schema_argument(py, finished.header.schema.as_ref())?,
-                    finished.header.schema.as_ref().map_or_else(
-                        || PyDict::new(py).into_any(),
-                        |schema| schema.enum_columns.clone().into_any(),
-                    ),
-                ],
-            )?
-            .into_any(),
-        ),
-        (
-            ANALYSIS_ARGUMENT,
-            finished.analysis.clone().into_pyobject(py)?.into_any(),
-        ),
-        (
-            HOOK_STATEMENTS_ARGUMENT,
-            finished.hook_statements.into_pyobject(py)?.into_any(),
-        ),
-        (
-            DECLARATIONS_ARGUMENT,
+                macros
+                    .dependencies
+                    .into_iter()
+                    .map(|item| item.into_bound(py))
+                    .collect(),
+            )? {
+                names.push(dependency.getattr(NAME_ATTRIBUTE)?.extract()?);
+            }
             (
-                finished.declarations.spliced.sql.as_str(),
-                span_rows(&finished.declarations.spliced),
-                usages,
-                finished.named_usages,
-                finished.macros.map(|macros| {
-                    (
-                        macros.sql,
-                        macros
-                            .spans
-                            .into_iter()
-                            .map(span_row)
-                            .collect::<Vec<SpanRow>>(),
-                        macros.dependencies,
-                        macros.usages,
-                    )
-                }),
+                macros.sql,
+                macros
+                    .spans
+                    .into_iter()
+                    .map(span_row)
+                    .collect::<Vec<SpanRow>>(),
+                names,
+                unique(
+                    py,
+                    macros
+                        .usages
+                        .into_iter()
+                        .map(|item| item.into_bound(py))
+                        .collect(),
+                )?,
             )
-                .into_pyobject(py)?
-                .into_any(),
+        }
+        None => (
+            finished.declarations.spliced.sql.clone(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
         ),
-    ]);
-    let (input, (enums, constants)): PlainInputPy<'py> =
-        callback(host, PLAIN_INPUT_CALLBACK, &arguments)?.extract()?;
+    };
+    let schema: Option<SchemaRecord> = finished.header.schema.as_ref().map(|schema| SchemaRecord {
+        description: finished.header.description.clone(),
+        columns: schema.columns.clone().unbind(),
+        audits: schema.audits.clone().unbind(),
+        dynamic_columns: schema.dynamic_columns.clone().unbind(),
+        type_enforcement: schema.type_enforcement,
+        model_schema: schema.model_schema.clone(),
+    });
+    let record: ModelInputRecord = ModelInputRecord {
+        model_file: model_file.clone_ref(py),
+        config: config.unbind(),
+        query_sql: finished.query_sql.clone(),
+        macro_source_sql: finished.declarations.spliced.sql.clone(),
+        references: finished.references.clone(),
+        schema,
+        sql_validation_enabled: finished.analysis.0,
+        rejected_opt_out: finished.analysis.1.map(Bound::unbind),
+        enum_declarations: local_enums.unbind(),
+        constant_declarations: local_constants.unbind(),
+        enum_columns: finished
+            .header
+            .schema
+            .as_ref()
+            .map_or_else(|| PyDict::new(py), |schema| schema.enum_columns.clone())
+            .unbind(),
+        macro_deps,
+        macro_usages: PyTuple::new(py, macro_usages)?.unbind(),
+        declaration_usages: PyTuple::new(py, unique(py, declaration_usages)?)?.unbind(),
+        expansion: ExpansionRecord {
+            authored: interpolated_sql == authored_query_sql,
+            authored_sql: authored_query_sql.clone(),
+            expanded_sql: macro_sql,
+            interpolation_spans,
+            declaration_spans: span_rows(&finished.declarations.spliced),
+            macro_spans,
+        },
+    };
     let (values, encoding_error) = config_values(&stripped);
     let facts: CompiledModelFacts = plain_model_facts(PlainModel {
         name,
@@ -192,24 +236,24 @@ pub(crate) fn plain_input<'py>(
         enum_declarations: declarations(enums)?,
         constant_declarations: declarations(constants)?,
     });
-    Ok((input, facts))
+    Ok((record, facts))
 }
 
-/// The schema argument the host builds its `SchemaModelEntry` from.
-fn schema_argument<'py>(
-    py: Python<'py>,
-    schema: Option<&HeaderSchema<'py>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    match schema {
-        Some(schema) => Ok((
-            schema.columns.clone(),
-            schema.audits.clone(),
-            schema.type_enforcement,
-            schema.dynamic_columns.clone(),
-            schema.model_schema.clone(),
-        )
-            .into_pyobject(py)?
-            .into_any()),
-        None => Ok(py.None().into_bound(py)),
+/// A dict's values in insertion order.
+fn dict_values<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
+    let mapping: &Bound<'py, PyDict> = mapping.downcast()?;
+    PyTuple::new(py_of(mapping), mapping.values())
+}
+
+fn py_of<'py>(mapping: &Bound<'py, PyDict>) -> Python<'py> {
+    mapping.py()
+}
+
+/// `dict.fromkeys(items)`: each item once, first occurrence first, by Python equality.
+fn unique<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let seen: Bound<'py, PyDict> = PyDict::new(py);
+    for item in items {
+        seen.set_item(item, py.None())?;
     }
+    Ok(seen.keys().into_iter().collect())
 }

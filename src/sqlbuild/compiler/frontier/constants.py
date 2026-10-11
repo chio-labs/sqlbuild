@@ -66,6 +66,27 @@ STAGE_CAPTURE_UNORDERED_ATTRIBUTES: dict[str, frozenset[str]] = {
         {"schemas", "analysis_shapes", "expression_shapes"}
     )
 }
+STAGE_CAPTURE_PROJECTED_ATTRIBUTES: dict[str, tuple[str, ...]] = {
+    "sqlbuild._native:NativeModelInput": (
+        "model_file",
+        "config",
+        "query_sql",
+        "macro_source_sql",
+        "references",
+        "schema_entry",
+        "schema_file",
+        "sql_validation_enabled",
+        "rejected_sql_analysis_opt_out",
+        "enum_declarations",
+        "constant_declarations",
+        "enum_columns",
+        "macro_deps",
+        "macro_usages",
+        "declaration_usages",
+        "sql_expansion",
+        "lint_expansion",
+    ),
+}
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
     "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog": frozenset(
         {"shared_analyses"}

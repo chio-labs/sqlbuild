@@ -1,13 +1,17 @@
 """The Python classes and project inputs the native model loop builds models with."""
 
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    CompiledSqlExpansion,
     CompilerDiagnostic,
+    CompileSqlReference,
     DeclarationScopeResolver,
+    ExpansionSpan,
     ModelInputBuildContext,
     NativeModelConfigSession,
 )
@@ -18,6 +22,7 @@ from sqlbuild.compiler.compiled_project._helpers.loop_inputs import (
     visibility_classes,
 )
 from sqlbuild.compiler.compiled_project.main._native_config_classes import native_config_classes
+from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFactory,
     DiscoveredHookFunction,
@@ -30,6 +35,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, Sql
 from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import UsageKind
+from sqlbuild.spec.contracts.models import SchemaModelEntry
 
 
 def model_loop_classes(
@@ -82,4 +88,12 @@ def model_loop_classes(
         "visibility": visibility_classes(
             context=context, visible_declarations=host_inputs["visible_declarations"]
         ),
+        "record": {"replace": replace, "declaration_rows": declaration_rows},
+        "input_view": {
+            "sql_reference": CompileSqlReference,
+            "reference_kind": SqlReferenceKind,
+            "schema_model_entry": SchemaModelEntry,
+            "sql_expansion": CompiledSqlExpansion,
+            "expansion_span": ExpansionSpan,
+        },
     }

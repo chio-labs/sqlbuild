@@ -11,7 +11,6 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.constants import MISSING_DESCRIPTION_CODE
 from sqlbuild.compiler.compile.models import (
-    CompileModelInput,
     CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
@@ -22,6 +21,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
+    ModelInput,
 )
 from sqlbuild.compiler.discovery.constants import PYTHON_UDF_DECORATOR_NAME, YAML_FILE_SUFFIXES
 from sqlbuild.compiler.discovery.main._yaml_entry_line import yaml_entry_line
@@ -67,7 +67,7 @@ class _PythonNode:
 def missing_description_diagnostics(
     *,
     discovered_inputs: DiscoveredProjectInputs,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     seed_inputs: tuple[CompileSeedInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
     function_inputs: tuple[CompileSqlFunctionInput, ...],
@@ -118,7 +118,7 @@ def _diagnostic(resource: _Resource) -> CompilerDiagnostic:
     )
 
 
-def _model(model_input: CompileModelInput) -> _Resource:
+def _model(model_input: ModelInput) -> _Resource:
     name: str = model_input.model_file.file_path.stem
     path: Path = model_input.model_file.relative_path
     contents: str = model_input.model_file.contents

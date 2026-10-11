@@ -83,7 +83,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSeed,
     CompiledSource,
     CompiledSqlScenario,
-    CompileModelInput,
     CompileModelSqlTestInputPayload,
     CompileProjectInputs,
     CompilerDiagnostic,
@@ -106,6 +105,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
+    ModelInput,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
@@ -468,7 +468,7 @@ def _connection_database_fallback(*, inputs: CompileProjectInputs) -> str | None
 
 def _assemble_compiled_model(
     *,
-    model_input: CompileModelInput,
+    model_input: ModelInput,
     sql_analysis_enabled: bool,
     sql_validation_enabled: bool = True,
     native_model: NativeModelFacts,
@@ -583,7 +583,7 @@ def _assemble_compiled_model(
     )
 
 
-def _model_name(model_input: CompileModelInput) -> str:
+def _model_name(model_input: ModelInput) -> str:
     return model_input.model_file.file_path.stem
 
 
@@ -601,7 +601,7 @@ def _build_dynamic_families_by_table(
 
 def _project_binding_diagnostics(
     *,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     analyses_by_name: dict[str, _ModelSqlAnalysis],
     dialect: str | None,
 ) -> tuple[CompilerDiagnostic, ...]:
@@ -623,7 +623,7 @@ def _project_binding_diagnostics(
 
 def _binding_compiler_diagnostics(
     *,
-    model_input: CompileModelInput,
+    model_input: ModelInput,
     diagnostics: tuple[SqlBindingDiagnostic, ...],
     dialect: str | None,
     cleaned_sql: str | None = None,
@@ -804,7 +804,7 @@ def _assemble_compiled_audit(
 def _build_test_model_query_overrides(
     *,
     test_input: CompileSqlTestInput,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     inputs: CompileProjectInputs,
 ) -> dict[str, str]:
     """Re-expand each model from its pre-macro macro_source_sql with test macro mocks applied."""
@@ -834,7 +834,7 @@ def _build_test_model_query_overrides(
         ),
     )
     overrides: dict[str, str] = {}
-    model_input: CompileModelInput
+    model_input: ModelInput
     for model_input in model_inputs:
         model_name: str = model_input.model_file.file_path.stem
         macro_source_sql: str = model_input.macro_source_sql or model_input.query_sql

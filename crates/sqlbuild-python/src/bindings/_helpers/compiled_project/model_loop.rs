@@ -1,5 +1,6 @@
 //! The compile-input model loop: each model's steps run in the attachment's order, natively.
 
+use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
 use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
 use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
@@ -10,7 +11,8 @@ use crate::bindings::_helpers::compiled_project::model_loop_hooks::{
     ExpandedHooks, HookModel, SqlHookClasses, expanded_hooks,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
-    FinishedModel, ModelLoopRow, ReferenceRow, plain_input,
+    FinishedModel, InterpolationRow, ModelLoopRow, RecordClasses, RecordInputs, ReferenceRow,
+    finished_record,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     analysis_override, hook_presence, reference_row,
@@ -43,10 +45,10 @@ use crate::bindings::_helpers::render::declaration_expansion::{
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{
-    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
-use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
+use pyo3::{FromPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
 use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
 use sqlbuild_analysis::compiled_project::main::legacy_schema_error::legacy_schema_error;
@@ -71,19 +73,16 @@ const UNMANAGED_ATTRIBUTE: &str = "unmanaged";
 const TABLE_TYPE_ATTRIBUTE: &str = "table_type";
 const DECLARED_ATTRIBUTE: &str = "declared";
 const VALIDATE_METHOD: &str = "validate";
-const CONFIG_ARGUMENT: &str = "config";
-const VISIBLE_ARGUMENT: &str = "visible";
 const FILE_PATH_ARGUMENT: &str = "file_path";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
-const INDEX_ARGUMENT: &str = "index";
 const ERROR_ARGUMENT: &str = "error";
 const VALUES_ARGUMENT: &str = "values";
 const CODE_ARGUMENT: &str = "code";
 const ANALYSIS_CONFLICT: &str = "MODEL sql_analysis conflicts with legacy sql_validation";
 const ANALYSIS_CONFLICT_CODE: &str = "P003";
 
-/// Models finished natively, native config builds, and projected declaration contexts.
-type LoopCounts = (usize, usize, usize);
+/// `(finished, config builds, projected visibilities, hook statements, described models)`.
+type LoopCounts = (usize, usize, usize, usize, usize);
 /// The native validator, header contract classes, and the loop's Python classes.
 type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
 /// `(analysis switches, native syntax, (project config path, legacy schema files))`.
@@ -138,6 +137,10 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) syntax_help: String,
     /// `InvalidScopePathError`.
     pub(crate) scope_path_error: Bound<'py, PyAny>,
+    /// What each finished model's input record is built with.
+    pub(crate) record: RecordClasses<'py>,
+    /// What model input views project their attributes with.
+    pub(crate) input_view: Bound<'py, PyAny>,
 }
 
 /// The ordered model loop of one compile-input stage.
@@ -215,14 +218,14 @@ impl NativeModelLoop {
         })
     }
 
-    /// Build every model in order into `project`; return the Python views and the native count.
+    /// Build every model in order into `project`; return each model's input view and counts.
     fn run<'py>(
         &self,
         py: Python<'py>,
-        mut project: PyRefMut<'py, NativeCompiledProject>,
+        project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
         models: Vec<ModelLoopRow>,
-    ) -> PyResult<(Vec<Bound<'py, PyAny>>, LoopCounts)> {
+    ) -> PyResult<(Vec<Bound<'py, NativeModelInput>>, LoopCounts)> {
         let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
         let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
         let context: LoopContext<'_, 'py> = LoopContext {
@@ -230,13 +233,18 @@ impl NativeModelLoop {
             classes: &classes,
             contracts: &contracts,
         };
-        let mut inputs: Vec<Bound<'py, PyAny>> = Vec::with_capacity(models.len());
+        project
+            .borrow_mut()
+            .set_input_classes(classes.input_view.clone().unbind());
+        let mut inputs: Vec<Bound<'py, NativeModelInput>> = Vec::with_capacity(models.len());
         let mut finished_natively: usize = 0;
+        let mut hook_statements: usize = 0;
+        let mut described: usize = 0;
         let configs: ModelConfigs<'py> = ModelConfigs::default();
         let visibility: ModelVisibility<'py> = ModelVisibility::default();
         let signatures: HookSignatures = HookSignatures::default();
-        for (index, row) in models.into_iter().enumerate() {
-            let ModelLoopRow((name, _, relative_path, file_path), header, _, _, _, _) = &row;
+        for row in models {
+            let ModelLoopRow((name, _, relative_path, file_path), header, _, _, _, _, _) = &row;
             let (_, header_values, enums, constants) = header;
             let visible: VisibleDeclarations<'py> = visibility.for_model(
                 &context,
@@ -248,11 +256,6 @@ impl NativeModelLoop {
             )?;
             let config: Bound<'py, PyAny> =
                 configs.effective(&context, header_values.bind(py), (name, relative_path))?;
-            let arguments = [
-                (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
-                (CONFIG_ARGUMENT, config.clone()),
-                (VISIBLE_ARGUMENT, visible.declarations.clone()),
-            ];
             let model: LoopModel<'_, 'py> = LoopModel {
                 row: &row,
                 config,
@@ -262,13 +265,31 @@ impl NativeModelLoop {
             };
             let finished: FinishedModel<'py> = self.finish(py, &context, model)?;
             finished_natively += 1;
-            let (input, facts) = plain_input(&host, &arguments, row, finished)?;
-            project.retain(facts);
-            inputs.push(input);
+            hook_statements += finished.hook_statements;
+            described += usize::from(finished.header.schema.is_some());
+            let record_inputs: RecordInputs<'_, 'py> = RecordInputs {
+                classes: &classes.record,
+                visible: &visible.declarations,
+            };
+            let (record, facts) = finished_record(&record_inputs, row, finished)?;
+            let mut owner = project.borrow_mut();
+            owner.retain(facts);
+            let index: usize = owner.retain_input(record);
+            drop(owner);
+            inputs.push(Bound::new(
+                py,
+                NativeModelInput::new(project.clone().unbind(), index),
+            )?);
         }
         Ok((
             inputs,
-            (finished_natively, configs.builds(), visibility.projected()),
+            (
+                finished_natively,
+                configs.builds(),
+                visibility.projected(),
+                hook_statements,
+                described,
+            ),
         ))
     }
 }
@@ -295,6 +316,7 @@ impl NativeModelLoop {
             contents,
             scan,
             interpolation,
+            _,
         ) = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
@@ -595,9 +617,9 @@ pub(crate) fn validation_outcome(
 /// `applied_interpolation`: record the interpolation's template reads, then its SQL or error.
 fn applied_interpolation(
     context: &LoopContext<'_, '_>,
-    interpolation: &(String, Vec<(String, String)>, Option<String>),
+    interpolation: &InterpolationRow,
 ) -> PyResult<String> {
-    let (sql, reads, error) = interpolation;
+    let (sql, reads, error, _) = interpolation;
     record_reads(context, reads)?;
     match error {
         Some(message) => Err(compile_error(context.classes, message, None)),

@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
+    ModelInput,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
@@ -489,7 +490,7 @@ class ModelInputBuildContext:
 class ModelInputScopeBuild:
     """Model inputs paired with public declaration artifacts and updated context."""
 
-    inputs: tuple[CompileModelInput, ...]
+    inputs: tuple[ModelInput, ...]
     declarations: DeclarationResolutionContext
     context: ModelInputBuildContext
     diagnostics: tuple[CompilerDiagnostic, ...] = ()
@@ -818,7 +819,7 @@ class ModelSqlAnalysis:
 class ModelSqlAnalysisRequest:
     """Inputs to one model's SQL analysis."""
 
-    model_input: CompileModelInput
+    model_input: ModelInput
     query_sql: str
     placeholders: dict[str, str] | None
     cache_key: str | None
@@ -917,7 +918,7 @@ class CompileProjectInputs:
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
-    model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
+    model_inputs: tuple[ModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)

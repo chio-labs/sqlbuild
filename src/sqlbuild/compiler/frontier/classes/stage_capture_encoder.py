@@ -23,6 +23,7 @@ from sqlbuild.compiler.frontier.constants import (
     STAGE_CAPTURE_INVOCATION_ID_MASK,
     STAGE_CAPTURE_INVOCATION_ID_PATTERN,
     STAGE_CAPTURE_OMITTED_ATTRIBUTES,
+    STAGE_CAPTURE_PROJECTED_ATTRIBUTES,
     STAGE_CAPTURE_RESERVED_KEYS,
     STAGE_CAPTURE_SHARED_MARKER,
     STAGE_CAPTURE_SHARED_MIN_BYTES,
@@ -126,7 +127,12 @@ class StageCaptureEncoder:
                 "args": self.encode(value.args),
                 "keywords": self.encode(value.keywords),
             }
-        attributes: dict[str, object] | None = _instance_attributes(value)
+        projected: tuple[str, ...] | None = STAGE_CAPTURE_PROJECTED_ATTRIBUTES.get(type_name)
+        attributes: dict[str, object] | None = (
+            _instance_attributes(value)
+            if projected is None
+            else {name: getattr(value, name) for name in projected}
+        )
         if attributes is None:
             return {"__opaque__": type_name}
         unordered: frozenset[str] = STAGE_CAPTURE_UNORDERED_ATTRIBUTES.get(type_name, frozenset())

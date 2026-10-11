@@ -48,7 +48,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
-    CompileModelInput,
     CompileProjectInputs,
     CompilerDiagnostic,
     CompileSeedInput,
@@ -64,6 +63,7 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     ModelInputScopeBuild,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
@@ -262,7 +262,7 @@ def _build_sql_functions(
     discovered_inputs: DiscoveredProjectInputs,
     context: ModelInputBuildContext,
     declaration_expansion: DeclarationExpansionContext,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     no_sql_validation: bool,
     python_functions_inherit_default_namespace: bool,
 ) -> tuple[CompileSqlFunctionInput, ...]:
@@ -306,7 +306,7 @@ def _build_models_with_declarations(
         constants=public_constants,
     )
     native_project: _native.NativeCompiledProject = _native.NativeCompiledProject()
-    model_inputs: tuple[CompileModelInput, ...] = build_model_inputs(
+    model_inputs: tuple[ModelInput, ...] = build_model_inputs(
         discovered_inputs=discovered_inputs,
         context=replace(
             context,

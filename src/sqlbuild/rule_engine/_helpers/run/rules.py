@@ -20,12 +20,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlExpansion,
-    CompileModelInput,
     CompileProjectInputs,
     DeclarationScopeBuild,
     SqlExpansionContext,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, ModelInput
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
@@ -343,7 +342,7 @@ def prepare_sql_rules(
 
 
 def early_lint_expansions(
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
 ) -> dict[Path, CompiledSqlExpansion]:
     """Each model's compile expansion for early lint, whole when the compile handed one over."""
 

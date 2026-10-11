@@ -14,9 +14,9 @@ from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledProject,
-    CompileModelInput,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -792,7 +792,7 @@ def test_given_inherited_enum_when_compiling_contract_then_resolves_from_model_p
         | {test_case.model_path: test_case.model_sql},
     )
 
-    model: CompileModelInput = compile_project_inputs(project_dir=tmp_path).model_inputs[0]
+    model: ModelInput = compile_project_inputs(project_dir=tmp_path).model_inputs[0]
 
     assert model.query_sql == test_case.expected_sql
     assert model.schema_entry is not None

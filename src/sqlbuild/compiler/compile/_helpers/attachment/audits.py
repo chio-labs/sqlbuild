@@ -47,7 +47,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileAuditInput,
-    CompileModelInput,
     CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
@@ -63,6 +62,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
+    ModelInput,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -129,7 +129,7 @@ def build_project_audit_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     context: ModelInputBuildContext,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
     seed_inputs: tuple[CompileSeedInput, ...],
 ) -> tuple[tuple[CompileAuditInput, ...], tuple[CompilerDiagnostic, ...]]:
@@ -155,7 +155,7 @@ def build_audit_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     context: ModelInputBuildContext,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     source_inputs: tuple[CompileSourceInput, ...],
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
@@ -194,7 +194,7 @@ def build_audit_inputs(
             discovered_inputs=discovered_inputs, context=attachment_context
         )
     )
-    model_input: CompileModelInput
+    model_input: ModelInput
     for model_input in model_inputs:
         if model_input.schema_entry is None:
             continue
@@ -395,7 +395,7 @@ def _build_source_and_seed_audit_inputs(
 
 def build_model_attached_audit_inputs(
     *,
-    model_input: CompileModelInput,
+    model_input: ModelInput,
     context: _AuditAttachmentContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render schema-attached model audits into compile audit inputs."""

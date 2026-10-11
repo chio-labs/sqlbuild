@@ -14,10 +14,10 @@ from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
-    CompileModelInput,
     CompileProjectInputs,
     CompileSqlReference,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
@@ -48,7 +48,7 @@ def binding_relation_names(references: tuple[CompileSqlReference, ...]) -> froze
     )
 
 
-def binding_required_names(model_input: CompileModelInput) -> frozenset[str] | None:
+def binding_required_names(model_input: ModelInput) -> frozenset[str] | None:
     if not model_input.sql_validation_enabled:
         return None
     return binding_relation_names(model_input.references)
@@ -76,7 +76,7 @@ def published_model_shape(
 
 
 def binding_schema_for_model(
-    *, model_input: CompileModelInput, complete_binding_schemas: dict[str, dict[str, str]]
+    *, model_input: ModelInput, complete_binding_schemas: dict[str, dict[str, str]]
 ) -> dict[str, dict[str, str]] | None:
     required_names: frozenset[str] | None = binding_required_names(model_input)
     if required_names is None:
@@ -313,7 +313,7 @@ def semantic_shapes(
 
 
 def referenced_model_names(
-    *, model_input: CompileModelInput, available_names: frozenset[str] | None = None
+    *, model_input: ModelInput, available_names: frozenset[str] | None = None
 ) -> tuple[str, ...]:
     return tuple(
         sorted(
@@ -328,7 +328,7 @@ def referenced_model_names(
 
 
 def upstream_signatures(
-    *, model_input: CompileModelInput, signatures: dict[str, str], available_names: frozenset[str]
+    *, model_input: ModelInput, signatures: dict[str, str], available_names: frozenset[str]
 ) -> dict[str, str]:
     """Return the output signatures of the analyzed models this model references."""
 

@@ -53,7 +53,6 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_yaml_s
             description="shipped native stages",
             engine="native",
             expected_native_calls={
-                "parse_model_header_metadata": 2,
                 "expand_config_templates": 1,
             },
         ),
@@ -61,7 +60,6 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_yaml_s
             description="native preview",
             engine="native-preview",
             expected_native_calls={
-                "parse_model_header_metadata": 2,
                 "expand_config_templates": 1,
             },
         ),

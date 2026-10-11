@@ -1,0 +1,296 @@
+//! A model's compile input, read from the native compiled project that owns it.
+
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
+
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
+
+/// The Python classes a model input's projected attributes are built with.
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+pub(crate) struct InputViewClasses<'py> {
+    sql_reference: Bound<'py, PyAny>,
+    reference_kind: Bound<'py, PyAny>,
+    schema_model_entry: Bound<'py, PyAny>,
+    sql_expansion: Bound<'py, PyAny>,
+    expansion_span: Bound<'py, PyAny>,
+}
+
+/// A model's attached header schema; its specs carry user-authored audit arguments.
+pub(crate) struct SchemaRecord {
+    pub(crate) description: Option<String>,
+    pub(crate) columns: Py<PyTuple>,
+    pub(crate) audits: Py<PyTuple>,
+    pub(crate) dynamic_columns: Py<PyTuple>,
+    pub(crate) type_enforcement: bool,
+    pub(crate) model_schema: Option<String>,
+}
+
+/// The expansion passes of a model's query, from authored text to expanded SQL.
+pub(crate) struct ExpansionRecord {
+    /// The authored query below the header.
+    pub(crate) authored_sql: String,
+    /// The declaration- and macro-expanded SQL before canonicalisation.
+    pub(crate) expanded_sql: String,
+    pub(crate) interpolation_spans: Vec<SpanRow>,
+    pub(crate) declaration_spans: Vec<SpanRow>,
+    pub(crate) macro_spans: Vec<SpanRow>,
+    /// Whether interpolation left the authored query unchanged.
+    pub(crate) authored: bool,
+}
+
+/// What the model loop finished for one model beyond its facts; handles carry user values.
+pub(crate) struct ModelInputRecord {
+    /// The discovered model file, owned by the discovery inputs.
+    pub(crate) model_file: Py<PyAny>,
+    /// The resolved config, whose values hold user values.
+    pub(crate) config: Py<PyAny>,
+    pub(crate) query_sql: String,
+    pub(crate) macro_source_sql: String,
+    pub(crate) references: Vec<ReferenceRow>,
+    pub(crate) schema: Option<SchemaRecord>,
+    pub(crate) sql_validation_enabled: bool,
+    pub(crate) rejected_opt_out: Option<Py<PyAny>>,
+    /// The model's own enums and constants, whose values are user values.
+    pub(crate) enum_declarations: Py<PyTuple>,
+    pub(crate) constant_declarations: Py<PyTuple>,
+    pub(crate) enum_columns: Py<PyDict>,
+    pub(crate) macro_deps: Vec<String>,
+    /// Usage records, the identities the scope index is built from.
+    pub(crate) macro_usages: Py<PyTuple>,
+    pub(crate) declaration_usages: Py<PyTuple>,
+    pub(crate) expansion: ExpansionRecord,
+}
+
+/// One model's compile input, projected from the owner on demand.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct NativeModelInput {
+    owner: Py<NativeCompiledProject>,
+    index: usize,
+    references: PyOnceLock<Py<PyTuple>>,
+    schema_entry: PyOnceLock<Py<PyAny>>,
+    sql_expansion: PyOnceLock<Py<PyAny>>,
+    lint_expansion: PyOnceLock<Py<PyAny>>,
+}
+
+impl NativeModelInput {
+    pub(crate) fn new(owner: Py<NativeCompiledProject>, index: usize) -> Self {
+        Self {
+            owner,
+            index,
+            references: PyOnceLock::new(),
+            schema_entry: PyOnceLock::new(),
+            sql_expansion: PyOnceLock::new(),
+            lint_expansion: PyOnceLock::new(),
+        }
+    }
+
+    fn read<'py, T>(
+        &self,
+        py: Python<'py>,
+        read: impl FnOnce(&ModelInputRecord, Python<'py>) -> PyResult<T>,
+    ) -> PyResult<T> {
+        let owner = self.owner.bind(py).borrow();
+        read(owner.input(self.index)?, py)
+    }
+
+    fn classes<'py>(&self, py: Python<'py>) -> PyResult<InputViewClasses<'py>> {
+        self.owner.bind(py).borrow().input_classes(py)?.extract()
+    }
+}
+
+#[pymethods]
+impl NativeModelInput {
+    #[getter]
+    fn model_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.read(py, |record, py| Ok(record.model_file.clone_ref(py)))
+    }
+
+    #[getter]
+    fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.read(py, |record, py| Ok(record.config.clone_ref(py)))
+    }
+
+    #[getter]
+    fn query_sql(&self, py: Python<'_>) -> PyResult<String> {
+        self.read(py, |record, _| Ok(record.query_sql.clone()))
+    }
+
+    #[getter]
+    fn macro_source_sql(&self, py: Python<'_>) -> PyResult<String> {
+        self.read(py, |record, _| Ok(record.macro_source_sql.clone()))
+    }
+
+    #[getter]
+    fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        self.references
+            .get_or_try_init(py, || {
+                let classes: InputViewClasses<'_> = self.classes(py)?;
+                self.read(py, |record, py| {
+                    let mut references: Vec<Bound<'_, PyAny>> =
+                        Vec::with_capacity(record.references.len());
+                    for (kind, name, package, count) in &record.references {
+                        let fields: Bound<'_, PyDict> = PyDict::new(py);
+                        fields.set_item("ref_kind", classes.reference_kind.call1((kind,))?)?;
+                        fields.set_item("ref_name", name)?;
+                        fields.set_item("ref_package", package)?;
+                        fields.set_item("call_argument_count", count)?;
+                        references.push(classes.sql_reference.call((), Some(&fields))?);
+                    }
+                    Ok(PyTuple::new(py, references)?.unbind())
+                })
+            })
+            .map(|references| references.clone_ref(py))
+    }
+
+    #[getter]
+    fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.schema_entry
+            .get_or_try_init(py, || {
+                let classes: InputViewClasses<'_> = self.classes(py)?;
+                self.read(py, |record, py| {
+                    let Some(schema) = &record.schema else {
+                        return Ok(py.None());
+                    };
+                    let fields: Bound<'_, PyDict> = PyDict::new(py);
+                    fields.set_item(
+                        "name",
+                        record
+                            .model_file
+                            .bind(py)
+                            .getattr("file_path")?
+                            .getattr("stem")?,
+                    )?;
+                    fields.set_item("model_schema", &schema.model_schema)?;
+                    fields.set_item("description", &schema.description)?;
+                    fields.set_item("type_enforcement", schema.type_enforcement.then_some(true))?;
+                    fields.set_item("columns", schema.columns.bind(py))?;
+                    fields.set_item("dynamic_columns", schema.dynamic_columns.bind(py))?;
+                    fields.set_item("audits", schema.audits.bind(py))?;
+                    Ok(classes.schema_model_entry.call((), Some(&fields))?.unbind())
+                })
+            })
+            .map(|entry| entry.clone_ref(py))
+    }
+
+    #[getter]
+    fn schema_file(&self, py: Python<'_>) -> Py<PyAny> {
+        py.None()
+    }
+
+    #[getter]
+    fn sql_validation_enabled(&self, py: Python<'_>) -> PyResult<bool> {
+        self.read(py, |record, _| Ok(record.sql_validation_enabled))
+    }
+
+    #[getter]
+    fn rejected_sql_analysis_opt_out(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.read(py, |record, py| {
+            Ok(record
+                .rejected_opt_out
+                .as_ref()
+                .map_or_else(|| py.None(), |location| location.clone_ref(py)))
+        })
+    }
+
+    #[getter]
+    fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        self.read(py, |record, py| Ok(record.enum_declarations.clone_ref(py)))
+    }
+
+    #[getter]
+    fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        self.read(py, |record, py| {
+            Ok(record.constant_declarations.clone_ref(py))
+        })
+    }
+
+    #[getter]
+    fn enum_columns(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        self.read(py, |record, py| Ok(record.enum_columns.clone_ref(py)))
+    }
+
+    #[getter]
+    fn macro_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        self.read(py, |record, py| PyTuple::new(py, &record.macro_deps))
+    }
+
+    #[getter]
+    fn macro_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        self.read(py, |record, py| Ok(record.macro_usages.clone_ref(py)))
+    }
+
+    #[getter]
+    fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+        self.read(py, |record, py| Ok(record.declaration_usages.clone_ref(py)))
+    }
+
+    /// The authored-to-expanded passes, when interpolation left the authored query unchanged.
+    #[getter]
+    fn sql_expansion(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.sql_expansion
+            .get_or_try_init(py, || {
+                let classes: InputViewClasses<'_> = self.classes(py)?;
+                self.read(py, |record, py| {
+                    let expansion: &ExpansionRecord = &record.expansion;
+                    if !expansion.authored {
+                        return Ok(py.None());
+                    }
+                    expansion_object(
+                        &classes,
+                        expansion,
+                        &[&expansion.declaration_spans, &expansion.macro_spans],
+                    )
+                })
+            })
+            .map(|expansion| expansion.clone_ref(py))
+    }
+
+    /// The whole expansion, variables included, which early SQL lint reuses.
+    #[getter]
+    fn lint_expansion(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.lint_expansion
+            .get_or_try_init(py, || {
+                let classes: InputViewClasses<'_> = self.classes(py)?;
+                self.read(py, |record, _| {
+                    let expansion: &ExpansionRecord = &record.expansion;
+                    expansion_object(
+                        &classes,
+                        expansion,
+                        &[
+                            &expansion.interpolation_spans,
+                            &expansion.declaration_spans,
+                            &expansion.macro_spans,
+                        ],
+                    )
+                })
+            })
+            .map(|expansion| expansion.clone_ref(py))
+    }
+}
+
+/// `CompiledSqlExpansion(authored_sql, expanded_sql, passes)` for these passes.
+fn expansion_object(
+    classes: &InputViewClasses<'_>,
+    expansion: &ExpansionRecord,
+    passes: &[&Vec<SpanRow>],
+) -> PyResult<Py<PyAny>> {
+    let py: Python<'_> = classes.sql_expansion.py();
+    let mut pass_objects: Vec<Bound<'_, PyTuple>> = Vec::with_capacity(passes.len());
+    for spans in passes {
+        let mut span_objects: Vec<Bound<'_, PyAny>> = Vec::with_capacity(spans.len());
+        for span in spans.iter() {
+            span_objects.push(classes.expansion_span.call1(span.into_pyobject(py)?)?);
+        }
+        pass_objects.push(PyTuple::new(py, span_objects)?);
+    }
+    let fields: Bound<'_, PyDict> = PyDict::new(py);
+    fields.set_item("authored_sql", &expansion.authored_sql)?;
+    fields.set_item("expanded_sql", &expansion.expanded_sql)?;
+    fields.set_item("passes", PyTuple::new(py, pass_objects)?)?;
+    Ok(classes.sql_expansion.call((), Some(&fields))?.unbind())
+}

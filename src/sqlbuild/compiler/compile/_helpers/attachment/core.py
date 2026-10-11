@@ -44,23 +44,18 @@ from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnviron
 from sqlbuild.compiler.compile.constants import EXPLICIT_REFERENCE_KINDS
 from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroArgumentError
 from sqlbuild.compiler.compile.models import (
-    CompileModelConfig,
-    CompileModelInput,
     CompileSeedInput,
     DeclarationResolutionContext,
-    ExpansionSpan,
     LoadedMacro,
-    MacroExpansionResult,
     ModelInputBuildContext,
     ModelResourceNames,
     ModelValidatorContext,
     NativeModelConfigInputs,
     SqlInterpolation,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
-from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
-from sqlbuild.compiler.compiled_project.models import PlainModelFacts
-from sqlbuild.compiler.compiled_project.types import PlainSchemaRow, ReferenceRow, SpanRow
+from sqlbuild.compiler.compiled_project.types import SpanRow
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -85,7 +80,6 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
-    UsageRecord,
     VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import (
@@ -98,7 +92,6 @@ from sqlbuild.spec.contracts.models import (
     ProjectConfig,
     SchemaSeedEntry,
     SettingsConfig,
-    SourceLocation,
     TargetConfig,
 )
 
@@ -160,58 +153,6 @@ class _ModelLoopHost:
             file_path=file_path,
         )
 
-    def plain_input(
-        self,
-        *,
-        index: int,
-        config: CompileModelConfig,
-        visible: _VisibleModelDeclarations,
-        values: dict[str, object],
-        references: list[ReferenceRow],
-        query_sql: str,
-        header: tuple[str | None, PlainSchemaRow | None, dict[str, EnumDeclaration]],
-        analysis: tuple[bool, SourceLocation | None],
-        hook_statements: int,
-        declarations: tuple[
-            str,
-            list[SpanRow],
-            list[UsageRecord],
-            list[UsageRecord],
-            tuple[str, list[SpanRow], list[DeclarationIdentity], list[UsageRecord]] | None,
-        ],
-    ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
-        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        report_native_answer(
-            stage=NativeStage.ATTACHMENTS, kind="cursor_intrinsic_rejections", units=hook_statements
-        )
-        return plain_model_input(
-            model_file=model_file,
-            interpolation=self.interpolations[model_file.file_path],
-            facts=PlainModelFacts(
-                config=config,
-                values=values,
-                references=references,
-                query_sql=query_sql,
-                description=header[0],
-                schema=header[1],
-                enum_columns=header[2],
-                sql_validation_enabled=analysis[0],
-                rejected_sql_analysis_opt_out=analysis[1],
-                declaration_sql=declarations[0],
-                declaration_spans=_expansion_spans(declarations[1]),
-                macro_expansion=_native_macro_expansion(declarations[4]),
-                declaration_usages=tuple(
-                    dict.fromkeys(
-                        (
-                            *dict.fromkeys(declarations[2]),
-                            *declarations[3],
-                        )
-                    )
-                ),
-            ),
-            declarations=(visible.local_enums, visible.local_constants),
-        )
-
 
 def build_model_inputs(
     *,
@@ -221,7 +162,7 @@ def build_model_inputs(
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     native_project: _native.NativeCompiledProject,
-) -> tuple[CompileModelInput, ...]:
+) -> tuple[ModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = tuple(
@@ -247,7 +188,7 @@ def _build_model_inputs(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
     native_project: _native.NativeCompiledProject,
-) -> tuple[CompileModelInput, ...]:
+) -> tuple[ModelInput, ...]:
     effective_vars: dict[str, object] = context.effective_vars
     effective_settings: SettingsConfig = context.effective_settings
     known_model_names: set[str] = build_known_ref_names(discovered_inputs)
@@ -337,7 +278,7 @@ def _build_model_inputs(
             )
         ),
     )
-    model_inputs: list[CompileModelInput] = _run_native_model_loop(
+    model_inputs: list[ModelInput] = _run_native_model_loop(
         loop=loop, interpolations=interpolations, native_project=native_project
     )
     validate_declared_schema_models_are_attached(
@@ -352,7 +293,7 @@ def _run_native_model_loop(
     loop: _ModelInputLoop,
     interpolations: dict[Path, SqlInterpolation],
     native_project: _native.NativeCompiledProject,
-) -> list[CompileModelInput]:
+) -> list[ModelInput]:
     """Run the model loop natively; models it cannot finish yet call back into the attachment."""
 
     files: tuple[DiscoveredSqlModelFile, ...] = loop.discovered_inputs.model_files
@@ -416,30 +357,33 @@ def _run_native_model_loop(
         ),
     )
     host: _ModelLoopHost = _ModelLoopHost(loop=loop, interpolations=interpolations)
-    inputs, (finished_natively, config_builds, declaration_contexts) = native_loop.run(
-        native_project,
-        host,
-        [
-            (
+    inputs, (finished_natively, config_builds, declaration_contexts, hook_statements, described) = (
+        native_loop.run(
+            native_project,
+            host,
+            [
                 (
-                    model_file.file_path.stem,
-                    model_file.relative_path.as_posix(),
-                    str(model_file.relative_path),
-                    str(model_file.file_path),
-                ),
-                (
-                    model_file.header_column_locations,
-                    model_file.header_values,
-                    model_file.enum_declarations,
-                    model_file.constant_declarations,
-                ),
-                model_file.query_sql,
-                model_file.contents,
-                loop.native_declaration_references.get(model_file.file_path),
-                _interpolation_row(interpolations[model_file.file_path]),
-            )
-            for model_file in files
-        ],
+                    (
+                        model_file.file_path.stem,
+                        model_file.relative_path.as_posix(),
+                        str(model_file.relative_path),
+                        str(model_file.file_path),
+                    ),
+                    (
+                        model_file.header_column_locations,
+                        model_file.header_values,
+                        model_file.enum_declarations,
+                        model_file.constant_declarations,
+                    ),
+                    model_file.query_sql,
+                    model_file.contents,
+                    loop.native_declaration_references.get(model_file.file_path),
+                    _interpolation_row(interpolations[model_file.file_path]),
+                    model_file,
+                )
+                for model_file in files
+            ],
+        )
     )
     report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds", units=config_builds)
     report_native_answer(
@@ -448,38 +392,28 @@ def _run_native_model_loop(
     report_native_answer(
         stage=NativeStage.MODEL_LOOP, kind="native_model_inputs", units=finished_natively
     )
+    for stage, kind, units in (
+        (NativeStage.MODEL_LOOP, "declaration_expansions", finished_natively),
+        (NativeStage.MODEL_LOOP, "cursor_intrinsic_validations", finished_natively),
+        (NativeStage.MODEL_CONFIG, "validations", finished_natively),
+        (NativeStage.MODEL_CONFIG, "header_metadata_parses", described),
+        (NativeStage.ATTACHMENTS, "cursor_intrinsic_rejections", hook_statements),
+    ):
+        report_native_answer(stage=stage, kind=kind, units=units)
     return list(inputs)
 
 
 def _interpolation_row(
     interpolation: SqlInterpolation,
-) -> tuple[str, list[tuple[str, str]], str | None]:
-    return interpolation.sql, list(interpolation.reads), interpolation.error
-
-
-def _expansion_spans(rows: list[SpanRow]) -> tuple[ExpansionSpan, ...]:
-    return tuple(
-        ExpansionSpan(
-            source_start=source_start,
-            source_end=source_end,
-            output_start=output_start,
-            output_end=output_end,
-        )
-        for source_start, source_end, output_start, output_end in rows
-    )
-
-
-def _native_macro_expansion(
-    row: tuple[str, list[SpanRow], list[DeclarationIdentity], list[UsageRecord]] | None,
-) -> MacroExpansionResult | None:
-    if row is None:
-        return None
-    sql, spans, dependencies, usages = row
-    return MacroExpansionResult(
-        sql=sql,
-        spans=_expansion_spans(spans),
-        dependencies=tuple(dict.fromkeys(dependencies)),
-        usages=tuple(dict.fromkeys(usages)),
+) -> tuple[str, list[tuple[str, str]], str | None, list[SpanRow]]:
+    return (
+        interpolation.sql,
+        list(interpolation.reads),
+        interpolation.error,
+        [
+            (span.source_start, span.source_end, span.output_start, span.output_end)
+            for span in interpolation.spans
+        ],
     )
 
 

@@ -2,7 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::exceptions::PyIndexError;
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{FromPyObject, pyclass, pymethods};
 use serde_json::Value;
@@ -15,9 +16,13 @@ use sqlbuild_analysis::compiled_project::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compiled_project::model_input_view::{
+    ModelInputRecord, NativeModelInput,
+};
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
+const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";
 pub(crate) const INCREMENTAL_MODE_KEY: &str = "incremental_mode";
 const MATERIALIZED_KEY: &str = "materialized";
 const TABLE_MATERIALIZATION: &str = "table";
@@ -73,6 +78,10 @@ pub(crate) struct DeclarationPy<'py>(
 #[derive(Default)]
 pub(crate) struct NativeCompiledProject {
     facts: CompiledProjectFacts,
+    /// What the model loop finished for each model beyond its facts, in loop order.
+    inputs: Vec<ModelInputRecord>,
+    /// The Python classes model input views project their attributes with.
+    input_classes: Option<Py<PyAny>>,
 }
 
 impl NativeCompiledProject {
@@ -84,6 +93,32 @@ impl NativeCompiledProject {
     /// Retain facts a producer finished natively.
     pub(crate) fn retain(&mut self, facts: CompiledModelFacts) {
         record_model(&mut self.facts, facts);
+    }
+
+    /// Retain a finished model's input record; return its index for the model's view.
+    pub(crate) fn retain_input(&mut self, record: ModelInputRecord) -> usize {
+        self.inputs.push(record);
+        self.inputs.len() - 1
+    }
+
+    /// Keep the classes model input views project their attributes with.
+    pub(crate) fn set_input_classes(&mut self, classes: Py<PyAny>) {
+        self.input_classes = Some(classes);
+    }
+
+    /// The input record at `index`.
+    pub(crate) fn input(&self, index: usize) -> PyResult<&ModelInputRecord> {
+        self.inputs
+            .get(index)
+            .ok_or_else(|| PyIndexError::new_err(index))
+    }
+
+    /// The classes model input views project their attributes with.
+    pub(crate) fn input_classes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.input_classes
+            .as_ref()
+            .map(|classes| classes.bind(py).clone())
+            .ok_or_else(|| PyIndexError::new_err(INPUT_CLASSES_UNSET))
     }
 }
 
@@ -272,5 +307,6 @@ fn declaration(row: DeclarationPy<'_>) -> PyResult<DeclarationFact> {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<NativeModelInput>()?;
     module.add_class::<NativeCompiledProject>()
 }

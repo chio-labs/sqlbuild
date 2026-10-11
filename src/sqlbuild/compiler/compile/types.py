@@ -10,9 +10,59 @@ from sqlbuild.sql_values.models import SqlValue
 if TYPE_CHECKING:
     from sqlbuild.compiler.compile.models import (
         CompactBatchPreparation,
+        CompiledSqlExpansion,
+        CompileModelConfig,
         CompileProjectInputs,
+        CompileSqlReference,
     )
+    from sqlbuild.compiler.discovery.models import (
+        ConstantDeclaration,
+        DiscoveredSchemaFile,
+        DiscoveredSqlModelFile,
+        EnumDeclaration,
+    )
+    from sqlbuild.compiler.scopes.models import UsageRecord
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+    from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
+
+
+class ModelInput(Protocol):
+    """One model's compile input: a native owner view, or a hand-built `CompileModelInput`."""
+
+    @property
+    def model_file(self) -> DiscoveredSqlModelFile: ...
+    @property
+    def config(self) -> CompileModelConfig: ...
+    @property
+    def query_sql(self) -> str: ...
+    @property
+    def macro_source_sql(self) -> str: ...
+    @property
+    def references(self) -> tuple[CompileSqlReference, ...]: ...
+    @property
+    def schema_entry(self) -> SchemaModelEntry | None: ...
+    @property
+    def schema_file(self) -> DiscoveredSchemaFile | None: ...
+    @property
+    def sql_validation_enabled(self) -> bool: ...
+    @property
+    def rejected_sql_analysis_opt_out(self) -> SourceLocation | None: ...
+    @property
+    def enum_declarations(self) -> tuple[EnumDeclaration, ...]: ...
+    @property
+    def constant_declarations(self) -> tuple[ConstantDeclaration, ...]: ...
+    @property
+    def enum_columns(self) -> dict[str, EnumDeclaration]: ...
+    @property
+    def macro_deps(self) -> tuple[str, ...]: ...
+    @property
+    def macro_usages(self) -> tuple[UsageRecord, ...]: ...
+    @property
+    def declaration_usages(self) -> tuple[UsageRecord, ...]: ...
+    @property
+    def sql_expansion(self) -> CompiledSqlExpansion | None: ...
+    @property
+    def lint_expansion(self) -> CompiledSqlExpansion | None: ...
 
 
 class TypedSqlValueRenderer(Protocol):

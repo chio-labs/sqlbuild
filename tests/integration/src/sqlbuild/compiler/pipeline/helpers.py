@@ -10,7 +10,6 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -225,22 +224,15 @@ def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...
 
 
 def count_declaration_resolutions(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Count native declaration projections and remaining attachment resolutions."""
+    """Count the native model loop's declaration projections."""
 
     counts: list[int] = [0]
     native_loop_type: type = native_module.NativeModelLoop
-    resolve: Callable[..., object] = attachment_core.resolve_declaration_context
-
-    def counting_resolve(**kwargs: Any) -> object:
-        counts[0] += 1
-        return resolve(**kwargs)
-
     monkeypatch.setattr(
         native_module,
         "NativeModelLoop",
         lambda *arguments: _ResolutionCountingLoop(native_loop_type(*arguments), counts),
     )
-    monkeypatch.setattr(attachment_core, "resolve_declaration_context", counting_resolve)
     return counts
 
 
@@ -248,7 +240,7 @@ class _ResolutionCountingLoop(NamedTuple):
     native_loop: Any
     counts: list[int]
 
-    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int]]:
+    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int, int, int]]:
         inputs, counts = self.native_loop.run(*arguments)
         self.counts[0] += counts[2]
         return inputs, counts

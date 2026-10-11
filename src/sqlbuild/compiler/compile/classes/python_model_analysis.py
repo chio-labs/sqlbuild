@@ -18,10 +18,10 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 )
 from sqlbuild.compiler.compile._helpers.sharing.binding import lineage_reference_map
 from sqlbuild.compiler.compile.models import (
-    CompileModelInput,
     CompileSqlReference,
     ModelSqlAnalysisRequest,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
     SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
@@ -37,7 +37,7 @@ class PythonModelAnalysis:
     def __init__(
         self,
         *,
-        model_inputs: tuple[CompileModelInput, ...],
+        model_inputs: tuple[ModelInput, ...],
         inference_profile: ExpressionInferenceProfile,
         complete_binding_schemas: dict[str, dict[str, str]],
     ) -> None:
@@ -90,7 +90,7 @@ class PythonModelAnalysis:
 
 
 def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
-    model_input: CompileModelInput = request.model_input
+    model_input: ModelInput = request.model_input
     references: tuple[CompileSqlReference, ...] = model_input.references
     values: dict[str, object] = model_input.config.values
     return (
@@ -140,7 +140,7 @@ def _analysis_name(reference: CompileSqlReference) -> str:
     return reference.ref_name
 
 
-def _placeholders(model_input: CompileModelInput) -> dict[str, str] | None:
+def _placeholders(model_input: ModelInput) -> dict[str, str] | None:
     raw_placeholders: object | None = model_input.config.values.get("placeholders")
     return (
         {str(key): str(value) for key, value in raw_placeholders.items()}
@@ -149,7 +149,7 @@ def _placeholders(model_input: CompileModelInput) -> dict[str, str] | None:
     )
 
 
-def _recovers_cte_facts(model_input: CompileModelInput) -> bool:
+def _recovers_cte_facts(model_input: ModelInput) -> bool:
     return model_input.config.values.get("contract") == ContractPolicy.ENFORCED or (
         model_input.schema_entry is not None and bool(model_input.schema_entry.type_enforcement)
     )

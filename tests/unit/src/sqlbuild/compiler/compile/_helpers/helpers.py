@@ -56,7 +56,12 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage, SqlTestMode
+from sqlbuild.compiler.compile.types import (
+    CompiledResourceType,
+    FunctionLanguage,
+    ModelInput,
+    SqlTestMode,
+)
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredLoaderFunction,
@@ -802,7 +807,7 @@ def extract_test_sql(
     )[0]
 
 
-def usage_consumers(model_input: CompileModelInput) -> set[ResourceIdentity | DeclarationIdentity]:
+def usage_consumers(model_input: ModelInput) -> set[ResourceIdentity | DeclarationIdentity]:
     """The consumers a model input's declaration usages are recorded for."""
 
     return {usage.consumer for usage in model_input.declaration_usages}

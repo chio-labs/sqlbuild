@@ -8,11 +8,12 @@ from sqlbuild.compiler.compile.constants import (
     CURSOR_INPUTS_CONFIG_KEY,
     CURSOR_MODEL_WITHOUT_INPUTS_CODE,
 )
-from sqlbuild.compiler.compile.models import CompileModelInput, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
+    ModelInput,
 )
 from sqlbuild.compiler.discovery.main._model_header_entry_span import get_model_header_entry_span
 from sqlbuild.compiler.planner.types import MaterializationType, MicrobatchStrategy
@@ -36,7 +37,7 @@ _HELP: str = (
 
 
 def cursor_model_without_inputs_diagnostics(
-    *, model_inputs: tuple[CompileModelInput, ...]
+    *, model_inputs: tuple[ModelInput, ...]
 ) -> tuple[CompilerDiagnostic, ...]:
     """Return one error per cursor-based incremental model with no cursor inputs."""
 
@@ -47,7 +48,7 @@ def cursor_model_without_inputs_diagnostics(
     )
 
 
-def _lacks_cursor_inputs(model_input: CompileModelInput) -> bool:
+def _lacks_cursor_inputs(model_input: ModelInput) -> bool:
     values: dict[str, object] = model_input.config.values
     if get_config_str(values=values, key="materialized") != MaterializationType.INCREMENTAL:
         return False
@@ -65,7 +66,7 @@ def _lacks_cursor_inputs(model_input: CompileModelInput) -> bool:
     )
 
 
-def _diagnostic(model_input: CompileModelInput) -> CompilerDiagnostic:
+def _diagnostic(model_input: ModelInput) -> CompilerDiagnostic:
     name: str = model_input.model_file.file_path.stem
     return CompilerDiagnostic(
         phase=DiagnosticPhase.COMPILE,

@@ -19,12 +19,12 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
-    CompileModelInput,
     ModelResourceNames,
     ModelValidationRequest,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.compiled_project.main._native_config_classes import native_config_classes
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
@@ -288,7 +288,7 @@ def legacy_schema_rows(
 
 def validate_declared_schema_models_are_attached(
     *,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     schema_files: tuple[DiscoveredSchemaFile, ...],
 ) -> None:
     """Ensure every declared schema.yml model entry attaches within its directory scope."""
