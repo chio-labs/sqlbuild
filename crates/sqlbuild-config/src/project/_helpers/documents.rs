@@ -27,7 +27,7 @@ use crate::project::constants::{
     LEGACY_EVENT_EXPORTERS_KEY, LOCAL_CONFIG_FILENAME, PROJECT_CONFIG_FILENAME,
     QUERY_CHANGE_TRACKING_KEY, REQUIRE_SQL_ANALYSIS_KEY, SETTINGS_SECTION, SQL_ANALYSIS_KEY,
 };
-use crate::project::errors::{ConfigFailure, LoadFailure, MessagePiece};
+use crate::project::errors::{ConfigFailure, FailureClass, LoadFailure, MessagePiece};
 use crate::project::models::{Built, ConfigFile, ConfigPaths};
 use crate::project::types::{Entries, Fields, Loaded};
 use crate::toml::main::load_toml::load_toml;
@@ -98,6 +98,7 @@ pub(crate) fn load_toml_mapping(
                 ),
             ],
             help: None,
+            class: FailureClass::ProjectConfig,
         }));
     }
     let bytes = std::fs::read(path).map_err(|error| LoadFailure::Io(file, error))?;

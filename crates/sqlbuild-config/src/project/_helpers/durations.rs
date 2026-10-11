@@ -1,6 +1,8 @@
 //! `Duration.parse` and the duration properties the loaders check, over exact integers.
 
 use crate::models::Natural;
+use crate::project::constants::PYTHON_INT_MAX_STR_DIGITS;
+use crate::project::errors::ConfigFailure;
 use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_decimal_value::python_decimal_value;
 
@@ -45,8 +47,8 @@ impl Duration {
     }
 }
 
-/// The leading run of Python decimal digits as an integer, and its length in bytes.
-fn leading_digits(text: &str) -> (Natural, usize) {
+/// The leading run of Python decimal digits as an integer, its byte length and its digit count.
+fn leading_digits(text: &str) -> (Natural, usize, usize) {
     let python = active_python_text();
     let mut values: Vec<u32> = Vec::new();
     let mut length = 0;
@@ -57,25 +59,41 @@ fn leading_digits(text: &str) -> (Natural, usize) {
         values.push(value);
         length += character.len_utf8();
     }
-    (Natural::from_digit_values(values.into_iter()), length)
+    let count = values.len();
+    (
+        Natural::from_digit_values(values.into_iter()),
+        length,
+        count,
+    )
 }
 
-/// `Duration.parse(text)`, or `None` when it does not match or is zero.
-pub(crate) fn parse_duration(text: &str) -> Option<Duration> {
+/// `Duration.parse(text)`, `None` when it does not match or is zero; `int()`'s digit limit raises.
+pub(crate) fn parse_duration(text: &str) -> Result<Option<Duration>, ConfigFailure> {
     let mut rest: &str = text.strip_suffix('\n').unwrap_or(text);
     let mut amounts: [Natural; 6] = Default::default();
+    let mut counts: [usize; 6] = [0; 6];
     let mut next_unit = 0;
     while !rest.is_empty() {
-        let (amount, length) = leading_digits(rest);
+        let (amount, length, count) = leading_digits(rest);
         if length == 0 {
-            return None;
+            return Ok(None);
         }
-        let unit =
-            (next_unit..UNITS.len()).find(|index| rest[length..].starts_with(UNITS[*index]))?;
+        let Some(unit) =
+            (next_unit..UNITS.len()).find(|index| rest[length..].starts_with(UNITS[*index]))
+        else {
+            return Ok(None);
+        };
         amounts[unit] = amount;
+        counts[unit] = count;
         rest = &rest[length + UNITS[unit].len()..];
         next_unit = unit + 1;
     }
+    if let Some(count) = counts
+        .iter()
+        .find(|count| **count > PYTHON_INT_MAX_STR_DIGITS)
+    {
+        return Err(ConfigFailure::integer_digits(*count));
+    }
     let is_zero = amounts.iter().all(Natural::is_zero);
-    (!is_zero).then_some(Duration { amounts })
+    Ok((!is_zero).then_some(Duration { amounts }))
 }

@@ -7,6 +7,7 @@ use crate::project::constants::{
     ON_SCHEMA_CHANGE_KEY, ON_SCHEMA_CHANGE_VALUES, REPLAY_ON_CHANGE_EXAMPLE,
     REPLAY_ON_CHANGE_VALUES, SETTING_SNIPPET_INDENT,
 };
+use crate::project::errors::ConfigFailure;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 /// A setting value as TOML shows it.
@@ -70,33 +71,43 @@ fn valid_values(key: &str) -> String {
     }
 }
 
-fn replay_problem(key: &str, value: &str) -> Option<String> {
-    let duration = python_strip(value.strip_prefix(BOUNDED_REPLAY_PREFIX)?);
-    if parse_duration(duration).is_some() {
-        return None;
+fn replay_problem(key: &str, value: &str) -> Result<Option<String>, ConfigFailure> {
+    let Some(bounded) = value.strip_prefix(BOUNDED_REPLAY_PREFIX) else {
+        return Ok(None);
+    };
+    let duration = python_strip(bounded);
+    if parse_duration(duration)?.is_some() {
+        return Ok(None);
     }
-    Some(format!(
+    Ok(Some(format!(
         "{key} '{value}' has an invalid duration '{duration}'; use a positive duration \
          such as 14d, 12h or 1mo"
-    ))
+    )))
 }
 
 /// `change_policy_problem`: why an `on_schema_change` or `replay_on_change` value is invalid.
-pub(crate) fn change_policy_problem(key: &str, value: &ConfigValue) -> Option<String> {
+pub(crate) fn change_policy_problem(
+    key: &str,
+    value: &ConfigValue,
+) -> Result<Option<String>, ConfigFailure> {
     let valid = valid_values(key);
     let ConfigValue::String(text) = value else {
-        return Some(format!("{key} must be a string; valid values: {valid}"));
+        return Ok(Some(format!(
+            "{key} must be a string; valid values: {valid}"
+        )));
     };
     if key == ON_SCHEMA_CHANGE_KEY && ON_SCHEMA_CHANGE_VALUES.contains(&text.as_str()) {
-        return None;
+        return Ok(None);
     }
     if key != ON_SCHEMA_CHANGE_KEY && text.starts_with(BOUNDED_REPLAY_PREFIX) {
         return replay_problem(key, text);
     }
     if key != ON_SCHEMA_CHANGE_KEY && REPLAY_ON_CHANGE_VALUES[..2].contains(&text.as_str()) {
-        return None;
+        return Ok(None);
     }
-    Some(format!("unknown {key} '{text}'; valid values: {valid}"))
+    Ok(Some(format!(
+        "unknown {key} '{text}'; valid values: {valid}"
+    )))
 }
 
 /// `change_policy_toml_help`: a valid TOML line for the change-policy key.

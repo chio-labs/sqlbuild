@@ -1038,3 +1038,21 @@ class TargetDiffConfigErrorTestCase:
     project_contents: str
     expected_error_fragment: str
     local_contents: str = ""
+
+
+@dataclass(frozen=True)
+class DeepProjectConnectionTestCase:
+    """Test case for project TOML nested deeper than the native parser's own limit."""
+
+    description: str
+    depth: int
+    expected_depth: int
+
+
+@dataclass(frozen=True)
+class OversizedDurationTestCase:
+    """Test case for a duration with more digits than Python's int() converts."""
+
+    description: str
+    section: str
+    expected_error_fragment: str

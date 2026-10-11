@@ -1,5 +1,6 @@
 //! Why a project configuration file is rejected.
 
+use crate::project::constants::PYTHON_INT_MAX_STR_DIGITS;
 use crate::project::models::ConfigFile;
 
 /// One piece of a rejection message: fixed text or the path of a configuration file.
@@ -9,11 +10,22 @@ pub enum MessagePiece {
     File(ConfigFile),
 }
 
-/// A `ProjectConfigError` message and its optional help.
+/// The Python exception a rejection raises.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FailureClass {
+    /// `ProjectConfigError`.
+    #[default]
+    ProjectConfig,
+    /// The `ValueError` `int()` raises for more digits than CPython converts.
+    IntegerDigits,
+}
+
+/// A rejection message, its optional help, and the exception it raises.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfigFailure {
     pub message: Vec<MessagePiece>,
     pub help: Option<String>,
+    pub class: FailureClass,
 }
 
 impl ConfigFailure {
@@ -22,6 +34,7 @@ impl ConfigFailure {
         Self {
             message: vec![MessagePiece::Text(text.into())],
             help: None,
+            class: FailureClass::ProjectConfig,
         }
     }
 
@@ -33,6 +46,19 @@ impl ConfigFailure {
                 MessagePiece::Text(format!(" {}", text.as_ref())),
             ],
             help: None,
+            class: FailureClass::ProjectConfig,
+        }
+    }
+
+    /// The `ValueError` of `int()` for a decimal string of `digits` digits.
+    pub fn integer_digits(digits: usize) -> Self {
+        Self {
+            class: FailureClass::IntegerDigits,
+            ..Self::plain(format!(
+                "Exceeds the limit ({PYTHON_INT_MAX_STR_DIGITS} digits) for integer string \
+                 conversion: value has {digits} digits; use sys.set_int_max_str_digits() to \
+                 increase the limit"
+            ))
         }
     }
 

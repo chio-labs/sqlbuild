@@ -267,6 +267,46 @@ pub struct MetadataModel {
     pub cursor_inputs: Vec<(String, Vec<String>)>,
     pub cursor: Option<String>,
     pub cursor_type: Option<String>,
+    /// The model's schema audits, model-level ones first, in Python's order.
+    pub audits: Vec<MetadataAudit>,
+}
+
+/// One accepted value of an `accepted_values` audit, by Python type.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AuditValue {
+    Null,
+    Bool(bool),
+    /// An `int` or `float`, as `str(value)`.
+    Number(String),
+    Text(String),
+    /// Any other object, which keeps the audit from being checked.
+    Other,
+}
+
+/// One schema audit as the metadata checks read it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MetadataAudit {
+    /// The schema column the audit is attached to, if any.
+    pub column: Option<String>,
+    pub definition: String,
+    /// The `expression` argument, when it is a string.
+    pub expression: Option<String>,
+    /// `str(arguments.get("to", ""))`.
+    pub target: String,
+    /// `str(arguments.get("field", ""))`.
+    pub field: String,
+    /// The `values` argument, when it is a list or tuple.
+    pub values: Option<Vec<AuditValue>>,
+}
+
+/// One schema audit diagnostic, located at its name in the model's authored SQL.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditFinding {
+    pub code: String,
+    pub message: String,
+    pub line: i64,
+    pub column: i64,
+    pub is_error: bool,
 }
 
 /// One source's cursor column and file text, shared with the other sources of its file.
@@ -285,10 +325,12 @@ pub struct MetadataSqlTest {
     pub ctes: Vec<(String, Vec<String>)>,
 }
 
-/// Python's `get_semantic_metadata_diagnostics` inputs, apart from audits and resource SQL.
+/// Python's `get_semantic_metadata_diagnostics` inputs, apart from resource SQL.
 #[derive(Clone, Debug)]
 pub struct MetadataRequest {
     pub dialect: Option<String>,
+    /// The inference profile's `quoted_identifiers_ignore_case`.
+    pub quoted_ignore_case: bool,
     /// The inference profile's declared function return types.
     pub return_types: Vec<(String, String)>,
     pub functions: Vec<MetadataFunction>,
@@ -312,6 +354,8 @@ pub struct MetadataFinding {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ModelMetadataFindings {
     pub functions: Vec<MetadataFinding>,
+    /// Schema audit findings, which follow function errors and precede reference errors.
+    pub audits: Vec<AuditFinding>,
     pub references: Vec<MetadataFinding>,
 }
 
@@ -324,4 +368,105 @@ pub struct MetadataOutcome {
     /// `(SQL test index, error, end column)`.
     pub sql_tests: Vec<(usize, MetadataFinding, i64)>,
     pub fallback_types: Vec<String>,
+}
+
+/// The kind of resource owning checked SQL, by Python's `CompiledResourceType` value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ResourceSqlKind {
+    Audit,
+    SqlTest,
+    Model,
+}
+
+/// One compiled audit as the resource SQL checks read it.
+#[derive(Clone, Debug)]
+pub struct AuditSqlInput {
+    pub name: String,
+    pub definition_name: String,
+    /// `(target kind, target name)` the audit is attached to.
+    pub attached_target: Option<(String, String)>,
+    pub attached_column: Option<String>,
+    /// Whether the audit file lives under the `<built-in>` root.
+    pub built_in: bool,
+    pub path: String,
+    pub contents: Arc<str>,
+    /// `(compiled SQL, authored SQL)` of the body, measure and evidence queries.
+    pub bodies: Vec<(Option<String>, Option<String>)>,
+    /// Whether the AUDIT header sets `sql_analysis false`.
+    pub opts_out: bool,
+    pub relations: Vec<String>,
+}
+
+/// One compiled SQL test as the resource SQL checks read it.
+#[derive(Clone, Debug)]
+pub struct SqlTestSqlInput {
+    pub name: String,
+    pub expected_model_names: Vec<String>,
+    pub path: String,
+    pub contents: Arc<str>,
+    pub sql_body: String,
+    pub authored_body: String,
+    pub opts_out: bool,
+}
+
+/// One SQL hook of a model: its config key, index, statement, named file and definition.
+#[derive(Clone, Debug)]
+pub struct HookSqlInput {
+    pub key: String,
+    pub index: usize,
+    pub statement: String,
+    pub hook_path: Option<String>,
+    pub definition: Option<String>,
+    pub relations: Vec<String>,
+}
+
+/// One model's SQL hooks as the resource SQL checks read them.
+#[derive(Clone, Debug)]
+pub struct HookModelInput {
+    pub name: String,
+    pub path: String,
+    pub authored_sql: Arc<str>,
+    pub analysis_disabled: bool,
+    pub hooks: Vec<HookSqlInput>,
+}
+
+/// Python's `get_resource_sql_diagnostics` inputs as plain data.
+#[derive(Clone, Debug)]
+pub struct ResourceSqlRequest {
+    pub dialect: Option<String>,
+    pub quoted_ignore_case: bool,
+    pub require_sql_analysis: bool,
+    /// Closed relation shapes in Python's dict order.
+    pub shapes: Vec<(String, Vec<(String, String)>)>,
+    pub audits: Vec<AuditSqlInput>,
+    pub sql_tests: Vec<SqlTestSqlInput>,
+    pub models: Vec<HookModelInput>,
+    /// `(relative path, contents)` of each SQL hook file.
+    pub hook_files: Vec<(String, Arc<str>)>,
+}
+
+/// A located resource SQL finding, or a rejected `sql_analysis false` with its note.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResourceSqlDiagnostic {
+    pub kind: ResourceSqlKind,
+    pub resource_name: String,
+    pub is_error: bool,
+    pub code: String,
+    pub message: String,
+    pub path: String,
+    /// `(line, column, end line, end column)`.
+    pub span: (i64, i64, Option<i64>, Option<i64>),
+    pub note: Option<String>,
+    pub help: Option<String>,
+}
+
+/// Why the resource SQL checks stop: Python's error for the same input, or an internal failure.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResourceSqlFailure {
+    /// The `CompileInputError` cursor intrinsic replacement raises.
+    CursorIntrinsic(String),
+    /// The `ValueError` analysis normalization raises.
+    Normalization(String),
+    /// An internal native failure, raised as `NativeCompilerError`.
+    Internal(String),
 }

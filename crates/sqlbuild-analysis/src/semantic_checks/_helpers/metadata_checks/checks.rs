@@ -1,4 +1,4 @@
-//! Python's `get_semantic_metadata_diagnostics`, apart from the audit and resource SQL checks.
+//! Python's `get_semantic_metadata_diagnostics`, apart from the resource SQL checks.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::semantic_checks::_helpers::explanation::messages::{compiled, pattern};
+use crate::semantic_checks::_helpers::metadata_checks::audits::{AuditContext, audit_errors};
 use crate::semantic_checks::_helpers::metadata_checks::families::Families;
 use crate::semantic_checks::_helpers::metadata_checks::function_calls::{
     FunctionContext, function_errors,
@@ -22,6 +23,7 @@ use crate::semantic_checks::models::{
     MetadataFinding, MetadataFunction, MetadataModel, MetadataOutcome, MetadataRequest,
     MetadataSource, MetadataSqlTest, ModelMetadataFindings, SemanticFailure,
 };
+use crate::semantic_validation::models::ProjectCatalog;
 use crate::type_system::models::TypeFamily;
 
 static SQL_TEST_CTE: LazyLock<Result<Regex, String>> =
@@ -41,6 +43,7 @@ type Reference<'a> = (String, &'a str, &'a [(String, String)]);
 /// The metadata errors of every model, source and SQL test, or the error Python raised.
 pub(crate) fn check_metadata(
     request: &MetadataRequest,
+    catalog: &ProjectCatalog,
 ) -> Result<MetadataOutcome, SemanticFailure> {
     let shapes: Shapes<'_> = request
         .shapes
@@ -61,9 +64,15 @@ pub(crate) fn check_metadata(
         return_types: &return_types,
         families: &families,
     };
+    let audits = AuditContext {
+        dialect: request.dialect.as_deref(),
+        quoted_ignore_case: request.quoted_ignore_case,
+        shapes: &shapes,
+        catalog,
+    };
     let mut models: Vec<ModelMetadataFindings> = Vec::with_capacity(request.models.len());
     for model in &request.models {
-        models.push(model_errors(model, &context)?);
+        models.push(model_errors(model, &context, &audits)?);
     }
     let sources = source_errors(&request.sources, &shapes)?;
     let sql_tests = sql_test_errors(&request.sql_tests, &shapes)?;
@@ -78,6 +87,7 @@ pub(crate) fn check_metadata(
 fn model_errors(
     model: &MetadataModel,
     context: &FunctionContext<'_>,
+    audits: &AuditContext<'_>,
 ) -> Result<ModelMetadataFindings, SemanticFailure> {
     if !model.checked {
         return Ok(ModelMetadataFindings::default());
@@ -86,12 +96,16 @@ fn model_errors(
     for (code, name, message) in function_errors(model, context)? {
         functions.push(model_error(model, code, &name, message)?);
     }
-    let references = match context.shapes.get(model.name.as_str()) {
-        Some(shape) => reference_errors(model, shape, context)?,
-        None => Vec::new(),
+    let (audits, references) = match context.shapes.get(model.name.as_str()) {
+        Some(shape) => (
+            audit_errors(model, shape, audits)?,
+            reference_errors(model, shape, context)?,
+        ),
+        None => (Vec::new(), Vec::new()),
     };
     Ok(ModelMetadataFindings {
         functions,
+        audits,
         references,
     })
 }

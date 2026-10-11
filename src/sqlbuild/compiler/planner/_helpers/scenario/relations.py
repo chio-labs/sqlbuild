@@ -76,7 +76,7 @@ from sqlbuild.compiler.planner.types import (
     FixtureKey,
     ScenarioArtifactKind,
 )
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.main.render_source_relation import render_source_relation

@@ -8,7 +8,6 @@ from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
     substitute_placeholder_defaults,
     table_function_analysis_name,
 )
-from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import names_set_operation
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     binding_relation_row_names,
     binding_schema_for_model,
@@ -106,7 +105,6 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
         ],
         sorted(binding_relation_row_names(rows)),
         _recovers_cte_facts(model_input),
-        names_set_operation(request.query_sql),
         (
             (
                 str(values.get("valid_from_column") or SNAPSHOT_DEFAULT_VALID_FROM_COLUMN),

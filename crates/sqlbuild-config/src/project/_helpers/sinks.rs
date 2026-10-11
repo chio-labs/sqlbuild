@@ -143,7 +143,7 @@ fn shutdown_timeout(config: &Entries, file: ConfigFile) -> Loaded<(Built, Built)
     let ConfigValue::String(text) = value else {
         return Err(invalid());
     };
-    let seconds = fixed_duration_seconds(text, true).ok_or_else(invalid)?;
+    let seconds = fixed_duration_seconds(text, true)?.ok_or_else(invalid)?;
     let limit = SHUTDOWN_TIMEOUT_MAX_SECONDS.to_string();
     if compare_naturals(&seconds, &limit).is_gt() {
         return Err(invalid());

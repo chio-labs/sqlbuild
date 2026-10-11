@@ -5,7 +5,6 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.sql_values._helpers.normalization import sql_value_identity
 from sqlbuild.sql_values.exceptions import SqlValueValidationError
 from sqlbuild.sql_values.main.normalize import normalize_sql_value
 from sqlbuild.sql_values.main.validate_rendered_size import validate_rendered_sql_value_size
@@ -79,12 +78,8 @@ def test_given_lists_sets_and_objects_when_normalizing_then_canonicalizes_unorde
 
     list_items: tuple[SqlValue, ...] = cast(tuple[SqlValue, ...], list_value.value)
     assert tuple(item.value for item in list_items) == test_case.expected_list_values
-    assert (
-        sql_value_identity(value=first_set) == sql_value_identity(value=second_set)
-    ) is test_case.expected_identities_equal
-    assert (
-        sql_value_identity(value=first_object) == sql_value_identity(value=second_object)
-    ) is test_case.expected_identities_equal
+    assert (first_set == second_set) is test_case.expected_identities_equal
+    assert (first_object == second_object) is test_case.expected_identities_equal
 
 
 @pytest.mark.parametrize(
@@ -126,9 +121,7 @@ def test_given_python_equal_cross_type_values_when_identifying_then_identity_rem
     boolean: SqlValue = normalize_sql_value(raw_value=True, context="constant 'value'")
     integer: SqlValue = normalize_sql_value(raw_value=1, context="constant 'value'")
 
-    assert (
-        sql_value_identity(value=boolean) == sql_value_identity(value=integer)
-    ) is test_case.expected_identities_equal
+    assert (boolean == integer) is test_case.expected_identities_equal
 
 
 @pytest.mark.parametrize(

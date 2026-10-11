@@ -1004,6 +1004,32 @@ class NamePattern:
 def unresolved_reference_marker_kind(
     sql: str, context: str, /
 ) -> tuple[int | None, str | None]: ...
+def normalize_typed_sql_value(
+    raw_value: object, typing: tuple[str, str | None], limits: tuple[int, int, int], /
+) -> object: ...
+def sql_test_blocks(
+    file_path: str, blocks: list[tuple[dict[str, object], str, tuple[int, int]]], /
+) -> list[object]: ...
+def validate_sql_test_block_names(
+    file_path: str, blocks: list[tuple[int, str | None]], /
+) -> None: ...
+def model_header_declarations(
+    header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
+) -> tuple[tuple[object, ...], tuple[object, ...]]: ...
+def typed_constant_record(
+    constant: tuple[str, object],
+    options: tuple[str | None, str | None],
+    paths: tuple[Path, Path],
+    /,
+) -> object: ...
+def deferred_target_segments(
+    template: str, logical: str, context_keys: list[str], variables: list[str], /
+) -> list[tuple[bool, str]]: ...
+def unknown_mapping_keys(
+    keys: list[tuple[str, bool]], allowed: list[str], /
+) -> tuple[str, str] | None: ...
+def unsupported_keys_help(keys: list[str], supported_keys: list[str], /) -> str: ...
+def resource_sql_diagnostic_rows(catalog: object, request: object, /) -> list[object]: ...
 def resource_identity_suggestion(
     name: str, private_identity: bool, /
 ) -> tuple[str, str] | None: ...
@@ -1291,6 +1317,7 @@ def infer_expression_source_shapes(
     request: tuple[str, bool, list[tuple[str, str]], list[tuple[str, str]], list[str]],
     adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
 ) -> list[list[tuple[str, str]] | None]: ...
+def _oracle_names_set_operation(sql: str, /) -> bool: ...
 def _oracle_cte_fact_recovery(
     request: tuple[
         str,
@@ -1340,29 +1367,24 @@ def check_semantic_metadata_rows(
     catalog: object,
     request: tuple[
         str | None,
+        bool,
         list[tuple[str, str]],
         list[tuple[str, list[tuple[str, str]]]],
         list[tuple[str, list[tuple[str, str]]]],
-        list[
-            tuple[
-                str,
-                str,
-                str,
-                bool,
-                bool,
-                list[tuple[str, list[str]]],
-                list[tuple[str, list[str]]],
-                str | None,
-                str | None,
-            ]
-        ],
+        list[tuple[object, ...]],
         list[str],
         list[tuple[str, str | None, int]],
         list[tuple[int, list[tuple[str, list[str]]]]],
     ],
     /,
 ) -> tuple[
-    list[tuple[list[tuple[str, str, int, int]], list[tuple[str, str, int, int]]]],
+    list[
+        tuple[
+            list[tuple[str, str, int, int]],
+            list[tuple[str, str, int, int, bool]],
+            list[tuple[str, str, int, int]],
+        ]
+    ],
     list[tuple[int, tuple[str, str, int, int]]],
     list[tuple[int, tuple[str, str, int, int], int]],
     list[str],

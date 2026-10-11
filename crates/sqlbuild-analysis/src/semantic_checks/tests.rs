@@ -16,6 +16,8 @@ mod operand_types;
 mod parsed_sql;
 #[path = "tests/test_positions.rs"]
 mod positions;
+#[path = "tests/test_resource_sql.rs"]
+mod resource_sql;
 #[path = "tests/test_types.rs"]
 mod test_types;
 #[path = "tests/test_type_recovery.rs"]

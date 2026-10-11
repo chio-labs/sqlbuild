@@ -12,3 +12,9 @@ pub(super) struct HostileTomlTestCase {
     pub(super) text: String,
     pub(super) expected_error: ConfigErrorKind,
 }
+
+pub(super) struct DeepTomlTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: String,
+    pub(super) expected_value: ConfigValue,
+}

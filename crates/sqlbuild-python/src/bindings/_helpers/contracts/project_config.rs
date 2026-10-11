@@ -2,13 +2,13 @@
 
 use std::path::PathBuf;
 
-use pyo3::exceptions::PyOSError;
+use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
-use sqlbuild_config::project::errors::{ConfigFailure, LoadFailure};
+use sqlbuild_config::project::errors::{ConfigFailure, FailureClass, LoadFailure};
 use sqlbuild_config::project::main::load_local_config::load_local_config;
 use sqlbuild_config::project::main::load_project_config::load_project_config;
 use sqlbuild_config::project::main::local_sql_analysis_failure::local_sql_analysis_failure;
@@ -92,6 +92,9 @@ fn config_error(py: Python<'_>, failure: &ConfigFailure, files: &Files<'_>) -> P
         })
         .collect::<PyResult<Vec<_>>>()?;
     let message = PyString::new(py, "").call_method1("join", (pieces,))?;
+    if failure.class == FailureClass::IntegerDigits {
+        return Ok(PyValueError::new_err(message.unbind()));
+    }
     let keywords = PyDict::new(py);
     keywords.set_item("help", failure.help.as_deref())?;
     let error = py

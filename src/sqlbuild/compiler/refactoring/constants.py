@@ -8,6 +8,14 @@ from sqlbuild.compiler.refactoring.types import (
     RefactorOperation,
 )
 
+STATEMENT_HEADER_BODY_PATTERN: str = (
+    r"(?P<header>(?>(?:[^\"')\\]|\\.)++"
+    r"|\"(?:[^\"\\]|\\.)*+\""
+    r"|'(?:[^'\\]|\\.)*+'"
+    r"|[\"'](?:[^\\)]|\\.)*+"
+    r"|\)(?!\s*;))*+)"
+)
+
 MODEL_KIND_PREFIX: str = "model:"
 IDENTIFIER_CHARACTERS: str = r"A-Za-z0-9_$"
 MIGRATE_FROM_KEY: str = "migrate_from"

@@ -6,9 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.sql.declarations import (
-    parse_model_constant_declarations,
-)
+import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -196,10 +194,11 @@ def test_given_typed_public_constants_when_parsing_then_returns_normalized_value
 def test_given_local_shorthand_and_wrapper_constants_when_parsing_then_honors_options(
     test_case: ParseLocalTypedConstantsTestCase,
 ) -> None:
-    declarations: tuple[ConstantDeclaration, ...] = parse_model_constant_declarations(
-        raw_value=test_case.raw_value,
-        model_name="orders",
-        relative_path=Path("models/orders.sql"),
+    declarations: tuple[ConstantDeclaration, ...] = cast(
+        tuple[ConstantDeclaration, ...],
+        _native.model_header_declarations(
+            (None, test_case.raw_value), "orders", Path("models/orders.sql")
+        )[1],
     )
 
     assert (

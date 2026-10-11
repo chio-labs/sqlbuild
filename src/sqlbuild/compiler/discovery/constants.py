@@ -186,14 +186,6 @@ SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
 )
 SQL_HOOK_IDENTITY_FIELDS: tuple[str, ...] = ("statement", "name", "definition_sql", "kwargs")
 
-STATEMENT_HEADER_BODY_PATTERN: str = (
-    r"(?P<header>(?>(?:[^\"')\\]|\\.)++"
-    r"|\"(?:[^\"\\]|\\.)*+\""
-    r"|'(?:[^'\\]|\\.)*+'"
-    r"|[\"'](?:[^\\)]|\\.)*+"
-    r"|\)(?!\s*;))*+)"
-)
-
 NATIVE_FAILED_TAG: str = "error"
 NATIVE_UNREADABLE_TAG: str = "read"
 NATIVE_UNLISTABLE_TAG: str = "unlistable"

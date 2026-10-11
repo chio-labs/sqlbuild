@@ -84,14 +84,6 @@ class DiagnosticUxCase:
 
 
 @dataclass(frozen=True)
-class ColumnSuggestionCase:
-    description: str
-    name: str
-    columns: tuple[str, ...]
-    expected_match: str | None
-
-
-@dataclass(frozen=True)
 class SemanticTriageCase:
     description: str
     column_type: str = "DATE"

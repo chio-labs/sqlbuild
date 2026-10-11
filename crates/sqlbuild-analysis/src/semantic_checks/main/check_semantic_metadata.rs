@@ -13,6 +13,7 @@ pub fn check_semantic_metadata(
 ) -> Result<MetadataOutcome, SemanticFailure> {
     let pool = catalog.analysis_pool().map_err(SemanticFailure::Internal)?;
     pool.install(|| {
-        catch_compiler_panic(|| Ok(check_metadata(request))).map_err(SemanticFailure::Internal)?
+        catch_compiler_panic(|| Ok(check_metadata(request, catalog)))
+            .map_err(SemanticFailure::Internal)?
     })
 }
