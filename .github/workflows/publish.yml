@@ -88,7 +88,7 @@ jobs:
           fi
           unzip -l dist/sqlbuild-[0-9]*.whl | grep 'sqlbuild/.agents/skills/sqlbuild/references/docs/CONTENTS.md'
           python -m venv /tmp/sqlbuild-wheel-smoke
-          /tmp/sqlbuild-wheel-smoke/bin/python -m pip install --find-links dist sqlbuild
+          /tmp/sqlbuild-wheel-smoke/bin/python -m pip install --find-links dist dist/sqlbuild-[0-9]*.whl
           /tmp/sqlbuild-wheel-smoke/bin/python -c "import sqlbuild._native as native; assert native.catalogue_json()"
           /tmp/sqlbuild-wheel-smoke/bin/sqb --version
           /tmp/sqlbuild-wheel-smoke/bin/sqb --help
@@ -124,10 +124,13 @@ jobs:
           args: --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
       - name: Inspect source distribution contents
         run: |
-          if tar -tzf dist/*.tar.gz | grep -E '(__pycache__/|\.pyc$|\.tmp$)'; then
-            echo "Source distribution contains generated or temporary script files"
-            exit 1
-          fi
+          for archive in dist/*.tar.gz; do
+            tar -tzf "$archive" > archive-contents.txt
+            if grep -E '(__pycache__/|\.pyc$|\.tmp$)' archive-contents.txt; then
+              echo "Source distribution contains generated or temporary script files"
+              exit 1
+            fi
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: sdist

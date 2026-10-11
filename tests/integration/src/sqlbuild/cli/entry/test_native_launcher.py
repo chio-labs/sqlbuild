@@ -22,6 +22,8 @@ from tests.integration.src.sqlbuild.cli.entry.helpers import (
     launch_records,
     python_starts,
     run,
+    run_with_full_output,
+    startup_install,
     without_seconds,
     write_project,
 )
@@ -212,3 +214,63 @@ def test_given_unchanged_project_when_sqb_serves_the_hit_then_python_never_start
     assert (first[0], served[0], edited[0]) == (0, 0, 0)
     assert without_seconds(served[2]).startswith(b"Inputs unchanged; reused the previous compile")
     assert (after_first, after_served, python_starts(marker)) == test_case.expected_python_starts
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="requires /dev/full")
+@pytest.mark.parametrize(
+    "test_case",
+    [HandoffTestCase("failed replay output", ("compile", "--json"), 1)],
+    ids=lambda case: case.description,
+)
+def test_given_cached_compile_when_output_write_fails_then_replay_returns_failure(
+    test_case: HandoffTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = write_project(tmp_path / "project")
+    first: LauncherRun = run(NATIVE_SQB, args=test_case.args, cwd=project_dir)
+    assert first[0] == 0
+    assert launch_records(project_dir)
+    captures: set[Path] = compute_log_captures(project_dir)
+    failed: LauncherRun = run_with_full_output(NATIVE_SQB, args=test_case.args, cwd=project_dir)
+    assert failed[0] == test_case.expected_exit_code
+    (capture,) = compute_log_captures(project_dir) - captures
+    assert capture_metadata(capture)["exit_code"] == test_case.expected_exit_code
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="isolated install uses POSIX scripts")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EditedProjectTestCase(
+            "startup search path edit", ("compile", "--json"), "1", "2", 1, "2 AS order_id"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cached_compile_when_startup_search_path_changes_then_new_helper_is_compiled(
+    test_case: EditedProjectTestCase,
+    tmp_path: Path,
+) -> None:
+    program, startup, new_helpers = startup_install(tmp_path / "environment")
+    project_dir: Path = write_project(tmp_path / "project")
+    (project_dir / "models" / "_macros").mkdir()
+    _ = (project_dir / "models" / "_macros" / "orders.py").write_text(
+        'import catalog_helper\n\ndef order_value() -> str:\n    """The order value."""\n    return catalog_helper.SQL\n',
+        encoding="utf-8",
+    )
+    model: Path = project_dir / "models" / "orders.sql"
+    _ = model.write_text(model.read_text().replace("1 AS order_id", "@order_value() AS order_id"))
+    first: LauncherRun = run(program, args=test_case.args, cwd=project_dir)
+    assert first[0] == 0, first[2]
+    assert launch_records(project_dir)
+    _ = run(program, args=test_case.args, cwd=project_dir)
+    warm: LauncherRun = run(program, args=test_case.args, cwd=project_dir)
+    assert compile_timings(warm[1])["project_reuse_hits"] == 1
+    _ = startup.write_text(str(new_helpers) + "\n", encoding="utf-8")
+    edited: LauncherRun = run(program, args=test_case.args, cwd=project_dir)
+    assert edited[0] == 0, edited[2]
+    assert compile_timings(edited[1])["project_reuse_misses"] == test_case.expected_misses
+    assert (
+        test_case.expected_fragment
+        in (project_dir / "target" / "compiled" / "models" / "orders.sql").read_text()
+    )

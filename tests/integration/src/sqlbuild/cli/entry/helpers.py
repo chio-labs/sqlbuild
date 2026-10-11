@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import sqlbuild
 from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 
 type LauncherRun = tuple[int, bytes, bytes]
@@ -103,3 +104,55 @@ def python_starts(marker: Path) -> int:
     """How many times the logging `sqlbuild-python` started."""
 
     return len(marker.read_text(encoding="utf-8").splitlines())
+
+
+def run_with_full_output(program: Path, *, args: tuple[str, ...], cwd: Path) -> LauncherRun:
+    """Run with a writable descriptor that rejects every output byte."""
+
+    with Path("/dev/full").open("wb") as output:
+        completed: subprocess.CompletedProcess[bytes] = subprocess.run(
+            [str(program), *args],
+            cwd=cwd,
+            stdout=output,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "NO_COLOR": "1", REUSE_DISABLE_ENV_VAR: "0"},
+            check=False,
+            timeout=600,
+        )
+    return completed.returncode, b"", completed.stderr
+
+
+def startup_install(directory: Path) -> tuple[Path, Path, Path]:
+    """Install a launcher in an isolated interpreter with an editable startup search path."""
+
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", "--system-site-packages", str(directory)],
+        check=True,
+        capture_output=True,
+    )
+    scripts: Path = directory / "bin"
+    program: Path = Path(shutil.copy2(NATIVE_SQB, scripts / "sqb"))
+    handoff: Path = scripts / "sqlbuild-python"
+    _ = handoff.write_text(
+        f"#!{scripts / 'python'}\n"
+        "from sqlbuild.cli.entry.main.launched import main\nraise SystemExit(main())\n",
+        encoding="utf-8",
+    )
+    handoff.chmod(0o755)
+    site_packages: Path = next((directory / "lib").glob("python*/site-packages"))
+    _ = (site_packages / "test_dependencies.pth").write_text(
+        str(Path(sqlbuild.__file__).resolve().parent.parent)
+        + "\n"
+        + "\n".join(str(Path(entry).resolve()) for entry in sys.path)
+        + "\n",
+        encoding="utf-8",
+    )
+    old: Path = directory.parent / "old_helpers"
+    new: Path = directory.parent / "new_helpers"
+    old.mkdir()
+    new.mkdir()
+    _ = (old / "catalog_helper.py").write_text("SQL = '1'\n", encoding="utf-8")
+    _ = (new / "catalog_helper.py").write_text("SQL = '2'\n", encoding="utf-8")
+    startup: Path = site_packages / "catalog.pth"
+    _ = startup.write_text(str(old) + "\n", encoding="utf-8")
+    return program, startup, new

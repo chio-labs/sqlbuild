@@ -12,6 +12,7 @@ from pathlib import Path
 
 from sqlbuild._native import NativeReuseAttempt
 from sqlbuild.cli.compile_reuse._helpers.native_reuse import reuse_rules
+from sqlbuild.cli.compile_reuse._helpers.startup_inputs import startup_inputs
 from sqlbuild.cli.compile_reuse.constants import (
     COMPILE_COMMAND_NAME,
     COMPUTE_LOG_DIRECTORY_NAME,
@@ -77,6 +78,7 @@ def _payload(
         "invocation_digest": invocation_digest,
         "runtime": runtime,
         "search_path": search_path,
+        "startup_inputs": startup_inputs(),
         "json_output": attempt.json_output,
         "rules": rules,
         "capture": {

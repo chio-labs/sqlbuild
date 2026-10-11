@@ -1,6 +1,7 @@
 //! Read launch records and turn their rules into the native reuse check's request.
 
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use sqlbuild_cache::project_reuse::models::{HostIdentity, ReuseRules};
 use sqlbuild_cache::project_snapshot::models::SnapshotRules;
@@ -16,7 +17,31 @@ pub(crate) fn read_record(path: &Path, key: &str) -> Option<LaunchRecord> {
     let Ok(record) = serde_json::from_slice::<LaunchRecord>(&bytes) else {
         return None;
     };
-    (record.format == LAUNCH_RECORD_FORMAT && record.key == key).then_some(record)
+    (record.format == LAUNCH_RECORD_FORMAT && record.key == key && startup_unchanged(&record))
+        .then_some(record)
+}
+
+fn startup_unchanged(record: &LaunchRecord) -> bool {
+    record
+        .startup_inputs
+        .iter()
+        .all(|(path, modified, size)| match std::fs::metadata(path) {
+            Ok(metadata) => {
+                let Ok(time) = metadata.modified() else {
+                    return false;
+                };
+                let Ok(duration) = time.duration_since(UNIX_EPOCH) else {
+                    return false;
+                };
+                let Ok(current) = i64::try_from(duration.as_nanos()) else {
+                    return false;
+                };
+                Some(current) == *modified && Some(metadata.len()) == *size
+            }
+            Err(error) => {
+                error.kind() == std::io::ErrorKind::NotFound && modified.is_none() && size.is_none()
+            }
+        })
 }
 
 /// The native reuse rules of a record, with this process's redirected output files.

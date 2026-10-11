@@ -54,6 +54,7 @@ pub struct LaunchRecord {
     pub invocation_digest: String,
     pub runtime: BTreeMap<String, String>,
     pub search_path: Vec<String>,
+    pub startup_inputs: Vec<(String, Option<i64>, Option<u64>)>,
     pub json_output: bool,
     pub rules: LaunchRules,
     pub capture: Option<LaunchCapture>,

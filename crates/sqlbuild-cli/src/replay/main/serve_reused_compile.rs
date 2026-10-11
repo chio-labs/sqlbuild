@@ -10,6 +10,7 @@ use crate::compute_logs::models::{CaptureEnd, CaptureStart, OpenCapture};
 use crate::replay::_helpers::console::{redirected_output_files, write_streams};
 use crate::replay::_helpers::records::{read_record, reuse_rules};
 use crate::replay::_helpers::serving::{served, stored_output};
+use crate::replay::constants::OUTPUT_FAILURE_EXIT_CODE;
 
 /// The exit code of a natively served reuse hit, or `None` to hand the invocation to Python.
 pub fn serve_reused_compile(
@@ -20,7 +21,7 @@ pub fn serve_reused_compile(
     let record = read_record(record_path, key)?;
     let rules = reuse_rules(&record.rules, redirected_output_files());
     let output = stored_output(&record, &rules)?;
-    let invocation = served(&record, &output, started.0)?;
+    let mut invocation = served(&record, &output, started.0)?;
     let capture: Option<io::Result<OpenCapture>> = record.capture.as_ref().map(|capture| {
         start_capture(CaptureStart {
             root: PathBuf::from(&capture.root),
@@ -30,7 +31,12 @@ pub fn serve_reused_compile(
             started_at: started.1,
         })
     });
-    let _ = write_streams(&invocation.stderr, &invocation.stdout);
+    if let Err(error) = write_streams(&invocation.stderr, &invocation.stdout) {
+        let message = format!("Compile replay failed: could not write output: {error}\n");
+        let _ = write_streams(&message, "");
+        invocation.stderr.push_str(&message);
+        invocation.exit_code = OUTPUT_FAILURE_EXIT_CODE;
+    }
     if let Some(Ok(capture)) = capture {
         let _ = finish_capture(
             capture,

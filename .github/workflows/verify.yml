@@ -871,7 +871,7 @@ jobs:
           args: --release --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
           target: ${{ matrix.platform.target }}
           manylinux: auto
-      - name: Smoke import the native extension from the built wheel
+      - name: Smoke test installed wheels and native console entry points
         shell: bash
         run: |
           python -m venv "${RUNNER_TEMP}/wheel-smoke"
@@ -880,7 +880,7 @@ jobs:
           else
             smoke_python="${RUNNER_TEMP}/wheel-smoke/bin/python"
           fi
-          "${smoke_python}" -m pip install --no-deps dist/*.whl
+          "${smoke_python}" -m pip install --find-links dist dist/*.whl
           cd "${RUNNER_TEMP}"
           "${smoke_python}" -c "import sqlbuild._native"
           smoke_scripts="$(dirname "${smoke_python}")"
