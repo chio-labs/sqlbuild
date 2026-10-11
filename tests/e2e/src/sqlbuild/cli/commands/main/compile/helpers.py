@@ -17,7 +17,7 @@ import time
 import zipfile
 from bisect import bisect_left
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from io import StringIO
@@ -59,7 +59,6 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_DISABLE_ENV_VAR,
 )
 from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
-from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
     RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
@@ -75,7 +74,6 @@ from sqlbuild.compiler.frontier.constants import (
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -4178,39 +4176,62 @@ def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
     return tuple(written)
 
 
-_ORIGINAL_SCAN_WRITE: Callable[..., None] = SqlTestScanCache.write
+def _stored_scan_values_replaced(
+    replacement: bytes,
+) -> Callable[[Path, pytest.MonkeyPatch], None]:
+    def change(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+        """Rewrite every stored scan value on disk, keeping a valid store frame and checksum."""
+
+        path: Path = compiler_cache_directory(root) / SQL_TEST_SCAN_STORE_FILE_NAME
+        frame: bytes = path.read_bytes()
+        header: bytes = frame[:_STORE_PREFIX_LENGTH]
+        body: bytes = frame[_STORE_PREFIX_LENGTH + _STORE_CHECKSUM_LENGTH :]
+        fields: list[bytes] = []
+        cursor: int = 0
+        for _ in range(2):
+            text, cursor = _store_bytes(body, cursor)
+            fields.append(text)
+        generation: bytes = body[cursor : cursor + 8]
+        metadata, cursor = _store_bytes(body, cursor + 8)
+        count: int = int.from_bytes(body[cursor : cursor + 8], "little")
+        cursor += 8
+        entries: list[bytes] = []
+        for _ in range(count):
+            key, cursor = _store_bytes(body, cursor)
+            last_used: bytes = body[cursor : cursor + 8]
+            _value, cursor = _store_bytes(body, cursor + 8)
+            entries.append(_framed(key) + last_used + _framed(replacement))
+        assert cursor == len(body) and count > 0
+        rewritten: bytes = b"".join(
+            (*map(_framed, fields), generation, _framed(metadata), count.to_bytes(8, "little"))
+        ) + b"".join(entries)
+        checksum: bytes = hashlib.sha256(_framed(rewritten)).digest()
+        _ = path.write_bytes(header + checksum + rewritten)
+
+    return change
 
 
-def _stored_scans_replaced(replacement: bytes) -> Callable[[pytest.MonkeyPatch], None]:
-    def arrange(monkeypatch: pytest.MonkeyPatch) -> None:
-        def write(
-            self: SqlTestScanCache,
-            *,
-            algorithm: str,
-            syntax: SqlLexicalSyntax,
-            parts: Sequence[str],
-            value: bytes,
-        ) -> None:
-            del value
-            _ORIGINAL_SCAN_WRITE(
-                self, algorithm=algorithm, syntax=syntax, parts=parts, value=replacement
-            )
-
-        monkeypatch.setattr(SqlTestScanCache, "write", write)
-
-    return arrange
+_STORE_PREFIX_LENGTH: int = 12
+_STORE_CHECKSUM_LENGTH: int = 32
 
 
-store_undecodable_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(b"{]")
-store_misshapen_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(
-    b'[{"mode": "model"}]'
+def _store_bytes(body: bytes, cursor: int) -> tuple[bytes, int]:
+    """One length-prefixed field of a native store body, and the cursor after it."""
+
+    length: int = int.from_bytes(body[cursor : cursor + 8], "little")
+    return body[cursor + 8 : cursor + 8 + length], cursor + 8 + length
+
+
+def _framed(value: bytes) -> bytes:
+    return len(value).to_bytes(8, "little") + value
+
+
+replace_stored_scans_undecodable: Callable[[Path, pytest.MonkeyPatch], None] = (
+    _stored_scan_values_replaced(b"{]")
 )
-
-
-def restore_sql_test_scan_writes(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Store real scan results again after an arrangement replaced them."""
-
-    monkeypatch.setattr(SqlTestScanCache, "write", _ORIGINAL_SCAN_WRITE)
+replace_stored_scans_misshapen: Callable[[Path, pytest.MonkeyPatch], None] = (
+    _stored_scan_values_replaced(b'[{"mode": "model"}]')
+)
 
 
 def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:
