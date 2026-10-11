@@ -10,7 +10,6 @@ from pathlib import Path
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
-    ExpansionSpan,
     LoadedMacro,
     MacroContext,
 )
@@ -28,11 +27,8 @@ from sqlbuild.compiler.macro_bridge._helpers.store_keys import (
     macro_store_token,
 )
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
-from sqlbuild.compiler.macro_bridge.main._scan_macro_calls import scan_macro_calls
-from sqlbuild.compiler.macro_bridge.main._splice_macro_calls import splice_macro_calls
 from sqlbuild.compiler.macro_bridge.models import (
     MacroCallClass,
-    MacroCallScan,
     MacroCallSite,
     ModuleSources,
 )
@@ -136,13 +132,6 @@ class MacroBridge:
             return False
         self._module_digests.update(digests)
         return True
-
-    def scan(self, sql: str) -> MacroCallScan:
-        """The complete top-level call sites of `sql`, and where its scan raises, if it does."""
-
-        return scan_macro_calls(
-            sql=sql, python_version=self._python_version, unicode_version=self._unicode_version
-        )
 
     def call_class(
         self,
@@ -249,13 +238,6 @@ class MacroBridge:
                 list(events),
             ),
         )
-
-    def splice(
-        self, *, sql: str, sites: tuple[MacroCallSite, ...], outputs: list[str]
-    ) -> tuple[str, tuple[ExpansionSpan, ...]]:
-        """Replace each call site with its output, returning the SQL and substitution spans."""
-
-        return splice_macro_calls(sql=sql, sites=sites, outputs=outputs)
 
     def stats(self) -> tuple[int, int, int]:
         """Memo hits, misses and recorded results so far."""

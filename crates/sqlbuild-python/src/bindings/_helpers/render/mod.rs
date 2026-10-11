@@ -3,4 +3,7 @@ pub(crate) mod macro_arguments;
 pub(crate) mod macro_call_memo;
 pub(crate) mod macro_call_rows;
 pub(crate) mod macro_calls;
+pub(crate) mod macro_evaluation;
+pub(crate) mod macro_expansion;
+pub(crate) mod macro_expansion_facts;
 pub(crate) mod registration;

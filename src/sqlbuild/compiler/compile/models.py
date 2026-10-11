@@ -12,7 +12,6 @@ from typing import Any, overload
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
-from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -67,7 +66,6 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
-from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -335,15 +333,6 @@ class DeclarationScopeBuild:
 
 
 @dataclass(frozen=True)
-class ParsedMacroArguments:
-    """One macro call's argument objects and the typed references written in them, in order."""
-
-    args: tuple[object, ...]
-    kwargs: dict[str, object]
-    typed_references: tuple[SqlResourceRef, ...]
-
-
-@dataclass(frozen=True)
 class MacroContext:
     """Expose target settings and caller-visible declarations to a Python SQL macro."""
 
@@ -394,19 +383,6 @@ class MacroContext:
         )
 
         return render_enum_member_value(value=value)
-
-
-@dataclass(frozen=True)
-class MacroExpansionState:
-    """Inputs and recorded facts of one authored string's macro expansion."""
-
-    loaded_macros: dict[str, LoadedMacro]
-    macro_overrides: dict[str, str]
-    macro_context: MacroContext
-    declaration_resolver: DeclarationScopeResolver | None
-    declarations: DeclarationResolutionContext | None
-    facts: MacroExpansionFacts
-    consumer: ResourceIdentity | DeclarationIdentity | None = None
 
 
 @dataclass(frozen=True)

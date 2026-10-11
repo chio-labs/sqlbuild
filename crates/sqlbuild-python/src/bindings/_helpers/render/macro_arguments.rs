@@ -7,6 +7,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_render::macro_arguments::errors::ArgumentError;
 use sqlbuild_render::macro_arguments::main::parse_macro_arguments::parse_macro_arguments as parse;
 use sqlbuild_render::macro_arguments::models::{ArgumentValue, MacroArguments};
 use sqlbuild_render::macro_arguments::types::ArgumentHost;
@@ -66,15 +67,7 @@ fn parse_macro_arguments(
     text: &str,
     nested: Vec<(usize, usize)>,
 ) -> PyResult<Py<PyAny>> {
-    let host = UnicodeHost {
-        unicodedata: py.import("unicodedata")?,
-        raised: RefCell::new(None),
-    };
-    let parsed = parse(&host, text, &nested);
-    if let Some(error) = host.raised.into_inner() {
-        return Err(error);
-    }
-    match parsed {
+    match parsed_arguments(py, text, &nested)? {
         Ok(arguments) => arguments_row(py, &arguments),
         Err(error) => Ok(
             ("error", error.detail, error.help, error.line, error.column)
@@ -83,6 +76,23 @@ fn parse_macro_arguments(
                 .unbind(),
         ),
     }
+}
+
+/// Parse a call's argument text, raising an unexpected `unicodedata` error once parsing returns.
+pub(crate) fn parsed_arguments(
+    py: Python<'_>,
+    text: &str,
+    nested: &[(usize, usize)],
+) -> PyResult<Result<MacroArguments, ArgumentError>> {
+    let host = UnicodeHost {
+        unicodedata: py.import("unicodedata")?,
+        raised: RefCell::new(None),
+    };
+    let parsed = parse(&host, text, nested);
+    if let Some(error) = host.raised.into_inner() {
+        return Err(error);
+    }
+    Ok(parsed)
 }
 
 fn arguments_row(py: Python<'_>, arguments: &MacroArguments) -> PyResult<Py<PyAny>> {

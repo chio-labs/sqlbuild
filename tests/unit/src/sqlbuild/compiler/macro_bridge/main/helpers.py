@@ -52,7 +52,7 @@ def recording_failure(*, stage: Callable[[], str], errors: list[Exception]) -> C
 
 def _scan_with_active_bridge() -> None:
     bridge: MacroBridge = cast(MacroBridge, active_macro_bridge())
-    _ = bridge.scan("SELECT @cents('amount') AS amount")
+    _ = bridge.stats()
 
 
 def recording_stage(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
@@ -64,29 +63,8 @@ _ALL_REFERENCE_CALL_MARKERS: tuple[str, ...] = tuple(
 _PASSABLE_REFERENCE_KINDS: frozenset[SqlReferenceKind] = frozenset(
     {SqlReferenceKind.REF, SqlReferenceKind.SOURCE, SqlReferenceKind.SEED}
 )
-_RELATION_PLACEHOLDER_PREFIX: str = "__sqlbuild_relation_"
-_RELATION_PLACEHOLDER_PATTERN: re.Pattern[str] = re.compile(
-    rf"{_RELATION_PLACEHOLDER_PREFIX}(\d+)__"
-)
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
-
-
-def relation_placeholder_text(index: int) -> str:
-    """Return the in-expansion placeholder text for the typed reference at ``index``."""
-
-    return f"{_RELATION_PLACEHOLDER_PREFIX}{index}__"
-
-
-def render_relation_placeholders(*, sql: str, relations: dict[SqlResourceRef, int]) -> str:
-    """Replace placeholders with the reference call written at the macro call site."""
-
-    if not relations or _RELATION_PLACEHOLDER_PREFIX not in sql:
-        return sql
-    ordered: tuple[SqlResourceRef, ...] = tuple(relations)
-    return _RELATION_PLACEHOLDER_PATTERN.sub(
-        lambda match: reference_call_text(ordered[int(match.group(1))]), sql
-    )
 
 
 def reference_call_text(ref: SqlResourceRef) -> str:
@@ -264,7 +242,7 @@ def _generated_references(sql: str) -> tuple[SqlResourceRef, ...]:
     return tuple(generated)
 
 
-def typed_reference_value(*, function: str, name: str) -> SqlResourceRef:
-    """Return the reference a `__ref`, `__source` or `__seed` macro argument names."""
+def typed_reference_kinds() -> dict[str, SqlResourceRefKind]:
+    """Each typed reference function, such as `__ref`, and the resource kind it names."""
 
-    return SqlResourceRef(kind=_TYPED_REFERENCE_KINDS[function], name=name)
+    return dict(_TYPED_REFERENCE_KINDS)

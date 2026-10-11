@@ -237,7 +237,7 @@ fn visibility<'py>(
 }
 
 /// Tests and scenarios record relationship visibility when they have any; others record all.
-fn usage_visibility<'py>(
+pub(crate) fn usage_visibility<'py>(
     visibility: &Bound<'py, PyAny>,
     relationship_visibility: bool,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {

@@ -66,6 +66,27 @@ class NativeCompiledProject:
     def model_names(self) -> list[str]: ...
     def __eq__(self, other: object) -> bool: ...
 
+class NativeMacroExpansion:
+    def __init__(
+        self,
+        file_path: object,
+        state: tuple[object, object, object, object, object],
+        enforce_explicit: bool,
+        classes: dict[str, object],
+    ) -> None: ...
+    def expand(
+        self, sql: str, bridge: object
+    ) -> tuple[
+        str,
+        list[tuple[int, int, int, int]],
+        list[tuple[str, str]],
+        list[Any],
+        list[Any],
+    ]: ...
+    def render_relation(self, reference: object) -> str: ...
+    def declaration_read(self, kind: str, name: str) -> None: ...
+    def block_memo(self) -> None: ...
+
 class NativeModelLoop:
     def __init__(
         self,

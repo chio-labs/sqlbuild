@@ -20,23 +20,6 @@ class MacroCallSite:
 
 
 @dataclass(frozen=True)
-class MacroScanFailure:
-    """Where Python's scan of a string raises: in the call at `call_start`, or between calls."""
-
-    call_start: int | None
-    call_name: str | None
-    message: str
-
-
-@dataclass(frozen=True)
-class MacroCallScan:
-    """A string's complete top-level call sites in order, and where its scan raises, if it does."""
-
-    sites: tuple[MacroCallSite, ...]
-    failure: MacroScanFailure | None
-
-
-@dataclass(frozen=True)
 class MacroCallClass:
     """A call's inputs besides its text: by object identity for the memo, by value for the store."""
 
