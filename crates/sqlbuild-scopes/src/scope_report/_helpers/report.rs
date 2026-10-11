@@ -289,8 +289,11 @@ fn nearby_page(
     context: &Context<'_>,
     nearby: &Selected<String>,
     filters: &ReportFilters,
-) -> (Vec<DeclarationReport>, ScopeSection) {
+) -> Result<(Vec<DeclarationReport>, ScopeSection), ReportFailure> {
     let shown: usize = nearby_shown(nearby.len(), filters.page_size);
+    if shown == 0 && !nearby.is_empty() {
+        return Err(ReportFailure::IndexOutOfRange);
+    }
     let reports: Vec<DeclarationReport> = nearby[..shown]
         .iter()
         .map(|(position, reason)| {
@@ -313,7 +316,7 @@ fn nearby_page(
         cursor: None,
         page_size: filters.page_size,
     };
-    (reports, section)
+    Ok((reports, section))
 }
 
 /// The report of a resolved record: its pages, sections, scope chain and completeness.
@@ -357,7 +360,7 @@ pub(crate) fn record_report(
         &selected.relationships,
         &spec(RELATIONSHIP_SECTION, completeness.relationships, 0),
     );
-    let (nearby_reports, nearby_section) = nearby_page(context, &selected.nearby, filters);
+    let (nearby_reports, nearby_section) = nearby_page(context, &selected.nearby, filters)?;
     let sections: Vec<ScopeSection> = vec![
         available_section,
         used_section,

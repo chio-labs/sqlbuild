@@ -248,6 +248,9 @@ pub(crate) fn existing_target(
         ));
     }
     let matches: Vec<usize> = match query(context, target) {
+        Ok(TargetMatch::Declarations(positions)) if !positions.is_empty() => {
+            return Err(ReportFailure::IndexOutOfRange);
+        }
         Ok(matched) => resource_matches(matched),
         Err(ReportFailure::Path(_) | ReportFailure::Identity(..)) => {
             return Ok(missing(&raw, unknown_target(&raw)));

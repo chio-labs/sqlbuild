@@ -322,6 +322,8 @@ pub enum ReportFailure {
     Identity(IdentityFailure, String),
     /// Serialization met an index diagnostic it cannot project or a value JSON cannot hold.
     Serialization(String),
+    /// An input Python's report code reads past an empty result for, raising `IndexError`.
+    IndexOutOfRange,
 }
 
 /// One usage of a full scope index, with the enum member the metadata projection shows.
