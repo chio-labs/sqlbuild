@@ -8,6 +8,10 @@ use crate::audits::models::{
 pub(super) fn order_arguments() -> Vec<(String, ArgumentValue)> {
     vec![
         (
+            "label".to_owned(),
+            ArgumentValue::Text("O'Brien@orders".to_owned()),
+        ),
+        (
             "column".to_owned(),
             ArgumentValue::Text("status".to_owned()),
         ),

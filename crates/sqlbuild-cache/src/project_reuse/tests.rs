@@ -1,3 +1,5 @@
+#[path = "tests/test_file_changes.rs"]
+mod file_changes;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_project_reuse.rs"]

@@ -8,6 +8,11 @@ use crate::audits::tests::test_types::{ParameterizedSqlTestCase, UnusedArguments
 fn given_parameterized_sql_when_rendering_then_python_text_is_returned() {
     let test_cases = [
         ParameterizedSqlTestCase {
+            description: "quoted inserted argument markers are not rescanned",
+            sql: "SELECT @'label'",
+            expected_sql: Ok("SELECT 'O''Brien@orders'"),
+        },
+        ParameterizedSqlTestCase {
             description: "raw and quoted parameters: lists joined, only text quoted, quotes doubled",
             sql: "WHERE @column IN (@'values') AND x = @values",
             expected_sql: Ok(

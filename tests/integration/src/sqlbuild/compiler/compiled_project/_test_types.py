@@ -163,3 +163,19 @@ class SharedInferredColumnsTestCase:
     description: str
     model_count: int
     expected_columns_per_model: int
+
+
+@dataclass(frozen=True)
+class AdapterParameterBoundaryTestCase:
+    description: str
+    adapter_name: str
+    declaration: str
+    literal: str
+    expected_sql: str
+
+
+@dataclass(frozen=True)
+class QuotedHookBoundaryTestCase:
+    description: str
+    argument: str
+    expected_sql: str

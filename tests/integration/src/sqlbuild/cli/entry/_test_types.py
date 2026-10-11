@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -44,3 +46,11 @@ class PythonStartsTestCase:
     description: str
     args: tuple[str, ...]
     expected_python_starts: tuple[int, int, int]
+
+
+@dataclass(frozen=True)
+class ReuseFileMutationTestCase:
+    description: str
+    prepare: Callable[[Path], Path]
+    expected_misses: int
+    expected_fragment: str

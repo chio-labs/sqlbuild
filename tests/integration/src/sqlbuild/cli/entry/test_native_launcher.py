@@ -8,6 +8,7 @@ from tests.integration.src.sqlbuild.cli.entry._test_types import (
     HandoffTestCase,
     JsonReuseTestCase,
     PythonStartsTestCase,
+    ReuseFileMutationTestCase,
     SelectorFileTestCase,
     TextReuseTestCase,
 )
@@ -21,10 +22,13 @@ from tests.integration.src.sqlbuild.cli.entry.helpers import (
     counting_install,
     launch_records,
     python_starts,
+    rewrite_model_preserving_mtime,
     run,
     run_with_full_output,
     startup_install,
+    without_compile_timings,
     without_seconds,
+    write_linked_project,
     write_project,
 )
 
@@ -214,6 +218,39 @@ def test_given_unchanged_project_when_sqb_serves_the_hit_then_python_never_start
     assert (first[0], served[0], edited[0]) == (0, 0, 0)
     assert without_seconds(served[2]).startswith(b"Inputs unchanged; reused the previous compile")
     assert (after_first, after_served, python_starts(marker)) == test_case.expected_python_starts
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="file-link fixture requires POSIX symlinks")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReuseFileMutationTestCase(
+            "equal-length model rewrite preserving mtime", write_project, 1, "2 AS order_id"
+        ),
+        ReuseFileMutationTestCase(
+            "linked model target rewrite preserving mtime", write_linked_project, 1, "2 AS order_id"
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cached_model_when_same_size_input_changes_then_replay_matches_fresh_compile(
+    test_case: ReuseFileMutationTestCase,
+    tmp_path: Path,
+) -> None:
+    project: Path = test_case.prepare(tmp_path / "project")
+    args: tuple[str, ...] = ("compile", "--json")
+    first: LauncherRun = run(NATIVE_SQB, args=args, cwd=project)
+    assert first[0] == 0, first[2]
+    warm: LauncherRun = run(NATIVE_SQB, args=args, cwd=project)
+    assert warm[0] == 0, warm[2]
+    assert compile_timings(warm[1])["project_reuse_hits"] == 1
+    rewrite_model_preserving_mtime(project)
+    edited: LauncherRun = run(NATIVE_SQB, args=args, cwd=project)
+    fresh: LauncherRun = run(PYTHON_CLI, args=(*args, "--no-cache"), cwd=project)
+    assert edited[0] == fresh[0] == 0
+    assert compile_timings(edited[1])["project_reuse_misses"] == test_case.expected_misses
+    assert test_case.expected_fragment.encode() in edited[1]
+    assert without_compile_timings(edited[1]) == without_compile_timings(fresh[1])
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="requires /dev/full")

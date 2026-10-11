@@ -87,6 +87,14 @@ def compile_timings(stdout: bytes) -> dict[str, int]:
     return json.loads(stdout)["compile_timings"]
 
 
+def without_compile_timings(stdout: bytes) -> dict[str, object]:
+    """Compare full reports while allowing invocation timings to differ."""
+
+    payload: dict[str, object] = json.loads(stdout)
+    _ = payload.pop("compile_timings")
+    return payload
+
+
 def counting_install(directory: Path, marker: Path) -> Path:
     """Install `sqb` beside a `sqlbuild-python` that logs each start to `marker`; return `sqb`."""
 
@@ -104,6 +112,26 @@ def python_starts(marker: Path) -> int:
     """How many times the logging `sqlbuild-python` started."""
 
     return len(marker.read_text(encoding="utf-8").splitlines())
+
+
+def write_linked_project(project_dir: Path) -> Path:
+    """Put the model behind a file link to an external input."""
+
+    project: Path = write_project(project_dir)
+    model: Path = project / "models" / "orders.sql"
+    target: Path = project.parent / "linked_orders.sql"
+    _ = model.replace(target)
+    model.symlink_to(target)
+    return project
+
+
+def rewrite_model_preserving_mtime(project_dir: Path) -> None:
+    """Change equal-length SQL bytes, including through a link, without changing mtime."""
+
+    model: Path = project_dir / "models" / "orders.sql"
+    original: os.stat_result = model.stat()
+    _ = model.write_text(model.read_text().replace("1 AS order_id", "2 AS order_id"))
+    os.utime(model, ns=(original.st_atime_ns, original.st_mtime_ns))
 
 
 def run_with_full_output(program: Path, *, args: tuple[str, ...], cwd: Path) -> LauncherRun:
