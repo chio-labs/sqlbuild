@@ -9,10 +9,12 @@ from datetime import UTC, datetime
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
-from sqlbuild.compiler.compile.models import (
-    CompiledSource,
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSeedView,
+    CompiledSourceView,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
 from sqlbuild.executor.janitor.constants import QUALIFIED_ORIGIN_PARTS
 from sqlbuild.executor.janitor.models import JanitorRelationKey
 
@@ -146,7 +148,7 @@ def collect_source_schemas(
     """Collect schemas containing active configured sources."""
 
     source_schemas: dict[tuple[str | None, str | None], set[str]] = defaultdict(set)
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         if source.source_entry.expression is not None:
             continue

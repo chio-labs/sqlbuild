@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import (
-    CompiledSource,
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSeedView,
+    CompiledSourceView,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
 from sqlbuild.compiler.manifest._helpers.macros import (
     build_manifest_macro_nodes,
 )
@@ -68,7 +70,7 @@ def build_manifest_payload(
             sql_analysis_dialect=project.sql_analysis_dialect,
         )
 
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         unique_id = f"source.{project_name}.{source.name}"
         sources[unique_id] = build_source_node(

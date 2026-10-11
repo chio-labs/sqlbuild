@@ -21,7 +21,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledSource,
     CompiledSqlTest,
     CompilerDiagnostic,
     RelatedLocation,
@@ -31,6 +30,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -376,7 +376,7 @@ def _hook_definitions(project: CompiledProjectView) -> list[dict[str, object]]:
     return definitions
 
 
-def _source_resource(source: CompiledSource) -> dict[str, object]:
+def _source_resource(source: CompiledSourceView) -> dict[str, object]:
     return {
         "name": source.name,
         "relative_path": str(source.source_file.relative_path),

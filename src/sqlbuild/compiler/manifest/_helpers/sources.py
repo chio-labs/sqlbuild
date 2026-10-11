@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledSource
+from sqlbuild.compiler.compile.types import CompiledSourceView
 from sqlbuild.compiler.manifest._helpers.shared import build_source_columns_dict
 from sqlbuild.compiler.manifest.constants import RESOURCE_TYPE_SOURCE
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -10,7 +10,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 def build_source_node(
     *,
-    source: CompiledSource,
+    source: CompiledSourceView,
     project_name: str,
     auto_load: bool = False,
 ) -> dict[str, object]:

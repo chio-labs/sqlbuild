@@ -39,6 +39,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
+    DiscoveredSourceFile,
     DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     EnumDeclaration,
@@ -61,6 +62,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
+    SourceEntry,
     SourceLocation,
     TargetConfig,
 )
@@ -333,6 +335,28 @@ class NativeCompiledSeed:
         render: Callable[..., str | None],
     ) -> NativeCompiledSeed: ...
 
+class NativeSourceInput:
+    @property
+    def source_entry(self) -> SourceEntry: ...
+    @property
+    def source_file(self) -> DiscoveredSourceFile: ...
+    @property
+    def declaration_usages(self) -> tuple[UsageRecord, ...]: ...
+    @property
+    def assembly_row(self) -> tuple[str, bool, str | None, str | None]: ...
+
+class NativeCompiledSource:
+    @property
+    def key(self) -> CompiledObjectKey: ...
+    @property
+    def deps(self) -> tuple[CompiledObjectKey, ...]: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def source_entry(self) -> SourceEntry: ...
+    @property
+    def source_file(self) -> DiscoveredSourceFile: ...
+
 class NativeProjectView:
     @property
     def run_id(self) -> str: ...
@@ -436,6 +460,15 @@ class NativeCompiledProject:
         self, namespaces: list[tuple[str | None, str | None, str | None, str | None]]
     ) -> None: ...
     def compiled_seed(self, index: int) -> NativeCompiledSeed: ...
+    def attach_sources(
+        self,
+        rows: list[tuple[str, DiscoveredSourceFile, SourceEntry]],
+        settings: tuple[str | None, bool, object],
+    ) -> list[NativeSourceInput]: ...
+    def record_source_namespaces(
+        self, namespaces: list[tuple[str | None, str | None] | None]
+    ) -> None: ...
+    def compiled_source(self, index: int) -> NativeCompiledSource: ...
     def graph_builds(self) -> int: ...
     def __eq__(self, other: object) -> bool: ...
 

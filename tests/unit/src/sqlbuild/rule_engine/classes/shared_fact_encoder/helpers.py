@@ -1,7 +1,11 @@
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
@@ -41,7 +45,7 @@ def _source_file(*, tmp_path: Path, names: tuple[str, ...], contents: str) -> Di
 def _views(
     *, tmp_path: Path, files: tuple[DiscoveredSourceFile, ...], names: tuple[str, ...]
 ) -> RuleFactViews:
-    sources: tuple[CompiledSource, ...] = tuple(
+    sources: tuple[CompiledSourceView, ...] = tuple(
         CompiledSource(
             key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=name),
             deps=(),

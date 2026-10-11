@@ -21,12 +21,14 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
     CompileInputsReadyCallback,
     DiagnosticPhase,
     DiagnosticSeverity,
     FunctionLanguage,
     ModelInput,
     SeedInput,
+    SourceInput,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
@@ -869,6 +871,13 @@ class CompileSourceInput:
     source_file: DiscoveredSourceFile
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
 
+    @property
+    def assembly_row(self) -> tuple[str, bool, str | None, str | None]:
+        """`(name, has a loader, database, schema)`, what assembly resolves a namespace from."""
+
+        entry: SourceEntry = self.source_entry
+        return (entry.name, entry.loader is not None, entry.database, entry.schema)
+
 
 @dataclass(frozen=True)
 class CompileSqlScenarioInput:
@@ -946,7 +955,7 @@ class CompileProjectInputs:
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
     model_inputs: tuple[ModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[SeedInput, ...] = field(default_factory=tuple)
-    source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
+    source_inputs: tuple[SourceInput, ...] = field(default_factory=tuple)
     sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
@@ -1208,7 +1217,7 @@ class CompiledProject:
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
     models: tuple[CompiledModelView, ...] = field(default_factory=tuple)
-    sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
+    sources: tuple[CompiledSourceView, ...] = field(default_factory=tuple)
     seeds: tuple[CompiledSeedView, ...] = field(default_factory=tuple)
     functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
     audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)

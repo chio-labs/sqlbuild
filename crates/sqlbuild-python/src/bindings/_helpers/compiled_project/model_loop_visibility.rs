@@ -44,15 +44,15 @@ const VISIBLE_FIELDS: [&str; 11] = [
 #[pyo3(from_item_all)]
 pub(crate) struct VisibilityClasses<'py> {
     /// The `DeclarationScopeResolver`, or `None`.
-    resolver: Bound<'py, PyAny>,
+    pub(crate) resolver: Bound<'py, PyAny>,
     /// Whether the resolver indexes declarations, so contexts are projected from it.
-    projects: bool,
+    pub(crate) projects: bool,
     /// Models whose private declarations or grants make their context their own.
     resource_specific: Bound<'py, PyAny>,
-    public_enums: Bound<'py, PyDict>,
-    public_constants: Bound<'py, PyDict>,
+    pub(crate) public_enums: Bound<'py, PyDict>,
+    pub(crate) public_constants: Bound<'py, PyDict>,
     visible_declarations: Bound<'py, PyAny>,
-    resource_identity: Bound<'py, PyAny>,
+    pub(crate) resource_identity: Bound<'py, PyAny>,
     declaration_identity: Bound<'py, PyAny>,
     model_kind: Bound<'py, PyAny>,
     enum_kind: Bound<'py, PyAny>,

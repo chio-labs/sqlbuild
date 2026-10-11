@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
     CompiledSeed,
+    CompiledSource,
     CompileProjectInputs,
     CompilerDiagnostic,
     InferredColumn,
@@ -19,6 +20,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledSeedView,
+    CompiledSourceView,
     CompileInputsView,
 )
 
@@ -88,11 +90,28 @@ def compiled_project_record_impl(project: CompiledProjectView) -> CompiledProjec
     if isinstance(project, CompiledProject):
         return project
     fields: dict[str, Any] = cast(_native.NativeProjectView, project).fields()
-    fields["seeds"] = tuple(map(_seed_record, fields["seeds"]))
+    fields["seeds"] = tuple(map(compiled_seed_record_impl, fields["seeds"]))
+    fields["sources"] = tuple(map(compiled_source_record_impl, fields["sources"]))
     return CompiledProject(**fields)
 
 
-def _seed_record(seed: CompiledSeedView) -> CompiledSeed:
+def compiled_source_record_impl(source: CompiledSourceView) -> CompiledSource:
+    """The source as a `CompiledSource`, projected from its owner when it is a native view."""
+
+    if isinstance(source, CompiledSource):
+        return source
+    return CompiledSource(
+        key=source.key,
+        deps=source.deps,
+        name=source.name,
+        source_entry=source.source_entry,
+        source_file=source.source_file,
+    )
+
+
+def compiled_seed_record_impl(seed: CompiledSeedView) -> CompiledSeed:
+    """The seed as a `CompiledSeed`, projected from its owner when it is a native view."""
+
     if isinstance(seed, CompiledSeed):
         return seed
     return CompiledSeed(

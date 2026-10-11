@@ -25,6 +25,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
@@ -150,7 +151,7 @@ def build_test_source(
     table: str | None = None,
     description: str | None = None,
     columns: tuple[SourceColumnEntry, ...] = (),
-) -> CompiledSource:
+) -> CompiledSourceView:
     """Build a minimal CompiledSource for manifest tests."""
 
     entry: SourceEntry = SourceEntry(
@@ -236,7 +237,7 @@ def build_test_plan_entry(
 def build_test_project(
     *,
     models: tuple[CompiledModelView, ...] = (),
-    sources: tuple[CompiledSource, ...] = (),
+    sources: tuple[CompiledSourceView, ...] = (),
     seeds: tuple[CompiledSeedView, ...] = (),
     sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = (),
     loaded_macros: dict[str, LoadedMacro] | None = None,

@@ -308,6 +308,7 @@ def _run_native_model_loop(
                     "visible_declarations": _VisibleModelDeclarations,
                     "config_session": loop.validation_context.validators.native_config,
                     "syntax_help": sql_analysis_opt_out_help(model_owned=True),
+                    "source_syntax_help": sql_analysis_opt_out_help(model_owned=False),
                     "macros": {
                         "loaded_macros": loop.context.loaded_macros,
                         "macro_context": loop.context.macro_context,

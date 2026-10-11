@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import cast
 
 import sqlbuild._native as _native
@@ -10,7 +9,6 @@ from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompileSourceInput,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType, CompileInputsView
 from sqlbuild.compiler.project_assembly.constants import (
@@ -26,7 +24,6 @@ from sqlbuild.compiler.project_assembly.types import (
     ProjectResourcesRow,
 )
 from sqlbuild.compiler.sql_analysis.constants import NATIVE_FAILURE_PREFIX
-from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def project_resources(
@@ -48,12 +45,7 @@ def project_resources(
     return NativeProjectResources(
         model_deps=tuple(model_deps),
         model_syntax_valid=tuple(syntax),
-        source_entries=tuple(
-            _source_entry(source_input=source_input, namespace=namespace)
-            for source_input, namespace in zip(
-                inputs.source_inputs[: len(source_namespaces)], source_namespaces, strict=True
-            )
-        ),
+        source_namespaces=tuple(source_namespaces),
         seed_namespaces=tuple(seed_namespaces),
         function_deps=tuple(_keys(keys) for keys in function_deps),
         audit_scope_deps=tuple(_keys(keys) for keys in audit_deps),
@@ -89,11 +81,3 @@ def _keys(rows: list[ObjectKeyRow]) -> tuple[CompiledObjectKey, ...]:
         CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
         for kind, name in rows
     )
-
-
-def _source_entry(
-    *, source_input: CompileSourceInput, namespace: tuple[str | None, str | None] | None
-) -> SourceEntry:
-    if namespace is None:
-        return source_input.source_entry
-    return replace(source_input.source_entry, database=namespace[0], schema=namespace[1])

@@ -80,11 +80,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
-    CompiledSource,
     CompiledSqlScenario,
     CompileModelSqlTestInputPayload,
     CompilerDiagnostic,
-    CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
@@ -103,10 +101,12 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
     CompileInputsView,
     DiagnosticPhase,
     DiagnosticSeverity,
     ModelInput,
+    SourceInput,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.planner.types import ContractPolicy
@@ -139,7 +139,6 @@ from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
 )
 from sqlbuild.spec.contracts.models import (
     SchemaDynamicColumnFamily,
-    SourceEntry,
     SourceLocation,
 )
 
@@ -203,7 +202,7 @@ def assemble_compiled_project(
     )
     profile = replace(profile, binding_catalog=binding_catalog)
     if sql_analysis_enabled:
-        expression_sources: tuple[CompileSourceInput, ...] = tuple(
+        expression_sources: tuple[SourceInput, ...] = tuple(
             source_input
             for source_input in inputs.source_inputs
             if source_input.source_entry.expression
@@ -364,18 +363,7 @@ def assemble_compiled_project(
             )
             for index, model_input in enumerate(inputs.model_inputs)
         ),
-        sources=tuple(
-            _assemble_compiled_source(
-                source_input=source_input,
-                native_entry=native_resource(
-                    resources=resources,
-                    slot=SOURCE_SLOT,
-                    items=resources.source_entries,
-                    index=index,
-                ),
-            )
-            for index, source_input in enumerate(inputs.source_inputs)
-        ),
+        sources=_compiled_sources(inputs=inputs, resources=resources),
         seeds=_compiled_seeds(inputs=inputs, resources=resources),
         functions=tuple(
             _assemble_compiled_function(
@@ -722,16 +710,24 @@ def _binding_compiler_diagnostics(
     return tuple(result)
 
 
-def _assemble_compiled_source(
-    *, source_input: CompileSourceInput, native_entry: SourceEntry
-) -> CompiledSource:
-    return CompiledSource(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=native_entry.name),
-        deps=(),
-        name=native_entry.name,
-        source_entry=native_entry,
-        source_file=source_input.source_file,
+def _compiled_sources(
+    *, inputs: CompileInputsView, resources: NativeProjectResources
+) -> tuple[CompiledSourceView, ...]:
+    """Each source's view over the compile's native project, raising assembly's error there."""
+
+    if not inputs.source_inputs:
+        return ()
+    owner: _native.NativeCompiledProject = cast(
+        _native.NativeCompiledProject, inputs.native_project
     )
+    owner.record_source_namespaces(list(resources.source_namespaces))
+    sources: list[CompiledSourceView] = []
+    for index in range(len(inputs.source_inputs)):
+        _ = native_resource(
+            resources=resources, slot=SOURCE_SLOT, items=resources.source_namespaces, index=index
+        )
+        sources.append(owner.compiled_source(index))
+    return tuple(sources)
 
 
 def _compiled_seeds(

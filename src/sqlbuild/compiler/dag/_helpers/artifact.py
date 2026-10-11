@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSource,
     CompiledSqlScenario,
     CompiledSqlTest,
 )
@@ -22,6 +21,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
 )
 from sqlbuild.compiler.dag.constants import REQUIRED_DAG_COLLECTION_KEYS
 from sqlbuild.compiler.dag.models import (
@@ -88,7 +88,7 @@ def format_dag_json(*, artifact: DagArtifact) -> str:
     return json.dumps(_drop_none(asdict(artifact)), indent=2)
 
 
-def _build_source_node(source: CompiledSource) -> DagNode:
+def _build_source_node(source: CompiledSourceView) -> DagNode:
     entry: SourceEntry = source.source_entry
     target: DagTarget = DagTarget(
         database=entry.database,

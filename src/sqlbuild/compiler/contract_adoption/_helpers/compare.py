@@ -7,8 +7,11 @@ from dataclasses import replace
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.compiler.compile.models import CompiledSource
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledResourceType,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.contract_adoption.models import ContractEvidence, ContractFinding
 from sqlbuild.compiler.contract_adoption.types import ContractFindingKind
 from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
@@ -34,7 +37,7 @@ def model_evidence(*, model: CompiledModelView) -> ContractEvidence:
     )
 
 
-def source_evidence(*, source: CompiledSource) -> ContractEvidence:
+def source_evidence(*, source: CompiledSourceView) -> ContractEvidence:
     entry: SourceEntry = source.source_entry
     relation: str | None = entry.table or entry.name
     findings: tuple[ContractFinding, ...] = ()

@@ -18,8 +18,12 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.cli.entry.models import (
     SelectorFileSummary,
 )
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredTaskFunction
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
@@ -120,7 +124,7 @@ def test_given_resolved_build_context_when_writing_then_renders_safe_verbose_sum
         effective_target_schema="DEV_DAGSTER_DEV",
         models=cast(tuple[CompiledModelView, ...], (object(), object())),
         sources=cast(
-            tuple[CompiledSource, ...],
+            tuple[CompiledSourceView, ...],
             tuple(
                 SimpleNamespace(source_entry=SimpleNamespace(loader="load_orders"))
                 for _ in range(test_case.total_source_count)

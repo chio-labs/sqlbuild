@@ -19,7 +19,6 @@ from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_fu
 from sqlbuild.compiler.compile._helpers.attachment.references import (
     validate_table_function_call_arities,
 )
-from sqlbuild.compiler.compile._helpers.attachment.sources import build_source_inputs
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
     build_test_inputs_with_cache,
@@ -49,7 +48,6 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
     CompilerDiagnostic,
-    CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
@@ -61,8 +59,9 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     ModelInputScopeBuild,
 )
-from sqlbuild.compiler.compile.types import CompileInputsView, ModelInput, SeedInput
+from sqlbuild.compiler.compile.types import CompileInputsView, ModelInput, SeedInput, SourceInput
 from sqlbuild.compiler.compiled_project.main._attach_seeds import attach_seeds
+from sqlbuild.compiler.compiled_project.main._attach_sources import attach_sources
 from sqlbuild.compiler.compiled_project.main._compile_inputs_view import compile_inputs_view
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -168,13 +167,10 @@ def build_compile_inputs(
             adapter_context.python_functions_inherit_default_namespace
         ),
     )
-    source_inputs: tuple[CompileSourceInput, ...] = build_source_inputs(
+    source_inputs: tuple[SourceInput, ...] = attach_sources(
         discovered_inputs=discovered_inputs,
-        effective_vars=model_context.effective_vars,
+        native_project=model_build.native_project,
         effective_settings=model_context.effective_settings,
-        macro_context=model_context.macro_context,
-        loaded_macros=model_context.loaded_macros,
-        declaration_expansion=model_context.declaration_expansion,
         no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs_with_cache(

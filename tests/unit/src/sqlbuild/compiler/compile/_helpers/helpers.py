@@ -61,6 +61,7 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
     ModelInput,
     SeedInput,
+    SourceInput,
     SqlTestMode,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -500,7 +501,7 @@ class RequiredDescriptionInputs:
     discovered_inputs: DiscoveredProjectInputs = REQUIRED_DESCRIPTION_BASE_INPUTS
     model_inputs: tuple[CompileModelInput, ...] = ()
     seed_inputs: tuple[SeedInput, ...] = ()
-    source_inputs: tuple[CompileSourceInput, ...] = ()
+    source_inputs: tuple[SourceInput, ...] = ()
     function_inputs: tuple[CompileSqlFunctionInput, ...] = ()
 
 
@@ -593,7 +594,7 @@ def seed_description_inputs(description: str | None) -> RequiredDescriptionInput
     )
 
 
-def returns_source_input(*, description: str | None, loader: str | None) -> CompileSourceInput:
+def returns_source_input(*, description: str | None, loader: str | None) -> SourceInput:
     return CompileSourceInput(
         source_entry=SourceEntry(name="raw_returns", description=description, loader=loader),
         source_file=DiscoveredSourceFile(

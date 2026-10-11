@@ -132,26 +132,6 @@ def hook_sql_statements(value: object) -> tuple[str, ...]:
     return tuple(statements)
 
 
-def validate_source_expression_syntax(
-    *,
-    expression: str,
-    source_name: str,
-    file_path: Path,
-) -> None:
-    """Validate that a source expression is parseable as a FROM target."""
-
-    from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
-    from sqlbuild.spec.contracts.models import SourceEntry
-
-    rendered: str = render_source_relation(
-        entry=SourceEntry(name=source_name, expression=expression)
-    )
-    _validate_sql_syntax_with_message(
-        query_sql=f"SELECT * FROM {rendered}",
-        error_prefix=f"SQL syntax error in source expression '{source_name}' ({file_path})",
-    )
-
-
 def _validate_sql_syntax_with_message(
     *,
     query_sql: str,

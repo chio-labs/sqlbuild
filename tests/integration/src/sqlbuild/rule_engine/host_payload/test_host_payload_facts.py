@@ -6,6 +6,9 @@ import pytest
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import (
+    compiled_project_record,
+)
 from sqlbuild.rule_engine._helpers.engine.custom_rules import host_project
 from sqlbuild.rule_engine._helpers.host.custom_host_pool import host_payload_project
 from sqlbuild.rule_engine.classes.project_tree import public_model
@@ -119,7 +122,7 @@ def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_un
     assert trimmed_digests == full_digests
     assert tuple(map(public_model, trimmed.models)) == tuple(map(public_model, project.models))
     assert (
-        dropped_fields(before=project, after=trimmed)
+        dropped_fields(before=compiled_project_record(project), after=trimmed)
         == trimmed_fields[CompiledProject] - test_case.expected_unpopulated_trimmed_fields
     )
     assert (

@@ -81,15 +81,7 @@ def project_request(
             )
             for model_input, checks in zip(inputs.model_inputs, syntax_checks, strict=True)
         ],
-        [
-            (
-                source_input.source_entry.name,
-                source_input.source_entry.loader is not None,
-                source_input.source_entry.database,
-                source_input.source_entry.schema,
-            )
-            for source_input in inputs.source_inputs
-        ],
+        [source_input.assembly_row for source_input in inputs.source_inputs],
         [
             (
                 seed_input.schema_entry.name,

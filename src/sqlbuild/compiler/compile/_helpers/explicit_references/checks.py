@@ -20,7 +20,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSource,
     CompilerDiagnostic,
     PythonSqlReferenceReport,
 )
@@ -28,6 +27,7 @@ from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
     CompiledProjectView,
+    CompiledSourceView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -258,7 +258,7 @@ def _sql_hook_rows(*, hook_key: str, entries: object) -> list[dict[str, object]]
     ]
 
 
-def _source_row(source: CompiledSource) -> dict[str, object]:
+def _source_row(source: CompiledSourceView) -> dict[str, object]:
     entry: SourceEntry = source.source_entry
     return {
         "name": source.name,

@@ -42,6 +42,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
     SqlTestMode,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
@@ -397,7 +398,7 @@ def build_test_project(
             )
         )
 
-    sources: list[CompiledSource] = []
+    sources: list[CompiledSourceView] = []
     source_name: str
     for source_name in source_names:
         source_entry: SourceEntry = SourceEntry(
@@ -823,7 +824,7 @@ def build_scenario_relation_test_scenario(
 def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProjectView:
     """Build a minimal CompiledProject containing one source entry."""
 
-    source: CompiledSource = CompiledSource(
+    source: CompiledSourceView = CompiledSource(
         key=source_key(source_entry.name),
         deps=(),
         name=source_entry.name,

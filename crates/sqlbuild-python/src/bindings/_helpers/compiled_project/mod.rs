@@ -20,4 +20,6 @@ pub(crate) mod project;
 pub(crate) mod project_view;
 pub(crate) mod registration;
 pub(crate) mod seed_views;
+pub(crate) mod source_loop;
+pub(crate) mod source_views;
 pub(crate) mod values;

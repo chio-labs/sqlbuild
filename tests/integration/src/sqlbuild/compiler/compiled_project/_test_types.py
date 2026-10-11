@@ -70,3 +70,24 @@ class ImmediateSyntaxErrorTestCase:
     model_sql: str
     expected_message: str
     expected_help_fragment: str
+
+
+@dataclass(frozen=True)
+class NativeSourceAttachmentTestCase:
+    """A source the native loop attaches: its assembled entry and recorded declaration usages."""
+
+    description: str
+    source_yml: str
+    source_name: str
+    expected_entry: dict[str, object]
+    expected_usages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeSourceErrorTestCase:
+    """A source the native loop rejects while attaching it."""
+
+    description: str
+    source_yml: str
+    expected_message: str
+    expects_help: bool

@@ -12,7 +12,6 @@ from sqlbuild.compiler.compile.classes.semantic_completion_inputs import Semanti
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModelSqlTestPayload,
-    CompiledSource,
     CompiledSqlTest,
     CompilerDiagnostic,
 )
@@ -20,6 +19,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompiledSourceView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -167,7 +167,7 @@ def _model_payload(model: CompiledModelView) -> tuple[Any, ...]:
 
 
 def _source_payload(
-    *, source: CompiledSource, files: dict[Path, int]
+    *, source: CompiledSourceView, files: dict[Path, int]
 ) -> tuple[str, str | None, int]:
     return (
         source.name,
@@ -204,7 +204,7 @@ def _model_error(*, model: CompiledModelView, row: _ErrorRow) -> CompilerDiagnos
     )
 
 
-def _source_error(*, source: CompiledSource, row: _ErrorRow) -> CompilerDiagnostic:
+def _source_error(*, source: CompiledSourceView, row: _ErrorRow) -> CompilerDiagnostic:
     code, message, line, column = row
     return CompilerDiagnostic(
         phase=DiagnosticPhase.COMPILE,

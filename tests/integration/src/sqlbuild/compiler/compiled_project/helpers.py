@@ -18,9 +18,11 @@ from sqlbuild.compiler.compile import models as compile_models
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileAdapterContext
-from sqlbuild.compiler.compile.types import CompileInputsView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.pipeline.main.project import compile_project
+from sqlbuild.spec.contracts.models import SourceColumnEntry
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
 
@@ -397,3 +399,38 @@ def copy_project(*, fixtures: tuple[str, ...], files: dict[str, str], project_di
         _ = shutil.copytree(fixture, project_dir, dirs_exist_ok=True)
     write_files(project_dir=project_dir, files=files)
     return project_dir
+
+
+SOURCE_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "eu"\n\n'
+        '[defaults]\ncontract = "enforced"\n'
+    ),
+    "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+    "constants/limits.sql": "CONSTANT (name order_cap, value 3);\n",
+    "macros/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
+}
+_SOURCE_CONNECTION: dict[str, object] = {"database": "warehouse", "schema": "main"}
+
+
+def compile_source_project(
+    *, project_dir: Path, source_yml: str, monkeypatch: pytest.MonkeyPatch
+) -> tuple[CompiledProjectView, CompileInputsView]:
+    """Compile a project declaring `source_yml`; return the project and its compile inputs."""
+
+    write_files(
+        project_dir=project_dir, files={**SOURCE_PROJECT_FILES, "sources/raw.yml": source_yml}
+    )
+    project: CompiledProjectView = compile_project(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=DuckDbAdapter(),
+        resolved_connection=_SOURCE_CONNECTION,
+    )
+    inputs, _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+    return project, inputs
+
+
+def column_metadata(column: SourceColumnEntry) -> tuple[str | None, tuple[dict[str, object], ...]]:
+    """A source column's description and its audits' arguments."""
+
+    return column.description, tuple(audit.arguments for audit in column.audits)

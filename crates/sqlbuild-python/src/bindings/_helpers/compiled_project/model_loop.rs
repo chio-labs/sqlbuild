@@ -36,6 +36,12 @@ use crate::bindings::_helpers::compiled_project::model_loop_visibility::{
     ModelVisibility, VisibilityClasses, VisibilityModel,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::source_loop::{
+    SourceRow, SourceSettings, attached_sources,
+};
+use crate::bindings::_helpers::compiled_project::source_views::{
+    AttachedSource, NativeSourceInput, retain_sources,
+};
 use crate::bindings::_helpers::discovery::project_files::python_semantics;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::render::declaration_expansion::{
@@ -135,6 +141,8 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) macros: MacroClasses<'py>,
     /// `sql_analysis_opt_out_help(model_owned=True)`, the help of a model's syntax error.
     pub(crate) syntax_help: String,
+    /// The same help for SQL a project's other resources own.
+    pub(crate) source_syntax_help: String,
     /// `InvalidScopePathError`.
     pub(crate) scope_path_error: Bound<'py, PyAny>,
     /// What each finished model's input record is built with.
@@ -220,6 +228,21 @@ impl NativeModelLoop {
 
     /// Build every model in order into `project`; return each model's input view and counts.
     fn run<'py>(
+        slf: &Bound<'py, Self>,
+        project: Bound<'py, NativeCompiledProject>,
+        host: Bound<'py, PyAny>,
+        models: Vec<ModelLoopRow>,
+    ) -> PyResult<(Vec<Bound<'py, NativeModelInput>>, LoopCounts)> {
+        let py: Python<'py> = slf.py();
+        project
+            .borrow_mut()
+            .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
+        slf.get().run_models(py, project, host, models)
+    }
+}
+
+impl NativeModelLoop {
+    fn run_models<'py>(
         &self,
         py: Python<'py>,
         project: Bound<'py, NativeCompiledProject>,
@@ -295,6 +318,26 @@ impl NativeModelLoop {
 }
 
 impl NativeModelLoop {
+    /// Attach every discovered source in order into `project`; return each source's view.
+    pub(crate) fn run_sources<'py>(
+        &self,
+        project: &Bound<'py, NativeCompiledProject>,
+        host: &Bound<'py, PyAny>,
+        rows: Vec<SourceRow>,
+        settings: SourceSettings,
+    ) -> PyResult<Vec<NativeSourceInput>> {
+        let py: Python<'py> = host.py();
+        let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
+        let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
+        let context: LoopContext<'_, 'py> = LoopContext {
+            host,
+            classes: &classes,
+            contracts: &contracts,
+        };
+        let attached: Vec<AttachedSource> = attached_sources(self, &context, rows, settings)?;
+        Ok(retain_sources(project, attached))
+    }
+
     /// Run the model's steps in the attachment's order; `None` hands it to the attachment.
     fn finish<'py>(
         &self,

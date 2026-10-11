@@ -9,9 +9,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
@@ -150,7 +153,7 @@ def build_clone_source_entries(
     adapter: BaseAdapter,
 ) -> tuple[CloneSourcePlanEntry, ...]:
     entries_by_key: dict[CompiledObjectKey, CloneSourcePlanEntry] = {}
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         source_entry: SourceEntry = source.source_entry
         if (

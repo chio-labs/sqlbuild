@@ -30,7 +30,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSource,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
@@ -38,6 +37,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
 )
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_TABLE_NAME,
@@ -428,7 +428,7 @@ def _prefetch_inspection_schemas(
     if catalog is None:
         return
     scopes: list[tuple[str | None, str]] = [(database, schema) for schema in schemas]
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         entry: SourceEntry = source.source_entry
         if (
@@ -811,7 +811,7 @@ def _gather_cursor_snapshots(
     """Gather cursor MIN/MAX values for selected incremental models."""
 
     model_map: dict[str, CompiledModelView] = {m.name: m for m in project.models}
-    source_map: dict[str, CompiledSource] = {s.name: s for s in project.sources}
+    source_map: dict[str, CompiledSourceView] = {s.name: s for s in project.sources}
 
     cursor_models: list[_CursorModelInfo] = _collect_cursor_models(
         project=project,
@@ -860,7 +860,7 @@ def _collect_cursor_models(
     project: CompiledProjectView,
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModelView],
-    source_map: dict[str, CompiledSource],
+    source_map: dict[str, CompiledSourceView],
     existing_relations: dict[str, RelationInfo],
     inputs: _CursorGatherInputs,
 ) -> list[_CursorModelInfo]:
@@ -1588,7 +1588,7 @@ def _resolve_upstream_qualified_name(
     ref: CompileSqlReference,
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModelView],
-    source_map: dict[str, CompiledSource],
+    source_map: dict[str, CompiledSourceView],
     seed_map: dict[str, CompiledSeedView],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     selected_names: frozenset[str] | None = None,
@@ -1615,7 +1615,7 @@ def _resolve_upstream_qualified_name(
         if seed is not None:
             return seed.destination.qualified_name
     elif ref.ref_kind == SqlReferenceKind.SOURCE:
-        source: CompiledSource | None = source_map.get(ref.ref_name)
+        source: CompiledSourceView | None = source_map.get(ref.ref_name)
         if source is not None:
             entry: SourceEntry = source.source_entry
             return render_source_relation(entry=entry, adapter=adapter)
@@ -1648,7 +1648,7 @@ def _validate_watermark_contract_column(
     ref: CompileSqlReference,
     cursor_column: str,
     model_map: dict[str, CompiledModelView],
-    source_map: dict[str, CompiledSource],
+    source_map: dict[str, CompiledSourceView],
     seed_map: dict[str, CompiledSeedView],
 ) -> None:
     """Validate reliable watermark column contracts before warehouse inspection."""
@@ -1694,7 +1694,7 @@ def _validate_watermark_contract_column(
         else:
             return
     elif ref.ref_kind == SqlReferenceKind.SOURCE:
-        upstream_source: CompiledSource | None = source_map.get(ref.ref_name)
+        upstream_source: CompiledSourceView | None = source_map.get(ref.ref_name)
         if (
             upstream_source is None
             or upstream_source.source_entry.contract != ContractPolicy.ENFORCED

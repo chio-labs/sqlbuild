@@ -8,10 +8,14 @@ import pytest
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledSource,
     LoadedMacro,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSeedView,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEntry
 from sqlbuild.compiler.manifest._helpers.shared import build_fqn
@@ -101,7 +105,7 @@ _MODEL_WITH_ALIAS: CompiledModelView = build_test_model(
     config_values={"materialized": "incremental", "tags": ["core", "nightly"]},
 )
 
-_SOURCE_WITH_COLUMNS: CompiledSource = build_test_source(
+_SOURCE_WITH_COLUMNS: CompiledSourceView = build_test_source(
     name="raw_events",
     database="raw_db",
     schema="events",
@@ -113,14 +117,14 @@ _SOURCE_WITH_COLUMNS: CompiledSource = build_test_source(
     ),
 )
 
-_SOURCE_RAW_ORDERS: CompiledSource = build_test_source(
+_SOURCE_RAW_ORDERS: CompiledSourceView = build_test_source(
     name="raw_orders",
     database="raw_db",
     schema="public",
     table="orders_table",
     description="Raw order data",
 )
-_SOURCE_EVENTS: CompiledSource = build_test_source(
+_SOURCE_EVENTS: CompiledSourceView = build_test_source(
     name="events",
     database=None,
     schema="analytics",
@@ -511,7 +515,7 @@ def test_given_model_when_building_manifest_then_produces_correct_node(
 def test_given_source_when_building_manifest_then_produces_correct_node(
     test_case: ManifestSourceNodeTestCase,
 ) -> None:
-    source: CompiledSource = _SOURCE_FIXTURES[test_case.expected_source_name]
+    source: CompiledSourceView = _SOURCE_FIXTURES[test_case.expected_source_name]
     project: CompiledProjectView = build_test_project(sources=(source,))
     plan_output: PlanOutput = build_test_plan_output()
 
@@ -636,7 +640,7 @@ def test_given_relative_path_when_building_fqn_then_returns_expected_parts(
 def test_given_deps_when_building_manifest_then_parent_map_correct(
     test_case: ManifestParentMapTestCase,
 ) -> None:
-    source: CompiledSource = build_test_source(name="raw_orders")
+    source: CompiledSourceView = build_test_source(name="raw_orders")
     model: CompiledModelView = build_test_model(name="orders", deps=(source_key("raw_orders"),))
     project: CompiledProjectView = build_test_project(models=(model,), sources=(source,))
     plan_output: PlanOutput = build_test_plan_output(
@@ -942,7 +946,7 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         columns=(SchemaColumn(name="id", type="INTEGER"),),
         deps=(source_key("raw_orders"),),
     )
-    source: CompiledSource = build_test_source(
+    source: CompiledSourceView = build_test_source(
         name="raw_orders",
         database="raw_db",
         schema="public",

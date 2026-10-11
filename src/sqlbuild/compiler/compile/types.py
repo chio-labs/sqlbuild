@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         DiscoveredProjectInputs,
         DiscoveredSchemaFile,
         DiscoveredSeedFile,
+        DiscoveredSourceFile,
         DiscoveredSqlHookFile,
         DiscoveredSqlModelFile,
         EnumDeclaration,
@@ -63,9 +64,38 @@ if TYPE_CHECKING:
         SchemaModelEntry,
         SchemaSeedEntry,
         SettingsConfig,
+        SourceEntry,
         SourceLocation,
         TargetConfig,
     )
+
+
+class SourceInput(Protocol):
+    """One attached source: a native owner view, or a hand-built `CompileSourceInput`."""
+
+    @property
+    def source_entry(self) -> SourceEntry: ...
+    @property
+    def source_file(self) -> DiscoveredSourceFile: ...
+    @property
+    def declaration_usages(self) -> tuple[UsageRecord, ...]: ...
+    @property
+    def assembly_row(self) -> tuple[str, bool, str | None, str | None]: ...
+
+
+class CompiledSourceView(Protocol):
+    """One assembled source: a native owner view, or a hand-built `CompiledSource`."""
+
+    @property
+    def key(self) -> CompiledObjectKey: ...
+    @property
+    def deps(self) -> tuple[CompiledObjectKey, ...]: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def source_entry(self) -> SourceEntry: ...
+    @property
+    def source_file(self) -> DiscoveredSourceFile: ...
 
 
 class SeedInput(Protocol):

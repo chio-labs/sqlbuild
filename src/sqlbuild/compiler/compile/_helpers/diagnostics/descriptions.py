@@ -12,7 +12,6 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import MISSING_DESCRIPTION_CODE
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
-    CompileSourceInput,
     CompileSqlFunctionInput,
 )
 from sqlbuild.compiler.compile.types import (
@@ -22,6 +21,7 @@ from sqlbuild.compiler.compile.types import (
     FunctionLanguage,
     ModelInput,
     SeedInput,
+    SourceInput,
 )
 from sqlbuild.compiler.discovery.constants import PYTHON_UDF_DECORATOR_NAME, YAML_FILE_SUFFIXES
 from sqlbuild.compiler.discovery.main._yaml_entry_line import yaml_entry_line
@@ -69,7 +69,7 @@ def missing_description_diagnostics(
     discovered_inputs: DiscoveredProjectInputs,
     model_inputs: tuple[ModelInput, ...],
     seed_inputs: tuple[SeedInput, ...],
-    source_inputs: tuple[CompileSourceInput, ...],
+    source_inputs: tuple[SourceInput, ...],
     function_inputs: tuple[CompileSqlFunctionInput, ...],
 ) -> tuple[CompilerDiagnostic, ...]:
     """Return one error for each named resource without a non-empty description."""
@@ -183,7 +183,7 @@ def _seed(seed_input: SeedInput) -> _Resource:
 
 
 def _source(
-    *, source_input: CompileSourceInput, loaders_by_name: dict[str, DiscoveredLoaderFunction]
+    *, source_input: SourceInput, loaders_by_name: dict[str, DiscoveredLoaderFunction]
 ) -> _Resource:
     name: str = source_input.source_entry.name
     loader: DiscoveredLoaderFunction | None = (
@@ -280,7 +280,7 @@ def _sql_hooks(discovered_inputs: DiscoveredProjectInputs) -> Iterator[_Resource
 
 
 def _python_nodes(
-    *, discovered_inputs: DiscoveredProjectInputs, source_inputs: tuple[CompileSourceInput, ...]
+    *, discovered_inputs: DiscoveredProjectInputs, source_inputs: tuple[SourceInput, ...]
 ) -> Iterator[_PythonNode]:
     source_owned_loaders: frozenset[str] = frozenset(
         source_input.source_entry.loader

@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
@@ -188,7 +189,7 @@ def build_project_with_targets(
             )
         )
 
-    sources: list[CompiledSource] = []
+    sources: list[CompiledSourceView] = []
     source_spec: tuple[str, str, str]
     for source_spec in source_names:
         sources.append(

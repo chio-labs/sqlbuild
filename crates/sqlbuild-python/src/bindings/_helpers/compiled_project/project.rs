@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use pyo3::exceptions::PyIndexError;
+use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{FromPyObject, pyclass, pymethods};
@@ -21,14 +21,20 @@ use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
+use crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop;
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::seed_views::{
     NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
+};
+use crate::bindings::_helpers::compiled_project::source_loop::{SourceRow, SourceSettings};
+use crate::bindings::_helpers::compiled_project::source_views::{
+    NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
 };
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
 const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";
+const ATTACHMENT_LOOP_UNSET: &str = "no model loop was kept to attach this project's resources";
 pub(crate) const INCREMENTAL_MODE_KEY: &str = "incremental_mode";
 const MATERIALIZED_KEY: &str = "materialized";
 const TABLE_MATERIALIZATION: &str = "table";
@@ -92,6 +98,10 @@ pub(crate) struct NativeCompiledProject {
     graph_builds: usize,
     /// Each attached seed, in attachment order.
     seeds: Vec<SeedRecord>,
+    /// Each attached source, in attachment order.
+    sources: Vec<SourceRecord>,
+    /// The model loop and its host, which attach the project's other resources.
+    attachment: Option<(Py<NativeModelLoop>, Py<PyAny>)>,
 }
 
 impl NativeCompiledProject {
@@ -119,6 +129,25 @@ impl NativeCompiledProject {
     /// Count one lineage graph a project view built.
     pub(crate) fn record_graph_build(&mut self) {
         self.graph_builds += 1;
+    }
+
+    /// Keep the model loop and its host for attaching the project's other resources.
+    pub(crate) fn keep_attachment_loop(
+        &mut self,
+        model_loop: Py<NativeModelLoop>,
+        host: Py<PyAny>,
+    ) {
+        self.attachment = Some((model_loop, host));
+    }
+
+    /// Every attached source, in attachment order.
+    pub(crate) fn sources(&self) -> &[SourceRecord] {
+        &self.sources
+    }
+
+    /// Keep one attached source.
+    pub(crate) fn retain_source(&mut self, source: SourceRecord) {
+        self.sources.push(source);
     }
 
     /// Every attached seed, in attachment order.
@@ -237,6 +266,45 @@ impl NativeCompiledProject {
                 .set_namespace(namespace);
         }
         Ok(())
+    }
+
+    /// Attach every discovered source in order with the kept loop; return each source's view.
+    fn attach_sources(
+        slf: &Bound<'_, Self>,
+        rows: Vec<SourceRow>,
+        settings: SourceSettings,
+    ) -> PyResult<Vec<NativeSourceInput>> {
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+        let py: Python<'_> = slf.py();
+        let (model_loop, host) = match &slf.borrow().attachment {
+            Some((model_loop, host)) => (model_loop.clone_ref(py), host.clone_ref(py)),
+            None => return Err(PyRuntimeError::new_err(ATTACHMENT_LOOP_UNSET)),
+        };
+        model_loop
+            .bind(py)
+            .get()
+            .run_sources(slf, host.bind(py), rows, settings)
+    }
+
+    /// Keep the namespaces native project assembly resolved, in source order.
+    fn record_source_namespaces(&mut self, namespaces: Vec<SourceNamespace>) -> PyResult<()> {
+        for (index, namespace) in namespaces.into_iter().enumerate() {
+            self.sources
+                .get_mut(index)
+                .ok_or_else(|| PyIndexError::new_err(index))?
+                .set_namespace(namespace);
+        }
+        Ok(())
+    }
+
+    /// The assembled source at `index`.
+    fn compiled_source(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledSource> {
+        if index >= slf.borrow().sources.len() {
+            return Err(PyIndexError::new_err(index));
+        }
+        Ok(NativeCompiledSource::new(slf.clone().unbind(), index))
     }
 
     /// The assembled seed at `index`.
@@ -397,5 +465,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeInputsView>()?;
     module.add_class::<NativeSeedInput>()?;
     module.add_class::<NativeCompiledSeed>()?;
+    module.add_class::<NativeSourceInput>()?;
+    module.add_class::<NativeCompiledSource>()?;
     module.add_class::<NativeCompiledProject>()
 }

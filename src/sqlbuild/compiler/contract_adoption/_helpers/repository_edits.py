@@ -5,8 +5,7 @@ from __future__ import annotations
 import re
 
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledSource
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledSourceView
 from sqlbuild.compiler.contract_adoption.exceptions import ContractAdoptionError
 from sqlbuild.compiler.contract_adoption.models import ContractFinding
 from sqlbuild.compiler.contract_adoption.types import ContractFindingKind
@@ -262,7 +261,7 @@ def _is_header_word_character(character: str) -> bool:
 
 def edit_source(
     *,
-    source: CompiledSource,
+    source: CompiledSourceView,
     physical_columns: tuple[ColumnInfo, ...],
     overwrite: bool,
     contents: str | None = None,

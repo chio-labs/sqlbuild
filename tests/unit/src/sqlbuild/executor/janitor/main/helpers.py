@@ -29,7 +29,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
@@ -542,7 +546,7 @@ def build_project(
     destination_schema: str = "analytics",
     migrate_from: str | None = None,
 ) -> CompiledProjectView:
-    source: CompiledSource = CompiledSource(
+    source: CompiledSourceView = CompiledSource(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SOURCE,
             name="raw_orders",
@@ -557,7 +561,7 @@ def build_project(
         ),
         source_file=cast(Any, object()),
     )
-    sources: tuple[CompiledSource, ...] = {True: (), False: (source,)}[source_schema is None]
+    sources: tuple[CompiledSourceView, ...] = {True: (), False: (source,)}[source_schema is None]
     return CompiledProject(
         run_id="run-1",
         effective_target_name="dev",

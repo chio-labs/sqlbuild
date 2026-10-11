@@ -31,6 +31,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompiledSeedView,
+    CompiledSourceView,
     FunctionLanguage,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
@@ -220,7 +221,7 @@ def build_project_from_source_cursor_input_test_case(
         schema=test_case.source_schema,
         table=test_case.source_table,
     )
-    source: CompiledSource = CompiledSource(
+    source: CompiledSourceView = CompiledSource(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SOURCE,
             name=test_case.source_name,

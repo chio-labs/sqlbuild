@@ -10,9 +10,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledObjectKey,
-    CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner.constants import (
     MODEL_POST_HOOKS_CONFIG_KEY,
@@ -82,7 +85,7 @@ def build_source_read_map(
         target_name=source_target_name,
     )
     result: dict[str, SourceEntry] = dict(source_map)
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         if source.source_entry.name not in selected_managed_sources:
             continue
@@ -107,7 +110,7 @@ def with_declared_source_reads(
     if not missing:
         return source_map
     result: dict[str, SourceEntry] = dict(source_map)
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         if source.source_entry.name in missing:
             result[source.source_entry.name] = source.source_entry
@@ -198,7 +201,7 @@ def _resolve_source_target_name(
     return active_target.defer_sources_to or project.effective_target_name
 
 
-def _raw_source_entry(source: CompiledSource) -> SourceEntry:
+def _raw_source_entry(source: CompiledSourceView) -> SourceEntry:
     source_entry: SourceEntry
     for source_entry in source.source_file.source_entries:
         if source_entry.name == source.source_entry.name:

@@ -48,7 +48,6 @@ from sqlbuild.compiler.compile.models import (
     AuthoredSqlExpansionResult,
     CompileAuditInput,
     CompilerDiagnostic,
-    CompileSourceInput,
     CompileSqlReference,
     DeclarationExpansionContext,
     LoadedMacro,
@@ -63,6 +62,7 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     ModelInput,
     SeedInput,
+    SourceInput,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
@@ -130,7 +130,7 @@ def build_project_audit_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     context: ModelInputBuildContext,
     model_inputs: tuple[ModelInput, ...],
-    source_inputs: tuple[CompileSourceInput, ...],
+    source_inputs: tuple[SourceInput, ...],
     seed_inputs: tuple[SeedInput, ...],
 ) -> tuple[tuple[CompileAuditInput, ...], tuple[CompilerDiagnostic, ...]]:
     """Resolve built-in-aware generic audits and build every project audit input."""
@@ -156,7 +156,7 @@ def build_audit_inputs(
     discovered_inputs: DiscoveredProjectInputs,
     context: ModelInputBuildContext,
     model_inputs: tuple[ModelInput, ...],
-    source_inputs: tuple[CompileSourceInput, ...],
+    source_inputs: tuple[SourceInput, ...],
     generic_audit_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]]
     | None = None,
     seed_inputs: tuple[SeedInput, ...] = (),
@@ -372,12 +372,12 @@ def _build_singular_audit_inputs(
 
 def _build_source_and_seed_audit_inputs(
     *,
-    source_inputs: tuple[CompileSourceInput, ...],
+    source_inputs: tuple[SourceInput, ...],
     seed_inputs: tuple[SeedInput, ...],
     context: _AuditAttachmentContext,
 ) -> tuple[CompileAuditInput, ...]:
     audit_inputs: list[CompileAuditInput] = []
-    source_input: CompileSourceInput
+    source_input: SourceInput
     for source_input in source_inputs:
         audit_inputs.extend(
             build_source_attached_audit_inputs(
@@ -473,7 +473,7 @@ def build_model_attached_audit_inputs(
 
 def build_source_attached_audit_inputs(
     *,
-    source_input: CompileSourceInput,
+    source_input: SourceInput,
     context: _AuditAttachmentContext,
 ) -> tuple[CompileAuditInput, ...]:
     """Render source-attached audits into compile audit inputs."""

@@ -74,10 +74,10 @@ pub(crate) struct SqlHookClasses<'py> {
     python_hook_entry: Bound<'py, PyAny>,
     /// Discovered SQL hook files by name.
     definitions: Bound<'py, PyDict>,
-    effective_vars: Bound<'py, PyDict>,
+    pub(crate) effective_vars: Bound<'py, PyDict>,
     /// `UnicodeEnvironment()` and `render_project_var_text`.
-    environment: Bound<'py, PyAny>,
-    render_project_var: Bound<'py, PyAny>,
+    pub(crate) environment: Bound<'py, PyAny>,
+    pub(crate) render_project_var: Bound<'py, PyAny>,
     sql_resource_ref: Bound<'py, PyAny>,
     /// `SqlResourceRefKind` by the `SqlReferenceKind` value of an explicit reference.
     explicit_kinds: Bound<'py, PyDict>,

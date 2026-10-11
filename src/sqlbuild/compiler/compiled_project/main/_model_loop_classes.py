@@ -63,6 +63,7 @@ def model_loop_classes(
         "usage_record": UsageRecord,
         "compile_error": CompileInputError,
         "syntax_help": host_inputs["syntax_help"],
+        "source_syntax_help": host_inputs["source_syntax_help"],
         "macros": host_inputs["macros"],
         "sql_hooks": host_inputs["sql_hooks"],
         "scope_path_error": InvalidScopePathError,
