@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
@@ -40,9 +40,9 @@ pub(crate) struct SchemaRecord {
 /// The expansion passes of a model's query, from authored text to expanded SQL.
 pub(crate) struct ExpansionRecord {
     /// The authored query below the header.
-    pub(crate) authored_sql: String,
+    pub(crate) authored_sql: Py<PyString>,
     /// The declaration- and macro-expanded SQL before canonicalisation.
-    pub(crate) expanded_sql: String,
+    pub(crate) expanded_sql: Py<PyString>,
     pub(crate) interpolation_spans: Vec<SpanRow>,
     pub(crate) declaration_spans: Vec<SpanRow>,
     pub(crate) macro_spans: Vec<SpanRow>,
@@ -56,8 +56,9 @@ pub(crate) struct ModelInputRecord {
     pub(crate) model_file: Py<PyAny>,
     /// The resolved config, whose values hold user values.
     pub(crate) config: Py<PyAny>,
-    pub(crate) query_sql: String,
-    pub(crate) macro_source_sql: String,
+    /// Immutable text shared with discovery, expansions and every Python-facing projection.
+    pub(crate) query_sql: Py<PyString>,
+    pub(crate) macro_source_sql: Py<PyString>,
     pub(crate) references: Vec<ReferenceRow>,
     pub(crate) schema: Option<SchemaRecord>,
     pub(crate) sql_validation_enabled: bool,
@@ -149,13 +150,13 @@ impl NativeModelInput {
     }
 
     #[getter]
-    fn query_sql(&self, py: Python<'_>) -> PyResult<String> {
-        self.read(py, |record, _| Ok(record.query_sql.clone()))
+    fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
+        self.read(py, |record, py| Ok(record.query_sql.clone_ref(py)))
     }
 
     #[getter]
-    fn macro_source_sql(&self, py: Python<'_>) -> PyResult<String> {
-        self.read(py, |record, _| Ok(record.macro_source_sql.clone()))
+    fn macro_source_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
+        self.read(py, |record, py| Ok(record.macro_source_sql.clone_ref(py)))
     }
 
     #[getter]
@@ -441,8 +442,8 @@ fn expansion_object(
         pass_objects.push(PyTuple::new(py, span_objects)?);
     }
     let fields: Bound<'_, PyDict> = PyDict::new(py);
-    fields.set_item("authored_sql", &expansion.authored_sql)?;
-    fields.set_item("expanded_sql", &expansion.expanded_sql)?;
+    fields.set_item("authored_sql", expansion.authored_sql.bind(py))?;
+    fields.set_item("expanded_sql", expansion.expanded_sql.bind(py))?;
     fields.set_item("passes", PyTuple::new(py, pass_objects)?)?;
     Ok(classes.sql_expansion.call((), Some(&fields))?.unbind())
 }

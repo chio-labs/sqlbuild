@@ -6,7 +6,7 @@ use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
 use sqlbuild_analysis::assembly::analysis_session::models::{
     ColumnFact, ContractProof, LineageFacts, LineageRow, ModelOutcome, PivotOutcome,
 };
@@ -167,7 +167,7 @@ fn located(
         cleaned,
         expansion: expansion
             .authored
-            .then_some((expansion.expanded_sql.as_str(), passes.as_slice())),
+            .then_some((expansion.expanded_sql.bind(py).to_str()?, passes.as_slice())),
     };
     locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)
 }

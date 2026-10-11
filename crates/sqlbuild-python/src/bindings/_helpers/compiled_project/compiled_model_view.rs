@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple, PyTupleMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use sqlbuild_analysis::compiled_project::models::{DynamicProofFact, ModelAnalysisFact};
@@ -355,8 +355,8 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn query_sql(&self, py: Python<'_>) -> PyResult<String> {
-        self.read(py, |record, _| Ok(record.query_sql.clone()))
+    fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
+        self.read(py, |record, _| Ok(record.query_sql.clone_ref(py)))
     }
 
     #[getter]

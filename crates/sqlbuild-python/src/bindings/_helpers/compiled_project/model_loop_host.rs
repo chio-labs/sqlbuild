@@ -2,7 +2,7 @@
 
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
 use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, ModelConfigFacts, PlainModel,
@@ -181,11 +181,27 @@ pub(crate) fn finished_record<'py>(
         type_enforcement: schema.type_enforcement,
         model_schema: schema.model_schema.clone(),
     });
+    // Keep each immutable spelling once for Python-facing views, including the discovered
+    // query when an expansion leaves it unchanged. Projections borrow these same strings.
+    let discovered_query: Py<PyString> = model_file
+        .bind(py)
+        .getattr("query_sql")?
+        .downcast_into::<PyString>()?
+        .unbind();
+    let authored: Py<PyString> = shared_sql(py, &authored_query_sql, &[&discovered_query])?;
+    let macro_source: Py<PyString> =
+        shared_sql(py, &finished.declarations.spliced.sql, &[&authored])?;
+    let expanded: Py<PyString> = shared_sql(py, &macro_sql, &[&authored, &macro_source])?;
+    let query: Py<PyString> = shared_sql(
+        py,
+        &finished.query_sql,
+        &[&authored, &macro_source, &expanded],
+    )?;
     let record: ModelInputRecord = ModelInputRecord {
         model_file: model_file.clone_ref(py),
         config: config.unbind(),
-        query_sql: finished.query_sql.clone(),
-        macro_source_sql: finished.declarations.spliced.sql.clone(),
+        query_sql: query,
+        macro_source_sql: macro_source,
         references: finished.references.clone(),
         schema,
         sql_validation_enabled: finished.analysis.0,
@@ -203,8 +219,8 @@ pub(crate) fn finished_record<'py>(
         declaration_usages: PyTuple::new(py, unique(py, declaration_usages)?)?.unbind(),
         expansion: ExpansionRecord {
             authored: interpolated_sql == authored_query_sql,
-            authored_sql: authored_query_sql.clone(),
-            expanded_sql: macro_sql,
+            authored_sql: authored,
+            expanded_sql: expanded,
             interpolation_spans,
             declaration_spans: span_rows(&finished.declarations.spliced),
             macro_spans,
@@ -239,6 +255,16 @@ pub(crate) fn finished_record<'py>(
         constant_declarations: declarations(constants)?,
     });
     Ok((record, facts))
+}
+
+/// Reuse an identical immutable spelling already owned by this model.
+fn shared_sql(py: Python<'_>, sql: &str, candidates: &[&Py<PyString>]) -> PyResult<Py<PyString>> {
+    for candidate in candidates {
+        if candidate.bind(py).to_str()? == sql {
+            return Ok(candidate.clone_ref(py));
+        }
+    }
+    Ok(PyString::new(py, sql).unbind())
 }
 
 /// A dict's values in insertion order.
