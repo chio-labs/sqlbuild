@@ -17,7 +17,6 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
     write_model_analyses,
 )
 from sqlbuild.compiler.compile._helpers.assembly import project as assembly_project
-from sqlbuild.compiler.compile._helpers.refs import cache as reference_cache
 from sqlbuild.compiler.compile.constants import COMPILE_CACHE_DISABLE_ENV_VAR
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -74,7 +73,7 @@ SELECT order_id FROM __source("raw_orders")
 }
 # The native model loop scans plain models itself; header columns keep this model on the
 # attachment path, whose reference scans the reference cache serves.
-_REFERENCE_CACHE_REPO_FILES: dict[str, str] = _CACHE_REPO_FILES | {
+_SOURCED_MODEL_REPO_FILES: dict[str, str] = _CACHE_REPO_FILES | {
     "models/orders.sql": (
         'MODEL (description "Test model orders.", columns (order_id (type INTEGER)));\n\n'
         'SELECT order_id FROM __source("raw_orders")\n'
@@ -134,7 +133,7 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    write_repo_files(tmp_path, _REFERENCE_CACHE_REPO_FILES)
+    write_repo_files(tmp_path, _SOURCED_MODEL_REPO_FILES)
     cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
     analyzer: Mock = Mock(
         side_effect=AssertionError("Polyglot analysis must not run on a cache hit")
@@ -144,10 +143,6 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
         side_effect=AssertionError("output signatures must not be rebuilt on a cache hit")
     )
     monkeypatch.setattr(assembly_project, "model_analysis_output_signature", signature_builder)
-    reference_scanner: Mock = Mock(
-        side_effect=AssertionError("SQL references must not be scanned on a cache hit")
-    )
-    monkeypatch.setattr(reference_cache, "scan_sql_reference_calls", reference_scanner)
 
     warm_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
 
@@ -155,9 +150,8 @@ def test_given_successful_analysis_when_compiling_again_then_reuses_identical_ca
     assert warm_project.diagnostics == cold_project.diagnostics
     analyzer.assert_not_called()
     signature_builder.assert_not_called()
-    reference_scanner.assert_not_called()
     assert len(tuple((compiler_cache_directory(tmp_path)).rglob("*.sqlite3"))) == (
-        test_case.expected_count + 1
+        test_case.expected_count
     )
 
 
@@ -379,75 +373,6 @@ def test_given_non_text_analysis_cache_when_compiling_then_reanalyzes_safely(
     _ = compile_project_with_cache(project_dir=tmp_path)
 
     assert analyzer.call_count == test_case.expected_count
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (AnalysisCacheTestCase(description="corrupt reference cache fallback", expected_count=1),),
-    ids=lambda case: case.description,
-)
-def test_given_corrupt_reference_cache_when_compiling_then_rescans_and_repairs_the_entry(
-    test_case: AnalysisCacheTestCase,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    write_repo_files: Callable[[Path, dict[str, str]], None],
-) -> None:
-    write_repo_files(tmp_path, _REFERENCE_CACHE_REPO_FILES)
-    cold_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = next(
-        (compiler_cache_directory(tmp_path) / "references-v3").glob("*.sqlite3")
-    )
-    with sqlite3.connect(cache_path) as connection:
-        persisted_contents: str = connection.execute(
-            "SELECT payload FROM sql_reference"
-        ).fetchone()[0]
-        corrupt_contents: str = persisted_contents.replace("raw_orders", "tampered", 1)
-        assert corrupt_contents != persisted_contents
-        _ = connection.execute(
-            "UPDATE sql_reference SET payload = ?",
-            (corrupt_contents,),
-        )
-    scanner: Mock = Mock(wraps=reference_cache.scan_sql_reference_calls)
-    monkeypatch.setattr(reference_cache, "scan_sql_reference_calls", scanner)
-
-    repaired_project: CompiledProject = compile_project_with_cache(project_dir=tmp_path)
-
-    with sqlite3.connect(cache_path) as connection:
-        repaired_contents: str = connection.execute("SELECT payload FROM sql_reference").fetchone()[
-            0
-        ]
-    assert repaired_project.models == cold_project.models
-    assert "raw_orders" in repaired_contents
-    assert scanner.call_count == test_case.expected_count
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (AnalysisCacheTestCase(description="non-text reference cache fallback", expected_count=1),),
-    ids=lambda case: case.description,
-)
-def test_given_non_text_reference_cache_when_compiling_then_rescans_safely(
-    test_case: AnalysisCacheTestCase,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    write_repo_files: Callable[[Path, dict[str, str]], None],
-) -> None:
-    write_repo_files(tmp_path, _REFERENCE_CACHE_REPO_FILES)
-    _ = compile_project_with_cache(project_dir=tmp_path)
-    cache_path: Path = next(
-        (compiler_cache_directory(tmp_path) / "references-v3").glob("*.sqlite3")
-    )
-    with sqlite3.connect(cache_path) as connection:
-        _ = connection.execute(
-            "UPDATE sql_reference SET payload = ?",
-            (sqlite3.Binary(b"broken"),),
-        )
-    scanner: Mock = Mock(wraps=reference_cache.scan_sql_reference_calls)
-    monkeypatch.setattr(reference_cache, "scan_sql_reference_calls", scanner)
-
-    _ = compile_project_with_cache(project_dir=tmp_path)
-
-    assert scanner.call_count == test_case.expected_count
 
 
 @pytest.mark.parametrize(

@@ -153,7 +153,6 @@ def build_compile_inputs(
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
-        reference_cache_dir=compile_cache_dir,
     )
     model_context = model_build.context
     seed_inputs: tuple[CompileSeedInput, ...] = build_seed_inputs(discovered_inputs)
@@ -293,7 +292,6 @@ def _build_models_with_declarations(
     no_sql_validation: bool,
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-    reference_cache_dir: Path | None,
 ) -> ModelInputScopeBuild:
     public_enums: dict[str, EnumDeclaration]
     public_constants: dict[str, ConstantDeclaration]
@@ -319,7 +317,6 @@ def _build_models_with_declarations(
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
-        reference_cache_dir=reference_cache_dir,
         native_project=native_project,
     )
     return ModelInputScopeBuild(

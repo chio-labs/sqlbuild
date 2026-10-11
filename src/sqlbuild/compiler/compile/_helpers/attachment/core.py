@@ -46,8 +46,11 @@ from sqlbuild.compiler.compile._helpers.named_declarations.core import (
 from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import (
     model_schema_enum_declarations,
 )
-from sqlbuild.compiler.compile._helpers.refs.cache import cached_sql_reference_extractor
-from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
+from sqlbuild.compiler.compile._helpers.refs.references import (
+    extract_sql_references,
+    report_invalid_reference_calls,
+    scan_sql_reference_calls,
+)
 from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     build_model_context_values,
@@ -107,7 +110,7 @@ from sqlbuild.compiler.compile.models import (
     SqlReferenceScan,
     SqlReferenceSourceMap,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlReferenceExtractor
+from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.compiled_project.main._model_input_row import model_input_row
 from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
 from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
@@ -192,7 +195,7 @@ class _ModelValidationContext:
     project_config_path: Path
     defer_model_sql_validation: bool
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
-    extract_references: SqlReferenceExtractor
+    sql_lexical_syntax: SqlLexicalSyntax
     known_model_names: set[str]
     known_seed_names: set[str]
     known_source_names: set[str]
@@ -396,7 +399,6 @@ def build_model_inputs(
     no_sql_validation: bool = False,
     defer_model_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    reference_cache_dir: Path | None = None,
     native_project: _native.NativeCompiledProject,
 ) -> tuple[CompileModelInput, ...]:
     """Attach schema metadata to discovered model files."""
@@ -404,19 +406,15 @@ def build_model_inputs(
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = tuple(
         schema_file for schema_file in discovered_inputs.schema_files if schema_file.model_entries
     )
-    with cached_sql_reference_extractor(
-        root=reference_cache_dir, syntax=context.sql_lexical_syntax
-    ) as extract_references:
-        return _build_model_inputs(
-            discovered_inputs=discovered_inputs,
-            context=context,
-            no_sql_validation=no_sql_validation,
-            defer_model_sql_validation=defer_model_sql_validation,
-            external_sql_reference_resolver=external_sql_reference_resolver,
-            extract_references=extract_references,
-            legacy_schema_files=legacy_schema_files,
-            native_project=native_project,
-        )
+    return _build_model_inputs(
+        discovered_inputs=discovered_inputs,
+        context=context,
+        no_sql_validation=no_sql_validation,
+        defer_model_sql_validation=defer_model_sql_validation,
+        external_sql_reference_resolver=external_sql_reference_resolver,
+        legacy_schema_files=legacy_schema_files,
+        native_project=native_project,
+    )
 
 
 def _build_model_inputs(
@@ -426,7 +424,6 @@ def _build_model_inputs(
     no_sql_validation: bool,
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-    extract_references: SqlReferenceExtractor,
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
     native_project: _native.NativeCompiledProject,
 ) -> tuple[CompileModelInput, ...]:
@@ -456,7 +453,7 @@ def _build_model_inputs(
         project_config_path=(discovered_inputs.project_dir or Path()) / PROJECT_CONFIG_FILENAME,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
-        extract_references=extract_references,
+        sql_lexical_syntax=context.sql_lexical_syntax,
         known_model_names=known_model_names,
         known_seed_names=known_seed_names,
         known_source_names=known_source_names,
@@ -1046,9 +1043,16 @@ def _validate_model_input(
             file_path=model_file.file_path,
             placeholders=sql_validation_placeholders,
         )
-    reference_scan: SqlReferenceScan = context.extract_references(
-        sql=expanded_query_sql,
-        origin=_model_reference_origin(model_file=model_file, source_map=reference_source_map),
+    reference_origin: SqlReferenceOrigin = _model_reference_origin(
+        model_file=model_file, source_map=reference_source_map
+    )
+    reference_scan: SqlReferenceScan = scan_sql_reference_calls(
+        sql=expanded_query_sql, syntax=context.sql_lexical_syntax, origin=reference_origin
+    )
+    report_invalid_reference_calls(
+        invalid_calls=reference_scan.invalid_calls,
+        origin=reference_origin,
+        syntax=context.sql_lexical_syntax,
     )
     references: tuple[CompileSqlReference, ...] = merge_call_site_references(
         references=reference_scan.references,

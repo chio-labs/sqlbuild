@@ -11,8 +11,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.compile.models import (
         CompactBatchPreparation,
         CompileProjectInputs,
-        SqlReferenceOrigin,
-        SqlReferenceScan,
     )
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
@@ -36,12 +34,6 @@ class CompactBatchResponseCallback(Protocol):
     """Keyword-only callback for publishing one native compact response."""
 
     def __call__(self, *, preparation: CompactBatchPreparation, response: object) -> None: ...
-
-
-class SqlReferenceExtractor(Protocol):
-    """Keyword-only reference extraction for one expanded SQL text."""
-
-    def __call__(self, *, sql: str, origin: SqlReferenceOrigin | None) -> SqlReferenceScan: ...
 
 
 class CompileInputsReadyCallback(Protocol):

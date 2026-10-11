@@ -87,6 +87,28 @@ _CONTRACT_ERROR_MODEL: str = (
             ),
         ),
         CompileReuseInvalidationTestCase(
+            description="model_reference_edit",
+            edit=lambda root: replace_project_text(
+                root,
+                "models/marts/referenced_orders.sql",
+                '__ref("stg_orders")',
+                '__ref("regional_orders")',
+            ),
+        ),
+        CompileReuseInvalidationTestCase(
+            description="macro_built_reference_edit",
+            edit=lambda root: replace_project_text(
+                root,
+                "models/marts/_sqlbuild/_macros/order_source.py",
+                '"stg_orders"',
+                '"regional_orders"',
+            ),
+        ),
+        CompileReuseInvalidationTestCase(
+            description="variable_reference_change",
+            edited_args=("--vars", json.dumps({"orders_model": "regional_orders"})),
+        ),
+        CompileReuseInvalidationTestCase(
             description="model_added",
             edit=lambda root: write_project_file(
                 root,

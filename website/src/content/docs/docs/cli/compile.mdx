@@ -120,7 +120,8 @@ prints `Recording compile for reuse...` and a completion line to stderr before t
 
 Any change runs the whole compile again: every model, test, and audit is rendered again, and
 contracts and semantic validation run for the whole project. No render is carried over from the
-previous compile; rendering runs natively and does not run unchanged macro calls again. A few
+previous compile; rendering runs natively and does not run unchanged macro calls again. Every
+model's SQL references are scanned again too; no reference scan is kept between compiles. A few
 caches under `target/cache/` shorten the rest:
 
 - An unchanged model takes its column analysis from `model-analyses.bin`. Entries are keyed by

@@ -62,6 +62,7 @@ from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_F
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
+    RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
     SQL_TEST_SCAN_STORE_FILE_NAME,
 )
 from sqlbuild.compiler.frontier.constants import (
@@ -2994,6 +2995,7 @@ COMPILE_REUSE_HIT_LINE: str = "Inputs unchanged; reused the previous compile"
 REUSE_DIGESTED_FILES_KIND: str = "reuse_digested_files"
 _COMPILE_REUSE_RULES_CONFIG: str = (
     '\n[rules]\nselect = ["XSQBR"]\n\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n'
+    "\n[references]\nenforce_explicit = false\n"
 )
 _FUTURE_MTIME_OFFSET_NS: int = 5_000_000_000
 _PHASE_DURATION: re.Pattern[str] = re.compile(r"  \(\d+\.\d+s\)")
@@ -3014,6 +3016,24 @@ _COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
         "MODEL (description 'Orders tagged with the configured region.');\n\n"
         f"SELECT order_id, '@@ENV:{COMPILE_REUSE_REGION_ENV_VAR}' AS region "
         'FROM __ref("stg_orders")\n'
+    ),
+    "models/marts/_sqlbuild/_macros/order_source.py": (
+        '"""Mart relation macros."""\n\n\n'
+        "def order_source() -> str:\n"
+        '    """Return the relation orders are read from."""\n'
+        "    return '__ref(\"stg_orders\")'\n"
+    ),
+    "models/marts/referenced_orders.sql": (
+        "MODEL (description 'Orders read through a direct reference.');\n\n"
+        'SELECT order_id FROM __ref("stg_orders")\n'
+    ),
+    "models/marts/macro_sourced_orders.sql": (
+        "MODEL (description 'Orders read through a macro-built reference.');\n\n"
+        "SELECT order_id FROM @order_source()\n"
+    ),
+    "models/marts/var_sourced_orders.sql": (
+        "MODEL (description 'Orders read through a variable reference.');\n\n"
+        'SELECT order_id FROM __ref("@@orders_model")\n'
     ),
     "rules/limits.py": "MAX_NAME_LENGTH: int = 40\n",
     "rules/naming.py": (
@@ -3051,6 +3071,12 @@ def prepare_compile_reuse_project(*, project_dir: Path) -> None:
     prepare_compile_cache_invalidation_project(project_dir=project_dir)
     for relative_path, contents in _COMPILE_REUSE_EXTRA_PROJECT_FILES.items():
         write_project_file(project_dir, relative_path, contents)
+    replace_project_text(
+        project_dir,
+        "sqlbuild_project.toml",
+        'quantity_multiplier = "2"',
+        'quantity_multiplier = "2"\norders_model = "stg_orders"',
+    )
     config_path: Path = project_dir / "sqlbuild_project.toml"
     config_path.write_text(
         config_path.read_text(encoding="utf-8") + _COMPILE_REUSE_RULES_CONFIG, encoding="utf-8"
@@ -4140,15 +4166,21 @@ RETIRED_RENDER_FILES: tuple[str, ...] = (
 
 
 def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
-    """Leave every engine's fact cache and render files of other target slots from old releases."""
+    """Leave every engine's fact and reference caches and other slots' render files behind."""
 
-    written: list[Path] = [
-        compiler_cache_directory(project_dir).parent
-        / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
-        / RETIRED_FACT_CACHE_DIRECTORY_NAME
-        / "sql-tests.sqlite3"
-        for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values()
-    ]
+    written: list[Path] = []
+    for suffix in ENGINE_CACHE_NAMESPACE_SUFFIXES.values():
+        engine_root: Path = (
+            compiler_cache_directory(project_dir).parent
+            / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
+        )
+        written.extend(
+            engine_root / retired_directory / "sql-tests.sqlite3"
+            for retired_directory in (
+                RETIRED_FACT_CACHE_DIRECTORY_NAME,
+                RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
+            )
+        )
     written.extend(
         compiler_cache_directory(project_dir) / RETIRED_REUSE_DIRECTORY_NAME / name
         for name in RETIRED_RENDER_FILES
