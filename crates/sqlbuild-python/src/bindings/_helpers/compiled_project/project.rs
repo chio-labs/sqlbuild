@@ -1,6 +1,11 @@
 //! The compile's natively owned project, which producers record into and consumers read.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+
+use crate::bindings::_helpers::compiled_project::scenario_loop::ScenarioRow;
+use crate::bindings::_helpers::compiled_project::sql_test_loop::{
+    AttachedSqlTests, SqlTestSettings, TestFileRow,
+};
 
 use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -423,6 +428,35 @@ impl NativeCompiledProject {
         Ok((first..first + count)
             .map(|index| NativeFunctionInput::new(slf.clone().unbind(), index))
             .collect())
+    }
+
+    /// Attach every SQL test case, then every scenario, with the kept loop.
+    fn attach_sql_tests(
+        slf: &Bound<'_, Self>,
+        files: Vec<TestFileRow>,
+        scenarios: Vec<ScenarioRow>,
+        settings: SqlTestSettings,
+    ) -> PyResult<AttachedSqlTests> {
+        let py: Python<'_> = slf.py();
+        let (model_loop, host) = slf.borrow().attachment_loop(py)?;
+        let arities: HashMap<String, usize> = slf
+            .borrow()
+            .functions
+            .iter()
+            .filter(|record| !record.attached.return_columns.is_empty())
+            .map(|record| {
+                (
+                    record.attached.name.clone(),
+                    record.attached.arguments.len(),
+                )
+            })
+            .collect();
+        model_loop.bind(py).get().run_sql_tests(
+            host.bind(py),
+            (&files, &scenarios),
+            &settings,
+            arities,
+        )
     }
 
     /// Attach singular, then resource-attached, audits; return views and override warnings.

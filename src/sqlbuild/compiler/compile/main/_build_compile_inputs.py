@@ -14,10 +14,6 @@ from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_model_inputs,
 )
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
-from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
-    build_scenario_inputs,
-    build_test_inputs_with_cache,
-)
 from sqlbuild.compiler.compile._helpers.audit_factories.core import (
     build_audit_factory_orphan_diagnostics,
 )
@@ -59,7 +55,7 @@ from sqlbuild.compiler.compile.types import (
     SeedInput,
     SourceInput,
 )
-from sqlbuild.compiler.compiled_project.main._attach_audits import attach_audits
+from sqlbuild.compiler.compiled_project.main._attach_checks import attach_checks
 from sqlbuild.compiler.compiled_project.main._attach_resources import attach_resources
 from sqlbuild.compiler.compiled_project.main._compile_inputs_view import compile_inputs_view
 from sqlbuild.compiler.discovery.models import (
@@ -169,32 +165,19 @@ def build_compile_inputs(
             adapter_context.python_functions_inherit_default_namespace
         ),
     )
-    test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs_with_cache(
-        discovered_inputs=discovered_inputs,
-        effective_vars=model_context.effective_vars,
-        macro_context=model_context.macro_context,
-        loaded_macros=model_context.loaded_macros,
-        declaration_expansion=model_context.declaration_expansion,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-        sql_function_inputs=sql_function_inputs,
-        sql_lexical_syntax=model_context.sql_lexical_syntax,
-        scan_cache=declaration_scope.sql_test_scans,
-    )
-    scenario_inputs: tuple[CompileSqlScenarioInput, ...] = build_scenario_inputs(
-        discovered_inputs=discovered_inputs,
-        effective_vars=model_context.effective_vars,
-        macro_context=model_context.macro_context,
-        loaded_macros=model_context.loaded_macros,
-        declaration_expansion=model_context.declaration_expansion,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-        sql_lexical_syntax=model_context.sql_lexical_syntax,
-    )
+    test_inputs: tuple[CompileSqlTestInput, ...]
+    scenario_inputs: tuple[CompileSqlScenarioInput, ...]
     audit_inputs: tuple[AuditInput, ...]
     audit_diagnostics: tuple[CompilerDiagnostic, ...]
-    audit_inputs, audit_diagnostics = attach_audits(
+    test_inputs, scenario_inputs, audit_inputs, audit_diagnostics = attach_checks(
         discovered_inputs=discovered_inputs,
         native_project=model_build.native_project,
-        effective_settings=model_context.effective_settings,
+        settings=(
+            model_context.effective_settings,
+            adapter_context.value_renderer,
+            model_context.sql_lexical_syntax,
+        ),
+        scan_cache=declaration_scope.sql_test_scans,
     )
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *audit_diagnostics,

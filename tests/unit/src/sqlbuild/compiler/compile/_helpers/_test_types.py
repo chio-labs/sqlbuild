@@ -420,27 +420,6 @@ class ExtractSqlScenarioCtesErrorTestCase:
 
 
 @dataclass(frozen=True)
-class BuildScenarioInputsTestCase:
-    description: str
-    sql_body: str
-    effective_vars: dict[str, object]
-    expected_source_fixture_names: tuple[str, ...]
-    expected_ref_fixture_names: tuple[str, ...]
-    expected_seed_fixture_names: tuple[str, ...]
-    expected_expected_model_names: tuple[str, ...]
-    expected_assertion_names: tuple[str, ...]
-    expected_sql_fragment: str
-    expected_dbt_ref_fixture_names: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class BuildScenarioInputsErrorTestCase:
-    description: str
-    sql_body: str
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class ExtractSqlAnalysisExpectedBranchesTestCase:
     description: str
     sql: str

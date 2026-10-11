@@ -5,18 +5,14 @@ from __future__ import annotations
 from functools import lru_cache
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.constants import (
     DEFAULT_SQL_TEST_MODE,
-    OMITTED_CEREMONIAL_SELECT_SQL,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
-    SqlReferenceOrigin,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
 
@@ -63,30 +59,3 @@ def scanned_expected_model_names(
     if error is not None:
         raise CompileInputError(error)
     return tuple(names)
-
-
-def extract_assertion_target_model_names(
-    *,
-    assertion_sql: tuple[str, ...],
-    syntax: SqlLexicalSyntax,
-    origin: SqlReferenceOrigin | None = None,
-) -> tuple[str, ...]:
-    """Extract assertion model targets in authored order using canonical references."""
-
-    targets: list[str] = []
-    for sql in assertion_sql:
-        targets.extend(
-            reference.ref_name
-            for reference in extract_sql_references(sql=sql, syntax=syntax, origin=origin)
-            if reference.ref_kind == SqlReferenceKind.REF
-        )
-    return tuple(dict.fromkeys(targets))
-
-
-def complete_omitted_ceremonial_select(*, sql: str, syntax: SqlLexicalSyntax) -> str:
-    """Return test or scenario SQL as one statement, adding an omitted trailing `SELECT 1`."""
-
-    offset: int | None = _native.omitted_ceremonial_select(sql, syntax.native_mapping)
-    if offset is None:
-        return sql
-    return f"{sql[:offset]}{OMITTED_CEREMONIAL_SELECT_SQL}{sql[offset:]}"

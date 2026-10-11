@@ -3,51 +3,9 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.constants import TABLE_FUNCTION_RETURN_KEYS
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import (
-    CompileSqlReference,
-)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.references.types import SqlReferenceKind
-
-
-def validate_table_function_reference_arities(
-    *,
-    references: tuple[CompileSqlReference, ...],
-    argument_counts: dict[str, int],
-    owner: str,
-) -> None:
-    _validate_table_function_row_arities(
-        rows=[
-            (str(reference.ref_kind), reference.ref_name, None, reference.call_argument_count)
-            for reference in references
-        ],
-        argument_counts=argument_counts,
-        owner=owner,
-    )
-
-
-def _validate_table_function_row_arities(
-    *,
-    rows: list[tuple[str, str, str | None, int | None]],
-    argument_counts: dict[str, int],
-    owner: str,
-) -> None:
-    """Validate `(kind, name, package, argument count)` reference rows against declared counts."""
-
-    for kind, name, _, received in rows:
-        if kind != SqlReferenceKind.TABLE_FUNCTION:
-            continue
-        expected_count: int | None = argument_counts.get(name)
-        if expected_count is None or received == expected_count:
-            continue
-        expected_label: str = "argument" if expected_count == 1 else "arguments"
-        raise CompileInputError(
-            f"{owner} table function '{name}' expects {expected_count} "
-            f"{expected_label} but received {received}"
-        )
 
 
 def build_known_ref_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import random
 import re
+from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
 from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
-from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpanded_sql_test
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     SqlReferenceScan,
@@ -141,19 +143,16 @@ def macro_scannable(body: str) -> bool:
 def native_macro_outcome(*, body: str) -> str:
     """Whether the raw extractor rejects a macro-test helper `body` for calling macros."""
 
-    try:
-        _ = extract_unexpanded_sql_test(
-            sql=(
-                f"WITH h AS ({body}), __macro_actual__ AS (SELECT @m(1) AS a), "
-                "__macro_expected__ AS (SELECT 1 AS a)"
-            ),
-            file_label="tests/unit/test_logic.sql",
-            mode=SqlTestMode.MACRO,
-            syntax=SqlLexicalSyntax(),
-        )
-    except CompileInputError as error:
-        return f"calls macros {'must not call macros' in str(error)}"
-    return "calls macros False"
+    response: dict[str, Any] = _raw_extraction(
+        sql=(
+            f"WITH h AS ({body}), __macro_actual__ AS (SELECT @m(1) AS a), "
+            "__macro_expected__ AS (SELECT 1 AS a)"
+        ),
+        mode=SqlTestMode.MACRO,
+        syntax=SqlLexicalSyntax(),
+    )
+    message: str = str(response.get("error", {}).get("message", ""))
+    return f"calls macros {'must not call macros' in message}"
 
 
 def python_reference_outcome(*, body: str, syntax: SqlLexicalSyntax) -> str:
@@ -171,17 +170,41 @@ def python_reference_outcome(*, body: str, syntax: SqlLexicalSyntax) -> str:
 def native_reference_outcome(*, body: str, syntax: SqlLexicalSyntax) -> str:
     """The raw extractor's reading of a UDF-test helper `body`, as `python_reference_outcome`."""
 
-    try:
-        _, invalid_calls = extract_unexpanded_sql_test(
-            sql=(
-                f"WITH h AS ({body}), __udf_actual__ AS (SELECT 1 AS a), "
-                "__udf_expected__ AS (SELECT 1 AS a)"
-            ),
-            file_label="tests/unit/test_logic.sql",
-            mode=SqlTestMode.UDF,
-            syntax=syntax,
-        )
-    except CompileInputError as error:
-        called: re.Match[str] | None = re.search(r"must not call (\w+);", str(error))
-        return (called and f"calls {called.group(1)}") or f"error: {error}"
-    return f"malformed calls {invalid_calls}"
+    response: dict[str, Any] = _raw_extraction(
+        sql=(
+            f"WITH h AS ({body}), __udf_actual__ AS (SELECT 1 AS a), "
+            "__udf_expected__ AS (SELECT 1 AS a)"
+        ),
+        mode=SqlTestMode.UDF,
+        syntax=syntax,
+    )
+    message: str = str(response.get("error", {}).get("message", ""))
+    called: re.Match[str] | None = re.search(r"must not call (\w+);", message)
+    invalid_calls: object = response.get("tests", [{}])[0].get("invalidCalls", False)
+    return (
+        (called and f"calls {called.group(1)}")
+        or (message and f"error: {message}")
+        or f"malformed calls {invalid_calls}"
+    )
+
+
+def _raw_extraction(*, sql: str, mode: SqlTestMode, syntax: SqlLexicalSyntax) -> dict[str, Any]:
+    """The native extractor's response for one test before expansion."""
+
+    request: dict[str, object] = {
+        "syntax": {_SYNTAX_FIELDS[key]: value for key, value in syntax.native_mapping.items()},
+        "tests": [
+            {"sql": sql, "fileLabel": "tests/unit/test_logic.sql", "mode": mode.value, "raw": True}
+        ],
+    }
+    return json.loads(_native.extract_sql_tests_json(json.dumps(request)))
+
+
+_SYNTAX_FIELDS: dict[str, str] = {
+    "backslash_escape_quotes": "backslashEscapeQuotes",
+    "escape_string_prefix": "escapeStringPrefix",
+    "raw_string_prefix": "rawStringPrefix",
+    "triple_quoted_strings": "tripleQuotedStrings",
+    "nested_block_comments": "nestedBlockComments",
+    "line_comment_prefixes": "lineCommentPrefixes",
+}

@@ -1,7 +1,7 @@
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::compiler::main::sql_scenario_extraction::extract_scenario_json;
-use crate::compiler::tests::test_types::ScenarioExtractionTestCase;
+use crate::sql_test_attachment::tests::helpers::scenario_json;
+use crate::sql_test_attachment::tests::test_types::ScenarioExtractionTestCase;
 
 #[test]
 fn given_scenarios_when_extracting_natively_then_outcomes_are_returned() {
@@ -85,8 +85,8 @@ fn given_scenarios_when_extracting_natively_then_outcomes_are_returned() {
 
     for test_case in test_cases {
         assert_eq!(
-            extract_scenario_json(test_case.sql, "tests/scenarios/orders.sql", &syntax),
-            Ok(test_case.expected_json.to_owned()),
+            scenario_json(test_case.sql, "tests/scenarios/orders.sql", &syntax),
+            test_case.expected_json,
             "{}",
             test_case.description
         );

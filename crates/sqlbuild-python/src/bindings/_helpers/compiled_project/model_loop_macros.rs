@@ -156,6 +156,16 @@ pub(crate) fn argument_references(
 }
 
 impl<'py> MacroClasses<'py> {
+    /// The names of the project's loaded macros.
+    pub(crate) fn macro_names(&self) -> PyResult<std::collections::HashSet<String>> {
+        let py: Python<'py> = self.macro_context.py();
+        self.loaded_macros
+            .bind(py)
+            .iter()
+            .map(|(name, _)| name.extract())
+            .collect()
+    }
+
     /// Typed reference function by `SqlResourceRefKind` value, from the expansion classes.
     fn ref_functions(&self) -> PyResult<Bound<'py, PyDict>> {
         let py: Python<'py> = self.macro_context.py();

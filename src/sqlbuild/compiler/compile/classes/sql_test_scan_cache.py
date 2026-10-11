@@ -24,8 +24,6 @@ class SqlTestScanCache:
             None if cache_dir is None else cache_dir / SQL_TEST_SCAN_STORE_FILE_NAME
         )
         self._store: _native.SqlTestScanStore | None = None
-        self._hits: int = 0
-        self._misses: int = 0
 
     def read[T](
         self,
@@ -42,10 +40,7 @@ class SqlTestScanCache:
             return None
         found: bytes | None = store.get([algorithm, syntax.cache_key, *parts])
         decoded: T | None = None if found is None else decode(found)
-        if decoded is None:
-            self._misses += 1
-        else:
-            self._hits += 1
+        store.record(decoded is not None)
         return decoded
 
     def write(
@@ -60,14 +55,20 @@ class SqlTestScanCache:
     def save(self) -> None:
         """Persist results stored by this compile and report hit and miss counts."""
 
-        record_compile_metric(metric="sql_test_scan_cache_hits", value=self._hits)
-        record_compile_metric(metric="sql_test_scan_cache_misses", value=self._misses)
+        hits, misses = (0, 0) if self._store is None else self._store.counts()
+        record_compile_metric(metric="sql_test_scan_cache_hits", value=hits)
+        record_compile_metric(metric="sql_test_scan_cache_misses", value=misses)
         if self._store is None or self._path is None:
             return
         try:
             _ = self._store.save(str(self._path))
         except (OSError, RuntimeError) as error:
             logging.getLogger(__name__).debug("SQL test scan store not saved: %s", error)
+
+    def opened(self) -> _native.SqlTestScanStore | None:
+        """The native store this compile reads and writes, or None when it has none."""
+
+        return self._opened()
 
     def _opened(self) -> _native.SqlTestScanStore | None:
         if self._path is None:

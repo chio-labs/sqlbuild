@@ -26,7 +26,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     load_project_macros,
 )
-from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpanded_sql_test
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
@@ -45,7 +44,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSourceInput,
     CompileSqlFunctionInput,
     CompileSqlReference,
-    CompileSqlTestCtes,
     DeclarationExpansionContext,
     DeclarationResolutionContext,
     DeclarationRuntimeProjection,
@@ -63,7 +61,6 @@ from sqlbuild.compiler.compile.types import (
     ModelInput,
     SeedInput,
     SourceInput,
-    SqlTestMode,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
@@ -103,7 +100,6 @@ from sqlbuild.compiler.scopes.models import (
     ScopeLookup,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.providers import Provider
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
@@ -786,28 +782,6 @@ def diagnostic_spans(
         (location.path.as_posix(), location.line, location.column, location.end_column)
         for location in locations
     )
-
-
-def extract_test_ctes(
-    *, ctes: tuple[tuple[str, str], ...], file_label: str, mode: SqlTestMode
-) -> CompileSqlTestCtes:
-    """Extract a SQL test made of `ctes` before expansion under generic SQL rules."""
-
-    return extract_test_sql(
-        sql="WITH " + ", ".join(f"{name} AS ({body})" for name, body in ctes),
-        file_label=file_label,
-        mode=mode,
-    )
-
-
-def extract_test_sql(
-    *, sql: str, file_label: str, mode: SqlTestMode = SqlTestMode.MODEL
-) -> CompileSqlTestCtes:
-    """Extract one SQL test before expansion under generic SQL rules."""
-
-    return extract_unexpanded_sql_test(
-        sql=sql, file_label=file_label, mode=mode, syntax=SqlLexicalSyntax()
-    )[0]
 
 
 def usage_consumers(model_input: ModelInput) -> set[ResourceIdentity | DeclarationIdentity]:

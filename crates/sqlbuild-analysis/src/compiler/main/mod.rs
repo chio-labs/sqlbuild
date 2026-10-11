@@ -1,7 +1,8 @@
 pub mod function_type_validation;
-pub mod sql_scenario_extraction;
+pub mod sql_scenario_classification;
 pub mod sql_test_assembly;
 pub mod sql_test_chains;
+pub mod sql_test_classification;
 pub mod sql_test_difference_sampling;
 pub mod sql_test_extraction;
 pub mod sql_test_fixture_facts;

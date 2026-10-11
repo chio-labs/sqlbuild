@@ -10,7 +10,6 @@ from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
     get_validated_model_cursor_intrinsics,
-    reject_cursor_intrinsics,
     render_cursor_intrinsics,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -114,24 +113,6 @@ def test_given_invalid_intrinsic_when_validating_then_raises(
             config_values={"materialized": "incremental", "cursor": "event_time"},
             model_name="events",
         )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        CursorIntrinsicErrorTestCase(
-            description="rejects an audit intrinsic",
-            sql="SELECT __cursor_start()",
-            expected_error_fragment="only supported",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_unsupported_sql_context_when_rejecting_then_raises(
-    test_case: CursorIntrinsicErrorTestCase,
-) -> None:
-    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        reject_cursor_intrinsics(sql=test_case.sql, context="Audit 'freshness'")
 
 
 @pytest.mark.parametrize(

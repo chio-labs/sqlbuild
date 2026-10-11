@@ -4207,23 +4207,6 @@ store_misshapen_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_repl
 )
 
 
-def ignore_test_text_in_scan_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Key stored SQL-test scans by file path only, so an edited test reads a stale scan."""
-
-    read: Callable[..., object] = SqlTestScanCache.read
-    write: Callable[..., None] = SqlTestScanCache.write
-
-    def path_only(kwargs: dict[str, Any]) -> dict[str, Any]:
-        return {**kwargs, "parts": kwargs["parts"][:1]}
-
-    monkeypatch.setattr(
-        SqlTestScanCache, "read", lambda self, **kwargs: read(self, **path_only(kwargs))
-    )
-    monkeypatch.setattr(
-        SqlTestScanCache, "write", lambda self, **kwargs: write(self, **path_only(kwargs))
-    )
-
-
 def restore_sql_test_scan_writes(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Store real scan results again after an arrangement replaced them."""
 

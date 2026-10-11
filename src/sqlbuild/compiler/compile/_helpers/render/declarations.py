@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from dataclasses import replace
 from functools import partial
@@ -10,10 +9,8 @@ from pathlib import Path
 from types import MappingProxyType
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.constants import MACRO_TOKEN, SQL_QUOTE_TOKENS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    DeclarationExpansionContext,
     DeclarationExpansionResult,
     DeclarationResolutionContext,
     DeclarationRuntimeProjection,
@@ -47,36 +44,18 @@ from sqlbuild.compiler.scopes.models import (
     ScopeIndex,
     ScopeLookup,
     UsageRecord,
-    VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
     ResourceKind,
     ScopeKind,
-    UsageKind,
 )
-from sqlbuild.compiler.sql_analysis.main._skip_block_comment import skip_block_comment
-from sqlbuild.compiler.sql_analysis.main._skip_line_comment import skip_line_comment
-from sqlbuild.compiler.sql_analysis.main._skip_quoted_text import skip_quoted_text
 from sqlbuild.spec.contracts.models import SchemaColumn
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError, SqlValueValidationError
 from sqlbuild.sql_values.main.validate_rendered_size import validate_rendered_sql_value_size
 from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
 
-_ENUM_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
-    r"@enum\s*\(\s*(?P<quote>['\"])(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
-    r"(?P=quote)\s*\)\s*\.\s*(?P<member>[A-Za-z_][A-Za-z0-9_]*)"
-)
-_CONSTANT_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
-    r"@const\s*\(\s*(?P<quote>['\"])(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
-    r"(?P=quote)\s*\)"
-)
-_DECLARATION_REFERENCE_START_PATTERN: re.Pattern[str] = re.compile(r"@(?P<kind>enum|const)\b")
-_DECLARATION_SCAN_SPECIAL: re.Pattern[str] = re.compile(r"['\"`$@/-]")
-_CONTEXT: str = "Enum and constant expansion"
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
-_ENUM_REFERENCE_KIND: str = "enum"
-_CONSTANT_REFERENCE_KIND: str = "const"
 
 
 def build_public_declaration_indexes(
@@ -181,67 +160,6 @@ def resolve_declaration_context(
     if projected:
         report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_contexts")
     return context
-
-
-def declaration_usage_records(
-    *, sql: str, resource: ResourceIdentity, declarations: DeclarationResolutionContext
-) -> tuple[UsageRecord, ...]:
-    """Collect declaration usages with path or expected-model provenance."""
-
-    usages: list[UsageRecord] = []
-    cursor: int = 0
-    while (reference_start := _find_next_reference_start(sql=sql, start=cursor)) is not None:
-        start_match: re.Match[str] | None = _DECLARATION_REFERENCE_START_PATTERN.match(
-            sql, reference_start
-        )
-        if start_match is None:
-            break
-        is_enum: bool = start_match.group("kind") == _ENUM_REFERENCE_KIND
-        match: re.Match[str] | None = (
-            _ENUM_REFERENCE_PATTERN.match(sql, reference_start)
-            if is_enum
-            else _CONSTANT_REFERENCE_PATTERN.match(sql, reference_start)
-        )
-        if match is None:
-            cursor = start_match.end()
-            continue
-        name: str = match.group("name")
-        visibility: tuple[VisibilityRecord, ...] = (
-            declarations.enum_visibility.get(name, ())
-            if is_enum
-            else declarations.constant_visibility.get(name, ())
-        )
-        for record in usage_visibility(visibility=visibility, consumer=resource):
-            usages.append(
-                UsageRecord(
-                    consumer=resource,
-                    declaration=record.declaration,
-                    kind=UsageKind.RUNTIME,
-                    through=record.through,
-                )
-            )
-        cursor = match.end()
-    return tuple(dict.fromkeys(usages))
-
-
-def resolve_declaration_expansion(
-    *,
-    context: DeclarationExpansionContext,
-    file_path: Path,
-    resource: ResourceIdentity | None = None,
-) -> DeclarationExpansionContext:
-    """Return an expansion context scoped to one authored resource path."""
-
-    if context.resolver is None or not context.resolver.lookup.index.declarations:
-        return context
-    return replace(
-        context,
-        declarations=resolve_declaration_context(
-            resolver=context.resolver,
-            file_path=file_path,
-            resource=resource,
-        ),
-    )
 
 
 def build_model_declaration_indexes(
@@ -393,22 +311,6 @@ def expand_scanned_declaration_references(  # noqa: PLR0913
     )
 
 
-def usage_visibility(
-    *,
-    visibility: tuple[VisibilityRecord, ...],
-    consumer: ResourceIdentity | DeclarationIdentity,
-) -> tuple[VisibilityRecord, ...]:
-    if not isinstance(consumer, ResourceIdentity) or consumer.kind not in {
-        ResourceKind.TEST,
-        ResourceKind.SCENARIO,
-    }:
-        return visibility
-    relationship_visibility: tuple[VisibilityRecord, ...] = tuple(
-        record for record in visibility if record.through is not None
-    )
-    return relationship_visibility or visibility
-
-
 def _with_declaration[T: EnumDeclaration | ConstantDeclaration](
     *, declarations: dict[str, T], declaration: T, kind: str
 ) -> dict[str, T]:
@@ -468,28 +370,3 @@ def render_enum_member_value(*, value: str | int) -> str:
         return str(value)
     escaped_value: str = value.replace("'", "''")
     return f"'{escaped_value}'"
-
-
-def _find_next_reference_start(*, sql: str, start: int) -> int | None:
-    if sql.find("@enum", start) < 0 and sql.find("@const", start) < 0:
-        return None
-    index: int = start
-    while index < len(sql):
-        special: re.Match[str] | None = _DECLARATION_SCAN_SPECIAL.search(sql, index)
-        if special is None:
-            return None
-        index = special.start()
-        character: str = sql[index]
-        if character in SQL_QUOTE_TOKENS:
-            index = skip_quoted_text(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if sql.startswith("--", index):
-            index = skip_line_comment(sql=sql, start=index)
-            continue
-        if sql.startswith("/*", index):
-            index = skip_block_comment(sql=sql, start=index, context=_CONTEXT)
-            continue
-        if character == MACRO_TOKEN and _DECLARATION_REFERENCE_START_PATTERN.match(sql, index):
-            return index
-        index += 1
-    return None

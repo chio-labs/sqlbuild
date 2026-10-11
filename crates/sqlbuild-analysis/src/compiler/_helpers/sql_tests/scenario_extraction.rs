@@ -1,6 +1,5 @@
 //! `extract_sql_scenario_ctes`: the top-level scan, the independence check, then classification.
 
-use serde::Serialize;
 use sqlbuild_scopes::relationship_names::main::top_level_ctes::scan_top_level_ctes;
 use sqlbuild_scopes::relationship_names::models::{RelationshipSource, TopLevelCtes};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
@@ -8,6 +7,7 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use crate::compiler::_helpers::sql_tests::check_independence::{
     IndependenceCheck, independence_error,
 };
+use crate::compiler::models::SqlScenarioCtes;
 
 type Cte = (String, String);
 
@@ -20,70 +20,33 @@ const ASSERT_PREFIX: &str = "__assert__";
 const MACRO_PREFIX: &str = "__macro__";
 const SCENARIO_CONTEXT: &str = "SQL scenario";
 
-#[derive(Debug, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ClassifiedScenario {
-    authored: Vec<Cte>,
-    expected: Vec<Cte>,
-    assertions: Vec<Cte>,
-    source_fixtures: Vec<String>,
-    ref_fixtures: Vec<String>,
-    seed_fixtures: Vec<String>,
-    dbt_ref_fixtures: Vec<String>,
-    expected_models: Vec<String>,
-    assertion_names: Vec<String>,
-}
-
-/// One scenario's error, or its classification.
-#[derive(Debug, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ScenarioOutcome {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    scenario: Option<ClassifiedScenario>,
-}
-
-/// The scenario's classification or error, as JSON; independence errors come first.
-pub(crate) fn extract_scenario_json(
+/// The scenario's classification or error; independence errors come first.
+pub(crate) fn extract_scenario(
     sql: &str,
     file: &str,
     syntax: &LexicalSyntax,
-) -> Result<String, String> {
-    let outcome: ScenarioOutcome =
-        match scan_top_level_ctes(sql, file, RelationshipSource::Scenario, syntax) {
-            TopLevelCtes::Failed(message) => ScenarioOutcome {
-                error: Some(message),
-                ..ScenarioOutcome::default()
-            },
-            TopLevelCtes::Scanned(ctes) => {
-                let independence: Option<String> = independence_error(
-                    &IndependenceCheck {
-                        ctes: &ctes,
-                        expected_prefix: EXPECTED_PREFIX,
-                        assertion_prefix: ASSERT_PREFIX,
-                        file_label: file,
-                        context_label: SCENARIO_CONTEXT,
-                    },
-                    syntax,
-                );
-                match independence.map_or_else(|| classify(ctes, file), Err) {
-                    Ok(scenario) => ScenarioOutcome {
-                        scenario: Some(scenario),
-                        ..ScenarioOutcome::default()
-                    },
-                    Err(message) => ScenarioOutcome {
-                        error: Some(message),
-                        ..ScenarioOutcome::default()
-                    },
-                }
-            }
-        };
-    serde_json::to_string(&outcome).map_err(|error| error.to_string())
+) -> Result<SqlScenarioCtes, String> {
+    let ctes = match scan_top_level_ctes(sql, file, RelationshipSource::Scenario, syntax) {
+        TopLevelCtes::Failed(message) => return Err(message),
+        TopLevelCtes::Scanned(ctes) => ctes,
+    };
+    if let Some(message) = independence_error(
+        &IndependenceCheck {
+            ctes: &ctes,
+            expected_prefix: EXPECTED_PREFIX,
+            assertion_prefix: ASSERT_PREFIX,
+            file_label: file,
+            context_label: SCENARIO_CONTEXT,
+        },
+        syntax,
+    ) {
+        return Err(message);
+    }
+    classify(ctes, file)
 }
 
-fn classify(ctes: Vec<Cte>, file: &str) -> Result<ClassifiedScenario, String> {
-    let mut scenario: ClassifiedScenario = ClassifiedScenario::default();
+fn classify(ctes: Vec<Cte>, file: &str) -> Result<SqlScenarioCtes, String> {
+    let mut scenario: SqlScenarioCtes = SqlScenarioCtes::default();
     for cte in ctes {
         let name: &str = &cte.0;
         if let Some(value) = name.strip_prefix(SOURCE_PREFIX) {

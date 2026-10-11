@@ -4,13 +4,17 @@ use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
+use sqlbuild_analysis::compiled_project::main::located_scan_error::located_scan_error;
 use sqlbuild_analysis::compiled_project::main::text_position::text_position;
+use sqlbuild_analysis::compiled_project::models::ScanFaultOrigin;
 use sqlbuild_analysis::compiled_project::models::TextPosition;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
-use sqlbuild_sqltext::sql_references::models::{InvalidReferenceCall, ReferenceExtraction};
+use sqlbuild_sqltext::sql_references::models::{
+    InvalidReferenceCall, ReferenceExtraction, SqlReference,
+};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::bindings::_helpers::compiled_project::model_loop::LoopContext;
+use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, compile_error};
 
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 const MODEL_RESOURCE: &str = "model";
@@ -46,12 +50,13 @@ pub(crate) fn report_invalid_calls(
             .get(&invalid_call.call)
             .and_then(|starts| starts.get(*occurrence).copied());
         *occurrence += 1;
-        report(context, invalid_call, start, origin)?;
+        report_invalid_call(context, invalid_call, start, origin)?;
     }
     Ok(())
 }
 
-fn report(
+/// Report one rejected call as P012, at `start` in the origin's contents when given.
+pub(crate) fn report_invalid_call(
     context: &LoopContext<'_, '_>,
     invalid_call: &InvalidReferenceCall,
     start: Option<usize>,
@@ -120,4 +125,34 @@ fn report(
         .report_diagnostic
         .call((), Some(&arguments))?;
     Ok(())
+}
+
+/// `extract_sql_references(sql, origin=file)`, reporting rejected calls and located scan errors.
+pub(crate) fn origin_references(
+    context: &LoopContext<'_, '_>,
+    syntax: &LexicalSyntax,
+    sql: &str,
+    file: (&str, &str, &str),
+) -> PyResult<Vec<SqlReference>> {
+    let (file_path, relative_path, contents) = file;
+    let scanned = match extract_sql_references(sql, syntax) {
+        ReferenceExtraction::Extracted(scanned) => scanned,
+        ReferenceExtraction::Failed(failure) => {
+            let origin: ScanFaultOrigin<'_> = ScanFaultOrigin {
+                relative_path,
+                contents,
+                query_sql: sql,
+                passes: None,
+            };
+            let message: String = located_scan_error(&failure, sql, &origin, syntax);
+            return Err(compile_error(context.classes, &message, None));
+        }
+    };
+    report_invalid_calls(
+        context,
+        syntax,
+        &scanned.invalid_calls,
+        (None, relative_path, file_path, contents),
+    )?;
+    Ok(scanned.references)
 }

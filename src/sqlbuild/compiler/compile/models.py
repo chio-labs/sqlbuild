@@ -728,21 +728,6 @@ class CompileSqlScenarioCte:
 
 
 @dataclass(frozen=True)
-class CompileSqlScenarioCtes:
-    """Extracted top-level SQL-native scenario CTE semantics."""
-
-    authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class FunctionArgument:
     """One SQL function argument with an adapter-native type string."""
 
@@ -1338,41 +1323,6 @@ class CompileSqlTestCte:
 
 
 @dataclass(frozen=True)
-class CompileModelSqlTestCtes:
-    """Extracted model-mode SQL-native test CTE semantics."""
-
-    authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    macro_mocks: dict[str, str] = field(default_factory=dict)
-    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_table_function_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    assertion_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompileDirectLogicSqlTestCtes:
-    """Extracted direct-logic SQL-native test CTE semantics."""
-
-    mode: SqlTestMode
-    helper_ctes: tuple[CompileSqlTestCte, ...]
-    actual_cte: CompileSqlTestCte
-    expected_cte: CompileSqlTestCte
-
-
-@dataclass(frozen=True)
-class CompileSqlTestCtes:
-    """Extracted top-level SQL-native test CTE semantics."""
-
-    mode: SqlTestMode
-    payload: CompileModelSqlTestCtes | CompileDirectLogicSqlTestCtes
-
-
-@dataclass(frozen=True)
 class CompileModelSqlTestInputPayload:
     """Model-mode SQL test compile payload."""
 
@@ -1390,24 +1340,6 @@ class CompileModelSqlTestInputPayload:
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
     read_helper_names: tuple[str, ...] = field(default_factory=tuple)
     reference_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class SqlTestReads:
-    """Helpers one SQL test reads and the unmocked models they and its expected rows reference."""
-
-    read_helper_names: tuple[str, ...]
-    reference_target_model_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class SqlTestCteGraph:
-    """Which authored helper and mock CTEs one SQL test reads, keyed by case-folded name."""
-
-    ctes: dict[str, CompileSqlTestCte]
-    reads: dict[str, tuple[str, ...]]
-    parsed_reads: dict[str, tuple[str, ...]]
-    reader_reads: tuple[str, ...]
 
 
 @dataclass(frozen=True)

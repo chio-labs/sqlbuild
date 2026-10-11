@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import chain
 from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
@@ -14,9 +15,7 @@ import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile._helpers.sql_tests.core import (
-    extract_assertion_target_model_names,
-)
+from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
@@ -596,8 +595,8 @@ def build_scenario_from_test_case(
         CompileSqlScenarioCte(name=f"__expected__{model_name}", sql_body="SELECT 1")
         for model_name in test_case.expected_model_names
     )
-    assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
-        assertion_sql=test_case.assertion_sql_bodies, syntax=_GENERIC_SQL_SYNTAX
+    assertion_target_model_names: tuple[str, ...] = _assertion_ref_targets(
+        test_case.assertion_sql_bodies
     )
     return CompiledSqlScenario(
         key=scenario_key,
@@ -1484,3 +1483,16 @@ def native_audit_scope_deps(
         CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
         for kind, name in audit_deps[0]
     )
+
+
+def _assertion_ref_targets(assertion_sql: tuple[str, ...]) -> tuple[str, ...]:
+    """The unique `__ref` targets the assertion bodies read, in authored order."""
+
+    references: Iterator[CompileSqlReference] = chain.from_iterable(
+        scan_sql_reference_calls(sql=sql, syntax=_GENERIC_SQL_SYNTAX).references
+        for sql in assertion_sql
+    )
+    refs: Iterator[CompileSqlReference] = filter(
+        lambda reference: reference.ref_kind == SqlReferenceKind.REF, references
+    )
+    return tuple(dict.fromkeys(reference.ref_name for reference in refs))

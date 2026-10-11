@@ -7,9 +7,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{
     PyBool, PyBoolMethods, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods,
 };
-use sqlbuild_analysis::compiled_project::main::located_scan_error::located_scan_error;
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
-use sqlbuild_analysis::compiled_project::models::ScanFaultOrigin;
 use sqlbuild_attachments::audits::main::attached_model_reference_error::attached_model_reference_error;
 use sqlbuild_attachments::audits::main::audit_reference_error::audit_reference_error;
 use sqlbuild_attachments::audits::main::render_attached_audit::render_attached_audit;
@@ -21,15 +19,14 @@ use sqlbuild_attachments::audits::models::{
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
 use sqlbuild_attachments::functions::models::KnownResources;
-use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
-use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
+use sqlbuild_sqltext::sql_references::models::SqlReference;
 
 use crate::bindings::_helpers::attachments::argument_values::argument_pairs;
 use crate::bindings::_helpers::compiled_project::audit_views::{AttachedAudit, AttachedTarget};
 use crate::bindings::_helpers::compiled_project::model_loop::{
-    LoopContext, NativeModelLoop, compile_error,
+    LoopContext, NativeModelLoop, compile_error, helped_compile_error,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
+use crate::bindings::_helpers::compiled_project::model_loop_calls::origin_references;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::reference_row;
 use crate::bindings::_helpers::compiled_project::model_loop_named::{
@@ -547,29 +544,10 @@ impl<'py> AuditScope<'_, 'py> {
 
     /// One SQL text's references, reporting rejected calls against the audit file.
     fn references(&self, sql: &str, file: (&str, &str, &str)) -> PyResult<Vec<ReferenceRow>> {
-        let (file_path, relative_path, contents) = file;
-        let syntax = &self.model_loop.syntax;
-        let scanned = match extract_sql_references(sql, syntax) {
-            ReferenceExtraction::Extracted(scanned) => scanned,
-            ReferenceExtraction::Failed(failure) => {
-                let origin: ScanFaultOrigin<'_> = ScanFaultOrigin {
-                    relative_path,
-                    contents,
-                    query_sql: sql,
-                    passes: None,
-                };
-                let message: String = located_scan_error(&failure, sql, &origin, syntax);
-                return Err(compile_error(self.context.classes, &message, None));
-            }
-        };
-        report_invalid_calls(
-            self.context,
-            syntax,
-            &scanned.invalid_calls,
-            (None, relative_path, file_path, contents),
-        )?;
-        let mut rows: Vec<ReferenceRow> = Vec::with_capacity(scanned.references.len());
-        for row in scanned.references.iter().map(reference_row) {
+        let references: Vec<SqlReference> =
+            origin_references(self.context, &self.model_loop.syntax, sql, file)?;
+        let mut rows: Vec<ReferenceRow> = Vec::with_capacity(references.len());
+        for row in references.iter().map(reference_row) {
             if !rows.contains(&row) {
                 rows.push(row);
             }
@@ -616,18 +594,7 @@ impl<'py> AuditScope<'_, 'py> {
 
     /// `CompileInputError` with `error`'s message and help.
     fn config_error(&self, error: &ConfigError) -> PyErr {
-        let raised = (|| {
-            let keywords: Bound<'_, PyDict> = PyDict::new(self.context.host.py());
-            keywords.set_item("help", &error.help)?;
-            self.context
-                .classes
-                .compile_error
-                .call((&error.message,), Some(&keywords))
-        })();
-        match raised {
-            Ok(instance) => PyErr::from_value(instance),
-            Err(failure) => failure,
-        }
+        helped_compile_error(self.context.classes, &error.message, error.help.as_deref())
     }
 
     /// The resolved severity and run scope; a measurement (`None`) severity reads no default.

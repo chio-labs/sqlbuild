@@ -44,14 +44,19 @@ use crate::bindings::_helpers::compiled_project::model_loop_visibility::{
     ModelVisibility, VisibilityClasses, VisibilityModel,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::scenario_loop::ScenarioRow;
 use crate::bindings::_helpers::compiled_project::source_loop::{
     SourceRow, SourceSettings, attached_sources,
 };
 use crate::bindings::_helpers::compiled_project::source_views::{
     AttachedSource, NativeSourceInput, retain_sources,
 };
+use crate::bindings::_helpers::compiled_project::sql_test_loop::{
+    AttachedSqlTests, SqlTestSettings, TestFileRow, TestScope,
+};
 use crate::bindings::_helpers::discovery::project_files::python_semantics;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
+use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations,
@@ -73,10 +78,13 @@ use sqlbuild_analysis::compiled_project::models::{
 };
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
+use sqlbuild_attachments::functions::models::KnownResources;
+use sqlbuild_attachments::test_targets::models::TargetCatalog;
 use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
+use std::collections::{HashMap, HashSet};
 
 const MATERIALIZED_KEY: &str = "materialized";
 const CURSOR_KEY: &str = "cursor";
@@ -89,6 +97,7 @@ const DECLARED_ATTRIBUTE: &str = "declared";
 const VALIDATE_METHOD: &str = "validate";
 const FILE_PATH_ARGUMENT: &str = "file_path";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
+const HELP_ARGUMENT: &str = "help";
 const ERROR_ARGUMENT: &str = "error";
 const VALUES_ARGUMENT: &str = "values";
 const CODE_ARGUMENT: &str = "code";
@@ -363,6 +372,73 @@ impl NativeModelLoop {
             contracts: &contracts,
         };
         attached_audits(self, &context, (files, owners), settings)
+    }
+
+    /// Attach every SQL test case, then every scenario, against the project's resources.
+    pub(crate) fn run_sql_tests<'py>(
+        &self,
+        host: &Bound<'py, PyAny>,
+        rows: (&[TestFileRow], &[ScenarioRow]),
+        settings: &SqlTestSettings,
+        table_function_arities: HashMap<String, usize>,
+    ) -> PyResult<AttachedSqlTests> {
+        let py: Python<'py> = host.py();
+        let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
+        let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
+        let context: LoopContext<'_, 'py> = LoopContext {
+            host,
+            classes: &classes,
+            contracts: &contracts,
+        };
+        let validator: Bound<'py, NativeModelValidator> =
+            self.validator.bind(py).downcast()?.clone();
+        let known: KnownResources<'_> = validator.get().known_resources();
+        let resolver: &Bound<'py, PyAny> = &classes.external_resolver;
+        let extended =
+            |names: &HashSet<String>, method: &str, keyword: &str| -> PyResult<HashSet<String>> {
+                let mut names: HashSet<String> = names.clone();
+                if !resolver.is_none() {
+                    let arguments: Bound<'py, PyDict> = PyDict::new(py);
+                    arguments.set_item(keyword, &names)?;
+                    let added: HashSet<String> = resolver
+                        .call_method(method, (), Some(&arguments))?
+                        .extract()?;
+                    names.extend(added);
+                }
+                Ok(names)
+            };
+        let models: HashSet<String> = extended(
+            known.models,
+            "extend_sql_test_model_names",
+            "known_model_names",
+        )?;
+        let seeds: HashSet<String> = extended(
+            known.seeds,
+            "extend_sql_test_seed_names",
+            "known_seed_names",
+        )?;
+        let sources: HashSet<String> = extended(
+            known.sources,
+            "extend_sql_test_source_names",
+            "known_source_names",
+        )?;
+        let scope: TestScope<'_, 'py> = TestScope {
+            model_loop: self,
+            context: &context,
+            settings,
+            catalog: TargetCatalog {
+                models,
+                sources,
+                seeds,
+                table_functions: known.table_functions.clone(),
+                macros: classes.macros.macro_names()?,
+            },
+            functions: known.functions.clone(),
+            table_function_arities,
+        };
+        let tests: Vec<Py<PyAny>> = scope.attached(rows.0)?;
+        let scenarios: Vec<Py<PyAny>> = scope.attached_scenarios(rows.1)?;
+        Ok((tests, scenarios))
     }
 
     /// Attach every SQL, then Python, function in order, checking table function call arities.
@@ -741,6 +817,23 @@ pub(crate) fn compile_error(classes: &LoopClasses<'_>, message: &str, code: Opti
         if let Some(code) = code {
             keywords.set_item(CODE_ARGUMENT, code)?;
         }
+        classes.compile_error.call((message,), Some(&keywords))
+    })();
+    match raised {
+        Ok(instance) => PyErr::from_value(instance),
+        Err(failure) => failure,
+    }
+}
+
+/// `CompileInputError(message, help=help)`.
+pub(crate) fn helped_compile_error(
+    classes: &LoopClasses<'_>,
+    message: &str,
+    help: Option<&str>,
+) -> PyErr {
+    let raised = (|| {
+        let keywords: Bound<'_, PyDict> = PyDict::new(classes.compile_error.py());
+        keywords.set_item(HELP_ARGUMENT, help)?;
         classes.compile_error.call((message,), Some(&keywords))
     })();
     match raised {

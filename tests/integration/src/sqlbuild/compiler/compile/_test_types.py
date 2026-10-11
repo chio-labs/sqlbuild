@@ -64,12 +64,3 @@ class FailingMacroProjectParityTestCase:
     expected_minimum_errors_after_macro_runs: int
     expected_minimum_distinct_errors: int
     expected_mismatches: list[tuple[object, object, object]]
-
-
-@dataclass(frozen=True)
-class DeclarationUsageTestCase:
-    """SQL texts whose declaration usages Python's usage walk recorded in a golden."""
-
-    description: str
-    texts: tuple[str, ...]
-    expected_differences: list[tuple[int, str, object, object]]

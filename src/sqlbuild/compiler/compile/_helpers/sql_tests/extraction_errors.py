@@ -6,27 +6,16 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
-from sqlbuild.compiler.compile._helpers.refs.references import (
-    reference_call_location,
-    reference_call_syntax_key,
-    scan_sql_reference_calls,
-)
 from sqlbuild.compiler.compile._helpers.sql_tests.native import (
     authored_sql_test_cte_batch,
-    authored_sql_test_ctes,
 )
-from sqlbuild.compiler.compile.constants import REFERENCE_CALL_SYNTAX_CODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestExtractionError
-from sqlbuild.compiler.compile.models import CompilerDiagnostic, SqlReferenceScan
-from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import SourceLocation
 
 _TAB_SIZE: int = 8
 _LINE_BREAK: str = "\n"
@@ -134,57 +123,6 @@ def _located_error(
         code=error.code,
         help=error.help,
     )
-
-
-def report_authored_invalid_calls(
-    *,
-    test_file: DiscoveredSqlTestFile,
-    test_block: DiscoveredSqlTestBlock,
-    actual_cte_name: str,
-    syntax: SqlLexicalSyntax,
-) -> int:
-    """Report each malformed reference call outside the actual CTE at its own location."""
-
-    ctes: tuple[tuple[str, int, str], ...] = authored_sql_test_ctes(
-        sql=test_block.sql_body, file_label=str(test_file.relative_path), syntax=syntax
-    )
-    reported: int = 0
-    name: str
-    body_start: int
-    body: str
-    for name, body_start, body in ctes:
-        if name == actual_cte_name:
-            continue
-        scan: SqlReferenceScan = scan_sql_reference_calls(sql=body, syntax=syntax)
-        for invalid_call in scan.invalid_calls:
-            offset: int | None = authored_file_offset(
-                test_file=test_file,
-                test_block=test_block,
-                body_offset=body_start + invalid_call.start,
-            )
-            if offset is None:
-                return reported
-            location: SourceLocation = reference_call_location(
-                path=test_file.relative_path,
-                text=test_file.contents,
-                start=offset,
-                call=invalid_call.call,
-            )
-            report_compile_diagnostic(
-                key=reference_call_syntax_key(
-                    file_path=test_file.file_path, call=invalid_call.call, location=location
-                ),
-                diagnostic=CompilerDiagnostic(
-                    phase=DiagnosticPhase.COMPILE,
-                    severity=DiagnosticSeverity.ERROR,
-                    code=REFERENCE_CALL_SYNTAX_CODE,
-                    message=invalid_call.message,
-                    location=location,
-                    help=invalid_call.help,
-                ),
-            )
-            reported += 1
-    return reported
 
 
 def authored_file_offset(

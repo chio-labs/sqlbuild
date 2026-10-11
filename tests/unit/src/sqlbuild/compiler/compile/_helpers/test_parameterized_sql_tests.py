@@ -3,14 +3,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_parameters
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -361,17 +359,9 @@ def test_given_adapter_specific_parameter_when_expanding_then_adapter_literal_is
         "sqlserver": SqlServerAdapter(),
     }[test_case.adapter_name]
 
-    rendered, used_names = expand_test_parameters(
-        sql='SELECT @param("value")',
-        file_path=Path("tests/unit/adapter.sql"),
-        values=(("value", test_case.value),),
-        value_renderer=renderer,
-        test_name="adapter rendering",
-        case_name="one",
-    )
+    rendered: str = renderer.render_typed_scalar(value=test_case.value)
 
-    assert rendered == test_case.expected_sql
-    assert used_names == frozenset(("value",))
+    assert f"SELECT {rendered}" == test_case.expected_sql
 
 
 @pytest.mark.parametrize(
@@ -420,32 +410,37 @@ def test_given_invalid_parameter_references_when_compiling_then_clear_error_is_r
     [
         ParameterizedSqlTestRenderingErrorTestCase(
             description="reports adapter test case and parameter when rendered value is oversized",
-            rendered_value="x" * 1_000_001,
+            rendered_value="'" * 600_000,
             expected_error_fragment=(
-                "SQL test 'large values' case 'oversized' parameter 'value' could not be "
-                "rendered by adapter 'test_adapter'"
+                "SQL test 'large_values' case 'oversized' parameter 'value' could not be "
+                "rendered by adapter 'duckdb': SQL test 'large_values' case 'oversized' "
+                "parameter 'value' rendered value is 1200002 bytes; maximum is 1000000 bytes"
             ),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_oversized_rendered_parameter_when_expanding_then_contextual_error_is_raised(
+def test_given_oversized_rendered_parameter_when_compiling_then_contextual_error_is_raised(
     test_case: ParameterizedSqlTestRenderingErrorTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    renderer: Mock = Mock()
-    renderer.adapter_name = "test_adapter"
-    renderer.render_typed_scalar.return_value = test_case.rendered_value
-    value: SqlValue = SqlValue(
-        logical_type=SqlLogicalType(SqlValueKind.STRING),
-        value="safe",
+    write_repo_files(
+        tmp_path,
+        base_repo_files()
+        | {
+            "tests/unit/large_values.sql": (
+                "TEST (parameters (value string), cases (oversized (value "
+                f'"{test_case.rendered_value}")));\n\nSELECT @param("value")\n'
+            )
+        },
     )
 
-    with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        expand_test_parameters(
-            sql='SELECT @param("value")',
-            file_path=Path("tests/unit/large.sql"),
-            values=(("value", value),),
-            value_renderer=renderer,
-            test_name="large values",
-            case_name="oversized",
-        )
+    with pytest.raises(CompileInputError) as error:
+        compile_project_inputs(project_dir=tmp_path)
+
+    assert str(error.value) == test_case.expected_error_fragment
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])
