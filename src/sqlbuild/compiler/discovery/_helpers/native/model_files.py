@@ -16,16 +16,17 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_request,
     seed_snapshot_listings,
 )
-from sqlbuild.compiler.discovery._helpers.sql.declarations import (
-    parse_model_constant_declarations,
-    parse_model_enum_declarations,
-)
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
     REMOVED_SQL_MODEL_HEADER_KEYS,
     SQL_MODEL_HEADER_KEYS,
 )
-from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, DiscoveryFileFault
+from sqlbuild.compiler.discovery.models import (
+    ConstantDeclaration,
+    DiscoveredSqlModelFile,
+    DiscoveryFileFault,
+    EnumDeclaration,
+)
 from sqlbuild.compiler.discovery.types import NativeFiles, NativeLocation
 
 
@@ -87,6 +88,14 @@ def _model_file(
         raise error
     _tag, contents, values, header_locations, output_locations, query_sql = payload
     header_values: dict[str, object] = cast(dict[str, object], values)
+    enum_declarations, constant_declarations = cast(
+        tuple[tuple[EnumDeclaration, ...], tuple[ConstantDeclaration, ...]],
+        _native.model_header_declarations(
+            (header_values.get("enums"), header_values.get("constants")),
+            file_path.stem,
+            relative_path,
+        ),
+    )
     return DiscoveredSqlModelFile(
         file_path=file_path,
         relative_path=relative_path,
@@ -99,15 +108,7 @@ def _model_file(
             locations=cast(list[NativeLocation], output_locations), relative_path=relative_path
         ),
         query_sql=str(query_sql),
-        enum_declarations=parse_model_enum_declarations(
-            raw_value=header_values.get("enums"),
-            model_name=file_path.stem,
-            relative_path=relative_path,
-        ),
-        constant_declarations=parse_model_constant_declarations(
-            raw_value=header_values.get("constants"),
-            model_name=file_path.stem,
-            relative_path=relative_path,
-        ),
+        enum_declarations=enum_declarations,
+        constant_declarations=constant_declarations,
         extract_implicit_alias_columns=extract_implicit_alias_columns,
     )

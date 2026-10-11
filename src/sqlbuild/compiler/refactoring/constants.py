@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.discovery.constants import STATEMENT_HEADER_BODY_PATTERN
 from sqlbuild.compiler.refactoring.types import (
     HeaderTokenKind,
     RefactorOperation,
     SqlFileRole,
+)
+
+STATEMENT_HEADER_BODY_PATTERN: str = (
+    r"(?P<header>(?>(?:[^\"')\\]|\\.)++"
+    r"|\"(?:[^\"\\]|\\.)*+\""
+    r"|'(?:[^'\\]|\\.)*+'"
+    r"|[\"'](?:[^\\)]|\\.)*+"
+    r"|\)(?!\s*;))*+)"
 )
 
 MODEL_KIND_PREFIX: str = "model:"

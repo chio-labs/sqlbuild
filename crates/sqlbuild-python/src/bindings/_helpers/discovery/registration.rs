@@ -2,11 +2,15 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-use crate::bindings::_helpers::discovery::{declaration_files, locations, project_files};
+use crate::bindings::_helpers::discovery::{
+    declaration_files, header_declarations, locations, project_files, sql_test_blocks,
+};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     project_files::register(module)?;
     declaration_files::register(module)?;
     locations::register(module)?;
+    sql_test_blocks::register(module)?;
+    header_declarations::register(module)?;
     Ok(())
 }

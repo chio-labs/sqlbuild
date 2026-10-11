@@ -19,7 +19,6 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_request,
     seed_snapshot_listings,
 )
-from sqlbuild.compiler.discovery._helpers.sql.declarations import typed_constant_declaration
 from sqlbuild.compiler.discovery._helpers.sql.schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
@@ -371,14 +370,11 @@ def _constant_declaration(
     *, file_path: Path, relative_path: Path, declaration: _ConstantPayload
 ) -> ConstantDeclaration:
     name, value, explicit_type, render_as = declaration
-    return typed_constant_declaration(
-        name=name,
-        value=value["value"],
-        explicit_type=explicit_type,
-        render_as_text=render_as,
-        file_path=file_path,
-        relative_path=relative_path,
-        model_name=None,
+    return cast(
+        ConstantDeclaration,
+        _native.typed_constant_record(
+            (name, value["value"]), (explicit_type, render_as), (file_path, relative_path)
+        ),
     )
 
 

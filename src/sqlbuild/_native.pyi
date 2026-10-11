@@ -1004,6 +1004,24 @@ class NamePattern:
 def unresolved_reference_marker_kind(
     sql: str, context: str, /
 ) -> tuple[int | None, str | None]: ...
+def normalize_typed_sql_value(
+    raw_value: object, typing: tuple[str, str | None], limits: tuple[int, int, int], /
+) -> object: ...
+def sql_test_blocks(
+    file_path: str, blocks: list[tuple[dict[str, object], str, tuple[int, int]]], /
+) -> list[object]: ...
+def validate_sql_test_block_names(
+    file_path: str, blocks: list[tuple[int, str | None]], /
+) -> None: ...
+def model_header_declarations(
+    header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
+) -> tuple[tuple[object, ...], tuple[object, ...]]: ...
+def typed_constant_record(
+    constant: tuple[str, object],
+    options: tuple[str | None, str | None],
+    paths: tuple[Path, Path],
+    /,
+) -> object: ...
 def resource_identity_suggestion(
     name: str, private_identity: bool, /
 ) -> tuple[str, str] | None: ...
