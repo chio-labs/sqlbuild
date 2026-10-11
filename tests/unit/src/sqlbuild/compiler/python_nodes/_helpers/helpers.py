@@ -18,7 +18,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -523,7 +527,7 @@ def build_orders_project_graph() -> ProjectGraph:
             qualified_name="orders",
         ),
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-id",
         effective_target_name=None,
         effective_connection={},

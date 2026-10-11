@@ -34,7 +34,11 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -82,7 +86,7 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
 def plan_single_test(
     *,
     test: CompiledSqlTest,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
@@ -102,7 +106,7 @@ def plan_single_test(
 def plan_single_test_allowing_errors(
     *,
     test: CompiledSqlTest,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
 ) -> tuple[SqlTestPlanResult, NativeSqlTestPlan]:
@@ -128,7 +132,7 @@ def plan_single_test_allowing_errors(
 
 def assert_native_artifact_matches_runtime_plan(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     sql_test: CompiledSqlTest,
     entry: SqlTestPlanEntry,
     warnings: tuple[PlanWarning, ...],
@@ -166,7 +170,7 @@ def assert_native_artifact_matches_runtime_plan(
 
 def build_test_and_project(
     test_case: PlanTestChainTestCase,
-) -> tuple[CompiledSqlTest, CompiledProject]:
+) -> tuple[CompiledSqlTest, CompiledProjectView]:
     """Build a CompiledSqlTest and CompiledProject from a test case."""
 
     authored_ctes: list[CompileSqlTestCte] = []
@@ -362,7 +366,7 @@ def build_test_and_project(
             )
         )
 
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test_run",
         effective_target_name=None,
         effective_connection={},

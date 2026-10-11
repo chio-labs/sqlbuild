@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 
 
 class ConservativeCustomAdapter(BaseAdapter):
@@ -35,7 +35,7 @@ class ConservativeCustomAdapter(BaseAdapter):
 
 def build_project(
     *, target: CompiledRelationLocation, effective_connection: dict[str, object]
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal compiled project for target validation tests."""
 
     return CompiledProject(

@@ -19,10 +19,9 @@ from sqlbuild.cli.commands.models import AdapterConnectionContext, ContractComma
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, ContractEvidence
 from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -56,7 +55,7 @@ def run_contract(request: ContractCommandRequest) -> int:
         selected_target=None,
         cli_vars=request.cli_vars,
     )
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered,
         adapter=context.adapter,
         selected_target=request.from_target,

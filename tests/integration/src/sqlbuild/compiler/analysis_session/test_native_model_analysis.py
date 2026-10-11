@@ -21,9 +21,9 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
@@ -477,7 +477,7 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
     recorded: NativePivotProofs = native_pivot_proofs(monkeypatch=monkeypatch)
 
-    project: CompiledProject = assemble_compiled_project(
+    project: CompiledProjectView = assemble_compiled_project(
         inputs=inputs,
         inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
         analysis_model_names=test_case.analysed_models,

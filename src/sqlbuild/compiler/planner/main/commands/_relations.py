@@ -1,7 +1,8 @@
 """Focused-command relation entrypoint."""
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.command_planning.static import (
     resolve_static_relation_context_impl,
 )
@@ -11,7 +12,7 @@ from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 def resolve_static_relation_context(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     deferral: DeferralInputs | None = None,

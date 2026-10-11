@@ -39,10 +39,12 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     SqlTestMode,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -280,7 +282,7 @@ def load_orders(_ctx: object) -> list[dict[str, object]]:
     return []
 
 
-def build_source_load_nodes_project() -> CompiledProject:
+def build_source_load_nodes_project() -> CompiledProjectView:
     raw_orders_entry: SourceEntry = SourceEntry(
         name="raw_orders",
         table="orders",
@@ -357,7 +359,7 @@ def build_test_project(
     sql_test_expected_model_names: tuple[str, ...] = (),
     table_fn_test_function_names: tuple[str, ...] = (),
     audit_model_source_deps: dict[str, tuple[str, ...]] | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal CompiledProject for graph tests."""
 
     effective_paths: dict[str, str] = model_paths or {}
@@ -646,7 +648,7 @@ def build_scenario_cli_identifier_limit_pipeline(
 ) -> tuple[CompiledSqlScenario, CompilePipelineResult]:
     """Build a minimal pipeline result for CLI scenario identifier-limit tests."""
 
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={model_name: ("raw__orders",)},
         source_names=("raw__orders",),
     )
@@ -680,7 +682,7 @@ def build_scenario_cli_identifier_limit_pipeline(
         source_fixture_names=("raw__orders",),
         expected_model_names=(model_name,),
     )
-    project = replace(project, sql_scenarios=(scenario,))
+    project = project_with(project=project, sql_scenarios=(scenario,))
     return scenario, CompilePipelineResult(project=project, plan_output=PlanOutput())
 
 
@@ -714,10 +716,10 @@ def build_scenario_relation_test_map() -> ScenarioRelationMap:
     )
 
 
-def build_scenario_relation_test_project() -> CompiledProject:
+def build_scenario_relation_test_project() -> CompiledProjectView:
     """Build a project covering scenario relation planning tests."""
 
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={
             "daily_revenue": ("raw__orders", "stg_customers", "country_codes"),
             "customer_revenue": ("raw__orders",),
@@ -737,15 +739,15 @@ def build_scenario_relation_test_project() -> CompiledProject:
         ),
     )
     models: list[CompiledModelView] = [models_by_name[model.name] for model in project.models]
-    return replace(project, models=tuple(models))
+    return project_with(project=project, models=tuple(models))
 
 
-def build_scenario_relation_test_project_with_unused_seed() -> CompiledProject:
+def build_scenario_relation_test_project_with_unused_seed() -> CompiledProjectView:
     """Build a scenario relation test project with a seed outside the scenario graph."""
 
-    project: CompiledProject = build_scenario_relation_test_project()
-    unused_seed_project: CompiledProject = build_test_project(seed_names=("unused_seed",))
-    return replace(project, seeds=(*project.seeds, unused_seed_project.seeds[0]))
+    project: CompiledProjectView = build_scenario_relation_test_project()
+    unused_seed_project: CompiledProjectView = build_test_project(seed_names=("unused_seed",))
+    return project_with(project=project, seeds=(*project.seeds, unused_seed_project.seeds[0]))
 
 
 def build_scenario_relation_test_scenario(
@@ -817,7 +819,7 @@ def build_scenario_relation_test_scenario(
     )
 
 
-def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProject:
+def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProjectView:
     """Build a minimal CompiledProject containing one source entry."""
 
     source: CompiledSource = CompiledSource(

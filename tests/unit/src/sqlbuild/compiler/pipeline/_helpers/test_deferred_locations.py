@@ -7,9 +7,9 @@ import pytest
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import build_deferred_locations
 from sqlbuild.spec.contracts.models import TargetConfig
 from tests.unit.src.sqlbuild.compiler.pipeline._helpers._test_types import (
@@ -127,7 +127,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline._helpers.helpers import (
 def test_given_deferred_target_config_when_building_targets_then_resolves_expected_naming(
     test_case: DeferredTargetTestCase,
 ) -> None:
-    project: CompiledProject = build_single_model_project(
+    project: CompiledProjectView = build_single_model_project(
         logical_schema=test_case.logical_schema,
         logical_database=test_case.logical_database,
         physical_schema=test_case.logical_schema or test_case.default_schema,

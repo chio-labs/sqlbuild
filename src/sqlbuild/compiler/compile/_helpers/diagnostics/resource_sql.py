@@ -24,12 +24,12 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledProject,
     CompiledSqlExpansion,
     CompilerDiagnostic,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -95,7 +95,7 @@ class _HelpContext:
 
 def get_resource_sql_diagnostics(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     shapes: dict[str, dict[str, str]],
     profile: ExpressionInferenceProfile,
 ) -> tuple[CompilerDiagnostic, ...]:
@@ -259,7 +259,7 @@ def _reported_diagnostic(
 
 def _audit_resources(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     shapes: dict[str, dict[str, str]],
     profile: ExpressionInferenceProfile,
 ) -> tuple[_ResourceSql, ...]:
@@ -337,7 +337,7 @@ def _audit_label(audit: CompiledAudit) -> str:
     return label
 
 
-def _sql_test_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
+def _sql_test_resources(*, project: CompiledProjectView) -> tuple[_ResourceSql, ...]:
     analysis_disabled: frozenset[str] = _analysis_disabled_models(project)
     resources: list[_ResourceSql] = []
     prepared: dict[str, tuple[str, frozenset[str]]] = {}
@@ -382,7 +382,7 @@ def _prepared_test_sql(sql_body: str) -> tuple[str, frozenset[str]]:
     )
 
 
-def _hook_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
+def _hook_resources(*, project: CompiledProjectView) -> tuple[_ResourceSql, ...]:
     hook_files: dict[Path, str] = {
         hook_file.relative_path: hook_file.contents for hook_file in project.sql_hook_files
     }
@@ -421,7 +421,7 @@ def _hook_resources(*, project: CompiledProject) -> tuple[_ResourceSql, ...]:
     return tuple(resources)
 
 
-def _analysis_disabled_models(project: CompiledProject) -> frozenset[str]:
+def _analysis_disabled_models(project: CompiledProjectView) -> frozenset[str]:
     return frozenset(
         model.name
         for model in project.models

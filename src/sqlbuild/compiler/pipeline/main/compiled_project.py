@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from functools import partial
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -12,9 +11,10 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAnalysisSelection,
-    CompiledProject,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.contracts.main.promotion_conflicts import promotion_conflict_diagnostics
 from sqlbuild.compiler.discovery.constants import (
     LOCAL_CONFIG_FILENAME,
@@ -55,7 +55,7 @@ def build_compiled_project(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolved_connection: dict[str, object] | None = None,
     analysis_selection: CompileAnalysisSelection | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build one compiled project with adapter defaults and target validation applied."""
 
     return compile_frontier(
@@ -88,7 +88,7 @@ def _build_python_compiled_project(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     resolved_connection: dict[str, object] | None,
     analysis_selection: CompileAnalysisSelection | None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     validate_named_target_schema_strategy(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
@@ -119,7 +119,7 @@ def _build_python_compiled_project(
         inference_profile=inference_profile,
         selection=analysis_selection,
     )
-    project: CompiledProject = assemble_project(
+    project: CompiledProjectView = assemble_project(
         inputs=compile_inputs,
         inference_profile=inference_profile,
         skip_column_inference=skip_column_inference,
@@ -144,8 +144,8 @@ def _build_python_compiled_project(
         ),
         project=project,
     )
-    return replace(
-        project,
+    return project_with(
+        project=project,
         diagnostics=(
             *project.diagnostics,
             *promotion_conflict_diagnostics(

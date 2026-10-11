@@ -2,16 +2,15 @@ from dataclasses import dataclass, field
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 
 
 @dataclass(frozen=True)
 class ManifestTopLevelTestCase:
     description: str
-    project: CompiledProject
+    project: CompiledProjectView
     plan_output: PlanOutput
     project_name: str
     adapter_type: str

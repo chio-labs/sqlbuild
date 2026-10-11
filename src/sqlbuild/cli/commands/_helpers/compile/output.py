@@ -21,7 +21,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSeed,
     CompiledSource,
     CompiledSqlTest,
@@ -30,6 +29,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -254,7 +254,7 @@ def _summary(
     diagnostics: tuple[CompilerDiagnostic, ...],
     selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> dict[str, int]:
-    project: CompiledProject = graph.project
+    project: CompiledProjectView = graph.project
     return {
         "models": len(project.models),
         "selected_models": len(_selected_models(graph=graph, selected_keys=selected_keys)),
@@ -306,7 +306,7 @@ def _selected_resource_count(
 
 
 def _resources(*, graph: ProjectGraph, lineage: ProjectColumnLineage | None) -> dict[str, object]:
-    project: CompiledProject = graph.project
+    project: CompiledProjectView = graph.project
     return {
         "models": [
             _model_resource(graph=graph, model=model, lineage=lineage) for model in project.models
@@ -351,7 +351,7 @@ def _hook_resources(*, hooks: object) -> list[dict[str, object]]:
     return serialize_hook_entries(value=hooks, sql_fields=SQL_HOOK_OUTPUT_FIELDS)
 
 
-def _hook_definitions(project: CompiledProject) -> list[dict[str, object]]:
+def _hook_definitions(project: CompiledProjectView) -> list[dict[str, object]]:
     definitions: list[dict[str, object]] = [
         {
             "type": "sql",

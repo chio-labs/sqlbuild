@@ -18,8 +18,13 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -89,7 +94,7 @@ def build_project_with_targets(
     seed_locations: dict[str, str | None] | None = None,
     incremental_models: tuple[_IncrementalModelSpec, ...] = (),
     source_names: tuple[tuple[str, str, str], ...] = (),
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal CompiledProject with explicit target schemas."""
 
     models: list[CompiledModelView] = []
@@ -216,8 +221,8 @@ def build_project_with_targets(
 
 
 def with_leading_enforced_model_contracts(
-    project: CompiledProject, *, columns_by_model: dict[str, tuple[str, ...]]
-) -> CompiledProject:
+    project: CompiledProjectView, *, columns_by_model: dict[str, tuple[str, ...]]
+) -> CompiledProjectView:
     """Attach enforced contracts to leading models in a compiled test project."""
 
     models: list[CompiledModelView] = list(project.models)
@@ -232,7 +237,7 @@ def with_leading_enforced_model_contracts(
                 columns=tuple(SchemaColumn(name=name) for name in column_names),
             ),
         )
-    return replace(project, models=tuple(models))
+    return project_with(project=project, models=tuple(models))
 
 
 def build_deferred_locations_from_map(

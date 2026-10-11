@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers.graph import build_project_graph_impl
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 
-def build_project_graph_from_compiled_project(*, project: CompiledProject) -> ProjectGraph:
+def build_project_graph_from_compiled_project(*, project: CompiledProjectView) -> ProjectGraph:
     """Build a static dependency graph for an already-compiled project."""
 
     return build_project_graph_impl(project)

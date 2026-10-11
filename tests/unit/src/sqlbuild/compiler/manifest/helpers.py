@@ -20,7 +20,11 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     LoadedMacro,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -235,7 +239,7 @@ def build_test_project(
     seeds: tuple[CompiledSeed, ...] = (),
     sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = (),
     loaded_macros: dict[str, LoadedMacro] | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal CompiledProject for manifest tests."""
 
     return CompiledProject(

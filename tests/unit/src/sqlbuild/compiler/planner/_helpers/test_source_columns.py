@@ -14,7 +14,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _build_cursor_input_relations,
     _runtime_cursor_producer_names,
@@ -155,7 +159,7 @@ class _QualifiedSourceAdapter(_RecordingAdapter):
 def test_given_sources_when_gathering_columns_then_returns_expected_source_columns(
     test_case: SourceColumnsTestCase,
 ) -> None:
-    project: CompiledProject = build_test_project_with_source_entry(test_case.source_entry)
+    project: CompiledProjectView = build_test_project_with_source_entry(test_case.source_entry)
     adapter: _RecordingAdapter = _RecordingAdapter(test_case.adapter_column_names)
 
     result: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
@@ -185,7 +189,7 @@ def test_given_sources_when_gathering_columns_then_returns_expected_source_colum
 def test_given_multi_database_sources_when_gathering_columns_then_matches_current_database_only(
     test_case: MultiDatabaseSourceColumnsTestCase,
 ) -> None:
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test",
         effective_target_name=None,
         effective_connection={},
@@ -236,7 +240,7 @@ def test_given_multi_database_sources_when_gathering_columns_then_matches_curren
 def test_given_known_source_columns_when_building_relations_context_then_reuses_prior_gather(
     test_case: KnownSourceColumnsReuseTestCase,
 ) -> None:
-    project: CompiledProject = build_test_project_with_source_entry(
+    project: CompiledProjectView = build_test_project_with_source_entry(
         SourceEntry(
             name="raw_payments",
             expression="SELECT 1 AS id, 1700 AS amount_cents, 'success' AS status",

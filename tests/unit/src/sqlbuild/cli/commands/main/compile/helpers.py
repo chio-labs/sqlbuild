@@ -3,7 +3,6 @@ from __future__ import annotations
 import errno
 import os
 from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -26,9 +25,11 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     FunctionLanguage,
 )
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -283,7 +284,7 @@ def read_target_files(target_dir: Path, expected_files: dict[str, str]) -> dict[
     }
 
 
-def build_static_target_writer_project() -> CompiledProject:
+def build_static_target_writer_project() -> CompiledProjectView:
     """Build compiled project state for offline compile target writer tests."""
 
     model_key: CompiledObjectKey = CompiledObjectKey(
@@ -341,7 +342,7 @@ def build_static_target_writer_project() -> CompiledProject:
     )
 
 
-def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProject:
+def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProjectView:
     """Build a static project containing one cacheable model SQL test."""
 
     compiled_test, project = build_test_and_project(
@@ -356,14 +357,14 @@ def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProject:
             expected_cte_bodies={"orders": "SELECT 2 AS order_id"},
         )
     )
-    return replace(
-        project,
+    return project_with(
+        project=project,
         compile_cache_dir=target_dir / "cache" / "compiler",
         sql_tests=(compiled_test,),
     )
 
 
-def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledProject:
+def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledProjectView:
     """Build a static cached project whose SQL test omits a required source mock."""
 
     compiled_test, project = build_test_and_project(
@@ -378,8 +379,8 @@ def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledPro
             expected_cte_bodies={"orders": "SELECT 2 AS order_id"},
         )
     )
-    return replace(
-        project,
+    return project_with(
+        project=project,
         compile_cache_dir=target_dir / "cache" / "compiler",
         sql_tests=(compiled_test,),
     )
@@ -417,7 +418,7 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
         upstream_deps[key] = ()
         all_keys[name] = key
 
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-1",
         effective_target_name="dev",
         effective_connection={},

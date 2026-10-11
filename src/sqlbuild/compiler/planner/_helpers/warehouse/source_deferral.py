@@ -10,10 +10,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner.constants import (
     MODEL_POST_HOOKS_CONFIG_KEY,
@@ -36,7 +35,7 @@ _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKin
 
 def build_source_read_map(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     source_map: dict[str, SourceEntry],
     selected_keys: frozenset[CompiledObjectKey],
     project_config: ProjectConfig | None,
@@ -97,7 +96,10 @@ def build_source_read_map(
 
 
 def with_declared_source_reads(
-    *, project: CompiledProject, source_map: dict[str, SourceEntry], source_names: frozenset[str]
+    *,
+    project: CompiledProjectView,
+    source_map: dict[str, SourceEntry],
+    source_names: frozenset[str],
 ) -> dict[str, SourceEntry]:
     """Add declared project sources that no selected SQL resource reads to a source map."""
 
@@ -127,7 +129,7 @@ def _sql_hook_source_reads(model: CompiledModelView) -> tuple[str, ...]:
 
 def _selected_managed_source_refs(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey],
     managed_source_names: frozenset[str],
 ) -> tuple[str, ...]:
@@ -179,7 +181,7 @@ def _direct_managed_source_refs(
 
 def _resolve_source_target_name(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
     defer_sources_to: str | None,

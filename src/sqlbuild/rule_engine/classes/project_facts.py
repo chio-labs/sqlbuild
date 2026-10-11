@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.classes.project_tree import ProjectTree, public_model
 from sqlbuild.rule_engine.models import Model
 
@@ -10,7 +10,7 @@ from sqlbuild.rule_engine.models import Model
 class ProjectFacts:
     """Compiler-owned project resources and deterministic project tree."""
 
-    def __init__(self, *, project: CompiledProject, project_dir: Path) -> None:
+    def __init__(self, *, project: CompiledProjectView, project_dir: Path) -> None:
         self.models: tuple[Model, ...] = tuple(
             public_model(model)
             for model in sorted(project.models, key=lambda item: item.relative_path.as_posix())

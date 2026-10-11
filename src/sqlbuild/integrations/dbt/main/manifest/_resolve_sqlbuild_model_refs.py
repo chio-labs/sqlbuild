@@ -2,8 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
     resolve_sqlbuild_model_dbt_refs as _resolve,
 )
@@ -12,7 +11,7 @@ from sqlbuild.integrations.dbt.models import DbtManifestIndex, DbtManifestModel
 
 def resolve_sqlbuild_model_dbt_refs(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: DbtManifestIndex,
     selected_model_names: Sequence[str] | None = None,
 ) -> tuple[tuple[CompiledModelView, DbtManifestModel], ...]:

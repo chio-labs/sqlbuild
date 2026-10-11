@@ -31,12 +31,12 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlExpansion,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -61,7 +61,7 @@ def _model_shapes(
 
 def get_source_binding_diagnostics(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     columns: dict[str, tuple[ColumnInfo, ...]],
     profile: ExpressionInferenceProfile,
     selected_keys: frozenset[CompiledObjectKey],

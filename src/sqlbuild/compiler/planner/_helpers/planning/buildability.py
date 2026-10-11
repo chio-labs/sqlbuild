@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.graph.buildability import (
     check_buildability,
     missing_upstream_message,
@@ -31,7 +32,7 @@ def check_selected_scope_buildability(
 ) -> None:
     """Raise a planner input error when selected upstream inputs are missing."""
 
-    project: CompiledProject = runtime.project
+    project: CompiledProjectView = runtime.project
     snapshot: WarehouseSnapshot = warehouse.snapshot
     external_seed_keys: frozenset[CompiledObjectKey] = frozenset(
         seed.key for seed in project.seeds if seed.external

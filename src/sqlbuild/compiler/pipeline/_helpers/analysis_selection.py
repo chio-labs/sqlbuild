@@ -9,9 +9,9 @@ from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
-    CompiledProject,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions
 from sqlbuild.compiler.planner.main.selection._resolve_planner_scopes import (
@@ -79,7 +79,7 @@ def resolve_configured_rule_selection(
     *,
     options: CompilePipelineOptions,
     discovered_inputs: DiscoveredProjectInputs,
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> frozenset[CompiledObjectKey] | None:
     """Align configured-rule subjects with models that received deep SQL analysis."""
 
@@ -114,7 +114,7 @@ def resolve_analysis_model_names(
 
     if selection is None or (not selection.select and not selection.exclude):
         return None
-    structural_project: CompiledProject = assemble_project(
+    structural_project: CompiledProjectView = assemble_project(
         inputs=compile_inputs,
         inference_profile=inference_profile,
         skip_column_inference=True,

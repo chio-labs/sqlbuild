@@ -11,13 +11,12 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
@@ -397,7 +396,7 @@ def build_manifest_seed_node(
     return node
 
 
-def build_compiled_project_with_models(sql_by_model_name: dict[str, str]) -> CompiledProject:
+def build_compiled_project_with_models(sql_by_model_name: dict[str, str]) -> CompiledProjectView:
     """Build a minimal compiled project from model SQL strings."""
 
     return build_compiled_project_with_model_specs(
@@ -412,7 +411,7 @@ def build_compiled_project_with_model_specs(
     sql_by_model_name: dict[str, str],
     tags_by_model_name: dict[str, tuple[str, ...]],
     path_by_model_name: dict[str, str],
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal compiled project from model SQL, tags, and relative paths."""
 
     model_inputs: list[CompileModelInput] = []

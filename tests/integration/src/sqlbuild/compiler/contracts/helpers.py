@@ -15,14 +15,14 @@ import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as cont
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompilerDiagnostic,
     DynamicColumnContractProof,
     DynamicColumnFamilyProof,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -166,7 +166,7 @@ type NativeContractRequest = tuple[str, bool, list[Any]]
 _EMPTY_SCHEMA_ROW: tuple[list[Any], list[Any], bool, bool] = ([], [], False, False)
 
 
-def compiled_contract_project(*, project_dir: Path) -> CompiledProject:
+def compiled_contract_project(*, project_dir: Path) -> CompiledProjectView:
     """Write and compile the base project whose models the generators perturb."""
 
     files: dict[str, str] = {
@@ -184,11 +184,11 @@ def compiled_contract_project(*, project_dir: Path) -> CompiledProject:
     ).project
 
 
-def perturbed_project(*, project: CompiledProject, rng: random.Random) -> CompiledProject:
+def perturbed_project(*, project: CompiledProjectView, rng: random.Random) -> CompiledProjectView:
     """The project with every model's contract inputs replaced by generated ones."""
 
     return replace(
-        project,
+        compiled_project_record(project),
         native_project=None,
         settings=replace(
             project.settings,
@@ -280,7 +280,7 @@ def _dynamic_proof(*, rng: random.Random) -> DynamicColumnContractProof:
     )
 
 
-def contract_diagnostics(*, project: CompiledProject, dialect: str | None) -> ContractView:
+def contract_diagnostics(*, project: CompiledProjectView, dialect: str | None) -> ContractView:
     """The project's contract diagnostics, through the public contract entry point."""
 
     return evaluate_model_contracts(project=project, dialect=dialect).diagnostics
@@ -321,7 +321,7 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
     evaluate: Callable[..., ContractValidationResult] = contract_entry.native_model_contracts
 
     def counted(
-        *, project: CompiledProject, dialect: TypeDialect | str | None
+        *, project: CompiledProjectView, dialect: TypeDialect | str | None
     ) -> ContractValidationResult:
         result: ContractValidationResult = evaluate(project=project, dialect=dialect)
         record.statuses.update(contract_statuses(project=project, result=result))
@@ -333,7 +333,7 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
 
 
 def contract_statuses(
-    *, project: CompiledProject, result: ContractValidationResult
+    *, project: CompiledProjectView, result: ContractValidationResult
 ) -> Counter[str]:
     """Counts of evaluated models, typed comparisons and diagnostics for one contract run."""
 
@@ -417,7 +417,7 @@ def _compares_typed_column(*, model: Sequence[Any], implicit: bool) -> bool:
     )
 
 
-def with_declared_type(*, project: CompiledProject, declared_type: str) -> CompiledProject:
+def with_declared_type(*, project: CompiledProjectView, declared_type: str) -> CompiledProjectView:
     """The project with its enforced staging model declaring `declared_type` for every column."""
 
     by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
@@ -430,7 +430,7 @@ def with_declared_type(*, project: CompiledProject, declared_type: str) -> Compi
         compiled_model_record(staging), schema_entry=replace(staging.schema_entry, columns=columns)
     )
     return replace(
-        project,
+        compiled_project_record(project),
         native_project=None,
         models=tuple(by_name[model.name] for model in project.models),
     )

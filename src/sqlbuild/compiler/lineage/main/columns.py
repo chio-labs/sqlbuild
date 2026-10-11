@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage._helpers.rich_columns import (
     build_rich_project_column_lineage,
 )
@@ -15,7 +15,7 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 def build_project_column_lineage(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str | None = None,
     mode: ColumnLineageMode = ColumnLineageMode.RICH,
     model_names: frozenset[str] | None = None,

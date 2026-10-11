@@ -11,11 +11,10 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.constants import DEFERRED_TARGET_CONTEXT_KEYS
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -27,7 +26,7 @@ _VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
 
 def build_deferred_locations(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     deferred_target_config: TargetConfig,
     effective_vars: dict[str, object],
     default_schema: str | None,

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlbuild.compiler.compile.models import (
-    CompiledProject,
-)
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
@@ -36,7 +34,7 @@ from sqlbuild.integrations.dbt.types import DbtInteropCommand
 def plan_dbt_interop_command(
     *,
     command: DbtInteropCommand | str,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: DbtManifestIndex,
     graph: DbtCombinedGraph,
     dbt_runner: DbtRunner,
@@ -111,7 +109,7 @@ def plan_dbt_interop_command(
     )
 
 
-def _is_dbt_anchor_term(*, term: str, project: CompiledProject) -> bool:
+def _is_dbt_anchor_term(*, term: str, project: CompiledProjectView) -> bool:
     parsed: SelectorExpansion = split_selector_expansion(term)
     if not parsed.downstream:
         return False
@@ -131,7 +129,7 @@ def _dbt_failure_detail(result: DbtLsResult) -> str | None:
     return detail or None
 
 
-def _matches_sqlbuild_direct_selector(*, term: str, project: CompiledProject) -> bool:
+def _matches_sqlbuild_direct_selector(*, term: str, project: CompiledProjectView) -> bool:
     model_names, _translated_path = resolve_sqlbuild_model_selector_names(
         project=project,
         term=term,
@@ -141,7 +139,7 @@ def _matches_sqlbuild_direct_selector(*, term: str, project: CompiledProject) ->
 
 def _build_required_dbt_selector_terms(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: DbtManifestIndex,
     selected_model_names: Sequence[str],
     required_unique_ids: Sequence[str],

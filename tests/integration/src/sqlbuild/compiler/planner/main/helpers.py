@@ -28,10 +28,12 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     FunctionLanguage,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -78,7 +80,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
 
 def build_project_from_test_case(
     test_case: BuildExecutionPlanTestCase,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a CompiledProject from an integration test case."""
 
     models: list[CompiledModelView] = []
@@ -209,7 +211,7 @@ def _settings_bool(settings: dict[str, object], key: str, *, default: bool) -> b
 
 def build_project_from_source_cursor_input_test_case(
     test_case: SourceCursorInputPlanErrorTestCase,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a project with one incremental model reading one source."""
 
     source_entry: SourceEntry = SourceEntry(
@@ -272,7 +274,7 @@ def build_project_from_source_cursor_input_test_case(
     )
 
 
-def build_future_cursor_project() -> CompiledProject:
+def build_future_cursor_project() -> CompiledProjectView:
     """Build one timestamp incremental source project for future safety tests."""
 
     case: SourceCursorInputPlanErrorTestCase = SourceCursorInputPlanErrorTestCase(
@@ -286,10 +288,10 @@ def build_future_cursor_project() -> CompiledProject:
         cursor_input_column="occurred_at",
         expected_error_fragment="",
     )
-    project: CompiledProject = build_project_from_source_cursor_input_test_case(case)
+    project: CompiledProjectView = build_project_from_source_cursor_input_test_case(case)
     model: CompiledModelView = project.models[0]
-    return replace(
-        project,
+    return project_with(
+        project=project,
         models=(
             replace(
                 compiled_model_record(model),
@@ -319,7 +321,7 @@ def write_previous_function_fingerprints(
         test_case,
         function_bodies={**test_case.function_bodies, **test_case.previous_function_bodies},
     )
-    previous_project: CompiledProject = build_project_from_test_case(previous_case)
+    previous_project: CompiledProjectView = build_project_from_test_case(previous_case)
     function_map: dict[str, CompiledFunction] = {
         function.name: function for function in previous_project.functions
     }
@@ -351,7 +353,7 @@ def write_previous_function_fingerprints(
 
 def build_project_from_format_test_case(
     test_case: FormatPlanIntegrationTestCase,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a CompiledProject from a format integration test case."""
 
     models: list[CompiledModelView] = []

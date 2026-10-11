@@ -1,10 +1,10 @@
 """Compile selection on the native project graph built from the compiled project."""
 
-from collections import Counter
 from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.cli.entry.main.entry import main
 from tests.integration.src.sqlbuild.compiler.graph._test_types import (
     NativeGraphSelectionTestCase,
@@ -14,7 +14,7 @@ from tests.integration.src.sqlbuild.compiler.graph.helpers import (
     MODEL_NAMES,
     ORDERS_PROJECT_FILES,
     compiled_models,
-    count_graph_builds,
+    record_compile_owners,
     write_files,
 )
 
@@ -56,7 +56,9 @@ def test_given_compile_selection_when_compiling_then_native_graph_selects_models
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=ORDERS_PROJECT_FILES)
-    builds: Counter[str] = count_graph_builds(monkeypatch=monkeypatch)
+    owners: list[native_module.NativeCompiledProject] = record_compile_owners(
+        monkeypatch=monkeypatch
+    )
 
     exit_code: int = main(
         ["--project-dir", str(tmp_path), "--no-color", "compile", "--no-cache", *test_case.select]
@@ -66,7 +68,7 @@ def test_given_compile_selection_when_compiling_then_native_graph_selects_models
     assert compiled_models(stdout=capsys.readouterr().out) == {
         name: name in test_case.expected_models for name in sorted(MODEL_NAMES)
     }
-    assert builds == Counter({"from_resources": test_case.expected_graph_builds})
+    assert sum(owner.graph_builds() for owner in owners) == test_case.expected_graph_builds
 
 
 @pytest.mark.parametrize(

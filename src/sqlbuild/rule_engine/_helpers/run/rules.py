@@ -17,13 +17,18 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlExpansion,
     CompileProjectInputs,
     DeclarationScopeBuild,
     SqlExpansionContext,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType, ModelInput
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    ModelInput,
+)
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
@@ -143,7 +148,7 @@ def evaluate_rules(
     model_paths: frozenset[str] | None = _selected_model_paths(
         graph=graph, selected_keys=selected_keys
     )
-    selected_project: CompiledProject = _selected_project(graph=graph, model_paths=model_paths)
+    selected_project: CompiledProjectView = _selected_project(graph=graph, model_paths=model_paths)
     selected_config: RulesConfig = replace(
         _selection_rules_config(
             config=effective_config,
@@ -242,7 +247,7 @@ def evaluate_rules(
 def _prepare_sql_rule_inputs(
     *,
     rules: tuple[Rule, ...],
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str,
     project_dir: Path,
     collect_files: bool,
@@ -390,7 +395,7 @@ def _selection_rules_config(
     *,
     config: RulesConfig,
     model_paths: frozenset[str] | None,
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> RulesConfig:
     if model_paths is None:
         return config
@@ -423,11 +428,11 @@ def _selected_sql_codes(config: RulesConfig) -> tuple[str, ...]:
 
 def _selected_project(
     *, graph: ProjectGraph, model_paths: frozenset[str] | None
-) -> CompiledProject:
+) -> CompiledProjectView:
     if model_paths is None:
         return graph.project
-    return replace(
-        graph.project,
+    return project_with(
+        project=graph.project,
         models=tuple(
             model for model in graph.project.models if model.relative_path.as_posix() in model_paths
         ),
@@ -508,7 +513,7 @@ def _run_sql_rules(
     rules: tuple[Rule, ...],
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    project: CompiledProject,
+    project: CompiledProjectView,
     lint_config: LintConfig,
     selected_model_paths: frozenset[str] | None,
     cache_enabled: bool,
@@ -736,7 +741,7 @@ def _sql_rule_codes(rules: tuple[Rule, ...]) -> tuple[str, ...]:
     return tuple(rule.code for rule in rules if rule.code.startswith("SQBRSQL"))
 
 
-def _sql_rule_models(project: CompiledProject) -> dict[str, CompiledModelView]:
+def _sql_rule_models(project: CompiledProjectView) -> dict[str, CompiledModelView]:
     return {
         model.relative_path.as_posix(): model
         for model in project.models
@@ -745,7 +750,7 @@ def _sql_rule_models(project: CompiledProject) -> dict[str, CompiledModelView]:
 
 
 def _sql_model_rule_identities(
-    *, rules: tuple[Rule, ...], project: CompiledProject, dialect: str
+    *, rules: tuple[Rule, ...], project: CompiledProjectView, dialect: str
 ) -> dict[str, str]:
     codes: tuple[str, ...] = _sql_rule_codes(rules)
     if not codes:

@@ -22,7 +22,6 @@ from sqlbuild.compiler.auditing.types import (
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     FunctionReturnColumn,
     InferredColumn,
@@ -30,6 +29,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
     FunctionLanguage,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
@@ -1657,7 +1657,7 @@ class PlannerPolicies:
 class PlannerRuntime:
     """Resolved execution environment shared by planner phases."""
 
-    project: CompiledProject
+    project: CompiledProjectView
     adapter: BaseAdapter
     connection: Any
     project_config: ProjectConfig | None = None

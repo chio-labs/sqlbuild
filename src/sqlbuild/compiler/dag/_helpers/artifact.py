@@ -11,7 +11,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
@@ -21,6 +20,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
 )
 from sqlbuild.compiler.dag.constants import REQUIRED_DAG_COLLECTION_KEYS
@@ -113,7 +113,7 @@ def _build_source_node(source: CompiledSource) -> DagNode:
 
 def _build_loader_node(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     loader: DiscoveredLoaderFunction,
     source_by_loader: dict[str, SourceEntry],
 ) -> DagNode:
@@ -502,7 +502,7 @@ def _source_by_loader(graph: ProjectGraph) -> dict[str, SourceEntry]:
 
 
 def _loader_to_source_entry(
-    *, project: CompiledProject, loader: DiscoveredLoaderFunction
+    *, project: CompiledProjectView, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
     destination: LoaderDestinationParts = loader_destination_parts(
         destination=(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from sqlbuild.sql_values.models import SqlValue
 
@@ -11,28 +11,122 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
+    import sqlbuild._native as _native
     from sqlbuild.compiler.compile.models import (
         CompactBatchPreparation,
+        CompiledAudit,
+        CompiledFunction,
         CompiledLineageColumnFact,
         CompiledObjectKey,
         CompiledRelationLocation,
+        CompiledSeed,
+        CompiledSource,
         CompiledSqlExpansion,
+        CompiledSqlScenario,
+        CompiledSqlTest,
         CompileModelConfig,
         CompileProjectInputs,
         CompilerDiagnostic,
         CompileSqlReference,
         DynamicColumnContractProof,
         InferredColumn,
+        LoadedMacro,
     )
     from sqlbuild.compiler.discovery.models import (
         ConstantDeclaration,
+        DiscoveredHookFunction,
+        DiscoveredLoaderFunction,
+        DiscoveredMaterializationFile,
         DiscoveredSchemaFile,
+        DiscoveredSqlHookFile,
         DiscoveredSqlModelFile,
         EnumDeclaration,
     )
-    from sqlbuild.compiler.scopes.models import UsageRecord
+    from sqlbuild.compiler.references.models import LiteralSqlRelation
+    from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+    from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-    from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
+    from sqlbuild.spec.contracts.models import (
+        ScenarioConfig,
+        SchemaModelEntry,
+        SettingsConfig,
+        SourceLocation,
+    )
+
+
+class CompiledProjectView(Protocol):
+    """One compiled project: a native owner view, or a hand-built `CompiledProject`."""
+
+    @property
+    def run_id(self) -> str: ...
+    @property
+    def effective_target_name(self) -> str | None: ...
+    @property
+    def effective_connection(self) -> dict[str, object]: ...
+    @property
+    def effective_vars(self) -> dict[str, object]: ...
+    @property
+    def binding_catalog(self) -> Any | None: ...
+    @property
+    def effective_target_database(self) -> str | None: ...
+    @property
+    def effective_target_schema(self) -> str | None: ...
+    @property
+    def sql_analysis_dialect(self) -> str | None: ...
+    @property
+    def sql_lexical_syntax(self) -> SqlLexicalSyntax: ...
+    @property
+    def compile_cache_dir(self) -> Path | None: ...
+    @property
+    def settings(self) -> SettingsConfig: ...
+    @property
+    def scenario(self) -> ScenarioConfig: ...
+    @property
+    def models(self) -> tuple[CompiledModelView, ...]: ...
+    @property
+    def sources(self) -> tuple[CompiledSource, ...]: ...
+    @property
+    def seeds(self) -> tuple[CompiledSeed, ...]: ...
+    @property
+    def functions(self) -> tuple[CompiledFunction, ...]: ...
+    @property
+    def audits(self) -> tuple[CompiledAudit, ...]: ...
+    @property
+    def sql_tests(self) -> tuple[CompiledSqlTest, ...]: ...
+    @property
+    def sql_scenarios(self) -> tuple[CompiledSqlScenario, ...]: ...
+    @property
+    def loader_functions(self) -> tuple[DiscoveredLoaderFunction, ...]: ...
+    @property
+    def hook_functions(self) -> tuple[DiscoveredHookFunction, ...]: ...
+    @property
+    def enforce_explicit_references(self) -> bool: ...
+    @property
+    def sql_hook_files(self) -> tuple[DiscoveredSqlHookFile, ...]: ...
+    @property
+    def materialization_files(self) -> tuple[DiscoveredMaterializationFile, ...]: ...
+    @property
+    def public_enums(self) -> dict[str, EnumDeclaration]: ...
+    @property
+    def public_constants(self) -> dict[str, ConstantDeclaration]: ...
+    @property
+    def loaded_macros(self) -> dict[str, LoadedMacro]: ...
+    @property
+    def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
+    @property
+    def unmatched_literal_sql_relations(self) -> tuple[LiteralSqlRelation, ...]: ...
+    @property
+    def external_sql_reference_resolver(self) -> ExternalSqlReferenceResolver | None: ...
+    @property
+    def scope_index(self) -> ScopeIndex: ...
+    @property
+    def sql_expansions(self) -> dict[Path, CompiledSqlExpansion]: ...
+    @property
+    def native_session(self) -> Any | None: ...
+    @property
+    def native_project(self) -> _native.NativeCompiledProject | None: ...
+    @property
+    def lineage_graph(self) -> _native.NativeProjectGraph: ...
 
 
 class CompiledModelView(Protocol):

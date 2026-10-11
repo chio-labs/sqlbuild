@@ -1,10 +1,10 @@
 """Collect destination models whose resolved table type is transient."""
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.spec.contracts.types import TableType
 
 
-def build_destination_transient_models(*, project: CompiledProject) -> frozenset[str]:
+def build_destination_transient_models(*, project: CompiledProjectView) -> frozenset[str]:
     """Return destination model names that clones should create as transient tables."""
 
     return frozenset(

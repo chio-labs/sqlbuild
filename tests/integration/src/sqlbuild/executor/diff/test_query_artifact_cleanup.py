@@ -15,6 +15,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.commands._helpers.diff.execution import execute_query_diff
 from sqlbuild.cli.commands.models import DiffCommandRequest, QueryDiffPreparation
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_QUERY_DIFF_ARTIFACT
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
 from sqlbuild.executor.diff.models import QueryDiffArtifact
@@ -84,7 +85,7 @@ def test_given_expired_owned_and_untracked_artifacts_when_janitor_runs_then_only
         normalized_owned_name: str = owned.name.lower()
         connection.execute(f"ALTER TABLE {owned.relation} RENAME TO {normalized_owned_name}")
         connection.execute(f"CREATE TABLE {untracked.relation} AS SELECT 2 AS order_id")
-        project: CompiledProject = CompiledProject(
+        project: CompiledProjectView = CompiledProject(
             run_id="run-1",
             effective_target_name="dev",
             effective_connection={},

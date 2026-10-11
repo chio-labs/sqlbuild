@@ -6,7 +6,7 @@ import json
 from typing import Any, cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.refactoring._helpers.text.text_edits import manual_at, text_edit
 from sqlbuild.compiler.refactoring.constants import (
     CTE_SCOPE_PREFIX,
@@ -32,7 +32,7 @@ from sqlbuild.compiler.refactoring.models import (
 from sqlbuild.compiler.refactoring.types import EditKind, NativeColumnReferences, ResourceColumns
 
 
-def resource_columns(*, project: CompiledProject) -> ResourceColumns:
+def resource_columns(*, project: CompiledProjectView) -> ResourceColumns:
     """Return the known output columns of every model, source, and seed."""
 
     columns: ResourceColumns = {}

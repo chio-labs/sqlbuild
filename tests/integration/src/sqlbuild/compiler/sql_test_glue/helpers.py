@@ -16,10 +16,10 @@ import sqlbuild._native as native_module
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledSqlTest,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.sql_test_glue.models import (
@@ -458,7 +458,7 @@ def assembly_outcome(*, project_dir: Path) -> PlanningCallOutcome:
 
 
 def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, object]:
-    project: CompiledProject = build_project_graph(
+    project: CompiledProjectView = build_project_graph(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
     ).project

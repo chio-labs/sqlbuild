@@ -19,7 +19,7 @@ from sqlbuild.cli.entry.models import (
     SelectorFileSummary,
 )
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredTaskFunction
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
@@ -111,7 +111,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.build_execution._test_types i
 def test_given_resolved_build_context_when_writing_then_renders_safe_verbose_summary(
     test_case: BuildRunContextTestCase,
 ) -> None:
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="20260830T175430Z_fb5fb40a8b81",
         effective_target_name="test",
         effective_connection={},

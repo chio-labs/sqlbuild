@@ -1,7 +1,6 @@
 """Dependency graph facts for custom rules."""
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.project_tree import public_model
 from sqlbuild.rule_engine.models import Model
 
@@ -9,7 +8,7 @@ from sqlbuild.rule_engine.models import Model
 class GraphFacts:
     """Compiler-resolved model dependencies and dependents."""
 
-    def __init__(self, *, project: CompiledProject) -> None:
+    def __init__(self, *, project: CompiledProjectView) -> None:
         self._compiled_by_path: dict[object, CompiledModelView] = {
             model.relative_path: model for model in project.models
         }

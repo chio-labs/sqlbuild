@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeComp
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
+use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
@@ -83,6 +84,8 @@ pub(crate) struct NativeCompiledProject {
     inputs: Vec<ModelInputRecord>,
     /// The Python classes model input views project their attributes with.
     input_classes: Option<Py<PyAny>>,
+    /// Lineage graphs its project views built.
+    graph_builds: usize,
 }
 
 impl NativeCompiledProject {
@@ -105,6 +108,16 @@ impl NativeCompiledProject {
     /// Keep the classes model input views project their attributes with.
     pub(crate) fn set_input_classes(&mut self, classes: Py<PyAny>) {
         self.input_classes = Some(classes);
+    }
+
+    /// Count one lineage graph a project view built.
+    pub(crate) fn record_graph_build(&mut self) {
+        self.graph_builds += 1;
+    }
+
+    /// Every model's input record, in loop order.
+    pub(crate) fn inputs(&self) -> &[ModelInputRecord] {
+        &self.inputs
     }
 
     /// The input record at `index`.
@@ -174,6 +187,19 @@ impl NativeCompiledProject {
             unchecked_output_columns: unchecked,
         };
         record_model_analysis(&mut self.facts, name, analysis)
+    }
+
+    /// The compiled project view of this owner's models with these project fields.
+    fn project_view(
+        slf: Bound<'_, Self>,
+        fields: Bound<'_, PyDict>,
+    ) -> PyResult<NativeProjectView> {
+        NativeProjectView::new(slf.unbind(), &fields)
+    }
+
+    /// How many lineage graphs this owner's project views built.
+    fn graph_builds(&self) -> usize {
+        self.graph_builds
     }
 
     /// Whether both projects retained the same facts.
@@ -317,5 +343,6 @@ fn declaration(row: DeclarationPy<'_>) -> PyResult<DeclarationFact> {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelInput>()?;
     module.add_class::<NativeCompiledModel>()?;
+    module.add_class::<NativeProjectView>()?;
     module.add_class::<NativeCompiledProject>()
 }

@@ -23,7 +23,8 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
 from sqlbuild.cli.commands.exceptions import StagedArtifactsChangedError
 from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.cli.output.models import WrittenTarget
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledProjectView
 
 _MIN_PREPARED_ARTIFACT_MODELS: int = 128
 _MAX_PREPARED_ARTIFACT_MODELS: int = 5000
@@ -45,7 +46,7 @@ class PreparedCompileArtifacts:
         self._executor: ThreadPoolExecutor | None = None
         self._future: Future[_PreparedResult] | None = None
         self._planned_tests: Future[PlannedStaticSqlTests] | None = None
-        self._planning_inputs: tuple[CompiledProject, BaseAdapter, Path] | None = None
+        self._planning_inputs: tuple[CompiledProjectView, BaseAdapter, Path] | None = None
 
     def __enter__(self) -> PreparedCompileArtifacts:
         return self
@@ -81,7 +82,7 @@ class PreparedCompileArtifacts:
     def start(
         self,
         *,
-        project: CompiledProject,
+        project: CompiledProjectView,
         adapter: BaseAdapter,
         target_dir: Path,
         stage_artifacts: bool,
@@ -100,7 +101,7 @@ class PreparedCompileArtifacts:
             self._start_test_planning(project=project, adapter=adapter, target_dir=target_dir)
 
     def _start_test_planning(
-        self, *, project: CompiledProject, adapter: BaseAdapter, target_dir: Path
+        self, *, project: CompiledProjectView, adapter: BaseAdapter, target_dir: Path
     ) -> None:
         """Plan SQL tests against the published target while the compile continues."""
 
@@ -116,7 +117,7 @@ class PreparedCompileArtifacts:
         self._planned_tests = self._executor.submit(plan)
 
     def _start_staging(
-        self, *, project: CompiledProject, adapter: BaseAdapter, target_dir: Path
+        self, *, project: CompiledProjectView, adapter: BaseAdapter, target_dir: Path
     ) -> bool:
         """Stage artifacts beside target_dir so publication can move them instead of copying."""
 
@@ -196,7 +197,7 @@ class PreparedCompileArtifacts:
             return None
 
 
-def _stages_artifacts(project: CompiledProject) -> bool:
+def _stages_artifacts(project: CompiledProjectView) -> bool:
     """Staging pays off for uncached, mid-sized projects whose memory stays within budget."""
 
     return (

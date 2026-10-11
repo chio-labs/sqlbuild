@@ -15,9 +15,8 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
     CompiledLineageColumnFact,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
@@ -158,7 +157,7 @@ def write_semantic_binding_project(
 
 def compile_reshaped_star_model(
     *, project_dir: Path, query_sql: str
-) -> tuple[CompiledProject, CompiledModelView]:
+) -> tuple[CompiledProjectView, CompiledModelView]:
     """Compile one reshaped-star model over the shared upstream order models."""
 
     (project_dir / "sqlbuild_project.toml").write_text(
@@ -174,7 +173,7 @@ def compile_reshaped_star_model(
         f"MODEL (description 'Test model reshaped_orders.', materialized table);\n{query_sql}",
         encoding="utf-8",
     )
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
     )

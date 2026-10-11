@@ -1,4 +1,3 @@
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -6,11 +5,11 @@ import pytest
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlScenario,
     CompiledSqlTest,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlScenarioFile,
 )
@@ -41,7 +40,7 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
     tmp_path: Path,
     test_case: NativeFactPayloadTestCase,
 ) -> None:
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="orders",
         relative_path="models/orders.sql",
         sql="SELECT 1",
@@ -80,7 +79,7 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
 
     request: dict[str, Any] = captured_native_request(
         monkeypatch=monkeypatch,
-        project=replace(project, sql_tests=sql_tests, sql_scenarios=(scenario,)),
+        project=project_with(project=project, sql_tests=sql_tests, sql_scenarios=(scenario,)),
         project_dir=tmp_path,
     )
 

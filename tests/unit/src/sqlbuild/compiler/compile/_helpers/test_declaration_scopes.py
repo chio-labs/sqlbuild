@@ -13,10 +13,9 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import ModelInput
+from sqlbuild.compiler.compile.types import CompiledProjectView, ModelInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -529,7 +528,7 @@ def test_given_expected_models_when_compiling_then_public_declarations_are_grant
 
     first: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
     second: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
-    compiled: CompiledProject = assemble_project(inputs=first, skip_column_inference=True)
+    compiled: CompiledProjectView = assemble_project(inputs=first, skip_column_inference=True)
     sql_body: str = getattr(first, test_case.input_collection)[0].sql_body
     grants: tuple[tuple[str, str, str], ...] = tuple(
         sorted(
@@ -587,7 +586,7 @@ def test_given_relationship_granted_reference_when_compiling_then_usage_retains_
     )
 
     inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
-    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+    compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     assert test_case.expected_usage in compiled.scope_index.usages
 
@@ -624,7 +623,7 @@ def test_given_exact_declaration_placement_when_assembling_then_project_is_accep
     )
 
     inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
-    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+    compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     assert compiled.scope_index.completeness.runtime_usage is test_case.expected_complete
     assert compiled.scope_index.completeness.placement is test_case.expected_complete
@@ -657,7 +656,7 @@ def test_given_models_in_same_directory_when_reusing_visibility_then_usage_consu
     )
 
     inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
-    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+    compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     consumers: set[ResourceIdentity] = {
         cast(ResourceIdentity, usage.consumer) for usage in compiled.scope_index.usages
@@ -715,7 +714,7 @@ def test_given_invalid_declaration_placement_when_assembling_then_it_reports_an_
     )
     inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
 
-    project: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+    project: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     assert re.search(
         cast(str, test_case.expected_fragment),
@@ -750,7 +749,7 @@ def test_given_disabled_placement_enforcement_when_assembling_then_project_and_w
     )
     inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
 
-    compiled: CompiledProject = assemble_project(inputs=inputs, skip_column_inference=True)
+    compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     assert tuple(model.name for model in compiled.models) == test_case.expected_model_names
     assert (

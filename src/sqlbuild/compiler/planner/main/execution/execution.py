@@ -9,8 +9,11 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner._helpers.changes.actions import resolve_model_actions
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.planning.buildability import (
@@ -67,7 +70,7 @@ from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 def build_execution_plan(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     selection: PlannerSelection,
@@ -209,7 +212,7 @@ def build_execution_plan(
 
 def _resolve_scopes_and_cursor_overrides(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selection: PlannerSelection,
     policies: PlannerPolicies,
     overrides: PlannerOverrides,
@@ -236,7 +239,7 @@ def _resolve_scopes_and_cursor_overrides(
 
 def _detect_planner_change_results(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scopes: PlannerScopeResolution,
     snapshot: WarehouseSnapshot,
     identities: PlannerIdentityContext,

@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.refactoring._helpers.project.project_files import (
     project_sql_files,
     python_string_locations,
@@ -59,7 +58,7 @@ from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
-def find_model(*, project: CompiledProject, name: str) -> CompiledModelView:
+def find_model(*, project: CompiledProjectView, name: str) -> CompiledModelView:
     """Return the compiled model a target names."""
 
     model: CompiledModelView | None = next(
@@ -325,7 +324,7 @@ def _pending_migration(
 
 
 def decide_model_migration(
-    *, before: CompiledProject, after: CompiledProject | None, old: str, new: str
+    *, before: CompiledProjectView, after: CompiledProjectView | None, old: str, new: str
 ) -> ModelMigrationDecision:
     """Declare migrate_from whenever the relation moves, unless migrations cannot follow it."""
 
@@ -356,7 +355,7 @@ def decide_model_migration(
 
 
 def _blocked_move(
-    *, after: CompiledProject, old_model: CompiledModelView, new_model: CompiledModelView
+    *, after: CompiledProjectView, old_model: CompiledModelView, new_model: CompiledModelView
 ) -> ModelMigrationDecision | None:
     old_database: str = (old_model.destination.database or "").lower()
     new_database: str = (new_model.destination.database or "").lower()
@@ -398,7 +397,7 @@ def needs_column_migration(*, model: CompiledModelView) -> bool:
     )
 
 
-def _model(*, project: CompiledProject, name: str) -> CompiledModelView | None:
+def _model(*, project: CompiledProjectView, name: str) -> CompiledModelView | None:
     return next((model for model in project.models if model.name == name), None)
 
 

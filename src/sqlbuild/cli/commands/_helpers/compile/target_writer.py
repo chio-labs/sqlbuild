@@ -37,11 +37,11 @@ from sqlbuild.cli.paths.main._compiled_sql_test_output_path import (
 from sqlbuild.cli.paths.main._sql_test_output_path import sql_test_output_path
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -116,7 +116,7 @@ def write_static_compile_target(
     *,
     target_dir: Path,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: dict[str, object] | None = None,
     planned_tests: Callable[[], PlannedStaticSqlTests] | None = None,
 ) -> WrittenTarget:
@@ -238,7 +238,7 @@ def _write_models(
 def _write_static_models(
     *,
     target_dir: Path,
-    project: CompiledProject,
+    project: CompiledProjectView,
     batch: NativeArtifactBatch,
 ) -> set[Path]:
     """Write offline model query SQL."""
@@ -293,7 +293,7 @@ def _write_static_functions(
     *,
     target_dir: Path,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     batch: NativeArtifactBatch,
 ) -> set[Path]:
     """Write offline rendered SQL function DDL."""
@@ -347,7 +347,7 @@ def _write_audits(
 def _write_static_audits(
     *,
     target_dir: Path,
-    project: CompiledProject,
+    project: CompiledProjectView,
     batch: NativeArtifactBatch,
 ) -> set[Path]:
     """Write offline resolved audit SQL."""
@@ -393,7 +393,7 @@ def static_sql_test_planning_diagnostics(
     *,
     target_dir: Path,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     planned_tests: Callable[[], PlannedStaticSqlTests] | None = None,
 ) -> tuple[CompilerDiagnostic, ...]:
     """Plan uncached SQL tests and report their errors without writing artifacts or cache."""
@@ -408,7 +408,7 @@ def static_sql_test_planning_diagnostics(
 
 
 def plan_static_sql_tests(
-    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProject
+    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProjectView
 ) -> PlannedStaticSqlTests:
     """Plan every SQL test whose cached artifact under target_dir cannot be reused."""
 
@@ -431,7 +431,7 @@ def _resolve_planned_static_tests(
     *,
     target_dir: Path,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     planned_tests: Callable[[], PlannedStaticSqlTests] | None,
 ) -> PlannedStaticSqlTests:
     planned: PlannedStaticSqlTests | None = planned_tests() if planned_tests is not None else None
@@ -441,7 +441,7 @@ def _resolve_planned_static_tests(
 
 
 def _partition_cached_static_tests(
-    *, tests_root: Path, adapter: BaseAdapter, project: CompiledProject
+    *, tests_root: Path, adapter: BaseAdapter, project: CompiledProjectView
 ) -> tuple[
     tuple[PendingStaticSqlTest, ...],
     set[Path],
@@ -502,7 +502,7 @@ def _partition_cached_static_tests(
 
 
 def _plan_static_test_artifacts(
-    *, adapter: BaseAdapter, project: CompiledProject, tests: tuple[CompiledSqlTest, ...]
+    *, adapter: BaseAdapter, project: CompiledProjectView, tests: tuple[CompiledSqlTest, ...]
 ) -> tuple[NativeSqlTestArtifact, ...]:
     if not tests:
         return ()
@@ -523,7 +523,7 @@ def _write_static_tests(
     *,
     target_dir: Path,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     planned_tests: Callable[[], PlannedStaticSqlTests] | None,
     batch: NativeArtifactBatch,
 ) -> tuple[set[Path], tuple[CompilerDiagnostic, ...]]:

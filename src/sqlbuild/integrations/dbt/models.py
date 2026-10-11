@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
@@ -438,7 +438,7 @@ class DbtInteropCompiledProject:
 
     adapter_name: str
     adapter: BaseAdapter
-    project: CompiledProject
+    project: CompiledProjectView
 
 
 @dataclass(frozen=True)
@@ -467,7 +467,7 @@ class DbtPlanEnvironment:
 
     project_dir: Path
     discovered_inputs: DiscoveredProjectInputs
-    project: CompiledProject
+    project: CompiledProjectView
     adapter: BaseAdapter
     adapter_name: str
 

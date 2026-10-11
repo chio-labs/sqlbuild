@@ -12,11 +12,11 @@ import sqlbuild._native as _native
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
-    CompiledProject,
     CompiledSqlScenario,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compiled_project_facts
 from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
 from sqlbuild.compiler.compiled_project.main.plain_typed_value import plain_typed_value
@@ -37,7 +37,7 @@ from sqlbuild.rule_engine.types import FindingRow
 
 def build_rules_request(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     dialect: str,

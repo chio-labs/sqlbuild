@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
@@ -23,7 +26,7 @@ from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner, DbtCombinedGr
 
 
 def build_dbt_combined_graph(
-    *, manifest: DbtManifestIndex, project: CompiledProject
+    *, manifest: DbtManifestIndex, project: CompiledProjectView
 ) -> DbtCombinedGraph:
     """Build a downstream-only combined graph from dbt manifest and SQLBuild compile."""
 
@@ -132,7 +135,7 @@ def _add_sqlbuild_model_edges(
     *,
     upstream: dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]],
     manifest: DbtManifestIndex,
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]]:
     sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
     dbt_refs_by_model_name: dict[str, list[DbtManifestModel]] = {}

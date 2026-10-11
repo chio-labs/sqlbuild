@@ -9,9 +9,6 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
-    parse_native_header_metadata,
-)
 
 import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -24,6 +21,9 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
+from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
+    parse_native_header_metadata,
+)
 from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,

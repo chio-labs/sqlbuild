@@ -7,7 +7,11 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -211,7 +215,7 @@ def test_given_partial_selection_when_resolving_scopes_then_inspects_only_upstre
         name=unrelated_key.name,
         materialized="table",
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run",
         effective_target_name=None,
         effective_connection={},

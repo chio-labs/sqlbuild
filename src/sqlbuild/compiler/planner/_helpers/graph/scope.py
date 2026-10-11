@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.graph.main._lineage_graph_names import lineage_graph_names
 from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys
@@ -29,7 +29,7 @@ from sqlbuild.compiler.planner.types import SelectorKind
 
 def build_planner_scope(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     auto_load_sources: bool,

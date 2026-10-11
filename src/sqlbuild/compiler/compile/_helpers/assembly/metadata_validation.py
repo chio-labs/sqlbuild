@@ -16,11 +16,11 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
-    CompiledProject,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -39,7 +39,7 @@ _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
 def _audit_errors(
     *,
     model: CompiledModelView,
-    project: CompiledProject,
+    project: CompiledProjectView,
     shape: dict[str, str],
     shapes: dict[str, dict[str, str]],
     profile: ExpressionInferenceProfile,
@@ -186,7 +186,7 @@ def _accepted_values_result(
 
 
 def _sql_test_columns(
-    *, project: CompiledProject, profile: ExpressionInferenceProfile
+    *, project: CompiledProjectView, profile: ExpressionInferenceProfile
 ) -> dict[str, tuple[str, ...]]:
     """Infer fixture interfaces in one batch instead of repeating Python AST walks."""
     bodies: dict[str, None] = {}

@@ -13,10 +13,11 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner._helpers.scenario.relations import (
     build_scenario_execution_plan,
@@ -391,13 +392,13 @@ def test_given_project_source_ref_in_scenario_fixture_when_building_fixture_plan
 def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario_plan(
     test_case: ScenarioExecutionPlanTestCase,
 ) -> None:
-    base_project: CompiledProject = build_scenario_relation_test_project()
+    base_project: CompiledProjectView = build_scenario_relation_test_project()
 
     def notify() -> None:
         return None
 
-    project: CompiledProject = replace(
-        base_project,
+    project: CompiledProjectView = project_with(
+        project=base_project,
         functions=(
             build_compiled_function(
                 body_sql=(
@@ -512,7 +513,7 @@ def test_given_scenario_graph_when_building_execution_plan_then_returns_scenario
 def test_given_required_unmocked_seed_when_building_execution_plan_then_loads_project_seed(
     test_case: ScenarioUnmockedSeedExecutionPlanTestCase,
 ) -> None:
-    project: CompiledProject = test_case.project
+    project: CompiledProjectView = test_case.project
     relation_plan: ScenarioRelationPlan = build_scenario_relation_plan(
         project=project,
         graph_plan=test_case.graph_plan,

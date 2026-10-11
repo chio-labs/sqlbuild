@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline.main import _compile_phase as compile_phase_module
 from sqlbuild.compiler.pipeline.main import compile as compile_module
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
@@ -48,7 +49,7 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monotonic: Mock = Mock(side_effect=test_case.clock_values)
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="timing-run",
         effective_target_name="test",
         effective_connection={},

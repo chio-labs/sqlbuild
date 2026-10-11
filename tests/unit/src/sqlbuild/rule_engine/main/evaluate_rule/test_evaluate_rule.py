@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
@@ -84,7 +84,7 @@ def test_given_same_custom_rule_when_using_public_and_native_paths_then_faults_h
 ) -> None:
     rule_case: RuleCase = test_case.rule_case
     public_result: RuleResult = evaluate_rule(rule=required_domain, test_case=rule_case)
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="commerce__mart__orders",
         relative_path=rule_case.path,
         sql="WITH final AS (SELECT 1 AS id) SELECT id FROM final",

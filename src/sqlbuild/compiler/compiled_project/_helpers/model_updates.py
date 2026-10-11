@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import fields, replace
-from typing import cast
+from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
+    CompiledProject,
     CompilerDiagnostic,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 
 
 def compiled_model_record_impl(model: CompiledModelView) -> CompiledModel:
@@ -72,3 +73,19 @@ def with_target_defaults_impl(
     """The model with the adapter's `(schema, database)` defaults filled into its destination."""
 
     return model.with_target_defaults(defaults, render_qualified_name)
+
+
+def compiled_project_record_impl(project: CompiledProjectView) -> CompiledProject:
+    """The project as a `CompiledProject`, projected from its owner when it is a native view."""
+
+    if isinstance(project, CompiledProject):
+        return project
+    return CompiledProject(**cast(_native.NativeProjectView, project).fields())
+
+
+def project_with_impl(*, project: CompiledProjectView, **changes: Any) -> CompiledProjectView:
+    """The project with `changes`; a native view shares its owner's models."""
+
+    if isinstance(project, CompiledProject):
+        return replace(project, **changes)
+    return cast(_native.NativeProjectView, project).with_changes(**changes)

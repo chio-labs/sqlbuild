@@ -50,10 +50,10 @@ from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningPro
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts  # noqa: F401
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlScenario,
     CompilerDiagnostic,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCheckFunction,
     DiscoveredProjectInputs,
@@ -138,7 +138,7 @@ class BuildRunContext:
     """Resolved inputs needed to render one build execution context."""
 
     command: str
-    project: CompiledProject
+    project: CompiledProjectView
     plan: PlanOutput
     discovered_inputs: DiscoveredProjectInputs
     python_plan_entries: tuple[PythonPlanEntry, ...]
@@ -707,7 +707,7 @@ class JanitorCompileContext:
 
     adapter_name: str
     adapter: BaseAdapter
-    project: CompiledProject
+    project: CompiledProjectView
     connection_config: dict[str, object]
 
 

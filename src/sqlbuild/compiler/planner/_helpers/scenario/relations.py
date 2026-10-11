@@ -18,13 +18,16 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_completion,
@@ -99,7 +102,7 @@ _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
 
 def build_scenario_relation_plan(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     graph_plan: ScenarioGraphPlan,
     relation_map: ScenarioRelationMap,
     render_qualified_name: Callable[..., str | None],
@@ -313,7 +316,7 @@ def _replace_relation_markers(
 def build_scenario_execution_plan(
     *,
     scenario: CompiledSqlScenario,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     graph_plan: ScenarioGraphPlan,
     relation_plan: ScenarioRelationPlan,
@@ -702,7 +705,7 @@ def _apply_fixture_overrides(
 
 def build_scenario_seed_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     graph_plan: ScenarioGraphPlan,
     relation_plan: ScenarioRelationPlan,
 ) -> tuple[SeedPlanEntry, ...]:

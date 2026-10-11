@@ -5,9 +5,8 @@ from __future__ import annotations
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
@@ -31,7 +30,7 @@ def compile_project_for_diff_environment(
     no_sql_validation: bool,
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Compile a project for one diff environment."""
 
     return build_compiled_project(
@@ -47,7 +46,7 @@ def compile_project_for_diff_environment(
 
 def resolve_diff_model_names(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
 ) -> tuple[str, ...]:

@@ -11,7 +11,8 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.assembly import project as assembly
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -115,7 +116,7 @@ def test_given_catalog_when_rebinding_physical_shapes_then_does_not_reuse_stale_
         "MODEL (description 'Test model report.', database warehouse, schema analytics);\n"
         + test_case.sql
     )
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path), adapter=SnowflakeAdapter()
     )
     assert project.binding_catalog is not None

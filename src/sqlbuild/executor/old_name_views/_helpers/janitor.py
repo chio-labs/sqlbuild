@@ -14,7 +14,7 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.migrations.constants import (
     MIGRATION_TABLE_NAME,
     OLD_NAME_VIEW_TABLE_NAME,
@@ -281,7 +281,7 @@ def _view(history: OldNameViewHistory) -> JanitorOldNameView:
     )
 
 
-def project_destinations(project: CompiledProject) -> dict[JanitorRelationKey, str]:
+def project_destinations(project: CompiledProjectView) -> dict[JanitorRelationKey, str]:
     """Map each project model's destination to the model's name."""
 
     return {

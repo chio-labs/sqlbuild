@@ -17,7 +17,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompilerDiagnostic,
@@ -27,6 +26,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
 )
 from sqlbuild.compiler.discovery.main.microbatch_guidance import microbatch_guidance
@@ -212,7 +212,7 @@ class _CustomMaterializationConfig:
 
 def build_planner_relations_context(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
@@ -309,7 +309,7 @@ def build_planner_relations_context(
 
 def _resolve_source_warehouse_columns(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     source_read_map: dict[str, SourceEntry],
@@ -369,7 +369,7 @@ def plan_model(
 
 def build_plan_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
@@ -1878,7 +1878,7 @@ def audit_is_selected(
 
 def _selected_audit_relation_keys(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey],
 ) -> frozenset[CompiledObjectKey]:
     """Return relation keys needed to render selected audits without selecting those relations."""

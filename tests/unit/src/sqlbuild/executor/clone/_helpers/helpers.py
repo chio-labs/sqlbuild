@@ -12,7 +12,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner.models import FunctionPlanEntry, ModelPlanEntry
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
@@ -154,7 +158,7 @@ def build_clone_function_entry(
     )
 
 
-def build_clone_retention_project() -> CompiledProject:
+def build_clone_retention_project() -> CompiledProjectView:
     return CompiledProject(
         run_id="clone-retention-run",
         effective_target_name="test",

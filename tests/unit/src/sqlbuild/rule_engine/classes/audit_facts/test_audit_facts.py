@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledAudit
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.models import Model
 from tests.unit.src.sqlbuild.rule_engine.classes.audit_facts._test_types import (
@@ -41,8 +42,8 @@ def test_given_attached_and_project_audits_when_querying_model_then_returns_only
     project_audit: CompiledAudit = build_audit(
         name=test_case.project_audit_name, attached_target_name=None
     )
-    project: CompiledProject = replace(
-        build_project(
+    project: CompiledProjectView = project_with(
+        project=build_project(
             name="orders",
             relative_path="models/orders.sql",
             sql="SELECT 1 AS order_id",

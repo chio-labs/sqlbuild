@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage._helpers.columns import _build_schema_mapping
 from sqlbuild.compiler.lineage._helpers.semantic_uses import get_model_semantic_uses
 from sqlbuild.compiler.lineage.models import DirectSemanticColumnUse
 
 
 def build_direct_semantic_uses(
-    *, project: CompiledProject, dialect: str | None, model_names: frozenset[str]
+    *, project: CompiledProjectView, dialect: str | None, model_names: frozenset[str]
 ) -> tuple[DirectSemanticColumnUse, ...]:
     """Extract semantic uses only for explicitly requested models."""
 

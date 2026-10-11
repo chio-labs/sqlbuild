@@ -1,13 +1,13 @@
 """Declaration facts for custom rules."""
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 
 
 class DeclarationFacts:
     """Compiler-resolved public and model-scoped declarations."""
 
-    def __init__(self, *, project: CompiledProject) -> None:
+    def __init__(self, *, project: CompiledProjectView) -> None:
         self.public_enums: tuple[EnumDeclaration, ...] = tuple(project.public_enums.values())
         self.public_constants: tuple[ConstantDeclaration, ...] = tuple(
             project.public_constants.values()

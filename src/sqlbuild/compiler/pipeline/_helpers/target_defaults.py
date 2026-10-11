@@ -10,22 +10,22 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, FunctionLanguage
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, FunctionLanguage
 from sqlbuild.compiler.compiled_project.main._with_target_defaults import with_target_defaults
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 
 
 def apply_target_defaults(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
     python_functions_inherit_default_namespace: bool,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Apply adapter default schema/database to compiled project targets."""
 
     models: tuple[CompiledModelView, ...] = tuple(
@@ -70,8 +70,8 @@ def apply_target_defaults(
         )
         for f in project.functions
     )
-    return replace(
-        project,
+    return project_with(
+        project=project,
         effective_target_database=project.effective_target_database or default_database,
         effective_target_schema=project.effective_target_schema or default_schema,
         models=models,

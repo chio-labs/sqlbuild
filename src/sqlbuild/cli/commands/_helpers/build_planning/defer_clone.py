@@ -25,9 +25,12 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone_with_options import run_clone_pipeline_with_options
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
@@ -77,10 +80,10 @@ def build_defer_clone_boundary_selectors(
     cli_vars: dict[str, object] | None,
     project_dir: Path,
     auto_load_sources: bool,
-) -> tuple[CompiledProject, tuple[str, ...], tuple[str, ...], int]:
+) -> tuple[CompiledProjectView, tuple[str, ...], tuple[str, ...], int]:
     """Resolve out-of-selection clone boundaries and the view chain to rebuild over them."""
 
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         selected_target=selected_target,
@@ -184,7 +187,7 @@ def run_defer_clone_boundary_prephase(
             boundary_selectors=(),
             view_chain_selectors=(),
         )
-    cloned_project: CompiledProject
+    cloned_project: CompiledProjectView
     boundary_selectors: tuple[str, ...]
     view_chain_selectors: tuple[str, ...]
     (

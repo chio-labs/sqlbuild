@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.refactoring._helpers.renames.model_planning import decide_model_migration
 from sqlbuild.compiler.refactoring._helpers.text.header_edits import insert_header_entry_edit
 from sqlbuild.compiler.refactoring.constants import MIGRATE_FROM_KEY
@@ -21,8 +21,8 @@ from sqlbuild.compiler.refactoring.models import (
 def with_model_migration(
     *,
     plan: RefactorPlan,
-    before: CompiledProject,
-    after: CompiledProject | None,
+    before: CompiledProjectView,
+    after: CompiledProjectView | None,
     originals: dict[str, str],
 ) -> RefactorPlan:
     """Return the plan with `migrate_from <old>` on the model whenever its relation moves."""

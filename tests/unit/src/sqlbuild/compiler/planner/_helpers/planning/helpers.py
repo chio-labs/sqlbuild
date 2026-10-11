@@ -13,7 +13,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner.models import (
     PlannerRelationsContext,
     PlannerRuntime,
@@ -54,7 +58,7 @@ def build_retention_planner_inputs(
         for name in model_names
     )
     keys: tuple[CompiledObjectKey, ...] = tuple(model.key for model in models)
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-1",
         effective_target_name="test",
         effective_connection={},

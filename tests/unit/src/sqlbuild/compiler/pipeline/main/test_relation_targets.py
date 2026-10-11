@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.models import DiscoveredPythonNode, PythonNodeGraph
@@ -37,7 +37,7 @@ from tests.unit.src.sqlbuild.compiler.pipeline.main.helpers import (
 def test_given_source_read_map_when_building_python_relation_targets_then_uses_read_relation(
     test_case: PythonRelationTargetsTestCase,
 ) -> None:
-    project: CompiledProject = build_relation_target_project()
+    project: CompiledProjectView = build_relation_target_project()
     raw_source: SourceEntry = project.sources[0].source_entry
     read_source: SourceEntry = SourceEntry(name="orders", schema="deferred_raw", table="orders")
     plan_output: PlanOutput = PlanOutput(

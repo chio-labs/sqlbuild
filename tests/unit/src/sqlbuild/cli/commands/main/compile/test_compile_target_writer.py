@@ -17,9 +17,15 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType, DiagnosticPhase
+from sqlbuild.compiler.compile.models import CompiledSqlTest
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    DiagnosticPhase,
+)
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -201,7 +207,7 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
     test_case: TargetWriterTestCase,
     tmp_path: Path,
 ) -> None:
-    project: CompiledProject = build_static_target_writer_project()
+    project: CompiledProjectView = build_static_target_writer_project()
     target_dir: Path = tmp_path / "target"
     stale_path: Path = target_dir / "compiled" / "models" / "deleted.sql"
     stale_path.parent.mkdir(parents=True)
@@ -226,8 +232,8 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
     assert not stale_path.exists()
     assert not (target_dir / "manifest.json").exists()
 
-    changed_project: CompiledProject = replace(
-        project,
+    changed_project: CompiledProjectView = project_with(
+        project=project,
         models=(
             replace(compiled_model_record(project.models[0]), query_sql="SELECT 3 AS order_id"),
         ),
@@ -256,9 +262,9 @@ def test_given_unicode_sql_when_writing_static_target_twice_then_bytes_remain_un
     tmp_path: Path,
     test_case: ExpectedMessageTestCase,
 ) -> None:
-    project: CompiledProject = build_static_target_writer_project()
-    project = replace(
-        project,
+    project: CompiledProjectView = build_static_target_writer_project()
+    project = project_with(
+        project=project,
         models=(
             replace(
                 compiled_model_record(project.models[0]),
@@ -299,7 +305,7 @@ def test_given_invalid_utf8_artifact_when_writing_again_then_existing_decode_err
     tmp_path: Path,
     test_case: ExpectedMessageTestCase,
 ) -> None:
-    project: CompiledProject = build_static_target_writer_project()
+    project: CompiledProjectView = build_static_target_writer_project()
     target_dir: Path = tmp_path / "target"
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -328,7 +334,7 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_cached_target_writer_project(target_dir=target_dir)
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
@@ -364,7 +370,7 @@ def test_given_artifact_with_moved_mtime_and_same_bytes_when_writing_then_reuses
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_cached_target_writer_project(target_dir=target_dir)
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
@@ -410,7 +416,7 @@ def test_given_test_with_planning_error_when_writing_twice_then_error_is_not_cac
     test_case: TargetWriterPlanningErrorTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_missing_mock_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_missing_mock_target_writer_project(target_dir=target_dir)
     first: WrittenTarget = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
@@ -451,7 +457,7 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_cached_target_writer_project(target_dir=target_dir)
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
@@ -459,8 +465,8 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
     )
     planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
     monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
-    changed_project: CompiledProject = replace(
-        project,
+    changed_project: CompiledProjectView = project_with(
+        project=project,
         models=(
             replace(compiled_model_record(project.models[0]), query_sql="SELECT 3 AS order_id"),
         ),
@@ -486,7 +492,7 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_cached_target_writer_project(target_dir=target_dir)
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
@@ -499,8 +505,8 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
         relative_path=Path("models/unrelated.sql"),
         query_sql="SELECT 9 AS unrelated_id",
     )
-    changed_project: CompiledProject = replace(
-        project,
+    changed_project: CompiledProjectView = project_with(
+        project=project,
         models=(*project.models, unrelated_model),
     )
     planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
@@ -525,7 +531,7 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_cached_target_writer_project(target_dir=target_dir)
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
@@ -540,7 +546,7 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
-        project=replace(project, sql_tests=(changed_test,)),
+        project=project_with(project=project, sql_tests=(changed_test,)),
     )
 
     assert planner_spy.call_count == test_case.expected_builder_calls
@@ -561,7 +567,7 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_cached_target_writer_project(target_dir=target_dir)
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
@@ -573,7 +579,7 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
-        project=replace(project, effective_target_schema="changed_schema"),
+        project=project_with(project=project, effective_target_schema="changed_schema"),
     )
 
     assert planner_spy.call_count == test_case.expected_builder_calls
@@ -590,8 +596,8 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = replace(
-        build_cached_target_writer_project(target_dir=target_dir),
+    project: CompiledProjectView = project_with(
+        project=build_cached_target_writer_project(target_dir=target_dir),
         compile_cache_dir=None,
     )
     planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
@@ -626,7 +632,7 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
-    project: CompiledProject = build_cached_target_writer_project(target_dir=target_dir)
+    project: CompiledProjectView = build_cached_target_writer_project(target_dir=target_dir)
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),

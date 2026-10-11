@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.graph._helpers.sql_refs import sql_ref_key_impl
 from sqlbuild.compiler.graph.models import HookReadEdge
@@ -28,7 +27,7 @@ def model_python_hook_names_impl(model: CompiledModelView) -> tuple[str, ...]:
     return tuple(dict.fromkeys(names))
 
 
-def hook_read_edges_impl(*, project: CompiledProject) -> tuple[HookReadEdge, ...]:
+def hook_read_edges_impl(*, project: CompiledProjectView) -> tuple[HookReadEdge, ...]:
     """Return edges from each hook read to the model that runs the hook."""
 
     reads_by_hook: dict[str, tuple[SqlResourceRef, ...]] = {

@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompilerDiagnostic
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.lint.models import CompileFacts
 from sqlbuild.lint.types import DiagnosticIdentity
 
 
-def compile_facts(*, project: CompiledProject, project_dir: Path) -> CompileFacts:
+def compile_facts(*, project: CompiledProjectView, project_dir: Path) -> CompileFacts:
     """Index a compilation so two compilations can be compared file by file."""
 
     model_paths: dict[CompiledObjectKey, Path] = {

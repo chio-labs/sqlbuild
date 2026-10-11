@@ -8,7 +8,8 @@ from functools import cached_property
 from typing import Any
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProviderUsage
 from sqlbuild.compiler.graph.main._lineage_graph_views import lineage_graph_views
 from sqlbuild.compiler.graph.models import LineageGraphViews
@@ -35,7 +36,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 class ProjectGraph:
     """Static compiled project graph held natively; dict views are built only when read."""
 
-    project: CompiledProject
+    project: CompiledProjectView
     native: _native.NativeProjectGraph = field(compare=False, repr=False)
 
     @cached_property
@@ -131,7 +132,7 @@ class PythonRunPlanOutputs:
 class CompilePipelineResult:
     """Complete output from the compile-and-plan pipeline."""
 
-    project: CompiledProject
+    project: CompiledProjectView
     plan_output: PlanOutput
     custom_materializations: dict[str, Callable[..., Any]] = field(default_factory=dict)
     python_node_names: frozenset[str] = field(default_factory=frozenset)
@@ -144,7 +145,7 @@ class CompilePipelineResult:
 class CompiledProjectPhaseResult:
     """Canonical project compilation output before command-specific planning."""
 
-    project: CompiledProject
+    project: CompiledProjectView
     connection_config: dict[str, object]
     compile_seconds: float
 
@@ -153,7 +154,7 @@ class CompiledProjectPhaseResult:
 class StaticCommandContext:
     """Shared compile, selection, and relation phases for focused commands."""
 
-    project: CompiledProject
+    project: CompiledProjectView
     scope: PlannerScope
     relations: PlannerRelationsContext
     connection_config: dict[str, object]
@@ -183,8 +184,8 @@ class ClonePipelineConnection:
 class ClonePipelineResult:
     """Prepared clone inputs for origin and destination target environments."""
 
-    origin_project: CompiledProject
-    destination_project: CompiledProject
+    origin_project: CompiledProjectView
+    destination_project: CompiledProjectView
     clone_plan: PlanOutput
     destination_source_entries: tuple[CloneSourcePlanEntry, ...] = field(default_factory=tuple)
     destination_model_entries: tuple[ModelPlanEntry, ...] = field(default_factory=tuple)

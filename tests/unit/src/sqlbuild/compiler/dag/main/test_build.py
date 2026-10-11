@@ -12,9 +12,10 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -236,7 +237,7 @@ seeds:
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
-    project: CompiledProject = assemble_compiled_project(inputs=inputs)
+    project: CompiledProjectView = assemble_compiled_project(inputs=inputs)
     graph: ProjectGraph = project_graph_from_indexes(
         project=project,
         upstream_deps={},
@@ -318,8 +319,8 @@ def test_given_qualified_loader_destination_when_building_dag_then_parses_loader
     graph: ProjectGraph = build_dag_artifact_test_graph()
     graph = replace(
         graph,
-        project=replace(
-            graph.project,
+        project=project_with(
+            project=graph.project,
             effective_target_database="default_db",
             effective_target_schema="default_schema",
             loader_functions=(

@@ -11,9 +11,7 @@ from functools import partial
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import (
-    CompiledProject,
-)
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     custom_rule_implementation_fingerprint,
@@ -43,7 +41,7 @@ from sqlbuild.rule_engine.models import (
 
 def evaluate_native(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     catalogue: tuple[Rule, ...],
@@ -88,7 +86,7 @@ def evaluate_native(
 
 def _evaluate_native_rows(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     dialect: str,
@@ -143,7 +141,7 @@ def _evaluate_native_rows(
 def start_custom_rules(
     *,
     executor: Executor,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     catalogue: tuple[Rule, ...],

@@ -29,13 +29,16 @@ from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_ro
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
     CompiledSource,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_TABLE_NAME,
     FUNCTION_NODE_TYPES,
@@ -203,7 +206,7 @@ class _StateTableSchemas:
 
 def build_warehouse_snapshot(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
@@ -246,7 +249,7 @@ def build_warehouse_snapshot(
 
 def gather_warehouse_snapshot(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     execute: AdapterExecute[Any, Any],
@@ -362,7 +365,7 @@ def gather_warehouse_snapshot(
 
 def gather_redirected_cursor_snapshots(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     existing_relations: dict[str, RelationInfo],
@@ -410,7 +413,7 @@ def gather_redirected_cursor_snapshots(
 
 def _prefetch_inspection_schemas(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     database: str | None,
@@ -440,7 +443,7 @@ def _prefetch_inspection_schemas(
 
 def _relevant_state_keys(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey] | None,
 ) -> frozenset[CompiledObjectKey] | None:
     """Retain state identities for the complete upstream closure of the selection."""
@@ -455,7 +458,7 @@ def _relevant_state_keys(
 
 def _resolve_database(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey] | None,
 ) -> str | None:
     """Extract the database from the first model target that declares one."""
@@ -483,7 +486,7 @@ def _resolve_database(
 
 def _collect_target_schemas(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey] | None,
 ) -> tuple[str, ...]:
     """Collect distinct non-null target schemas from models, seeds, and functions."""
@@ -514,7 +517,7 @@ def _collect_target_schemas(
 
 def _build_metadata_name_filter(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey] | None,
 ) -> tuple[str, ...] | None:
     names: set[str] = set()
@@ -602,7 +605,7 @@ def _model_upstream_names(
 
 def _gather_relations(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     database: str | None,
@@ -666,7 +669,7 @@ def _location_identity(
 
 def _gather_columns(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     relations: dict[str, RelationInfo],
@@ -781,7 +784,7 @@ def _selected_node_names(
 
 def _shares_unfiltered_fingerprints(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey] | None,
 ) -> bool:
     """Return whether one unfiltered read can serve this selection and migration inspection."""
@@ -797,7 +800,7 @@ def _shares_unfiltered_fingerprints(
 
 def _gather_cursor_snapshots(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     execute: AdapterExecute[Any, Any],
@@ -854,7 +857,7 @@ def _gather_cursor_snapshots(
 
 def _collect_cursor_models(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     model_map: dict[str, CompiledModelView],
     source_map: dict[str, CompiledSource],
@@ -1620,7 +1623,7 @@ def _resolve_upstream_qualified_name(
 
 
 def _selected_runtime_producer_names(
-    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey] | None
+    *, project: CompiledProjectView, selected_keys: frozenset[CompiledObjectKey] | None
 ) -> frozenset[str]:
     """Return selected warehouse relations produced during this planner invocation."""
 

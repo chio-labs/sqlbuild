@@ -21,9 +21,9 @@ from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
-    CompiledProject,
     CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
@@ -160,7 +160,7 @@ def project_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjec
 
 def assemble_with(
     *, inputs: CompileProjectInputs, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Assemble `inputs` with `engine`."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
@@ -173,7 +173,7 @@ def recorded_assembly(
     """Assemble `inputs` with `engine`; return its assembly view and the input reads recorded."""
 
     with COMPILE_INPUT_READS.recording() as reads:
-        project: CompiledProject = assemble_with(
+        project: CompiledProjectView = assemble_with(
             inputs=inputs, engine=engine, monkeypatch=monkeypatch
         )
     return assembly_view(project), (reads.environment_names, reads.read_run_id)
@@ -208,7 +208,7 @@ def assembly_outcome(
         )
 
 
-def assembly_view(project: CompiledProject) -> object:
+def assembly_view(project: CompiledProjectView) -> object:
     """Return every resource fact native project assembly derives, with the diagnostics."""
 
     return (

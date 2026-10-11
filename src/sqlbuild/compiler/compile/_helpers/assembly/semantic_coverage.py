@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import TYPE_CHECKED_DIALECTS
 
 
-def semantic_coverage(project: CompiledProject) -> dict[str, tuple[str, ...]]:
+def semantic_coverage(project: CompiledProjectView) -> dict[str, tuple[str, ...]]:
     """Return partial-check reasons for machine reports."""
 
     if not project.settings.sql_analysis:

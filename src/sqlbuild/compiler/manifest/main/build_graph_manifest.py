@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.manifest._helpers.payload import build_manifest_payload
 from sqlbuild.compiler.planner.models import PlanOutput
 
 
 def build_graph_manifest(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan_output: PlanOutput | None,
     project_name: str,
     adapter_type: str,

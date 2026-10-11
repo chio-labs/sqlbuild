@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompactLineageFacts, CompiledProject
+from sqlbuild.compiler.compile.models import CompactLineageFacts
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
@@ -61,7 +63,7 @@ def test_given_selected_custom_rule_when_evaluating_then_reports_fault(
     tmp_path: Path,
     test_case: CustomRuleTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=test_case)
 
@@ -86,7 +88,7 @@ def test_given_custom_rule_when_repeated_then_deterministic_cache_is_reused(
     tmp_path: Path,
     test_case: CustomRuleTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=test_case)
     _ = evaluate(project=project, config=config, project_dir=tmp_path)
@@ -112,7 +114,7 @@ def test_given_lazy_lineage_when_materialized_then_project_rule_cache_is_stable(
     tmp_path: Path,
     test_case: CustomRuleTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=test_case)
     lineage: CompactLineageFacts = CompactLineageFacts(
@@ -120,13 +122,13 @@ def test_given_lazy_lineage_when_materialized_then_project_rule_cache_is_stable(
         rows=((0, 0, 1, ()),),
         resource_name_indexes={0: 0},
     )
-    project = replace(
-        project,
+    project = project_with(
+        project=project,
         models=(replace(compiled_model_record(project.models[0]), fast_lineage_columns=lineage),),
     )
     _ = evaluate(project=project, config=config, project_dir=tmp_path)
-    materialized_project: CompiledProject = replace(
-        project,
+    materialized_project: CompiledProjectView = project_with(
+        project=project,
         models=(
             replace(compiled_model_record(project.models[0]), fast_lineage_columns=tuple(lineage)),
         ),
@@ -156,7 +158,7 @@ def test_given_hermetic_custom_rule_when_cache_required_then_second_run_hits_cac
     tmp_path: Path,
     test_case: CustomRuleTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=test_case)
     _ = evaluate(project=project, config=config, project_dir=tmp_path)
@@ -200,7 +202,7 @@ def test_given_project_file_change_when_repeating_custom_rule_then_dependencies_
     tmp_path: Path,
     test_case: CustomRuleCacheDependencyTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(
         tmp_path=tmp_path,
@@ -250,7 +252,7 @@ def test_given_nonhermetic_custom_rule_when_cache_required_then_raises_file_line
     tmp_path: Path,
     test_case: CustomRuleTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=test_case)
     with pytest.raises(RulesError, match=test_case.expected_error_pattern):
@@ -273,7 +275,7 @@ def test_given_project_wide_rule_when_reading_project_context_then_cache_is_allo
     tmp_path: Path,
     test_case: CustomRuleTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=test_case)
 
@@ -321,7 +323,7 @@ def test_given_common_suppression_when_custom_rule_faults_then_native_policy_sup
         description=test_case.description,
         body="return [ctx.finding(subject=model)]",
     )
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(tmp_path=tmp_path, test_case=custom_rule_case)
     relative_path: str = "models/mart/commerce__mart__orders.sql"

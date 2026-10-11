@@ -12,10 +12,10 @@ from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
-    CompiledProject,
     CompilerDiagnostic,
     LiteralSqlRelation,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -369,7 +369,7 @@ def compile_outcome(*, project_dir: Path) -> tuple[object, ...]:
     """Assemble the project: every diagnostic and unmatched relation, or the error raised."""
 
     try:
-        project: CompiledProject = assemble_project(
+        project: CompiledProjectView = assemble_project(
             inputs=build_compile_inputs(
                 discovered_inputs=discover_project_inputs(project_dir=project_dir),
                 adapter_context=_ADAPTER_CONTEXT,

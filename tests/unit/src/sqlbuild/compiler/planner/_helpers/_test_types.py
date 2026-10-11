@@ -8,11 +8,10 @@ from sqlbuild.compiler.auditing.types import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompileSqlReference,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledProjectView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -654,7 +653,7 @@ class ScenarioExecutionPlanTestCase:
 class ScenarioUnmockedSeedExecutionPlanTestCase:
     description: str
     graph_plan: ScenarioGraphPlan
-    project: CompiledProject
+    project: CompiledProjectView
     expected_seed_fixture_names: frozenset[str]
     expected_seed_entry_targets: dict[str, str]
 

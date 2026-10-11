@@ -11,10 +11,9 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, ModelInput
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, ModelInput
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
@@ -209,7 +208,7 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
         "WITH __ref__orders AS (\n  SELECT 7 AS threshold\n),\n"
         "__expected__orders AS (\n  SELECT 7 AS threshold\n)\nSELECT 1",
     )
-    compiled_project: CompiledProject = assemble_project(
+    compiled_project: CompiledProjectView = assemble_project(
         inputs=compile_inputs,
         skip_column_inference=True,
     )

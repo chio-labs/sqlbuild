@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import evaluate_contract_rule
@@ -35,7 +35,7 @@ def test_given_config_value_the_encoder_rejects_when_building_natively_then_rule
     test_case: NativeRowsEncodeErrorTestCase,
 ) -> None:
     started: list[str] = record_custom_starts(monkeypatch=monkeypatch)
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="orders",
         relative_path="models/orders.sql",
         sql="SELECT 1",

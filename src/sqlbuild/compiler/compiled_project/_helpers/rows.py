@@ -9,13 +9,12 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileModelConfig,
     CompileSqlReference,
     DynamicColumnContractProof,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SchemaModelEntry
@@ -61,7 +60,7 @@ def record_model_analyses_impl(
     return transferred
 
 
-def hand_built_project_impl(project: CompiledProject) -> _native.NativeCompiledProject:
+def hand_built_project_impl(project: CompiledProjectView) -> _native.NativeCompiledProject:
     """A native project for a `CompiledProject` built without the compile-input stage."""
 
     native: _native.NativeCompiledProject = _native.NativeCompiledProject()

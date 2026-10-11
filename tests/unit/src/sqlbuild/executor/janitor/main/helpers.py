@@ -29,7 +29,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
@@ -541,7 +541,7 @@ def build_project(
     destination_database: str | None = None,
     destination_schema: str = "analytics",
     migrate_from: str | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     source: CompiledSource = CompiledSource(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SOURCE,

@@ -14,11 +14,14 @@ from sqlbuild.compiler.compile._helpers.render.parameters import expand_test_par
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
     CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, TypedSqlValueRenderer
+from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
+    CompiledResourceType,
+    TypedSqlValueRenderer,
+)
 from sqlbuild.compiler.planner._helpers.output.plan_entry import scope_overlaps
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
@@ -246,7 +249,7 @@ def test_given_parameterized_sql_tests_when_compiling_then_cases_have_typed_uniq
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
     compile_inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
-    compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
+    compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
 
     assert tuple(test.name for test in compiled.sql_tests) == test_case.expected_names
     assert tuple(test.key.name for test in compiled.sql_tests) == test_case.expected_names
@@ -288,7 +291,7 @@ def test_given_parameterized_sql_tests_when_compiling_then_cases_have_typed_uniq
         model_test_path.read_text(encoding="utf-8").replace('amount "2.4700"', 'amount "2.4800"'),
         encoding="utf-8",
     )
-    changed: CompiledProject = assemble_compiled_project(
+    changed: CompiledProjectView = assemble_compiled_project(
         inputs=compile_project_inputs(project_dir=tmp_path)
     )
     changed_fingerprints: tuple[str | None, ...] = tuple(

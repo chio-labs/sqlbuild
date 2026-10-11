@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledSqlScenario,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.scenario.artifacts import (
     build_scenario_hash_index,
@@ -116,7 +115,7 @@ def _scenario_artifacts(graph_plan: ScenarioGraphPlan) -> tuple[ScenarioArtifact
 
 
 def _scenario_namespace(
-    *, project: CompiledProject, graph_plan: ScenarioGraphPlan
+    *, project: CompiledProjectView, graph_plan: ScenarioGraphPlan
 ) -> tuple[str | None, str | None]:
     models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     model_name: str

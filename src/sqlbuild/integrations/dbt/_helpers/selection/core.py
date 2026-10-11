@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
@@ -31,7 +31,7 @@ from sqlbuild.integrations.dbt.types import DbtCombinedGraphOwner
 
 def resolve_dbt_interop_sqlbuild_selection(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: DbtManifestIndex | None = None,
     graph: DbtCombinedGraph,
     select: Sequence[str],
@@ -135,7 +135,7 @@ def resolve_dbt_interop_sqlbuild_selection(
 
 def _resolve_path_between_keys(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: DbtManifestIndex | None,
     graph: DbtCombinedGraph,
     parsed: SelectorExpansion,
@@ -171,7 +171,7 @@ def _path_endpoint_names(*, term: str, raw_term: str) -> tuple[str, str]:
 
 def _resolve_path_endpoint_key(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: DbtManifestIndex | None,
     endpoint: str,
     raw_term: str,
@@ -204,7 +204,7 @@ def _resolve_path_endpoint_key(
 
 
 def _resolve_direct_sqlbuild_keys(
-    *, project: CompiledProject, term: str
+    *, project: CompiledProjectView, term: str
 ) -> tuple[frozenset[DbtCombinedGraphKey], str | None]:
     model_names, translated_path = resolve_sqlbuild_model_selector_names(
         project=project,
@@ -231,7 +231,7 @@ def _add_expanded_keys(
 
 
 def _resolve_excluded_sqlbuild_names(
-    *, project: CompiledProject, exclude: Sequence[str]
+    *, project: CompiledProjectView, exclude: Sequence[str]
 ) -> frozenset[str]:
     excluded: set[str] = set()
     term: str

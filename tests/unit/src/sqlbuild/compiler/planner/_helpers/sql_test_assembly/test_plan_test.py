@@ -19,7 +19,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
     plan_compiled_sql_test_artifacts,
@@ -484,7 +485,7 @@ def test_given_test_and_project_when_planning_then_produces_expected_chain(
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
@@ -627,7 +628,7 @@ def test_given_unresolved_chain_input_when_planning_then_test_is_blocked_with_er
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     result: SqlTestPlanResult
@@ -724,7 +725,7 @@ def test_given_model_chain_when_native_planning_then_artifact_matches_runtime_sq
     test_case: NativePlanningDifferentialTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case.planning_case)
     assert isinstance(compiled_test.payload, CompiledModelSqlTestPayload)
     compiled_test = replace(
@@ -740,7 +741,7 @@ def test_given_model_chain_when_native_planning_then_artifact_matches_runtime_sq
             ),
         ),
     )
-    project = replace(project, sql_tests=(compiled_test,))
+    project = project_with(project=project, sql_tests=(compiled_test,))
     adapter: DuckDbAdapter = DuckDbAdapter()
     entry, warnings = plan_single_test(
         test=compiled_test,
@@ -800,7 +801,7 @@ def test_given_refs_in_comments_and_literals_when_planning_then_preserves_sql_an
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     entry, warnings = plan_single_test(test=compiled_test, project=project, adapter=DuckDbAdapter())
@@ -840,7 +841,7 @@ def test_given_repeated_query_with_different_fixture_rows_when_planning_then_kee
             expected_cte_bodies={"orders": f"SELECT {fixture_id} AS id"},
         )
         compiled_test: CompiledSqlTest
-        project: CompiledProject
+        project: CompiledProjectView
         compiled_test, project = build_test_and_project(fixture_case)
         entry, warnings = plan_single_test(
             test=compiled_test,
@@ -879,7 +880,7 @@ def test_given_unresolved_marker_in_mock_when_planning_with_analysis_then_report
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     result: SqlTestPlanResult
@@ -1038,7 +1039,7 @@ def test_given_udf_sql_test_when_planning_then_compares_resolved_actual_to_expec
         ),
     )
 
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test_run",
         effective_target_name=None,
         effective_connection={},
@@ -1169,7 +1170,7 @@ def test_given_table_function_sql_test_when_planning_then_compares_resolved_actu
         ),
     )
 
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test_run",
         effective_target_name=None,
         effective_connection={},
@@ -1275,7 +1276,7 @@ def test_given_sql_analysis_enabled_when_planning_test_then_it_uses_top_level_ge
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
@@ -1328,7 +1329,7 @@ def test_given_sql_analysis_enabled_when_generated_cte_name_conflicts_then_it_ra
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragments[0]):
@@ -1372,7 +1373,7 @@ def test_given_sql_analysis_assertion_when_planning_then_uses_shared_chain_ctes(
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
@@ -1443,7 +1444,7 @@ def test_given_adapter_function_when_resolving_with_analysis_then_keeps_authored
     test_case: SqlAnalysisDialectTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(
         PlanTestChainTestCase(
             description=test_case.description,
@@ -1515,7 +1516,7 @@ def test_given_tsql_shared_cte_name_when_planning_then_helper_and_model_cte_stay
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
     adapter: BaseAdapter = build_comparison_test_adapter("sqlserver")
 
@@ -1602,7 +1603,7 @@ def test_given_reference_the_compiler_missed_when_planning_then_it_fails_with_lo
     test_case: PlanTestChainTestCase,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     with pytest.raises(SqlTestReferenceError) as raised:

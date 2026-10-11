@@ -1,7 +1,7 @@
 """Test helpers for native rules engine boundaries."""
 
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from operator import attrgetter
 from pathlib import Path
 from typing import Any, cast
@@ -12,12 +12,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
     CompiledSqlTestResource,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import native
@@ -43,20 +43,20 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
 
 
-def project_with_scope(*, index: ScopeIndex) -> CompiledProject:
+def project_with_scope(*, index: ScopeIndex) -> CompiledProjectView:
     """Return a minimal compiled project carrying canonical scope facts."""
 
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="orders",
         relative_path="models/orders.sql",
         sql="SELECT 1 AS id",
         config_values={},
     )
-    return replace(project, scope_index=index)
+    return project_with(project=project, scope_index=index)
 
 
 def captured_native_request(
-    *, monkeypatch: pytest.MonkeyPatch, project: CompiledProject, project_dir: Path
+    *, monkeypatch: pytest.MonkeyPatch, project: CompiledProjectView, project_dir: Path
 ) -> dict[str, Any]:
     """Evaluate through the Python boundary and capture the header and rows handed to Rust."""
 
@@ -223,7 +223,7 @@ def load_custom_rule(*, root: Path, configured_path: Path) -> Rule:
 
 def custom_rule_inputs(
     *, tmp_path: Path, test_case: CustomRuleTestCase
-) -> tuple[CompiledProject, RulesConfig]:
+) -> tuple[CompiledProjectView, RulesConfig]:
     _ = write_rule(
         root=tmp_path,
         body=test_case.body,
@@ -231,7 +231,7 @@ def custom_rule_inputs(
         project_wide=test_case.project_wide,
     )
     (tmp_path / "rules" / "input.json").write_text("{}", encoding="utf-8")
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="commerce__mart__orders",
         relative_path="models/mart/commerce__mart__orders.sql",
         sql=_MODEL_SQL,
@@ -265,26 +265,26 @@ def custom_rules_with_imports(
 
 def two_model_project(
     *, customers_sql: str, customers_config: dict[str, object]
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Return an orders and customers project with configurable customers facts."""
 
-    orders: CompiledProject = build_project(
+    orders: CompiledProjectView = build_project(
         name="orders",
         relative_path="models/orders.sql",
         sql="SELECT 1 AS order_id",
         config_values={},
     )
-    customers: CompiledProject = build_project(
+    customers: CompiledProjectView = build_project(
         name="customers",
         relative_path="models/customers.sql",
         sql=customers_sql,
         config_values=customers_config,
     )
-    return replace(orders, models=(*orders.models, *customers.models))
+    return project_with(project=orders, models=(*orders.models, *customers.models))
 
 
 def evaluate_cached_custom_rules(
-    *, project: CompiledProject, project_dir: Path, cache_enabled: bool
+    *, project: CompiledProjectView, project_dir: Path, cache_enabled: bool
 ) -> CustomRulesOutcome:
     """Evaluate the selected custom rule through the incremental read-tracking cache."""
 
@@ -307,7 +307,7 @@ def evaluate_contract_rule(
     config: RulesConfig = RulesConfig(
         select=("SQBRCONTRACT101",), cache=RulesCacheConfig(enabled=cache_enabled)
     )
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="commerce__mart__orders",
         relative_path="models/mart/commerce__mart__orders.sql",
         sql="WITH orders AS (SELECT id FROM source_orders) SELECT id FROM orders",
@@ -383,8 +383,8 @@ def evaluate_incremental_step(
     )
 
 
-def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledProject:
-    projects: list[CompiledProject] = [
+def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledProjectView:
+    projects: list[CompiledProjectView] = [
         build_project(
             name=model.name,
             relative_path=model.relative_path,
@@ -393,4 +393,6 @@ def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledPr
         )
         for model in models
     ]
-    return replace(projects[0], models=tuple(project.models[0] for project in projects))
+    return project_with(
+        project=projects[0], models=tuple(project.models[0] for project in projects)
+    )

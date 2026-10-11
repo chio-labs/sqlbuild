@@ -15,13 +15,16 @@ from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledProject,
     CompileSqlReference,
     DynamicColumnContractProof,
     FixtureColumnInference,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -46,7 +49,7 @@ _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\s*,\s*"([^
 
 def build_relation_fixture_completion(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     ordered_model_names: tuple[str, ...],
     fixture_groups: FixtureGroups,
@@ -358,7 +361,7 @@ def _fixture_keys_requiring_analysis(
 
 def build_relation_fixture_context(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     models_by_name: dict[str, CompiledModelView] | None = None,
 ) -> RelationFixturePlanningContext:
     """Build immutable project-wide fixture metadata once per planning invocation."""
@@ -590,7 +593,7 @@ def _replace_relation_markers_with_stubs(query_sql: str) -> str:
 
 
 def _fixture_relation_metadata(
-    *, project: CompiledProject, model_map: dict[str, CompiledModelView]
+    *, project: CompiledProjectView, model_map: dict[str, CompiledModelView]
 ) -> dict[FixtureKey, FixtureRelationMetadata]:
     relations: dict[FixtureKey, FixtureRelationMetadata] = {}
     for model_name, model in model_map.items():

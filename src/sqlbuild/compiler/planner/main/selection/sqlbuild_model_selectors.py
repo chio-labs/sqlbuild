@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 
 
 def resolve_sqlbuild_model_selector_names(
-    *, project: CompiledProject, term: str
+    *, project: CompiledProjectView, term: str
 ) -> tuple[tuple[str, ...], str | None]:
     """Resolve one SQLBuild-owned model selector core to names and path translation."""
 

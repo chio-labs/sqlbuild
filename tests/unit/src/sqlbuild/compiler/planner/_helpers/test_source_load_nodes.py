@@ -14,7 +14,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_intermediate_source_map,
     expand_selected_loader_dependencies,
@@ -77,7 +82,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 def test_given_selected_source_load_keys_when_building_entries_then_returns_ordered_load_nodes(
     test_case: SourceLoadNodesTestCase,
 ) -> None:
-    project: CompiledProject = build_source_load_nodes_project()
+    project: CompiledProjectView = build_source_load_nodes_project()
     selected_keys: frozenset[CompiledObjectKey] = frozenset(
         entry.key for entry in test_case.expected_entries
     )
@@ -113,7 +118,7 @@ def test_given_selected_source_load_keys_when_building_entries_then_returns_orde
 def test_given_unrelated_selected_seed_when_building_source_map_then_sources_are_excluded(
     test_case: SourceMetadataClosureTestCase,
 ) -> None:
-    project: CompiledProject = build_source_load_nodes_project()
+    project: CompiledProjectView = build_source_load_nodes_project()
     seed_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SEED, "country_codes")
 
     source_map: dict[str, SourceEntry] = build_source_load_map(
@@ -138,7 +143,7 @@ def test_given_unrelated_selected_seed_when_building_source_map_then_sources_are
 def test_given_transitive_unselected_upstream_when_building_source_map_then_source_is_retained(
     test_case: SourceMetadataClosureTestCase,
 ) -> None:
-    project: CompiledProject = build_source_load_nodes_project()
+    project: CompiledProjectView = build_source_load_nodes_project()
     selected_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "fact_orders")
     upstream_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "stg_orders")
     source_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.SOURCE, "raw_orders")
@@ -199,7 +204,7 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
             qualified_name="ANALYTICS_DB.STAGING.STG_ORDERS_PHYSICAL",
         ),
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test",
         effective_target_name=None,
         effective_connection={},
@@ -249,7 +254,7 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
 def test_given_terminal_source_when_expanding_loader_deps_then_adds_intermediate_source(
     test_case: LoaderDagExpansionTestCase,
 ) -> None:
-    project: CompiledProject = build_source_load_nodes_project()
+    project: CompiledProjectView = build_source_load_nodes_project()
     selected_keys: frozenset[CompiledObjectKey] = frozenset(
         CompiledObjectKey(resource_type=CompiledResourceType.SOURCE, name=name)
         for name in test_case.selected_names
@@ -301,9 +306,9 @@ def test_given_terminal_source_when_expanding_loader_deps_then_adds_intermediate
 def test_given_qualified_intermediate_destination_when_building_map_then_parses_loader_target(
     test_case: LoaderDestinationPlanningTestCase,
 ) -> None:
-    project: CompiledProject = build_source_load_nodes_project()
-    project = replace(
-        project,
+    project: CompiledProjectView = build_source_load_nodes_project()
+    project = project_with(
+        project=project,
         effective_target_database="default_db",
         effective_target_schema="default_schema",
         loader_functions=(

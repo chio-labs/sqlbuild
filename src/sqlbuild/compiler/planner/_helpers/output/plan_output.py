@@ -7,9 +7,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import (
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
@@ -65,7 +65,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 def build_plan_output(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
@@ -202,7 +202,7 @@ def _resolve_seed_plan_reason(
 
 def _build_provider_usages(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     model_entries: tuple[ModelPlanEntry, ...],
     source_load_entries: tuple[SourceLoadPlanEntry, ...],
 ) -> tuple[PlanProviderUsage, ...]:
@@ -307,7 +307,7 @@ def _to_plan_provider_usages(
 
 def _validate_skipped_intermediate_loader_targets(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     snapshot: WarehouseSnapshot,
     relations: PlannerRelationsContext,
     source_load_entries: tuple[SourceLoadPlanEntry, ...],
@@ -345,7 +345,7 @@ def _validate_skipped_intermediate_loader_targets(
 
 def _build_function_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     snapshot: WarehouseSnapshot,
     relations: PlannerRelationsContext,
@@ -418,7 +418,7 @@ def plan_function(
 
 def build_selected_audit_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
@@ -458,7 +458,7 @@ def build_selected_audit_entries(
 
 def plan_selected_sql_tests(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
     sql_test_selection: SqlTestSelection,
@@ -499,7 +499,7 @@ def sql_test_is_selected(
 
 def build_selected_test_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
     sql_test_selection: SqlTestSelection,

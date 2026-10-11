@@ -8,7 +8,7 @@ import pytest
 
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
@@ -139,7 +139,7 @@ def test_given_snowflake_query_when_inferring_rich_types_then_preserves_proven_o
         "MODEL (description 'Test model report.', materialized view, database warehouse, schema analytics);\n"
         + test_case.sql
     )
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter=SnowflakeAdapter(),
         column_lineage_mode=ColumnLineageMode.RICH,

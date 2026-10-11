@@ -18,8 +18,9 @@ import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_ABANDONED_SUFFIX,
@@ -46,7 +47,7 @@ _MAX_HOSTS: int = 8
 
 def run_custom_hosts(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     dialect: str,
@@ -98,10 +99,10 @@ def run_custom_hosts(
     )
 
 
-def _write_inputs(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+def _write_inputs(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
     """Publish the project payload atomically; hosts started earlier wait for it to appear."""
 
-    payload: CompiledProject = host_payload_project(project)
+    payload: CompiledProjectView = host_payload_project(project)
     with tempfile.NamedTemporaryFile(
         dir=path.parent, prefix="writing-", suffix=".pickle", delete=False
     ) as handle:
@@ -115,10 +116,14 @@ def _write_inputs(*, path: Path, project: CompiledProject, config: RulesConfig) 
     partial.replace(path)
 
 
-def host_payload_project(project: CompiledProject) -> CompiledProject:
+def host_payload_project(project: CompiledProjectView) -> CompiledProject:
     """Return the project hosts decode, without model state no Rule fact reads."""
 
-    return replace(project, models=tuple(map(_payload_model, project.models)), native_project=None)
+    return replace(
+        compiled_project_record(project),
+        models=tuple(map(_payload_model, project.models)),
+        native_project=None,
+    )
 
 
 def _payload_model(model: CompiledModelView) -> CompiledModelView:

@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.rule_engine._helpers.engine import custom_rules, fact_replay
@@ -55,7 +56,7 @@ class OrdersReferenceResolver:
         return None
 
 
-def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProject:
+def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProjectView:
     """Write and compile one DuckDB project with an external reference resolver."""
 
     for relative_path, contents in files.items():
@@ -76,7 +77,7 @@ def dropped_fields(*, before: object, after: object) -> frozenset[str]:
     return frozenset(filter(lambda name: getattr(before, name) != getattr(after, name), names))
 
 
-def every_fact_key(project: CompiledProject) -> tuple[FactKey, ...]:
+def every_fact_key(project: CompiledProjectView) -> tuple[FactKey, ...]:
     """Return a key for every fact Rules can read, over every model of the project."""
 
     models: tuple[Model, ...] = tuple(public_model(model) for model in project.models)
@@ -94,7 +95,7 @@ def every_fact_key(project: CompiledProject) -> tuple[FactKey, ...]:
     )
 
 
-def fact_digests(*, project: CompiledProject, root: Path) -> dict[FactKey, tuple[str, str]]:
+def fact_digests(*, project: CompiledProjectView, root: Path) -> dict[FactKey, tuple[str, str]]:
     """Digest every fact as hosts observe it and as whole-project digests encode it."""
 
     views: RuleFactViews = build_rule_fact_views(

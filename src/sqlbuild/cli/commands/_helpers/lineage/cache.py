@@ -15,7 +15,8 @@ from typing import Any
 
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.models import LineageNode, RelationLineageIndex
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.constants import CACHE_DIRECTORY_NAME
 from sqlbuild.compiler.frontier.main.engine_cache_name import engine_cache_name
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -200,7 +201,7 @@ def _relation_index(*, graph: ProjectGraph) -> RelationLineageIndex:
     )
 
 
-def _lineage_node(*, project: CompiledProject, key: CompiledObjectKey) -> LineageNode:
+def _lineage_node(*, project: CompiledProjectView, key: CompiledObjectKey) -> LineageNode:
     for model in project.models:
         if model.key == key:
             return LineageNode(

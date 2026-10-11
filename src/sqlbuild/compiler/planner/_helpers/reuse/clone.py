@@ -8,11 +8,10 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
@@ -56,7 +55,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 def build_clone_plan_output(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
 ) -> PlanOutput:
@@ -79,13 +78,13 @@ def build_clone_plan_output(
 
 def build_clone_model_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection: Any,
-    source_project: CompiledProject | None = None,
+    source_project: CompiledProjectView | None = None,
 ) -> tuple[ModelPlanEntry, ...]:
-    effective_source_project: CompiledProject = source_project or project
+    effective_source_project: CompiledProjectView = source_project or project
     model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
     seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
@@ -146,7 +145,7 @@ def build_clone_model_entries(
 
 def build_clone_source_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
     adapter: BaseAdapter,
 ) -> tuple[CloneSourcePlanEntry, ...]:
@@ -181,14 +180,14 @@ def build_clone_source_entries(
 
 def build_clone_function_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection: Any,
-    source_project: CompiledProject | None = None,
+    source_project: CompiledProjectView | None = None,
 ) -> tuple[FunctionPlanEntry, ...]:
     """Build destination-resolved function definitions for clone recreation."""
-    effective_source_project: CompiledProject = source_project or project
+    effective_source_project: CompiledProjectView = source_project or project
     model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
     seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
@@ -238,7 +237,7 @@ def build_clone_function_entries(
 
 def build_origin_source_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_names: frozenset[str],
     adapter: BaseAdapter,
 ) -> tuple[CloneSourcePlanEntry, ...]:
@@ -257,7 +256,7 @@ def build_origin_source_entries(
 
 def build_origin_model_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_names: frozenset[str],
 ) -> tuple[ModelPlanEntry, ...]:
     entries: list[ModelPlanEntry] = []
@@ -289,7 +288,7 @@ def build_origin_model_entries(
 
 def build_clone_seed_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
 ) -> tuple[SeedPlanEntry, ...]:
     return tuple(
@@ -308,7 +307,7 @@ def build_clone_seed_entries(
 
 def build_origin_seed_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_names: frozenset[str],
 ) -> tuple[SeedPlanEntry, ...]:
     return tuple(

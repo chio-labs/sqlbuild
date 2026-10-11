@@ -5,12 +5,12 @@ from __future__ import annotations
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompilerDiagnostic,
     RelatedLocation,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -30,7 +30,7 @@ type _DiagnosticRow = tuple[
 
 
 def native_model_contracts(
-    *, project: CompiledProject, dialect: TypeDialect | str | None
+    *, project: CompiledProjectView, dialect: TypeDialect | str | None
 ) -> ContractValidationResult:
     """Return every model's column contract diagnostics, read from the owner, in model order."""
 

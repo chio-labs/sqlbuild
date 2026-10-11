@@ -1,14 +1,14 @@
 """Column facts for custom rules."""
 
-from sqlbuild.compiler.compile.models import CompiledProject, InferredColumn
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.models import Model
 
 
 class ColumnFacts:
     """Declared and compiler-inferred output columns."""
 
-    def __init__(self, *, project: CompiledProject) -> None:
+    def __init__(self, *, project: CompiledProjectView) -> None:
         self._models: dict[object, CompiledModelView] = {
             model.relative_path: model for model in project.models
         }

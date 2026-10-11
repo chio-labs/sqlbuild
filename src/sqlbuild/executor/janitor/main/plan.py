@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
 from sqlbuild.executor.janitor._helpers.archive_planning import plan_janitor_archives
 from sqlbuild.executor.janitor._helpers.classification import (
@@ -41,7 +41,7 @@ from sqlbuild.runtime.observability.classes.operation_lifecycle import Operation
 
 def build_janitor_plan(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     retention_days: int,
@@ -187,7 +187,7 @@ def _plan_protected_names(
     managed_target_schemas: set[tuple[str | None, str | None]],
     facts: JanitorWarehouseFacts,
     early_drops: tuple[str, ...],
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: JanitorRelationScope,
     now: datetime,
 ) -> tuple[JanitorOldNameViewPlanning, JanitorRelationScope]:
@@ -212,7 +212,7 @@ def _plan_protected_names(
 
 def _protect_pending_origins(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     facts: JanitorWarehouseFacts,
     scope: JanitorRelationScope,
     old_names: JanitorOldNameViewPlanning,

@@ -9,8 +9,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
-    CompiledProject,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import ExpectedCountTestCase
@@ -53,7 +53,7 @@ def test_given_expanded_mixed_mode_tests_when_compiling_project_then_complete_in
         },
     )
 
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter=DuckDbAdapter(),
     )

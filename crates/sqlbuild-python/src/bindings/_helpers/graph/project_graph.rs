@@ -27,7 +27,7 @@ const KIND_SELECTOR: &str = "kind";
 const PATH_SELECTOR: &str = "path";
 
 /// `(key, deps, tags, model folder)`.
-type ResourceRow = (ObjectKey, Vec<ObjectKey>, Vec<String>, Option<String>);
+pub(crate) type ResourceRow = (ObjectKey, Vec<ObjectKey>, Vec<String>, Option<String>);
 type Edges = Vec<(ObjectKey, Vec<ObjectKey>)>;
 /// `(names, upstream, downstream, tags, paths)` in Python's dict order.
 type IndexesRow = (
@@ -74,23 +74,28 @@ impl NativeProjectGraph {
     }
 }
 
+/// The project graph indexes of these resources, in project order.
+pub(crate) fn project_graph(resources: Vec<ResourceRow>) -> PyResult<NativeProjectGraph> {
+    compiler_guard(|| {
+        let resources: Vec<GraphResource> = resources
+            .into_iter()
+            .map(|(key, deps, tags, folder)| GraphResource {
+                key,
+                deps,
+                tags,
+                folder,
+            })
+            .collect();
+        Ok(NativeProjectGraph::new(build_project_graph(&resources)))
+    })
+}
+
 #[pymethods]
 impl NativeProjectGraph {
     /// Build the indexes from resources in project order: models, sources, seeds, functions.
     #[staticmethod]
     fn from_resources(resources: Vec<ResourceRow>) -> PyResult<Self> {
-        compiler_guard(|| {
-            let resources: Vec<GraphResource> = resources
-                .into_iter()
-                .map(|(key, deps, tags, folder)| GraphResource {
-                    key,
-                    deps,
-                    tags,
-                    folder,
-                })
-                .collect();
-            Ok(Self::new(build_project_graph(&resources)))
-        })
+        project_graph(resources)
     }
 
     /// Wrap indexes a caller already built, such as the planner's.

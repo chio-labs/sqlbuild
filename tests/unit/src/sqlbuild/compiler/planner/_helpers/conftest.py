@@ -4,8 +4,8 @@ import pytest
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
@@ -23,7 +23,7 @@ def diamond_graph() -> tuple[
     dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ]:
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={
             "orders": ("raw_orders",),
             "customers": ("raw_customers",),
@@ -57,7 +57,7 @@ def path_graph() -> tuple[
     dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     dict[CompiledObjectKey, str],
 ]:
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={
             "stg_orders": ("raw_orders",),
             "stg_customers": ("raw_customers",),

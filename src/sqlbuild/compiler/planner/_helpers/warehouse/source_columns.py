@@ -10,14 +10,14 @@ from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_colum
 from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
     list_relations_for_inspection,
 )
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.constants import METADATA_NAME_FILTER_LIMIT
 from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def gather_source_columns(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     source_entries: tuple[SourceEntry, ...] | None = None,
@@ -34,7 +34,7 @@ def gather_source_columns(
 
 def gather_source_inspection(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     source_entries: tuple[SourceEntry, ...] | None,
@@ -110,7 +110,7 @@ def gather_source_inspection(
 
 def _build_source_table_name_filter(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     database: str | None,
     schemas: set[str],
     source_entries: tuple[SourceEntry, ...] | None = None,

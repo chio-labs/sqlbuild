@@ -239,23 +239,7 @@ impl NativeModelInput {
     #[getter]
     fn sql_expansion(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
-        self.read(py, |record, py| {
-            record
-                .projections
-                .sql_expansion
-                .get_or_try_init(py, || {
-                    let expansion: &ExpansionRecord = &record.expansion;
-                    if !expansion.authored {
-                        return Ok(py.None());
-                    }
-                    expansion_object(
-                        &classes,
-                        expansion,
-                        &[&expansion.declaration_spans, &expansion.macro_spans],
-                    )
-                })
-                .map(|expansion| expansion.clone_ref(py))
-        })
+        self.read(py, |record, _| authored_expansion(&classes, record))
     }
 
     /// The whole expansion, variables included, which early SQL lint reuses.
@@ -281,6 +265,29 @@ impl NativeModelInput {
                 .map(|expansion| expansion.clone_ref(py))
         })
     }
+}
+
+/// The authored-to-expanded passes, when interpolation left the authored query unchanged.
+pub(crate) fn authored_expansion(
+    classes: &InputViewClasses<'_>,
+    record: &ModelInputRecord,
+) -> PyResult<Py<PyAny>> {
+    let py: Python<'_> = classes.sql_expansion.py();
+    record
+        .projections
+        .sql_expansion
+        .get_or_try_init(py, || {
+            let expansion: &ExpansionRecord = &record.expansion;
+            if !expansion.authored {
+                return Ok(py.None());
+            }
+            expansion_object(
+                classes,
+                expansion,
+                &[&expansion.declaration_spans, &expansion.macro_spans],
+            )
+        })
+        .map(|expansion| expansion.clone_ref(py))
 }
 
 /// Where a rejected `sql_analysis false` was authored, or `None`.

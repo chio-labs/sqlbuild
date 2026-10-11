@@ -5,8 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
-from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.compile.models import CompiledSqlTest
+from sqlbuild.compiler.compile.types import CompiledProjectView, SqlTestMode
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.rule_engine.classes.model_test_facts import TestFacts as ModelTestFacts
 from sqlbuild.rule_engine.models import Model
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import (
@@ -47,8 +48,8 @@ def test_given_model_and_non_model_tests_when_querying_model_then_returns_each_m
     direct: CompiledSqlTest = direct_sql_test(
         mode=SqlTestMode.UDF, name=test_case.direct_test_name, block_index=1
     )
-    project: CompiledProject = replace(
-        build_project(
+    project: CompiledProjectView = project_with(
+        project=build_project(
             name=test_case.model_name,
             relative_path="models/orders.sql",
             sql="SELECT 1 AS order_id",

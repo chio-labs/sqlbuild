@@ -17,6 +17,7 @@ from sqlbuild.cli.output.models import (
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileModelConfig
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -64,7 +65,7 @@ def test_given_large_hook_integer_when_formatting_json_then_preserves_value(
             }
         ),
     )
-    graph = replace(graph, project=replace(graph.project, models=(model,)))
+    graph = replace(graph, project=project_with(project=graph.project, models=(model,)))
 
     payload: dict[str, object] = json.loads(
         format_compile_json(

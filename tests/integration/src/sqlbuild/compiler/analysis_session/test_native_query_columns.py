@@ -19,8 +19,7 @@ from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import 
 )
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     FallbackColumnsTestCase,
     MissingSessionAnalysisTestCase,
@@ -57,7 +56,7 @@ _HEADER: str = "MODEL (description 'Test model.', materialized view);\n"
 def test_given_unprojectable_model_when_compiling_then_parsed_tree_columns_are_kept(
     test_case: FallbackColumnsTestCase, tmp_path: Path
 ) -> None:
-    project: CompiledProject = compiled_project(
+    project: CompiledProjectView = compiled_project(
         project_dir=tmp_path,
         files={
             "sqlbuild_project.toml": _PROJECT,

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.lint.constants import RELATION_KIND_REF, RELATION_KIND_SEED, RELATION_KIND_SOURCE
 from sqlbuild.lint.main.declared_relation_keys import declared_relation_keys
 from sqlbuild.lint.types import RelationKeys
 
 
-def compiled_relation_keys(project: CompiledProject) -> RelationKeys:
+def compiled_relation_keys(project: CompiledProjectView) -> RelationKeys:
     """Collect declared keys of compiled models, seeds and sources."""
 
     return declared_relation_keys(

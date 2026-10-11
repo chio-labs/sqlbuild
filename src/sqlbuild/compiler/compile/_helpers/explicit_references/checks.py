@@ -19,7 +19,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSource,
     CompilerDiagnostic,
@@ -28,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -71,7 +71,10 @@ class _LiteralSql:
 
 
 def explicit_reference_report(
-    *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs, enforce_explicit: bool
+    *,
+    project: CompiledProjectView,
+    discovered_inputs: DiscoveredProjectInputs,
+    enforce_explicit: bool,
 ) -> PythonSqlReferenceReport:
     """Return P005, P007 and P008 errors and unmatched Python-SQL relations; raise P001."""
 
@@ -190,7 +193,7 @@ def _owner_row(
     }
 
 
-def _resource_rows(project: CompiledProject) -> list[dict[str, object]]:
+def _resource_rows(project: CompiledProjectView) -> list[dict[str, object]]:
     return [
         {"key": _key_row(resource.key), "deps": _key_rows(resource.deps)}
         for resource in (*project.models, *project.sources, *project.seeds, *project.functions)
@@ -282,7 +285,7 @@ def _ref_rows(refs: tuple[SqlResourceRef, ...]) -> list[tuple[str, str]]:
 
 
 def _owners(
-    *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
+    *, project: CompiledProjectView, discovered_inputs: DiscoveredProjectInputs
 ) -> tuple[_PythonSqlOwner, ...]:
     owners: list[_PythonSqlOwner] = []
     for label, nodes in (
@@ -320,7 +323,7 @@ def _owners(
 
 
 def _loader_owners(
-    *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
+    *, project: CompiledProjectView, discovered_inputs: DiscoveredProjectInputs
 ) -> tuple[_PythonSqlOwner, ...]:
     sources_by_loader: dict[str, set[str]] = {}
     for source in project.sources:

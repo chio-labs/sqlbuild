@@ -17,11 +17,15 @@ from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    SqlTestMode,
+)
 from sqlbuild.compiler.planner._helpers.fixtures.completion import build_relation_fixture_context
 from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import (
     build_validated_test_fixtures,
@@ -50,7 +54,7 @@ _FUNCTION_RESOURCE_TYPES: frozenset[CompiledResourceType] = frozenset(
 def plan_sql_tests(
     *,
     tests: tuple[CompiledSqlTest, ...],
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
     validate_fixtures: bool = False,
@@ -151,7 +155,7 @@ def _expected_column_diagnostics(
 def _validate_fixtures(
     *,
     tests: tuple[CompiledSqlTest, ...],
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     fixture_planning_context: RelationFixturePlanningContext,
 ) -> tuple[tuple[CompiledSqlTest, ...], dict[int, tuple[str, ...]]]:
@@ -196,7 +200,7 @@ def _validate_fixtures(
 def _with_validated_fixtures(
     *,
     test: CompiledSqlTest,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     ordered_model_names: tuple[str, ...],
     fixture_planning_context: RelationFixturePlanningContext,
@@ -272,7 +276,7 @@ def _plan_entry(
     *,
     test: CompiledSqlTest,
     plan: NativeSqlTestPlan,
-    project: CompiledProject,
+    project: CompiledProjectView,
     models_by_name: dict[str, CompiledModelView],
     sql_analysis_enabled: bool,
 ) -> SqlTestPlanEntry:
@@ -334,7 +338,7 @@ def _chain_function_deps(
 
 
 def _direct_function_deps(
-    *, test: CompiledSqlTest, project: CompiledProject
+    *, test: CompiledSqlTest, project: CompiledProjectView
 ) -> tuple[CompiledObjectKey, ...]:
     if not isinstance(test.payload, CompiledDirectLogicSqlTestPayload):
         return ()

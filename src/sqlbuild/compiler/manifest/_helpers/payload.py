@@ -6,11 +6,10 @@ from datetime import UTC, datetime
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledSeed,
     CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.manifest._helpers.macros import (
     build_manifest_macro_nodes,
 )
@@ -34,7 +33,7 @@ from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity
 
 def build_manifest_payload(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan_output: PlanOutput | None,
     project_name: str,
     adapter_type: str,
@@ -132,7 +131,7 @@ def build_manifest_payload(
     }
 
 
-def _build_python_hook_metadata(project: CompiledProject) -> dict[str, dict[str, object]]:
+def _build_python_hook_metadata(project: CompiledProjectView) -> dict[str, dict[str, object]]:
     hook_identities: dict[str, PythonNodeIdentity] = build_hook_identities(project.hook_functions)
     return {
         hook.name: {

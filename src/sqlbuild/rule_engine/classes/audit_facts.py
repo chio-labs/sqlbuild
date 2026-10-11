@@ -1,13 +1,14 @@
 """Audit facts for custom rules."""
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledAudit
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.models import Model
 
 
 class AuditFacts:
     """Compiled audits indexed by their model subject."""
 
-    def __init__(self, *, project: CompiledProject) -> None:
+    def __init__(self, *, project: CompiledProjectView) -> None:
         self._audits: tuple[CompiledAudit, ...] = project.audits
         by_model: dict[str, list[CompiledAudit]] = {}
         for audit in self._audits:

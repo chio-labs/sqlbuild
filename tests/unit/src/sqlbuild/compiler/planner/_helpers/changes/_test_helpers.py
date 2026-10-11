@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     FunctionLanguage,
 )
@@ -135,7 +136,7 @@ def build_metadata_json_with_audit_gate(metadata_json: str) -> str:
     return json.dumps(metadata, sort_keys=True, separators=(",", ":"), default=str)
 
 
-def build_project_for_function_metadata_detection() -> CompiledProject:
+def build_project_for_function_metadata_detection() -> CompiledProjectView:
     function_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.UDF,
         name="is_large_order",
@@ -188,7 +189,7 @@ def build_scope_for_function_metadata_detection() -> PlannerScope:
         resource_type=CompiledResourceType.UDF,
         name="is_large_order",
     )
-    project: CompiledProject = build_project_for_function_metadata_detection()
+    project: CompiledProjectView = build_project_for_function_metadata_detection()
     return PlannerScope(
         upstream_deps={model_key: (function_key,), function_key: ()},
         downstream_deps={function_key: (model_key,), model_key: ()},

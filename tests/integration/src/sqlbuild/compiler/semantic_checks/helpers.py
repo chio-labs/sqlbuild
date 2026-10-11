@@ -20,8 +20,9 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import (
     complete_semantic_diagnostics,
 )
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -94,7 +95,7 @@ type _Template = Callable[[random.Random, str, tuple[str, ...]], tuple[str, tupl
 class SemanticInputs:
     """The arguments the Python compile passed to `complete_semantic_diagnostics`."""
 
-    project: CompiledProject
+    project: CompiledProjectView
     profile: ExpressionInferenceProfile
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]]
     resource_sql_analysis: bool
@@ -205,7 +206,7 @@ def captured_semantic_inputs(
         _ = path.write_text(contents, encoding="utf-8")
     captured: list[SemanticInputs] = []
 
-    def capture(**arguments: Any) -> CompiledProject:
+    def capture(**arguments: Any) -> CompiledProjectView:
         captured.append(SemanticInputs(**arguments))
         return complete_semantic_diagnostics(**arguments)
 
@@ -224,18 +225,18 @@ def with_dialect(inputs: SemanticInputs, dialect: str | None) -> SemanticInputs:
 
     return replace(
         inputs,
-        project=replace(inputs.project, sql_analysis_dialect=dialect),
+        project=project_with(project=inputs.project, sql_analysis_dialect=dialect),
         profile=replace(inputs.profile, sql_analysis_dialect=dialect),
     )
 
 
-def completed_natively(inputs: SemanticInputs) -> CompiledProject:
+def completed_natively(inputs: SemanticInputs) -> CompiledProjectView:
     """The native stage's completed project."""
 
     return native_completion(inputs)
 
 
-def note_kinds(project: CompiledProject, kinds: tuple[str, ...]) -> Counter[str]:
+def note_kinds(project: CompiledProjectView, kinds: tuple[str, ...]) -> Counter[str]:
     """How many notes of each kind the project's diagnostics carry."""
 
     notes: list[str] = list(chain.from_iterable(item.notes for item in project.diagnostics))
@@ -245,7 +246,7 @@ def note_kinds(project: CompiledProject, kinds: tuple[str, ...]) -> Counter[str]
     return counts
 
 
-def native_completion(inputs: SemanticInputs) -> CompiledProject:
+def native_completion(inputs: SemanticInputs) -> CompiledProjectView:
     """The native stage's completed project."""
 
     return complete_native_semantic_diagnostics(
@@ -269,7 +270,7 @@ def session_corpus_files(*, corpus: str, rng: random.Random, model_count: int) -
     return generators[corpus]()
 
 
-def proven_output_count(project: CompiledProject) -> int:
+def proven_output_count(project: CompiledProjectView) -> int:
     """How many models a dynamic pivot proof gave their output names."""
 
     return sum(
@@ -298,7 +299,7 @@ def record_session_models(*, monkeypatch: pytest.MonkeyPatch) -> list[frozenset[
     return selections
 
 
-def completion_view(project: CompiledProject) -> tuple[object, ...]:
+def completion_view(project: CompiledProjectView) -> tuple[object, ...]:
     """Everything the stage decides: diagnostics and each model's binding and type facts."""
 
     return (

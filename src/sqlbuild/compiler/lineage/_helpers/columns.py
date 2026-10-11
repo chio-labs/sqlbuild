@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.lineage.models import ColumnLineage, ColumnLineageSource, PhysicalResource
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
@@ -64,7 +67,7 @@ def _physical_function_name(function_name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "__", function_name)
 
 
-def _build_schema_mapping(project: CompiledProject) -> dict[str, dict[str, str]]:
+def _build_schema_mapping(project: CompiledProjectView) -> dict[str, dict[str, str]]:
     schema: dict[str, dict[str, str]] = {}
     for model in project.models:
         columns: dict[str, str] = {}

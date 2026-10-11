@@ -8,8 +8,8 @@ from collections.abc import Callable
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
-    CompiledProject,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline._helpers.graph import build_project_graph_impl
@@ -36,7 +36,7 @@ def build_project_graph_with_analysis_selection(
     if on_progress is not None:
         on_progress("Compiling project...")
     compile_start: float = time.monotonic()
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         selected_target=selected_target,

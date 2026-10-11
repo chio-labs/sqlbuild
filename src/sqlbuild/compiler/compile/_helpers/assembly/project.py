@@ -103,6 +103,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -158,7 +159,7 @@ def assemble_compiled_project(
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
     analysis_cache_dir: Path | None = None,
     analysis_model_names: frozenset[str] | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Convert attached compile inputs into the planner-ready project view."""
 
     sql_analysis_enabled: bool = (
@@ -324,13 +325,8 @@ def assemble_compiled_project(
         effective_target_name=inputs.effective_target_name,
         run_id=inputs.run_id,
     )
-    project: CompiledProject = CompiledProject(
+    fields: dict[str, Any] = dict(
         binding_catalog=profile.binding_catalog,
-        sql_expansions={
-            model_input.model_file.file_path: model_input.sql_expansion
-            for model_input in inputs.model_inputs
-            if model_input.sql_expansion is not None
-        },
         run_id=inputs.run_id,
         effective_target_name=inputs.effective_target_name,
         effective_connection=inputs.effective_connection,
@@ -441,6 +437,7 @@ def assemble_compiled_project(
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
         scope_index=scope_index,
     )
+    project: CompiledProjectView = _assembled_project(inputs=inputs, fields=fields)
     return complete_semantic_diagnostics(
         project=project,
         profile=profile,
@@ -449,6 +446,28 @@ def assemble_compiled_project(
         binding_results={
             name: analysis.polyglot_analysis.binding_diagnostics
             for name, analysis in model_sql_analysis_by_name.items()
+        },
+    )
+
+
+def _assembled_project(
+    *, inputs: CompileProjectInputs, fields: dict[str, Any]
+) -> CompiledProjectView:
+    """The native owner's project view when it holds every model; else a `CompiledProject`."""
+
+    models: tuple[CompiledModelView, ...] = fields["models"]
+    if inputs.native_project is not None and all(
+        isinstance(model, _native.NativeCompiledModel) for model in models
+    ):
+        return inputs.native_project.project_view(
+            {**fields, "unmatched_literal_sql_relations": (), "native_session": None}
+        )
+    return CompiledProject(
+        **fields,
+        sql_expansions={
+            model_input.model_file.file_path: model_input.sql_expansion
+            for model_input in inputs.model_inputs
+            if model_input.sql_expansion is not None
         },
     )
 

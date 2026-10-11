@@ -7,12 +7,11 @@ from pathlib import Path
 
 from sqlbuild.compiler.compile.main.map_expanded_offset import map_expanded_offset
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledSqlExpansion,
     ExpansionSpan,
     MappedOffset,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.refactoring.constants import (
     EMBEDDED_REF_PATTERN,
     GENERIC_PLACEHOLDER_KIND,
@@ -83,7 +82,7 @@ def analysis_sql(*, text: str, dialect: str) -> AnalysisSql:
 
 
 def model_body(
-    *, project: CompiledProject, project_dir: Path, model: CompiledModelView, contents: str
+    *, project: CompiledProjectView, project_dir: Path, model: CompiledModelView, contents: str
 ) -> ModelBody | None:
     """Return the mappable compiled body of a model, or None when it cannot be mapped."""
 
@@ -135,7 +134,7 @@ def authored_span(*, body: ModelBody, start: int, end: int) -> tuple[int, int] |
 
 
 def _expansion(
-    *, project: CompiledProject, project_dir: Path, model: CompiledModelView
+    *, project: CompiledProjectView, project_dir: Path, model: CompiledModelView
 ) -> CompiledSqlExpansion | None:
     target: Path = (project_dir / model.relative_path).resolve()
     path: Path

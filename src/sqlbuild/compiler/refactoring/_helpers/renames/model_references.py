@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.refactoring._helpers.text.header_edits import model_name_header_edits
 from sqlbuild.compiler.refactoring._helpers.text.schema_edits import schema_model_name_edits
 from sqlbuild.compiler.refactoring._helpers.text.sql_sites import (
@@ -76,7 +79,7 @@ def macro_reference_locations(
 ) -> tuple[ManualLocation, ...]:
     """Locate `__ref` calls to the model that macros produce, which no edit can reach."""
 
-    compiled: CompiledProject = project.graph.project
+    compiled: CompiledProjectView = project.graph.project
     contents: dict[str, str] = {item.relative_path: item.contents for item in files}
     locations: list[ManualLocation] = []
     model: CompiledModelView
@@ -130,7 +133,7 @@ def _fixture_edits(*, item: ProjectSqlFile, old: str, new: str) -> tuple[TextEdi
 
 def _generated_references(
     *,
-    compiled: CompiledProject,
+    compiled: CompiledProjectView,
     project: RefactorProject,
     model: CompiledModelView,
     text: str,

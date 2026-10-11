@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import RetentionRequest
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.executor.clone._helpers.retention import build_clone_retention_requests
 
 
 def build_destination_retention_requests(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter_name: str,
     namespace_owned: bool,
     selected_model_names: frozenset[str] | None = None,

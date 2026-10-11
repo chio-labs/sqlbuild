@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledProjectView,
     CompiledResourceType,
     FunctionLanguage,
 )
@@ -99,7 +100,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         qualified_name="analytics_dev.normalize_email",
         logical_schema="analytics",
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-1",
         effective_target_name="dev",
         effective_connection={},

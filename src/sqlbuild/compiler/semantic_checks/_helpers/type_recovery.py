@@ -8,11 +8,15 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompilerDiagnostic,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.compiled_project.main._with_type_recovery import with_type_recovery
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.semantic_checks._helpers.payloads import (
     diagnostic_ids,
     has_blocking_binding,
@@ -31,12 +35,12 @@ type _Revised = list[tuple[str, int | None, int | None]]
 
 def recover_native_output_types(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
     catalog: object,
     session: Any | None,
     session_models: frozenset[str],
-) -> CompiledProject:
+) -> CompiledProjectView:
     """The project with recovered output types; a native internal failure raises."""
 
     if not has_blocking_binding(project):
@@ -87,11 +91,11 @@ def recover_native_output_types(
         )
         for model, positions in zip(project.models, model_bindings, strict=True)
     )
-    return replace(project, models=models, diagnostics=diagnostics)
+    return project_with(project=project, models=models, diagnostics=diagnostics)
 
 
 def _revalidated(
-    *, project: CompiledProject, revalidated: list[int], poisoned: list[tuple[str, str]]
+    *, project: CompiledProjectView, revalidated: list[int], poisoned: list[tuple[str, str]]
 ) -> list[_Revised]:
     """Python's revalidation of each planned model with unknown types for poisoned outputs."""
 

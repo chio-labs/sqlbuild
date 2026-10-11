@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AttachedAuditGateCycleTestCase,
     AttachedAuditGateTestCase,
@@ -95,7 +95,7 @@ def test_given_attached_audit_reading_another_resource_when_compiling_then_it_ad
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    project: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+    project: CompiledProjectView = compile_and_assemble(project_dir=tmp_path)
 
     assert set(test_case.expected_edges) <= execution_edge_names(project=project)
 

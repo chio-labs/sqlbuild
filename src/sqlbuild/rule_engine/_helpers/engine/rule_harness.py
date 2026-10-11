@@ -7,7 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -39,7 +39,7 @@ def run_rule_case(*, rule: RuleCheck | Rule, test_case: RuleCase) -> RuleResult:
     with TemporaryDirectory(prefix="sqlbuild-rule-") as temporary:
         root: Path = Path(temporary)
         _ = _write_rule_project(root=root, rule=resolved, test_case=test_case)
-        project: CompiledProject = _compile_rule_project(root=root)
+        project: CompiledProjectView = _compile_rule_project(root=root)
         config: RulesConfig = load_rules_config(root)
         result: RulesResult = evaluate(
             project=project,
@@ -107,7 +107,7 @@ def _toml_value(*, value: object) -> str:
     raise RuleUsageError(f"RuleCase config value {value!r} cannot be represented as a rule option")
 
 
-def _compile_rule_project(*, root: Path) -> CompiledProject:
+def _compile_rule_project(*, root: Path) -> CompiledProjectView:
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=root)
     adapter: DuckDbAdapter = DuckDbAdapter()
     return compile_project(discovered_inputs=discovered, adapter=adapter)

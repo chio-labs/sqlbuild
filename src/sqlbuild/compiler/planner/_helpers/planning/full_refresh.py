@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.planner.constants import FULL_REFRESH_DISABLED_REBUILD_CODE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ChangeDetectionResult
@@ -18,7 +17,7 @@ def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bo
 
 
 def effectively_full_refreshed_model_names(
-    *, project: CompiledProject, cli_full_refresh: bool
+    *, project: CompiledProjectView, cli_full_refresh: bool
 ) -> frozenset[str]:
     """Return model names that are effectively full refreshed for this invocation."""
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.graph.models import LineageGraphViews
 from sqlbuild.compiler.graph.types import NativeKey
 
@@ -43,13 +43,13 @@ def native_keys(keys: Iterable[CompiledObjectKey]) -> list[NativeKey]:
     return [native_key(key) for key in keys]
 
 
-def build_native_project_graph_impl(project: CompiledProject) -> _native.NativeProjectGraph:
+def build_native_project_graph_impl(project: CompiledProjectView) -> _native.NativeProjectGraph:
     """The project's native graph, built once per compiled project."""
 
     return project.lineage_graph
 
 
-def project_lineage_views_impl(project: CompiledProject) -> LineageGraphViews:
+def project_lineage_views_impl(project: CompiledProjectView) -> LineageGraphViews:
     """The project's lineage edges and selector indexes as fresh dicts."""
 
     return lineage_graph_views_impl(project.lineage_graph)

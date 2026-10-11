@@ -9,7 +9,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.planner.main.scenarios.is_scenario_artifact_physical_name import (
     is_scenario_artifact_physical_name,
@@ -88,7 +88,7 @@ def collect_query_diff_artifact_candidates(
 
 def gather_janitor_warehouse_facts(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     target_schemas: set[tuple[str | None, str | None]],

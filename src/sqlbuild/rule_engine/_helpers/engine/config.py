@@ -6,7 +6,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.planner.main.selection.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import PlannerScope
@@ -135,7 +136,9 @@ def _reject_forbidden_exceptions(config: RulesConfig) -> None:
     )
 
 
-def resolve_rule_ignore_selectors(*, config: RulesConfig, project: CompiledProject) -> RulesConfig:
+def resolve_rule_ignore_selectors(
+    *, config: RulesConfig, project: CompiledProjectView
+) -> RulesConfig:
     """Resolve configured resource selectors into deterministic finding paths."""
     if not any(ignore.selectors for ignore in config.rule_ignores):
         return config
@@ -162,7 +165,7 @@ def resolve_rule_ignore_selectors(*, config: RulesConfig, project: CompiledProje
     return replace(config, rule_ignores=tuple(resolved))
 
 
-def _resource_paths(*, project: CompiledProject) -> dict[CompiledObjectKey, Path]:
+def _resource_paths(*, project: CompiledProjectView) -> dict[CompiledObjectKey, Path]:
     paths: dict[CompiledObjectKey, Path] = {
         model.key: model.relative_path for model in project.models
     }

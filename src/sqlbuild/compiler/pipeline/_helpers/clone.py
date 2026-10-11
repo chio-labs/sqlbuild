@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompileAnalysisSelection, CompiledProject
+from sqlbuild.compiler.compile.models import CompileAnalysisSelection
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.models import (
@@ -27,7 +28,7 @@ def prepare_clone_pipeline(
     options: ClonePipelineOptions,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> ClonePipelineResult:
-    origin_project: CompiledProject = _compile_project_for_environment(
+    origin_project: CompiledProjectView = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=origin_target_name,
@@ -37,7 +38,7 @@ def prepare_clone_pipeline(
         cli_vars=options.cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
-    destination_project: CompiledProject = _compile_project_for_environment(
+    destination_project: CompiledProjectView = _compile_project_for_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=destination_target_name,
@@ -55,7 +56,7 @@ def prepare_clone_pipeline(
         discovered_inputs=discovered_inputs,
         target_name=destination_target_name,
     )
-    origin_source_project: CompiledProject = (
+    origin_source_project: CompiledProjectView = (
         origin_project
         if origin_read_target_name == origin_target_name
         else _compile_project_for_environment(
@@ -69,7 +70,7 @@ def prepare_clone_pipeline(
             external_sql_reference_resolver=external_sql_reference_resolver,
         )
     )
-    destination_source_project: CompiledProject = (
+    destination_source_project: CompiledProjectView = (
         destination_project
         if destination_read_target_name == destination_target_name
         else _compile_project_for_environment(
@@ -126,7 +127,7 @@ def _compile_project_for_environment(
     no_cache: bool,
     cli_vars: dict[str, object] | None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     return build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,

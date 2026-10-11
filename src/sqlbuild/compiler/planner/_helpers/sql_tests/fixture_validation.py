@@ -6,12 +6,11 @@ import re
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledSqlTest,
     FixtureColumnInference,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_completion,
     build_relation_fixture_context,
@@ -33,7 +32,7 @@ _COLLECTION_TYPES: frozenset[str] = frozenset(
 def build_validated_test_fixtures(
     *,
     test: CompiledSqlTest,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     ordered_model_names: tuple[str, ...],
     mock_refs: dict[str, str],

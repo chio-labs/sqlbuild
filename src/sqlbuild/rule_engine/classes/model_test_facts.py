@@ -1,14 +1,14 @@
 """SQL test facts for custom rules."""
 
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
-from sqlbuild.compiler.compile.types import SqlTestMode
+from sqlbuild.compiler.compile.models import CompiledSqlTest
+from sqlbuild.compiler.compile.types import CompiledProjectView, SqlTestMode
 from sqlbuild.rule_engine.models import Model
 
 
 class TestFacts:
     """Compiled SQL tests indexed by their model subject."""
 
-    def __init__(self, *, project: CompiledProject) -> None:
+    def __init__(self, *, project: CompiledProjectView) -> None:
         self._tests: tuple[CompiledSqlTest, ...] = project.sql_tests
         by_model: dict[str, list[CompiledSqlTest]] = {}
         for test in self._tests:

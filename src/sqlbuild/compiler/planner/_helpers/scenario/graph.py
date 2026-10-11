@@ -6,10 +6,13 @@ from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlScenario,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner.constants import SCENARIO_PLAN_GRAPH_VALIDATION
 from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
 from sqlbuild.compiler.planner.types import WarningSeverity
@@ -31,7 +34,7 @@ class _UpstreamRequirements:
 def plan_scenario_graph(
     *,
     scenario: CompiledSqlScenario,
-    project: CompiledProject,
+    project: CompiledProjectView,
     sql_analysis_enabled: bool = True,
     sql_analysis_dialect: str | None = None,
 ) -> tuple[ScenarioGraphPlan, tuple[PlanWarning, ...]]:

@@ -1,7 +1,6 @@
 """SQL facts indexed by custom-rule model subjects."""
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.sql_document import SqlDocument
 from sqlbuild.rule_engine.exceptions import RuleUsageError
 from sqlbuild.rule_engine.models import Model, ModelSql
@@ -10,7 +9,7 @@ from sqlbuild.rule_engine.models import Model, ModelSql
 class SqlFacts:
     """Authored and expanded SQL indexed by public model identity."""
 
-    def __init__(self, *, dialect: str, project: CompiledProject) -> None:
+    def __init__(self, *, dialect: str, project: CompiledProjectView) -> None:
         self._dialect: str = dialect
         self._models: dict[object, CompiledModelView] = {
             model.relative_path: model for model in project.models

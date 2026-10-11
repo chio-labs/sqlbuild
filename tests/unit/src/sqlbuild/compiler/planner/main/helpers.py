@@ -13,7 +13,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -31,13 +35,13 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
 
-def model_definition_hash(project: CompiledProject, name: str) -> str:
+def model_definition_hash(project: CompiledProjectView, name: str) -> str:
     models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     model: CompiledModelView = models_by_name[name]
     return compute_query_hash(query_sql=model.query_sql, dialect=project.sql_analysis_dialect)
 
 
-def build_sqlbuild_model_selector_project() -> CompiledProject:
+def build_sqlbuild_model_selector_project() -> CompiledProjectView:
     return CompiledProject(
         run_id="selector-test-run",
         effective_target_name=None,
@@ -102,7 +106,7 @@ def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
     )
 
 
-def build_protected_schema_replay_project() -> CompiledProject:
+def build_protected_schema_replay_project() -> CompiledProjectView:
     """Build a full_refresh false incremental whose declared column forces a full replay."""
 
     model: CompiledModelView = CompiledModel(

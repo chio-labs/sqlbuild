@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     HookReadEdgeTestCase,
     HookReadErrorTestCase,
@@ -123,7 +123,7 @@ def test_given_hook_reads_when_compiling_then_hooked_model_runs_after_reads(
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    project: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+    project: CompiledProjectView = compile_and_assemble(project_dir=tmp_path)
 
     assert set(test_case.expected_edges) <= execution_edge_names(project=project)
 
@@ -152,7 +152,7 @@ def test_given_sql_hook_read_when_compiling_then_lineage_and_selection_ignore_it
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    project: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+    project: CompiledProjectView = compile_and_assemble(project_dir=tmp_path)
 
     assert set(test_case.expected_edges) <= execution_edge_names(project=project)
     assert set(test_case.expected_edges).isdisjoint(lineage_edge_names(project=project))

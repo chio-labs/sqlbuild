@@ -65,7 +65,7 @@ from sqlbuild.compiler.compile.constants import (
     RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
     SQL_TEST_SCAN_STORE_FILE_NAME,
 )
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
@@ -4937,7 +4937,7 @@ def type_system_engine_compile(
         return result
 
     def recorded_contracts(
-        *, project: CompiledProject, dialect: TypeDialect | str | None
+        *, project: CompiledProjectView, dialect: TypeDialect | str | None
     ) -> ContractValidationResult:
         result: ContractValidationResult = evaluate_contracts(project=project, dialect=dialect)
         statuses.update(contract_statuses(project=project, result=result))

@@ -12,13 +12,13 @@ from sqlbuild.compiler.compile.classes.semantic_completion_inputs import Semanti
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModelSqlTestPayload,
-    CompiledProject,
     CompiledSource,
     CompiledSqlTest,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -36,7 +36,7 @@ type _NamesRow = tuple[str, list[str]]
 
 def native_metadata_diagnostics(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     profile: ExpressionInferenceProfile,
     resource_sql_analysis: bool,
     catalog: object,

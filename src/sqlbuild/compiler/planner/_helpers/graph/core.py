@@ -6,10 +6,10 @@ import heapq
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
     CompiledResourceType,
     SqlTestMode,
 )
@@ -27,7 +27,7 @@ def _key_sort_key(key: CompiledObjectKey) -> tuple[str, str]:
 
 
 def build_execution_upstream_deps(
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
     """Return execution-order edges from lineage and woven SQL test nodes."""
 
@@ -63,7 +63,7 @@ def build_execution_upstream_deps(
 
 
 def build_execution_edge_origins(
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> dict[tuple[CompiledObjectKey, CompiledObjectKey], str]:
     """Return human-readable origins for execution edges injected beyond pure lineage."""
 
@@ -94,7 +94,7 @@ def build_execution_edge_origins(
 
 
 def _is_lineage_edge(
-    *, project: CompiledProject, gated: CompiledObjectKey, read: CompiledObjectKey
+    *, project: CompiledProjectView, gated: CompiledObjectKey, read: CompiledObjectKey
 ) -> bool:
     return native_graph_key(read) in project.lineage_graph.upstream(native_graph_key(gated))
 

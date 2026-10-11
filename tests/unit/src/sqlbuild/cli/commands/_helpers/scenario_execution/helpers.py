@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
     CompiledSqlScenario,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlScenarioFile
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -47,7 +47,7 @@ def configure_scenario_runner(
     monkeypatch.setattr(runner, "run_warehouse_scenarios", lambda **_: 0)
 
 
-def build_project_with_scenarios(project_dir: Path) -> CompiledProject:
+def build_project_with_scenarios(project_dir: Path) -> CompiledProjectView:
     scenarios: tuple[CompiledSqlScenario, ...] = tuple(
         CompiledSqlScenario(
             key=CompiledObjectKey(CompiledResourceType.SQL_SCENARIO, scenario_name),

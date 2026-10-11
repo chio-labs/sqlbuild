@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 from sqlbuild.compiler.planner.types import MaterializationType, PlanAction, PlanReason
@@ -36,7 +36,7 @@ def relation_target_python_node() -> None:
     """No-op Python declaration used by relation target graph tests."""
 
 
-def build_relation_target_project() -> CompiledProject:
+def build_relation_target_project() -> CompiledProjectView:
     source_entry: SourceEntry = SourceEntry(name="orders", schema="load_raw", table="orders")
     source_file: DiscoveredSourceFile = DiscoveredSourceFile(
         file_path=Path("sources/raw.yml"),

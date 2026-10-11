@@ -7,9 +7,9 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.errors.contracts.exceptions import SharedInputError
@@ -21,7 +21,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 def build_python_relation_targets_impl(
     *,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan_output: PlanOutput,
     required_refs: frozenset[SqlResourceRef] | None = None,
 ) -> dict[SqlResourceRef, str]:
@@ -77,7 +77,7 @@ def _planned_relation_refs(*, plan_output: PlanOutput) -> frozenset[SqlResourceR
 def _resolve_relation(
     *,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan_output: PlanOutput,
     ref: SqlResourceRef,
 ) -> str:

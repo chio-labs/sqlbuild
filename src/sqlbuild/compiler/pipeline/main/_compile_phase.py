@@ -8,8 +8,8 @@ from collections.abc import Callable
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
     resolve_compile_analysis_selection,
@@ -42,7 +42,7 @@ def compile_project_phase(
         on_progress("Compiling project...")
     compile_start: float = time.monotonic()
     try:
-        project: CompiledProject = build_compiled_project(
+        project: CompiledProjectView = build_compiled_project(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             selected_target=resolved_options.selected_target,

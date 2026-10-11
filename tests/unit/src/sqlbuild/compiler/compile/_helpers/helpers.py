@@ -36,7 +36,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageSourceFact,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSqlTest,
     CompileModelConfig,
@@ -57,6 +56,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
     FunctionLanguage,
     ModelInput,
@@ -224,7 +224,7 @@ def compile_first_model(*, project_dir: Path) -> CompiledModelView:
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
     )
-    compiled_project: CompiledProject = assemble_project(
+    compiled_project: CompiledProjectView = assemble_project(
         inputs=compile_inputs,
         skip_column_inference=True,
     )
@@ -291,7 +291,7 @@ def model_header(*, key: str, value: str) -> str:
     return f"MODEL (description 'Test model check.', {key} {value});\nSELECT 1 AS order_id"
 
 
-def compile_and_assemble(*, project_dir: Path) -> CompiledProject:
+def compile_and_assemble(*, project_dir: Path) -> CompiledProjectView:
     """Attach and assemble a DuckDB fixture so scope placement is validated."""
 
     return assemble_project(
@@ -311,7 +311,7 @@ def gate_model(*, sql: str, header: str = "MODEL (description 'Test model.');") 
     return f"{header}\n{sql}"
 
 
-def execution_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, str]]:
+def execution_edge_names(*, project: CompiledProjectView) -> frozenset[tuple[str, str]]:
     """Return (node, upstream) name pairs of the project's execution graph."""
 
     edges: set[tuple[str, str]] = set()
@@ -328,7 +328,7 @@ def inline_sql_hook_header(sql: str) -> str:
     return f"MODEL (description 'Test model.', pre_hooks [inline_sql('{sql}')]);"
 
 
-def lineage_edge_names(*, project: CompiledProject) -> frozenset[tuple[str, str]]:
+def lineage_edge_names(*, project: CompiledProjectView) -> frozenset[tuple[str, str]]:
     """Return (node, upstream) name pairs of the project's lineage graph used for selection."""
 
     edges: set[tuple[str, str]] = set()
@@ -447,7 +447,7 @@ def collect_typed_macro_violations(
     return violations.diagnostics
 
 
-def render_compile_diagnostics(*, project: CompiledProject) -> str:
+def render_compile_diagnostics(*, project: CompiledProjectView) -> str:
     """Render every project diagnostic with its code, message, location, and help."""
 
     return "\n".join(

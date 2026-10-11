@@ -11,9 +11,9 @@ from sqlbuild.compiler.compile.main.effective_config import build_effective_conn
 from sqlbuild.compiler.compile.main.effective_runtime import build_effective_runtime_config
 from sqlbuild.compiler.compile.main.expand_template_data import expand_template_data
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.constants import DEFAULTS_SECTION, PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -183,7 +183,7 @@ def _optional_string(value: object) -> str | None:
     return None if value is None else str(value)
 
 
-def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> None:
+def validate_project_targets(*, adapter_name: str, project: CompiledProjectView) -> None:
     """Validate compiled model and seed locations for the effective adapter."""
 
     if adapter_name not in {
@@ -204,7 +204,7 @@ def validate_project_targets(*, adapter_name: str, project: CompiledProject) -> 
     )
 
 
-def validate_managed_write_schemas(*, adapter: BaseAdapter, project: CompiledProject) -> None:
+def validate_managed_write_schemas(*, adapter: BaseAdapter, project: CompiledProjectView) -> None:
     """Require an explicitly resolved physical schema for every managed warehouse write."""
 
     if adapter.allows_implicit_managed_write_schema:

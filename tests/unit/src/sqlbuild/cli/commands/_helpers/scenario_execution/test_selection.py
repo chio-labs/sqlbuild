@@ -6,7 +6,8 @@ import pytest
 
 from sqlbuild.cli.commands._helpers.scenario_execution.selection import select_scenarios
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlScenario
+from sqlbuild.compiler.compile.models import CompiledSqlScenario
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.unit.src.sqlbuild.cli.commands._helpers.scenario_execution._test_types import (
     SelectScenariosErrorTestCase,
     SelectScenariosTestCase,
@@ -33,7 +34,7 @@ def test_given_scenario_selectors_when_excluding_then_returns_remaining_scenario
     tmp_path: Path,
 ) -> None:
     project_dir: Path = tmp_path
-    project: CompiledProject = build_project_with_scenarios(project_dir)
+    project: CompiledProjectView = build_project_with_scenarios(project_dir)
 
     selected: tuple[CompiledSqlScenario, ...] = select_scenarios(
         project=project,

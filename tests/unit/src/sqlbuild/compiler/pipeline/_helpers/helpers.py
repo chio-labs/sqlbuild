@@ -12,7 +12,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 
 
@@ -22,7 +26,7 @@ def build_single_model_project(
     logical_database: str | None,
     physical_schema: str | None,
     physical_database: str | None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a project with one model for deferred target testing."""
 
     qualified: str | None = (None, f"{physical_schema}.test_model")[physical_schema is not None]

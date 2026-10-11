@@ -8,10 +8,13 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner.models import (
     PlannerRelationsContext,
     PlannerScope,
@@ -28,7 +31,7 @@ from sqlbuild.runtime.observability.main.run_scope import run_scope
 
 def build_planner_source_freshness_result(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
@@ -65,7 +68,7 @@ def build_planner_source_freshness_result(
     )
 
 
-def _resolve_state_database(project: CompiledProject) -> str | None:
+def _resolve_state_database(project: CompiledProjectView) -> str | None:
     model_destination: CompiledRelationLocation
     for model_destination in _iter_state_destinations(project=project):
         if model_destination.database is not None:
@@ -73,7 +76,7 @@ def _resolve_state_database(project: CompiledProject) -> str | None:
     return None
 
 
-def _collect_state_schemas(*, project: CompiledProject, scope: PlannerScope) -> tuple[str, ...]:
+def _collect_state_schemas(*, project: CompiledProjectView, scope: PlannerScope) -> tuple[str, ...]:
     selected_model_names: frozenset[str] = frozenset(
         key.name for key in scope.selected_keys if key.resource_type == CompiledResourceType.MODEL
     )
@@ -91,7 +94,9 @@ def _collect_state_schemas(*, project: CompiledProject, scope: PlannerScope) -> 
     return tuple(sorted(schemas))
 
 
-def _iter_state_destinations(*, project: CompiledProject) -> tuple[CompiledRelationLocation, ...]:
+def _iter_state_destinations(
+    *, project: CompiledProjectView
+) -> tuple[CompiledRelationLocation, ...]:
     return (
         *(model.destination for model in project.models),
         *(seed.destination for seed in project.seeds),

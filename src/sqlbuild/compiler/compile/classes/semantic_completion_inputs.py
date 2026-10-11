@@ -19,8 +19,8 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile._helpers.diagnostics.resource_sql import get_resource_sql_diagnostics
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.models import SqlSchemaValidationRequest
 
@@ -29,14 +29,14 @@ class SemanticCompletionInputs:
     """Expose the shapes, revalidation requests and metadata checks semantic completion reads."""
 
     @staticmethod
-    def shapes(project: CompiledProject) -> dict[str, dict[str, str]]:
+    def shapes(project: CompiledProjectView) -> dict[str, dict[str, str]]:
         """Closed relation shapes, as type recovery, recovery and explanation read them."""
 
         return semantic_shapes(project=project)
 
     @staticmethod
     def revalidation_request(
-        *, project: CompiledProject, model: CompiledModelView, shapes: dict[str, dict[str, str]]
+        *, project: CompiledProjectView, model: CompiledModelView, shapes: dict[str, dict[str, str]]
     ) -> SqlSchemaValidationRequest:
         """Type recovery's request revalidating one failed model against `shapes`."""
 
@@ -60,7 +60,7 @@ class SemanticCompletionInputs:
 
     @staticmethod
     def metadata_shapes(
-        *, project: CompiledProject, profile: ExpressionInferenceProfile
+        *, project: CompiledProjectView, profile: ExpressionInferenceProfile
     ) -> dict[str, dict[str, str]]:
         """Closed relation shapes, as the metadata checks read them under `profile`."""
 
@@ -76,7 +76,7 @@ class SemanticCompletionInputs:
     def audit_diagnostics(
         *,
         model: CompiledModelView,
-        project: CompiledProject,
+        project: CompiledProjectView,
         shape: dict[str, str],
         shapes: dict[str, dict[str, str]],
         profile: ExpressionInferenceProfile,
@@ -89,7 +89,7 @@ class SemanticCompletionInputs:
 
     @staticmethod
     def sql_test_columns(
-        *, project: CompiledProject, profile: ExpressionInferenceProfile
+        *, project: CompiledProjectView, profile: ExpressionInferenceProfile
     ) -> dict[str, tuple[str, ...]]:
         """The inferred output columns of every model SQL test CTE body."""
 
@@ -98,7 +98,7 @@ class SemanticCompletionInputs:
     @staticmethod
     def resource_sql_diagnostics(
         *,
-        project: CompiledProject,
+        project: CompiledProjectView,
         shapes: dict[str, dict[str, str]],
         profile: ExpressionInferenceProfile,
     ) -> tuple[CompilerDiagnostic, ...]:

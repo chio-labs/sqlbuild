@@ -12,11 +12,10 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileProjectInputs,
     CompilerDiagnostic,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -228,7 +227,7 @@ SELECT
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
     )
-    project: CompiledProject = assemble_project(inputs=inputs)
+    project: CompiledProjectView = assemble_project(inputs=inputs)
     models: dict[str, CompiledModelView] = {model.name: model for model in project.models}
 
     exact: CompiledModelView = models["exact_orders"]
@@ -367,7 +366,7 @@ SELECT {test_case.projection}
     )
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    project: CompiledProject = assemble_project(
+    project: CompiledProjectView = assemble_project(
         inputs=build_compile_inputs(
             discovered_inputs=discovered,
             adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -453,7 +452,7 @@ SELECT * FROM __ref("customer_category_amounts")
 """,
         },
     )
-    project: CompiledProject = assemble_project(
+    project: CompiledProjectView = assemble_project(
         inputs=build_compile_inputs(
             discovered_inputs=discover_project_inputs(project_dir=tmp_path),
             adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -556,7 +555,7 @@ GROUP BY customer_id
 """,
         },
     )
-    project: CompiledProject = assemble_project(
+    project: CompiledProjectView = assemble_project(
         inputs=build_compile_inputs(
             discovered_inputs=discover_project_inputs(project_dir=tmp_path),
             adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -644,7 +643,7 @@ SELECT * FROM __ref("open_category_amounts")
 """,
         },
     )
-    project: CompiledProject = assemble_project(
+    project: CompiledProjectView = assemble_project(
         inputs=build_compile_inputs(
             discovered_inputs=discover_project_inputs(project_dir=tmp_path),
             adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,

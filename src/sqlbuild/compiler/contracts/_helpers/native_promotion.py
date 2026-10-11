@@ -6,8 +6,9 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -16,7 +17,7 @@ from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compi
 
 
 def native_promotion_conflicts(
-    *, project: CompiledProject, adapter_default: TablePromotionMode, settings_file: str
+    *, project: CompiledProjectView, adapter_default: TablePromotionMode, settings_file: str
 ) -> tuple[CompilerDiagnostic, ...]:
     """Return one K011 error per enforced-contract table model under immediate promotion."""
 

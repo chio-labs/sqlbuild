@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.scopes.types import DiagnosticSeverity
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     NamedDeclarationAcceptedTestCase,
@@ -199,7 +199,7 @@ def test_given_valid_named_declaration_layout_when_compiling_then_project_is_acc
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    compiled: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+    compiled: CompiledProjectView = compile_and_assemble(project_dir=tmp_path)
 
     assert compiled.scope_index.completeness.placement is True
     assert (
@@ -556,7 +556,7 @@ def test_given_advisory_placement_when_compiling_misplaced_declaration_then_warn
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _ADVISORY_PROJECT_FILE} | test_case.files)
 
-    compiled: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+    compiled: CompiledProjectView = compile_and_assemble(project_dir=tmp_path)
 
     assert tuple(
         (diagnostic.code.value, diagnostic.severity)

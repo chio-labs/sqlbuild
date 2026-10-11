@@ -26,9 +26,8 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
@@ -517,7 +516,7 @@ def _build_node(
 ) -> LineageNode:
     if isinstance(graph, RelationLineageIndex):
         return graph.nodes.get(key, LineageNode(key=key))
-    project: CompiledProject = graph.project
+    project: CompiledProjectView = graph.project
     for model in project.models:
         if model.key == key:
             return LineageNode(

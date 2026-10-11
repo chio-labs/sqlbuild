@@ -8,7 +8,7 @@ import stat
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.constants import PARENT_DIRECTORY_TOKEN
 from sqlbuild.rule_engine.exceptions import RuleUsageError
 from sqlbuild.rule_engine.models import Model, ProjectPath
@@ -20,7 +20,7 @@ _TRACKED_TEXT_SUFFIXES: frozenset[str] = frozenset({".py", ".sql", ".toml", ".ya
 class ProjectTree:
     """Deterministic compiler-owned view of supported project paths."""
 
-    def __init__(self, *, project_dir: Path, project: CompiledProject) -> None:
+    def __init__(self, *, project_dir: Path, project: CompiledProjectView) -> None:
         self._root: Path = project_dir.resolve()
         self._discovered: tuple[ProjectPath, ...] | None = None
         self._directories: dict[Path, Path | None] = {}

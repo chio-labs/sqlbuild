@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +7,8 @@ import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -123,8 +124,8 @@ def test_given_external_blocked_model_when_building_execution_plan_then_only_tha
 ) -> None:
     adapter: DuckDbAdapter = DuckDbAdapter()
     connection: Any = adapter.connect({"database": ":memory:"})
-    project: CompiledProject = replace(
-        build_compiled_project_with_models(
+    project: CompiledProjectView = project_with(
+        project=build_compiled_project_with_models(
             {
                 "blocked": "select 1 as id",
                 "unrelated": "select 2 as id",

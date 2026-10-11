@@ -9,8 +9,7 @@ from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine._helpers.host.module_state import rule_namespaces
 from sqlbuild.rule_engine._helpers.host.tracked_facts import tracked_fact_views
 from sqlbuild.rule_engine.classes.fact_reads import FactReads
@@ -48,7 +47,7 @@ type _FindingKey = tuple[str, str, int, int, str, str]
 
 @dataclass(frozen=True)
 class _PassInputs:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project_dir: Path
     selected_rules: tuple[Rule, ...]
@@ -61,7 +60,7 @@ class _PassInputs:
 
 def evaluate_custom_rules(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     selected_rules: tuple[Rule, ...],
@@ -188,7 +187,7 @@ def _evaluate_pass(
     tracker: _ReadTracker,
 ) -> list[CustomRuleEvaluation]:
     evaluations: list[CustomRuleEvaluation] = []
-    project: CompiledProject = inputs.project
+    project: CompiledProjectView = inputs.project
     plan: CustomRulePlan | None = inputs.plan
     guard: RuntimeGuard | None = inputs.guard
     context_facts: RuleFactViews = (

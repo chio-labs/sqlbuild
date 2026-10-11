@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredLoaderFunction
 from sqlbuild.spec.contracts.main.loader_destination_parts import loader_destination_parts
 from sqlbuild.spec.contracts.models import LoaderDestinationParts, SourceEntry
@@ -11,7 +11,7 @@ from sqlbuild.spec.contracts.models import LoaderDestinationParts, SourceEntry
 
 def expand_selected_loader_dependencies(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey],
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     executable_dependency_source_keys: frozenset[CompiledObjectKey] = frozenset(),
@@ -80,7 +80,7 @@ def expand_selected_loader_dependencies(
 
 
 def build_intermediate_source_map(
-    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey]
+    *, project: CompiledProjectView, selected_keys: frozenset[CompiledObjectKey]
 ) -> dict[str, SourceEntry]:
     """Return synthetic source entries for selected intermediate loader nodes."""
 
@@ -108,7 +108,7 @@ def build_intermediate_source_map(
 
 
 def build_upstream_intermediate_source_map(
-    *, project: CompiledProject, selected_keys: frozenset[CompiledObjectKey]
+    *, project: CompiledProjectView, selected_keys: frozenset[CompiledObjectKey]
 ) -> dict[str, SourceEntry]:
     """Return synthetic source entries for upstream intermediate loaders of selected sources."""
 
@@ -189,7 +189,7 @@ def upstream_loader_dependency_names(
 
 
 def loader_to_source_entry(
-    *, project: CompiledProject, loader: DiscoveredLoaderFunction
+    *, project: CompiledProjectView, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
     destination: LoaderDestinationParts = loader_destination_parts(
         destination=(

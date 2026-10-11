@@ -10,9 +10,12 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_BUILT,
     NATIVE_LINEAGE_UNKNOWN_DIALECT,
@@ -40,7 +43,7 @@ type _NativeOutcome = tuple[str, list[_NativeColumn], bool, str | None]
 
 def build_native_fast_project_column_lineage(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str | None,
     model_names: frozenset[str] | None,
 ) -> ProjectColumnLineage | None:
@@ -122,7 +125,7 @@ def _native_request(model: CompiledModelView) -> tuple[bool, str, list[str]] | N
     return (True, model.query_sql, [column.output_column for column in columns])
 
 
-def _schema_resources(project: CompiledProject) -> list[tuple[str, str, list[str]]]:
+def _schema_resources(project: CompiledProjectView) -> list[tuple[str, str, list[str]]]:
     resources: list[tuple[str, str, list[str]]] = []
     for model in project.models:
         columns: list[str] = [column.name for column in model.inferred_columns or ()]

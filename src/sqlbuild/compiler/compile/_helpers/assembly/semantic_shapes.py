@@ -12,11 +12,10 @@ from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_sha
 from sqlbuild.compiler.compile._helpers.analysis.reference_names import table_function_analysis_name
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileProjectInputs,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, ModelInput
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, ModelInput
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
@@ -225,7 +224,7 @@ def build_complete_binding_schemas(inputs: CompileProjectInputs) -> dict[str, di
 
 def semantic_shapes(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     profile: ExpressionInferenceProfile | None = None,
 ) -> dict[str, dict[str, str]]:
     """Return closed shapes; absence means open, never an empty physical table."""

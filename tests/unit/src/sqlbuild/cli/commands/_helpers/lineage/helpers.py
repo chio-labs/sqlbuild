@@ -16,7 +16,11 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -51,7 +55,7 @@ def build_lineage_test_graph() -> ProjectGraph:
         model_entries=(),
         seed_entries=(),
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test-run",
         effective_target_name=None,
         effective_connection={},

@@ -10,8 +10,8 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationReadProbe
 from sqlbuild.adapter.contract.types import RelationReadStatus
 from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSource
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.discovery.main._yaml_entry_line import yaml_entry_line
 from sqlbuild.compiler.planner._helpers.resolve.sources import render_source_read_relation
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -32,7 +32,7 @@ class _MissingSourceTable:
 
 def check_selected_source_tables_exist(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,

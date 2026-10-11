@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.diff import (
     compile_project_for_diff_environment,
@@ -24,10 +24,10 @@ def run_diff_pipeline(
     exclude: tuple[str, ...],
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-) -> tuple[CompiledProject, CompiledProject, tuple[str, ...]]:
+) -> tuple[CompiledProjectView, CompiledProjectView, tuple[str, ...]]:
     """Compile both environments and resolve selected diffable model names."""
 
-    left_project: CompiledProject = compile_project_for_diff_environment(
+    left_project: CompiledProjectView = compile_project_for_diff_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=from_target,
@@ -36,7 +36,7 @@ def run_diff_pipeline(
         cli_vars=cli_vars,
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
-    right_project: CompiledProject = compile_project_for_diff_environment(
+    right_project: CompiledProjectView = compile_project_for_diff_environment(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         target_name=to_target,

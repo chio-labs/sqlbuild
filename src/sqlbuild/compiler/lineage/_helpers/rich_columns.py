@@ -6,8 +6,11 @@ import logging
 from typing import Any
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter, TypeDialect
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.lineage._helpers.columns import (
     _build_schema_mapping,
     _build_star_lineage,
@@ -75,7 +78,7 @@ _POLYGLOT_DIALECT_ALIASES: dict[str, PolyglotAnalysisDialect] = {
 
 def build_rich_project_column_lineage(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str | None = None,
     model_names: frozenset[str] | None = None,
 ) -> ProjectColumnLineage | None:

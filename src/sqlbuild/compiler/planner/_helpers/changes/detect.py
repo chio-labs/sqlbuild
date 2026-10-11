@@ -9,10 +9,13 @@ from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.changes.metadata import (
     changed_local_function_names,
@@ -60,7 +63,7 @@ from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 def detect_changes(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
     full_refresh: bool,
@@ -103,7 +106,7 @@ def detect_changes(
 
 def detect_model_changes_in_scope(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
     query_change_tracking: bool | None = None,

@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     view_classes,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
@@ -18,6 +19,7 @@ const VALUES_ATTRIBUTE: &str = "values";
 const LOGICAL_SCHEMA_ATTRIBUTE: &str = "logical_schema";
 const LOGICAL_DATABASE_ATTRIBUTE: &str = "logical_database";
 const MODEL_RESOURCE: &str = "model";
+const TAGS_KEY: &str = "tags";
 
 /// `(name, type, nullability)` of one inferred output column.
 pub(crate) type InferredRow = (String, Option<String>, String);
@@ -522,6 +524,39 @@ impl NativeCompiledModel {
         })?;
         Ok(self.changed(py, |overlay| overlay.destination = Some(destination)))
     }
+}
+
+/// The model's project graph row: its key, dependencies, tags and folder.
+pub(crate) fn model_graph_row(
+    model: &NativeCompiledModel,
+    py: Python<'_>,
+) -> PyResult<ResourceRow> {
+    model.read(py, |record, py| {
+        let compiled: &CompiledRecord = compiled_of(record)?;
+        let values: Bound<'_, PyAny> = record.config.bind(py).getattr(VALUES_ATTRIBUTE)?;
+        let mut tags: Vec<String> = Vec::new();
+        if let Some(value) = values.downcast::<PyDict>()?.get_item(TAGS_KEY)?
+            && (value.is_instance_of::<pyo3::types::PyList>()
+                || value.is_instance_of::<pyo3::types::PyTuple>())
+        {
+            for tag in value.try_iter()? {
+                tags.push(tag?.str()?.extract()?);
+            }
+        }
+        let folder: String = record
+            .model_file
+            .bind(py)
+            .getattr("relative_path")?
+            .getattr("parent")?
+            .str()?
+            .extract()?;
+        Ok((
+            (MODEL_RESOURCE.to_owned(), model_name(record, py)?),
+            compiled.deps.clone(),
+            tags,
+            Some(folder),
+        ))
+    })
 }
 
 fn model_name(record: &ModelInputRecord, py: Python<'_>) -> PyResult<String> {

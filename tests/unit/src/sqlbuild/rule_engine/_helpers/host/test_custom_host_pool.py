@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.host import custom_host, custom_host_pool
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine.constants import CUSTOM_RULES_CACHE_FILE
@@ -75,7 +75,7 @@ def test_given_partitioned_hosts_when_evaluating_then_findings_and_cache_match_o
         records_module_state=test_case.records_module_state,
         detects_duplicates=test_case.detects_duplicates,
     )
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
     cache_path: Path = rules_bulk_cache_path(
         project_dir=tmp_path, file_name=CUSTOM_RULES_CACHE_FILE
     )
@@ -129,8 +129,8 @@ def test_given_results_cached_by_split_hosts_when_rerunning_then_only_edited_sub
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostPartitionTestCase
 ) -> None:
     write_order_rules(root=tmp_path)
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
-    edited: CompiledProject = orders_project(
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
+    edited: CompiledProjectView = orders_project(
         model_count=test_case.model_count, edits={"orders_003": "SELECT 2 AS order_id"}
     )
     launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
@@ -174,7 +174,7 @@ def test_given_failing_rule_on_split_hosts_when_evaluating_then_single_host_erro
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostFailureTestCase
 ) -> None:
     write_order_rules(root=tmp_path, failing=test_case.failing_models)
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
 
     _ = use_hosts(monkeypatch=monkeypatch, hosts=1)
     with pytest.raises(RulesError) as single:
@@ -246,7 +246,7 @@ def test_given_failing_host_when_others_are_busy_then_they_stop_before_later_inv
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostCancellationTestCase
 ) -> None:
     write_order_rules(root=tmp_path, failing=("orders_000",), delay_seconds=test_case.delay_seconds)
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
     launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
     monkeypatch.setattr(custom_host_pool, "_HOST_TIMEOUT_MILLIS", test_case.timeout_millis)
     started: float = time.monotonic()
@@ -279,7 +279,7 @@ def test_given_cancelled_hosts_when_failing_then_no_process_is_signalled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostCancellationTestCase
 ) -> None:
     write_order_rules(root=tmp_path, failing=("orders_000",), delay_seconds=test_case.delay_seconds)
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
     _ = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
     signals: list[tuple[int, int]] = record_signals(monkeypatch=monkeypatch)
 
@@ -314,7 +314,7 @@ def test_given_hosts_started_before_payload_when_payload_arrives_then_findings_a
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostInputsTestCase
 ) -> None:
     write_order_rules(root=tmp_path)
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
     oracle: CustomRulesOutcome = evaluate_order_rules(
         project=project, root=tmp_path, cache_enabled=False
     )
@@ -354,7 +354,7 @@ def test_given_payload_write_failure_when_hosts_wait_then_original_error_is_rais
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostInputsTestCase
 ) -> None:
     write_order_rules(root=tmp_path)
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
     launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
     fail_inputs(monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds)
     started: float = time.monotonic()
@@ -391,7 +391,7 @@ def test_given_input_folder_removed_when_payload_write_fails_then_original_error
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostInputsTestCase
 ) -> None:
     write_order_rules(root=tmp_path)
-    project: CompiledProject = orders_project(model_count=test_case.model_count)
+    project: CompiledProjectView = orders_project(model_count=test_case.model_count)
     launches: list[str] = use_hosts(monkeypatch=monkeypatch, hosts=test_case.hosts)
     failures: list[float] = fail_inputs_without_directory(
         monkeypatch=monkeypatch, delay_seconds=test_case.write_delay_seconds

@@ -1,8 +1,8 @@
-from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledSource
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.rule_engine.classes.rule_context import RuleFactViews, build_rule_fact_views
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -51,8 +51,8 @@ def _views(
         )
         for name, declared in zip(names, files, strict=True)
     )
-    project: CompiledProject = replace(
-        build_project(
+    project: CompiledProjectView = project_with(
+        project=build_project(
             name="orders", relative_path="models/orders.sql", sql="SELECT 1", config_values={}
         ),
         sources=sources,

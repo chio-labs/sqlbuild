@@ -12,9 +12,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
     apply_unit_test_selectors,
@@ -84,7 +84,7 @@ def run_compile_pipeline(
         on_progress=on_progress,
     )
     effective_config: dict[str, object] = compile_result.connection_config
-    project: CompiledProject = compile_result.project
+    project: CompiledProjectView = compile_result.project
     compile_seconds: float = compile_result.compile_seconds
     graph: ProjectGraph = build_project_graph_impl(project)
     project_dir: Path | None = discovered_inputs.project_dir
@@ -165,7 +165,7 @@ def _build_result(
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     connection: Any,
-    project: CompiledProject,
+    project: CompiledProjectView,
     options: CompilePipelineOptions,
     on_progress: Callable[[str], None] | None = None,
 ) -> CompilePipelineResult:
