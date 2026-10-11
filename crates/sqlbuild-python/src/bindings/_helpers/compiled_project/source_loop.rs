@@ -11,7 +11,10 @@ use sqlbuild_model_config::templates::models::TemplateOptions;
 use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, compile_error, record_reads,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_macros::expanded_with;
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::model_loop_macros::{
+    argument_references as macro_argument_references, expanded_with,
+};
 use crate::bindings::_helpers::compiled_project::source_views::{AttachedSource, replaced};
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_templates::{
@@ -47,7 +50,6 @@ pub(crate) fn attached_sources<'py>(
     settings: SourceSettings,
 ) -> PyResult<Vec<AttachedSource>> {
     let (default_contract, validate, source_kind) = settings;
-    let syntax_help: &str = &context.classes.source_syntax_help;
     let py: Python<'py> = context.host.py();
     let source_kind: Bound<'py, PyAny> = source_kind.into_bound(py);
     let mut attached: Vec<AttachedSource> = Vec::with_capacity(rows.len());
@@ -62,9 +64,9 @@ pub(crate) fn attached_sources<'py>(
         let declarations: Bound<'py, PyAny> = scoped_declarations(context, &file_path, &consumer)?;
         let (expression, usages) = match entry.getattr("expression")?.extract::<Option<String>>()? {
             Some(sql) => {
-                let (sql, usages) =
+                let expansion: AuthoredExpansion<'py> =
                     expanded_authored_sql(model_loop, context, (&sql, &file_path), &declarations)?;
-                (Some(sql), usages)
+                (Some(expansion.sql), expansion.usages)
             }
             None => (None, PyTuple::empty(py)),
         };
@@ -99,7 +101,7 @@ pub(crate) fn attached_sources<'py>(
                 return Err(compile_error(context.classes, &message, None));
             }
             if validate {
-                checked_expression(context, (&name, &file_path, sql), syntax_help)?;
+                checked_expression(context, (&name, &file_path, sql))?;
             }
         }
         let contract: Option<String> = entry
@@ -126,7 +128,7 @@ pub(crate) fn attached_sources<'py>(
 }
 
 /// A source's declaration context, or the public declarations when none are indexed.
-fn scoped_declarations<'py>(
+pub(crate) fn scoped_declarations<'py>(
     context: &LoopContext<'_, 'py>,
     file_path: &str,
     consumer: &Bound<'py, PyAny>,
@@ -153,13 +155,20 @@ fn scoped_declarations<'py>(
         .call((), Some(&fields))
 }
 
+/// Authored SQL after expansion, with its usages and typed macro argument references.
+pub(crate) struct AuthoredExpansion<'py> {
+    pub(crate) sql: String,
+    pub(crate) usages: Bound<'py, PyTuple>,
+    pub(crate) argument_references: Vec<ReferenceRow>,
+}
+
 /// `expand_authored_sql_result`: interpolate, splice declarations and expand macros.
-fn expanded_authored_sql<'py>(
+pub(crate) fn expanded_authored_sql<'py>(
     model_loop: &NativeModelLoop,
     context: &LoopContext<'_, 'py>,
     authored: (&str, &str),
     declarations: &Bound<'py, PyAny>,
-) -> PyResult<(String, Bound<'py, PyTuple>)> {
+) -> PyResult<AuthoredExpansion<'py>> {
     let (sql, file_path) = authored;
     let py: Python<'py> = declarations.py();
     let hooks = &context.classes.sql_hooks;
@@ -186,6 +195,7 @@ fn expanded_authored_sql<'py>(
     let consumer: Bound<'py, PyAny> = declarations.getattr("consumer")?;
     let (references, stop) = declaration_scan(model_loop.python, &interpolated_sql);
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut argument_references: Vec<ReferenceRow> = Vec::new();
     let mut expanded_sql: String = interpolated_sql.clone();
     if !references.is_empty() || stop.is_some() {
         let file_keyword: Bound<'py, PyDict> = PyDict::new(py);
@@ -236,6 +246,7 @@ fn expanded_authored_sql<'py>(
             file_path,
             &expanded_sql,
         )?;
+        argument_references = macro_argument_references(context, &output)?;
         usages.extend(output.usages.into_iter().map(|usage| usage.into_bound(py)));
         expanded_sql = output.sql;
     }
@@ -243,7 +254,11 @@ fn expanded_authored_sql<'py>(
     for usage in usages {
         unique.set_item(usage, py.None())?;
     }
-    Ok((expanded_sql, PyTuple::new(py, unique.keys())?))
+    Ok(AuthoredExpansion {
+        sql: expanded_sql,
+        usages: PyTuple::new(py, unique.keys())?,
+        argument_references,
+    })
 }
 
 /// `_expand_source_template_value`: a text field with its `${...}` templates expanded.
@@ -268,6 +283,16 @@ fn template_value<'py>(
     value: &Bound<'py, PyAny>,
     label: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
+    expanded_template(context, value, label, false)
+}
+
+/// `expand_config_templates` without context values; `preserve` keeps `@@CTX` tokens.
+pub(crate) fn expanded_template<'py>(
+    context: &LoopContext<'_, 'py>,
+    value: &Bound<'py, PyAny>,
+    label: &str,
+    preserve: bool,
+) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let hooks = &context.classes.sql_hooks;
     let host: PythonHost<'py> = PythonHost::new(
@@ -281,7 +306,7 @@ fn template_value<'py>(
     );
     let options: TemplateOptions = TemplateOptions {
         allow_context: false,
-        preserve_context_tokens: false,
+        preserve_context_tokens: preserve,
         preserve_unknown_context: false,
     };
     let result: Result<Bound<'py, PyAny>, Stop> = expanded(&host, value, options);
@@ -383,15 +408,24 @@ fn replaced_spec(value: &Bound<'_, PyAny>, changes: &Bound<'_, PyDict>) -> PyRes
 }
 
 /// `validate_source_expression_syntax`: the expression parses as a FROM target.
-fn checked_expression(
-    context: &LoopContext<'_, '_>,
-    source: (&str, &str, &str),
-    syntax_help: &str,
-) -> PyResult<()> {
+fn checked_expression(context: &LoopContext<'_, '_>, source: (&str, &str, &str)) -> PyResult<()> {
     let (name, file_path, expression) = source;
+    parse_checked(
+        context,
+        &format!("SELECT * FROM {}", expression_relation(expression)),
+        &format!("SQL syntax error in source expression '{name}' ({file_path})"),
+    )
+}
+
+/// `_validate_sql_syntax_with_message` for SQL a non-model resource owns.
+pub(crate) fn parse_checked(
+    context: &LoopContext<'_, '_>,
+    sql: &str,
+    error_prefix: &str,
+) -> PyResult<()> {
     let py: Python<'_> = context.host.py();
     let check: SyntaxCheck = SyntaxCheck {
-        sql: format!("SELECT * FROM {}", expression_relation(expression)),
+        sql: sql.to_owned(),
         placeholders: Vec::new(),
     };
     let Some(message) = syntax_error_message(py, &check, GENERIC_DIALECT, SyntaxMode::Parse)?
@@ -399,13 +433,11 @@ fn checked_expression(
         return Ok(());
     };
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item("help", syntax_help)?;
-    let error: Bound<'_, PyAny> = context.classes.compile_error.call(
-        (format!(
-            "SQL syntax error in source expression '{name}' ({file_path}): {message}"
-        ),),
-        Some(&keywords),
-    )?;
+    keywords.set_item("help", &context.classes.source_syntax_help)?;
+    let error: Bound<'_, PyAny> = context
+        .classes
+        .compile_error
+        .call((format!("{error_prefix}: {message}"),), Some(&keywords))?;
     Err(PyErr::from_value(error))
 }
 

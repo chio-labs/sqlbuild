@@ -38,6 +38,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -439,7 +440,7 @@ def build_test_project(
             )
         )
 
-    functions: list[CompiledFunction] = []
+    functions: list[CompiledFunctionView] = []
     function_name: str
     for function_name in function_names:
         functions.append(
@@ -931,7 +932,7 @@ def build_transitive_watermark_models(
 
 def build_function_transitive_watermark_models(
     *, watermark_name: str, watermark_column: str
-) -> tuple[CompiledModelView, dict[str, CompiledModelView], dict[str, CompiledFunction]]:
+) -> tuple[CompiledModelView, dict[str, CompiledModelView], dict[str, CompiledFunctionView]]:
     """Build a consumer whose physical watermark is upstream of a table function."""
 
     consumer: CompiledModelView
@@ -947,7 +948,7 @@ def build_function_transitive_watermark_models(
         name=function_name,
         qualified_name=f"analytics.{function_name}",
     )
-    function: CompiledFunction = CompiledFunction(
+    function: CompiledFunctionView = CompiledFunction(
         key=CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name=function_name),
         deps=(),
         name=function_name,

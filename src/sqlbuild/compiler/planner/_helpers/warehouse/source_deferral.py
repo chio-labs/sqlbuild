@@ -8,10 +8,10 @@ from dataclasses import replace
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledFunction,
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledSourceView,
@@ -147,7 +147,7 @@ def _selected_managed_source_refs(
             )
         )
         names.update(name for name in _sql_hook_source_reads(model) if name in managed_source_names)
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if function.key not in selected_keys:
             continue

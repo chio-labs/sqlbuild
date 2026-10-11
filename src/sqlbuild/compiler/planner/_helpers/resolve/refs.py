@@ -10,11 +10,14 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledSeedView
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledSeedView,
+)
 from sqlbuild.compiler.planner.constants import (
     SQL_ALIAS_BOUNDARY_CHARACTERS,
     SQL_ALIAS_KEYWORD,
@@ -381,7 +384,7 @@ def build_seed_locations(
 
 
 def build_function_locations(
-    functions: tuple[CompiledFunction, ...],
+    functions: tuple[CompiledFunctionView, ...],
 ) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of function name to compiled relation location."""
 

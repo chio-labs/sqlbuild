@@ -89,7 +89,7 @@ fn infer_query_columns(
 }
 
 /// A normalization rejection as Python's `ValueError`; anything else as an internal failure.
-fn query_columns_error(failure: QueryColumnsFailure) -> PyErr {
+pub(crate) fn query_columns_error(failure: QueryColumnsFailure) -> PyErr {
     match failure {
         QueryColumnsFailure::Normalization(message) => compiler_error(message),
         QueryColumnsFailure::Internal(reason) => {

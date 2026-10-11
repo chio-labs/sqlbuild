@@ -74,16 +74,13 @@ from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompileAuditInput,
     CompiledAudit,
-    CompiledFunction,
     CompiledLineageColumnFact,
     CompiledModel,
     CompiledObjectKey,
     CompiledProject,
-    CompiledRelationLocation,
     CompiledSqlScenario,
     CompileModelSqlTestInputPayload,
     CompilerDiagnostic,
-    CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
     DeclarationScopeResolver,
@@ -97,6 +94,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -119,7 +117,6 @@ from sqlbuild.compiler.project_assembly.models import (
     NativeProjectFacts,
     NativeProjectResources,
 )
-from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
     BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
@@ -365,13 +362,7 @@ def assemble_compiled_project(
         ),
         sources=_compiled_sources(inputs=inputs, resources=resources),
         seeds=_compiled_seeds(inputs=inputs, resources=resources),
-        functions=tuple(
-            _assemble_compiled_function(
-                function_input=function_input,
-                native_deps=resources.function_deps[index],
-            )
-            for index, function_input in enumerate(inputs.sql_function_inputs)
-        ),
+        functions=_compiled_functions(inputs=inputs, resources=resources),
         audits=tuple(
             _assemble_compiled_audit(
                 audit_input=audit_input,
@@ -750,50 +741,18 @@ def _compiled_seeds(
     return tuple(seeds)
 
 
-def _assemble_compiled_function(
-    *,
-    function_input: CompileSqlFunctionInput,
-    native_deps: tuple[CompiledObjectKey, ...],
-) -> CompiledFunction:
-    return CompiledFunction(
-        key=CompiledObjectKey(
-            resource_type=CompiledResourceType(
-                function_node_type(return_columns=function_input.return_columns)
-            ),
-            name=function_input.name,
-        ),
-        deps=native_deps,
-        name=function_input.name,
-        relative_path=function_input.function_file.relative_path,
-        arguments=function_input.arguments,
-        returns=function_input.returns,
-        body_sql=function_input.body_sql,
-        return_columns=function_input.return_columns,
-        references=function_input.references,
-        destination=CompiledRelationLocation(
-            database=function_input.database,
-            schema=function_input.schema,
-            name=function_input.name,
-            qualified_name=None,
-            logical_database=function_input.logical_database,
-            logical_schema=function_input.logical_schema,
-        ),
-        fingerprint_destination=CompiledRelationLocation(
-            database=function_input.fingerprint_database,
-            schema=function_input.fingerprint_schema,
-            name=function_input.name,
-            qualified_name=None,
-            logical_database=function_input.fingerprint_logical_database,
-            logical_schema=function_input.fingerprint_logical_schema,
-        ),
-        language=function_input.language,
-        source_file_path=function_input.function_file.file_path,
-        runtime_version=function_input.runtime_version,
-        entry_point=function_input.entry_point,
-        packages=function_input.packages,
-        tags=function_input.tags,
-        description=function_input.description,
+def _compiled_functions(
+    *, inputs: CompileInputsView, resources: NativeProjectResources
+) -> tuple[CompiledFunctionView, ...]:
+    """Each function's view over the compile's native project, with its resolved deps."""
+
+    if not inputs.sql_function_inputs:
+        return ()
+    owner: _native.NativeCompiledProject = cast(
+        _native.NativeCompiledProject, inputs.native_project
     )
+    owner.record_function_deps(list(resources.function_deps))
+    return tuple(owner.compiled_function(index) for index in range(len(inputs.sql_function_inputs)))
 
 
 def _assemble_compiled_audit(

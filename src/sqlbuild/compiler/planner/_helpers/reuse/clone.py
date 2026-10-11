@@ -6,11 +6,11 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledSourceView,
@@ -205,7 +205,7 @@ def build_clone_function_entries(
         connection=connection,
     )
     entries_by_key: dict[CompiledObjectKey, FunctionPlanEntry] = {}
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if function.key not in plan.selected_keys:
             continue

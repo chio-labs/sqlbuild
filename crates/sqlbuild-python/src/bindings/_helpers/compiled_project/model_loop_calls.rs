@@ -13,9 +13,10 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use crate::bindings::_helpers::compiled_project::model_loop::LoopContext;
 
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
+const MODEL_RESOURCE: &str = "model";
 
-/// The model whose rejected calls are reported: `(name, relative path, file path, contents)`.
-pub(crate) type CallOrigin<'a> = (&'a str, &'a str, &'a str, &'a str);
+/// `(model name or none for a function, relative path, file path, contents)` of a file.
+pub(crate) type CallOrigin<'a> = (Option<&'a str>, &'a str, &'a str, &'a str);
 
 /// Report each rejected call in order, at its authored location when the authored text has it.
 pub(crate) fn report_invalid_calls(
@@ -64,7 +65,7 @@ fn report(
     fields.set_item("severity", "error")?;
     fields.set_item("code", REFERENCE_CALL_SYNTAX_CODE)?;
     fields.set_item("message", &invalid_call.message)?;
-    fields.set_item("resource_type", "model")?;
+    fields.set_item("resource_type", name.map(|_| MODEL_RESOURCE))?;
     fields.set_item("resource_name", name)?;
     fields.set_item("help", &invalid_call.help)?;
     let key: Bound<'_, PyTuple> = match start {

@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.models import (
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -158,7 +159,7 @@ def build_project_for_function_metadata_detection() -> CompiledProjectView:
         name="is_large_order",
         qualified_name=None,
     )
-    function: CompiledFunction = CompiledFunction(
+    function: CompiledFunctionView = CompiledFunction(
         key=function_key,
         deps=(),
         name="is_large_order",

@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_ro
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompilerDiagnostic,
@@ -24,6 +23,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -1577,7 +1577,7 @@ def _build_cursor_input_relations(
     adapter: BaseAdapter,
     model_locations: dict[str, CompiledRelationLocation],
     models_by_name: dict[str, CompiledModelView],
-    functions_by_name: dict[str, CompiledFunction] | None = None,
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
     seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
@@ -1677,7 +1677,7 @@ def validate_source_cursor_input_columns(
     model: CompiledModelView,
     cursor_column: str | None,
     models_by_name: dict[str, CompiledModelView] | None = None,
-    functions_by_name: dict[str, CompiledFunction] | None = None,
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
     source_map: dict[str, SourceEntry] | None = None,
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
 ) -> None:

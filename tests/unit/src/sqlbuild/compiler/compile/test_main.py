@@ -10,9 +10,8 @@ import pytest
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
-    CompileSqlFunctionInput,
 )
-from sqlbuild.compiler.compile.types import CompileInputsView
+from sqlbuild.compiler.compile.types import CompileInputsView, FunctionInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -3133,7 +3132,7 @@ def main():
         ),
     )
 
-    functions: dict[str, CompileSqlFunctionInput] = {
+    functions: dict[str, FunctionInput] = {
         entry.name: entry for entry in compile_inputs.sql_function_inputs
     }
     assert functions["defaulted"].tags == ("reference", "daily")
@@ -3170,7 +3169,7 @@ def main():
         ),
         selected_target="physical",
     )
-    physical_functions: dict[str, CompileSqlFunctionInput] = {
+    physical_functions: dict[str, FunctionInput] = {
         entry.name: entry for entry in physical_inputs.sql_function_inputs
     }
     assert (

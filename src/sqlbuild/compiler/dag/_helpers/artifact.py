@@ -9,7 +9,6 @@ from enum import StrEnum
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSqlScenario,
@@ -17,6 +16,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -188,7 +188,7 @@ def _build_seed_node(seed: CompiledSeedView) -> DagNode:
     )
 
 
-def _build_function_node(function: CompiledFunction) -> DagNode:
+def _build_function_node(function: CompiledFunctionView) -> DagNode:
     node_type: str = function_node_type(return_columns=function.return_columns)
     return DagNode(
         id=f"{node_type}:{function.name}",

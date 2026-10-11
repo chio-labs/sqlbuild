@@ -18,7 +18,6 @@ from sqlbuild.cli.output.models import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledFunction,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledSqlTest,
@@ -26,6 +25,7 @@ from sqlbuild.compiler.compile.models import (
     RelatedLocation,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -395,7 +395,7 @@ def _seed_resource(seed: CompiledSeedView) -> dict[str, object]:
     return item
 
 
-def _function_resource(function: CompiledFunction) -> dict[str, object]:
+def _function_resource(function: CompiledFunctionView) -> dict[str, object]:
     item: dict[str, object] = {
         "name": function.name,
         "relative_path": str(function.relative_path),

@@ -3,8 +3,7 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::attachments::{
-    audit_rendering, ceremonial_select, cursor_intrinsics, function_headers, test_parameters,
-    test_targets,
+    audit_rendering, ceremonial_select, cursor_intrinsics, test_parameters, test_targets,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -13,6 +12,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     test_parameters::register(module)?;
     ceremonial_select::register(module)?;
     test_targets::register(module)?;
-    function_headers::register(module)?;
     Ok(())
 }

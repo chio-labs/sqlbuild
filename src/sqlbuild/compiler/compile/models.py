@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompactBatchResponseCallback,
+    CompiledFunctionView,
     CompiledModelView,
     CompiledResourceType,
     CompiledSeedView,
@@ -25,6 +26,7 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsReadyCallback,
     DiagnosticPhase,
     DiagnosticSeverity,
+    FunctionInput,
     FunctionLanguage,
     ModelInput,
     SeedInput,
@@ -781,6 +783,20 @@ class CompileSqlFunctionInput:
     tags: tuple[str, ...] = field(default_factory=tuple)
     description: str | None = None
 
+    @property
+    def assembly_row(self) -> tuple[str, str, list[str], list[tuple[str, str, str | None]]]:
+        """`(node type, name, tags, references)`, what assembly resolves dependencies from."""
+
+        return (
+            CompiledResourceType.TABLE_FN if self.return_columns else CompiledResourceType.UDF,
+            self.name,
+            list(self.tags),
+            [
+                (str(reference.ref_kind), reference.ref_name, reference.ref_package)
+                for reference in self.references
+            ],
+        )
+
 
 @dataclass(frozen=True)
 class CompileModelInput:
@@ -956,7 +972,7 @@ class CompileProjectInputs:
     model_inputs: tuple[ModelInput, ...] = field(default_factory=tuple)
     seed_inputs: tuple[SeedInput, ...] = field(default_factory=tuple)
     source_inputs: tuple[SourceInput, ...] = field(default_factory=tuple)
-    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)
+    sql_function_inputs: tuple[FunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
     audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
@@ -1219,7 +1235,7 @@ class CompiledProject:
     models: tuple[CompiledModelView, ...] = field(default_factory=tuple)
     sources: tuple[CompiledSourceView, ...] = field(default_factory=tuple)
     seeds: tuple[CompiledSeedView, ...] = field(default_factory=tuple)
-    functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
+    functions: tuple[CompiledFunctionView, ...] = field(default_factory=tuple)
     audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)

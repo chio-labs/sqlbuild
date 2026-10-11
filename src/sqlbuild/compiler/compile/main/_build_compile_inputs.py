@@ -15,10 +15,6 @@ from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_model_inputs,
 )
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
-from sqlbuild.compiler.compile._helpers.attachment.functions import build_sql_function_inputs
-from sqlbuild.compiler.compile._helpers.attachment.references import (
-    validate_table_function_call_arities,
-)
 from sqlbuild.compiler.compile._helpers.attachment.sql_tests import (
     build_scenario_inputs,
     build_test_inputs_with_cache,
@@ -48,10 +44,8 @@ from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
     CompilerDiagnostic,
-    CompileSqlFunctionInput,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
-    DeclarationExpansionContext,
     DeclarationResolutionContext,
     DeclarationScopeBuild,
     LoadedMacro,
@@ -59,7 +53,14 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     ModelInputScopeBuild,
 )
-from sqlbuild.compiler.compile.types import CompileInputsView, ModelInput, SeedInput, SourceInput
+from sqlbuild.compiler.compile.types import (
+    CompileInputsView,
+    FunctionInput,
+    ModelInput,
+    SeedInput,
+    SourceInput,
+)
+from sqlbuild.compiler.compiled_project.main._attach_functions import attach_functions
 from sqlbuild.compiler.compiled_project.main._attach_seeds import attach_seeds
 from sqlbuild.compiler.compiled_project.main._attach_sources import attach_sources
 from sqlbuild.compiler.compiled_project.main._compile_inputs_view import compile_inputs_view
@@ -157,11 +158,14 @@ def build_compile_inputs(
     seed_inputs: tuple[SeedInput, ...] = attach_seeds(
         discovered_inputs=discovered_inputs, native_project=model_build.native_project
     )
-    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = _build_sql_functions(
+    sql_function_inputs: tuple[FunctionInput, ...] = attach_functions(
         discovered_inputs=discovered_inputs,
-        context=model_context,
-        declaration_expansion=model_context.declaration_expansion,
-        model_inputs=model_build.inputs,
+        native_project=model_build.native_project,
+        settings=(
+            model_context.effective_settings,
+            model_context.target_config,
+            model_context.macro_context.adapter_name,
+        ),
         no_sql_validation=no_sql_validation,
         python_functions_inherit_default_namespace=(
             adapter_context.python_functions_inherit_default_namespace
@@ -253,34 +257,6 @@ def build_compile_inputs(
         "declaration_scope": declaration_scope,
     }
     return compile_inputs_view(fields=fields, native_project=model_build.native_project)
-
-
-def _build_sql_functions(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    context: ModelInputBuildContext,
-    declaration_expansion: DeclarationExpansionContext,
-    model_inputs: tuple[ModelInput, ...],
-    no_sql_validation: bool,
-    python_functions_inherit_default_namespace: bool,
-) -> tuple[CompileSqlFunctionInput, ...]:
-    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = build_sql_function_inputs(
-        discovered_inputs=discovered_inputs,
-        effective_vars=context.effective_vars,
-        effective_settings=context.effective_settings,
-        target_config=context.target_config,
-        macro_context=context.macro_context,
-        loaded_macros=context.loaded_macros,
-        declaration_expansion=declaration_expansion,
-        no_sql_validation=no_sql_validation,
-        python_functions_inherit_default_namespace=python_functions_inherit_default_namespace,
-        sql_lexical_syntax=context.sql_lexical_syntax,
-    )
-    validate_table_function_call_arities(
-        model_inputs=model_inputs,
-        sql_function_inputs=sql_function_inputs,
-    )
-    return sql_function_inputs
 
 
 def _build_models_with_declarations(

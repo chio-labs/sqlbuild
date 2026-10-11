@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
+    CompiledFunction,
     CompiledModel,
     CompiledProject,
     CompiledSeed,
@@ -17,6 +18,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledSeedView,
@@ -92,7 +94,35 @@ def compiled_project_record_impl(project: CompiledProjectView) -> CompiledProjec
     fields: dict[str, Any] = cast(_native.NativeProjectView, project).fields()
     fields["seeds"] = tuple(map(compiled_seed_record_impl, fields["seeds"]))
     fields["sources"] = tuple(map(compiled_source_record_impl, fields["sources"]))
+    fields["functions"] = tuple(map(compiled_function_record_impl, fields["functions"]))
     return CompiledProject(**fields)
+
+
+def compiled_function_record_impl(function: CompiledFunctionView) -> CompiledFunction:
+    """The function as a `CompiledFunction`, projected from its owner when it is a native view."""
+
+    if isinstance(function, CompiledFunction):
+        return function
+    return CompiledFunction(
+        key=function.key,
+        deps=function.deps,
+        name=function.name,
+        relative_path=function.relative_path,
+        arguments=function.arguments,
+        returns=function.returns,
+        body_sql=function.body_sql,
+        destination=function.destination,
+        fingerprint_destination=function.fingerprint_destination,
+        return_columns=function.return_columns,
+        references=function.references,
+        language=function.language,
+        source_file_path=function.source_file_path,
+        runtime_version=function.runtime_version,
+        entry_point=function.entry_point,
+        packages=function.packages,
+        tags=function.tags,
+        description=function.description,
+    )
 
 
 def compiled_source_record_impl(source: CompiledSourceView) -> CompiledSource:

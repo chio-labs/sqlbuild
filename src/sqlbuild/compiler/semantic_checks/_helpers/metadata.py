@@ -10,12 +10,12 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModelSqlTestPayload,
     CompiledSqlTest,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -54,7 +54,7 @@ def native_metadata_diagnostics(
     columns_by_sql: dict[str, tuple[str, ...]] = SemanticCompletionInputs.sql_test_columns(
         project=project, profile=profile
     )
-    functions: dict[str, CompiledFunction] = {
+    functions: dict[str, CompiledFunctionView] = {
         function.name.casefold(): function for function in project.functions
     }
     file_texts: dict[Path, str] = {}
@@ -111,7 +111,9 @@ def native_metadata_diagnostics(
     return tuple(diagnostics)
 
 
-def _function_payload(*, key: str, function: CompiledFunction) -> tuple[str, list[tuple[str, str]]]:
+def _function_payload(
+    *, key: str, function: CompiledFunctionView
+) -> tuple[str, list[tuple[str, str]]]:
     return (key, [(argument.name, argument.type) for argument in function.arguments])
 
 

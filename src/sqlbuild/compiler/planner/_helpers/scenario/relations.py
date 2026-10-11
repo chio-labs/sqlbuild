@@ -16,13 +16,13 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -332,7 +332,7 @@ def build_scenario_execution_plan(
         source_warehouse_columns or {}
     )
     models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
-    functions_by_key: dict[CompiledObjectKey, CompiledFunction] = {
+    functions_by_key: dict[CompiledObjectKey, CompiledFunctionView] = {
         function.key: function for function in project.functions
     }
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
@@ -491,7 +491,7 @@ def build_scenario_execution_plan(
 
 def _build_scenario_function_entry(
     *,
-    function: CompiledFunction,
+    function: CompiledFunctionView,
     adapter: BaseAdapter,
     relation_plan: ScenarioRelationPlan,
     function_locations: dict[str, CompiledRelationLocation],

@@ -31,7 +31,6 @@ from sqlbuild.compiler.project_assembly.types import (
     SyntaxCheckRow,
     VariableRow,
 )
-from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.spec.contracts.models import DefaultsConfig, TargetConfig
 
 
@@ -91,15 +90,7 @@ def project_request(
             )
             for seed_input in inputs.seed_inputs
         ],
-        [
-            (
-                function_node_type(return_columns=function_input.return_columns),
-                function_input.name,
-                list(function_input.tags),
-                _reference_rows(function_input.references),
-            )
-            for function_input in inputs.sql_function_inputs
-        ],
+        [function_input.assembly_row for function_input in inputs.sql_function_inputs],
         [
             _audit_row(
                 references=audit_input.references,

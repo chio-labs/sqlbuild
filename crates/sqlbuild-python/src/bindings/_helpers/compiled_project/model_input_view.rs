@@ -324,13 +324,20 @@ pub(crate) fn references(
     classes: &InputViewClasses<'_>,
     record: &ModelInputRecord,
 ) -> PyResult<Py<PyTuple>> {
+    reference_tuple(classes, &record.references, &record.projections.references)
+}
+
+/// `CompileSqlReference` records of `rows`, built once into `cache`.
+pub(crate) fn reference_tuple(
+    classes: &InputViewClasses<'_>,
+    rows: &[ReferenceRow],
+    cache: &PyOnceLock<Py<PyTuple>>,
+) -> PyResult<Py<PyTuple>> {
     let py: Python<'_> = classes.sql_reference.py();
-    record
-        .projections
-        .references
+    cache
         .get_or_try_init(py, || {
-            let mut references: Vec<Bound<'_, PyAny>> = Vec::with_capacity(record.references.len());
-            for (kind, name, package, count) in &record.references {
+            let mut references: Vec<Bound<'_, PyAny>> = Vec::with_capacity(rows.len());
+            for (kind, name, package, count) in rows {
                 let fields: Bound<'_, PyDict> = PyDict::new(py);
                 fields.set_item("ref_kind", classes.reference_kind.call1((kind,))?)?;
                 fields.set_item("ref_name", name)?;

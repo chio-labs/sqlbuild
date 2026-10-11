@@ -58,6 +58,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompileInputsView,
+    FunctionInput,
     FunctionLanguage,
     ModelInput,
     SeedInput,
@@ -502,7 +503,7 @@ class RequiredDescriptionInputs:
     model_inputs: tuple[CompileModelInput, ...] = ()
     seed_inputs: tuple[SeedInput, ...] = ()
     source_inputs: tuple[SourceInput, ...] = ()
-    function_inputs: tuple[CompileSqlFunctionInput, ...] = ()
+    function_inputs: tuple[FunctionInput, ...] = ()
 
 
 class OrdersApi(Provider):

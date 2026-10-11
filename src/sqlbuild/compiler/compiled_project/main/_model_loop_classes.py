@@ -14,10 +14,13 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     DeclarationScopeResolver,
     ExpansionSpan,
+    FunctionArgument,
+    FunctionReturnColumn,
     InferredColumn,
     ModelInputBuildContext,
     NativeModelConfigSession,
 )
+from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.compiler.compiled_project._helpers.loop_inputs import (
     hook_signature,
     named_records,
@@ -100,6 +103,11 @@ def model_loop_classes(
             "schema_model_entry": SchemaModelEntry,
             "sql_expansion": CompiledSqlExpansion,
             "expansion_span": ExpansionSpan,
+            "functions": {
+                "function_argument": FunctionArgument,
+                "function_return_column": FunctionReturnColumn,
+                "function_language": FunctionLanguage,
+            },
             "compiled": {
                 "object_key": CompiledObjectKey,
                 "relation_location": CompiledRelationLocation,

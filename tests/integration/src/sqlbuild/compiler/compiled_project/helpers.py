@@ -6,7 +6,7 @@ import json
 import shutil
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,11 @@ from sqlbuild.compiler.compile import models as compile_models
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileAdapterContext
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledProjectView,
+    CompileInputsView,
+)
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -56,11 +60,24 @@ def forbid_hand_built_projects(*, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def skip_model_retention(*, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run the native model loop into a throwaway project instead of the compile's own."""
+    """Run the native model loop into a throwaway project instead of the compile's own.
+
+    The compile's own project still runs the loop over no models, so it keeps the loop that
+    attaches its other resources.
+    """
 
     native_loop: Callable[..., object] = attachment_core._run_native_model_loop
 
     def discarded(**kwargs: Any) -> object:
+        loop: Any = kwargs["loop"]
+        _ = native_loop(
+            **{
+                **kwargs,
+                "loop": replace(
+                    loop, discovered_inputs=replace(loop.discovered_inputs, model_files=())
+                ),
+            }
+        )
         kwargs["native_project"] = _native.NativeCompiledProject()
         return native_loop(**kwargs)
 
@@ -434,3 +451,61 @@ def column_metadata(column: SourceColumnEntry) -> tuple[str | None, tuple[dict[s
     """A source column's description and its audits' arguments."""
 
     return column.description, tuple(audit.arguments for audit in column.audits)
+
+
+FUNCTION_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "eu"\n'
+        'amount_type = "DECIMAL(10, 2)"\n\n[defaults]\nfunction_schema = "udfs_${region}"\n'
+    ),
+    "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+    "models/orders.sql": "MODEL (description 'Orders.', schema analytics);\nSELECT 1 AS order_id\n",
+    "functions/sql/order_total.sql": (
+        "FUNCTION (description 'Order total.', tags [finance],"
+        " arguments (amount ${amount_type}), returns ${amount_type});\nSELECT amount * 2\n"
+    ),
+    "functions/sql/open_orders.sql": (
+        "FUNCTION (description 'Open orders.', schema reporting,"
+        " returns table (order_id INTEGER, status VARCHAR));\n"
+        'SELECT order_id, @enum("order_status").PLACED AS status FROM __ref("orders")\n'
+    ),
+    "functions/python/score.py": (
+        "from sqlbuild.functions import udf\n\n"
+        "@udf(arguments={'value': 'INTEGER'}, returns='INTEGER', runtime_version='3.11',"
+        " packages=['numpy'], tags=['ml'])\n"
+        "def main(value):\n    '''Score.'''\n    return value\n"
+    ),
+}
+
+
+def compile_function_project(
+    *, project_dir: Path, files: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> tuple[CompiledProjectView, CompileInputsView]:
+    """Compile a project of `files`; return the project and its compile inputs."""
+
+    write_files(project_dir=project_dir, files=files)
+    project: CompiledProjectView = compile_project(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=DuckDbAdapter(),
+        resolved_connection=_SOURCE_CONNECTION,
+    )
+    inputs, _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+    return project, inputs
+
+
+def function_summary(function: CompiledFunctionView) -> tuple[object, ...]:
+    """A compiled function's planner-facing facts."""
+
+    return (
+        type(function).__name__,
+        str(function.key.resource_type),
+        tuple(dep.name for dep in function.deps),
+        tuple((argument.name, argument.type) for argument in function.arguments),
+        function.returns,
+        tuple((column.name, column.type) for column in function.return_columns),
+        tuple(reference.ref_name for reference in function.references),
+        function.language.value,
+        function.destination.qualified_name,
+        function.fingerprint_destination.qualified_name,
+        (function.runtime_version, function.packages, function.tags, function.description),
+    )

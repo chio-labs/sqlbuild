@@ -5,11 +5,10 @@ from __future__ import annotations
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledFunction,
     CompiledObjectKey,
     CompiledSqlTest,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import (
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
@@ -353,7 +352,7 @@ def _build_function_entries(
     selected_keys: frozenset[CompiledObjectKey],
 ) -> list[FunctionPlanEntry]:
     entries: list[FunctionPlanEntry] = []
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if function.key not in selected_keys:
             continue
@@ -377,7 +376,7 @@ def _build_function_entries(
 
 def plan_function(
     *,
-    function: CompiledFunction,
+    function: CompiledFunctionView,
     adapter: BaseAdapter,
     relations: PlannerRelationsContext,
     fingerprint_query_sql: str,

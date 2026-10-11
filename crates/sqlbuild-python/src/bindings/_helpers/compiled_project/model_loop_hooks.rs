@@ -451,7 +451,7 @@ impl<'py> HookRun<'_, '_, 'py> {
             &self.model_loop.syntax,
             &scanned.invalid_calls,
             (
-                self.model.name,
+                Some(self.model.name),
                 self.model.relative_path,
                 self.model.file_path,
                 self.model.contents,

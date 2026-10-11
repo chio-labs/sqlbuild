@@ -95,3 +95,13 @@ pub struct FunctionNamespace {
     pub fingerprint_logical_database: Option<String>,
     pub fingerprint_logical_schema: Option<String>,
 }
+
+/// The discovered resource names a function's references resolve against.
+#[derive(Debug)]
+pub struct KnownResources<'a> {
+    pub models: &'a std::collections::HashSet<String>,
+    pub seeds: &'a std::collections::HashSet<String>,
+    pub sources: &'a std::collections::HashSet<String>,
+    pub functions: &'a std::collections::HashSet<String>,
+    pub table_functions: &'a std::collections::HashSet<String>,
+}

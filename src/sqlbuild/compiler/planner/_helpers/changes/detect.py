@@ -7,11 +7,11 @@ from collections.abc import Callable
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledObjectKey,
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -81,7 +81,7 @@ def detect_changes(
     )
 
     function_changes: dict[str, FunctionChangeResult] = {}
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
         if function.key not in scope.selected_keys:

@@ -17,11 +17,16 @@ use sqlbuild_analysis::compiled_project::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_project::function_loop::{FunctionRow, FunctionSettings};
+use crate::bindings::_helpers::compiled_project::function_views::{
+    AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, ObjectKeyRow,
+};
 use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
 use crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop;
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::seed_views::{
     NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
@@ -34,6 +39,7 @@ use crate::bindings::_helpers::compiled_project::values::{object_value, plain_va
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
 const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";
+const RELATIVE_PATH_ATTRIBUTE: &str = "relative_path";
 const ATTACHMENT_LOOP_UNSET: &str = "no model loop was kept to attach this project's resources";
 pub(crate) const INCREMENTAL_MODE_KEY: &str = "incremental_mode";
 const MATERIALIZED_KEY: &str = "materialized";
@@ -100,6 +106,8 @@ pub(crate) struct NativeCompiledProject {
     seeds: Vec<SeedRecord>,
     /// Each attached source, in attachment order.
     sources: Vec<SourceRecord>,
+    /// Each attached SQL, then Python, function in attachment order.
+    functions: Vec<FunctionRecord>,
     /// The model loop and its host, which attach the project's other resources.
     attachment: Option<(Py<NativeModelLoop>, Py<PyAny>)>,
 }
@@ -131,6 +139,14 @@ impl NativeCompiledProject {
         self.graph_builds += 1;
     }
 
+    /// The kept model loop and its host.
+    fn attachment_loop(&self, py: Python<'_>) -> PyResult<(Py<NativeModelLoop>, Py<PyAny>)> {
+        match &self.attachment {
+            Some((model_loop, host)) => Ok((model_loop.clone_ref(py), host.clone_ref(py))),
+            None => Err(PyRuntimeError::new_err(ATTACHMENT_LOOP_UNSET)),
+        }
+    }
+
     /// Keep the model loop and its host for attaching the project's other resources.
     pub(crate) fn keep_attachment_loop(
         &mut self,
@@ -138,6 +154,11 @@ impl NativeCompiledProject {
         host: Py<PyAny>,
     ) {
         self.attachment = Some((model_loop, host));
+    }
+
+    /// Every attached function, in attachment order.
+    pub(crate) fn functions(&self) -> &[FunctionRecord] {
+        &self.functions
     }
 
     /// Every attached source, in attachment order.
@@ -278,14 +299,69 @@ impl NativeCompiledProject {
             return Ok(Vec::new());
         }
         let py: Python<'_> = slf.py();
-        let (model_loop, host) = match &slf.borrow().attachment {
-            Some((model_loop, host)) => (model_loop.clone_ref(py), host.clone_ref(py)),
-            None => return Err(PyRuntimeError::new_err(ATTACHMENT_LOOP_UNSET)),
-        };
+        let (model_loop, host) = slf.borrow().attachment_loop(py)?;
         model_loop
             .bind(py)
             .get()
             .run_sources(slf, host.bind(py), rows, settings)
+    }
+
+    /// Attach every SQL, then Python, function with the kept loop; return each one's view.
+    fn attach_functions(
+        slf: &Bound<'_, Self>,
+        rows: (Vec<FunctionRow>, Vec<FunctionRow>),
+        settings: FunctionSettings,
+    ) -> PyResult<Vec<NativeFunctionInput>> {
+        let py: Python<'_> = slf.py();
+        let (model_loop, host) = slf.borrow().attachment_loop(py)?;
+        let models: Vec<(String, Vec<ReferenceRow>)> = slf
+            .borrow()
+            .inputs
+            .iter()
+            .map(|record| {
+                Ok((
+                    record
+                        .model_file
+                        .bind(py)
+                        .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                        .str()?
+                        .to_string(),
+                    record.references.clone(),
+                ))
+            })
+            .collect::<PyResult<_>>()?;
+        let attached: Vec<AttachedFunction> =
+            model_loop
+                .bind(py)
+                .get()
+                .run_functions(host.bind(py), rows, settings, &models)?;
+        let first: usize = slf.borrow().functions.len();
+        let count: usize = attached.len();
+        slf.borrow_mut()
+            .functions
+            .extend(attached.into_iter().map(FunctionRecord::new));
+        Ok((first..first + count)
+            .map(|index| NativeFunctionInput::new(slf.clone().unbind(), index))
+            .collect())
+    }
+
+    /// Keep the dependency keys native project assembly resolved, in function order.
+    fn record_function_deps(&mut self, deps: Vec<Vec<ObjectKeyRow>>) -> PyResult<()> {
+        for (index, keys) in deps.into_iter().enumerate() {
+            self.functions
+                .get_mut(index)
+                .ok_or_else(|| PyIndexError::new_err(index))?
+                .set_deps(keys);
+        }
+        Ok(())
+    }
+
+    /// The assembled function at `index`.
+    fn compiled_function(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledFunction> {
+        if index >= slf.borrow().functions.len() {
+            return Err(PyIndexError::new_err(index));
+        }
+        Ok(NativeCompiledFunction::new(slf.clone().unbind(), index))
     }
 
     /// Keep the namespaces native project assembly resolved, in source order.
@@ -466,6 +542,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeSeedInput>()?;
     module.add_class::<NativeCompiledSeed>()?;
     module.add_class::<NativeSourceInput>()?;
+    module.add_class::<NativeFunctionInput>()?;
+    module.add_class::<NativeCompiledFunction>()?;
     module.add_class::<NativeCompiledSource>()?;
     module.add_class::<NativeCompiledProject>()
 }

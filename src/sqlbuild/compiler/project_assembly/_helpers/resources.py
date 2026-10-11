@@ -47,7 +47,7 @@ def project_resources(
         model_syntax_valid=tuple(syntax),
         source_namespaces=tuple(source_namespaces),
         seed_namespaces=tuple(seed_namespaces),
-        function_deps=tuple(_keys(keys) for keys in function_deps),
+        function_deps=tuple(function_deps),
         audit_scope_deps=tuple(_keys(keys) for keys in audit_deps),
         failure=None if failure is None else _failure(row=failure, held=held),
     )

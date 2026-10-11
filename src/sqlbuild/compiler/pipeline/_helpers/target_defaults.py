@@ -8,16 +8,15 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModel,
     CompiledRelationLocation,
     CompiledSeed,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledSeedView,
-    FunctionLanguage,
 )
 from sqlbuild.compiler.compiled_project.main._with_target_defaults import with_target_defaults
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
@@ -51,26 +50,13 @@ def apply_target_defaults(
         )
         for seed in project.seeds
     )
-    functions: tuple[CompiledFunction, ...] = tuple(
-        replace(
-            f,
-            destination=_resolve_function_target(
-                function=f,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-                python_functions_inherit_default_namespace=(
-                    python_functions_inherit_default_namespace
-                ),
-            ),
-            fingerprint_destination=_resolve_target(
-                target=f.fingerprint_destination,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-            ),
+    functions: tuple[CompiledFunctionView, ...] = tuple(
+        cast(_native.NativeCompiledFunction, function).with_target_defaults(
+            (default_schema, default_database),
+            render_qualified_name,
+            python_functions_inherit_default_namespace,
         )
-        for f in project.functions
+        for function in project.functions
     )
     return project_with(
         project=project,
@@ -124,28 +110,6 @@ def _seed_with_defaults(
             render_qualified_name=render_qualified_name,
         ),
     )
-
-
-def _resolve_function_target(
-    *,
-    function: CompiledFunction,
-    default_schema: str | None,
-    default_database: str | None,
-    render_qualified_name: Callable[..., str | None],
-    python_functions_inherit_default_namespace: bool,
-) -> CompiledRelationLocation:
-    apply_defaults: bool = (
-        function.language != FunctionLanguage.PYTHON or python_functions_inherit_default_namespace
-    )
-    resolved: CompiledRelationLocation = _resolve_target(
-        target=function.destination,
-        default_schema=default_schema if apply_defaults else None,
-        default_database=default_database if apply_defaults else None,
-        render_qualified_name=render_qualified_name,
-    )
-    if not apply_defaults and resolved.qualified_name is None:
-        return replace(resolved, qualified_name=resolved.name)
-    return resolved
 
 
 def _resolve_target(

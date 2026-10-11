@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledFunction
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledResourceType,
     CompiledSeedView,
@@ -37,7 +37,7 @@ from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_ident
 
 def build_direct_model_version_identities(
     *,
-    functions: tuple[CompiledFunction, ...],
+    functions: tuple[CompiledFunctionView, ...],
     seeds: tuple[CompiledSeedView, ...] = (),
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
@@ -65,7 +65,7 @@ def build_direct_model_version_identities(
     model_metadata_jsons: dict[str, str] = {}
     model_local_hashes: dict[str, str] = {}
     graph_nodes: dict[GraphNodeKey, GraphIdentityNode] = {}
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in functions:
         function_hash: str | None = function_local_hashes.get(function.name)
         if function_hash is None:

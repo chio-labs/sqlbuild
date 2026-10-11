@@ -27,12 +27,12 @@ from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -475,7 +475,7 @@ def _resolve_database(
             continue
         if seed.destination.database is not None:
             return seed.destination.database
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if selected_keys is not None and function.key not in selected_keys:
             continue
@@ -504,7 +504,7 @@ def _collect_target_schemas(
             continue
         if seed.destination.schema is not None:
             schemas.add(seed.destination.schema)
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if selected_keys is not None and function.key not in selected_keys:
             continue
@@ -625,7 +625,7 @@ def _gather_relations(
     seed: CompiledSeedView
     for seed in project.seeds:
         logical_names_by_identity[_location_identity(seed.destination)] = seed.name
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         logical_names_by_identity[_location_identity(function.destination)] = function.name
     fingerprint_schemas: set[str] = set()
@@ -877,7 +877,7 @@ def _collect_cursor_models(
         else None
     )
     seed_map: dict[str, CompiledSeedView] = {seed.name: seed for seed in project.seeds}
-    function_map: dict[str, CompiledFunction] = {
+    function_map: dict[str, CompiledFunctionView] = {
         function.name: function for function in project.functions
     }
     runtime_producer_names: frozenset[str] = _selected_runtime_producer_names(

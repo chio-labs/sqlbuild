@@ -35,6 +35,7 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -308,7 +309,7 @@ def build_test_and_project(
             )
         )
 
-    functions: list[CompiledFunction] = []
+    functions: list[CompiledFunctionView] = []
     function_name: str
     qualified_name: str
     for function_name, qualified_name in test_case.function_locations.items():

@@ -10,11 +10,11 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledObjectKey,
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -594,7 +594,7 @@ def test_given_table_function_and_transitive_watermark_when_planning_then_source
 ) -> None:
     model: CompiledModelView
     models_by_name: dict[str, CompiledModelView]
-    functions_by_name: dict[str, CompiledFunction]
+    functions_by_name: dict[str, CompiledFunctionView]
     model, models_by_name, functions_by_name = build_function_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,

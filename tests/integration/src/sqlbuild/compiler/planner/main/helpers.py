@@ -27,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
     FunctionArgument,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
@@ -152,7 +153,7 @@ def build_project_from_test_case(
             )
         )
 
-    functions: list[CompiledFunction] = []
+    functions: list[CompiledFunctionView] = []
     function_name: str
     for function_name, target_schema in test_case.function_locations.items():
         body_sql: str = test_case.function_bodies.get(function_name, "value = 1")
@@ -324,12 +325,12 @@ def write_previous_function_fingerprints(
         function_bodies={**test_case.function_bodies, **test_case.previous_function_bodies},
     )
     previous_project: CompiledProjectView = build_project_from_test_case(previous_case)
-    function_map: dict[str, CompiledFunction] = {
+    function_map: dict[str, CompiledFunctionView] = {
         function.name: function for function in previous_project.functions
     }
     function_name: str
     for function_name in test_case.previous_function_bodies:
-        function: CompiledFunction = function_map[function_name]
+        function: CompiledFunctionView = function_map[function_name]
         fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
         write_fingerprint(
             connection=connection,

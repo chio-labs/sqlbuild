@@ -10,11 +10,10 @@ from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationL
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledRelationLocation,
     CursorInputRoles,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     resolve_bounded_cursor_override,
@@ -185,7 +184,7 @@ def _unresolved_cursor_bounds_error(
 def resolve_function_sql(
     *,
     adapter: BaseAdapter,
-    function: CompiledFunction,
+    function: CompiledFunctionView,
     model_locations: dict[str, CompiledRelationLocation],
     seed_locations: dict[str, CompiledRelationLocation],
     function_locations: dict[str, CompiledRelationLocation],

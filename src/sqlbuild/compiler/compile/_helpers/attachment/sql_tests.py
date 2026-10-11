@@ -57,7 +57,6 @@ from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestCtes,
     CompileModelSqlTestInputPayload,
-    CompileSqlFunctionInput,
     CompileSqlReference,
     CompileSqlScenarioCte,
     CompileSqlScenarioCtes,
@@ -73,6 +72,7 @@ from sqlbuild.compiler.compile.models import (
     SqlTestReads,
 )
 from sqlbuild.compiler.compile.types import (
+    FunctionInput,
     SqlTestMode,
 )
 from sqlbuild.compiler.discovery.models import (
@@ -116,7 +116,7 @@ def build_test_inputs_with_cache(
     loaded_macros: dict[str, LoadedMacro],
     declaration_expansion: DeclarationExpansionContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-    sql_function_inputs: tuple[CompileSqlFunctionInput, ...],
+    sql_function_inputs: tuple[FunctionInput, ...],
     sql_lexical_syntax: SqlLexicalSyntax,
     scan_cache: SqlTestScanCache,
 ) -> tuple[CompileSqlTestInput, ...]:
@@ -147,7 +147,7 @@ def build_test_inputs(
     declaration_expansion: DeclarationExpansionContext,
     sql_lexical_syntax: SqlLexicalSyntax,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = (),
+    sql_function_inputs: tuple[FunctionInput, ...] = (),
     scan_cache: SqlTestScanCache | None = None,
 ) -> tuple[CompileSqlTestInput, ...]:
     """Build compile-time test inputs from discovered SQL-native test blocks."""

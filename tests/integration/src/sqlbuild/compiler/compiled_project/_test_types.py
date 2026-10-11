@@ -91,3 +91,22 @@ class NativeSourceErrorTestCase:
     source_yml: str
     expected_message: str
     expects_help: bool
+
+
+@dataclass(frozen=True)
+class NativeFunctionAttachmentTestCase:
+    """A function the native loop attaches and assembly keeps in the native project."""
+
+    description: str
+    function_name: str
+    expected_summary: tuple[object, ...]
+    expected_usages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeFunctionErrorTestCase:
+    """Function files the native loop rejects while attaching them."""
+
+    description: str
+    files: dict[str, str]
+    expected_message: str

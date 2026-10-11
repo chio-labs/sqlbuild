@@ -12,12 +12,12 @@ from pathlib import Path
 from sqlbuild.compiler.compile.constants import MISSING_DESCRIPTION_CODE
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
-    CompileSqlFunctionInput,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
+    FunctionInput,
     FunctionLanguage,
     ModelInput,
     SeedInput,
@@ -70,7 +70,7 @@ def missing_description_diagnostics(
     model_inputs: tuple[ModelInput, ...],
     seed_inputs: tuple[SeedInput, ...],
     source_inputs: tuple[SourceInput, ...],
-    function_inputs: tuple[CompileSqlFunctionInput, ...],
+    function_inputs: tuple[FunctionInput, ...],
 ) -> tuple[CompilerDiagnostic, ...]:
     """Return one error for each named resource without a non-empty description."""
 
@@ -218,7 +218,7 @@ def _source(
     )
 
 
-def _function(function_input: CompileSqlFunctionInput) -> _Resource:
+def _function(function_input: FunctionInput) -> _Resource:
     name: str = function_input.name
     path: Path = function_input.function_file.relative_path
     resource_type: CompiledResourceType = (

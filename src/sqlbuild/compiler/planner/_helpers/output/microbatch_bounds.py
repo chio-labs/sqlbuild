@@ -7,10 +7,9 @@ from datetime import datetime
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
 from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
 from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
     aligned_timestamp_bounds,
@@ -93,7 +92,7 @@ def validate_capped_watermark_inputs(
     *,
     model: CompiledModelView,
     models_by_name: dict[str, CompiledModelView],
-    functions_by_name: dict[str, CompiledFunction] | None = None,
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
 ) -> None:
     """Reject capped producers feeding microbatch watermark inputs."""
 
@@ -132,7 +131,7 @@ def _find_capped_producer_ancestor(
     *,
     reference: CompileSqlReference,
     models_by_name: dict[str, CompiledModelView],
-    functions_by_name: dict[str, CompiledFunction],
+    functions_by_name: dict[str, CompiledFunctionView],
 ) -> CompiledModelView | None:
     """Return the first capped microbatch model in a reference's upstream lineage."""
 
@@ -174,7 +173,7 @@ def _find_capped_producer_ancestor(
             SqlReferenceKind.UDF,
             SqlReferenceKind.TABLE_FUNCTION,
         }:
-            function: CompiledFunction | None = functions_by_name.get(current.ref_name)
+            function: CompiledFunctionView | None = functions_by_name.get(current.ref_name)
             if function is not None:
                 pending.extend(function.references)
     return None

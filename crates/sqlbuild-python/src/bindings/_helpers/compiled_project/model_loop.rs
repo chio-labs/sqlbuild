@@ -1,5 +1,9 @@
 //! The compile-input model loop: each model's steps run in the attachment's order, natively.
 
+use crate::bindings::_helpers::compiled_project::function_loop::{
+    FunctionRow, FunctionSettings, attached_functions, checked_table_function_arities,
+};
+use crate::bindings::_helpers::compiled_project::function_views::AttachedFunction;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
 use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
@@ -338,6 +342,27 @@ impl NativeModelLoop {
         Ok(retain_sources(project, attached))
     }
 
+    /// Attach every SQL, then Python, function in order, checking table function call arities.
+    pub(crate) fn run_functions<'py>(
+        &self,
+        host: &Bound<'py, PyAny>,
+        rows: (Vec<FunctionRow>, Vec<FunctionRow>),
+        settings: FunctionSettings,
+        models: &[(String, Vec<ReferenceRow>)],
+    ) -> PyResult<Vec<AttachedFunction>> {
+        let py: Python<'py> = host.py();
+        let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
+        let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
+        let context: LoopContext<'_, 'py> = LoopContext {
+            host,
+            classes: &classes,
+            contracts: &contracts,
+        };
+        let attached: Vec<AttachedFunction> = attached_functions(self, &context, rows, settings)?;
+        checked_table_function_arities(&context, models, &attached)?;
+        Ok(attached)
+    }
+
     /// Run the model's steps in the attachment's order; `None` hands it to the attachment.
     fn finish<'py>(
         &self,
@@ -481,7 +506,7 @@ impl NativeModelLoop {
             context,
             &self.syntax,
             &scanned.invalid_calls,
-            (name, relative_path, file_path, contents),
+            (Some(name), relative_path, file_path, contents),
         )?;
         let analysis: (bool, Option<Bound<'py, PyAny>>) = (
             analysed && scanned.invalid_calls.is_empty(),

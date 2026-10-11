@@ -19,7 +19,7 @@ class NativeProjectResources:
     model_syntax_valid: tuple[bool, ...]
     source_namespaces: tuple[tuple[str | None, str | None] | None, ...]
     seed_namespaces: tuple[NamespaceRow, ...]
-    function_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    function_deps: tuple[list[ObjectKeyRow], ...]
     audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     failure: NativeResourceFailure | None = None
 
