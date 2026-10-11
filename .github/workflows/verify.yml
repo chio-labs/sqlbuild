@@ -865,6 +865,12 @@ jobs:
           args: --release --out dist --features extension-module
           target: ${{ matrix.platform.target }}
           manylinux: auto
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
       - name: Smoke import the native extension from the built wheel
         shell: bash
         run: |
@@ -877,6 +883,10 @@ jobs:
           "${smoke_python}" -m pip install --no-deps dist/*.whl
           cd "${RUNNER_TEMP}"
           "${smoke_python}" -c "import sqlbuild._native"
+          smoke_scripts="$(dirname "${smoke_python}")"
+          "${smoke_scripts}/sqb" --version
+          "${smoke_scripts}/sqb" --help
+          "${smoke_scripts}/sqlbuild" --help
 
   verify:
     name: Verify

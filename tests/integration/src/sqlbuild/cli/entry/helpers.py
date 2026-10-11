@@ -1,0 +1,85 @@
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
+
+type LauncherRun = tuple[int, bytes, bytes]
+
+_ELAPSED_SECONDS: re.Pattern[bytes] = re.compile(rb"\(\d+\.\d s\)")
+NATIVE_SQB: Path = Path(sys.executable).with_name("sqb")
+PYTHON_CLI: Path = Path(sys.executable).with_name("sqlbuild-python")
+PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders_shop"\n'
+        'adapter = "duckdb"\n'
+        'default_target = "dev"\n\n'
+        "[connections.local]\n"
+        'database = "warehouse.duckdb"\n\n'
+        "[targets.dev]\n"
+        'connection = "local"\n'
+        'schema = "dev"\n'
+    ),
+    "models/orders.sql": (
+        'MODEL (\n  description "One row per order",\n  materialized table,\n);\n\n'
+        "SELECT 1 AS order_id, CAST('2026-04-01' AS DATE) AS ordered_on\n"
+    ),
+}
+
+
+def write_project(project_dir: Path) -> Path:
+    """Write a one-model DuckDB project."""
+
+    for relative, contents in PROJECT_FILES.items():
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    return project_dir
+
+
+def run(program: Path, *, args: tuple[str, ...], cwd: Path) -> LauncherRun:
+    """Run one CLI process with reuse enabled; return its exit code, stdout and stderr."""
+
+    completed: subprocess.CompletedProcess[bytes] = subprocess.run(
+        [str(program), *args],
+        cwd=cwd,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "NO_COLOR": "1", REUSE_DISABLE_ENV_VAR: "0"},
+        timeout=600,
+    )
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+def launch_records(project_dir: Path) -> dict[Path, int]:
+    """Every launch record in the project and its modification time."""
+
+    directory: Path = project_dir / "target" / "cache" / "launcher-v1"
+    return {path: path.stat().st_mtime_ns for path in directory.glob("*.json")}
+
+
+def compute_log_captures(project_dir: Path) -> set[Path]:
+    """Every completed compute log capture directory."""
+
+    return {marker.parent for marker in (project_dir / "logs").glob("*/*/complete")}
+
+
+def capture_metadata(capture: Path) -> dict[str, object]:
+    """A capture's final metadata."""
+
+    return json.loads((capture / "metadata.json").read_text(encoding="utf-8"))
+
+
+def without_seconds(stream: bytes) -> bytes:
+    """The stream with the reuse notice's elapsed seconds blanked."""
+
+    return _ELAPSED_SECONDS.sub(b"(s)", stream)
+
+
+def compile_timings(stdout: bytes) -> dict[str, int]:
+    """The `compile_timings` of a JSON compile report."""
+
+    return json.loads(stdout)["compile_timings"]

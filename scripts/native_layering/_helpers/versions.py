@@ -9,6 +9,7 @@ from typing import Any
 
 from scripts.native_layering.constants import (
     CARGO_MANIFEST,
+    CLI_DISTRIBUTION_PIN_PREFIX,
     PYPROJECT_MANIFEST,
     RELEASE_MANIFEST,
     RELEASE_MANIFEST_PACKAGE,
@@ -28,6 +29,14 @@ def get_native_version_errors(root: Path) -> tuple[str, ...]:
         .get("version"),
         f"{PYPROJECT_MANIFEST} [project] version": pyproject.get("project", {}).get("version"),
         f"{RELEASE_MANIFEST} version": release.get(RELEASE_MANIFEST_PACKAGE),
+        f"{PYPROJECT_MANIFEST} sqlbuild-cli dependency": next(
+            (
+                dependency.removeprefix(CLI_DISTRIBUTION_PIN_PREFIX)
+                for dependency in pyproject.get("project", {}).get("dependencies", ())
+                if dependency.startswith(CLI_DISTRIBUTION_PIN_PREFIX)
+            ),
+            None,
+        ),
     }
     if len(set(versions.values())) == 1:
         return ()
