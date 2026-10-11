@@ -37,7 +37,7 @@ type RecordRows = (
     Vec<GrantRow>,
     Vec<DiagnosticKeyRow>,
 );
-type GroupRows = (Vec<Vec<usize>>, bool);
+type GroupRows = Vec<Vec<usize>>;
 /// Roots, resources, declarations, usages, grants and diagnostics in canonical order.
 type OrderRows = (
     Vec<usize>,
@@ -202,7 +202,7 @@ fn identity_message(py: Python<'_>, failure: &IdentityFailure, value: &str) -> S
 }
 
 fn group_rows(groups: KeyedGroups) -> GroupRows {
-    (groups.groups, groups.repr_ordered)
+    groups.groups
 }
 
 fn lookup_rows(lookup: &ReportLookup) -> (OrderRows, MappingRows, VisibilityRows) {

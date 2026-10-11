@@ -912,7 +912,7 @@ def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str:
 type _ScopeQualified = tuple[str, str, tuple[str, str] | None]
 type _ScopeRoot = tuple[str, str, str | None]
 type _ScopeResource = tuple[tuple[str, str], str, _ScopeRoot]
-type _ScopeGroups = tuple[list[list[int]], bool]
+type _ScopeGroups = list[list[int]]
 
 class NativeScopeLookup:
     def target(

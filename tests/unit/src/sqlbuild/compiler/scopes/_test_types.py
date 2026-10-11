@@ -60,6 +60,16 @@ class QualifiedIdentityCase:
 
 
 @dataclass(frozen=True)
+class UnicodeKeyOrderCase:
+    """Resource names and paths, with the lookup mapping orders Python's `repr` sort gives."""
+
+    description: str
+    names: tuple[str, ...]
+    expected_names: tuple[str, ...]
+    expected_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ExpectedBooleanCase:
     """One scalar boolean behavior case."""
 

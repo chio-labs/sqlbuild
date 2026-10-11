@@ -361,9 +361,8 @@ pub struct GrantRecord {
 /// One lookup mapping's groups; members index the records the mapping groups.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KeyedGroups {
+    /// Groups in Python's `repr(key)` order.
     pub groups: Vec<Vec<usize>>,
-    /// Whether `groups` follow Python's `repr(key)` order; otherwise first-occurrence order.
-    pub repr_ordered: bool,
 }
 
 /// Python's `DeclarationVisibilityIndex` positions over the canonical declarations.

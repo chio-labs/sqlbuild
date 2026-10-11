@@ -74,16 +74,8 @@ pub(super) struct LookupTestCase {
     pub(super) declarations: &'static [DeclarationRow],
     /// First resource identity of each resource group, in mapping order.
     pub(super) expected_resource_groups: &'static [&'static str],
-    pub(super) expected_repr_ordered: bool,
     /// `global`, `private`, `local` and `inherited` position groups as text.
     pub(super) expected_visibility: &'static [&'static str],
-}
-
-/// One Python `repr` case for a lookup key string.
-pub(super) struct ReprTestCase {
-    pub(super) description: &'static str,
-    pub(super) value: &'static str,
-    pub(super) expected_repr: Option<&'static str>,
 }
 
 /// `(position, reason, through)` of one visible record.

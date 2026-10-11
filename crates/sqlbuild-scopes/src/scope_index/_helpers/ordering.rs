@@ -76,24 +76,19 @@ pub(crate) fn group_in_order<K: Hash + Eq>(
     groups
 }
 
-/// Python's `group_records`: groups ordered by `repr(key)` when every key's repr is known.
+/// Python's `group_records`: groups ordered by `repr(key)`, members in input order.
 pub(crate) fn keyed_groups<K: Hash + Eq>(
     members: &[usize],
     key: impl Fn(usize) -> K,
-    repr: impl Fn(&K) -> Option<String>,
+    repr: impl Fn(&K) -> String,
 ) -> KeyedGroups {
     let groups: Vec<Vec<usize>> = group_in_order(members, &key);
-    let reprs: Option<Vec<String>> = groups.iter().map(|group| repr(&key(group[0]))).collect();
-    let Some(reprs) = reprs else {
-        return KeyedGroups {
-            groups,
-            repr_ordered: false,
-        };
-    };
-    let mut ordered: Vec<(String, Vec<usize>)> = reprs.into_iter().zip(groups).collect();
+    let mut ordered: Vec<(String, Vec<usize>)> = groups
+        .into_iter()
+        .map(|group| (repr(&key(group[0])), group))
+        .collect();
     ordered.sort_by(|left, right| left.0.cmp(&right.0));
     KeyedGroups {
         groups: ordered.into_iter().map(|(_repr, group)| group).collect(),
-        repr_ordered: true,
     }
 }

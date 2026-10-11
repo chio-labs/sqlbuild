@@ -10,6 +10,7 @@ use crate::scope_index::_helpers::visibility::{VisibilityIndex, checked_owner};
 use crate::scope_index::models::{
     RejectedPath, ReportGroups, ReportLookup, ReportRecords, ScopeIndex, ScopeKind,
 };
+use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 /// Stable `sorted(range(count), key=key)`.
@@ -102,7 +103,7 @@ pub fn report_lookup(records: &ReportRecords) -> Result<ReportLookup, RejectedPa
         resources_by_path: keyed_groups(
             &resources,
             |resource| resource_paths[resource].as_str(),
-            |path| python_str_repr(path),
+            |path| python_str_repr(active_python_text(), path),
         ),
         declarations: keyed_groups(
             &declarations,
