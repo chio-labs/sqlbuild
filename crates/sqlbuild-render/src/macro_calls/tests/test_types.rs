@@ -65,3 +65,10 @@ pub(crate) struct CallBoundsTestCase {
     pub(crate) expected_args_starts: &'static [usize],
     pub(crate) expected_failure: Option<(Option<usize>, Option<&'static str>, ScanError)>,
 }
+
+pub(crate) struct CallClassStoreTextTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) context_token: Option<&'static str>,
+    pub(crate) prior_relations: Option<&'static [(&'static str, &'static str)]>,
+    pub(crate) expected_text: &'static str,
+}

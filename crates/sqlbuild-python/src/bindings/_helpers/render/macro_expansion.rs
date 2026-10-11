@@ -14,13 +14,15 @@ use sqlbuild_core::text::models::PythonText;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
 use sqlbuild_render::macro_calls::models::{
-    MacroCallEvent, MacroCallScan, MacroCallSite, MacroScanFailure, MacroSpliceSpan,
+    MacroCallEntry, MacroCallEvent, MacroCallScan, MacroCallSite, MacroScanFailure, MacroSpliceSpan,
 };
 
 use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
-use crate::bindings::_helpers::render::macro_call_rows::{
-    EventRow, SpanRow, event_from_row, event_row, span_row,
+use crate::bindings::_helpers::render::macro_call_classes::{
+    CallClass, ClassInputs, StoreTokenClasses,
 };
+use crate::bindings::_helpers::render::macro_call_memo::{MacroCallMemo, poisoned};
+use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_evaluation::{CallText, Evaluation, evaluate_call};
 use crate::bindings::_helpers::render::macro_expansion_facts::{ExpansionFacts, ResourceRef};
 use crate::bindings::_helpers::render::macro_generated_references::{
@@ -28,6 +30,8 @@ use crate::bindings::_helpers::render::macro_generated_references::{
 };
 
 const RELATION_PREFIX: &str = "__sqlbuild_relation_";
+const MEMO_ATTRIBUTE: &str = "memo";
+const OBSERVE_MODULES_METHOD: &str = "observe_modules";
 const RELATION_SUFFIX: &str = "__";
 const CONSTANT_KIND: &str = "constant";
 const RELATIONSHIP_CONSUMER_KINDS: [&str; 2] = ["test", "scenario"];
@@ -56,12 +60,12 @@ pub(crate) struct ExpansionClasses<'py> {
     resource_identity: Bound<'py, PyAny>,
     model_kind: Bound<'py, PyAny>,
     pub(crate) resource_ref: Bound<'py, PyAny>,
-    ref_kind: Bound<'py, PyAny>,
     /// `SqlResourceRefKind` member by typed reference function, such as `__ref`.
     pub(crate) ref_kinds: Bound<'py, PyDict>,
     /// Typed reference function by `SqlResourceRefKind` value.
     ref_functions: Bound<'py, PyDict>,
-    macro_call_site: Bound<'py, PyAny>,
+    /// `macro_store_token` and `context_store_token`.
+    store_tokens: StoreTokenClasses<'py>,
     pub(crate) relation_renderer: Bound<'py, PyAny>,
     /// Builds the `MacroContext` a macro is called with from the visible declarations.
     pub(crate) invocation_context: Bound<'py, PyAny>,
@@ -170,25 +174,28 @@ impl NativeMacroExpansion {
     fn call_classes<'py>(
         &self,
         classes: &ExpansionClasses<'py>,
-        bridge: &Bound<'py, PyAny>,
+        memo: &MacroCallMemo,
         scan: &MacroCallScan,
-    ) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
+    ) -> PyResult<Option<Vec<CallClass>>> {
         if scan.failure.is_some() {
             return Ok(None);
         }
-        let py: Python<'py> = bridge.py();
-        let mut found: Vec<Bound<'py, PyAny>> = Vec::with_capacity(scan.sites.len());
+        let py: Python<'py> = classes.compile_error.py();
+        let inputs: ClassInputs<'_, 'py> = ClassInputs {
+            declarations: self.declarations.bind(py),
+            loaded_macros: self.loaded_macros.bind(py),
+            macro_context: self.macro_context.bind(py),
+            store: &classes.store_tokens,
+        };
+        let mut state = memo.classes.lock().map_err(poisoned)?;
+        let mut found: Vec<CallClass> = Vec::with_capacity(scan.sites.len());
         for site in &scan.sites {
-            let arguments: Bound<'py, PyDict> = PyDict::new(py);
-            arguments.set_item("site", site_object(classes, site)?)?;
-            arguments.set_item("declarations", self.declarations.bind(py))?;
-            arguments.set_item("loaded_macros", self.loaded_macros.bind(py))?;
-            arguments.set_item("macro_context", self.macro_context.bind(py))?;
-            let call_class: Bound<'py, PyAny> =
-                bridge.call_method("call_class", (), Some(&arguments))?;
-            if call_class.is_none() {
+            let Some(tree_names) = &site.tree_names else {
                 return Ok(None);
-            }
+            };
+            let Some(call_class) = state.call_class(tree_names, &inputs)? else {
+                return Ok(None);
+            };
             found.push(call_class);
         }
         Ok(Some(found))
@@ -198,10 +205,11 @@ impl NativeMacroExpansion {
     fn bridged_output<'py>(
         &self,
         run: &Evaluation<'_, 'py>,
-        bridge: &Bound<'py, PyAny>,
+        bridge: (&Bound<'py, PyAny>, &MacroCallMemo),
         call: (&CallText<'_>, &MacroCallSite),
-        call_class: &Bound<'py, PyAny>,
+        call_class: &CallClass,
     ) -> PyResult<String> {
+        let (bridge, memo) = bridge;
         let (text, site) = call;
         let classes: &ExpansionClasses<'py> = run.classes;
         let py: Python<'py> = bridge.py();
@@ -210,27 +218,31 @@ impl NativeMacroExpansion {
             return self.evaluated_output(run, (text, site));
         }
         let call_text: &str = text.slice(site.start, site.end);
-        let prior: Option<Bound<'py, PyTuple>> = if site.typed_reference_text {
-            let relations: Vec<ResourceRef> = self.facts.borrow().relations.clone();
-            Some(reference_tuple(classes, &relations)?)
-        } else {
-            None
+        let prior: Option<Vec<ResourceRef>> = site
+            .typed_reference_text
+            .then(|| self.facts.borrow().relations.clone());
+        let (class_id, class_text) = memo
+            .classes
+            .lock()
+            .map_err(poisoned)?
+            .class_id(call_class, prior.as_deref());
+        let recorded: Option<MacroCallEntry> = {
+            let mut inner = memo.inner.lock().map_err(poisoned)?;
+            if let Some(class_text) = class_text {
+                inner.set_persistent_class(class_id, &class_text);
+            }
+            inner
+                .lookup(class_id, call_text)
+                .map(|entry| MacroCallEntry::clone(&entry))
         };
-        let lookup: Bound<'py, PyDict> = PyDict::new(py);
-        lookup.set_item("call_class", call_class)?;
-        lookup.set_item("call_text", call_text)?;
-        lookup.set_item("prior_relations", prior.as_ref())?;
-        let (class_id, recorded): (Bound<'py, PyAny>, Option<RecordedCall>) =
-            bridge.call_method("lookup", (), Some(&lookup))?.extract()?;
-        if let Some((recorded_sql, relations, events)) = recorded {
-            for event in events {
-                self.replay(classes, event_from_row(event)?)?;
+        if let Some(entry) = recorded {
+            for event in entry.events {
+                self.replay(classes, event)?;
             }
-            for relation in &relations {
-                let key: ResourceRef = resource_key(relation)?;
-                let _ = self.facts.borrow_mut().relation_slot(&key);
+            for relation in &entry.relations {
+                let _ = self.facts.borrow_mut().relation_slot(relation);
             }
-            return self.render_placeholders(classes, &recorded_sql);
+            return self.render_placeholders(classes, &entry.sql);
         }
         let known: usize = self.facts.borrow().relations.len();
         self.facts.borrow_mut().begin_event_log();
@@ -239,14 +251,16 @@ impl NativeMacroExpansion {
         let output: String = result?;
         let added: Vec<ResourceRef> = self.facts.borrow().relations[known..].to_vec();
         if replayable && (prior.is_some() || added.is_empty()) {
-            let record: Bound<'py, PyDict> = PyDict::new(py);
-            record.set_item("class_id", class_id)?;
-            record.set_item("call_text", call_text)?;
-            record.set_item("sql", &output)?;
-            record.set_item("relations", reference_tuple(classes, &added)?)?;
-            let rows: Vec<EventRow> = events.iter().map(event_row).collect();
-            record.set_item("events", PyTuple::new(py, rows)?)?;
-            let _ = bridge.call_method("record", (), Some(&record))?;
+            observe_new_modules(bridge, memo)?;
+            let entry: MacroCallEntry = MacroCallEntry {
+                sql: output.clone(),
+                relations: added,
+                events,
+            };
+            memo.inner
+                .lock()
+                .map_err(poisoned)?
+                .record(class_id, call_text.to_owned(), entry);
         }
         self.render_placeholders(classes, &output)
     }
@@ -617,20 +631,29 @@ pub(crate) fn expanded<'py>(
     };
     let text: CallText<'_> = CallText::new(sql);
     let scan: MacroCallScan = scan_sites(this.python, text.text);
-    let call_classes: Option<Vec<Bound<'py, PyAny>>> = if bridge.is_none() {
+    let memo: Option<Bound<'py, MacroCallMemo>> = if bridge.is_none() {
         None
     } else {
-        this.call_classes(&classes, bridge, &scan)?
+        Some(bridge.getattr(MEMO_ATTRIBUTE)?.downcast_into()?)
     };
-    let outputs: Vec<String> = match call_classes {
-        Some(call_classes) => {
+    let call_classes: Option<Vec<CallClass>> = match &memo {
+        Some(memo) => this.call_classes(&classes, memo.get(), &scan)?,
+        None => None,
+    };
+    let outputs: Vec<String> = match (call_classes, &memo) {
+        (Some(call_classes), Some(memo)) => {
             let mut outputs: Vec<String> = Vec::with_capacity(scan.sites.len());
             for (site, call_class) in scan.sites.iter().zip(call_classes) {
-                outputs.push(this.bridged_output(&run, bridge, (&text, site), &call_class)?);
+                outputs.push(this.bridged_output(
+                    &run,
+                    (bridge, memo.get()),
+                    (&text, site),
+                    &call_class,
+                )?);
             }
             outputs
         }
-        None => this.unmemoised_outputs(&run, &text, &scan)?,
+        _ => this.unmemoised_outputs(&run, &text, &scan)?,
     };
     let bounds: Vec<(usize, usize)> = scan
         .sites
@@ -659,47 +682,6 @@ fn top_level_output(
     call: (&CallText<'_>, &MacroCallSite),
 ) -> PyResult<String> {
     evaluate_call(run, call, true)?.extract()
-}
-
-/// `(sql, relations, events)` of a recorded call as the bridge returns it.
-type RecordedCall<'py> = (String, Vec<Bound<'py, PyAny>>, Vec<EventRow>);
-
-/// The Python `MacroCallSite` the bridge classifies.
-fn site_object<'py>(
-    classes: &ExpansionClasses<'py>,
-    site: &MacroCallSite,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = classes.macro_call_site.py();
-    let fields: Bound<'py, PyDict> = PyDict::new(py);
-    fields.set_item("start", site.start)?;
-    fields.set_item("args_start", site.args_start)?;
-    fields.set_item("end", site.end)?;
-    fields.set_item("name", &site.name)?;
-    fields.set_item(
-        "tree_names",
-        site.tree_names
-            .as_ref()
-            .map(|names| PyTuple::new(py, names))
-            .transpose()?,
-    )?;
-    fields.set_item("typed_reference_text", site.typed_reference_text)?;
-    classes.macro_call_site.call((), Some(&fields))
-}
-
-/// `SqlResourceRef` objects for typed references, in order.
-pub(crate) fn reference_tuple<'py>(
-    classes: &ExpansionClasses<'py>,
-    references: &[ResourceRef],
-) -> PyResult<Bound<'py, PyTuple>> {
-    let py: Python<'py> = classes.resource_ref.py();
-    let mut objects: Vec<Bound<'py, PyAny>> = Vec::with_capacity(references.len());
-    for (kind, name) in references {
-        let fields: Bound<'py, PyDict> = PyDict::new(py);
-        fields.set_item("kind", classes.ref_kind.call1((kind,))?)?;
-        fields.set_item("name", name)?;
-        objects.push(classes.resource_ref.call((), Some(&fields))?);
-    }
-    PyTuple::new(py, objects)
 }
 
 /// A `SqlResourceRef`'s kind value and name.
@@ -784,4 +766,18 @@ fn result_has_markers(classes: &ExpansionClasses<'_>, result: &str) -> bool {
         .generated
         .markers()
         .any(|marker| result.contains(marker))
+}
+
+/// Observe modules a recorded call imported, so the store is not saved over changed code.
+fn observe_new_modules(bridge: &Bound<'_, PyAny>, memo: &MacroCallMemo) -> PyResult<()> {
+    let Some(observed) = *memo.observed_modules.lock().map_err(poisoned)? else {
+        return Ok(());
+    };
+    let loaded: usize = PyModule::import(bridge.py(), "sys")?
+        .getattr("modules")?
+        .len()?;
+    if loaded != observed {
+        let _ = bridge.call_method0(OBSERVE_MODULES_METHOD)?;
+    }
+    Ok(())
 }

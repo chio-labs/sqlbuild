@@ -787,6 +787,7 @@ dependencies = [
 name = "sqlbuild-render"
 version = "0.155.0"
 dependencies = [
+ "serde_json",
  "sqlbuild-cache",
  "sqlbuild-core",
  "tempfile",
