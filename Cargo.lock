@@ -734,6 +734,7 @@ name = "sqlbuild-config"
 version = "0.155.0"
 dependencies = [
  "saphyr-parser",
+ "sqlbuild-core",
  "tempfile",
  "toml_edit",
  "toml_parser",

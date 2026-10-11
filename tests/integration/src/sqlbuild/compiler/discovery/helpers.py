@@ -38,7 +38,6 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_payload_error,
     native_text_runtime,
 )
-from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
     SelectedContractInputDiscoverer,
 )
@@ -61,7 +60,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,
@@ -573,46 +571,6 @@ def repository_files(*, pattern: str) -> list[Path]:
             REPOSITORY_ROOT.glob(pattern),
         )
     )
-
-
-def _python_project_fields(project: ProjectConfig, local: LocalConfig) -> dict[str, object]:
-    return {
-        "name": project.name,
-        "adapter": project.adapter,
-        "default_target": project.default_target,
-        "sql_analysis": project.settings.sql_analysis,
-        "require_sql_analysis": project.settings.require_sql_analysis,
-        "enforce_placement": project.scopes.enforce_placement,
-        "enforce_explicit_references": project.references.enforce_explicit,
-        "vars": [list(item) for item in project.vars.items()],
-        "path_default_keys": list(project.path_defaults),
-        "target_names": list(project.targets),
-        "local_target": local.target,
-        "local_adapter": local.adapter,
-        "local_sql_analysis": {True: local.settings.sql_analysis, False: None}[
-            "sql_analysis" in local.setting_overrides
-        ],
-        "local_vars": [list(item) for item in local.vars.items()],
-        "local_target_names": list(local.targets),
-    }
-
-
-def python_project_outcome(*, project_dir: Path) -> object:
-    """Return the discovery fields Python's loaders read, or the rejection marker."""
-
-    outcome: list[object] = [PYTHON_ERROR]
-    with suppress(Exception):
-        outcome[0] = _python_project_fields(
-            load_project_config(project_dir=project_dir), load_local_config(project_dir=project_dir)
-        )
-    return outcome[0]
-
-
-def native_project_outcome(*, project_dir: Path) -> object:
-    """Return the discovery fields the native reader reads, or its failure marker."""
-
-    parsed: dict[str, object] = json.loads(_native._oracle_project_config(str(project_dir)))
-    return {True: DEFERRED, False: parsed}["error" in parsed]
 
 
 def deferred_valid_count(*, expected: list[object], actual: list[object]) -> int:

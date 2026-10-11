@@ -1,6 +1,7 @@
 //! Find TOML 1.1 syntax, which the parser accepts and Python's TOML 1.0 `tomllib` rejects.
 
 use crate::errors::{ConfigError, ConfigErrorKind};
+use crate::toml::_helpers::integers::{LargeInteger, large_integer};
 use toml_parser::decoder::Encoding;
 use toml_parser::parser::{EventReceiver, RecursionGuard, parse_document};
 use toml_parser::{ErrorSink, ParseError, Source, Span};
@@ -24,6 +25,7 @@ struct VersionReceiver<'text> {
     after_comma: bool,
     key_segments: usize,
     found: Option<(usize, &'static str)>,
+    large_integers: Vec<LargeInteger>,
 }
 
 impl VersionReceiver<'_> {
@@ -47,6 +49,17 @@ impl VersionReceiver<'_> {
     fn line_break(&mut self, span: Span) {
         if self.in_inline_table() {
             self.record(span, "a newline or comment inside an inline table");
+        }
+    }
+
+    fn record_large_integer(&mut self, span: Span) {
+        let raw = self
+            .source
+            .get(span)
+            .map(|raw| raw.as_str())
+            .unwrap_or_default();
+        if let Some(digits) = large_integer(raw) {
+            self.large_integers.push((span.start(), span.end(), digits));
         }
     }
 
@@ -127,6 +140,9 @@ impl EventReceiver for VersionReceiver<'_> {
     fn scalar(&mut self, span: Span, encoding: Option<Encoding>, _error: &mut dyn ErrorSink) {
         self.token();
         self.check_escapes(span, encoding);
+        if encoding.is_none() {
+            self.record_large_integer(span);
+        }
     }
 
     fn value_sep(&mut self, _span: Span, _error: &mut dyn ErrorSink) {
@@ -144,8 +160,8 @@ impl EventReceiver for VersionReceiver<'_> {
     }
 }
 
-/// Reject TOML 1.1-only syntax, syntax errors, and nesting beyond the native limits.
-pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<(), ConfigError> {
+/// Reject TOML 1.1 syntax, syntax errors and deep nesting; return the integers beyond 64 bits.
+pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<Vec<LargeInteger>, ConfigError> {
     let source = Source::new(text);
     let tokens = source.lex().into_vec();
     let mut receiver = VersionReceiver {
@@ -154,6 +170,7 @@ pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<(), ConfigError> {
         after_comma: false,
         key_segments: 0,
         found: None,
+        large_integers: Vec::new(),
     };
     let mut errors: Vec<ParseError> = Vec::new();
     parse_document(
@@ -171,7 +188,7 @@ pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<(), ConfigError> {
         });
     }
     match receiver.found {
-        None => Ok(()),
+        None => Ok(receiver.large_integers),
         Some((offset, construct)) => Err(ConfigError {
             kind: ConfigErrorKind::Syntax,
             message: format!("{construct} is TOML 1.1 syntax, which tomllib rejects"),
