@@ -1,1 +1,0 @@
-"""Private resource name helpers."""
