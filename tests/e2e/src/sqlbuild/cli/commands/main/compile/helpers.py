@@ -35,7 +35,6 @@ import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
 import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
 import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
-import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
@@ -3879,12 +3878,6 @@ def twin_header_changed(root: Path) -> None:
     )
 
 
-def analyze_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Analyze every model in one batch, without dependency-ordered binding."""
-
-    monkeypatch.setattr(project_assembly, "binding_schema_for_model", lambda **_kwargs: None)
-
-
 def star_chain_added(root: Path) -> None:
     """Add two models that each select every column of the one before, below staging orders."""
 
@@ -4952,11 +4945,10 @@ def engine_in_process_compile(
 
 class NativeTypeAnswers(NamedTuple):
     """What the native type system answered in one compile: each Python-side normalization,
-    contract results that compared at least one typed column, and contract handbacks."""
+    and contract results that compared at least one typed column."""
 
     normalized: list[bool]
     typed_comparisons: int
-    handbacks: int
 
 
 def type_system_engine_compile(
@@ -4983,7 +4975,6 @@ def type_system_engine_compile(
     def recorded_contracts(request: NativeContractRequest) -> list[NativeContractOutcome]:
         outcomes: list[NativeContractOutcome] = evaluate_contracts(request)
         contract_statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
-        contract_statuses["handbacks"] += sum(deferral is not None for deferral, _ in outcomes)
         return outcomes
 
     type_normalization.normalize_type.cache_clear()
@@ -4997,7 +4988,6 @@ def type_system_engine_compile(
     return run, NativeTypeAnswers(
         normalized=normalized,
         typed_comparisons=contract_statuses["typed_comparisons"],
-        handbacks=contract_statuses["handbacks"],
     )
 
 

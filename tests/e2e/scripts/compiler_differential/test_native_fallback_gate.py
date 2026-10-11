@@ -9,7 +9,7 @@ import pytest
 from scripts.compiler_differential.main.differential import run_compiler_differential
 from tests.e2e.scripts.compiler_differential._test_types import NativeFallbackGateTestCase
 from tests.e2e.scripts.compiler_differential.helpers import (
-    MODEL_ANALYSIS_SABOTAGE,
+    FALLBACK_RECORD_PERTURBATION,
     harness_arguments,
     write_native_perturbation,
 )
@@ -42,12 +42,12 @@ _VANISHED_ENTRY: str = (
             ),
         ),
         NativeFallbackGateTestCase(
-            description="preview_model_analysis_sabotaged_to_python_fails",
-            perturbation=MODEL_ANALYSIS_SABOTAGE,
+            description="unexpected_preview_fallback_record_fails",
+            perturbation=FALLBACK_RECORD_PERTURBATION,
             appended_entries="",
             expected_exit_code=1,
             expected_lines=(
-                "Native fallback allow-list: native-preview model_analysis analysis_session "
+                "Native fallback allow-list: native-preview analysis_session analysis_session "
                 "session (project): ",
                 "Compiler differential FAILED: 0 of 1 projects differ",
             ),
