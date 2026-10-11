@@ -1366,29 +1366,24 @@ def check_semantic_metadata_rows(
     catalog: object,
     request: tuple[
         str | None,
+        bool,
         list[tuple[str, str]],
         list[tuple[str, list[tuple[str, str]]]],
         list[tuple[str, list[tuple[str, str]]]],
-        list[
-            tuple[
-                str,
-                str,
-                str,
-                bool,
-                bool,
-                list[tuple[str, list[str]]],
-                list[tuple[str, list[str]]],
-                str | None,
-                str | None,
-            ]
-        ],
+        list[tuple[object, ...]],
         list[str],
         list[tuple[str, str | None, int]],
         list[tuple[int, list[tuple[str, list[str]]]]],
     ],
     /,
 ) -> tuple[
-    list[tuple[list[tuple[str, str, int, int]], list[tuple[str, str, int, int]]]],
+    list[
+        tuple[
+            list[tuple[str, str, int, int]],
+            list[tuple[str, str, int, int, bool]],
+            list[tuple[str, str, int, int]],
+        ]
+    ],
     list[tuple[int, tuple[str, str, int, int]]],
     list[tuple[int, tuple[str, str, int, int], int]],
     list[str],

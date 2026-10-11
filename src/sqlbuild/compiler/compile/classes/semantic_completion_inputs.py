@@ -9,9 +9,8 @@ from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
     get_complete_schema_binding_request,
 )
 from sqlbuild.compiler.compile._helpers.assembly.metadata_validation import (
-    _audit_errors,
-    _names,
-    _sql_test_columns,
+    names,
+    sql_test_columns,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
@@ -70,22 +69,7 @@ class SemanticCompletionInputs:
     def column_names(value: object) -> tuple[str, ...]:
         """The column names a metadata config value lists."""
 
-        return _names(value)
-
-    @staticmethod
-    def audit_diagnostics(
-        *,
-        model: CompiledModelView,
-        project: CompiledProjectView,
-        shape: dict[str, str],
-        shapes: dict[str, dict[str, str]],
-        profile: ExpressionInferenceProfile,
-    ) -> tuple[CompilerDiagnostic, ...]:
-        """The schema audit checks of one model with a closed shape."""
-
-        return _audit_errors(
-            model=model, project=project, shape=shape, shapes=shapes, profile=profile
-        )
+        return names(value)
 
     @staticmethod
     def sql_test_columns(
@@ -93,7 +77,7 @@ class SemanticCompletionInputs:
     ) -> dict[str, tuple[str, ...]]:
         """The inferred output columns of every model SQL test CTE body."""
 
-        return _sql_test_columns(project=project, profile=profile)
+        return sql_test_columns(project=project, profile=profile)
 
     @staticmethod
     def resource_sql_diagnostics(

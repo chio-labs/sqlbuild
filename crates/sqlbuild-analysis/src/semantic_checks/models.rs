@@ -267,6 +267,46 @@ pub struct MetadataModel {
     pub cursor_inputs: Vec<(String, Vec<String>)>,
     pub cursor: Option<String>,
     pub cursor_type: Option<String>,
+    /// The model's schema audits, model-level ones first, in Python's order.
+    pub audits: Vec<MetadataAudit>,
+}
+
+/// One accepted value of an `accepted_values` audit, by Python type.
+#[derive(Clone, Debug, PartialEq)]
+pub enum AuditValue {
+    Null,
+    Bool(bool),
+    /// An `int` or `float`, as `str(value)`.
+    Number(String),
+    Text(String),
+    /// Any other object, which keeps the audit from being checked.
+    Other,
+}
+
+/// One schema audit as the metadata checks read it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MetadataAudit {
+    /// The schema column the audit is attached to, if any.
+    pub column: Option<String>,
+    pub definition: String,
+    /// The `expression` argument, when it is a string.
+    pub expression: Option<String>,
+    /// `str(arguments.get("to", ""))`.
+    pub target: String,
+    /// `str(arguments.get("field", ""))`.
+    pub field: String,
+    /// The `values` argument, when it is a list or tuple.
+    pub values: Option<Vec<AuditValue>>,
+}
+
+/// One schema audit diagnostic, located at its name in the model's authored SQL.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditFinding {
+    pub code: String,
+    pub message: String,
+    pub line: i64,
+    pub column: i64,
+    pub is_error: bool,
 }
 
 /// One source's cursor column and file text, shared with the other sources of its file.
@@ -285,10 +325,12 @@ pub struct MetadataSqlTest {
     pub ctes: Vec<(String, Vec<String>)>,
 }
 
-/// Python's `get_semantic_metadata_diagnostics` inputs, apart from audits and resource SQL.
+/// Python's `get_semantic_metadata_diagnostics` inputs, apart from resource SQL.
 #[derive(Clone, Debug)]
 pub struct MetadataRequest {
     pub dialect: Option<String>,
+    /// The inference profile's `quoted_identifiers_ignore_case`.
+    pub quoted_ignore_case: bool,
     /// The inference profile's declared function return types.
     pub return_types: Vec<(String, String)>,
     pub functions: Vec<MetadataFunction>,
@@ -312,6 +354,8 @@ pub struct MetadataFinding {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ModelMetadataFindings {
     pub functions: Vec<MetadataFinding>,
+    /// Schema audit findings, which follow function errors and precede reference errors.
+    pub audits: Vec<AuditFinding>,
     pub references: Vec<MetadataFinding>,
 }
 
