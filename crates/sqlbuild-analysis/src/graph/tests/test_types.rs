@@ -15,13 +15,6 @@ pub(super) struct SelectorErrorTestCase {
 /// `(code, message, help)` of the `PlannerInputError` Python raises.
 pub(super) type SelectorFailure = (&'static str, &'static str, Option<&'static str>);
 
-pub(super) struct GlobTestCase {
-    pub(super) description: &'static str,
-    pub(super) pattern: &'static str,
-    pub(super) name: &'static str,
-    pub(super) expected_match: bool,
-}
-
 pub(super) struct CloseMatchTestCase {
     pub(super) description: &'static str,
     pub(super) word: &'static str,

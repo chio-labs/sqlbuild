@@ -1,8 +1,7 @@
 use crate::graph::_helpers::close_matches::close_matches;
-use crate::graph::_helpers::glob::fnmatch;
 use crate::graph::tests::helpers::{failure, keys, resolved};
 use crate::graph::tests::test_types::{
-    CloseMatchTestCase, GlobTestCase, SelectorErrorTestCase, SelectorTestCase,
+    CloseMatchTestCase, SelectorErrorTestCase, SelectorTestCase,
 };
 
 #[test]
@@ -308,99 +307,6 @@ fn given_invalid_selectors_when_resolving_then_errors_match_python() {
         assert_eq!(
             resolved(test_case.select, test_case.exclude),
             Err(failure(test_case.expected_error)),
-            "{}",
-            test_case.description
-        );
-    }
-}
-
-#[test]
-fn given_glob_patterns_when_matching_then_results_match_fnmatchcase() {
-    let test_cases = [
-        GlobTestCase {
-            description: "ord* against orders",
-            pattern: "ord*",
-            name: "orders",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "o?ders against orders",
-            pattern: "o?ders",
-            name: "orders",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "[a-c]* against customers",
-            pattern: "[a-c]*",
-            name: "customers",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "[!a-c]* against customers",
-            pattern: "[!a-c]*",
-            name: "customers",
-            expected_match: false,
-        },
-        GlobTestCase {
-            description: "[z-a]x against x",
-            pattern: "[z-a]x",
-            name: "x",
-            expected_match: false,
-        },
-        GlobTestCase {
-            description: "[]] against ]",
-            pattern: "[]]",
-            name: "]",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "[!] against !",
-            pattern: "[!]",
-            name: "!",
-            expected_match: false,
-        },
-        GlobTestCase {
-            description: "[a-] against -",
-            pattern: "[a-]",
-            name: "-",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "[ against [",
-            pattern: "[",
-            name: "[",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "a[b against a[b",
-            pattern: "a[b",
-            name: "a[b",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "**s against orders",
-            pattern: "**s",
-            name: "orders",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "[^o]* against orders",
-            pattern: "[^o]*",
-            name: "orders",
-            expected_match: true,
-        },
-        GlobTestCase {
-            description: "[\\]x against \\x",
-            pattern: "[\\]x",
-            name: "\\x",
-            expected_match: true,
-        },
-    ];
-
-    for test_case in test_cases {
-        assert_eq!(
-            fnmatch(test_case.pattern, test_case.name),
-            test_case.expected_match,
             "{}",
             test_case.description
         );

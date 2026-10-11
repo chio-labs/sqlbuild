@@ -9,6 +9,7 @@ pub mod is_python_word;
 pub mod python_casefold;
 pub mod python_cleandoc;
 pub mod python_decimal_value;
+pub mod python_fnmatchcase;
 pub mod python_ignorecase_key;
 pub mod python_str_repr;
 pub mod python_strip;

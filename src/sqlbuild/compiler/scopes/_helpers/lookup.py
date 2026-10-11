@@ -6,7 +6,6 @@ from collections.abc import Callable, Hashable, Sequence
 from types import MappingProxyType
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes._helpers.placement import qualified_row, root_row
 from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import (
@@ -146,12 +145,6 @@ def project_lookup(
         ),
         native=native,
     )
-
-
-def identity_key(identity: ResourceIdentity | DeclarationIdentity) -> str:
-    """The qualified identity text the scope reports sort and print."""
-
-    return format_identity(identity=identity)
 
 
 def _resource_identity(record: ResourceRecord) -> ResourceIdentity:

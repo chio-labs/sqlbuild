@@ -75,3 +75,10 @@ pub(super) struct ReprTestCase {
     pub(super) value: &'static str,
     pub(super) expected_repr: &'static str,
 }
+
+pub(super) struct GlobTestCase {
+    pub(super) description: &'static str,
+    pub(super) pattern: &'static str,
+    pub(super) name: &'static str,
+    pub(super) expected_match: bool,
+}

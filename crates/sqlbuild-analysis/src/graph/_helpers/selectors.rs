@@ -18,6 +18,7 @@ use crate::graph::errors::SelectorError;
 use crate::graph::models::{
     BuildResources, EdgeDirection as Direction, ParsedSelector, ProjectGraph,
 };
+use sqlbuild_core::text::main::python_fnmatchcase::python_fnmatchcase;
 
 pub(crate) type Keys = BTreeSet<ObjectKey>;
 type Resolved = Result<Keys, SelectorError>;
@@ -383,5 +384,5 @@ impl ProjectGraph {
 
 /// Python's `fnmatch.fnmatchcase`: `*`, `?`, `[seq]` and `[!seq]` over characters.
 fn glob_matches(pattern: &str, name: &str) -> bool {
-    crate::graph::_helpers::glob::fnmatch(pattern, name)
+    python_fnmatchcase(name, pattern)
 }

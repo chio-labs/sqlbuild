@@ -1,6 +1,5 @@
 //! The project-relative folder where a declaration with a given placement lives.
 
-use crate::placement::_helpers::roles::role_parts;
 use crate::placement::constants::{AUTHORED_ROOT_PATHS, DECLARATION_GROUP_DIRECTORY};
 use crate::scope_index::models::{DeclarationKind, ScopeKind};
 
@@ -11,7 +10,7 @@ pub fn declaration_directory(
     scope: ScopeKind,
     path: Option<&str>,
 ) -> String {
-    let parts: &[&str] = role_parts(kind);
+    let parts: &[&str] = kind.role_parts();
     let Some(path) = path.filter(|_| scope != ScopeKind::Global) else {
         return parts.join("/");
     };

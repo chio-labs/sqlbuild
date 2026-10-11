@@ -20,7 +20,6 @@ from sqlbuild.compiler.scopes.models import (
     ResourceRecord,
     ScopeLookup,
     ScopeTargetQuery,
-    VisibilityProvenance,
     VisibilityRecord,
     VisibilityResolution,
 )
@@ -30,7 +29,6 @@ from sqlbuild.compiler.scopes.types import (
     NativeResourceRecordRow,
     OwnershipRootKind,
     ResourceKind,
-    ScopeDeclarationPairs,
     VisibilityReason,
 )
 
@@ -127,51 +125,6 @@ def resolve_path_visibility(
         tuple(declarations[position] for position, _, _ in visible),
         tuple(declarations[position] for position, _ in inaccessible),
     )
-
-
-def classify_resource(
-    *, lookup: ScopeLookup, resource: ResourceRecord
-) -> tuple[
-    ScopeDeclarationPairs[VisibilityProvenance],
-    ScopeDeclarationPairs[VisibilityProvenance],
-    ScopeDeclarationPairs[str],
-]:
-    """Direct, relationship and unavailable declarations of a resource, each in report order."""
-
-    direct, relationships, unavailable, error = _lookup(lookup).classify(
-        _resource_row(resource=resource)
-    )
-    if error is not None:
-        raise InvalidScopePathError(error)
-    declarations: tuple[DeclarationRecord, ...] = lookup.index.declarations
-    return (
-        tuple(
-            (declarations[position], VisibilityProvenance(reason)) for position, reason in direct
-        ),
-        tuple(
-            (declarations[position], VisibilityProvenance(reason, through))
-            for position, reason, through in relationships
-        ),
-        tuple((declarations[position], reason) for position, reason in unavailable),
-    )
-
-
-def explain_standing(
-    *, lookup: ScopeLookup, resource: ResourceRecord, declaration: DeclarationIdentity
-) -> tuple[VisibilityProvenance | None, str | None]:
-    """The first `declaration` record's visibility for `resource`, else why it is hidden."""
-
-    _, positions, _, _ = _lookup(lookup).target(qualified_row(identity=declaration), "")
-    visible, granted, through, hidden, error = _lookup(lookup).explain(
-        _resource_row(resource=resource), positions[0]
-    )
-    if error is not None:
-        raise InvalidScopePathError(error)
-    if visible is not None:
-        return VisibilityProvenance(visible), None
-    if granted is not None:
-        return VisibilityProvenance(granted, through), None
-    return None, hidden
 
 
 def declaration_lexical_path(*, record: DeclarationRecord) -> str:

@@ -6,6 +6,7 @@ use crate::text::main::is_python_space::is_python_space;
 use crate::text::main::is_python_word::is_python_word;
 use crate::text::main::python_casefold::python_casefold;
 use crate::text::main::python_cleandoc::python_cleandoc;
+use crate::text::main::python_fnmatchcase::python_fnmatchcase;
 use crate::text::main::python_ignorecase_key::python_ignorecase_key;
 use crate::text::main::python_str_repr::python_str_repr;
 use crate::text::main::python_text::python_text;
@@ -13,7 +14,7 @@ use crate::text::main::python_upper::python_upper;
 use crate::text::models::PythonText;
 use crate::text::tests::test_types::{
     CaseMappingTestCase, CharacterClassTestCase, CleandocTestCase, CloseMatchesTestCase,
-    IgnorecaseTestCase, PythonTextTestCase, ReprTestCase,
+    GlobTestCase, IgnorecaseTestCase, PythonTextTestCase, ReprTestCase,
 };
 
 const KEYS: &[&str] = &[
@@ -536,6 +537,129 @@ fn given_text_when_taking_repr_then_it_matches_python() {
         assert_eq!(
             python_str_repr(python, test_case.value),
             test_case.expected_repr,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_glob_patterns_when_matching_then_results_match_fnmatchcase() {
+    let test_cases = [
+        GlobTestCase {
+            description: "ord* against orders",
+            pattern: "ord*",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "o?ders against orders",
+            pattern: "o?ders",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[a-c]* against customers",
+            pattern: "[a-c]*",
+            name: "customers",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[!a-c]* against customers",
+            pattern: "[!a-c]*",
+            name: "customers",
+            expected_match: false,
+        },
+        GlobTestCase {
+            description: "[z-a]x against x",
+            pattern: "[z-a]x",
+            name: "x",
+            expected_match: false,
+        },
+        GlobTestCase {
+            description: "[]] against ]",
+            pattern: "[]]",
+            name: "]",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[!] against !",
+            pattern: "[!]",
+            name: "!",
+            expected_match: false,
+        },
+        GlobTestCase {
+            description: "[a-] against -",
+            pattern: "[a-]",
+            name: "-",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[ against [",
+            pattern: "[",
+            name: "[",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "a[b against a[b",
+            pattern: "a[b",
+            name: "a[b",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "**s against orders",
+            pattern: "**s",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[^o]* against orders",
+            pattern: "[^o]*",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[\\]x against \\x",
+            pattern: "[\\]x",
+            name: "\\x",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[!b-a] drops its empty range and matches any character",
+            pattern: "[!b-a]",
+            name: "\n",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[a-b-a] reads the second hyphen as a literal",
+            pattern: "[a-b-a]",
+            name: "-",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "* matches across newlines",
+            pattern: "a*b",
+            name: "a\nb",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "? matches one non-ASCII character",
+            pattern: "caf?",
+            name: "caf\u{e9}",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "matching is case-sensitive",
+            pattern: "Orders",
+            name: "orders",
+            expected_match: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            python_fnmatchcase(test_case.name, test_case.pattern),
+            test_case.expected_match,
             "{}",
             test_case.description
         );

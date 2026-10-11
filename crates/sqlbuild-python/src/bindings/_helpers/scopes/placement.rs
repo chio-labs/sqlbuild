@@ -6,9 +6,8 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::placement::main::declaration_directory::declaration_directory;
 use sqlbuild_scopes::placement::main::placement_diagnostics::placement_diagnostics;
 use sqlbuild_scopes::placement::main::relocate_for_resource_move::relocate_for_resource_move;
-use sqlbuild_scopes::placement::main::required_declaration_placement::required_declaration_placement;
 use sqlbuild_scopes::placement::models::{
-    PlacementDiagnostic, PlacementIndex, PlacementUsage, Relocation, RequiredPlacement,
+    PlacementDiagnostic, PlacementIndex, PlacementUsage, Relocation,
 };
 use sqlbuild_scopes::scope_index::models::{
     DeclarationIdentity, DeclarationKind, DeclarationRecord, OwnershipRoot, OwnershipRootKind,
@@ -37,7 +36,6 @@ pub(crate) type DeclarationRow = (
 /// Consumer, declaration and what the consumer uses it through.
 type UsageRow = (QualifiedRow, QualifiedRow, Option<QualifiedRow>);
 type IndexRows = (Vec<ResourceRow>, Vec<DeclarationRow>, Vec<UsageRow>);
-type RequiredRow = (&'static str, Option<String>, Vec<String>);
 /// Declaration position, path, scope, ownership root and owning path.
 type RelocationRow = (usize, String, &'static str, RootOut, Option<String>);
 type RootOut = (String, &'static str, Option<&'static str>);
@@ -166,21 +164,6 @@ fn scope_placement_diagnostics(
         .collect())
 }
 
-/// The scope, folder and consumer labels `declaration`'s consumers require, if any.
-#[pyfunction]
-fn scope_required_placement(
-    py: Python<'_>,
-    rows: IndexRows,
-    declaration: QualifiedRow,
-) -> PyResult<Option<RequiredRow>> {
-    let index: PlacementIndex = placement_index(rows)?;
-    let declaration: DeclarationIdentity = declaration_identity(declaration)?;
-    let required: Option<RequiredPlacement> = py
-        .compiler_detach(|| Ok(required_declaration_placement(&index, &declaration)))
-        .map_err(compiler_error)?;
-    Ok(required.map(|item| (item.scope.as_str(), item.path, item.consumers)))
-}
-
 /// Each declaration that moves when `resource` moves to `destination`, or `None` if unsettled.
 #[pyfunction]
 fn scope_relocations(
@@ -207,7 +190,6 @@ fn scope_declaration_directory(kind: &str, scope: &str, path: Option<&str>) -> P
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scope_placement_diagnostics, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_required_placement, module)?)?;
     module.add_function(wrap_pyfunction!(scope_relocations, module)?)?;
     module.add_function(wrap_pyfunction!(scope_declaration_directory, module)?)?;
     Ok(())

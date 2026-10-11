@@ -27,30 +27,6 @@ class PathNormalizationCase:
 
 
 @dataclass(frozen=True)
-class PathNormalizationCacheCase:
-    """Expected bounded-cache behavior for repeated path normalization."""
-
-    description: str
-    path: str
-    call_count: int
-    expected_hits: int
-    expected_misses: int
-    expected_max_size: int
-    expected_current_size: int
-
-
-@dataclass(frozen=True)
-class PathVisibilityCase:
-    """One component-aware lexical visibility case."""
-
-    description: str
-    scope: ScopeKind
-    owner: str
-    resource: str
-    expected_visible: bool
-
-
-@dataclass(frozen=True)
 class QualifiedIdentityCase:
     """One qualified identity round-trip case."""
 
@@ -67,6 +43,16 @@ class UnicodeKeyOrderCase:
     names: tuple[str, ...]
     expected_names: tuple[str, ...]
     expected_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class IdentityReportCase:
+    """One qualified identity text, the identity a report names, and its diagnostic messages."""
+
+    description: str
+    text: str
+    expected_identity: str | None
+    expected_messages: tuple[str, ...]
 
 
 @dataclass(frozen=True)

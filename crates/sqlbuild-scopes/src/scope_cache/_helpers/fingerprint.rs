@@ -3,6 +3,8 @@
 use sqlbuild_config::models::ConfigValue;
 use sqlbuild_config::toml::main::load_toml::load_toml;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
+use sqlbuild_core::posix_path::main::posix_suffix::posix_suffix;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
 
 use std::collections::HashSet;
 
@@ -19,13 +21,9 @@ use crate::scope_cache::models::FingerprintInputs;
 /// A config value `json.dumps` cannot serialize.
 pub(crate) struct Unserializable;
 
-/// Python's `Path(name).suffix`.
-pub(crate) fn suffix(path: &str) -> &str {
-    let name: &str = path.rsplit('/').next().unwrap_or(path);
-    match name.rfind('.') {
-        Some(index) if index > 0 && index < name.len() - 1 => &name[index..],
-        _ => "",
-    }
+/// Python's `Path(name).suffix` under the running Python.
+fn suffix(path: &str) -> &str {
+    posix_suffix(active_python_text(), path)
 }
 
 /// `_source_role`: declaration, macro, relationship or resource.

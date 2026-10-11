@@ -2,7 +2,7 @@
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.report_operations import list_folder
+from sqlbuild.compiler.scopes._helpers.reports import list_folder
 from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     ScopeListResult,

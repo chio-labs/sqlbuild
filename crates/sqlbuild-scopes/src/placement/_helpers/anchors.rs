@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::placement::_helpers::posix_paths::parent;
 use crate::placement::_helpers::roles::is_named_kind;
 use crate::placement::constants::PROJECT_ROOT_PATH;
 use crate::placement::models::{PlacementIndex, PlacementUsage};
@@ -10,6 +9,7 @@ use crate::scope_index::models::{
     DeclarationIdentity, DeclarationRecord, OwnershipRoot, OwnershipRootKind, QualifiedIdentity,
     ResourceIdentity, ResourceRecord,
 };
+use sqlbuild_core::posix_path::main::posix_parent::posix_parent;
 
 /// An ownership root and the folder below it a consumer sits in.
 pub(crate) type Anchor = (OwnershipRoot, String);
@@ -117,7 +117,7 @@ fn direct_anchor<'a>(
     match (resource, &usage.consumer) {
         (Some(identity), _) => match resources.get(identity) {
             Some(record) => {
-                DirectAnchor::Anchor((record.ownership_root.clone(), parent(&record.path)))
+                DirectAnchor::Anchor((record.ownership_root.clone(), posix_parent(&record.path)))
             }
             None => DirectAnchor::None,
         },

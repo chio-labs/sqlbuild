@@ -10,7 +10,6 @@ from sqlbuild.compiler.compile.main._static_macro_inventory import inventory_pro
 from sqlbuild.compiler.compile.models import StaticMacroInventory
 from sqlbuild.compiler.discovery.main._scope_snapshot import discover_scope_snapshot
 from sqlbuild.compiler.discovery.models import DiscoveryFileFault, TolerantScopeDiscovery
-from sqlbuild.compiler.scopes._helpers.identities import format_identity
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.models import (
@@ -155,8 +154,8 @@ def _prospective_resource(*, path: Path) -> ResourceRecord | None:
     return None
 
 
-def _resource_key(record: ResourceRecord) -> tuple[str, str]:
-    return (record.path, format_identity(identity=record.identity))
+def _resource_key(record: ResourceRecord) -> tuple[str, str, str]:
+    return (record.path, record.identity.kind.value, record.identity.name)
 
 
 def _diagnostic_key(item: ScopeDiagnostic) -> tuple[str, int, int, str, str]:

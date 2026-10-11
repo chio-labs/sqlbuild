@@ -7,3 +7,4 @@ pub mod placement;
 pub mod relationship_names;
 pub mod scope_cache;
 pub mod scope_index;
+pub mod scope_report;

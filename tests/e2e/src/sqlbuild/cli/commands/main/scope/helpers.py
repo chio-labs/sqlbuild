@@ -77,6 +77,23 @@ def write_scope_performance_project(
             )
 
 
+def write_unicode_macro_project(*, project_dir: Path, macro_names: tuple[str, ...]) -> None:
+    """Write one model and a global macro file defining each named macro."""
+
+    (project_dir / "models").mkdir(parents=True)
+    (project_dir / "macros").mkdir()
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "scope_unicode"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        'MODEL(description "Test model orders.");\nSELECT 1 AS id\n', encoding="utf-8"
+    )
+    macro_source: str = "\n\n".join(
+        f"def {name}(expression: str) -> str:\n    return expression\n" for name in macro_names
+    )
+    (project_dir / "macros" / "names.py").write_text(macro_source, encoding="utf-8")
+
+
 def _write_scope_model(*, model_dir: Path, model_index: int, macro_name: str) -> None:
     (model_dir / f"model_{model_index:05d}.sql").write_text(
         f'MODEL(description "Test model.");\nSELECT @{macro_name}("id") AS id\n', encoding="utf-8"

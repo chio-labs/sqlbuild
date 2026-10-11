@@ -8,3 +8,5 @@ pub(crate) mod relationship_scan;
 pub(crate) mod scope_cache;
 pub(crate) mod scope_index;
 pub(crate) mod scope_lookup;
+pub(crate) mod scope_report_rows;
+pub(crate) mod scope_reports;
