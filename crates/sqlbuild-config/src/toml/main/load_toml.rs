@@ -1,27 +1,26 @@
 //! Load a TOML document the way Python's `tomllib.loads` does.
 
-use crate::constants::BYTE_ORDER_MARK;
 use crate::errors::{ConfigError, ConfigErrorKind};
 use crate::models::ConfigValue;
+use crate::toml::_helpers::reading::{bracket_depth, load_document};
+use crate::toml::constants::{DEEP_DOCUMENT_BRACKETS, DEEP_DOCUMENT_STACK_BYTES};
 
 /// The table `tomllib.loads(text)` returns, rejecting TOML 1.1 syntax as `tomllib` does.
 pub fn load_toml(text: &str) -> Result<ConfigValue, ConfigError> {
-    if text.starts_with(BYTE_ORDER_MARK) {
-        return Err(ConfigError::new(
-            ConfigErrorKind::Syntax,
-            "invalid statement: tomllib does not skip a byte order mark",
-        ));
+    if bracket_depth(text) <= DEEP_DOCUMENT_BRACKETS {
+        return load_document(text);
     }
-    let text = text.replace("\r\n", "\n");
-    let large_integers = crate::toml::_helpers::version::reject_toml_1_1_syntax(&text)?;
-    crate::toml::_helpers::namespaces::reject_namespace_conflicts(&text)?;
-    if large_integers.is_empty() {
-        return crate::toml::_helpers::conversion::parse_document(&text);
-    }
-    let mark = crate::toml::_helpers::integers::placeholder_mark(&text)?;
-    let substituted =
-        crate::toml::_helpers::integers::substitute_large_integers(&text, &large_integers, mark);
-    crate::toml::_helpers::conversion::parse_document(&substituted).map(|value| {
-        crate::toml::_helpers::integers::restore_large_integers(value, &large_integers, mark)
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .stack_size(DEEP_DOCUMENT_STACK_BYTES)
+            .spawn_scoped(scope, || load_document(text))
+            .map_err(|error| ConfigError::new(ConfigErrorKind::Unsupported, error.to_string()))?
+            .join()
+            .unwrap_or_else(|_| {
+                Err(ConfigError::new(
+                    ConfigErrorKind::Unsupported,
+                    "the deep TOML reader stopped unexpectedly",
+                ))
+            })
     })
 }

@@ -29,13 +29,13 @@ fn place(file: ConfigFile, label: &str) -> Place<'_> {
 }
 
 /// `_fixed_duration_seconds`: whole seconds of a fixed duration, or `None`.
-pub(crate) fn fixed_duration_seconds(value: &str, allow_zero: bool) -> Option<String> {
+pub(crate) fn fixed_duration_seconds(value: &str, allow_zero: bool) -> Loaded<Option<String>> {
     if allow_zero && value == ZERO_FIXED_DURATION {
-        return Some("0".to_owned());
+        return Ok(Some("0".to_owned()));
     }
-    parse_duration(value)
+    Ok(parse_duration(value)?
         .filter(|duration| !duration.has_calendar_component())
-        .map(|duration| duration.fixed_seconds().decimal())
+        .map(|duration| duration.fixed_seconds().decimal()))
 }
 
 fn settings_mapping(payload: Option<&ConfigValue>, file: ConfigFile) -> Loaded<&Entries> {
@@ -212,10 +212,11 @@ fn cursor_limit(
     label: &str,
 ) -> Loaded<(Option<String>, Built)> {
     let limit = optional_str(mapping, keys.0)?;
-    if limit
-        .as_deref()
-        .is_some_and(|text| text != ZERO_DAY_DURATION && parse_duration(text).is_none())
-    {
+    let invalid = match limit.as_deref() {
+        Some(text) if text != ZERO_DAY_DURATION => parse_duration(text)?.is_none(),
+        _ => false,
+    };
+    if invalid {
         return Err(ConfigFailure::plain(format!(
             "{label}.{} must be a duration like 0d, 7d, 12h, or 1mo",
             keys.0
@@ -332,7 +333,7 @@ pub(crate) fn load_migrations(payload: Option<&ConfigValue>, file: ConfigFile) -
     let views = match get(mapping, OLD_NAME_VIEWS_KEY) {
         None => return Ok(object("MigrationsConfig", Vec::new())),
         Some(ConfigValue::Bool(false)) => Built::Value(ConfigValue::Null),
-        Some(ConfigValue::String(text)) if parse_duration(python_strip(text)).is_some() => {
+        Some(ConfigValue::String(text)) if parse_duration(python_strip(text))?.is_some() => {
             Built::Value(ConfigValue::String(python_strip(text).to_owned()))
         }
         Some(_) => {
@@ -445,7 +446,7 @@ pub(crate) fn load_diff(payload: Option<&ConfigValue>, file: ConfigFile) -> Load
     validate_allowed_keys(mapping, &["query_artifact_ttl"], place(file, "diff"))?;
     let ttl = optional_str(mapping, "query_artifact_ttl")?
         .unwrap_or_else(|| DEFAULT_QUERY_ARTIFACT_TTL.to_owned());
-    if fixed_duration_seconds(&ttl, false).is_none() {
+    if fixed_duration_seconds(&ttl, false)?.is_none() {
         return Err(ConfigFailure::at(
             file,
             "diff.query_artifact_ttl must be a positive fixed duration such as '24h'",

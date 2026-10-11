@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from sqlbuild.sql_values.types import CollectionRendering
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ColumnContractModeConfigErrorTestCase,
     ColumnContractModeConfigTestCase,
+    DeepProjectConnectionTestCase,
     DiffConfigTestCase,
     EffectiveBatchDefaultTestCase,
     FutureCursorConfigErrorTestCase,
@@ -44,6 +46,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     MicrobatchLimitConfigErrorTestCase,
     MicrobatchLimitConfigTestCase,
     MissingMigrationOriginConfigTestCase,
+    OversizedDurationTestCase,
     StartCursorConfigTestCase,
     TargetExecutionLimitsConfigTestCase,
 )
@@ -2077,3 +2080,61 @@ def test_given_invalid_column_contract_mode_when_loading_project_then_error_is_r
 
     with pytest.raises(ProjectConfigError, match=test_case.expected_error_fragment):
         load_project_config(project_dir=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeepProjectConnectionTestCase(
+            description="arrays nested three hundred deep", depth=300, expected_depth=300
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_deeply_nested_connection_when_loading_project_then_tomllib_nesting_is_kept(
+    test_case: DeepProjectConnectionTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n[connection]\n'
+        f"nested = {'[' * test_case.depth}1{']' * test_case.depth}\n",
+        encoding="utf-8",
+    )
+
+    config: ProjectConfig = load_project_config(project_dir=tmp_path)
+
+    nested: object = config.connection["nested"]
+    depth: int = 0
+    while isinstance(nested, list):
+        nested = nested[0]
+        depth += 1
+    assert depth == test_case.expected_depth
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OversizedDurationTestCase(
+            description="diff artifact TTL",
+            section='[diff]\nquery_artifact_ttl = "{digits}h"\n',
+            expected_error_fragment="Exceeds the limit (4300 digits)",
+        ),
+        OversizedDurationTestCase(
+            description="lifecycle shutdown timeout",
+            section='[sinks.lifecycle]\nshutdown_timeout = "{digits}s"\n',
+            expected_error_fragment="value has 4301 digits",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duration_beyond_int_digit_limit_when_loading_project_then_value_error_is_raised(
+    test_case: OversizedDurationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n' + test_case.section.format(digits="1" * 4301),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=re.escape(test_case.expected_error_fragment)):
+        _ = load_project_config(project_dir=tmp_path)

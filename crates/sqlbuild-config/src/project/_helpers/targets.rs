@@ -91,7 +91,7 @@ fn execution_limits(payload: Option<&ConfigValue>, label: &str, file: ConfigFile
     let max_duration = optional_str(mapping, "max_duration")?;
     let seconds = match max_duration.as_deref() {
         None => none(),
-        Some(text) => match fixed_duration_seconds(text, false) {
+        Some(text) => match fixed_duration_seconds(text, false)? {
             Some(seconds) => Built::Value(seconds_value(&seconds)),
             None => {
                 return Err(ConfigFailure::at(

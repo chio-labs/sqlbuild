@@ -244,3 +244,5 @@ pub(crate) const ON_SCHEMA_CHANGE_EXAMPLE: &str = "append_new_columns";
 pub(crate) const REPLAY_ON_CHANGE_EXAMPLE: &str = "bounded-14d";
 pub(crate) const GLOB_SEGMENTS: [&str; 2] = ["*", "**"];
 pub(crate) const UNSUPPORTED_GLOB_MARKERS: [char; 3] = ['*', '?', '['];
+/// CPython's default `sys.get_int_max_str_digits()`, beyond which `int()` raises.
+pub(crate) const PYTHON_INT_MAX_STR_DIGITS: usize = 4_300;

@@ -1,4 +1,4 @@
-//! Integers beyond 64 bits, which `tomllib` reads exactly and the TOML parser rejects.
+//! Values the TOML parser rejects but `tomllib` reads: integers beyond 64 bits and deep nesting.
 
 use crate::errors::{ConfigError, ConfigErrorKind};
 use crate::models::{ConfigValue, Natural};
@@ -7,8 +7,8 @@ const DECIMAL_RADIX: u32 = 10;
 /// Noncharacters that can mark a placeholder; the first absent from a document is used.
 const PLACEHOLDER_MARKS: std::ops::RangeInclusive<u32> = 0xFDD0..=0xFDEF;
 
-/// A large integer literal: its byte range in the document and its signed decimal digits.
-pub(crate) type LargeInteger = (usize, usize, String);
+/// A value read apart from the document: its byte range there and the value it stands for.
+pub(crate) type Placeholder = (usize, usize, ConfigValue);
 
 fn digits_with_separators(body: &str, radix: u32) -> Option<Vec<u32>> {
     let mut values: Vec<u32> = Vec::new();
@@ -71,12 +71,8 @@ pub(crate) fn placeholder_mark(text: &str) -> Result<char, ConfigError> {
         })
 }
 
-/// `text` with each large integer replaced by a placeholder string marked by `mark`.
-pub(crate) fn substitute_large_integers(
-    text: &str,
-    integers: &[LargeInteger],
-    mark: char,
-) -> String {
+/// `text` with each placeholder range replaced by a string marked by `mark`.
+pub(crate) fn substitute_placeholders(text: &str, integers: &[Placeholder], mark: char) -> String {
     let mut substituted = String::with_capacity(text.len());
     let mut copied = 0;
     for (index, (start, end, _)) in integers.iter().enumerate() {
@@ -88,10 +84,10 @@ pub(crate) fn substitute_large_integers(
     substituted
 }
 
-/// `value` with each placeholder string turned back into its large integer.
-pub(crate) fn restore_large_integers(
+/// `value` with each placeholder string turned back into the value it stands for.
+pub(crate) fn restore_placeholders(
     value: ConfigValue,
-    integers: &[LargeInteger],
+    integers: &[Placeholder],
     mark: char,
 ) -> ConfigValue {
     match value {
@@ -105,19 +101,19 @@ pub(crate) fn restore_large_integers(
             })
             .map(|(_, integer)| integer)
         {
-            Some((_, _, digits)) => ConfigValue::BigInteger(digits.clone()),
+            Some((_, _, restored)) => restored.clone(),
             None => ConfigValue::String(text),
         },
         ConfigValue::List(items) => ConfigValue::List(
             items
                 .into_iter()
-                .map(|item| restore_large_integers(item, integers, mark))
+                .map(|item| restore_placeholders(item, integers, mark))
                 .collect(),
         ),
         ConfigValue::Map(entries) => ConfigValue::Map(
             entries
                 .into_iter()
-                .map(|(key, item)| (key, restore_large_integers(item, integers, mark)))
+                .map(|(key, item)| (key, restore_placeholders(item, integers, mark)))
                 .collect(),
         ),
         other => other,

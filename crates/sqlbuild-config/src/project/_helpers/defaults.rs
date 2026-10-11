@@ -50,7 +50,7 @@ fn validate_change_policies(
         if matches!(value, ConfigValue::String(text) if text.contains(TEMPLATE_OPEN_TOKEN)) {
             continue;
         }
-        if let Some(problem) = change_policy_problem(key, value) {
+        if let Some(problem) = change_policy_problem(key, value)? {
             return Err(
                 ConfigFailure::at(file, format!("[{section}] {problem}")).with_help(
                     change_policy_toml_help(key, PROJECT_CONFIG_FILENAME, section),
@@ -358,7 +358,7 @@ pub(crate) fn optional_retention_policy(
     if text == ZERO_DAY_DURATION {
         return Ok(retention(Some("0")));
     }
-    match parse_duration(text).filter(|duration| duration.is_whole_days()) {
+    match parse_duration(text)?.filter(|duration| duration.is_whole_days()) {
         Some(duration) => Ok(retention(Some(&duration.days()))),
         None => Err(ConfigFailure::at(
             file,

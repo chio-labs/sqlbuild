@@ -1,4 +1,4 @@
-use crate::project::errors::{ConfigFailure, LoadFailure, MessagePiece};
+use crate::project::errors::{ConfigFailure, FailureClass, LoadFailure, MessagePiece};
 use crate::project::main::load_local_config::load_local_config;
 use crate::project::main::load_project_config::load_project_config;
 use crate::project::models::{ConfigFile, ConfigPaths};
@@ -41,5 +41,6 @@ pub(super) fn failure_at(
             MessagePiece::Text(format!(" {text}")),
         ],
         help: help.map(str::to_owned),
+        class: FailureClass::ProjectConfig,
     })
 }

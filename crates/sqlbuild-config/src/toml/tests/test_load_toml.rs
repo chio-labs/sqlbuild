@@ -2,7 +2,7 @@ use crate::errors::ConfigErrorKind;
 use crate::models::{ConfigDate, ConfigDateTime, ConfigTime, ConfigValue};
 use crate::toml::main::load_toml::load_toml;
 use crate::toml::tests::helpers::table;
-use crate::toml::tests::test_types::{HostileTomlTestCase, LoadTomlTestCase};
+use crate::toml::tests::test_types::{DeepTomlTestCase, HostileTomlTestCase, LoadTomlTestCase};
 
 #[test]
 fn given_toml_documents_when_loading_then_values_match_tomllib() {
@@ -360,6 +360,44 @@ fn given_hostile_toml_when_loading_then_native_reader_rejects_without_exhausting
         assert_eq!(
             actual,
             Err(test_case.expected_error),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_values_nested_past_the_parser_limit_when_loading_then_tomllib_values_are_kept() {
+    let test_cases = [
+        DeepTomlTestCase {
+            description: "two hundred nested arrays",
+            text: format!("a = {}1{}\nb = 2", "[".repeat(200), "]".repeat(200)),
+            expected_value: (0..200).fold(ConfigValue::Integer(1), |inner, _| {
+                ConfigValue::List(vec![inner])
+            }),
+        },
+        DeepTomlTestCase {
+            description: "two hundred nested inline tables holding a large integer",
+            text: format!(
+                "a = {}99999999999999999999{}\nb = 2",
+                "{b = ".repeat(200),
+                "}".repeat(200)
+            ),
+            expected_value: (0..199).fold(
+                table(vec![(
+                    "b",
+                    ConfigValue::BigInteger("99999999999999999999".to_owned()),
+                )]),
+                |inner, _| table(vec![("b", inner)]),
+            ),
+        },
+    ];
+    for test_case in test_cases {
+        let loaded = load_toml(&test_case.text).map(|value| value.get("a").cloned());
+
+        assert_eq!(
+            loaded,
+            Ok(Some(test_case.expected_value)),
             "{}",
             test_case.description
         );
