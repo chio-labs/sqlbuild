@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import names_set_operation
+import sqlbuild._native as _native
 from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types import (
     SetOperationSearchTestCase,
 )
@@ -55,7 +55,7 @@ def test_given_generated_sql_when_searching_set_operations_then_matches_python_s
     ]
     expected: list[bool] = [_PYTHON_SEARCH.search(sql) is not None for sql in sqls]
 
-    assert [names_set_operation(sql) for sql in sqls] == expected
+    assert [_native._oracle_names_set_operation(sql) for sql in sqls] == expected
     assert sum(expected) >= test_case.expected_minimum_matches
 
 

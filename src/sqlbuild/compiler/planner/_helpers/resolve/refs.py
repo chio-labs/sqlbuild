@@ -28,7 +28,7 @@ from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind

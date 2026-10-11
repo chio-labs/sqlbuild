@@ -1317,6 +1317,7 @@ def infer_expression_source_shapes(
     request: tuple[str, bool, list[tuple[str, str]], list[tuple[str, str]], list[str]],
     adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
 ) -> list[list[tuple[str, str]] | None]: ...
+def _oracle_names_set_operation(sql: str, /) -> bool: ...
 def _oracle_cte_fact_recovery(
     request: tuple[
         str,

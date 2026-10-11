@@ -7,6 +7,7 @@ use sqlbuild_analysis::assembly::analysis_session::main::attach_analysis_cache::
 use sqlbuild_analysis::assembly::analysis_session::main::expression_shapes::expression_shapes;
 use sqlbuild_analysis::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
+use sqlbuild_analysis::assembly::analysis_session::main::names_set_operation::names_set_operation;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
@@ -51,7 +52,6 @@ type ModelRow = (
     Vec<(String, bool)>,
     Vec<(String, String, String)>,
     Vec<String>,
-    bool,
     bool,
     Option<(String, String)>,
     String,
@@ -374,11 +374,11 @@ fn model_request(row: ModelRow) -> ModelRequest {
         lineage_references,
         required_names,
         recover_cte_facts,
-        has_set_operation,
         snapshot_columns,
         pivot_sql,
         dynamic_families,
     ) = row;
+    let has_set_operation = names_set_operation(&query_sql);
     ModelRequest {
         name,
         query_sql,
