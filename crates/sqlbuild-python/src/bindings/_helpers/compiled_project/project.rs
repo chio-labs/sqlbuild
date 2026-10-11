@@ -11,7 +11,9 @@ use crate::bindings::_helpers::compiled_project::sql_test_loop::{
 };
 
 use pyo3::exceptions::{PyIndexError, PyRuntimeError};
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef, PyResult, Python,
+};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{FromPyObject, pyclass, pymethods};
 use serde_json::Value;
@@ -336,6 +338,24 @@ impl NativeCompiledProject {
             unchecked_output_columns: unchecked,
         };
         record_model_analysis(&mut self.facts, name, analysis)
+    }
+
+    /// Record each assembled native model view's final typed analysis; return how many.
+    fn record_view_analyses(
+        slf: &Bound<'_, Self>,
+        views: Vec<PyRef<'_, NativeCompiledModel>>,
+    ) -> PyResult<usize> {
+        let py: Python<'_> = slf.py();
+        let mut facts: Vec<(String, ModelAnalysisFact)> = Vec::with_capacity(views.len());
+        for view in &views {
+            facts.push(view.analysis_fact(py)?);
+        }
+        let mut owner = slf.borrow_mut();
+        let mut recorded: usize = 0;
+        for (name, analysis) in facts {
+            recorded += usize::from(record_model_analysis(&mut owner.facts, &name, analysis));
+        }
+        Ok(recorded)
     }
 
     /// The compile inputs view of this owner's model inputs with these input fields.

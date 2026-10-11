@@ -8,12 +8,17 @@ from typing import cast
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    CompactLineageFacts,
+    CompiledLineageColumnFact,
+    CompiledLineageSourceFact,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSqlExpansion,
     CompilerDiagnostic,
     CompileSqlReference,
     DeclarationScopeResolver,
+    DynamicColumnContractProof,
+    DynamicColumnFamilyProof,
     ExpansionSpan,
     FunctionArgument,
     FunctionReturnColumn,
@@ -43,7 +48,7 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, Sql
 from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.scopes.types import UsageKind
-from sqlbuild.spec.contracts.models import SchemaModelEntry
+from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
 
 
 def model_loop_classes(
@@ -118,6 +123,13 @@ def model_loop_classes(
                 "relation_location": CompiledRelationLocation,
                 "inferred_column": InferredColumn,
                 "nullability": InferredNullability,
+                "compiler_diagnostic": CompilerDiagnostic,
+                "source_location": SourceLocation,
+                "compact_lineage_facts": CompactLineageFacts,
+                "lineage_column_fact": CompiledLineageColumnFact,
+                "lineage_source_fact": CompiledLineageSourceFact,
+                "contract_proof": DynamicColumnContractProof,
+                "family_proof": DynamicColumnFamilyProof,
             },
         },
     }

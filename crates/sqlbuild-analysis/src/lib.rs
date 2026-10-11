@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod assembly;
+pub mod binding_locations;
 pub mod column_references;
 pub mod compiled_project;
 pub mod compiler;

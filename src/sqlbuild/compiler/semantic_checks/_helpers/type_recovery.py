@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.analysis_session.types import DiagnosticRow
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
@@ -28,7 +29,7 @@ from sqlbuild.compiler.semantic_checks.constants import (
     UNKNOWN_RECOVERED_TYPE,
 )
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlBindingResult
+from sqlbuild.compiler.sql_analysis.models import SqlBindingResult
 
 type _Revised = list[tuple[str, int | None, int | None]]
 
@@ -36,7 +37,7 @@ type _Revised = list[tuple[str, int | None, int | None]]
 def recover_native_output_types(
     *,
     project: CompiledProjectView,
-    binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
+    binding_results: dict[str, list[DiagnosticRow]],
     catalog: object,
     session: Any | None,
     session_models: frozenset[str],
@@ -46,7 +47,7 @@ def recover_native_output_types(
     if not has_blocking_binding(project):
         return project
     ids: dict[CompilerDiagnostic, int] = diagnostic_ids(project)
-    raw_ids: dict[SqlBindingDiagnostic, int] = raw_binding_ids(binding_results)
+    raw_ids: dict[DiagnosticRow, int] = raw_binding_ids(binding_results)
     request: Any = (
         project.sql_analysis_dialect,
         [
@@ -120,13 +121,13 @@ def _revalidated(
 def _model_payload(
     *,
     model: CompiledModelView,
-    binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
+    binding_results: dict[str, list[DiagnosticRow]],
     ids: dict[CompilerDiagnostic, int],
-    raw_ids: dict[SqlBindingDiagnostic, int],
+    raw_ids: dict[DiagnosticRow, int],
     from_session: bool,
 ) -> tuple[Any, ...]:
-    raws: tuple[SqlBindingDiagnostic, ...] = (
-        binding_results.get(model.name, ()) if model.binding_diagnostics else ()
+    raws: list[DiagnosticRow] = (
+        binding_results.get(model.name, []) if model.binding_diagnostics else []
     )
     return (
         model.name,
@@ -137,7 +138,7 @@ def _model_payload(
         [reference.ref_name for reference in model.references],
         None if from_session else lineage_payload(model),
         [(ids[item], item.code, item.message, item.is_error) for item in model.binding_diagnostics],
-        [(raw_ids[raw], raw.code, raw.message, raw.start, raw.end) for raw in raws],
+        [(raw_ids[raw], raw[0], raw[1], raw[4], raw[5]) for raw in raws],
     )
 
 

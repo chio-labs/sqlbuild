@@ -816,6 +816,25 @@ class CompileModelInput:
 
 
 @dataclass(frozen=True)
+class HandBuiltAnalysis:
+    """A hand-built model input's session position, fallback columns and standalone proof."""
+
+    session: tuple[Any, int] | None
+    fallback: list[tuple[str, str | None, str]] | None
+    standalone_proof: (
+        tuple[
+            bool,
+            list[tuple[str, str | None, str]],
+            list[tuple[str, str | None]],
+            list[str],
+            str | None,
+            bool,
+        ]
+        | None
+    )
+
+
+@dataclass(frozen=True)
 class ModelSqlAnalysis:
     """Completed model analysis and its in-memory binding proof."""
 

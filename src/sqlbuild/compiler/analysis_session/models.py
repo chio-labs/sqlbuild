@@ -11,7 +11,6 @@ from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompileSqlReference,
     InferredColumn,
-    ModelSqlAnalysis,
 )
 from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.lineage.types import InferredNullability
@@ -37,9 +36,10 @@ class NativeModelAnalysisRequest:
 
 @dataclass(frozen=True, slots=True)
 class NativeModelAnalyses:
-    """Each model's native analysis by name, and the finished session that produced them."""
+    """Each analysed model's position in the finished session that keeps its outcome."""
 
-    analyses: dict[str, ModelSqlAnalysis]
+    positions: dict[str, int]
+    succeeded: frozenset[str]
     session: Any | None
 
 

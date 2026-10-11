@@ -5,6 +5,14 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple, PyTupleMethods};
 use pyo3::{FromPyObject, pyclass, pymethods};
 
+use sqlbuild_analysis::compiled_project::models::{DynamicProofFact, ModelAnalysisFact};
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_core::text::models::PythonText;
+
+use crate::bindings::_helpers::compiled_project::compiled_model_analysis::{
+    AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
+};
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, ModelInputRecord, model_relation_key_row, read_input, references,
     rejected_opt_out, schema_entry, view_classes,
@@ -22,6 +30,7 @@ const LOGICAL_SCHEMA_ATTRIBUTE: &str = "logical_schema";
 const LOGICAL_DATABASE_ATTRIBUTE: &str = "logical_database";
 const MODEL_RESOURCE: &str = "model";
 const TAGS_KEY: &str = "tags";
+const NULLABLE: &str = "nullable";
 
 /// `(name, type, nullability)` of one inferred output column.
 pub(crate) type InferredRow = (String, Option<String>, String);
@@ -38,8 +47,15 @@ pub(crate) type DestinationRow = (Option<String>, Option<String>, String);
 pub(crate) struct CompiledViewClasses<'py> {
     object_key: Bound<'py, PyAny>,
     relation_location: Bound<'py, PyAny>,
-    inferred_column: Bound<'py, PyAny>,
-    nullability: Bound<'py, PyAny>,
+    pub(crate) inferred_column: Bound<'py, PyAny>,
+    pub(crate) nullability: Bound<'py, PyAny>,
+    pub(crate) compiler_diagnostic: Bound<'py, PyAny>,
+    pub(crate) source_location: Bound<'py, PyAny>,
+    pub(crate) compact_lineage_facts: Bound<'py, PyAny>,
+    pub(crate) lineage_column_fact: Bound<'py, PyAny>,
+    pub(crate) lineage_source_fact: Bound<'py, PyAny>,
+    pub(crate) contract_proof: Bound<'py, PyAny>,
+    pub(crate) family_proof: Bound<'py, PyAny>,
 }
 
 /// A compiled relation location's parts.
@@ -58,16 +74,8 @@ pub(crate) struct CompiledRecord {
     /// `(resource type, name)` of each dependency.
     deps: Vec<(String, String)>,
     destination: DestinationFact,
-    inferred: Option<Vec<InferredRow>>,
-    /// The native session's compact lineage sequence, or `None`.
-    fast_lineage_columns: Option<Py<PyAny>>,
-    fast_lineage_has_star: bool,
-    fast_lineage_star_resolved: bool,
-    /// Binding diagnostics, normally none; kept until diagnostics are owner facts.
-    binding_diagnostics: Py<PyTuple>,
-    binding_validated: bool,
-    /// The dynamic column proof, normally none; kept until proofs are owner facts.
-    dynamic_column_contract: Option<Py<PyAny>>,
+    /// Columns, lineage, binding diagnostics and dynamic proof kept from the native session.
+    analysis: AnalysisRecord,
     macro_deps: Vec<String>,
     projections: CompiledProjections,
 }
@@ -124,17 +132,13 @@ impl Default for ViewProjections {
     }
 }
 
-/// `(compact lineage, has star, star resolved)`.
-type LineageArgument = (Option<Py<PyAny>>, bool, bool);
-
-/// What assembly hands the owner for one model.
+/// Deps, session analysis, failed analysis's columns, standalone proof, and macro deps.
 #[derive(FromPyObject)]
 pub(crate) struct CompiledArguments(
     Vec<(String, String)>,
+    Option<SessionArgument>,
     Option<Vec<InferredRow>>,
-    LineageArgument,
-    (Py<PyTuple>, bool),
-    Option<Py<PyAny>>,
+    Option<ProofArgument>,
     Vec<String>,
 );
 
@@ -145,14 +149,9 @@ pub(crate) fn compiled_record(
     name: &str,
     arguments: CompiledArguments,
 ) -> PyResult<CompiledRecord> {
-    let CompiledArguments(
-        deps,
-        inferred,
-        (fast_lineage_columns, fast_lineage_has_star, fast_lineage_star_resolved),
-        (binding_diagnostics, binding_validated),
-        dynamic_column_contract,
-        macro_deps,
-    ) = arguments;
+    let CompiledArguments(deps, session, fallback, standalone_proof, macro_deps) = arguments;
+    let analysis: AnalysisRecord =
+        analysis_record(py, input, session, (fallback, standalone_proof))?;
     let config: &Bound<'_, PyAny> = input.config.bind(py);
     let values: Bound<'_, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
     Ok(CompiledRecord {
@@ -165,13 +164,7 @@ pub(crate) fn compiled_record(
             logical_schema: config.getattr(LOGICAL_SCHEMA_ATTRIBUTE)?.extract()?,
             logical_database: config.getattr(LOGICAL_DATABASE_ATTRIBUTE)?.extract()?,
         },
-        inferred,
-        fast_lineage_columns,
-        fast_lineage_has_star,
-        fast_lineage_star_resolved,
-        binding_diagnostics,
-        binding_validated,
-        dynamic_column_contract,
+        analysis,
         macro_deps,
         projections: CompiledProjections::default(),
     })
@@ -255,11 +248,57 @@ impl NativeCompiledModel {
         self.read(py, |record, py| read(compiled_of(record)?, py))
     }
 
+    /// This view's typed analysis as the owner's model facts read it, and the model's name.
+    pub(crate) fn analysis_fact(&self, py: Python<'_>) -> PyResult<(String, ModelAnalysisFact)> {
+        self.read(py, |record, py| {
+            let analysis: &AnalysisRecord = &compiled_of(record)?.analysis;
+            let rows: &[InferredRow] = analysis.inferred.as_deref().unwrap_or_default();
+            let python: PythonText = active_python_text();
+            let mut inferred_columns: Vec<(String, Option<String>)> =
+                Vec::with_capacity(rows.len());
+            for (name, column_type, _) in rows {
+                let poisoned: bool = self.overlay.poisoned.contains(name);
+                inferred_columns.push((name.clone(), column_type.clone().filter(|_| !poisoned)));
+            }
+            let dynamic_proof: Option<DynamicProofFact> =
+                analysis.proof.as_ref().map(|proof| DynamicProofFact {
+                    output_proven: proof.output_proven,
+                    bare_dynamic_pivot: proof.bare_dynamic_pivot,
+                    families: casefolded_families(python, &proof.families),
+                    failure_reason: proof.failure_reason.clone(),
+                    named_families: proof.families.clone(),
+                });
+            let fact: ModelAnalysisFact = ModelAnalysisFact {
+                inferred_columns,
+                dynamic_proof,
+                inferred: analysis.inferred.is_some(),
+                nullable_columns: rows
+                    .iter()
+                    .map(|(_, _, nullability)| nullability == NULLABLE)
+                    .collect(),
+                fast_lineage_has_star: analysis.has_star,
+                unchecked_output_columns: self.overlay.poisoned.clone(),
+            };
+            Ok((model_name(record, py)?, fact))
+        })
+    }
+
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
             Ok(record.model_file.bind(py).getattr(name)?.unbind())
         })
     }
+}
+
+/// Each family's name casefolded as Python's, with its inferred type.
+fn casefolded_families(
+    python: PythonText,
+    families: &[(String, Option<String>)],
+) -> Vec<(String, Option<String>)> {
+    families
+        .iter()
+        .map(|(name, kind)| (python_casefold(python, name), kind.clone()))
+        .collect()
 }
 
 /// The compiled record of an input, which assembly records before any view is handed out.
@@ -396,7 +435,7 @@ impl NativeCompiledModel {
     #[getter]
     fn inferred_rows(&self, py: Python<'_>) -> PyResult<Option<Vec<InferredRow>>> {
         self.compiled(py, |compiled, _| {
-            let Some(rows) = &compiled.inferred else {
+            let Some(rows) = &compiled.analysis.inferred else {
                 return Ok(None);
             };
             let mut shown: Vec<InferredRow> = Vec::with_capacity(rows.len());
@@ -442,7 +481,7 @@ impl NativeCompiledModel {
     #[getter]
     fn output_column_count(&self, py: Python<'_>) -> PyResult<usize> {
         self.read(py, |record, py| {
-            if let Some(rows) = &compiled_of(record)?.inferred {
+            if let Some(rows) = &compiled_of(record)?.analysis.inferred {
                 return Ok(rows.len());
             }
             Ok(record
@@ -465,7 +504,7 @@ impl NativeCompiledModel {
             self.projections
                 .inferred_columns
                 .get_or_try_init(py, || {
-                    let Some(rows) = &compiled.inferred else {
+                    let Some(rows) = &compiled.analysis.inferred else {
                         return Ok::<_, pyo3::PyErr>(py.None());
                     };
                     let mut columns: Vec<Bound<'_, PyAny>> = Vec::with_capacity(rows.len());
@@ -488,22 +527,20 @@ impl NativeCompiledModel {
 
     #[getter]
     fn fast_lineage_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.compiled(py, |compiled, py| {
-            Ok(compiled
-                .fast_lineage_columns
-                .as_ref()
-                .map_or_else(|| py.None(), |columns| columns.clone_ref(py)))
+            compiled.analysis.lineage_object(py, &classes.compiled)
         })
     }
 
     #[getter]
     fn fast_lineage_has_star(&self, py: Python<'_>) -> PyResult<bool> {
-        self.compiled(py, |compiled, _| Ok(compiled.fast_lineage_has_star))
+        self.compiled(py, |compiled, _| Ok(compiled.analysis.has_star))
     }
 
     #[getter]
     fn fast_lineage_star_resolved(&self, py: Python<'_>) -> PyResult<bool> {
-        self.compiled(py, |compiled, _| Ok(compiled.fast_lineage_star_resolved))
+        self.compiled(py, |compiled, _| Ok(compiled.analysis.star_resolved))
     }
 
     #[getter]
@@ -550,28 +587,29 @@ impl NativeCompiledModel {
 
     #[getter]
     fn binding_diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        self.compiled(py, |compiled, py| {
-            Ok(self
-                .overlay
-                .binding_diagnostics
-                .as_ref()
-                .unwrap_or(&compiled.binding_diagnostics)
-                .clone_ref(py))
+        if let Some(diagnostics) = &self.overlay.binding_diagnostics {
+            return Ok(diagnostics.clone_ref(py));
+        }
+        let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
+        self.read(py, |record, py| {
+            let name: String = model_name(record, py)?;
+            let path: Bound<'_, PyAny> = record.model_file.bind(py).getattr("relative_path")?;
+            compiled_of(record)?
+                .analysis
+                .binding_tuple(py, &classes.compiled, (&name, &path))
         })
     }
 
     #[getter]
     fn binding_validated(&self, py: Python<'_>) -> PyResult<bool> {
-        self.compiled(py, |compiled, _| Ok(compiled.binding_validated))
+        self.compiled(py, |compiled, _| Ok(compiled.analysis.binding_validated))
     }
 
     #[getter]
     fn dynamic_column_contract(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.compiled(py, |compiled, py| {
-            Ok(compiled
-                .dynamic_column_contract
-                .as_ref()
-                .map_or_else(|| py.None(), |proof| proof.clone_ref(py)))
+            compiled.analysis.proof_object(py, &classes.compiled)
         })
     }
 

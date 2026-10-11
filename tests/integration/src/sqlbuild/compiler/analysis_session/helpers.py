@@ -15,14 +15,17 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.analysis_session.classes.native_model_analysis as native_model_analysis
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
+from sqlbuild.compiler.analysis_session.constants import LINEAGE_NATIVE
 from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
     analyze_native_model_sql,
+)
+from sqlbuild.compiler.analysis_session.main._dynamic_contract_proof import (
+    dynamic_contract_proof as contract_proof,
 )
 from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
     infer_native_expression_source_shapes,
@@ -30,11 +33,15 @@ from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_sha
 from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contracts import (
     prove_native_dynamic_contracts,
 )
+from sqlbuild.compiler.analysis_session.main._session_outcome_analysis import (
+    session_outcome_analysis,
+)
 from sqlbuild.compiler.analysis_session.models import (
     NativeModelAnalyses,
     NativeModelAnalysisRequest,
     NativePivotTables,
 )
+from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.compile._helpers.analysis.cache import build_analysis_cache_context
 from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import (
     model_dynamic_families,
@@ -51,7 +58,6 @@ from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
     CompactLineageFacts,
     CompileAdapterContext,
-    CompiledLineageColumnFact,
     DynamicColumnContractProof,
     InferredColumn,
     ModelSqlAnalysis,
@@ -422,13 +428,13 @@ def native_pivot_proofs(*, monkeypatch: pytest.MonkeyPatch) -> NativePivotProofs
     """Record every batch of native pivot proofs assembly takes."""
 
     recorded_proofs: NativePivotProofs = NativePivotProofs()
-    native_proofs: Callable[..., tuple[DynamicColumnContractProof | None, ...]] = (
+    native_proofs: Callable[..., tuple[ProofRow | None, ...]] = (
         native_stage_assembly.prove_native_dynamic_contracts
     )
 
-    def recorded(**keywords: Any) -> tuple[DynamicColumnContractProof | None, ...]:
-        proofs: tuple[DynamicColumnContractProof | None, ...] = native_proofs(**keywords)
-        recorded_proofs.proofs.extend(proofs)
+    def recorded(**keywords: Any) -> tuple[ProofRow | None, ...]:
+        proofs: tuple[ProofRow | None, ...] = native_proofs(**keywords)
+        recorded_proofs.proofs.extend(map(contract_proof, proofs))
         proven: int = sum(proof is not None for proof in proofs)
         recorded_proofs.session_proofs += proven * (keywords["session"] is not None)
         return proofs
@@ -572,7 +578,6 @@ class NativeAnalysisRuns:
     session_proofs: int = 0
     proven_pivots: int = 0
     native_enrichments: int = 0
-    native_column_objects: int = 0
     native_column_values: int = 0
     golden: list[GoldenEntry] = field(default_factory=list)
 
@@ -593,13 +598,9 @@ def analyse_natively(
     `runs.golden` gathers the entries the Python oracle recorded for the same seam calls.
     """
 
-    original_analysis: Callable[..., tuple[dict[str, ModelSqlAnalysis], Any]] = (
-        native_stage_assembly.analyze_model_sql
-    )
+    original_analysis: Callable[..., NativeModelAnalyses] = native_stage_assembly.analyze_model_sql
 
-    def analysed_three_ways(
-        request: NativeModelAnalysisRequest,
-    ) -> tuple[dict[str, ModelSqlAnalysis], Any]:
+    def analysed_three_ways(request: NativeModelAnalysisRequest) -> NativeModelAnalyses:
         profile: ExpressionInferenceProfile = request.inference_profile
         cache: AnalysisCacheContext | None = build_analysis_cache_context(
             root=cache_root, inference_profile=profile, allow_compact_analysis=True
@@ -614,13 +615,16 @@ def analyse_natively(
                     inference_profile=replace(profile, binding_catalog=catalog),
                 )
             )
-            cached_views.append((_analysis_views(cached.analyses), _catalog_view(catalog)))
-        analyses, session = original_analysis(replace(request, analysis_cache=None))
+            cached_views.append(
+                (_analysis_views(_projected(cached, request, runs)), _catalog_view(catalog))
+            )
+        native: NativeModelAnalyses = original_analysis(replace(request, analysis_cache=None))
+        session: Any = native.session
+        analyses: dict[str, ModelSqlAnalysis] = _projected(native, request, runs)
         uncached_view: object = (_analysis_views(analyses), _catalog_view(profile.binding_catalog))
         columns: list[InferredColumn] = list(
             chain.from_iterable(map(_native_columns, analyses.values()))
         )
-        runs.native_column_objects += len(set(map(id, columns)))
         runs.native_column_values += len(set(columns))
         runs.analysed_models += len(analyses)
         runs.golden.append(golden_entry("models", _analysis_views(analyses)))
@@ -628,7 +632,7 @@ def analyse_natively(
         for index, view in enumerate(cached_views):
             _append(runs, f"model analyses, cached run {index}", uncached_view, view)
         _compare_proofs(request=request, analyses=analyses, session=session, runs=runs)
-        return analyses, session
+        return native
 
     def recorded_shapes(
         *, expressions: tuple[str, ...], profile: ExpressionInferenceProfile
@@ -641,14 +645,6 @@ def analyse_natively(
         runs.golden.append(golden_entry("shapes", (native, catalog.expression_shapes)))
         return native
 
-    native_lineage_facts: Callable[..., tuple[CompiledLineageColumnFact, ...]] = (
-        native_model_analysis.lineage_facts
-    )
-
-    def counted_native_enrichment(rows: list[Any]) -> tuple[CompiledLineageColumnFact, ...]:
-        runs.native_enrichments += 1
-        return native_lineage_facts(rows)
-
     assembled_model: Callable[..., CompiledModelView] = project_assembly._assemble_compiled_model
 
     def recorded_model(*arguments: Any, **keywords: Any) -> CompiledModelView:
@@ -657,7 +653,6 @@ def analyse_natively(
         return model
 
     with monkeypatch.context() as patch:
-        patch.setattr(native_model_analysis, "lineage_facts", counted_native_enrichment)
         patch.setattr(project_assembly, "_assemble_compiled_model", recorded_model)
         patch.setattr(project_assembly, "analyze_model_sql", analysed_three_ways)
         patch.setattr(project_assembly, "expression_source_shapes_by_engine", recorded_shapes)
@@ -699,9 +694,9 @@ def analysis_request(
 
     requests: list[NativeModelAnalysisRequest] = []
 
-    def captured(request: NativeModelAnalysisRequest) -> tuple[dict[str, ModelSqlAnalysis], None]:
+    def captured(request: NativeModelAnalysisRequest) -> NativeModelAnalyses:
         requests.append(request)
-        return {}, None
+        return NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None)
 
     with (
         monkeypatch.context() as patch,
@@ -770,12 +765,12 @@ def _compare_proofs(
             ),
         )
         proof: DynamicColumnContractProof | None = analysis.dynamic_column_contract
-        standalone: DynamicColumnContractProof | None = prove_native_dynamic_contracts(
-            session=None, tables=tables, models=models
-        )[0]
-        in_session: DynamicColumnContractProof | None = prove_native_dynamic_contracts(
-            session=session, tables=tables, models=models
-        )[0]
+        standalone: DynamicColumnContractProof | None = contract_proof(
+            prove_native_dynamic_contracts(session=None, tables=tables, models=models)[0]
+        )
+        in_session: DynamicColumnContractProof | None = contract_proof(
+            prove_native_dynamic_contracts(session=session, tables=tables, models=models)[0]
+        )
         runs.pivot_proofs += proof is not None
         runs.proven_pivots += proof is not None and proof.output_proven
         runs.standalone_proofs += standalone is not None
@@ -788,6 +783,28 @@ def _append(runs: NativeAnalysisRuns, name: str, uncached: object, cached: objec
     runs.names.append(name)
     runs.uncached.append(uncached)
     runs.cached.append(cached)
+
+
+def _projected(
+    native: NativeModelAnalyses, request: NativeModelAnalysisRequest, runs: NativeAnalysisRuns
+) -> dict[str, ModelSqlAnalysis]:
+    """The test oracle's projection of each finished outcome as the analysis it replaced."""
+
+    placeholders: dict[str, dict[str, str] | None] = {
+        model_input.model_file.file_path.stem: model_placeholders(model_input)
+        for model_input in request.model_inputs
+    }
+    sources: list[str] = [
+        cast(Any, native.session).outcome_rows(position)[0][2]
+        for position in native.positions.values()
+    ]
+    runs.native_enrichments += sum(source != LINEAGE_NATIVE for source in sources)
+    return {
+        name: session_outcome_analysis(
+            session=native.session, position=position, placeholders=placeholders.get(name)
+        )
+        for name, position in native.positions.items()
+    }
 
 
 def _analysis_views(analyses: dict[str, ModelSqlAnalysis]) -> object:

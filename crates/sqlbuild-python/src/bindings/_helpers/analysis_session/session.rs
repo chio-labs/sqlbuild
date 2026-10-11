@@ -109,14 +109,16 @@ type PivotRequestRow = (
 type ContractRow = (&'static str, Option<ProofRow>);
 /// `(hits, misses, stored, why the store was not read or saved)`.
 type CacheStatsRow = (usize, usize, usize, Option<String>);
-/// `(models, catalog schema additions, analysis-shape names, dynamic pivot proofs)`.
-type FinishRow = (Vec<OutcomeRow>, Shapes, Vec<String>, Vec<ContractRow>);
+/// `(catalog schema additions, analysis-shape names, whether each model's analysis succeeded)`.
+type FinishRow = (Shapes, Vec<String>, Vec<bool>);
 
 /// One compile's native model analysis; an internal failure raises `NativeCompilerError`.
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct NativeModelAnalysisSession {
     inner: Option<AnalysisSession>,
     finished: Option<FinishedSession>,
+    /// Each requested model's outcome and dynamic pivot proof, in request order, once finished.
+    outcomes: Vec<(ModelOutcome, PivotOutcome)>,
     sharing: (usize, usize),
     cache_path: Option<PathBuf>,
     cache_stats: Option<CacheStatsRow>,
@@ -133,6 +135,13 @@ impl NativeModelAnalysisSession {
     /// The finished session later compile stages read, once `finish` has succeeded.
     pub(crate) fn finished_session(&self) -> Option<&FinishedSession> {
         self.finished.as_ref()
+    }
+
+    /// The finished outcome and dynamic pivot proof of the model requested at `index`.
+    pub(crate) fn outcome(&self, index: usize) -> PyResult<&(ModelOutcome, PivotOutcome)> {
+        self.outcomes
+            .get(index)
+            .ok_or_else(|| internal_error("the session returned no analysis for a model"))
     }
 
     /// The running session, or `NativeCompilerError` once it has failed or finished.
@@ -191,7 +200,32 @@ impl NativeModelAnalysisSession {
                 .map(|error| error.to_string());
             self.cache_stats = Some((stats.hits, stats.misses, stats.stored, saved));
         }
-        Ok(finish_row(outcome))
+        let SessionOutcome {
+            models,
+            schema_additions,
+            analysis_names,
+            dynamic_contracts,
+        } = outcome;
+        let succeeded: Vec<bool> = models
+            .iter()
+            .map(|model| model.analysis.analysis_succeeded)
+            .collect();
+        self.outcomes = models.into_iter().zip(dynamic_contracts).collect();
+        Ok((schema_additions, analysis_names, succeeded))
+    }
+
+    /// Each requested model's raw binding diagnostic rows, in request order.
+    fn binding_rows(&self) -> Vec<Vec<DiagnosticRow>> {
+        self.outcomes
+            .iter()
+            .map(|(outcome, _)| outcome.analysis.binding_diagnostics.clone())
+            .collect()
+    }
+
+    /// The model at `index`'s outcome and proof rows, for hand-built model inputs only.
+    fn outcome_rows(&self, index: usize) -> PyResult<(OutcomeRow, ContractRow)> {
+        let (outcome, contract) = self.outcome(index)?;
+        Ok((outcome_row(outcome.clone()), contract_row(contract.clone())))
     }
 
     /// The analysis cache's `(hits, misses, stored, failure)`; None without a cache.
@@ -256,6 +290,7 @@ fn start_model_analysis_session(
     Ok(NativeModelAnalysisSession {
         inner: Some(session),
         finished: None,
+        outcomes: Vec::new(),
         sharing: (0, 0),
         cache_path,
         cache_stats,
@@ -384,19 +419,6 @@ fn lineage_items(rows: Vec<LineageRow>) -> Vec<LineageItem> {
             )
         })
         .collect()
-}
-
-fn finish_row(outcome: SessionOutcome) -> FinishRow {
-    (
-        outcome.models.into_iter().map(outcome_row).collect(),
-        outcome.schema_additions,
-        outcome.analysis_names,
-        outcome
-            .dynamic_contracts
-            .into_iter()
-            .map(contract_row)
-            .collect(),
-    )
 }
 
 fn families_by_table(rows: Vec<(String, Vec<FamilyRow>)>) -> Vec<(String, Vec<DynamicFamily>)> {

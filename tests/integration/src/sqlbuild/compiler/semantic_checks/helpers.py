@@ -17,6 +17,7 @@ import sqlbuild.compiler.compile._helpers.assembly.project as assembly_project
 import sqlbuild.compiler.semantic_checks._helpers.stage as semantic_stage
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.analysis_session.types import DiagnosticRow
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import (
     complete_semantic_diagnostics,
 )
@@ -31,7 +32,6 @@ from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_mod
 from sqlbuild.compiler.semantic_checks.main._complete_native_semantic_diagnostics import (
     complete_native_semantic_diagnostics,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     generated_analysis_files,
 )
@@ -97,7 +97,7 @@ class SemanticInputs:
 
     project: CompiledProjectView
     profile: ExpressionInferenceProfile
-    binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]]
+    binding_results: dict[str, list[DiagnosticRow]]
     resource_sql_analysis: bool
     native_session: Any | None = None
 

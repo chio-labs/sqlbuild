@@ -228,7 +228,7 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
     assert runs.session_proofs >= test_case.expected_minimum_pivot_proofs
     assert runs.proven_pivots >= test_case.expected_minimum_proven_pivots
     assert runs.native_enrichments >= test_case.expected_minimum_native_enrichments
-    assert runs.native_column_objects == runs.native_column_values > 0
+    assert runs.native_column_values > 0
 
 
 @pytest.mark.parametrize(
@@ -290,7 +290,6 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
         sum(session.sharing[1] for session in uncached),
         runs.analysed_models - shared,
         deferral_kinds(record_dir),
-        runs.native_column_objects,
         runs.native_column_values,
     ) == (
         test_case.expected_analysed,
@@ -298,7 +297,6 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
         test_case.expected_reanalysed,
         test_case.expected_unshared,
         Counter(),
-        test_case.expected_column_values,
         test_case.expected_column_values,
     )
 
@@ -519,7 +517,7 @@ def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_cal
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
 
-    assert analyze_native_model_sql(request=request).analyses
+    assert analyze_native_model_sql(request=request).positions
     assert len(rule.calls) >= test_case.expected_minimum_calls, test_case.description
     assert all(
         isinstance(value, InferredNullability)

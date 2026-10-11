@@ -147,3 +147,12 @@ class NativeResourceDiagnosticTestCase:
     description: str
     files: dict[str, str]
     expected_diagnostics: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class HandBuiltAnalysisTestCase:
+    """Model SQL and the analysis facts native and hand-built assembly report for it."""
+
+    description: str
+    models: dict[str, str]
+    expected_models: tuple[tuple[object, ...], ...]

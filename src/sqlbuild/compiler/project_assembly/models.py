@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import (
-    DynamicColumnContractProof,
-)
+from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.project_assembly.types import NamespaceRow, ObjectKeyRow
 
 
@@ -37,7 +35,7 @@ class NativeModelFacts:
     """One model's native facts; its dependencies as `(resource type, name)` rows."""
 
     deps: list[ObjectKeyRow]
-    dynamic_contract: DynamicColumnContractProof | None
+    dynamic_contract: ProofRow | None
     syntax_valid: bool = False
 
 

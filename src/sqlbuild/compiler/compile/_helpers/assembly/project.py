@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
@@ -10,13 +9,15 @@ from typing import Any, cast
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import BuiltinAdapter
-from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
-    infer_native_query_columns,
+from sqlbuild.compiler.analysis_session.main._infer_native_query_column_rows import (
+    infer_native_query_column_rows,
 )
-from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeModelAnalysisRequest
-from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
-    get_complete_schema_binding_request,
+from sqlbuild.compiler.analysis_session.models import (
+    NativeColumnQuery,
+    NativeModelAnalyses,
+    NativeModelAnalysisRequest,
 )
+from sqlbuild.compiler.analysis_session.types import ColumnRow, DiagnosticRow
 from sqlbuild.compiler.compile._helpers.analysis.cache import (
     build_analysis_cache_context,
 )
@@ -27,9 +28,8 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_hook_sql_syntax,
     validate_sql_syntax,
 )
-from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
-    get_authored_binding_location,
-    query_line_offset,
+from sqlbuild.compiler.compile._helpers.assembly.hand_built_models import (
+    hand_built_compiled_model,
 )
 from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
@@ -41,9 +41,6 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
     build_declared_column_types as _build_column_types_by_table,
-)
-from sqlbuild.compiler.compile._helpers.assembly.targets import (
-    build_model_relation_target,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
@@ -72,8 +69,6 @@ from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
 )
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
-    CompiledLineageColumnFact,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlScenario,
@@ -82,13 +77,8 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioInput,
     CompileSqlTestInput,
     DeclarationScopeResolver,
-    DynamicColumnContractProof,
-    InferredColumn,
+    HandBuiltAnalysis,
     MacroContext,
-    PolyglotAnalysisResult,
-)
-from sqlbuild.compiler.compile.models import (
-    ModelSqlAnalysis as _ModelSqlAnalysis,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledAuditView,
@@ -99,8 +89,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompiledSourceView,
     CompileInputsView,
-    DiagnosticPhase,
-    DiagnosticSeverity,
     ModelInput,
     SourceInput,
 )
@@ -117,15 +105,11 @@ from sqlbuild.compiler.project_assembly.models import (
 )
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.constants import (
-    BINDING_UNKNOWN_TABLE_INTERNAL_CODE,
     NATIVE_DIALECT_ALIASES,
     NATIVE_FAILURE_PREFIX,
 )
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
-from sqlbuild.compiler.sql_analysis.models import (
-    SqlBindingDiagnostic,
-)
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -134,7 +118,6 @@ from sqlbuild.spec.contracts.main.resolve_effective_scenario_config import (
 )
 from sqlbuild.spec.contracts.models import (
     SchemaDynamicColumnFamily,
-    SourceLocation,
 )
 
 
@@ -257,14 +240,13 @@ def assemble_compiled_project(
         if sql_analysis_enabled and analysis_model_names != frozenset()
         else None
     )
-    model_sql_analysis_by_name: dict[str, _ModelSqlAnalysis] = {}
-    native_session: Any | None = None
+    analyses: NativeModelAnalyses | None = None
     if sql_analysis_enabled:
         with (
             record_compile_timing("model_analysis_ms"),
             record_compile_cpu_timing("model_analysis_cpu_ms"),
         ):
-            model_sql_analysis_by_name, native_session = analyze_model_sql(
+            analyses = analyze_model_sql(
                 NativeModelAnalysisRequest(
                     known_functions=known_function_names(inputs.sql_function_inputs),
                     known_types=known_declared_types(
@@ -289,11 +271,12 @@ def assemble_compiled_project(
                     dynamic_families_by_table=dynamic_families_by_table,
                 )
             )
+    native_session: Any | None = None if analyses is None else analyses.session
     native: NativeProjectFacts = project_facts_by_engine(
         inputs=inputs,
         dialect=profile.sql_analysis_dialect,
         analysis_model_names=analysis_model_names,
-        analyses=model_sql_analysis_by_name,
+        analyses=analyses,
         session=native_session,
         column_types_by_table=column_types_by_table,
         authoritative_column_types_by_table=complete_binding_schemas,
@@ -318,6 +301,29 @@ def assemble_compiled_project(
         effective_target_name=inputs.effective_target_name,
         run_id=inputs.run_id,
     )
+    models: tuple[CompiledModelView, ...] = tuple(
+        _assemble_compiled_model(
+            model_input=model_input,
+            sql_analysis_enabled=(
+                sql_analysis_enabled
+                and model_input.sql_validation_enabled
+                and (
+                    analysis_model_names is None or _model_name(model_input) in analysis_model_names
+                )
+            ),
+            sql_validation_enabled=(
+                analysis_model_names is None or _model_name(model_input) in analysis_model_names
+            ),
+            native_model=native.models[index],
+            column_nullability_by_table=column_nullability_by_table,
+            column_types_by_table=column_types_by_table,
+            dynamic_contract_analysis_inputs=dynamic_contract_analysis_inputs,
+            inference_profile=profile,
+            analyses=analyses,
+            allow_compact_analysis=allow_compact_analysis,
+        )
+        for index, model_input in enumerate(inputs.model_inputs)
+    )
     fields: dict[str, Any] = dict(
         binding_catalog=profile.binding_catalog,
         run_id=inputs.run_id,
@@ -334,30 +340,7 @@ def assemble_compiled_project(
             project_config=inputs.project_config,
             local_config=inputs.local_config,
         ),
-        models=tuple(
-            _assemble_compiled_model(
-                model_input=model_input,
-                sql_analysis_enabled=(
-                    sql_analysis_enabled
-                    and model_input.sql_validation_enabled
-                    and (
-                        analysis_model_names is None
-                        or _model_name(model_input) in analysis_model_names
-                    )
-                ),
-                sql_validation_enabled=(
-                    analysis_model_names is None or _model_name(model_input) in analysis_model_names
-                ),
-                native_model=native.models[index],
-                column_nullability_by_table=column_nullability_by_table,
-                column_types_by_table=column_types_by_table,
-                dynamic_contract_analysis_inputs=dynamic_contract_analysis_inputs,
-                inference_profile=profile,
-                sql_analysis=model_sql_analysis_by_name.get(model_input.model_file.file_path.stem),
-                allow_compact_analysis=allow_compact_analysis,
-            )
-            for index, model_input in enumerate(inputs.model_inputs)
-        ),
+        models=models,
         sources=_compiled_sources(inputs=inputs, resources=resources),
         seeds=_compiled_seeds(inputs=inputs, resources=resources),
         functions=_compiled_functions(inputs=inputs, resources=resources),
@@ -382,11 +365,7 @@ def assemble_compiled_project(
         loaded_macros=inputs.loaded_macros,
         diagnostics=(
             *inputs.diagnostics,
-            *_project_binding_diagnostics(
-                model_inputs=inputs.model_inputs,
-                analyses_by_name=model_sql_analysis_by_name,
-                dialect=profile.sql_analysis_dialect,
-            ),
+            *_project_binding_diagnostics(models=models, analyses=analyses),
         ),
         external_sql_reference_resolver=inputs.external_sql_reference_resolver,
         scope_index=scope_index,
@@ -397,10 +376,7 @@ def assemble_compiled_project(
         profile=profile,
         resource_sql_analysis=sql_analysis_enabled and not inputs.no_sql_validation,
         native_session=native_session,
-        binding_results={
-            name: analysis.polyglot_analysis.binding_diagnostics
-            for name, analysis in model_sql_analysis_by_name.items()
-        },
+        binding_results=_binding_rows(analyses),
     )
 
 
@@ -448,9 +424,10 @@ def _assemble_compiled_model(
     column_types_by_table: dict[str, dict[str, str]] | None = None,
     dynamic_contract_analysis_inputs: _DynamicContractAnalysisInputs | None = None,
     inference_profile: ExpressionInferenceProfile | None = None,
-    sql_analysis: _ModelSqlAnalysis | None = None,
+    analyses: NativeModelAnalyses | None = None,
     allow_compact_analysis: bool = False,
 ) -> CompiledModelView:
+    del column_types_by_table, dynamic_contract_analysis_inputs, allow_compact_analysis
     model_name: str = model_input.model_file.file_path.stem
     syntax_validated: bool = native_model.syntax_valid
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
@@ -458,13 +435,7 @@ def _assemble_compiled_model(
         sql=model_input.query_sql,
         cursor_type=model_input.config.values.get("cursor_type"),
     )
-    inferred_columns: tuple[InferredColumn, ...] | None = None
-    fast_lineage_columns: Sequence[CompiledLineageColumnFact] | None = None
-    fast_lineage_has_star: bool = False
-    fast_lineage_star_resolved: bool = False
-    placeholders: dict[str, str] | None = (
-        sql_analysis.placeholders if sql_analysis is not None else _model_placeholders(model_input)
-    )
+    placeholders: dict[str, str] | None = _model_placeholders(model_input)
     if sql_validation_enabled and model_input.sql_validation_enabled and not syntax_validated:
         for hook_name in ("pre_hooks", "post_hooks"):
             validate_hook_sql_syntax(
@@ -475,19 +446,20 @@ def _assemble_compiled_model(
                 placeholders=placeholders,
                 dialect=profile.sql_analysis_dialect,
             )
+    session_analysis: tuple[_native.NativeModelAnalysisSession, int] | None = None
+    fallback: list[ColumnRow] | None = None
     if sql_analysis_enabled:
-        if sql_analysis is None:
+        position: int | None = None if analyses is None else analyses.positions.get(model_name)
+        if analyses is None or position is None:
             raise _native.NativeCompilerError(
                 f"{NATIVE_FAILURE_PREFIX}native model analysis: the session returned no "
                 f"analysis for model '{model_name}'"
             )
-        polyglot_analysis: PolyglotAnalysisResult = sql_analysis.polyglot_analysis
-        if polyglot_analysis.analysis_succeeded:
-            inferred_columns = polyglot_analysis.columns
-            fast_lineage_columns = polyglot_analysis.lineage_columns
-            fast_lineage_has_star = polyglot_analysis.has_star
-            fast_lineage_star_resolved = polyglot_analysis.star_resolved
-        else:
+        session_analysis = (
+            cast(_native.NativeModelAnalysisSession, analyses.session),
+            position,
+        )
+        if model_name not in analyses.succeeded:
             if model_input.sql_validation_enabled and not syntax_validated:
                 validate_sql_syntax(
                     query_sql=analysis_query_sql,
@@ -496,7 +468,7 @@ def _assemble_compiled_model(
                     placeholders=placeholders,
                     dialect=profile.sql_analysis_dialect,
                 )
-            inferred_columns = infer_native_query_columns(
+            fallback = infer_native_query_column_rows(
                 queries=(
                     NativeColumnQuery(
                         sql=analysis_query_sql, mode="parse", placeholders=placeholders
@@ -504,7 +476,7 @@ def _assemble_compiled_model(
                 ),
                 profile=profile,
                 column_nullability_by_table=column_nullability_by_table,
-            )[0].columns
+            )[0][1]
     elif sql_validation_enabled and model_input.sql_validation_enabled and not syntax_validated:
         validate_sql_syntax(
             query_sql=analysis_query_sql,
@@ -513,21 +485,6 @@ def _assemble_compiled_model(
             placeholders=placeholders,
             dialect=profile.sql_analysis_dialect,
         )
-    dynamic_column_contract: DynamicColumnContractProof | None = (
-        sql_analysis.dynamic_column_contract
-        if sql_analysis is not None and sql_analysis.dynamic_column_contract is not None
-        else native_model.dynamic_contract
-    )
-    if dynamic_column_contract is not None and dynamic_column_contract.output_proven:
-        inferred_columns = dynamic_column_contract.fixed_columns
-        fast_lineage_has_star = True
-    binding_diagnostics: tuple[CompilerDiagnostic, ...] = _binding_compiler_diagnostics(
-        model_input=model_input,
-        cleaned_sql=sql_analysis.cleaned_sql if sql_analysis is not None else None,
-        dialect=profile.sql_analysis_dialect,
-        diagnostics=(polyglot_analysis.binding_diagnostics if sql_analysis_enabled else ()),
-    )
-    binding_validated: bool = polyglot_analysis.binding_validated if sql_analysis_enabled else False
     macro_deps: tuple[str, ...] = model_input.macro_deps or find_macro_call_names(
         model_input.macro_source_sql
     )
@@ -535,47 +492,21 @@ def _assemble_compiled_model(
         return model_input.compiled_model(
             (
                 native_model.deps,
-                None
-                if inferred_columns is None
-                else [
-                    (column.name, column.type, str(column.nullability))
-                    for column in inferred_columns
-                ],
-                (fast_lineage_columns, fast_lineage_has_star, fast_lineage_star_resolved),
-                (binding_diagnostics, binding_validated),
-                dynamic_column_contract,
+                session_analysis,
+                fallback,
+                native_model.dynamic_contract,
                 list(macro_deps),
             )
         )
-    return CompiledModel(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
-        deps=tuple(
-            CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
-            for kind, name in native_model.deps
+    return hand_built_compiled_model(
+        model_input=model_input,
+        deps=native_model.deps,
+        analysis=HandBuiltAnalysis(
+            session=session_analysis,
+            fallback=fallback,
+            standalone_proof=native_model.dynamic_contract,
         ),
-        name=model_name,
-        relative_path=model_input.model_file.relative_path,
-        query_sql=model_input.query_sql,
-        config=model_input.config,
-        destination=build_model_relation_target(model_input=model_input, model_name=model_name),
-        references=model_input.references,
-        schema_entry=model_input.schema_entry,
-        inferred_columns=inferred_columns,
-        fast_lineage_columns=fast_lineage_columns,
-        fast_lineage_has_star=fast_lineage_has_star,
-        fast_lineage_star_resolved=fast_lineage_star_resolved,
-        authored_sql=model_input.model_file.contents,
-        authored_query_sql=model_input.model_file.query_sql,
-        output_column_locations=model_input.model_file.output_column_locations,
-        extract_implicit_alias_columns=model_input.model_file.extract_implicit_alias_columns,
         macro_deps=macro_deps,
-        enum_declarations=model_input.enum_declarations,
-        constant_declarations=model_input.constant_declarations,
-        enum_columns=model_input.enum_columns,
-        binding_diagnostics=binding_diagnostics,
-        binding_validated=binding_validated,
-        dynamic_column_contract=dynamic_column_contract,
-        rejected_sql_analysis_opt_out=model_input.rejected_sql_analysis_opt_out,
     )
 
 
@@ -596,96 +527,26 @@ def _build_dynamic_families_by_table(
 
 
 def _project_binding_diagnostics(
-    *,
-    model_inputs: tuple[ModelInput, ...],
-    analyses_by_name: dict[str, _ModelSqlAnalysis],
-    dialect: str | None,
+    *, models: tuple[CompiledModelView, ...], analyses: NativeModelAnalyses | None
 ) -> tuple[CompilerDiagnostic, ...]:
+    """Every analysed model's located binding diagnostics, which the project also reports."""
+
+    if analyses is None:
+        return ()
     diagnostics: list[CompilerDiagnostic] = []
-    for model_input in model_inputs:
-        analysis: _ModelSqlAnalysis | None = analyses_by_name.get(_model_name(model_input))
-        if analysis is None:
-            continue
-        diagnostics.extend(
-            _binding_compiler_diagnostics(
-                model_input=model_input,
-                cleaned_sql=analysis.cleaned_sql,
-                dialect=dialect,
-                diagnostics=analysis.polyglot_analysis.binding_diagnostics,
-            )
-        )
+    for model in models:
+        if model.name in analyses.positions:
+            diagnostics.extend(model.binding_diagnostics)
     return tuple(diagnostics)
 
 
-def _binding_compiler_diagnostics(
-    *,
-    model_input: ModelInput,
-    diagnostics: tuple[SqlBindingDiagnostic, ...],
-    dialect: str | None,
-    cleaned_sql: str | None = None,
-) -> tuple[CompilerDiagnostic, ...]:
-    line_offset: int | None = query_line_offset(model_input)
-    seen: set[tuple[str, str, int | None, int | None]] = set()
-    result: list[CompilerDiagnostic] = []
-    for diagnostic in diagnostics:
-        if diagnostic.code == BINDING_UNKNOWN_TABLE_INTERNAL_CODE:
-            continue
-        if cleaned_sql is None:
-            cleaned_sql = get_complete_schema_binding_request(
-                query_sql=cursor_intrinsics_analysis_sql(
-                    sql=model_input.query_sql,
-                    cursor_type=model_input.config.values.get("cursor_type"),
-                ),
-                placeholders=_model_placeholders(model_input),
-                dialect=dialect,
-                binding_schema={},
-            ).sql
-        line: int | None
-        column: int | None
-        location: SourceLocation | None = get_authored_binding_location(
-            path=model_input.model_file.relative_path,
-            authored_sql=model_input.model_file.contents,
-            authored_query_sql=model_input.model_file.query_sql,
-            cleaned_sql=cleaned_sql,
-            expansion=model_input.sql_expansion,
-            diagnostic=diagnostic,
-        )
-        line, column = (location.line, location.column) if location is not None else (None, None)
-        if line is None:
-            line = (
-                diagnostic.line + line_offset
-                if diagnostic.line is not None and line_offset is not None
-                else diagnostic.line
-            )
-            column = diagnostic.column
-        key: tuple[str, str, int | None, int | None] = (
-            diagnostic.code,
-            diagnostic.message,
-            line,
-            column,
-        )
-        if (
-            key in seen
-            and diagnostic.start is not None
-            and diagnostic.severity == DiagnosticSeverity.ERROR
-        ):
-            continue
-        seen.add(key)
-        result.append(
-            CompilerDiagnostic(
-                phase=DiagnosticPhase.COMPILE,
-                severity=DiagnosticSeverity(diagnostic.severity),
-                code=diagnostic.code,
-                message=diagnostic.message,
-                resource_type=CompiledResourceType.MODEL,
-                resource_name=_model_name(model_input),
-                path=model_input.model_file.relative_path,
-                line=line,
-                column=column,
-                location=location,
-            )
-        )
-    return tuple(result)
+def _binding_rows(analyses: NativeModelAnalyses | None) -> dict[str, list[DiagnosticRow]]:
+    """Each analysed model's raw binding rows, which semantic type recovery identifies."""
+
+    if analyses is None or analyses.session is None:
+        return {}
+    rows: list[list[DiagnosticRow]] = analyses.session.binding_rows()
+    return {name: rows[position] for name, position in analyses.positions.items()}
 
 
 def _compiled_sources(

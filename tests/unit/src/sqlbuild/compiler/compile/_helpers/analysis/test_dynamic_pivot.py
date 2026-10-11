@@ -5,7 +5,11 @@ import pytest
 from sqlbuild.compiler.analysis_session._helpers.dynamic_contracts import (
     native_dynamic_contracts,
 )
+from sqlbuild.compiler.analysis_session.main._dynamic_contract_proof import (
+    dynamic_contract_proof as contract_proof,
+)
 from sqlbuild.compiler.analysis_session.models import NativePivotTables
+from sqlbuild.compiler.compile.models import DynamicColumnContractProof
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types import (
     DynamicPivotAnalysisTestCase,
@@ -147,7 +151,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.analysis._test_types impo
 def test_given_dynamic_family_when_analyzing_output_then_requires_supported_closed_shape(
     test_case: DynamicPivotAnalysisTestCase,
 ) -> None:
-    (proof,) = native_dynamic_contracts(
+    (row,) = native_dynamic_contracts(
         session=None,
         tables=NativePivotTables(
             dialect=test_case.dialect,
@@ -190,6 +194,7 @@ def test_given_dynamic_family_when_analyzing_output_then_requires_supported_clos
             ),
         ),
     )
+    proof: DynamicColumnContractProof | None = contract_proof(row)
 
     assert proof is not None
     assert proof.output_proven is test_case.expected_proven

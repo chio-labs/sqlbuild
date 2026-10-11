@@ -33,8 +33,12 @@ def record_model_analyses_impl(
 ) -> int:
     """Transfer each assembled model's typed analysis to its retained facts; return how many."""
 
-    transferred: int = 0
+    transferred: int = project.record_view_analyses(
+        [model for model in models if isinstance(model, _native.NativeCompiledModel)]
+    )
     for model in models:
+        if isinstance(model, _native.NativeCompiledModel):
+            continue
         proof: DynamicColumnContractProof | None = model.dynamic_column_contract
         inferred: list[tuple[str, str | None, str]] | None = model.inferred_rows
         columns: list[tuple[str, str | None, str]] = inferred or []

@@ -6,6 +6,7 @@ from typing import Any
 
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.types import DiagnosticRow
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
@@ -14,14 +15,13 @@ from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_
 from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_models
 from sqlbuild.compiler.semantic_checks._helpers.type_recovery import recover_native_output_types
 from sqlbuild.compiler.semantic_checks.constants import NATIVE_SEMANTIC_NO_CATALOG
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 
 def completed_semantic_project(
     *,
     project: CompiledProjectView,
     profile: ExpressionInferenceProfile,
-    binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
+    binding_results: dict[str, list[DiagnosticRow]],
     resource_sql_analysis: bool,
     session: Any | None,
 ) -> CompiledProjectView:

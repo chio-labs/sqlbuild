@@ -13,22 +13,34 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
+from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
+from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileAdapterContext, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import (
+    CompileAdapterContext,
+    CompileModelConfig,
+    CompileModelInput,
+    CompileProjectInputs,
+    CompilerDiagnostic,
+)
 from sqlbuild.compiler.compile.types import (
     CompiledAuditView,
     CompiledFunctionView,
+    CompiledModelView,
     CompiledProjectView,
     CompileInputsView,
 )
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.pipeline.main.project import compile_project
-from sqlbuild.spec.contracts.models import SourceColumnEntry
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, SourceColumnEntry
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
 
@@ -613,3 +625,93 @@ def cursor_model_files(*, read: str = "") -> dict[str, str]:
         "models/payments.sql": 'MODEL (description "Payments");\nSELECT 1 AS id\n',
         "models/finance/daily_revenue.sql": _CURSOR_MODEL.format(read=read),
     }
+
+
+_HAND_BUILT_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
+_HAND_BUILT_CONFIG: ProjectConfig = ProjectConfig(name="orders", adapter="duckdb")
+
+
+def _hand_built_model(name: str, sql: str) -> CompileModelInput:
+    relative_path: Path = Path(f"models/{name}.sql")
+    return CompileModelInput(
+        model_file=DiscoveredSqlModelFile(
+            file_path=Path("/repo") / relative_path,
+            relative_path=relative_path,
+            contents=f"MODEL (description 'Test model.');\n\n{sql}\n",
+            header_values={},
+            header_column_locations={},
+            output_column_locations={},
+            query_sql=sql,
+        ),
+        config=CompileModelConfig(values={}),
+        query_sql=sql,
+        references=extract_sql_references(sql=sql, syntax=_HAND_BUILT_SYNTAX),
+        sql_validation_enabled=True,
+    )
+
+
+def hand_built_analysed_project(models: dict[str, str]) -> CompiledProjectView:
+    """Assemble hand-built model inputs, which cross the explicit analysis boundary."""
+
+    return assemble_compiled_project(
+        inputs=CompileProjectInputs(
+            project_config=_HAND_BUILT_CONFIG,
+            local_config=LocalConfig(),
+            sql_lexical_syntax=_HAND_BUILT_SYNTAX,
+            discovered_inputs=DiscoveredProjectInputs(
+                project_config=_HAND_BUILT_CONFIG, local_config=LocalConfig()
+            ),
+            model_inputs=tuple(map(_hand_built_model, models, models.values())),
+        ),
+        inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
+    )
+
+
+def native_analysed_project(*, project_dir: Path, models: dict[str, str]) -> CompiledProjectView:
+    """Compile the same models from files through the native owner."""
+
+    write_files(
+        project_dir=project_dir,
+        files={
+            "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+            **{
+                f"models/{name}.sql": f"MODEL (description 'Test model.');\n\n{sql}\n"
+                for name, sql in models.items()
+            },
+        },
+    )
+    return compile_project(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=DuckDbAdapter(),
+        resolved_connection=_SOURCE_CONNECTION,
+    )
+
+
+def model_analysis_summary(project: CompiledProjectView) -> tuple[tuple[object, ...], ...]:
+    """Each model's column names, lineage outputs, star flag and located binding diagnostics."""
+
+    return tuple(map(_model_analysis, sorted(project.models, key=_model_name)))
+
+
+def _model_name(model: CompiledModelView) -> str:
+    return model.name
+
+
+def _model_analysis(model: CompiledModelView) -> tuple[object, ...]:
+    return (
+        model.name,
+        tuple(column.name for column in model.inferred_columns or ()),
+        tuple(column.output_column for column in model.fast_lineage_columns or ()),
+        model.fast_lineage_has_star,
+        model.binding_validated,
+        tuple(map(_located_binding, model.binding_diagnostics)),
+    )
+
+
+def _located_binding(diagnostic: CompilerDiagnostic) -> tuple[object, ...]:
+    return (
+        diagnostic.code,
+        diagnostic.line,
+        diagnostic.column,
+        getattr(diagnostic.location, "end_column", None),
+    )

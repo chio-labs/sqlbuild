@@ -25,6 +25,6 @@ type ProofRow = tuple[
     bool, list[ColumnRow], list[tuple[str, str | None]], list[str], str | None, bool
 ]
 type ContractRow = tuple[str, ProofRow | None]
-type FinishRow = tuple[list[OutcomeRow], ShapeRows, list[str], list[ContractRow]]
+type FinishRow = tuple[ShapeRows, list[str], list[bool]]
 
 type QueryColumnsMode = Literal["batch", "reanalysis", "parse", "legacy"]

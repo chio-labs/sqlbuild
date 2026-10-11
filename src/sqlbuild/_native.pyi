@@ -167,10 +167,17 @@ class NativeModelInput:
         self,
         arguments: tuple[
             list[tuple[str, str]],
+            tuple[NativeModelAnalysisSession, int] | None,
             list[tuple[str, str | None, str]] | None,
-            tuple[Sequence[CompiledLineageColumnFact] | None, bool, bool],
-            tuple[tuple[CompilerDiagnostic, ...], bool],
-            DynamicColumnContractProof | None,
+            tuple[
+                bool,
+                list[tuple[str, str | None, str]],
+                list[tuple[str, str | None]],
+                list[str],
+                str | None,
+                bool,
+            ]
+            | None,
             list[str],
         ],
     ) -> NativeCompiledModel: ...
@@ -645,6 +652,7 @@ class NativeCompiledProject:
         ]
         | None,
     ) -> bool: ...
+    def record_view_analyses(self, views: list[NativeCompiledModel]) -> int: ...
     def model_names(self) -> list[str]: ...
     def project_view(self, fields: dict[str, object]) -> NativeProjectView: ...
     def inputs_view(self, fields: dict[str, object]) -> NativeInputsView: ...
@@ -1121,6 +1129,14 @@ type _PivotContractRow = tuple[
     | None,
 ]
 
+def locate_model_binding_diagnostics(
+    rows: list[_AnalysisDiagnosticRow],
+    texts: tuple[str, str, str],
+    expansion: tuple[str, list[list[tuple[int, int, int, int]]]] | None,
+) -> list[
+    tuple[str, str, str, int | None, int | None, tuple[int, int, int | None, int | None] | None]
+]: ...
+
 class NativeModelAnalysisSession:
     @property
     def fact_models(self) -> list[str]: ...
@@ -1129,37 +1145,9 @@ class NativeModelAnalysisSession:
     ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str]]: ...
     def finish(
         self,
-    ) -> tuple[
-        list[
-            tuple[
-                bool,
-                list[tuple[str, str | None, str]] | None,
-                str,
-                list[tuple[str, int, int, list[tuple[str, str, str]]]],
-                bool,
-                bool,
-                list[_AnalysisDiagnosticRow],
-                bool,
-                str,
-            ]
-        ],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[str],
-        list[
-            tuple[
-                str,
-                tuple[
-                    bool,
-                    list[tuple[str, str | None, str]],
-                    list[tuple[str, str | None]],
-                    list[str],
-                    str | None,
-                    bool,
-                ]
-                | None,
-            ]
-        ],
-    ]: ...
+    ) -> tuple[list[tuple[str, list[tuple[str, str]]]], list[str], list[bool]]: ...
+    def binding_rows(self) -> list[list[_AnalysisDiagnosticRow]]: ...
+    def outcome_rows(self, index: int) -> tuple[Any, Any]: ...
     def prove_dynamic_contracts(
         self, models: list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]], /
     ) -> list[_PivotContractRow]: ...

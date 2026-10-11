@@ -16,6 +16,7 @@ from sqlbuild.compiler.analysis_session._helpers.profile_rows import (
 )
 from sqlbuild.compiler.analysis_session.constants import ADAPTER_NULLABILITY_CALLBACK
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
+from sqlbuild.compiler.analysis_session.types import ColumnRow
 from sqlbuild.compiler.compile.models import CompileSqlReference, InferredColumn
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.types import InferredNullability
@@ -44,8 +45,32 @@ def native_query_columns(
 ) -> tuple[NativeQueryColumns, ...]:
     """Each query's columns; a native internal failure raises `NativeCompilerError`."""
 
+    return tuple(
+        NativeQueryColumns(
+            succeeded=succeeded,
+            columns=None if columns is None else _inferred_columns(columns),
+            has_star=has_star,
+        )
+        for succeeded, columns, has_star in native_query_column_rows(
+            queries=queries,
+            profile=profile,
+            column_types_by_table=column_types_by_table,
+            column_nullability_by_table=column_nullability_by_table,
+        )
+    )
+
+
+def native_query_column_rows(
+    *,
+    queries: Sequence[NativeColumnQuery],
+    profile: ExpressionInferenceProfile,
+    column_types_by_table: Mapping[str, Mapping[str, str]],
+    column_nullability_by_table: Mapping[str, Mapping[str, InferredNullability]],
+) -> list[tuple[bool, list[ColumnRow] | None, bool]]:
+    """Each query's `(succeeded, column rows, has star)` as the native analysis returns it."""
+
     if not queries:
-        return ()
+        return []
     dialect: str = profile.sql_analysis_dialect or "generic"
     dialect = NATIVE_DIALECT_ALIASES.get(dialect, dialect)
     catalog: Any | None = (
@@ -65,28 +90,18 @@ def native_query_columns(
     adapter_rules: dict[str, FunctionNullabilityRule] = adapter_nullability_rules(profile)
     if adapter_rules:
         record_analysis_deferral(kind=ADAPTER_NULLABILITY_CALLBACK)
-    rows: list[tuple[bool, list[tuple[str, str | None, str]] | None, bool]] = (
-        _native.infer_query_columns(
-            None if catalog is None else catalog.native,
-            (
-                dialect,
-                list(profile.function_return_types.items()),
-                nullability_rule_rows(profile),
-                shape_rows(column_types_by_table),
-                shape_rows(column_nullability_by_table),
-                [_query_row(query) for query in queries],
-                profile.sql_analysis_dialect or "generic",
-            ),
-            (adapter_rules, InferredNullability) if adapter_rules else None,
-        )
-    )
-    return tuple(
-        NativeQueryColumns(
-            succeeded=succeeded,
-            columns=None if columns is None else _inferred_columns(columns),
-            has_star=has_star,
-        )
-        for succeeded, columns, has_star in rows
+    return _native.infer_query_columns(
+        None if catalog is None else catalog.native,
+        (
+            dialect,
+            list(profile.function_return_types.items()),
+            nullability_rule_rows(profile),
+            shape_rows(column_types_by_table),
+            shape_rows(column_nullability_by_table),
+            [_query_row(query) for query in queries],
+            profile.sql_analysis_dialect or "generic",
+        ),
+        (adapter_rules, InferredNullability) if adapter_rules else None,
     )
 
 

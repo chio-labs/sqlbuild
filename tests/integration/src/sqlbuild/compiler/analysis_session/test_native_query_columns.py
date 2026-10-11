@@ -17,7 +17,7 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
     infer_native_query_columns,
 )
-from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeModelAnalyses
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
@@ -131,7 +131,11 @@ def test_given_table_function_when_compiling_then_body_columns_match_declaration
 def test_given_session_without_model_analysis_when_assembling_then_raises_native_compiler_error(
     test_case: MissingSessionAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(project_assembly, "analyze_model_sql", lambda _request: ({}, None))
+    monkeypatch.setattr(
+        project_assembly,
+        "analyze_model_sql",
+        lambda _request: NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None),
+    )
 
     with pytest.raises(native_module.NativeCompilerError) as raised:
         _ = compiled_project(
