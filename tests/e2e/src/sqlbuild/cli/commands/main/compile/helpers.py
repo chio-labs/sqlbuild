@@ -4653,7 +4653,7 @@ def freeze_macro_call_store_environment(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(macro_bridge_class, "store_environment", lambda **_kwargs: "frozen")
     monkeypatch.setattr(macro_bridge_class, "unchanged_module_digests", lambda **_kwargs: {})
-    monkeypatch.setattr(macro_bridge_class.MacroBridge, "_observe_modules", lambda _bridge: True)
+    monkeypatch.setattr(macro_bridge_class.MacroBridge, "observe_modules", lambda _bridge: True)
     monkeypatch.setattr(call_store_module, "claim_first_compile", lambda: True)
 
 
