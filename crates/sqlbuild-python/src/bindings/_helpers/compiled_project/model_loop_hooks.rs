@@ -1,6 +1,5 @@
 //! A model's hooks, expanded by the project's hook code and checked natively.
 
-use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyTuple};
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
@@ -14,7 +13,6 @@ use crate::bindings::_helpers::compiled_project::model_loop_host::{ReferenceRow,
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{HOOK_KEYS, present};
 
 const EXPAND_HOOKS_CALLBACK: &str = "expand_hooks";
-const INDEX_ARGUMENT: &str = "index";
 const REFERENCES_METHOD: &str = "references";
 const STATEMENT_ATTRIBUTE: &str = "statement";
 
@@ -22,16 +20,12 @@ const STATEMENT_ATTRIBUTE: &str = "statement";
 pub(crate) fn expanded_hooks<'py>(
     model_loop: &NativeModelLoop,
     context: &LoopContext<'_, 'py>,
-    index: usize,
+    arguments: &[(&str, Bound<'py, PyAny>)],
     model: (&str, &str),
 ) -> PyResult<(Bound<'py, PyDict>, usize)> {
     let py: Python<'py> = context.host.py();
-    let (values, references): (Bound<'py, PyDict>, Vec<ReferenceRow>) = callback(
-        context.host,
-        EXPAND_HOOKS_CALLBACK,
-        &[(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())],
-    )?
-    .extract()?;
+    let (values, references): (Bound<'py, PyDict>, Vec<ReferenceRow>) =
+        callback(context.host, EXPAND_HOOKS_CALLBACK, arguments)?.extract()?;
     let external: Vec<Option<PyErr>> = external_errors(context, &references, model.1)?;
     let rows: Vec<(&str, &str, bool)> = references
         .iter()

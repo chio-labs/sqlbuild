@@ -464,3 +464,32 @@ pub struct DeclaredScope {
     pub owner: Option<ResourceIdentity>,
     pub owning_path: Option<String>,
 }
+
+/// A qualified identity as Python's `parse_identity` reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum QualifiedIdentity {
+    Resource(ResourceIdentity),
+    Declaration(DeclarationIdentity),
+}
+
+/// Why Python's `parse_identity` rejects a value; each names the value or the raw kind.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IdentityFailure {
+    /// `Qualified identity has no name: {value!r}`.
+    NoName,
+    /// `Unknown qualified identity kind: {raw_kind!r}`.
+    UnknownKind(String),
+    /// `Invalid private identity: {value!r}`.
+    InvalidPrivate,
+    /// `Expected a kind-qualified identity such as 'model:name': {value!r}`.
+    Unqualified,
+}
+
+/// Why Python's `normalize_path` raises `InvalidScopePathError`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScopePathFailure {
+    /// `Scope path must be project-relative: {path}`.
+    NotProjectRelative,
+    /// `Scope path escapes the project: {path}`.
+    EscapesProject,
+}

@@ -2,14 +2,13 @@
 
 import sys
 import unicodedata
-from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     build_native_model_config,
     native_model_config_session,
@@ -50,15 +49,12 @@ def compile_with_config_build_count(
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.PYTHON.value)
     build_counts: list[int] = [0]
-    original_build_model_config: Callable[..., CompileModelConfig] = (
-        attachment_core.build_native_model_config
+    native_loop_type: type = _native.NativeModelLoop
+    monkeypatch.setattr(
+        _native,
+        "NativeModelLoop",
+        lambda *arguments: _ConfigCountingLoop(native_loop_type(*arguments), build_counts),
     )
-
-    def counting_build_model_config(**kwargs: Any) -> CompileModelConfig:
-        build_counts[0] += 1
-        return original_build_model_config(**kwargs)
-
-    monkeypatch.setattr(attachment_core, "build_native_model_config", counting_build_model_config)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     return (
         build_compile_inputs(
@@ -67,6 +63,19 @@ def compile_with_config_build_count(
         ),
         build_counts[0],
     )
+
+
+@dataclass(frozen=True)
+class _ConfigCountingLoop:
+    """The native model loop, adding up the model config builds it runs."""
+
+    native_loop: Any
+    build_counts: list[int]
+
+    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int]]:
+        inputs, counts = self.native_loop.run(*arguments)
+        self.build_counts[0] += counts[1]
+        return inputs, counts
 
 
 def compile_input_schema_columns(inputs: CompileProjectInputs) -> tuple[SchemaColumn, ...]:

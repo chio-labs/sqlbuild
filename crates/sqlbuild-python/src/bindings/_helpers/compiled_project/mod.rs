@@ -1,5 +1,6 @@
 pub(crate) mod model_loop;
 pub(crate) mod model_loop_calls;
+pub(crate) mod model_loop_config;
 pub(crate) mod model_loop_contracts;
 pub(crate) mod model_loop_external;
 pub(crate) mod model_loop_header;
@@ -8,6 +9,7 @@ pub(crate) mod model_loop_host;
 pub(crate) mod model_loop_inputs;
 pub(crate) mod model_loop_opt_out;
 pub(crate) mod model_loop_schema;
+pub(crate) mod model_loop_visibility;
 pub(crate) mod project;
 pub(crate) mod registration;
 pub(crate) mod values;

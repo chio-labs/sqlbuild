@@ -21,6 +21,7 @@ use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
+use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
 use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
 use crate::bindings::_helpers::compiled_project::model_loop_header::{
     AttachedHeader, HeaderSource, header_schema,
@@ -37,6 +38,9 @@ use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_schema::{
     ModelSchema, model_schema, schema_column_names, schema_usages,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_visibility::{
+    ModelVisibility, VisibilityClasses, VisibilityModel,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::discovery::project_files::python_semantics;
@@ -56,7 +60,9 @@ const UNMANAGED_ATTRIBUTE: &str = "unmanaged";
 const TABLE_TYPE_ATTRIBUTE: &str = "table_type";
 const DECLARED_ATTRIBUTE: &str = "declared";
 const VALIDATE_METHOD: &str = "validate";
-const CONFIG_CALLBACK: &str = "config";
+const CONFIG_ARGUMENT: &str = "config";
+const VISIBLE_ARGUMENT: &str = "visible";
+const FILE_PATH_ARGUMENT: &str = "file_path";
 const CHECK_HOOKS_CALLBACK: &str = "check_hooks";
 const INTERPOLATE_CALLBACK: &str = "interpolate";
 const EXPAND_MACROS_CALLBACK: &str = "expand_macros";
@@ -70,6 +76,8 @@ const CODE_ARGUMENT: &str = "code";
 const ANALYSIS_CONFLICT: &str = "MODEL sql_analysis conflicts with legacy sql_validation";
 const ANALYSIS_CONFLICT_CODE: &str = "P003";
 
+/// Models finished natively, native config builds, and projected declaration contexts.
+type LoopCounts = (usize, usize, usize);
 /// The native validator, header contract classes, and the loop's Python classes.
 type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
 /// `(analysis switches, native syntax, (project config path, legacy schema files))`.
@@ -109,6 +117,12 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) external_resolver: Bound<'py, PyAny>,
     /// `SqlReferenceKind`.
     pub(crate) reference_kind: Bound<'py, PyAny>,
+    /// `functools.partial`, binding the model's file to its constant renderer.
+    pub(crate) partial: Bound<'py, PyAny>,
+    /// What a model's effective config is built from.
+    pub(crate) config: ConfigClasses<'py>,
+    /// What a model's visible declarations are resolved from.
+    pub(crate) visibility: VisibilityClasses<'py>,
 }
 
 /// The ordered model loop of one compile-input stage.
@@ -142,10 +156,11 @@ pub(crate) struct VisibleDeclarations<'py> {
 
 /// What the model loop knows about a model before finishing it.
 struct LoopModel<'a, 'py> {
-    index: usize,
     row: &'a ModelLoopRow,
     config: Bound<'py, PyAny>,
     visible: &'a VisibleDeclarations<'py>,
+    /// The index, config and declarations every host callback for the model receives.
+    arguments: &'a [(&'static str, Bound<'py, PyAny>)],
 }
 
 #[pymethods]
@@ -196,7 +211,7 @@ impl NativeModelLoop {
         mut project: PyRefMut<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
         models: Vec<ModelLoopRow>,
-    ) -> PyResult<(Vec<Bound<'py, PyAny>>, usize)> {
+    ) -> PyResult<(Vec<Bound<'py, PyAny>>, LoopCounts)> {
         let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
         let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
         let context: LoopContext<'_, 'py> = LoopContext {
@@ -206,34 +221,46 @@ impl NativeModelLoop {
         };
         let mut inputs: Vec<Bound<'py, PyAny>> = Vec::with_capacity(models.len());
         let mut finished_natively: usize = 0;
+        let configs: ModelConfigs<'py> = ModelConfigs::default();
+        let visibility: ModelVisibility<'py> = ModelVisibility::default();
         for (index, row) in models.into_iter().enumerate() {
-            let index_argument = [(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())];
-            let (config, declarations, consumer): (
-                Bound<'py, PyAny>,
-                Bound<'py, PyAny>,
-                Bound<'py, PyAny>,
-            ) = callback(&host, CONFIG_CALLBACK, &index_argument)?.extract()?;
-            let visible: VisibleDeclarations<'py> = VisibleDeclarations {
-                declarations,
-                consumer,
-            };
+            let ModelLoopRow((name, _, relative_path, file_path), header, _, _, _) = &row;
+            let (_, header_values, enums, constants) = header;
+            let visible: VisibleDeclarations<'py> = visibility.for_model(
+                &context,
+                &VisibilityModel {
+                    name,
+                    file_path,
+                    local: (enums.bind(py), constants.bind(py)),
+                },
+            )?;
+            let config: Bound<'py, PyAny> =
+                configs.effective(&context, header_values.bind(py), (name, relative_path))?;
+            let arguments = [
+                (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
+                (CONFIG_ARGUMENT, config.clone()),
+                (VISIBLE_ARGUMENT, visible.declarations.clone()),
+            ];
             let model: LoopModel<'_, 'py> = LoopModel {
-                index,
                 row: &row,
                 config,
                 visible: &visible,
+                arguments: &arguments,
             };
             let (input, facts) = match self.finish(py, &context, model)? {
                 Some(finished) => {
                     finished_natively += 1;
-                    plain_input(&host, index, row, finished)?
+                    plain_input(&host, &arguments, row, finished)?
                 }
-                None => attached_input(&host, &index_argument)?,
+                None => attached_input(&host, &arguments)?,
             };
             project.retain(facts);
             inputs.push(input);
         }
-        Ok((inputs, finished_natively))
+        Ok((
+            inputs,
+            (finished_natively, configs.builds(), visibility.projected()),
+        ))
     }
 }
 
@@ -246,24 +273,23 @@ impl NativeModelLoop {
         model: LoopModel<'_, 'py>,
     ) -> PyResult<Option<FinishedModel<'py>>> {
         let LoopModel {
-            index,
             row,
             config,
             visible,
+            arguments,
         } = model;
         let ModelLoopRow(
             (name, posix_path, relative_path, file_path),
-            locations,
+            (locations, _, _, _),
             authored_query,
             contents,
             scan,
         ) = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
-        let index_argument = [(INDEX_ARGUMENT, index.into_pyobject(py)?.into_any())];
         let hooked: bool = hook_presence(&values)?;
         if hooked {
-            callback(context.host, CHECK_HOOKS_CALLBACK, &index_argument)?;
+            callback(context.host, CHECK_HOOKS_CALLBACK, &arguments[..2])?;
         }
         let schema_usages: Vec<Bound<'py, PyAny>> = match &schema {
             Some(schema) => {
@@ -275,9 +301,17 @@ impl NativeModelLoop {
             None => Vec::new(),
         };
         let interpolated: String =
-            callback(context.host, INTERPOLATE_CALLBACK, &index_argument)?.extract()?;
+            callback(context.host, INTERPOLATE_CALLBACK, &arguments[..1])?.extract()?;
         let (references, stop) = scan.clone().unwrap_or_default();
-        let render_constant: Bound<'py, PyAny> = context.host.getattr(CONSTANT_TEXT_CALLBACK)?;
+        let file_keyword: Bound<'py, PyDict> = PyDict::new(py);
+        file_keyword.set_item(
+            FILE_PATH_ARGUMENT,
+            context.classes.path_class.call1((file_path,))?,
+        )?;
+        let render_constant: Bound<'py, PyAny> = context.classes.partial.call(
+            (context.host.getattr(CONSTANT_TEXT_CALLBACK)?,),
+            Some(&file_keyword),
+        )?;
         let expansion_classes: ExpansionClasses<'py> = ExpansionClasses {
             usage_record: context.classes.usage_record.clone(),
             compile_error: context.classes.compile_error.clone(),
@@ -304,7 +338,8 @@ impl NativeModelLoop {
                 context.host,
                 EXPAND_MACROS_CALLBACK,
                 &[
-                    (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
+                    arguments[0].clone(),
+                    arguments[2].clone(),
                     (
                         SQL_ARGUMENT,
                         declarations
@@ -380,7 +415,7 @@ impl NativeModelLoop {
             (&references, declared_columns),
         )?;
         let (values, hook_statements): (Bound<'py, PyDict>, usize) = if hooked {
-            expanded_hooks(self, context, index, (name, relative_path))?
+            expanded_hooks(self, context, arguments, (name, relative_path))?
         } else {
             (values, 0)
         };

@@ -1,7 +1,7 @@
 //! The Python host the loop hands finished models and user-code steps to.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject};
 use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
 use sqlbuild_analysis::compiled_project::models::{
@@ -26,23 +26,21 @@ const FALLBACK_CALLBACK: &str = "fallback";
 const MODEL_ROW_CALLBACK: &str = "model_row";
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
 const LAYER_SCHEMA_ATTRIBUTE: &str = "layer_schema";
-const INDEX_ARGUMENT: &str = "index";
 const MODEL_INPUT_ARGUMENT: &str = "model_input";
 const VALUES_ARGUMENT: &str = "values";
 const REFERENCES_ARGUMENT: &str = "references";
 const QUERY_SQL_ARGUMENT: &str = "query_sql";
-const DESCRIPTION_ARGUMENT: &str = "description";
-const SCHEMA_ARGUMENT: &str = "schema";
+const HEADER_ARGUMENT: &str = "header";
 const HOOK_STATEMENTS_ARGUMENT: &str = "hook_statements";
 const DECLARATIONS_ARGUMENT: &str = "declarations";
-const ENUM_COLUMNS_ARGUMENT: &str = "enum_columns";
 const ANALYSIS_ARGUMENT: &str = "analysis";
 
 /// `((name, POSIX path, relative path, file path), column locations, query, contents, scan)`.
 #[derive(FromPyObject)]
 pub(crate) struct ModelLoopRow(
     pub(crate) (String, String, String, String),
-    pub(crate) Py<PyDict>,
+    /// Header column locations, header values, and the model's own enums and constants.
+    pub(crate) (Py<PyDict>, Py<PyDict>, Py<PyAny>, Py<PyAny>),
     pub(crate) String,
     pub(crate) String,
     pub(crate) Option<(Vec<ScannedReference>, Option<u8>)>,
@@ -87,7 +85,7 @@ pub(crate) fn callback<'py>(
 /// The host's Python view of a natively finished model, and the facts the project retains.
 pub(crate) fn plain_input<'py>(
     host: &Bound<'py, PyAny>,
-    index: usize,
+    model_arguments: &[(&str, Bound<'py, PyAny>)],
     row: ModelLoopRow,
     finished: FinishedModel<'py>,
 ) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
@@ -102,8 +100,8 @@ pub(crate) fn plain_input<'py>(
         Some(schema) => schema.enum_columns.keys().extract()?,
         None => Vec::new(),
     };
-    let arguments = [
-        (INDEX_ARGUMENT, index.into_pyobject(py)?.into_any()),
+    let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = model_arguments.to_vec();
+    arguments.extend([
         (VALUES_ARGUMENT, stripped.clone().into_any()),
         (
             REFERENCES_ARGUMENT,
@@ -114,12 +112,19 @@ pub(crate) fn plain_input<'py>(
             finished.query_sql.as_str().into_pyobject(py)?.into_any(),
         ),
         (
-            DESCRIPTION_ARGUMENT,
-            finished.header.description.as_deref().into_pyobject(py)?,
-        ),
-        (
-            SCHEMA_ARGUMENT,
-            schema_argument(py, finished.header.schema.as_ref())?,
+            HEADER_ARGUMENT,
+            PyTuple::new(
+                py,
+                [
+                    finished.header.description.as_deref().into_pyobject(py)?,
+                    schema_argument(py, finished.header.schema.as_ref())?,
+                    finished.header.schema.as_ref().map_or_else(
+                        || PyDict::new(py).into_any(),
+                        |schema| schema.enum_columns.clone().into_any(),
+                    ),
+                ],
+            )?
+            .into_any(),
         ),
         (
             ANALYSIS_ARGUMENT,
@@ -128,13 +133,6 @@ pub(crate) fn plain_input<'py>(
         (
             HOOK_STATEMENTS_ARGUMENT,
             finished.hook_statements.into_pyobject(py)?.into_any(),
-        ),
-        (
-            ENUM_COLUMNS_ARGUMENT,
-            finished.header.schema.as_ref().map_or_else(
-                || PyDict::new(py).into_any(),
-                |schema| schema.enum_columns.clone().into_any(),
-            ),
         ),
         (
             DECLARATIONS_ARGUMENT,
@@ -147,7 +145,7 @@ pub(crate) fn plain_input<'py>(
                 .into_pyobject(py)?
                 .into_any(),
         ),
-    ];
+    ]);
     let (input, (enums, constants)): PlainInputPy<'py> =
         callback(host, PLAIN_INPUT_CALLBACK, &arguments)?.extract()?;
     let (values, encoding_error) = config_values(&stripped);
@@ -179,9 +177,9 @@ pub(crate) fn plain_input<'py>(
 /// The attachment's model input, after all its callbacks ran, and the facts read from it.
 pub(crate) fn attached_input<'py>(
     host: &Bound<'py, PyAny>,
-    index_argument: &[(&str, Bound<'py, PyAny>)],
+    model_arguments: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
-    let input: Bound<'py, PyAny> = callback(host, FALLBACK_CALLBACK, index_argument)?;
+    let input: Bound<'py, PyAny> = callback(host, FALLBACK_CALLBACK, model_arguments)?;
     let row: ModelInputPy<'_> = callback(
         host,
         MODEL_ROW_CALLBACK,

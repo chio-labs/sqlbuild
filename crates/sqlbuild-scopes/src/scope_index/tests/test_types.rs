@@ -106,3 +106,13 @@ pub(super) struct PathVisibleTestCase {
     pub(super) path: &'static str,
     pub(super) expected_visible: bool,
 }
+
+/// One qualified value and the identity or failure Python's `parse_identity` gives it.
+pub(super) struct ParseIdentityTestCase {
+    pub(super) description: &'static str,
+    pub(super) value: &'static str,
+    pub(super) expected_identity: Result<
+        crate::scope_index::models::QualifiedIdentity,
+        crate::scope_index::models::IdentityFailure,
+    >,
+}

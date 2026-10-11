@@ -42,6 +42,7 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
+from sqlbuild.compiler.compiled_project.main._native_config_classes import native_config_classes
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFactory,
     DiscoveredSchemaFile,
@@ -65,8 +66,6 @@ from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
     ProjectConfig,
-    ResolvedTableType,
-    ResolvedTimeTravelRetention,
     SchemaAuditInstance,
     SchemaColumn,
     SchemaDynamicColumnFamily,
@@ -75,7 +74,6 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TimeTravelRetentionSource
 
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _TABLE_BACKED_MATERIALIZATIONS: tuple[str, ...] = (
@@ -695,19 +693,6 @@ def native_model_config_session(
     )
 
 
-def native_path_default(
-    *, session: NativeModelConfigSession, model_file: DiscoveredSqlModelFile
-) -> str | None:
-    """Select a model's path default natively, raising Python's error for equal matches."""
-
-    selected: str | _native.NativeConfigError | None = session.builder.path_default(
-        str(model_file.relative_path)
-    )
-    if isinstance(selected, _native.NativeConfigError):
-        raise native_config_error(error=selected)
-    return selected
-
-
 def build_native_model_config(
     *,
     session: NativeModelConfigSession,
@@ -716,48 +701,15 @@ def build_native_model_config(
 ) -> CompileModelConfig:
     """Build a model's effective config natively, raising its first config error."""
 
-    built: _BuiltConfig | _native.NativeConfigError = session.builder.build(
-        model_file.header_values, matched_path_default, model_file.file_path.stem
+    built: object = session.builder.model_config(
+        model_file.header_values,
+        (matched_path_default, model_file.file_path.stem),
+        native_config_classes(session=session, record_template_reads=record_template_reads),
     )
     report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds")
     if isinstance(built, _native.NativeConfigError):
         raise native_config_error(error=built)
-    values, header_keys, namespace, overrides, reads = built
-    logical_schema, layer_schema_configured, logical_database = namespace
-    retention_override, table_type_override = overrides
-    record_template_reads(tuple(reads))
-    materialized: object | None = values.get(_MATERIALIZED_CONFIG_KEY)
-    inherited_retention, inherited_table_type = session.inherited_storage[
-        materialized
-        if isinstance(materialized, str) and materialized in _TABLE_BACKED_MATERIALIZATIONS
-        else None
-    ]
-    return CompileModelConfig(
-        values=values,
-        model_header_keys=header_keys,
-        matched_path_default=matched_path_default,
-        logical_schema=logical_schema,
-        layer_schema=logical_schema if layer_schema_configured else None,
-        logical_database=logical_database,
-        time_travel_retention=(
-            inherited_retention
-            if retention_override is None
-            else ResolvedTimeTravelRetention(
-                desired_days=retention_override[0],
-                unmanaged=retention_override[1],
-                source=TimeTravelRetentionSource.MODEL,
-            )
-        ),
-        table_type=(
-            inherited_table_type
-            if table_type_override is None
-            else ResolvedTableType(
-                value=TableType(table_type_override),
-                source=TableTypeSource.MODEL,
-                declared=True,
-            )
-        ),
-    )
+    return cast(CompileModelConfig, built)
 
 
 def native_model_validation(

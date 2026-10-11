@@ -28,6 +28,7 @@ from sqlbuild.compiler.compile._helpers.analysis.compact import native_section
 from sqlbuild.compiler.compile._helpers.assembly import binding_waves
 from sqlbuild.compiler.compile._helpers.assembly import project as project_assembly
 from sqlbuild.compiler.compile._helpers.assembly.binding_waves import analyze_binding_waves
+from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile._helpers.sharing import binding as binding_sharing
 from sqlbuild.compiler.compile.classes.binding_dataflow import BindingDataflow
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -749,3 +750,33 @@ def _preparation_payload(preparation: CompactBatchPreparation) -> bytes:
         },
         option=orjson.OPT_SORT_KEYS,
     )
+
+
+def count_declaration_resolutions(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Count declaration contexts the model loop projects and the attachment resolves."""
+
+    counts: list[int] = [0]
+    native_loop_type: type = _native.NativeModelLoop
+    resolve: Callable[..., object] = attachment_core.resolve_declaration_context
+
+    def counting_resolve(**kwargs: Any) -> object:
+        counts[0] += 1
+        return resolve(**kwargs)
+
+    monkeypatch.setattr(
+        _native,
+        "NativeModelLoop",
+        lambda *arguments: _ResolutionCountingLoop(native_loop_type(*arguments), counts),
+    )
+    monkeypatch.setattr(attachment_core, "resolve_declaration_context", counting_resolve)
+    return counts
+
+
+class _ResolutionCountingLoop(NamedTuple):
+    native_loop: Any
+    counts: list[int]
+
+    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int]]:
+        inputs, counts = self.native_loop.run(*arguments)
+        self.counts[0] += counts[2]
+        return inputs, counts

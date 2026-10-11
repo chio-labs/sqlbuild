@@ -49,3 +49,13 @@ class ModelLoopErrorTestCase:
     model_sql: str
     expected_message: str
     expected_code: str
+
+
+@dataclass(frozen=True)
+class ModelPathScopeErrorTestCase:
+    """A model path the scope lookup rejects while the loop resolves its declarations."""
+
+    description: str
+    model_path: str
+    expected_message: str
+    expected_code: str

@@ -41,21 +41,12 @@ from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import
 )
 from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
 from sqlbuild.compiler.planner.types import ContractPolicy
-from sqlbuild.compiler.scopes.constants import CURRENT_PATH_COMPONENT, QUALIFIED_IDENTITY_SEPARATOR
-from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
-from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
-    resolve_scope_declaration_visibility,
-)
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
-    DeclarationRecord,
-    OwnershipRoot,
     ResourceIdentity,
-    ResourceRecord,
     ScopeIndex,
     ScopeLookup,
-    ScopeTargetQuery,
     UsageRecord,
     VisibilityRecord,
 )
@@ -87,7 +78,6 @@ _CONTEXT: str = "Enum and constant expansion"
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
 _ENUM_REFERENCE_KIND: str = "enum"
 _CONSTANT_REFERENCE_KIND: str = "const"
-_PATH_CACHE_PREFIX: str = "<path>"
 
 
 def build_public_declaration_indexes(
@@ -186,122 +176,12 @@ def resolve_declaration_context(
 ) -> DeclarationResolutionContext:
     """Project canonical visibility for one authored path onto runtime declaration values."""
 
-    target_path: Path = file_path
-    if resolver.project_dir is not None and file_path.is_absolute():
-        try:
-            target_path = file_path.relative_to(resolver.project_dir)
-        except ValueError:
-            target_path = file_path
-    resources: tuple[ResourceRecord, ...] = (
-        resolver.lookup.resources.get(resource, ())
-        if resource is not None
-        else resolver.lookup.resources_by_path.get(target_path.as_posix(), ())
-    )
-    cache_key: tuple[str, str] | None = None
-    if (
-        len(resources) == 1
-        and resolver.resource_specific is not None
-        and resources[0].identity not in resolver.resource_specific
-    ):
-        cache_key = (Path(resources[0].path).parent.as_posix(), resources[0].ownership_root.path)
-        cached: DeclarationResolutionContext | None = resolver.contexts_by_directory.get(cache_key)
-        if cached is not None:
-            return _rebind_declaration_context(context=cached, consumer=resources[0].identity)
-    elif not resources and resource is None:
-        cache_key = (_PATH_CACHE_PREFIX, target_path.as_posix())
-        cached_path_context: DeclarationResolutionContext | None = (
-            resolver.contexts_by_directory.get(cache_key)
-        )
-        if cached_path_context is not None:
-            return cached_path_context
-    matches: tuple[ResourceRecord, ...] = resources
-    consumer: ResourceIdentity | None = resource or (resources[0].identity if resources else None)
-    if not resources or _scope_query_parses_identity(resource=resource, target_path=target_path):
-        matches, consumer = _queried_matches(
-            resolver=resolver, target_path=target_path, resource=resource
-        )
-    context: DeclarationResolutionContext = resolver.native_contexts.context(
-        list(matches), consumer
-    )
-    report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_contexts")
-    if cache_key is not None:
-        resolver.cache_context(key=cache_key, context=context)
+    context: DeclarationResolutionContext
+    projected: bool
+    context, projected = resolver.native_contexts.resolve(resolver, file_path, resource)
+    if projected:
+        report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_contexts")
     return context
-
-
-def _scope_query_parses_identity(*, resource: ResourceIdentity | None, target_path: Path) -> bool:
-    """Whether the scope query reads the path target as a qualified identity."""
-
-    return resource is None and QUALIFIED_IDENTITY_SEPARATOR in str(target_path)
-
-
-def _queried_matches(
-    *,
-    resolver: DeclarationScopeResolver,
-    target_path: Path,
-    resource: ResourceIdentity | None,
-) -> tuple[tuple[ResourceRecord, ...], ResourceIdentity | None]:
-    """The resources a scope query matches, or an unknown path's lexical folder record."""
-
-    query: ScopeTargetQuery = resolve_scope_declaration_visibility(
-        lookup=resolver.lookup, target=resource or target_path
-    ).target
-    if not query.unknown:
-        return query.matches, resource or (query.matches[0].identity if query.matches else None)
-    definition_record: DeclarationRecord | None = next(
-        (
-            record
-            for record in resolver.lookup.index.declarations
-            if record.path == target_path.as_posix() and record.scope is not ScopeKind.PRIVATE
-        ),
-        None,
-    )
-    lexical_path: str = (
-        Path(declaration_lexical_path(record=definition_record)).as_posix()
-        if definition_record is not None
-        else target_path.as_posix()
-    )
-    return (
-        ResourceRecord(
-            identity=ResourceIdentity(ResourceKind.MODEL, f"<path:{lexical_path}>"),
-            path=lexical_path,
-            ownership_root=OwnershipRoot(path=CURRENT_PATH_COMPONENT),
-        ),
-    ), None
-
-
-def _rebind_declaration_context(
-    *, context: DeclarationResolutionContext, consumer: ResourceIdentity
-) -> DeclarationResolutionContext:
-    return replace(
-        context,
-        consumer=consumer,
-        enums=dict(context.enums),
-        constants=dict(context.constants),
-        macros=dict(context.macros),
-        macro_records=dict(context.macro_records),
-        inaccessible_enums=dict(context.inaccessible_enums),
-        inaccessible_constants=dict(context.inaccessible_constants),
-        inaccessible_macros=dict(context.inaccessible_macros),
-        enum_visibility=_rebind_visibility(
-            records_by_name=context.enum_visibility, consumer=consumer
-        ),
-        constant_visibility=_rebind_visibility(
-            records_by_name=context.constant_visibility, consumer=consumer
-        ),
-        macro_visibility=_rebind_visibility(
-            records_by_name=context.macro_visibility, consumer=consumer
-        ),
-    )
-
-
-def _rebind_visibility(
-    *, records_by_name: dict[str, tuple[VisibilityRecord, ...]], consumer: ResourceIdentity
-) -> dict[str, tuple[VisibilityRecord, ...]]:
-    result: dict[str, tuple[VisibilityRecord, ...]] = {}
-    for name, records in records_by_name.items():
-        result[name] = tuple(replace(record, resource=consumer) for record in records)
-    return result
 
 
 def declaration_usage_records(

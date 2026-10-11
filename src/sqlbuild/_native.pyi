@@ -78,7 +78,7 @@ class NativeModelLoop:
         project: NativeCompiledProject,
         host: object,
         models: list[tuple[object, ...]],
-    ) -> tuple[list[Any], int]: ...
+    ) -> tuple[list[Any], tuple[int, int, int]]: ...
 
 class NativeProjectGraph:
     @staticmethod
@@ -203,9 +203,11 @@ class NativeDeclarationContexts:
         positions: list[tuple[object, ...]],
         table: tuple[list[int], dict[str, list[int]], dict[str, list[int]]],
         classes: dict[str, object],
-        lookup: dict[str, object],
+        lookups: tuple[dict[str, object], dict[str, object]],
     ) -> None: ...
-    def context(self, matches: Sequence[Any], consumer: object) -> Any: ...
+    def resolve(
+        self, resolver: object, file_path: object, resource: object | None = None
+    ) -> tuple[Any, bool]: ...
 
 class NativeScopeIndex:
     def records(
@@ -304,19 +306,12 @@ class NativeModelConfigBuilder:
         target: tuple[tuple[str | None, str], tuple[str | None, str | None] | None],
         python: tuple[tuple[int, int], str],
     ) -> None: ...
-    def path_default(self, model_path: str) -> str | NativeConfigError | None: ...
-    def build(
-        self, header: dict[str, object], matched_path_default: str | None, model_name: str
-    ) -> (
-        tuple[
-            dict[str, object],
-            tuple[str, ...],
-            tuple[str | None, bool, str | None],
-            tuple[tuple[int | None, bool] | None, str | None],
-            list[tuple[str, str]],
-        ]
-        | NativeConfigError
-    ): ...
+    def model_config(
+        self,
+        header: dict[str, object],
+        model: tuple[str | None, str],
+        classes: dict[str, object],
+    ) -> object | NativeConfigError: ...
 
 class NativeModelValidator:
     def __init__(

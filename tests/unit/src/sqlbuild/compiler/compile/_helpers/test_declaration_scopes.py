@@ -9,7 +9,6 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -29,13 +28,11 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     ResourceIdentity,
     UsageRecord,
-    VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
     ResourceKind,
     UsageKind,
-    VisibilityReason,
 )
 from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
@@ -51,7 +48,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
     compile_project_inputs,
     render_compile_diagnostics,
-    visible_declarations_without_runtime_values,
+    usage_consumers,
 )
 
 _PROJECT_FILE: str = """
@@ -66,65 +63,47 @@ sql_validation = false
 
 @pytest.mark.parametrize(
     "test_case",
-    [ExpectedBooleanTestCase(description="immutable facts are reused", expected_result=True)],
-    ids=lambda case: case.description,
-)
-def test_given_no_visibility_records_when_rebinding_then_reuses_immutable_facts(
-    test_case: ExpectedBooleanTestCase,
-) -> None:
-    declarations: attachment_core._VisibleModelDeclarations = (
-        visible_declarations_without_runtime_values()
-    )
-
-    rebound: attachment_core._VisibleModelDeclarations = (
-        attachment_core._rebind_visible_declarations(
-            declarations=declarations,
-            consumer=ResourceIdentity(ResourceKind.MODEL, "orders"),
-        )
-    )
-
-    assert (rebound is declarations) is test_case.expected_result
-
-
-@pytest.mark.parametrize(
-    "test_case",
     [
         ExpectedBooleanTestCase(
-            description="new consumer gets independent facts", expected_result=True
+            description="models sharing a folder each record their own enum usage",
+            expected_result=True,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_visibility_record_when_rebinding_then_projects_new_consumer_independently(
+def test_given_models_in_one_folder_when_compiling_then_folder_visibility_is_rebound_per_model(
     test_case: ExpectedBooleanTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
-    original_consumer: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, "customers")
-    new_consumer: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, "orders")
-    declaration: DeclarationIdentity = DeclarationIdentity(DeclarationKind.ENUM, "status")
-    declarations: attachment_core._VisibleModelDeclarations = (
-        visible_declarations_without_runtime_values(
-            enum_visibility={
-                "status": (
-                    VisibilityRecord(
-                        resource=original_consumer,
-                        declaration=declaration,
-                        reason=VisibilityReason.GLOBAL,
-                    ),
-                )
-            }
-        )
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "models/domain/_enums/status.sql": "ENUM (name status, members [OPEN, SHIPPED]);",
+            "models/domain/customers.sql": (
+                'MODEL (description "Test model customers.");\n'
+                'SELECT @enum("status").OPEN AS status\n'
+            ),
+            "models/domain/orders.sql": (
+                'MODEL (description "Test model orders.");\n'
+                'SELECT @enum("status").SHIPPED AS status\n'
+            ),
+        },
     )
 
-    rebound: attachment_core._VisibleModelDeclarations = (
-        attachment_core._rebind_visible_declarations(
-            declarations=declarations,
-            consumer=new_consumer,
-        )
-    )
+    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
 
-    assert (rebound is not declarations) is test_case.expected_result
-    assert rebound.enum_visibility["status"][0].resource == new_consumer
-    assert declarations.enum_visibility["status"][0].resource == original_consumer
+    consumers: list[set[ResourceIdentity | DeclarationIdentity]] = [
+        usage_consumers(model_input) for model_input in inputs.model_inputs
+    ]
+    assert (
+        consumers
+        == [
+            {ResourceIdentity(ResourceKind.MODEL, "customers")},
+            {ResourceIdentity(ResourceKind.MODEL, "orders")},
+        ]
+    ) is test_case.expected_result
 
 
 @pytest.mark.parametrize(

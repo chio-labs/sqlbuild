@@ -11,7 +11,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,
 )
@@ -88,7 +87,6 @@ from sqlbuild.compiler.scopes.models import (
     ResourceRecord,
     ScopeIndex,
     ScopeLookup,
-    VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -120,26 +118,6 @@ DUCKDB_DECLARATION_EXPANSION_CONTEXT: DeclarationExpansionContext = DeclarationE
     value_renderer=DUCKDB_COMPILE_ADAPTER_CONTEXT.value_renderer,
     collection_rendering=DUCKDB_COMPILE_ADAPTER_CONTEXT.collection_rendering,
 )
-
-
-def visible_declarations_without_runtime_values(
-    *, enum_visibility: dict[str, tuple[VisibilityRecord, ...]] | None = None
-) -> attachment_core._VisibleModelDeclarations:
-    """Build declaration visibility facts without runtime declaration values."""
-
-    return attachment_core._VisibleModelDeclarations(
-        local_enums={},
-        local_constants={},
-        enums={},
-        constants={},
-        inaccessible_enums={},
-        inaccessible_constants={},
-        enum_visibility=enum_visibility or {},
-        constant_visibility={},
-        macros={},
-        macro_records={},
-        inaccessible_macros={},
-    )
 
 
 def direct_orders_lineage(*column_names: str) -> tuple[CompiledLineageColumnFact, ...]:
@@ -846,3 +824,9 @@ def extract_test_sql(
     return extract_unexpanded_sql_test(
         sql=sql, file_label=file_label, mode=mode, syntax=SqlLexicalSyntax()
     )[0]
+
+
+def usage_consumers(model_input: CompileModelInput) -> set[ResourceIdentity | DeclarationIdentity]:
+    """The consumers a model input's declaration usages are recorded for."""
+
+    return {usage.consumer for usage in model_input.declaration_usages}

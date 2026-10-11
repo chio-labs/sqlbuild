@@ -235,7 +235,7 @@ def build_inputs_with_native_loop(
 
     loops: dict[bool, Callable[..., object]] = {
         True: lambda *arguments: _CountingLoop(native_loop_type(*arguments), finished),
-        False: lambda *_: _AttachmentLoop(finished),
+        False: lambda *arguments: _AttachmentLoop(native_loop_type(*arguments), finished),
     }
 
     with monkeypatch.context() as patch:
@@ -259,29 +259,49 @@ class _CountingLoop:
     native_loop: Any
     finished: list[int]
 
-    def run(self, *arguments: object) -> tuple[list[object], int]:
-        inputs, count = self.native_loop.run(*arguments)
-        self.finished.append(count)
-        return inputs, count
+    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int]]:
+        inputs, counts = self.native_loop.run(*arguments)
+        self.finished.append(counts[0])
+        return inputs, counts
 
 
 @dataclass(frozen=True)
 class _AttachmentLoop:
-    """The model loop as the attachment alone runs it, retaining facts from each model input."""
+    """The model loop with every model built by the attachment from its native config.
 
+    The native loop still resolves each model's config and visible declarations and runs the
+    steps before a model is finished, as a handed-over model's do; the attachment then builds the
+    model input, and the project retains facts read back from that input.
+    """
+
+    native_loop: Any
     finished: list[int]
 
     def run(
         self, project: _native.NativeCompiledProject, host: Any, models: list[object]
-    ) -> tuple[list[object], int]:
-        inputs: list[object] = []
-        for index in range(len(models)):
-            _ = host.config(index=index)
-            model_input: object = host.fallback(index=index)
+    ) -> tuple[list[object], tuple[int, int, int]]:
+        inputs, counts = self.native_loop.run(
+            _native.NativeCompiledProject(), _FallbackHost(host), models
+        )
+        for model_input in inputs:
             project.record_model(host.model_row(model_input=model_input))
-            inputs.append(model_input)
         self.finished.append(0)
-        return inputs, 0
+        return inputs, (0, counts[1], counts[2])
+
+
+@dataclass(frozen=True)
+class _FallbackHost:
+    """A host whose natively finished models are built by the attachment instead."""
+
+    host: Any
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.host, name)
+
+    def plain_input(
+        self, *, index: int, config: object, visible: object, **_: object
+    ) -> tuple[object, tuple[list[object], list[object]]]:
+        return self.host.fallback(index=index, config=config, visible=visible), ([], [])
 
 
 def expansions(inputs: CompileProjectInputs) -> list[tuple[object, object]]:

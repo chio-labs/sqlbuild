@@ -16,13 +16,10 @@ from sqlbuild.compiler.compile._helpers.analysis.validation import validate_sql_
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     _model_sql_validation_gate,
     _resolve_model_schema,
-    build_layered_model_values,
     build_model_header_schema_entry,
-    build_native_model_config,
     find_schema_model_match,
     legacy_schema_rows,
     native_model_config_session,
-    native_path_default,
     strip_model_header_metadata_from_config,
     validate_declared_schema_models_are_attached,
     validate_model_config,
@@ -62,7 +59,6 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     reject_cursor_intrinsics,
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
-    build_model_declaration_indexes,
     expand_scanned_declaration_references,
     render_constant_declaration,
     resolve_declaration_context,
@@ -78,12 +74,9 @@ from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     interpolate_sql_batch,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import (
-    contains_template_data,
     expand_effective_vars,
     expand_template_data,
-)
-from sqlbuild.compiler.compile.constants import (
-    MACRO_CALL_PATTERN,
+    record_template_reads,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroArgumentError
 from sqlbuild.compiler.compile.models import (
@@ -108,7 +101,6 @@ from sqlbuild.compiler.compile.models import (
     ModelValidationRequest,
     ModelValidatorContext,
     NativeModelConfigInputs,
-    NativeModelConfigSession,
     SqlAnalysisOptOutRequest,
     SqlInterpolation,
     SqlReferenceOrigin,
@@ -156,14 +148,11 @@ from sqlbuild.compiler.scopes.models import (
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
     ResourceKind,
-    ScopeKind,
     UsageKind,
-    VisibilityReason,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.spec.contracts.models import (
-    DefaultsConfig,
     LocalConfig,
     ProjectConfig,
     SchemaColumn,
@@ -176,11 +165,6 @@ from sqlbuild.spec.contracts.models import (
 
 _HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
-_MODEL_HEADER_COLUMNS_KEY: str = "columns"
-_MODEL_HEADER_DESCRIPTION_KEY: str = "description"
-_REUSABLE_MODEL_HEADER_KEYS: frozenset[str] = frozenset(
-    {_MODEL_HEADER_COLUMNS_KEY, _MODEL_HEADER_DESCRIPTION_KEY}
-)
 _HOOK_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset(
     {"ctx", "context", "_ctx", "hook_context"}
 )
@@ -199,50 +183,6 @@ class _VisibleModelDeclarations:
     macros: dict[str, LoadedMacro]
     macro_records: dict[str, DeclarationRecord]
     inaccessible_macros: dict[str, DeclarationRecord]
-
-
-@dataclass
-class _VisibleModelDeclarationCache:
-    context: ModelInputBuildContext
-    reusable_by_parent: bool
-    resource_specific: frozenset[ResourceIdentity] = frozenset()
-    by_parent: dict[Path, _VisibleModelDeclarations] = field(default_factory=dict)
-
-    @classmethod
-    def build(cls, context: ModelInputBuildContext) -> _VisibleModelDeclarationCache:
-        resolver: DeclarationScopeResolver | None = context.declaration_resolver
-        return cls(
-            context=context,
-            reusable_by_parent=resolver is not None,
-            resource_specific=(
-                frozenset(
-                    declaration.identity.owner
-                    for declaration in resolver.lookup.index.declarations
-                    if declaration.scope is ScopeKind.PRIVATE
-                    and declaration.identity.owner is not None
-                )
-                | frozenset(resolver.lookup.grants_by_resource)
-                if resolver is not None
-                else frozenset()
-            ),
-        )
-
-    def for_model(
-        self, *, model_file: DiscoveredSqlModelFile, consumer: ResourceIdentity
-    ) -> _VisibleModelDeclarations:
-        parent: Path = model_file.file_path.parent
-        if consumer in self.resource_specific:
-            return _build_visible_declaration_indexes(model_file=model_file, context=self.context)
-        cached: _VisibleModelDeclarations | None = self.by_parent.get(parent)
-        if self.reusable_by_parent and cached is not None:
-            return _rebind_visible_declarations(declarations=cached, consumer=consumer)
-        resolved: _VisibleModelDeclarations = _build_visible_declaration_indexes(
-            model_file=model_file,
-            context=self.context,
-        )
-        if self.reusable_by_parent:
-            self.by_parent[parent] = resolved
-        return resolved
 
 
 @dataclass(frozen=True)
@@ -269,8 +209,6 @@ class _ModelInputLoop:
     validation_context: _ModelValidationContext
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...]
-    reusable_config_cache: _ReusableModelConfigCache
-    declaration_cache: _VisibleModelDeclarationCache
     native_declaration_references: dict[Path, NativeDeclarationScan]
 
 
@@ -305,164 +243,56 @@ class _HookExpansionFacts:
 
 
 @dataclass
-class _ReusableModelConfigCache:
-    defaults: DefaultsConfig
-    path_defaults: dict[str, dict[str, object]]
-    target_config: TargetConfig | None
-    reusable_by_path_default: dict[str | None, bool] = field(default_factory=dict)
-    inherited_values_by_path_default: dict[str | None, dict[str, object]] = field(
-        default_factory=dict
-    )
-    reusable_metadata_by_identity: dict[int, tuple[object, bool]] = field(default_factory=dict)
-    configs: dict[str | None, CompileModelConfig] = field(default_factory=dict)
-
-    def get(
-        self,
-        *,
-        matched_path_default: str | None,
-        model_header_values: dict[str, object],
-    ) -> CompileModelConfig | None:
-        reusable_metadata: dict[str, object] | None = self._reusable_metadata(model_header_values)
-        if reusable_metadata is None or not self._is_reusable(matched_path_default):
-            return None
-        cached: CompileModelConfig | None = self.configs.get(matched_path_default)
-        if cached is None:
-            return None
-        values: dict[str, object] = dict(cached.values)
-        values.update(reusable_metadata)
-        return replace(cached, values=values)
-
-    def remember(
-        self,
-        *,
-        matched_path_default: str | None,
-        model_header_values: dict[str, object],
-        config: CompileModelConfig,
-    ) -> None:
-        reusable_metadata: dict[str, object] | None = self._reusable_metadata(model_header_values)
-        if reusable_metadata is None or not self._is_reusable(matched_path_default):
-            return
-        inherited_values: dict[str, object] = self.inherited_values_by_path_default[
-            matched_path_default
-        ]
-        reusable_values: dict[str, object] = {
-            key: value for key, value in config.values.items() if key not in reusable_metadata
-        }
-        reusable_values.update(
-            (key, inherited_values[key]) for key in reusable_metadata if key in inherited_values
-        )
-        self.configs[matched_path_default] = replace(config, values=reusable_values)
-
-    def _reusable_metadata(
-        self,
-        model_header_values: dict[str, object],
-    ) -> dict[str, object] | None:
-        if not model_header_values:
-            return {}
-        if not model_header_values.keys() <= _REUSABLE_MODEL_HEADER_KEYS:
-            return None
-        if _contains_dynamic_or_unsupported_reusable_metadata(
-            model_header_values.get(_MODEL_HEADER_DESCRIPTION_KEY)
-        ):
-            return None
-        if _MODEL_HEADER_COLUMNS_KEY not in model_header_values:
-            return model_header_values
-        metadata: object = model_header_values[_MODEL_HEADER_COLUMNS_KEY]
-        cached: tuple[object, bool] | None = self.reusable_metadata_by_identity.get(id(metadata))
-        if cached is not None and cached[0] is metadata:
-            return model_header_values if cached[1] else None
-        reusable: bool = not _contains_dynamic_or_unsupported_reusable_metadata(metadata)
-        self.reusable_metadata_by_identity[id(metadata)] = (metadata, reusable)
-        if not reusable:
-            return None
-        return model_header_values
-
-    def _is_reusable(self, matched_path_default: str | None) -> bool:
-        cached: bool | None = self.reusable_by_path_default.get(matched_path_default)
-        if cached is not None:
-            return cached
-        layered_values: dict[str, object] = build_layered_model_values(
-            defaults=self.defaults,
-            path_defaults=self.path_defaults,
-            matched_path_default=matched_path_default,
-            model_header_values={},
-        )
-        target_namespace_values: tuple[object, object] = (
-            None if self.target_config is None else self.target_config.database,
-            None if self.target_config is None else self.target_config.schema,
-        )
-        reusable: bool = not contains_template_data(
-            (layered_values, target_namespace_values)
-        ) and not _contains_mutable_nested_config(layered_values)
-        self.reusable_by_path_default[matched_path_default] = reusable
-        self.inherited_values_by_path_default[matched_path_default] = layered_values
-        return reusable
-
-
-@dataclass
 class _ModelLoopHost:
     """The attachment steps the native model loop calls back into, one model index at a time."""
 
     loop: _ModelInputLoop
     interpolations: dict[Path, SqlInterpolation]
-    declarations: dict[int, _VisibleModelDeclarations] = field(default_factory=dict)
-    configs: dict[int, CompileModelConfig] = field(default_factory=dict)
     macros: dict[int, MacroExpansionResult] = field(default_factory=dict)
     python_hooks: dict[int, tuple[UsageRecord, ...]] = field(default_factory=dict)
     hooks: dict[int, HookExpansionResult] = field(default_factory=dict)
-
-    current_file: Path = Path()
-
-    def config(
-        self, *, index: int
-    ) -> tuple[CompileModelConfig, _VisibleModelDeclarations, ResourceIdentity]:
-        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        consumer: ResourceIdentity = ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem)
-        self.current_file = model_file.file_path
-        self.declarations[index] = self.loop.declaration_cache.for_model(
-            model_file=model_file, consumer=consumer
-        )
-        config: CompileModelConfig = _effective_model_config(loop=self.loop, model_file=model_file)
-        self.configs[index] = config
-        return config, self.declarations[index], consumer
 
     def interpolate(self, *, index: int) -> str:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         return applied_interpolation(self.interpolations[model_file.file_path])
 
-    def constant_text(self, *, declaration: ConstantDeclaration) -> str:
+    def constant_text(self, *, declaration: ConstantDeclaration, file_path: Path) -> str:
         return render_constant_declaration(
             declaration=declaration,
             value_renderer=self.loop.context.value_renderer,
             collection_rendering=self.loop.context.collection_rendering,
-            file_path=self.current_file,
+            file_path=file_path,
         )
 
-    def fallback(self, *, index: int) -> CompileModelInput:
+    def fallback(
+        self, *, index: int, config: CompileModelConfig, visible: _VisibleModelDeclarations
+    ) -> CompileModelInput:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         return _build_model_input(
             loop=self.loop,
             model_file=model_file,
             interpolation=self.interpolations[model_file.file_path],
-            declarations=self.declarations.pop(index),
-            effective_config=self.configs.pop(index),
+            declarations=visible,
+            effective_config=config,
             expanded_macros=self.macros.pop(index, None),
             checked_hooks=self.python_hooks.pop(index, None),
             expanded_hooks=self.hooks.pop(index, None),
         )
 
-    def check_hooks(self, *, index: int) -> None:
+    def check_hooks(self, *, index: int, config: CompileModelConfig) -> None:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         self.python_hooks[index] = _checked_python_hooks(
-            loop=self.loop, model_file=model_file, values=self.configs[index].values
+            loop=self.loop, model_file=model_file, values=config.values
         )
 
-    def expand_hooks(self, *, index: int) -> tuple[dict[str, object], list[ReferenceRow]]:
+    def expand_hooks(
+        self, *, index: int, config: CompileModelConfig, visible: _VisibleModelDeclarations
+    ) -> tuple[dict[str, object], list[ReferenceRow]]:
         expansion: HookExpansionResult = _model_hook_expansion(
             loop=self.loop,
             model_file=self.loop.discovered_inputs.model_files[index],
-            declarations=self.declarations[index],
-            config=self.configs[index],
+            declarations=visible,
+            config=config,
         )
         self.hooks[index] = expansion
         return expansion.values, [
@@ -471,14 +301,14 @@ class _ModelLoopHost:
         ]
 
     def expand_macros(
-        self, *, index: int, sql: str, spans: list[SpanRow]
+        self, *, index: int, visible: _VisibleModelDeclarations, sql: str, spans: list[SpanRow]
     ) -> tuple[str, list[ReferenceRow], list[SpanRow]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         expansion: MacroExpansionResult = _macro_expansion(
             loop=self.loop,
             model_file=model_file,
             declarations=_declaration_context(
-                declarations=self.declarations[index],
+                declarations=visible,
                 consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
             ),
             declaration_expansion=DeclarationExpansionResult(
@@ -503,18 +333,17 @@ class _ModelLoopHost:
         self,
         *,
         index: int,
+        config: CompileModelConfig,
+        visible: _VisibleModelDeclarations,
         values: dict[str, object],
         references: list[ReferenceRow],
         query_sql: str,
-        description: str | None,
-        schema: PlainSchemaRow | None,
-        enum_columns: dict[str, EnumDeclaration],
+        header: tuple[str | None, PlainSchemaRow | None, dict[str, EnumDeclaration]],
         analysis: tuple[bool, SourceLocation | None],
         hook_statements: int,
         declarations: tuple[str, list[SpanRow], list[UsageRecord], list[UsageRecord]],
     ) -> tuple[CompileModelInput, tuple[list[tuple[object, ...]], list[tuple[object, ...]]]]:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        visible: _VisibleModelDeclarations = self.declarations.pop(index)
         report_native_answer(
             stage=NativeStage.ATTACHMENTS, kind="cursor_intrinsic_rejections", units=hook_statements
         )
@@ -522,13 +351,13 @@ class _ModelLoopHost:
             model_file=model_file,
             interpolation=self.interpolations[model_file.file_path],
             facts=PlainModelFacts(
-                config=self.configs.pop(index),
+                config=config,
                 values=values,
                 references=references,
                 query_sql=query_sql,
-                description=description,
-                schema=schema,
-                enum_columns=enum_columns,
+                description=header[0],
+                schema=header[1],
+                enum_columns=header[2],
                 sql_validation_enabled=analysis[0],
                 rejected_sql_analysis_opt_out=analysis[1],
                 declaration_sql=declarations[0],
@@ -558,33 +387,6 @@ class _ModelLoopHost:
 
     def model_row(self, *, model_input: CompileModelInput) -> tuple[object, ...]:
         return model_input_row(model_input)
-
-
-def _contains_mutable_nested_config(values: dict[str, object]) -> bool:
-    if any(key in values for key in _MODEL_HOOK_KEYS):
-        return True
-
-    def is_mutable(value: object) -> bool:
-        if isinstance(value, dict | list | set):
-            return True
-        if isinstance(value, tuple):
-            return any(is_mutable(item) for item in value)
-        return value is not None and not isinstance(value, str | int | float | bool)
-
-    return any(is_mutable(value) for value in values.values())
-
-
-def _contains_dynamic_or_unsupported_reusable_metadata(value: object) -> bool:
-    if isinstance(value, str):
-        return contains_template_data(value) or MACRO_CALL_PATTERN.search(value) is not None
-    if isinstance(value, dict):
-        return any(
-            not isinstance(key, str) or _contains_dynamic_or_unsupported_reusable_metadata(item)
-            for key, item in value.items()
-        )
-    if isinstance(value, list | tuple):
-        return any(_contains_dynamic_or_unsupported_reusable_metadata(item) for item in value)
-    return value is not None and not isinstance(value, int | float | bool)
 
 
 def build_model_inputs(
@@ -708,12 +510,6 @@ def _build_model_inputs(
         validation_context=validation_context,
         sql_hook_definitions=sql_hook_definitions,
         legacy_schema_files=legacy_schema_files,
-        reusable_config_cache=_ReusableModelConfigCache(
-            defaults=discovered_inputs.project_config.defaults,
-            path_defaults=discovered_inputs.project_config.path_defaults,
-            target_config=context.target_config,
-        ),
-        declaration_cache=_VisibleModelDeclarationCache.build(context),
         native_declaration_references=dict(
             zip(
                 (model_file.file_path for model_file in prepared_files),
@@ -753,8 +549,13 @@ def _run_native_model_loop(
             model_loop_classes(
                 audit_factories=loop.discovered_inputs.audit_factories,
                 context=loop.context,
-                report_diagnostic=report_compile_diagnostic,
                 external_resolver=loop.validation_context.external_sql_reference_resolver,
+                host_inputs={
+                    "report_diagnostic": report_compile_diagnostic,
+                    "record_template_reads": record_template_reads,
+                    "visible_declarations": _VisibleModelDeclarations,
+                    "config_session": loop.validation_context.validators.native_config,
+                },
             ),
         ),
         loop.context.sql_lexical_syntax.native_mapping,
@@ -774,7 +575,7 @@ def _run_native_model_loop(
         ),
     )
     host: _ModelLoopHost = _ModelLoopHost(loop=loop, interpolations=interpolations)
-    inputs, finished_natively = native_loop.run(
+    inputs, (finished_natively, config_builds, declaration_contexts) = native_loop.run(
         native_project,
         host,
         [
@@ -785,13 +586,22 @@ def _run_native_model_loop(
                     str(model_file.relative_path),
                     str(model_file.file_path),
                 ),
-                model_file.header_column_locations,
+                (
+                    model_file.header_column_locations,
+                    model_file.header_values,
+                    model_file.enum_declarations,
+                    model_file.constant_declarations,
+                ),
                 model_file.query_sql,
                 model_file.contents,
                 loop.native_declaration_references.get(model_file.file_path),
             )
             for model_file in files
         ],
+    )
+    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds", units=config_builds)
+    report_native_answer(
+        stage=NativeStage.MODEL_LOOP, kind="declaration_contexts", units=declaration_contexts
     )
     report_native_answer(
         stage=NativeStage.MODEL_LOOP, kind="native_model_inputs", units=finished_natively
@@ -923,32 +733,6 @@ def _macro_expansion(
         if location is None:
             raise
         raise error.located(location) from None
-
-
-def _effective_model_config(
-    *, loop: _ModelInputLoop, model_file: DiscoveredSqlModelFile
-) -> CompileModelConfig:
-    reusable_config_cache: _ReusableModelConfigCache = loop.reusable_config_cache
-    native_config: NativeModelConfigSession = loop.validation_context.validators.native_config
-    matched_path_default: str | None = native_path_default(
-        session=native_config, model_file=model_file
-    )
-    effective_config: CompileModelConfig | None = reusable_config_cache.get(
-        matched_path_default=matched_path_default,
-        model_header_values=model_file.header_values,
-    )
-    if effective_config is None:
-        effective_config = build_native_model_config(
-            session=native_config,
-            model_file=model_file,
-            matched_path_default=matched_path_default,
-        )
-        reusable_config_cache.remember(
-            matched_path_default=matched_path_default,
-            model_header_values=model_file.header_values,
-            config=effective_config,
-        )
-    return effective_config
 
 
 def _build_model_input(
@@ -1285,88 +1069,6 @@ def _validate_model_input(
         references,
         rejected_opt_out,
     )
-
-
-def _build_visible_declaration_indexes(
-    *, model_file: DiscoveredSqlModelFile, context: ModelInputBuildContext
-) -> _VisibleModelDeclarations:
-    local_enums: dict[str, EnumDeclaration]
-    local_constants: dict[str, ConstantDeclaration]
-    model_identity: ResourceIdentity = ResourceIdentity(
-        ResourceKind.MODEL, model_file.file_path.stem
-    )
-    local_enums, local_constants = build_model_declaration_indexes(model_file=model_file)
-    visible: DeclarationResolutionContext = DeclarationResolutionContext(
-        enums=context.public_enums,
-        constants=context.public_constants,
-    )
-    if (
-        context.declaration_resolver is not None
-        and context.declaration_resolver.lookup.index.declarations
-    ):
-        visible = resolve_declaration_context(
-            resolver=context.declaration_resolver, file_path=model_file.file_path
-        )
-    return _VisibleModelDeclarations(
-        local_enums=local_enums,
-        local_constants=local_constants,
-        enums=visible.enums | local_enums,
-        constants=visible.constants | local_constants,
-        inaccessible_enums=visible.inaccessible_enums,
-        inaccessible_constants=visible.inaccessible_constants,
-        enum_visibility=visible.enum_visibility
-        | {
-            name: (
-                VisibilityRecord(
-                    model_identity,
-                    DeclarationIdentity(DeclarationKind.ENUM, name, model_identity),
-                    reason=VisibilityReason.PRIVATE_OWNER,
-                ),
-            )
-            for name in local_enums
-        },
-        constant_visibility=visible.constant_visibility
-        | {
-            name: (
-                VisibilityRecord(
-                    model_identity,
-                    DeclarationIdentity(DeclarationKind.CONSTANT, name, model_identity),
-                    reason=VisibilityReason.PRIVATE_OWNER,
-                ),
-            )
-            for name in local_constants
-        },
-        macros=visible.macros,
-        macro_records=visible.macro_records,
-        inaccessible_macros=visible.inaccessible_macros,
-    )
-
-
-def _rebind_visible_declarations(
-    *, declarations: _VisibleModelDeclarations, consumer: ResourceIdentity
-) -> _VisibleModelDeclarations:
-    if not declarations.enum_visibility and not declarations.constant_visibility:
-        return declarations
-    return replace(
-        declarations,
-        enum_visibility=_rebind_visibility(
-            visibility=declarations.enum_visibility, consumer=consumer
-        ),
-        constant_visibility=_rebind_visibility(
-            visibility=declarations.constant_visibility, consumer=consumer
-        ),
-    )
-
-
-def _rebind_visibility(
-    *,
-    visibility: dict[str, tuple[VisibilityRecord, ...]],
-    consumer: ResourceIdentity,
-) -> dict[str, tuple[VisibilityRecord, ...]]:
-    rebound: dict[str, tuple[VisibilityRecord, ...]] = {}
-    for name, records in visibility.items():
-        rebound[name] = tuple(replace(record, resource=consumer) for record in records)
-    return rebound
 
 
 def _generated_enum_usages(

@@ -9,17 +9,19 @@ import pytest
 
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.scopes.exceptions import InvalidQualifiedIdentityError
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     ModelLoopErrorTestCase,
     ModelLoopParityTestCase,
+    ModelPathScopeErrorTestCase,
     RetainedRulesRowsTestCase,
     UnretainedRulesRowsTestCase,
     ZeroMaterializationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     HEADER_CONTRACT_FILES,
-    MODEL_SCHEMA_FILES,
     LEGACY_PROJECT_TYPES,
+    MODEL_SCHEMA_FILES,
     OPT_OUT_FILES,
     PARITY_FILES,
     TYPE_PROOF_FILES,
@@ -307,6 +309,44 @@ def test_given_ordinary_compile_when_compiling_then_no_python_project_is_constru
     assert exit_code == 0
     assert {name: counts[name] for name in LEGACY_PROJECT_TYPES} == (
         test_case.expected_constructions
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModelPathScopeErrorTestCase(
+            description="a folder holding the identity separator is read as an identity",
+            model_path="models/a:b/orders.sql",
+            expected_message="Unknown qualified identity kind: 'models/a'",
+            expected_code="S002",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_path_scope_rejects_when_running_native_model_loop_then_scope_error_is_raised(
+    test_case: ModelPathScopeErrorTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_dir: Path = copy_project(
+        fixtures=(),
+        files={
+            "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+            "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+            test_case.model_path: "MODEL (description 'Orders.');\nSELECT 1 AS order_id\n",
+        },
+        project_dir=tmp_path / "project",
+    )
+
+    with pytest.raises(InvalidQualifiedIdentityError) as raised:
+        _ = build_inputs_with_native_loop(
+            project_dir=project_dir, native=True, monkeypatch=monkeypatch
+        )
+
+    assert (str(raised.value), raised.value.code) == (
+        test_case.expected_message,
+        test_case.expected_code,
     )
 
 
