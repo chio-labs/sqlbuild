@@ -339,7 +339,7 @@ fn surrogate_path(value: &Bound<'_, PyAny>, path: String) -> PyResult<Option<(St
 fn first_surrogate_offset(text: &Bound<'_, PyString>) -> PyResult<Option<usize>> {
     let encoded = text.call_method1(ENCODE, (UTF32_LE, SURROGATE_PASS))?;
     let mut offset = 0;
-    for unit in encoded.extract::<Vec<u8>>()?.chunks_exact(4) {
+    for unit in encoded.extract::<Vec<u8>>()?.as_chunks::<4>().0 {
         let code_point = u32::from_le_bytes([unit[0], unit[1], unit[2], unit[3]]);
         match char::from_u32(code_point) {
             Some(character) => offset += character.len_utf8(),

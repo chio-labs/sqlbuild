@@ -16,7 +16,9 @@ fn code_points(name: &Bound<'_, PyString>) -> PyResult<Vec<u32>> {
         Err(_) => Ok(name
             .call_method1(ENCODE, (UTF32_LE, SURROGATE_PASS))?
             .extract::<Vec<u8>>()?
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|unit| u32::from_le_bytes([unit[0], unit[1], unit[2], unit[3]]))
             .collect()),
     }
