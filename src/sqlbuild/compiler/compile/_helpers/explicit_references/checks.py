@@ -17,7 +17,6 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompilerDiagnostic,
@@ -25,6 +24,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
     CompiledModelView,
     CompiledProjectView,
     CompiledSourceView,
@@ -269,7 +269,7 @@ def _source_row(source: CompiledSourceView) -> dict[str, object]:
     }
 
 
-def _audit_row(audit: CompiledAudit) -> dict[str, object]:
+def _audit_row(audit: CompiledAuditView) -> dict[str, object]:
     target: tuple[str, str] | None = (
         (
             str(AttachedAuditTargetKind(audit.attached_target_kind).resource_type),

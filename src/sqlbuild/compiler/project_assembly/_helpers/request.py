@@ -25,7 +25,6 @@ from sqlbuild.compiler.project_assembly.constants import (
     TRUE_TEXT,
 )
 from sqlbuild.compiler.project_assembly.types import (
-    AuditRow,
     ProjectRequestRow,
     ReferenceRow,
     SyntaxCheckRow,
@@ -91,14 +90,7 @@ def project_request(
             for seed_input in inputs.seed_inputs
         ],
         [function_input.assembly_row for function_input in inputs.sql_function_inputs],
-        [
-            _audit_row(
-                references=audit_input.references,
-                attached_kind=audit_input.attached_target_kind,
-                attached_name=audit_input.attached_target_name,
-            )
-            for audit_input in inputs.audit_inputs
-        ],
+        [audit_input.assembly_row for audit_input in inputs.audit_inputs],
     )
     return row, [render if isinstance(render, Exception) else None for render in renders]
 
@@ -166,17 +158,3 @@ def _syntax_check_rows(
     checks: tuple[tuple[str, dict[str, str] | None], ...],
 ) -> list[SyntaxCheckRow]:
     return [(sql, list((placeholders or {}).items())) for sql, placeholders in checks]
-
-
-def _audit_row(
-    *,
-    references: tuple[CompileSqlReference, ...],
-    attached_kind: object,
-    attached_name: str | None,
-) -> AuditRow:
-    attached: tuple[str, str] | None = (
-        (str(attached_kind), attached_name)
-        if attached_kind is not None and attached_name is not None
-        else None
-    )
-    return (_reference_rows(references), attached)

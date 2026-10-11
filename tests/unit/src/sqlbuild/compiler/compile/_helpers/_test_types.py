@@ -686,48 +686,6 @@ class SnapshotConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
-class ResolveAuditSeverityTestCase:
-    description: str
-    instance_severity: str | None
-    default_severity: str | None
-    expected_severity: str | None = None
-    expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class ResolveAuditRunScopeTestCase:
-    description: str
-    instance_run_scope: str | None
-    default_run_scope: str | None
-    expected_run_scope: str
-
-
-@dataclass(frozen=True)
-class ResolveAuditRunScopeErrorTestCase:
-    description: str
-    instance_run_scope: str | None
-    default_run_scope: str | None
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
-class ValidateModelAttachedAuditRefsTestCase:
-    description: str
-    references: tuple[CompileSqlReference, ...]
-    attached_target_kind: str
-    attached_target_name: str
-    expected_valid: bool = True
-    expected_error_fragment: str | None = None
-
-
-@dataclass(frozen=True)
-class ValidateAuditRefsErrorTestCase:
-    description: str
-    references: tuple[CompileSqlReference, ...]
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class CustomMaterializationConfigErrorTestCase:
     description: str
     config_values: dict[str, object]

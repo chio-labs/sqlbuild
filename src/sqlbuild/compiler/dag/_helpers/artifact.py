@@ -8,7 +8,6 @@ from enum import StrEnum
 
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSqlScenario,
@@ -16,6 +15,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
@@ -363,7 +363,7 @@ def _sql_test_meta(test: CompiledSqlTest) -> dict[str, object]:
     }
 
 
-def _build_audit_check(audit: CompiledAudit) -> DagCheck:
+def _build_audit_check(audit: CompiledAuditView) -> DagCheck:
     checked_asset_ids: tuple[str, ...] = tuple(_node_id(key) for key in audit.scope_deps)
     if audit.attached_target_kind is not None and audit.attached_target_name is not None:
         resource_type: CompiledResourceType = AttachedAuditTargetKind(
@@ -387,7 +387,7 @@ def _build_audit_check(audit: CompiledAudit) -> DagCheck:
     )
 
 
-def _audit_check_id(audit: CompiledAudit) -> str:
+def _audit_check_id(audit: CompiledAuditView) -> str:
     parts: tuple[str | None, ...] = (
         _node_id(audit.key),
         audit.attached_target_kind.value if audit.attached_target_kind is not None else None,

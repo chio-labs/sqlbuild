@@ -20,14 +20,19 @@ from sqlbuild.compiler.scopes.types import (
 )
 
 _NAMED_KINDS: frozenset[DeclarationKind] = frozenset(
-    {DeclarationKind.SCHEMA, DeclarationKind.SQL_HOOK, DeclarationKind.PYTHON_HOOK}
+    {
+        DeclarationKind.AUDIT,
+        DeclarationKind.SCHEMA,
+        DeclarationKind.SQL_HOOK,
+        DeclarationKind.PYTHON_HOOK,
+    }
 )
 
 
 def named_records(
     resolver: DeclarationScopeResolver | None,
 ) -> dict[tuple[str, str], DeclarationRecord]:
-    """Each project-owned schema's and hook's first record, by `(kind, name)`."""
+    """Each project-owned generic audit's, schema's and hook's first record, by `(kind, name)`."""
 
     if resolver is None:
         return {}

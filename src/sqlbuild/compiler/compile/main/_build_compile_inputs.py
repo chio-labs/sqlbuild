@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.attachment.audits import build_project_audit_inputs
 from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_effective_connection,
     build_effective_settings,
@@ -42,7 +41,6 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
-    CompileAuditInput,
     CompilerDiagnostic,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
@@ -54,15 +52,15 @@ from sqlbuild.compiler.compile.models import (
     ModelInputScopeBuild,
 )
 from sqlbuild.compiler.compile.types import (
+    AuditInput,
     CompileInputsView,
     FunctionInput,
     ModelInput,
     SeedInput,
     SourceInput,
 )
-from sqlbuild.compiler.compiled_project.main._attach_functions import attach_functions
-from sqlbuild.compiler.compiled_project.main._attach_seeds import attach_seeds
-from sqlbuild.compiler.compiled_project.main._attach_sources import attach_sources
+from sqlbuild.compiler.compiled_project.main._attach_audits import attach_audits
+from sqlbuild.compiler.compiled_project.main._attach_resources import attach_resources
 from sqlbuild.compiler.compiled_project.main._compile_inputs_view import compile_inputs_view
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -155,10 +153,10 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
     )
     model_context = model_build.context
-    seed_inputs: tuple[SeedInput, ...] = attach_seeds(
-        discovered_inputs=discovered_inputs, native_project=model_build.native_project
-    )
-    sql_function_inputs: tuple[FunctionInput, ...] = attach_functions(
+    seed_inputs: tuple[SeedInput, ...]
+    sql_function_inputs: tuple[FunctionInput, ...]
+    source_inputs: tuple[SourceInput, ...]
+    seed_inputs, sql_function_inputs, source_inputs = attach_resources(
         discovered_inputs=discovered_inputs,
         native_project=model_build.native_project,
         settings=(
@@ -170,12 +168,6 @@ def build_compile_inputs(
         python_functions_inherit_default_namespace=(
             adapter_context.python_functions_inherit_default_namespace
         ),
-    )
-    source_inputs: tuple[SourceInput, ...] = attach_sources(
-        discovered_inputs=discovered_inputs,
-        native_project=model_build.native_project,
-        effective_settings=model_context.effective_settings,
-        no_sql_validation=no_sql_validation,
     )
     test_inputs: tuple[CompileSqlTestInput, ...] = build_test_inputs_with_cache(
         discovered_inputs=discovered_inputs,
@@ -197,14 +189,12 @@ def build_compile_inputs(
         external_sql_reference_resolver=external_sql_reference_resolver,
         sql_lexical_syntax=model_context.sql_lexical_syntax,
     )
-    audit_inputs: tuple[CompileAuditInput, ...]
+    audit_inputs: tuple[AuditInput, ...]
     audit_diagnostics: tuple[CompilerDiagnostic, ...]
-    audit_inputs, audit_diagnostics = build_project_audit_inputs(
+    audit_inputs, audit_diagnostics = attach_audits(
         discovered_inputs=discovered_inputs,
-        context=model_context,
-        model_inputs=model_build.inputs,
-        source_inputs=source_inputs,
-        seed_inputs=seed_inputs,
+        native_project=model_build.native_project,
+        effective_settings=model_context.effective_settings,
     )
     diagnostics: tuple[CompilerDiagnostic, ...] = (
         *audit_diagnostics,

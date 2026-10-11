@@ -110,3 +110,22 @@ class NativeFunctionErrorTestCase:
     description: str
     files: dict[str, str]
     expected_message: str
+
+
+@dataclass(frozen=True)
+class NativeAuditAttachmentTestCase:
+    """An audit the native loop attaches and assembly keeps in the native project."""
+
+    description: str
+    audit_name: str
+    expected_summary: tuple[object, ...]
+    expected_usages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeAuditErrorTestCase:
+    """Audit files the native loop rejects while attaching them."""
+
+    description: str
+    files: dict[str, str]
+    expected_message: str

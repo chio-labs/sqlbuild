@@ -6,7 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledSqlTest, InferredColumn
+from sqlbuild.compiler.compile.models import CompiledSqlTest, InferredColumn
+from sqlbuild.compiler.compile.types import CompiledAuditView
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_error_digest, fact_value_digest
 from sqlbuild.rule_engine.classes.fact_reads import FactReads
@@ -244,11 +245,11 @@ class _TrackedTestFacts(_TrackedView):
 class _TrackedAuditFacts(_TrackedView):
     __slots__ = ()
 
-    def all(self) -> tuple[CompiledAudit, ...]:
+    def all(self) -> tuple[CompiledAuditView, ...]:
         self._tracked_reads.record(key=(FACT_AUDITS_ALL,))
         return self._tracked_view.all()
 
-    def for_model(self, model: Model) -> tuple[CompiledAudit, ...]:
+    def for_model(self, model: Model) -> tuple[CompiledAuditView, ...]:
         self._tracked_reads.record_model_name(fact=FACT_AUDITS_FOR_MODEL, model=model)
         return self._tracked_view.for_model(model)
 

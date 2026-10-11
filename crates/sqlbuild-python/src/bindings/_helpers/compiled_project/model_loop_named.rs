@@ -25,6 +25,7 @@ const CONSUMER_FIELD: &str = "consumer";
 const DECLARATION_FIELD: &str = "declaration";
 const CURRENT_FOLDER: &str = ".";
 const INACCESSIBLE_CODE: &str = "S006";
+const MODEL_RESOURCE: &str = "model";
 
 /// A named declaration kind: its enum value, diagnostic label and declaration role.
 pub(crate) struct NamedKind {
@@ -52,6 +53,13 @@ pub(crate) const PYTHON_HOOK_DECLARATION: NamedKind = NamedKind {
     role: "hooks/python",
 };
 
+/// Generic audits attached to models, sources and seeds.
+pub(crate) const AUDIT_DECLARATION: NamedKind = NamedKind {
+    value: "audit",
+    label: "Generic audit",
+    role: "audits/generic",
+};
+
 /// The usage of the indexed declaration `name`, if any, reporting S006 when it is hidden.
 pub(crate) fn named_usages<'py>(
     context: &LoopContext<'_, 'py>,
@@ -59,8 +67,24 @@ pub(crate) fn named_usages<'py>(
     consumer: &Bound<'py, PyAny>,
     model: (&str, &str),
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let (kind, name) = declaration;
     let (model_name, relative_path) = model;
+    resource_named_usages(
+        context,
+        declaration,
+        consumer,
+        (MODEL_RESOURCE, model_name, relative_path),
+    )
+}
+
+/// `named_usages` for a consumer of `(resource type, name, relative path)`.
+pub(crate) fn resource_named_usages<'py>(
+    context: &LoopContext<'_, 'py>,
+    declaration: (&NamedKind, &str),
+    consumer: &Bound<'py, PyAny>,
+    resource: (&str, &str, &str),
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let (kind, name) = declaration;
+    let (resource_type, model_name, relative_path) = resource;
     let py: Python<'py> = consumer.py();
     let key: Bound<'py, PyTuple> = PyTuple::new(py, [kind.value, name])?;
     let Some(record) = context.classes.named_records.get_item(key)? else {
@@ -72,7 +96,12 @@ pub(crate) fn named_usages<'py>(
         return Err(path_error(context, &declared, &label));
     };
     if !visible {
-        report_inaccessible(context, &record, (kind, name), (model_name, &label))?;
+        report_inaccessible(
+            context,
+            &record,
+            (kind, name),
+            (resource_type, model_name, &label),
+        )?;
     }
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item(CONSUMER_FIELD, consumer)?;
@@ -132,11 +161,11 @@ fn report_inaccessible(
     context: &LoopContext<'_, '_>,
     record: &Bound<'_, PyAny>,
     declaration: (&NamedKind, &str),
-    model: (&str, &str),
+    resource: (&str, &str, &str),
 ) -> PyResult<()> {
     let py: Python<'_> = record.py();
     let (kind, name) = declaration;
-    let (model_name, label) = model;
+    let (resource_type, model_name, label) = resource;
     let folder: &str = Path::new(label)
         .parent()
         .and_then(Path::to_str)
@@ -169,7 +198,7 @@ fn report_inaccessible(
              with {scope} scope owned by '{owner}'"
         ),
     )?;
-    fields.set_item("resource_type", "model")?;
+    fields.set_item("resource_type", resource_type)?;
     fields.set_item("resource_name", model_name)?;
     fields.set_item("path", context.classes.path_class.call1((label,))?)?;
     fields.set_item(

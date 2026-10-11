@@ -1,15 +1,41 @@
-"""Functions attached natively by the compile's model loop and held by its native project."""
+"""Seeds, functions and sources attached natively and held by the compile's native project."""
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.types import FunctionInput
+from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.types import FunctionInput, SeedInput, SourceInput
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
+    DiscoveredSchemaFile,
+    DiscoveredSourceFile,
 )
 from sqlbuild.compiler.scopes.types import ResourceKind
-from sqlbuild.spec.contracts.models import DefaultsConfig, SettingsConfig, TargetConfig
+from sqlbuild.spec.contracts.models import (
+    DefaultsConfig,
+    SchemaSeedEntry,
+    SettingsConfig,
+    SourceEntry,
+    TargetConfig,
+)
 
 
-def attach_functions(
+def attach_seeds_impl(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    native_project: _native.NativeCompiledProject,
+) -> tuple[SeedInput, ...]:
+    """Pair every declared seed with its CSV file; raise for a declaration without one."""
+
+    declarations: list[tuple[SchemaSeedEntry, DiscoveredSchemaFile]] = []
+    for schema_file in discovered_inputs.schema_files:
+        declarations.extend((seed_entry, schema_file) for seed_entry in schema_file.seed_entries)
+    return tuple(
+        native_project.attach_seeds(
+            declarations, list(discovered_inputs.seed_files), CompileInputError
+        )
+    )
+
+
+def attach_functions_impl(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     native_project: _native.NativeCompiledProject,
@@ -62,6 +88,32 @@ def attach_functions(
                 None if target_config is None else (target_config.database, target_config.schema),
                 python_functions_inherit_default_namespace,
                 ResourceKind.FUNCTION,
+            ),
+        )
+    )
+
+
+def attach_sources_impl(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    native_project: _native.NativeCompiledProject,
+    effective_settings: SettingsConfig,
+    no_sql_validation: bool,
+) -> tuple[SourceInput, ...]:
+    """Expand and validate every discovered source in declaration order."""
+
+    rows: list[tuple[str, DiscoveredSourceFile, SourceEntry]] = []
+    for source_file in discovered_inputs.source_files:
+        rows.extend(
+            (str(source_file.file_path), source_file, entry) for entry in source_file.source_entries
+        )
+    return tuple(
+        native_project.attach_sources(
+            rows,
+            (
+                discovered_inputs.project_config.defaults.contract,
+                effective_settings.sql_analysis and not no_sql_validation,
+                ResourceKind.SOURCE,
             ),
         )
     )

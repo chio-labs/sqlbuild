@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_audit_record import compiled_audit_record
 from sqlbuild.compiler.compiled_project.main.compiled_function_record import (
     compiled_function_record,
 )
@@ -24,5 +25,5 @@ class ProjectFacts:
         self.seeds: tuple[object, ...] = tuple(map(compiled_seed_record, project.seeds))
         self.functions: tuple[object, ...] = tuple(map(compiled_function_record, project.functions))
         self.tests: tuple[object, ...] = project.sql_tests
-        self.audits: tuple[object, ...] = project.audits
+        self.audits: tuple[object, ...] = tuple(map(compiled_audit_record, project.audits))
         self.tree: ProjectTree = ProjectTree(project_dir=project_dir, project=project)

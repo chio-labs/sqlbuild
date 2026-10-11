@@ -5,6 +5,7 @@ from functools import partial
 from pathlib import Path
 from typing import cast
 
+from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -20,7 +21,7 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     NativeModelConfigSession,
 )
-from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, FunctionLanguage
 from sqlbuild.compiler.compiled_project._helpers.loop_inputs import (
     hook_signature,
     named_records,
@@ -103,6 +104,10 @@ def model_loop_classes(
             "schema_model_entry": SchemaModelEntry,
             "sql_expansion": CompiledSqlExpansion,
             "expansion_span": ExpansionSpan,
+            "audits": {
+                "audit_severity": AuditSeverity,
+                "attached_target_kind": AttachedAuditTargetKind,
+            },
             "functions": {
                 "function_argument": FunctionArgument,
                 "function_return_column": FunctionReturnColumn,

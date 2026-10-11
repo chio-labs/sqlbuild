@@ -72,8 +72,6 @@ from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
 )
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
-    CompileAuditInput,
-    CompiledAudit,
     CompiledLineageColumnFact,
     CompiledModel,
     CompiledObjectKey,
@@ -93,7 +91,7 @@ from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis as _ModelSqlAnalysis,
 )
 from sqlbuild.compiler.compile.types import (
-    AttachedAuditTargetKind,
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
@@ -363,18 +361,7 @@ def assemble_compiled_project(
         sources=_compiled_sources(inputs=inputs, resources=resources),
         seeds=_compiled_seeds(inputs=inputs, resources=resources),
         functions=_compiled_functions(inputs=inputs, resources=resources),
-        audits=tuple(
-            _assemble_compiled_audit(
-                audit_input=audit_input,
-                native_scope_deps=native_resource(
-                    resources=resources,
-                    slot=AUDIT_SLOT,
-                    items=resources.audit_scope_deps,
-                    index=index,
-                ),
-            )
-            for index, audit_input in enumerate(inputs.audit_inputs)
-        ),
+        audits=_compiled_audits(inputs=inputs, resources=resources),
         sql_tests=assemble_sql_tests_by_engine(
             inputs=inputs,
             macro_mock_queries=lambda test_input: _build_test_model_query_overrides(
@@ -755,39 +742,24 @@ def _compiled_functions(
     return tuple(owner.compiled_function(index) for index in range(len(inputs.sql_function_inputs)))
 
 
-def _assemble_compiled_audit(
-    *,
-    audit_input: CompileAuditInput,
-    native_scope_deps: tuple[CompiledObjectKey, ...],
-) -> CompiledAudit:
-    audit_name: str = _resolve_audit_name(audit_input)
-    normalized_target_kind: AttachedAuditTargetKind | None = None
-    if audit_input.attached_target_kind is not None:
-        normalized_target_kind = AttachedAuditTargetKind(audit_input.attached_target_kind)
-    return CompiledAudit(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.AUDIT, name=audit_name),
-        scope_deps=native_scope_deps,
-        name=audit_name,
-        definition_name=(audit_input.audit_block.name or audit_input.audit_file.file_path.stem),
-        audit_file=audit_input.audit_file,
-        audit_block=audit_input.audit_block,
-        sql_body=audit_input.sql_body,
-        evaluation_mode=audit_input.evaluation_mode,
-        measurement_contract=audit_input.measurement_contract,
-        thresholds=audit_input.thresholds,
-        minimum_samples=audit_input.minimum_samples,
-        measure_sql=audit_input.measure_sql,
-        evidence_sql=audit_input.evidence_sql,
-        evidence_limit=audit_input.evidence_limit,
-        references=audit_input.references,
-        attached_target_kind=normalized_target_kind,
-        attached_target_name=audit_input.attached_target_name,
-        attached_column_name=audit_input.attached_column_name,
-        severity=audit_input.severity,
-        run_scope=audit_input.run_scope,
-        always_run=audit_input.always_run,
-        description=audit_input.description,
+def _compiled_audits(
+    *, inputs: CompileInputsView, resources: NativeProjectResources
+) -> tuple[CompiledAuditView, ...]:
+    """Each audit's view over the compile's native project, raising assembly's error there."""
+
+    if not inputs.audit_inputs:
+        return ()
+    owner: _native.NativeCompiledProject = cast(
+        _native.NativeCompiledProject, inputs.native_project
     )
+    owner.record_audit_scope_deps(list(resources.audit_scope_deps))
+    audits: list[CompiledAuditView] = []
+    for index in range(len(inputs.audit_inputs)):
+        _ = native_resource(
+            resources=resources, slot=AUDIT_SLOT, items=resources.audit_scope_deps, index=index
+        )
+        audits.append(owner.compiled_audit(index))
+    return tuple(audits)
 
 
 def _build_test_model_query_overrides(
@@ -868,11 +840,3 @@ def _assemble_compiled_sql_scenario(
         source_path=scenario_input.scenario_file.relative_path,
         ownership_root=scenario_input.scenario_file.ownership_root,
     )
-
-
-def _resolve_audit_name(audit_input: CompileAuditInput) -> str:
-    if audit_input.name is not None:
-        return audit_input.name
-    if audit_input.audit_block.name is not None:
-        return audit_input.audit_block.name
-    return audit_input.audit_file.file_path.stem

@@ -17,7 +17,6 @@ from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledSqlTest,
@@ -25,6 +24,7 @@ from sqlbuild.compiler.compile.models import (
     RelatedLocation,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
@@ -412,7 +412,7 @@ def _function_resource(function: CompiledFunctionView) -> dict[str, object]:
     return item
 
 
-def _audit_resource(audit: CompiledAudit) -> dict[str, object]:
+def _audit_resource(audit: CompiledAuditView) -> dict[str, object]:
     item: dict[str, object] = {
         "name": audit.name,
         "relative_path": str(audit.audit_file.relative_path),

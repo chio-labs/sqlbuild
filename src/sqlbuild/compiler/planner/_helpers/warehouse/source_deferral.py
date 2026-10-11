@@ -7,10 +7,10 @@ from dataclasses import replace
 
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
@@ -156,7 +156,7 @@ def _selected_managed_source_refs(
                 sql=function.body_sql, managed_source_names=managed_source_names
             )
         )
-    audit: CompiledAudit
+    audit: CompiledAuditView
     for audit in project.audits:
         if audit.scope_deps and not any(dep in selected_keys for dep in audit.scope_deps):
             continue

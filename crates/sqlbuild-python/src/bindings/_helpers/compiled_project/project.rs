@@ -16,6 +16,12 @@ use sqlbuild_analysis::compiled_project::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compiled_project::audit_loop::{
+    AttachmentOwner, AuditFileRow, AuditSettings, model_owner, resource_owner,
+};
+use crate::bindings::_helpers::compiled_project::audit_views::{
+    AuditRecord, NativeAuditInput, NativeCompiledAudit,
+};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_project::function_loop::{FunctionRow, FunctionSettings};
 use crate::bindings::_helpers::compiled_project::function_views::{
@@ -33,13 +39,15 @@ use crate::bindings::_helpers::compiled_project::seed_views::{
 };
 use crate::bindings::_helpers::compiled_project::source_loop::{SourceRow, SourceSettings};
 use crate::bindings::_helpers::compiled_project::source_views::{
-    NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
+    AttachedSource, NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
 };
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
 const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";
 const RELATIVE_PATH_ATTRIBUTE: &str = "relative_path";
+const SOURCE_OWNER: &str = "source";
+const SEED_OWNER: &str = "seed";
 const ATTACHMENT_LOOP_UNSET: &str = "no model loop was kept to attach this project's resources";
 pub(crate) const INCREMENTAL_MODE_KEY: &str = "incremental_mode";
 const MATERIALIZED_KEY: &str = "materialized";
@@ -108,6 +116,8 @@ pub(crate) struct NativeCompiledProject {
     sources: Vec<SourceRecord>,
     /// Each attached SQL, then Python, function in attachment order.
     functions: Vec<FunctionRecord>,
+    /// Each singular, then model-, source- and seed-attached, audit in attachment order.
+    audits: Vec<AuditRecord>,
     /// The model loop and its host, which attach the project's other resources.
     attachment: Option<(Py<NativeModelLoop>, Py<PyAny>)>,
 }
@@ -139,6 +149,71 @@ impl NativeCompiledProject {
         self.graph_builds += 1;
     }
 
+    /// Each schema-attached model, then each source and seed, with the audits attached to it.
+    fn attachment_owners<'py>(&self, py: Python<'py>) -> PyResult<Vec<AttachmentOwner<'py>>> {
+        let mut owners: Vec<AttachmentOwner<'py>> = Vec::new();
+        for record in &self.inputs {
+            let Some(schema) = &record.schema else {
+                continue;
+            };
+            let model_file: &Bound<'py, PyAny> = record.model_file.bind(py);
+            owners.push(model_owner(
+                model_file
+                    .getattr("file_path")?
+                    .getattr("stem")?
+                    .extract()?,
+                model_file
+                    .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                    .str()?
+                    .to_string(),
+                (schema.audits.bind(py), schema.columns.bind(py)),
+            )?);
+        }
+        for source in &self.sources {
+            let attached: &AttachedSource = source.attached();
+            let path: String = attached
+                .source_file
+                .bind(py)
+                .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                .str()?
+                .to_string();
+            owners.push(resource_owner(
+                SOURCE_OWNER,
+                attached.name.clone(),
+                (path.clone(), path),
+                (
+                    attached.audits.bind(py).as_any(),
+                    attached.columns.bind(py).as_any(),
+                ),
+            )?);
+        }
+        for seed in &self.seeds {
+            let (name, seed_file, schema_entry, schema_file) = seed.parts();
+            let schema_entry: &Bound<'py, PyAny> = schema_entry.bind(py);
+            owners.push(resource_owner(
+                SEED_OWNER,
+                name.to_owned(),
+                (
+                    seed_file
+                        .bind(py)
+                        .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                        .str()?
+                        .to_string(),
+                    schema_file
+                        .bind(py)
+                        .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                        .str()?
+                        .to_string(),
+                ),
+                (
+                    &schema_entry.getattr("audits")?,
+                    &schema_entry.getattr("columns")?,
+                ),
+            )?);
+        }
+        Ok(owners)
+    }
+
     /// The kept model loop and its host.
     fn attachment_loop(&self, py: Python<'_>) -> PyResult<(Py<NativeModelLoop>, Py<PyAny>)> {
         match &self.attachment {
@@ -154,6 +229,11 @@ impl NativeCompiledProject {
         host: Py<PyAny>,
     ) {
         self.attachment = Some((model_loop, host));
+    }
+
+    /// Every attached audit, in attachment order.
+    pub(crate) fn audits(&self) -> &[AuditRecord] {
+        &self.audits
     }
 
     /// Every attached function, in attachment order.
@@ -343,6 +423,52 @@ impl NativeCompiledProject {
         Ok((first..first + count)
             .map(|index| NativeFunctionInput::new(slf.clone().unbind(), index))
             .collect())
+    }
+
+    /// Attach singular, then resource-attached, audits; return views and override warnings.
+    fn attach_audits<'py>(
+        slf: &Bound<'py, Self>,
+        files: Vec<AuditFileRow>,
+        settings: AuditSettings,
+    ) -> PyResult<(Vec<NativeAuditInput>, Vec<Bound<'py, PyAny>>)> {
+        let py: Python<'py> = slf.py();
+        let (model_loop, host) = slf.borrow().attachment_loop(py)?;
+        let owners: Vec<AttachmentOwner<'py>> = slf.borrow().attachment_owners(py)?;
+        let (attached, shadows) =
+            model_loop
+                .bind(py)
+                .get()
+                .run_audits(host.bind(py), &files, owners, &settings)?;
+        let first: usize = slf.borrow().audits.len();
+        let count: usize = attached.len();
+        slf.borrow_mut()
+            .audits
+            .extend(attached.into_iter().map(AuditRecord::new));
+        Ok((
+            (first..first + count)
+                .map(|index| NativeAuditInput::new(slf.clone().unbind(), index))
+                .collect(),
+            shadows,
+        ))
+    }
+
+    /// Keep the scope dependency keys native project assembly resolved, in audit order.
+    fn record_audit_scope_deps(&mut self, deps: Vec<Vec<ObjectKeyRow>>) -> PyResult<()> {
+        for (index, keys) in deps.into_iter().enumerate() {
+            self.audits
+                .get_mut(index)
+                .ok_or_else(|| PyIndexError::new_err(index))?
+                .set_scope_deps(keys);
+        }
+        Ok(())
+    }
+
+    /// The assembled audit at `index`.
+    fn compiled_audit(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledAudit> {
+        if index >= slf.borrow().audits.len() {
+            return Err(PyIndexError::new_err(index));
+        }
+        Ok(NativeCompiledAudit::new(slf.clone().unbind(), index))
     }
 
     /// Keep the dependency keys native project assembly resolved, in function order.
@@ -543,6 +669,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeCompiledSeed>()?;
     module.add_class::<NativeSourceInput>()?;
     module.add_class::<NativeFunctionInput>()?;
+    module.add_class::<NativeAuditInput>()?;
+    module.add_class::<NativeCompiledAudit>()?;
     module.add_class::<NativeCompiledFunction>()?;
     module.add_class::<NativeCompiledSource>()?;
     module.add_class::<NativeCompiledProject>()

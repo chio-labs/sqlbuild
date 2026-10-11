@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -91,7 +91,7 @@ def test_given_audit_when_executing_resolved_sql_then_returns_expected_rows(
     for sql in test_case.setup_sql:
         connection.execute(sql)
 
-    audit: CompiledAudit = CompiledAudit(
+    audit: CompiledAuditView = CompiledAudit(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.AUDIT,
             name="test_audit",

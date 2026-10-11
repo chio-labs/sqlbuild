@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import compiled_resource_type
-from sqlbuild.compiler.compile._helpers.render.declarations import resolve_declaration_expansion
 from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
-    DeclarationExpansionContext,
     DeclarationScopeResolver,
 )
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
@@ -117,14 +114,3 @@ def named_declaration_usages(
             ),
         )
     return (UsageRecord(consumer=consumer, declaration=record.identity),)
-
-
-def declaration_file_expansion(
-    *, context: DeclarationExpansionContext, file_path: Path, consumer: DeclarationIdentity
-) -> DeclarationExpansionContext:
-    """Resolve macros, enums, and constants from a declaration file's own owning folder."""
-
-    resolved: DeclarationExpansionContext = resolve_declaration_expansion(
-        context=context, file_path=file_path
-    )
-    return replace(resolved, declarations=replace(resolved.declarations, consumer=consumer))

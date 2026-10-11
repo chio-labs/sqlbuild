@@ -63,6 +63,11 @@ impl SourceRecord {
         }
     }
 
+    /// The attached source.
+    pub(crate) fn attached(&self) -> &AttachedSource {
+        &self.attached
+    }
+
     /// Keep the namespace native project assembly resolved for the source.
     pub(crate) fn set_namespace(&mut self, namespace: SourceNamespace) {
         self.namespace = Some(namespace);

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompiledSqlTest,
 )
-from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledProjectView
+from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledProjectView,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
@@ -424,7 +427,7 @@ def build_selected_audit_entries(
     model_materializations: dict[str, str],
 ) -> list[AuditPlanEntry]:
     entries: list[AuditPlanEntry] = []
-    selected_audits: tuple[CompiledAudit, ...] = tuple(
+    selected_audits: tuple[CompiledAuditView, ...] = tuple(
         audit
         for audit in project.audits
         if audit_is_selected(audit=audit, selected_keys=scope.selected_keys)
@@ -438,7 +441,7 @@ def build_selected_audit_entries(
     lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
         lineage.downstream_deps
     )
-    audit: CompiledAudit
+    audit: CompiledAuditView
     for audit in selected_audits:
         entries.append(
             plan_audit(

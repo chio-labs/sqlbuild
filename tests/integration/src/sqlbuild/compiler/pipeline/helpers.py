@@ -15,10 +15,9 @@ from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
-    CompileAuditInput,
     CompiledLineageColumnFact,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import AuditInput, CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
@@ -58,7 +57,7 @@ _AUDIT_FACTORY_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
 )
 
 
-def compile_audits_for_project(*, project_dir: Path) -> tuple[CompileAuditInput, ...]:
+def compile_audits_for_project(*, project_dir: Path) -> tuple[AuditInput, ...]:
     """Compile one project's audit inputs with the real DuckDB compiler path."""
 
     return build_compile_inputs(
@@ -68,9 +67,7 @@ def compile_audits_for_project(*, project_dir: Path) -> tuple[CompileAuditInput,
     ).audit_inputs
 
 
-def audit_input_projection(
-    *, audits: tuple[CompileAuditInput, ...]
-) -> tuple[tuple[object, ...], ...]:
+def audit_input_projection(*, audits: tuple[AuditInput, ...]) -> tuple[tuple[object, ...], ...]:
     """Project attachment-relevant fields for direct/generated equivalence."""
 
     return tuple(

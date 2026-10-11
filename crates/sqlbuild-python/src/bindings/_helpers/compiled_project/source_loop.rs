@@ -162,6 +162,36 @@ pub(crate) struct AuthoredExpansion<'py> {
     pub(crate) argument_references: Vec<ReferenceRow>,
 }
 
+/// `declaration_file_expansion`: a declaration file's folder context, consumed by `identity`.
+pub(crate) fn file_declarations<'py>(
+    context: &LoopContext<'_, 'py>,
+    file_path: &str,
+    identity: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let visibility = &context.classes.visibility;
+    let py: Python<'py> = identity.py();
+    let fields: Bound<'py, PyDict> = PyDict::new(py);
+    fields.set_item("consumer", identity)?;
+    if visibility.projects {
+        let contexts: Bound<'py, NativeDeclarationContexts> = visibility
+            .resolver
+            .getattr(NATIVE_CONTEXTS_ATTRIBUTE)?
+            .downcast_into()?;
+        let (resolved, _) =
+            contexts
+                .get()
+                .resolved_context(&visibility.resolver, file_path, None)?;
+        return Ok(replaced(py, &resolved, &fields)?.into_bound(py));
+    }
+    fields.set_item("enums", &visibility.public_enums)?;
+    fields.set_item("constants", &visibility.public_constants)?;
+    context
+        .classes
+        .macros
+        .declaration_context
+        .call((), Some(&fields))
+}
+
 /// `expand_authored_sql_result`: interpolate, splice declarations and expand macros.
 pub(crate) fn expanded_authored_sql<'py>(
     model_loop: &NativeModelLoop,

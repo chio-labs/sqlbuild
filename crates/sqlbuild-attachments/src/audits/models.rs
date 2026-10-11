@@ -66,3 +66,10 @@ pub enum ParameterRenderStop {
     /// The argument whose value cannot be rendered.
     UnsupportedValue(String),
 }
+
+/// The resources a singular audit reads, sorted, and its P004 `(message, help)`, if any.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SingularAuditResources {
+    pub resources: Vec<(String, String)>,
+    pub problem: Option<(String, String)>,
+}

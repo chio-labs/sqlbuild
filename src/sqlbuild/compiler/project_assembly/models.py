@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
     DynamicColumnContractProof,
 )
 from sqlbuild.compiler.project_assembly.types import NamespaceRow, ObjectKeyRow
@@ -20,7 +19,7 @@ class NativeProjectResources:
     source_namespaces: tuple[tuple[str | None, str | None] | None, ...]
     seed_namespaces: tuple[NamespaceRow, ...]
     function_deps: tuple[list[ObjectKeyRow], ...]
-    audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    audit_scope_deps: tuple[list[ObjectKeyRow], ...]
     failure: NativeResourceFailure | None = None
 
 

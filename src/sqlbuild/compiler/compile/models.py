@@ -17,7 +17,9 @@ from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CON
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    AuditInput,
     CompactBatchResponseCallback,
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledResourceType,
@@ -948,6 +950,22 @@ class CompileAuditInput:
                 AttachedAuditTargetKind(self.attached_target_kind),
             )
 
+    @property
+    def assembly_row(
+        self,
+    ) -> tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]:
+        """`(references, attached (kind, name))`, what assembly resolves scope deps from."""
+
+        return (
+            [
+                (str(reference.ref_kind), reference.ref_name, reference.ref_package)
+                for reference in self.references
+            ],
+            (str(self.attached_target_kind), self.attached_target_name)
+            if self.attached_target_kind is not None and self.attached_target_name is not None
+            else None,
+        )
+
 
 @dataclass(frozen=True)
 class CompileProjectInputs:
@@ -975,7 +993,7 @@ class CompileProjectInputs:
     sql_function_inputs: tuple[FunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
-    audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
+    audit_inputs: tuple[AuditInput, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
@@ -1236,7 +1254,7 @@ class CompiledProject:
     sources: tuple[CompiledSourceView, ...] = field(default_factory=tuple)
     seeds: tuple[CompiledSeedView, ...] = field(default_factory=tuple)
     functions: tuple[CompiledFunctionView, ...] = field(default_factory=tuple)
-    audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
+    audits: tuple[CompiledAuditView, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)

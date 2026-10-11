@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledObjectKey
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
     CompiledProjectView,
     CompiledResourceType,
 )
@@ -64,7 +65,7 @@ def attached_audit_gate_edges_impl(
 
 def _audit_gates(*, project: CompiledProjectView) -> tuple[_AuditGate, ...]:
     gates: list[_AuditGate] = []
-    audit: CompiledAudit
+    audit: CompiledAuditView
     for audit in project.audits:
         if audit.attached_target_kind is None or audit.attached_target_name is None:
             continue
@@ -105,7 +106,7 @@ def _gate_edges(
 
 
 def _extra_reads(
-    *, audit: CompiledAudit, target: CompiledObjectKey
+    *, audit: CompiledAuditView, target: CompiledObjectKey
 ) -> tuple[CompiledObjectKey, ...]:
     return tuple(
         read

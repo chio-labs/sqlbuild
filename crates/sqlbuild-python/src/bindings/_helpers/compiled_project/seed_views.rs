@@ -97,6 +97,16 @@ pub(crate) fn paired_seeds(
 }
 
 impl SeedRecord {
+    /// The seed's name, CSV file, declaration and declaring schema file.
+    pub(crate) fn parts(&self) -> (&str, &Py<PyAny>, &Py<PyAny>, &Py<PyAny>) {
+        (
+            &self.name,
+            &self.seed_file,
+            &self.schema_entry,
+            &self.schema_file,
+        )
+    }
+
     /// Keep the destination native project assembly resolved for the seed.
     pub(crate) fn set_namespace(&mut self, namespace: SeedNamespace) {
         let (database, schema, logical_database, logical_schema) = namespace;

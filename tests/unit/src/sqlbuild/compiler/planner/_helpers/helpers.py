@@ -38,6 +38,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
@@ -521,7 +522,7 @@ def build_test_project(
     )
     sql_tests.extend(((), (table_function_sql_test,))[bool(table_fn_test_function_names)])
 
-    audits: list[CompiledAudit] = []
+    audits: list[CompiledAuditView] = []
     model_name: str
     audit_source_names: tuple[str, ...]
     for model_name, audit_source_names in (audit_model_source_deps or {}).items():
@@ -1147,7 +1148,7 @@ def build_warnings_change_result(
 
 def build_audit_from_test_case(
     test_case: PlanAuditTestCase,
-) -> CompiledAudit:
+) -> CompiledAuditView:
     """Build a minimal CompiledAudit from a test case."""
 
     return CompiledAudit(
@@ -1367,7 +1368,7 @@ def build_scheduling_audit(
     references: tuple[CompileSqlReference, ...],
     attached_target_kind: AttachedAuditTargetKind | None,
     attached_target_name: str | None,
-) -> CompiledAudit:
+) -> CompiledAuditView:
     """Build a minimal CompiledAudit for scheduling tests."""
 
     stub_file: DiscoveredAuditFile = DiscoveredAuditFile(

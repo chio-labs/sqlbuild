@@ -1,5 +1,9 @@
 //! The compile-input model loop: each model's steps run in the attachment's order, natively.
 
+use crate::bindings::_helpers::compiled_project::audit_loop::{
+    AttachmentOwner, AuditFileRow, AuditSettings, attached_audits,
+};
+use crate::bindings::_helpers::compiled_project::audit_views::AttachedAudit;
 use crate::bindings::_helpers::compiled_project::function_loop::{
     FunctionRow, FunctionSettings, attached_functions, checked_table_function_arities,
 };
@@ -340,6 +344,25 @@ impl NativeModelLoop {
         };
         let attached: Vec<AttachedSource> = attached_sources(self, &context, rows, settings)?;
         Ok(retain_sources(project, attached))
+    }
+
+    /// Attach every singular audit, then each owner's attached audits.
+    pub(crate) fn run_audits<'py>(
+        &self,
+        host: &Bound<'py, PyAny>,
+        files: &[AuditFileRow],
+        owners: Vec<AttachmentOwner<'py>>,
+        settings: &AuditSettings,
+    ) -> PyResult<(Vec<AttachedAudit>, Vec<Bound<'py, PyAny>>)> {
+        let py: Python<'py> = host.py();
+        let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
+        let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
+        let context: LoopContext<'_, 'py> = LoopContext {
+            host,
+            classes: &classes,
+            contracts: &contracts,
+        };
+        attached_audits(self, &context, (files, owners), settings)
     }
 
     /// Attach every SQL, then Python, function in order, checking table function call arities.

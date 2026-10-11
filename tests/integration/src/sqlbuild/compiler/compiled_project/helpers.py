@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile._helpers.attachment import core as attachment_cor
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import CompileAdapterContext
 from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledProjectView,
     CompileInputsView,
@@ -508,4 +509,38 @@ def function_summary(function: CompiledFunctionView) -> tuple[object, ...]:
         function.destination.qualified_name,
         function.fingerprint_destination.qualified_name,
         (function.runtime_version, function.packages, function.tags, function.description),
+    )
+
+
+AUDIT_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[settings]\ndefault_audit_severity = "warn"\n'
+    ),
+    "models/orders.sql": (
+        "MODEL (description 'Orders.', columns (order_id (type INTEGER,"
+        " audits [not_null, at_least(minimum 1, severity error)])));\nSELECT 1 AS order_id\n"
+    ),
+    "models/customers.sql": "MODEL (description 'Customers.');\nSELECT 1 AS customer_id\n",
+    "audits/generic/at_least.sql": (
+        "AUDIT (name at_least);\nSELECT * FROM @relation WHERE @column < @minimum\n"
+    ),
+    "audits/singular/orders_have_customers.sql": (
+        "AUDIT (name orders_have_customers, run_scope final);\n"
+        'SELECT * FROM __ref("orders") o LEFT JOIN __ref("customers") c'
+        " ON o.order_id = c.customer_id WHERE c.customer_id IS NULL\n"
+    ),
+}
+
+
+def audit_summary(audit: CompiledAuditView) -> tuple[object, ...]:
+    """A compiled audit's planner-facing facts."""
+
+    return (
+        type(audit).__name__,
+        audit.definition_name,
+        tuple(dep.name for dep in audit.scope_deps),
+        str(audit.severity),
+        audit.run_scope,
+        (audit.attached_target_name, audit.attached_column_name),
+        audit.sql_body,
     )

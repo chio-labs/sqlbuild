@@ -7,10 +7,7 @@ from typing import cast
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-)
-from sqlbuild.compiler.compile.types import CompiledResourceType, CompileInputsView
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.project_assembly.constants import (
     COMPILE_INPUT_FAILURE,
     ENVIRONMENT_READ,
@@ -20,7 +17,6 @@ from sqlbuild.compiler.project_assembly.constants import (
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources, NativeResourceFailure
 from sqlbuild.compiler.project_assembly.types import (
     FailureRow,
-    ObjectKeyRow,
     ProjectResourcesRow,
 )
 from sqlbuild.compiler.sql_analysis.constants import NATIVE_FAILURE_PREFIX
@@ -48,7 +44,7 @@ def project_resources(
         source_namespaces=tuple(source_namespaces),
         seed_namespaces=tuple(seed_namespaces),
         function_deps=tuple(function_deps),
-        audit_scope_deps=tuple(_keys(keys) for keys in audit_deps),
+        audit_scope_deps=tuple(audit_deps),
         failure=None if failure is None else _failure(row=failure, held=held),
     )
 
@@ -74,10 +70,3 @@ def _replay_read(*, kind: str, name: str) -> None:
         COMPILE_INPUT_READS.environment_read(name)
     else:
         COMPILE_INPUT_READS.context_read(name)
-
-
-def _keys(rows: list[ObjectKeyRow]) -> tuple[CompiledObjectKey, ...]:
-    return tuple(
-        CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
-        for kind, name in rows
-    )

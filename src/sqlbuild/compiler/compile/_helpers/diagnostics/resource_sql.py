@@ -23,12 +23,12 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledSqlExpansion,
     CompilerDiagnostic,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
     CompiledProjectView,
     CompiledResourceType,
     DiagnosticPhase,
@@ -305,7 +305,10 @@ def _audit_resources(
 
 
 def _binds_cleanly(
-    *, audit: CompiledAudit, shapes: dict[str, dict[str, str]], profile: ExpressionInferenceProfile
+    *,
+    audit: CompiledAuditView,
+    shapes: dict[str, dict[str, str]],
+    profile: ExpressionInferenceProfile,
 ) -> bool:
     """A built-in single-column audit on a column its closed target shape contains."""
 
@@ -328,7 +331,7 @@ def _binds_cleanly(
     )
 
 
-def _audit_label(audit: CompiledAudit) -> str:
+def _audit_label(audit: CompiledAuditView) -> str:
     label: str = f"audit '{audit.definition_name}'"
     if audit.attached_target_name is not None:
         label += f" on {audit.attached_target_kind} '{audit.attached_target_name}'"

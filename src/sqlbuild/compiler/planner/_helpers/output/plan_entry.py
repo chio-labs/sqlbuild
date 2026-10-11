@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompilerDiagnostic,
@@ -23,6 +22,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
@@ -1862,7 +1862,7 @@ def scope_overlaps(
 
 def audit_is_selected(
     *,
-    audit: CompiledAudit,
+    audit: CompiledAuditView,
     selected_keys: frozenset[CompiledObjectKey],
 ) -> bool:
     """Return whether an audit belongs to the selected logical target scope."""
@@ -1884,7 +1884,7 @@ def _selected_audit_relation_keys(
     """Return relation keys needed to render selected audits without selecting those relations."""
 
     relation_keys: set[CompiledObjectKey] = set()
-    audit: CompiledAudit
+    audit: CompiledAuditView
     for audit in project.audits:
         if audit_is_selected(audit=audit, selected_keys=selected_keys):
             relation_keys.update(audit.scope_deps)

@@ -1,3 +1,5 @@
+pub(crate) mod audit_loop;
+pub(crate) mod audit_views;
 pub(crate) mod compiled_model_view;
 pub(crate) mod function_loop;
 pub(crate) mod function_views;

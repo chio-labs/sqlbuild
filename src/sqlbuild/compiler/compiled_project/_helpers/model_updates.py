@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
+    CompiledAudit,
     CompiledFunction,
     CompiledModel,
     CompiledProject,
@@ -18,6 +19,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
@@ -95,7 +97,39 @@ def compiled_project_record_impl(project: CompiledProjectView) -> CompiledProjec
     fields["seeds"] = tuple(map(compiled_seed_record_impl, fields["seeds"]))
     fields["sources"] = tuple(map(compiled_source_record_impl, fields["sources"]))
     fields["functions"] = tuple(map(compiled_function_record_impl, fields["functions"]))
+    fields["audits"] = tuple(map(compiled_audit_record_impl, fields["audits"]))
     return CompiledProject(**fields)
+
+
+def compiled_audit_record_impl(audit: CompiledAuditView) -> CompiledAudit:
+    """The audit as a `CompiledAudit`, projected from its owner when it is a native view."""
+
+    if isinstance(audit, CompiledAudit):
+        return audit
+    return CompiledAudit(
+        key=audit.key,
+        scope_deps=audit.scope_deps,
+        name=audit.name,
+        definition_name=audit.definition_name,
+        audit_file=audit.audit_file,
+        audit_block=audit.audit_block,
+        sql_body=audit.sql_body,
+        evaluation_mode=audit.evaluation_mode,
+        measurement_contract=audit.measurement_contract,
+        thresholds=audit.thresholds,
+        minimum_samples=audit.minimum_samples,
+        measure_sql=audit.measure_sql,
+        evidence_sql=audit.evidence_sql,
+        evidence_limit=audit.evidence_limit,
+        references=audit.references,
+        attached_target_kind=audit.attached_target_kind,
+        attached_target_name=audit.attached_target_name,
+        attached_column_name=audit.attached_column_name,
+        severity=audit.severity,
+        run_scope=audit.run_scope,
+        always_run=audit.always_run,
+        description=audit.description,
+    )
 
 
 def compiled_function_record_impl(function: CompiledFunctionView) -> CompiledFunction:

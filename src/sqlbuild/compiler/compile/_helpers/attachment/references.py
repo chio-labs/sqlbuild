@@ -8,7 +8,6 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
@@ -49,57 +48,6 @@ def _validate_table_function_row_arities(
             f"{owner} table function '{name}' expects {expected_count} "
             f"{expected_label} but received {received}"
         )
-
-
-def validate_audit_references(
-    *,
-    references: tuple[CompileSqlReference, ...],
-    audit_file: DiscoveredAuditFile,
-    known_model_names: set[str],
-    known_seed_names: set[str],
-    known_source_names: set[str],
-) -> None:
-    """Validate extracted audit refs against discovered project inputs."""
-
-    reference: CompileSqlReference
-    for reference in references:
-        if reference.ref_kind == SqlReferenceKind.DBT_REF:
-            raise CompileInputError(
-                f"Audit file {audit_file.relative_path} may not use "
-                f"{SqlReferenceKind.DBT_REF.example_call(reference.ref_name, quote='"')}; "
-                "audit dbt model checks belong in dbt"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.REF
-            and reference.ref_name not in known_model_names
-        ):
-            if reference.ref_name in known_seed_names:
-                raise CompileInputError(
-                    f"Audit file {audit_file.relative_path} references seed '{reference.ref_name}' "
-                    f"with {SqlReferenceKind.REF.placeholder_call('...')}. Use "
-                    f"{SqlReferenceKind.SEED.example_call(reference.ref_name, quote='"')} for seed "
-                    f"references; {SqlReferenceKind.REF.function_name} only resolves models."
-                )
-            raise CompileInputError(
-                f"Audit file {audit_file.relative_path} references unknown model "
-                f"'{reference.ref_name}'"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.SEED
-            and reference.ref_name not in known_seed_names
-        ):
-            raise CompileInputError(
-                f"Audit file {audit_file.relative_path} references unknown seed "
-                f"'{reference.ref_name}'"
-            )
-        if (
-            reference.ref_kind == SqlReferenceKind.SOURCE
-            and reference.ref_name not in known_source_names
-        ):
-            raise CompileInputError(
-                f"Audit file {audit_file.relative_path} references unknown source "
-                f"'{reference.ref_name}'"
-            )
 
 
 def build_known_ref_names(discovered_inputs: DiscoveredProjectInputs) -> set[str]:

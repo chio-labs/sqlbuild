@@ -2,6 +2,7 @@
 
 from sqlbuild.compiler.compile.models import CompiledAudit
 from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_audit_record import compiled_audit_record
 from sqlbuild.rule_engine.models import Model
 
 
@@ -9,7 +10,7 @@ class AuditFacts:
     """Compiled audits indexed by their model subject."""
 
     def __init__(self, *, project: CompiledProjectView) -> None:
-        self._audits: tuple[CompiledAudit, ...] = project.audits
+        self._audits: tuple[CompiledAudit, ...] = tuple(map(compiled_audit_record, project.audits))
         by_model: dict[str, list[CompiledAudit]] = {}
         for audit in self._audits:
             if audit.attached_target_name is not None:
