@@ -85,17 +85,11 @@ fn text(value: Option<&Value>) -> String {
         .unwrap_or_else(|| "-".to_owned())
 }
 
-/// Families as `name:aggregate:pattern`; a pattern containing `(` fails to compile.
+/// Families as `name:aggregate:pattern`.
 pub(super) fn dynamic_summary(raw: &Value) -> Result<Vec<String>, String> {
-    let pattern_error = |pattern: &str| {
-        pattern
-            .contains('(')
-            .then(|| "missing ), unterminated subpattern at position 0".to_owned())
-    };
     crate::header_metadata::main::parse_dynamic_columns::parse_dynamic_columns(
         raw,
         ("orders", "models/orders.sql"),
-        &pattern_error,
     )
     .map(|families| {
         families

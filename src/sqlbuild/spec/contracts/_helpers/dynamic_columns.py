@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import re
+from functools import lru_cache
 
+import sqlbuild._native as _native
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
@@ -12,7 +13,7 @@ def dynamic_family_accepts_name(*, family: SchemaDynamicColumnFamily, column_nam
 
     if family.name_pattern is None:
         return True
-    return re.fullmatch(family.name_pattern, column_name) is not None
+    return _compiled_name_pattern(family.name_pattern).matches(column_name)
 
 
 def matching_dynamic_families(
@@ -25,3 +26,8 @@ def matching_dynamic_families(
         for family in families
         if dynamic_family_accepts_name(family=family, column_name=column_name)
     )
+
+
+@lru_cache(maxsize=256)
+def _compiled_name_pattern(pattern: str) -> _native.NamePattern:
+    return _native.NamePattern(pattern)

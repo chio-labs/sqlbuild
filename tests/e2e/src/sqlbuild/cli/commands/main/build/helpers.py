@@ -1056,3 +1056,62 @@ def coded_json_diagnostic(*, document: dict[str, Any], code: str) -> dict[str, A
     """Return the first compile diagnostic with the given code."""
 
     return {item["code"]: item for item in document["diagnostics"]}[code]
+
+
+def dynamic_category_project(*, tmp_path: Path, name_pattern_entry: str) -> Path:
+    """Create a project pivoting order amounts into a governed dynamic column family."""
+
+    return prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="dynamic_category_amounts",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "dynamic_category_amounts"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                'database = "warehouse.duckdb"\n\n'
+                "[defaults]\n"
+                'contract = "enforced"\n\n'
+                "[rules]\n"
+                'select = ["SQBRMODEL102", "SQBRCONTRACT101", "SQBRCONTRACT105", '
+                '"SQBRCONTRACT106"]\n'
+            ),
+            "models/stg_order_amounts.sql": (
+                "MODEL (description 'Test model stg_order_amounts.',\n"
+                "  materialized table,\n"
+                "  columns (\n"
+                "    customer_id (type INTEGER),\n"
+                "    category (type VARCHAR),\n"
+                '    amount (type "DECIMAL(12,2)"),\n'
+                "  ),\n"
+                ");\n"
+                "SELECT CAST(1 AS INTEGER) AS customer_id, "
+                "CAST('books' AS VARCHAR) AS category, "
+                "CAST(10.25 AS DECIMAL(12,2)) AS amount\n"
+                "UNION ALL\n"
+                "SELECT CAST(1 AS INTEGER), CAST('games' AS VARCHAR), "
+                "CAST(20.50 AS DECIMAL(12,2))\n"
+                "UNION ALL\n"
+                "SELECT CAST(2 AS INTEGER), CAST('books' AS VARCHAR), "
+                "CAST(7.00 AS DECIMAL(12,2))\n"
+            ),
+            "models/customer_category_amounts.sql": (
+                "MODEL (description 'Test model customer_category_amounts.',\n"
+                "  materialized table,\n"
+                "  columns (customer_id (type INTEGER)),\n"
+                "  dynamic_columns (\n"
+                "    category_amounts (\n"
+                "      pivot_column category,\n"
+                "      value_column amount,\n"
+                "      aggregate MAX,\n"
+                '      type "DECIMAL(12,2)"' + name_pattern_entry + "\n"
+                "    )\n"
+                "  ),\n"
+                ");\n"
+                'PIVOT __ref("stg_order_amounts")\n'
+                "ON category\n"
+                "USING MAX(amount)\n"
+                "GROUP BY customer_id\n"
+            ),
+        },
+    )

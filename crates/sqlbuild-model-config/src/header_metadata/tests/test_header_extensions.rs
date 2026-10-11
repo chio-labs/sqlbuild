@@ -41,7 +41,7 @@ fn given_dynamic_columns_when_parsing_then_families_or_first_error_are_returned(
             raw: map(&[("revenue", family(Some("(")))]),
             expected_families: Err(
                 "model 'orders' dynamic column family 'revenue' has invalid name_pattern: \
-                 missing ), unterminated subpattern at position 0",
+                 unclosed group",
             ),
         },
         DynamicColumnsTestCase {
