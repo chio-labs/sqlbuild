@@ -320,10 +320,31 @@ GENERATOR_DIALECT_BLOCKS: tuple[str, ...] = tuple(
     block for block in GENERATOR_ANALYSIS_BLOCKS if block not in GENERATOR_DIALECT_EXCLUDED_BLOCKS
 )
 GENERATOR_SELECTED_MODEL: str = "{model}"
+GENERATOR_ANALYSIS_MODEL: str = "{analysis_model}"
+GENERATOR_RICH_LINEAGE_ARGUMENTS: tuple[str, ...] = ("compile", "--json", "--lineage-mode", "rich")
 GENERATOR_ANALYSIS_MODE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("compile-select", ("compile", "--json", "--select", GENERATOR_SELECTED_MODEL)),
     ("compile-no-analysis", ("compile", "--json", "--no-sql-analysis")),
-    ("compile-rich-lineage", ("compile", "--json", "--lineage-mode", "rich")),
+    ("compile-rich-lineage", GENERATOR_RICH_LINEAGE_ARGUMENTS),
+    (
+        "lineage-rich-upstream",
+        ("lineage", "--json", f"{GENERATOR_ANALYSIS_MODEL}.amount", "--direction", "upstream"),
+    ),
+    (
+        "lineage-rich-downstream",
+        ("lineage", "--json", f"{GENERATOR_SELECTED_MODEL}.amount", "--direction", "downstream"),
+    ),
+    (
+        "lineage-fast-upstream",
+        ("lineage", "--json", "--mode", "fast", f"{GENERATOR_ANALYSIS_MODEL}.amount"),
+    ),
+    ("lineage-relations", ("lineage", "--json", GENERATOR_SELECTED_MODEL, "--direction", "both")),
+)
+GOLDEN_STDOUT_LABELS: frozenset[str] = frozenset(
+    label for label, _ in GENERATOR_ANALYSIS_MODE_COMMANDS if label.startswith("lineage-")
+)
+DIALECT_RICH_LINEAGE: DifferentialCommand = DifferentialCommand(
+    label="compile-rich-lineage", arguments=GENERATOR_RICH_LINEAGE_ARGUMENTS
 )
 GENERATOR_CHANNEL_ENV_VAR: str = "SQB_DIFFERENTIAL_CHANNEL"
 GENERATOR_MISSING_ENV_VAR: str = "SQB_DIFFERENTIAL_UNSET"

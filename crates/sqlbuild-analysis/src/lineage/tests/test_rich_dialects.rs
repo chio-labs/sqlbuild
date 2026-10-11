@@ -57,7 +57,7 @@ fn given_analysis_dialect_names_when_resolving_then_match_the_wheel_decoding() {
         for name in test_case.names {
             let decoded: Option<DialectType> =
                 serde_json::from_value(serde_json::Value::String((*name).to_owned())).ok();
-            assert_eq!(parser_dialect(Some(name)), decoded, "{name}");
+            assert_eq!(parser_dialect(Some(name)).ok(), decoded, "{name}");
             assert_eq!(
                 decoded.is_some(),
                 test_case.expected_known,

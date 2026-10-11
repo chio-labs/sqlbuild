@@ -8,6 +8,19 @@ pub enum LineageResourceType {
     Seed,
 }
 
+/// A semantic column use projected onto a project resource and authored SQL.
+pub struct DirectSemanticUse {
+    pub model: String,
+    pub context: String,
+    pub expression: String,
+    pub resource_type: LineageResourceType,
+    pub resource_name: String,
+    pub column: String,
+    pub confidence: String,
+    pub line: Option<u64>,
+    pub offset: Option<u64>,
+}
+
 impl LineageResourceType {
     /// Python's `CompiledResourceType` value.
     pub fn as_str(self) -> &'static str {

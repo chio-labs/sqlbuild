@@ -79,7 +79,7 @@ pub(crate) fn schema_names(resource: &RichSchemaResource) -> LineageSchemaResour
 }
 
 /// The physical name's typed columns; a later resource with columns replaces an earlier one.
-fn schema_tables(
+pub(crate) fn schema_tables(
     schema: &[RichSchemaResource],
     referenced: &HashSet<String>,
 ) -> HashMap<String, SchemaTable> {

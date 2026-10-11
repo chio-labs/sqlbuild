@@ -18,7 +18,7 @@ pub fn build_rich_lineage(request: &RichLineageRequest) -> Result<Vec<RichLineag
     if request.models.is_empty() {
         return Ok(Vec::new());
     }
-    let Some(dialect) = parser_dialect(Some(&request.dialect)) else {
+    let Ok(dialect) = parser_dialect(Some(&request.dialect)) else {
         return Err(format!("Unknown dialect: {}", request.dialect));
     };
     let context = request_context(request, dialect);

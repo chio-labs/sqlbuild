@@ -106,5 +106,55 @@ fn source_row(source: LineageSource) -> SourceRow {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(build_rich_column_lineage, module)?)?;
+    module.add_function(wrap_pyfunction!(build_direct_semantic_uses, module)?)?;
     Ok(())
+}
+
+type SemanticUseRow = (
+    String,
+    String,
+    String,
+    &'static str,
+    String,
+    String,
+    String,
+    Option<u64>,
+    Option<u64>,
+);
+
+/// Project semantic uses onto authored resources without Python analysis reconstruction.
+#[pyfunction]
+fn build_direct_semantic_uses(
+    py: Python<'_>,
+    schema: Vec<(String, String, TypedColumns, TypedColumns)>,
+    models: Vec<(String, String, String)>,
+    dialect: &str,
+) -> PyResult<Vec<SemanticUseRow>> {
+    let schema = schema
+        .into_iter()
+        .map(schema_resource)
+        .collect::<PyResult<Vec<_>>>()?;
+    let uses = py
+        .compiler_detach(|| {
+            sqlbuild_analysis::lineage::main::direct_semantic_uses::direct_semantic_uses(
+                &schema, &models, dialect,
+            )
+        })
+        .map_err(compiler_error)?;
+    Ok(uses
+        .into_iter()
+        .map(|usage| {
+            (
+                usage.model,
+                usage.context,
+                usage.expression,
+                usage.resource_type.as_str(),
+                usage.resource_name,
+                usage.column,
+                usage.confidence,
+                usage.line,
+                usage.offset,
+            )
+        })
+        .collect())
 }

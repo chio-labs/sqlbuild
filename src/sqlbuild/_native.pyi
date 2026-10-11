@@ -1468,6 +1468,11 @@ def build_fast_column_lineage(
     request: tuple[str | None, list[tuple[str, str, list[str]]], list[tuple[bool, str, list[str]]]],
     /,
 ) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
+def build_direct_semantic_uses(
+    schema: list[tuple[str, str, list[tuple[str, str | None]], list[tuple[str, str | None]]]],
+    models: list[tuple[str, str, str]],
+    dialect: str,
+) -> list[tuple[str, str, str, str, str, str, str, int | None, int | None]]: ...
 def build_rich_column_lineage(
     request: tuple[
         str,

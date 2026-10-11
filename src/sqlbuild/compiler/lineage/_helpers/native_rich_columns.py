@@ -89,13 +89,8 @@ def _schema_resources(
             (
                 CompiledResourceType.MODEL.value,
                 model.name,
-                [(column.name, column.type) for column in model.inferred_columns or ()],
-                [
-                    (column.name, column.type)
-                    for column in (
-                        model.schema_entry.columns if model.schema_entry is not None else ()
-                    )
-                ],
+                [(name, column_type) for name, column_type, _ in model.inferred_rows or ()],
+                list(model.schema_column_rows or ()),
             )
         )
     for source in project.sources:

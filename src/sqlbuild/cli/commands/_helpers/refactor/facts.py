@@ -154,7 +154,9 @@ def _declaration(record: DeclarationRecord) -> dict[str, object]:
     }
 
 
-def _model(*, model: CompiledModelView, expansion: CompiledSqlExpansion | None) -> dict[str, object]:
+def _model(
+    *, model: CompiledModelView, expansion: CompiledSqlExpansion | None
+) -> dict[str, object]:
     values: dict[str, object] = dict(model.config.values)
     return {
         "name": model.name,
