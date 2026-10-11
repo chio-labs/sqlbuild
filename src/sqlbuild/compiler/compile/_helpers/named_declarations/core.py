@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.scopes.constants import DECLARATION_ROLE_PARTS
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
-from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
+from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visible
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -69,7 +69,7 @@ def named_declaration_usages(
     lexical_consumer: str | DeclarationRecord = (
         consumer_path if isinstance(consumer_path, DeclarationRecord) else consumer_path.as_posix()
     )
-    if declaration_visibility(declaration=record, consumer=lexical_consumer) is None:
+    if not declaration_visible(declaration=record, consumer=lexical_consumer):
         consumer_label: str = (
             consumer_path.path
             if isinstance(consumer_path, DeclarationRecord)

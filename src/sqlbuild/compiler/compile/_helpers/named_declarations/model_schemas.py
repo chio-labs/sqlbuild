@@ -16,7 +16,7 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
-from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
+from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visible
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
@@ -95,7 +95,7 @@ def _enum_type_records(
         )
         if enum_record is None:
             continue
-        if declaration_visibility(declaration=enum_record, consumer=record) is None:
+        if not declaration_visible(declaration=enum_record, consumer=record):
             owner: str = enum_record.owning_path or enum_record.ownership_root.path
             report_compile_diagnostic(
                 key=(

@@ -1,25 +1,32 @@
-"""Visibility of one declaration from an authored consumer path."""
+"""Visibility of one declaration from an authored consumer path, checked natively."""
 
 from __future__ import annotations
 
-from pathlib import PurePath
-
-from sqlbuild.compiler.scopes._helpers.visibility import (
-    declaration_lexical_path,
-    path_visibility_reason,
-)
-from sqlbuild.compiler.scopes.models import DeclarationRecord
-from sqlbuild.compiler.scopes.types import VisibilityReason
+import sqlbuild._native as _native
+from sqlbuild.compiler.scopes._helpers.visibility import declaration_lexical_path
+from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
+from sqlbuild.compiler.scopes.models import DeclarationRecord, ResourceIdentity
 
 
-def declaration_visibility(
-    *, declaration: DeclarationRecord, consumer: str | PurePath | DeclarationRecord
-) -> VisibilityReason | None:
-    """Return why a declaration is visible from a resource path or a declaration's owner folder."""
+def declaration_visible(
+    *, declaration: DeclarationRecord, consumer: str | DeclarationRecord
+) -> bool:
+    """Return whether a declaration is visible from a resource path or a declaration's folder."""
 
-    path: str | PurePath = (
+    path: str = (
         declaration_lexical_path(record=consumer)
         if isinstance(consumer, DeclarationRecord)
         else consumer
     )
-    return path_visibility_reason(declaration=declaration, path=path)
+    owner: ResourceIdentity | None = declaration.identity.owner
+    visible: bool | None
+    message: str | None
+    visible, message = _native.scope_path_visible(
+        declaration.scope.value,
+        None if owner is None else (owner.kind.value, owner.name),
+        declaration.owning_path,
+        path,
+    )
+    if visible is None:
+        raise InvalidScopePathError(message or "")
+    return visible

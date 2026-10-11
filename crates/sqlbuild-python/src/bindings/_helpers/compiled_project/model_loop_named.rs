@@ -111,6 +111,18 @@ pub(crate) fn resource_named_usages<'py>(
 
 /// `InvalidScopePathError` for the consumer path or owner folder Python normalizes first.
 fn path_error(context: &LoopContext<'_, '_>, declared: &DeclaredScope, label: &str) -> PyErr {
+    match context
+        .classes
+        .scope_path_error
+        .call1((scope_path_message(declared, label),))
+    {
+        Ok(instance) => PyErr::from_value(instance),
+        Err(failure) => failure,
+    }
+}
+
+/// The `InvalidScopePathError` message of the first path Python's visibility check rejects.
+pub(crate) fn scope_path_message(declared: &DeclaredScope, label: &str) -> String {
     let owner: &str = declared
         .owning_path
         .as_deref()
@@ -123,15 +135,11 @@ fn path_error(context: &LoopContext<'_, '_>, declared: &DeclaredScope, label: &s
             Ok(_) => (label, ScopePathFailure::NotProjectRelative),
         },
     };
-    let message: String = match failure {
+    match failure {
         ScopePathFailure::NotProjectRelative => {
             format!("Scope path must be project-relative: {path}")
         }
         ScopePathFailure::EscapesProject => format!("Scope path escapes the project: {path}"),
-    };
-    match context.classes.scope_path_error.call1((message,)) {
-        Ok(instance) => PyErr::from_value(instance),
-        Err(failure) => failure,
     }
 }
 

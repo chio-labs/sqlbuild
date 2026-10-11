@@ -925,6 +925,9 @@ def scope_relocations(
     destination: str,
 ) -> list[tuple[int, str, str, tuple[str, str, str | None], str | None]] | None: ...
 def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str: ...
+def scope_path_visible(
+    scope: str, owner: tuple[str, str] | None, owning_path: str | None, path: str
+) -> tuple[bool | None, str | None]: ...
 def build_native_scope_index(
     resources: list[tuple[str, str, str, str]],
     declarations: list[
