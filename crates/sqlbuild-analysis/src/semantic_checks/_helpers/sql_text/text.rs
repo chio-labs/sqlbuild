@@ -1,54 +1,56 @@
-//! Python string operations over ASCII text, where byte offsets equal code-point offsets.
+//! Python string operations, with offsets in code points as Python's string indexes count them.
 
-use crate::semantic_checks::models::SemanticDeferral;
+use sqlbuild_core::text::main::active_python_text::active_python_text;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_core::text::main::python_upper::python_upper;
 
-/// ASCII text or a deferral, because Python's case folding and regex classes differ beyond it.
-pub(crate) fn ascii(text: &str) -> Result<&str, SemanticDeferral> {
-    if text.is_ascii() {
-        Ok(text)
-    } else {
-        Err(SemanticDeferral::NonAsciiText)
-    }
-}
-
-/// ASCII text without the separators Python's `\s` matches and Rust's does not.
-pub(crate) fn plain_text(text: &str) -> Result<&str, SemanticDeferral> {
-    if ascii(text)?
-        .bytes()
-        .any(|byte| (0x1c..=0x1f).contains(&byte))
-    {
-        return Err(SemanticDeferral::NonAsciiText);
-    }
-    Ok(text)
-}
-
-/// Python's `str.casefold` on ASCII text.
+/// Python's `str.casefold`.
 pub(crate) fn casefold(text: &str) -> String {
-    text.to_ascii_lowercase()
+    python_casefold(active_python_text(), text)
 }
 
-/// Python's `str.splitlines(keepends=True)` line lengths on ASCII text.
-fn line_ends(text: &str) -> Vec<(usize, usize)> {
-    let bytes = text.as_bytes();
-    let mut lines: Vec<(usize, usize)> = Vec::new();
+/// Python's `str.upper`.
+pub(crate) fn upper(text: &str) -> String {
+    python_upper(active_python_text(), text)
+}
+
+/// The line boundaries Python's `str.splitlines` splits on.
+fn is_line_boundary(character: char) -> bool {
+    matches!(
+        character,
+        '\n' | '\r'
+            | '\u{b}'
+            | '\u{c}'
+            | '\u{1c}'
+            | '\u{1d}'
+            | '\u{1e}'
+            | '\u{85}'
+            | '\u{2028}'
+            | '\u{2029}'
+    )
+}
+
+/// Python's `str.splitlines(keepends=True)` as `(start, content end, next start)` byte offsets.
+fn line_ends(text: &str) -> Vec<(usize, usize, usize)> {
+    let mut lines: Vec<(usize, usize, usize)> = Vec::new();
     let mut start: usize = 0;
-    let mut index: usize = 0;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if matches!(byte, b'\n' | b'\r' | 0x0b | 0x0c | 0x1c | 0x1d | 0x1e) {
-            let content_end = index;
-            index += 1;
-            if byte == b'\r' && bytes.get(index) == Some(&b'\n') {
-                index += 1;
-            }
-            lines.push((start, content_end));
-            start = index;
-        } else {
-            index += 1;
+    let mut characters = text.char_indices().peekable();
+    while let Some((index, character)) = characters.next() {
+        if !is_line_boundary(character) {
+            continue;
         }
+        let mut next: usize = index + character.len_utf8();
+        if character == '\r'
+            && let Some((_, '\n')) = characters.peek()
+        {
+            let _ = characters.next();
+            next += 1;
+        }
+        lines.push((start, index, next));
+        start = next;
     }
-    if start < bytes.len() {
-        lines.push((start, bytes.len()));
+    if start < text.len() {
+        lines.push((start, text.len(), text.len()));
     }
     lines
 }
@@ -56,6 +58,7 @@ fn line_ends(text: &str) -> Vec<(usize, usize)> {
 /// Python's `_line_index`: `splitlines()` and the running starts of `splitlines(keepends=True)`.
 pub(crate) struct LineIndex<'a> {
     pub(crate) lines: Vec<&'a str>,
+    /// Code-point offsets of each line start, then the text length.
     pub(crate) starts: Vec<usize>,
 }
 
@@ -64,11 +67,10 @@ impl<'a> LineIndex<'a> {
         let ends = line_ends(text);
         let mut starts: Vec<usize> = vec![0];
         let mut lines: Vec<&'a str> = Vec::with_capacity(ends.len());
-        for (index, (start, content_end)) in ends.iter().enumerate() {
-            lines.push(&text[*start..*content_end]);
-            let next_start = ends.get(index + 1).map_or(text.len(), |(next, _)| *next);
+        for (start, content_end, next_start) in ends {
+            lines.push(&text[start..content_end]);
             let previous = starts.last().copied().unwrap_or(0);
-            starts.push(previous + (next_start - start));
+            starts.push(previous + text[start..next_start].chars().count());
         }
         Self { lines, starts }
     }
@@ -85,9 +87,9 @@ impl<'a> LineIndex<'a> {
 pub(crate) fn newlines_before(text: &str, end: i64) -> i64 {
     let end: usize = clamp(text, end);
     i64::try_from(
-        text.as_bytes()[..end]
-            .iter()
-            .filter(|byte| **byte == b'\n')
+        text.chars()
+            .take(end)
+            .filter(|character| *character == '\n')
             .count(),
     )
     .unwrap_or(i64::MAX)
@@ -96,19 +98,34 @@ pub(crate) fn newlines_before(text: &str, end: i64) -> i64 {
 /// Python's `text.rfind("\n", 0, end)` with Python's slice clamping.
 pub(crate) fn last_newline_before(text: &str, end: i64) -> i64 {
     let end: usize = clamp(text, end);
-    text.as_bytes()[..end]
-        .iter()
-        .rposition(|byte| *byte == b'\n')
-        .map_or(-1, |index| i64::try_from(index).unwrap_or(i64::MAX))
+    text.chars()
+        .take(end)
+        .enumerate()
+        .filter(|(_, character)| *character == '\n')
+        .last()
+        .map_or(-1, |(index, _)| i64::try_from(index).unwrap_or(i64::MAX))
 }
 
+/// A Python slice bound over `text`'s code points: negative counts from the end.
 fn clamp(text: &str, end: i64) -> usize {
-    let length: i64 = i64::try_from(text.len()).unwrap_or(i64::MAX);
+    let length: i64 = i64::try_from(text.chars().count()).unwrap_or(i64::MAX);
     let end: i64 = if end < 0 { (length + end).max(0) } else { end };
     usize::try_from(end.min(length)).unwrap_or(0)
 }
 
-/// Python's `text[:end]` for a non-negative end on ASCII text.
+/// Python's `text[:end]`.
 pub(crate) fn prefix(text: &str, end: i64) -> &str {
-    &text[..clamp(text, end)]
+    &text[..byte_offset(text, clamp(text, end))]
+}
+
+/// The byte offset of code point `index`, or the text length past the end.
+pub(crate) fn byte_offset(text: &str, index: usize) -> usize {
+    text.char_indices()
+        .nth(index)
+        .map_or(text.len(), |(byte, _)| byte)
+}
+
+/// The code-point offset of byte offset `byte` on a character boundary.
+pub(crate) fn code_point_offset(text: &str, byte: usize) -> usize {
+    text[..byte].chars().count()
 }

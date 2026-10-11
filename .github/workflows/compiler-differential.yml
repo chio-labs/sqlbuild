@@ -37,14 +37,8 @@ jobs:
         run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
-      - name: Compare dense projects with and without custom rules on the preview engine
+      - name: Compare dense projects with and without custom rules (native vs native-preview)
         env:
           MODELS: ${{ matrix.models }}
         run: make compiler-differential-dense COMPILER_DIFFERENTIAL_DENSE_MODELS="${MODELS}"
-      - name: Compare dense projects with and without custom rules on the shipped engine
-        env:
-          MODELS: ${{ matrix.models }}
-        run: >-
-          make compiler-differential-dense COMPILER_DIFFERENTIAL_DENSE_MODELS="${MODELS}"
-          COMPILER_DIFFERENTIAL_ARGS="--engines python native"
 

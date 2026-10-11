@@ -26,12 +26,7 @@ NATIVE_FALLBACK_COUNTS_FIELD: str = "counts"
 NATIVE_FALLBACK_PROJECT_CORPUS: str = "project"
 NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
     "analysis_session": "model_analysis",
-    "fast_columns.py": "lineage_facts",
-    "type_recovery.py": "semantic_checks",
-    "recovery.py": "semantic_checks",
-    "metadata_validation.py": "semantic_checks",
     "contracts/columns.py": "contracts",
-    "contracts/promotion.py": "contracts",
 }
 NATIVE_FALLBACK_DEFERRAL_UNKNOWN_STAGE: str = "analysis"
 NATIVE_FALLBACK_LIST_HEADER: str = (
@@ -62,8 +57,8 @@ GOLDEN_PATH_MASK: str = "<project>"
 GOLDEN_WORK_MASK: str = "<work>"
 GOLDEN_VERSION_MASK: str = "<sqlbuild-version>"
 GOLDEN_MISSING_HINT: str = "no golden; record it with `make compiler-baselines`"
-ENGINE_NAMES: tuple[str, ...] = ("python", "native", "native-preview")
-DEFAULT_ENGINES: tuple[str, str] = ("python", "native-preview")
+ENGINE_NAMES: tuple[str, ...] = ("native", "native-preview")
+DEFAULT_ENGINES: tuple[str, str] = ("native", "native-preview")
 SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
 EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset(
     {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR, ANALYSIS_RECORD_ENV_VAR}
@@ -689,6 +684,12 @@ ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "contracts",
     "pipeline/_helpers/target_validation.py",
     "sql_analysis",
+)
+ANALYSIS_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (
+    "crates/sqlbuild-analysis/src/contracts/constants.rs",
+)
+NATIVE_CODE_CONSTANT_PATTERN: re.Pattern[str] = re.compile(
+    r'const [A-Z0-9_]*_CODE: &str = "([A-Z][0-9]{3})";'
 )
 _NEVER_REPORTED_BY_POLYGLOT: str = (
     "polyglot defines the finding but never reports it, and no SQLBuild check maps to it"

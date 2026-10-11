@@ -12,29 +12,25 @@ class GeneratedAssemblyParityTestCase:
     count: int
     model_count: int
     environment: dict[str, str]
-    expected_minimum_python_calls: int
     expected_minimum_environment_reads: int
 
 
 @dataclass(frozen=True)
 class AssemblyDeferralTestCase:
-    """A project native hands back to Python, recording why, with Python's exact outcome."""
+    """A project whose model SQL Python rejects with a syntax error."""
 
     description: str
     files: dict[str, str]
-    expected_kind: str
     expected_error: str
 
 
 @dataclass(frozen=True)
-class DeferredAssemblyTestCase:
-    """A project native hands back to Python, which assembles it without error."""
+class EdgeAssemblyTestCase:
+    """Projects whose assembly raises or reads Python-only values, against Python's golden."""
 
     description: str
-    effective_vars: dict[str, object]
-    seed_schema: str
-    expected_schema: str
-    expected_kind: str
+    projects: tuple[tuple[str, dict[str, str], dict[str, object] | None], ...]
+    expected_raised: int
 
 
 @dataclass(frozen=True)
@@ -54,4 +50,24 @@ class OptOutTestCase:
     description: str
     models: dict[str, str]
     expected_rejected: dict[str, bool]
-    expected_python_validations: int
+
+
+@dataclass(frozen=True)
+class GraphFactsTestCase:
+    """A project whose assembly request carries each resource's project-graph facts."""
+
+    description: str
+    files: dict[str, str]
+    expected_model_tags: tuple[list[str], ...]
+    expected_seeds: list[tuple[str, list[str]]]
+    expected_function_kinds: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativePanicTestCase:
+    """A project whose native assembly panics in the parser."""
+
+    description: str
+    files: dict[str, str]
+    dialect: str
+    expected_message: str

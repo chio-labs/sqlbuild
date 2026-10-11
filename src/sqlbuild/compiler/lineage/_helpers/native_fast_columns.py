@@ -14,18 +14,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledProject,
 )
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.lineage._helpers.columns import _build_schema_mapping
-from sqlbuild.compiler.lineage._helpers.fast_columns import (
-    _build_polyglot_fast_model_column_lineage,
-)
-from sqlbuild.compiler.lineage._helpers.native_deferrals import record_lineage_deferral
 from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_BUILT,
-    NATIVE_LINEAGE_DEFERRED,
-    NATIVE_LINEAGE_NO_CATALOG,
-    NATIVE_LINEAGE_STAR,
+    NATIVE_LINEAGE_UNKNOWN_DIALECT,
     NATIVE_LINEAGE_UNPARSED,
 )
+from sqlbuild.compiler.lineage.exceptions import UnknownLineageDialectError
 from sqlbuild.compiler.lineage.models import (
     ColumnLineage,
     ColumnLineageSource,
@@ -51,7 +45,7 @@ def build_native_fast_project_column_lineage(
     dialect: str | None,
     model_names: frozenset[str] | None,
 ) -> ProjectColumnLineage | None:
-    """Build `build_fast_project_column_lineage`'s graph with native star expansion and parsing."""
+    """Build the fast lineage graph with native star expansion and parsing."""
 
     if not project.settings.sql_analysis:
         return None
@@ -66,17 +60,12 @@ def build_native_fast_project_column_lineage(
     catalog: object | None = (
         project.binding_catalog.native if project.binding_catalog is not None else None
     )
-    if catalog is None and requests:
-        for _ in requests:
-            record_lineage_deferral(kind=NATIVE_LINEAGE_NO_CATALOG)
-        return None
     outcomes: list[_NativeOutcome] = (
         _native.build_fast_column_lineage(catalog, (dialect, _schema_resources(project), requests))
         if requests
         else []
     )
     outcome_index: int = 0
-    python_schema: dict[str, dict[str, str]] | None = None
     model_results: dict[str, ModelColumnLineage] = {}
     compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]] = {}
     model_order: list[str] = []
@@ -84,10 +73,8 @@ def build_native_fast_project_column_lineage(
         if model.fast_lineage_columns is not None:
             columns: Sequence[CompiledLineageColumnFact] = model.fast_lineage_columns
             if _needs_star_expansion(model):
-                status, star_columns, _, _ = outcomes[outcome_index]
+                _, star_columns, _, _ = outcomes[outcome_index]
                 outcome_index += 1
-                if status != NATIVE_LINEAGE_STAR:
-                    return None
                 columns = (*columns, *(_column_fact(column) for column in star_columns))
             compact_models[model.name] = (columns, model.fast_lineage_has_star)
             model_order.append(model.name)
@@ -108,13 +95,8 @@ def build_native_fast_project_column_lineage(
                 sqlbuild_model=model.name,
                 sqlbuild_error=detail,
             )
-        elif status == NATIVE_LINEAGE_DEFERRED:
-            record_lineage_deferral(kind=str(detail))
-            if python_schema is None:
-                python_schema = _build_schema_mapping(project)
-            result = _build_polyglot_fast_model_column_lineage(
-                model=model, schema=python_schema, dialect=dialect
-            )
+        elif status == NATIVE_LINEAGE_UNKNOWN_DIALECT:
+            raise UnknownLineageDialectError(f"Unknown dialect: {detail}")
         if result is None:
             continue
         model_results[model.name] = result

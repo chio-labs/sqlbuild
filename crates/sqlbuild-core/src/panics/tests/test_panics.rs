@@ -1,5 +1,6 @@
 use crate::panics::main::catch_compiler_panic::catch_compiler_panic;
 use crate::panics::main::is_compiler_panic::is_compiler_panic;
+use crate::panics::main::native_failure::native_failure;
 use crate::panics::tests::test_types::PanicTestCase;
 
 #[test]
@@ -9,6 +10,16 @@ fn given_native_failure_when_crossing_python_boundary_then_only_unwinds_become_n
         PanicTestCase {
             description: "panic becomes a recoverable compiler exception",
             operation: || std::panic::panic_any("synthetic compiler failure"),
+            expected_named_error: true,
+        },
+        PanicTestCase {
+            description: "an internal native failure is a named compiler error",
+            operation: || {
+                Err(native_failure(
+                    "model analysis of 'orders'",
+                    "a broken invariant",
+                ))
+            },
             expected_named_error: true,
         },
         PanicTestCase {

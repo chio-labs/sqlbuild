@@ -7,6 +7,11 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
+    infer_native_query_columns,
+)
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
 from sqlbuild.compiler.attachments.constants import (
     HEADER_ARGUMENTS_STAGE,
     HEADER_METADATA_STAGE,
@@ -25,7 +30,6 @@ from sqlbuild.compiler.attachments.models import (
     NativeFunctionNamespace,
     NativeFunctionNamespaceInputs,
 )
-from sqlbuild.compiler.compile._helpers.analysis.compact import infer_columns_with_sql_analysis
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     validate_function_sql_syntax,
 )
@@ -72,8 +76,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredPythonFunctionFile,
     DiscoveredSqlFunctionFile,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.models import ResourceIdentity
 from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -317,7 +319,6 @@ def _sql_function_header(
         python=False,
         relative_path=function_file.relative_path,
     )
-    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="function_headers")
     _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
     arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
         header=native_header,
@@ -407,9 +408,10 @@ def _validate_table_function_output_contract(
     return_columns: tuple[FunctionReturnColumn, ...],
     function_file: DiscoveredSqlFunctionFile,
 ) -> None:
-    inferred_columns: tuple[InferredColumn, ...] | None = infer_columns_with_sql_analysis(
-        query_sql=body_sql
-    )
+    inferred_columns: tuple[InferredColumn, ...] | None = infer_native_query_columns(
+        queries=(NativeColumnQuery(sql=body_sql, mode="parse"),),
+        profile=ExpressionInferenceProfile(),
+    )[0].columns
     if not inferred_columns:
         return
     declared_count: int = len(return_columns)
@@ -435,7 +437,6 @@ def _build_python_function_input(
         python=True,
         relative_path=python_function_file.relative_path,
     )
-    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="function_headers")
     _raise_header_failure(header=native_header, stage=HEADER_START_STAGE)
     arguments: tuple[FunctionArgument, ...] = _expanded_native_arguments(
         header=native_header,

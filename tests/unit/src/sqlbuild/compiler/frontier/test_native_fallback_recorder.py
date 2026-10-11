@@ -20,16 +20,16 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import NativeFallback
         NativeFallbackRecorderTestCase(
             description="counts_per_site_and_kind_sorted",
             recorded=(
-                (NativeFallbackSite.PROJECT_ASSEMBLY, "deferred"),
-                (NativeFallbackSite.MACRO_CALL_RESOLUTION, "deferred"),
-                (NativeFallbackSite.PROJECT_ASSEMBLY, "deferred"),
-                (NativeFallbackSite.PROJECT_ASSEMBLY, "error"),
+                (NativeFallbackSite.SCOPE_REBIND_LOOKUP, "deferred"),
+                (NativeFallbackSite.MACRO_CALL_MOCKED, "deferred"),
+                (NativeFallbackSite.SCOPE_REBIND_LOOKUP, "deferred"),
+                (NativeFallbackSite.SCOPE_REBIND_LOOKUP, "error"),
             ),
             expected_files=[
                 [
-                    ["macro_calls.resolution", "deferred", 1],
-                    ["project_assembly.assembly", "deferred", 2],
-                    ["project_assembly.assembly", "error", 1],
+                    ["declaration_scopes.rebind_lookup", "deferred", 2],
+                    ["declaration_scopes.rebind_lookup", "error", 1],
+                    ["macro_calls.mocked_evaluation", "deferred", 1],
                 ]
             ],
         ),

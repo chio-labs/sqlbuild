@@ -792,22 +792,14 @@ class RetiredCompilerCacheTestCase:
     expected_removed: bool
 
 
-@dataclass(frozen=True)
-class DenseBatchedPreparationTestCase:
-    description: str
-    model_count: int
-    expected_exit_code: int
-
-
 type DensePreparedCompile = PreparedCompile
 
 
 @dataclass(frozen=True)
 class SharedCacheKeyTestCase:
-    """A model analysis schedule under which two models share one analysis cache key."""
+    """Expected parity when identical SQL models share native cached analysis."""
 
     description: str
-    schedule: Callable[[pytest.MonkeyPatch], None]
     expected_matches_uncached: bool = True
 
 
@@ -820,18 +812,6 @@ class CompilerEngineParityTestCase:
     right_engine: str
     expected_engines: tuple[str, str]
     expected_exit_codes: tuple[int, int]
-
-
-@dataclass(frozen=True)
-class DefaultEngineParityTestCase:
-    """The Python oracle and the unset default compiling copies of one project, with stores."""
-
-    description: str
-    oracle_engine: str
-    default_engine: str
-    expected_engines: tuple[str, str]
-    expected_exit_codes: tuple[int, int]
-    expected_macro_call_stores: tuple[tuple[str, ...], tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -853,39 +833,6 @@ class NativeAnalysisSeamTestCase:
 
 
 @dataclass(frozen=True)
-class CompilerEngineMacroParityTestCase:
-    """Two engines compiling separate copies of one macro-heavy project."""
-
-    description: str
-    files: dict[str, str]
-    expected_exit_codes: tuple[int, int]
-    expected_compiled_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class CompilerEngineStoreTestCase:
-    """A sequence of engine compiles in one project and which of them reuse a stored compile."""
-
-    description: str
-    engines: tuple[str, ...]
-    expected_reused: tuple[bool, ...]
-    expected_python_stores: tuple[str, ...]
-    expected_native_stores: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class CompilerEngineRulesStoreTestCase:
-    """Compile plus Rules under each engine and the store files each engine must own."""
-
-    description: str
-    rules_selector: str
-    stores: tuple[str, ...]
-    native_marker: str
-    expected_python_files: tuple[str, ...]
-    expected_native_files: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class CompilerEngineTierStoreTestCase:
     """Alternating compiles under two native tiers and the stores each tier must own alone."""
 
@@ -894,19 +841,6 @@ class CompilerEngineTierStoreTestCase:
     expected_reused: tuple[bool, ...]
     expected_first_engine_stores: tuple[str, ...]
     expected_second_engine_stores: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class NativeModelConfigParityTestCase:
-    """Authored model config compiled by two engines that must report and write the same."""
-
-    description: str
-    project_files: dict[str, str]
-    project_config_replacements: tuple[tuple[str, str], ...]
-    environment: dict[str, str]
-    engines: tuple[str, str]
-    expected_exit_codes: tuple[int, int]
-    expected_report_text: str
 
 
 @dataclass(frozen=True)
@@ -930,17 +864,6 @@ class RejectedReferenceCallTestCase:
 
 
 @dataclass(frozen=True)
-class NativeModelLoopParityTestCase:
-    """Models whose declarations two engines must resolve, report and write the same way."""
-
-    description: str
-    project_files: dict[str, str]
-    engines: tuple[str, str]
-    expected_exit_codes: tuple[int, int]
-    expected_report_text: str
-
-
-@dataclass(frozen=True)
 class NativeDeclarationErrorTestCase:
     """A failing project whose declaration error both engines must report the same way."""
 
@@ -957,7 +880,7 @@ class ReferenceScanErrorTestCase:
     description: str
     project_files: dict[str, str]
     expected_message: str
-    expected_macro_calls: tuple[int, int, int]
+    expected_macro_calls: tuple[int, int]
     expected_error_types: tuple[str, ...]
 
 

@@ -46,15 +46,24 @@ class ScopeEngineTierTestCase:
 
 @dataclass(frozen=True)
 class ExpectedNameScanTestCase:
-    """Seeded SQL test bodies scanned for expected models natively and in Python."""
+    """Seeded SQL test bodies whose relationship scans match Python's recorded golden."""
 
     description: str
     syntax: str
     seed: int
     count: int
     expected_minimum_scanned: int
-    expected_minimum_python_errors: int
-    expected_minimum_native_errors: int
+    expected_minimum_errors: int
+
+
+@dataclass(frozen=True)
+class RelationshipEdgeTestCase:
+    """SQL texts around Unicode identifier and keyword edges, against Python's golden."""
+
+    description: str
+    characters: tuple[str, ...]
+    expected_minimum_scanned: int
+    expected_minimum_errors: int
 
 
 @dataclass(frozen=True)

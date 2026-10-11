@@ -50,14 +50,6 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_yaml_s
     "test_case",
     [
         ModelConfigTierTestCase(
-            description="python oracle",
-            engine="python",
-            expected_native_calls={
-                "parse_model_header_metadata": 2,
-                "expand_config_templates": 1,
-            },
-        ),
-        ModelConfigTierTestCase(
             description="shipped native stages",
             engine="native",
             expected_native_calls={
@@ -82,13 +74,13 @@ def test_given_engine_tier_when_building_model_inputs_then_every_engine_runs_nat
     calls, config = model_config_engine_outcome(
         project_dir=tmp_path / test_case.engine, engine=test_case.engine, monkeypatch=monkeypatch
     )
-    _, python_config = model_config_engine_outcome(
-        project_dir=tmp_path / "python", engine="python", monkeypatch=monkeypatch
+    _, shipped_config = model_config_engine_outcome(
+        project_dir=tmp_path / "shipped", engine="native", monkeypatch=monkeypatch
     )
 
-    assert (calls, config.replace(test_case.engine, "python")) == (
+    assert (calls, config.replace(test_case.engine, "shipped")) == (
         test_case.expected_native_calls,
-        python_config,
+        shipped_config,
     )
 
 

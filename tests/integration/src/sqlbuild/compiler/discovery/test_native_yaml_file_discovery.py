@@ -7,12 +7,10 @@ from pathlib import Path
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
-    EngineSwitchParityTestCase,
     NativeYamlLoadTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
     native_yaml_tags_and_values,
-    stage_outcome,
     write_project,
 )
 
@@ -27,51 +25,6 @@ _SEED: bytes = (
     b"seeds:\n  - name: channels\n    description: Channels.\n"
     b"    columns:\n      - name: id\n        type: INTEGER\n"
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        EngineSwitchParityTestCase(
-            description="sources, model schema and seed declarations",
-            files=(
-                ("sources/orders.yml", _SOURCES),
-                ("sources/more.yaml", _SOURCES.replace(b"raw_orders", b"raw_customers")),
-                ("sources/notes.txt", b"ignored"),
-                ("models/orders.sql", b'MODEL (description "Orders");\nSELECT 1 AS order_id'),
-                ("models/marts/schema.yml", b"models: []\n"),
-                ("models/marts/_sqlbuild/schemas/schema.yml", b"models: []\n"),
-                ("seeds/channels.yml", _SEED),
-                ("seeds/channels.csv", b"id\n1\n"),
-            ),
-        ),
-        EngineSwitchParityTestCase(
-            description="a Python-only tag and invalid YAML load in Python with its error",
-            files=(
-                ("sources/a.yml", b"sources: []\nextra: !!set {a: null}\n"),
-                ("sources/b.yml", b"sources: [\n"),
-            ),
-        ),
-        EngineSwitchParityTestCase(
-            description="an unreadable source file fails with Python's read error",
-            files=(("sources/a.yml", b"sources: []\n# \xff\n"),),
-        ),
-        EngineSwitchParityTestCase(
-            description="a directory named like a source file fails as Python reads it",
-            files=(("sources/folder.yml/inner.txt", b""),),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_yaml_files_when_discovering_through_the_engine_switch_then_inputs_match(
-    test_case: EngineSwitchParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    write_project(project_dir=tmp_path, files=test_case.files)
-    python: object = stage_outcome(project_dir=tmp_path, engine="python", monkeypatch=monkeypatch)
-
-    native: object = stage_outcome(project_dir=tmp_path, engine="native", monkeypatch=monkeypatch)
-
-    assert (native == python) is test_case.expected_identical, test_case.description
 
 
 @pytest.mark.parametrize(

@@ -127,9 +127,6 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
     scan_native_declaration_references,
 )
@@ -524,9 +521,6 @@ def _build_model_inputs(
         for model_file in render_files
         if interpolations[model_file.file_path].error is None
     )
-    report_native_answer(
-        stage=NativeStage.MODEL_LOOP, kind="variable_substitutions", units=len(prepared_files)
-    )
     loop: _ModelInputLoop = _ModelInputLoop(
         discovered_inputs=discovered_inputs,
         context=context,
@@ -666,7 +660,6 @@ def _build_model_input(
         value_renderer=context.value_renderer,
         collection_rendering=context.collection_rendering,
     )
-    report_native_answer(stage=NativeStage.MODEL_LOOP, kind="declaration_expansions")
     declaration_expanded_sql: str = declaration_expansion.sql
     try:
         macro_expansion: MacroExpansionResult = expand_sql_macros_result(
@@ -1103,34 +1096,9 @@ def build_seed_inputs(discovered_inputs: DiscoveredProjectInputs) -> tuple[Compi
         for seed_entry in schema_file.seed_entries:
             seed_declarations.append((seed_entry, schema_file))
 
-    if native_stage_enabled(NativeStage.ATTACHMENTS):
-        return _native_seed_inputs(
-            seed_declarations=seed_declarations, seed_files=discovered_inputs.seed_files
-        )
-    seed_files_by_name: dict[str, DiscoveredSeedFile] = {
-        seed_file.file_path.stem: seed_file for seed_file in discovered_inputs.seed_files
-    }
-
-    seed_inputs: list[CompileSeedInput] = []
-    seed_entry: SchemaSeedEntry
-    seed_schema_file: DiscoveredSchemaFile
-    for seed_entry, seed_schema_file in seed_declarations:
-        seed_file: DiscoveredSeedFile | None = seed_files_by_name.get(seed_entry.name)
-        if seed_file is None:
-            raise CompileInputError(
-                f"Seed declaration '{seed_entry.name}' in {seed_schema_file.relative_path} "
-                "has no matching CSV file under seeds/"
-            )
-
-        seed_inputs.append(
-            CompileSeedInput(
-                seed_file=seed_file,
-                schema_entry=seed_entry,
-                schema_file=seed_schema_file,
-            )
-        )
-
-    return tuple(seed_inputs)
+    return _native_seed_inputs(
+        seed_declarations=seed_declarations, seed_files=discovered_inputs.seed_files
+    )
 
 
 def _native_seed_inputs(
@@ -1150,7 +1118,6 @@ def _native_seed_inputs(
             f"Seed declaration '{seed_entry.name}' in {seed_schema_file.relative_path} "
             "has no matching CSV file under seeds/",
         )
-    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="seed_pairs", units=len(pairs))
     return tuple(
         CompileSeedInput(
             seed_file=seed_files[file_index],

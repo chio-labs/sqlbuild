@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
     CompileSqlTestInput,
 )
+from sqlbuild.compiler.sql_test_glue.types import SqlTestAssemblyFailureKind
 
 
 @dataclass(frozen=True)
@@ -50,8 +51,17 @@ class NativeSqlTestAssemblyRequest:
 
 
 @dataclass(frozen=True)
-class NativeSqlTestAssembly:
-    """One natively assembled test and the keyed diagnostics to report before it."""
+class NativeSqlTestFailure:
+    """The error one test's assembly raises: its kind and message."""
 
-    test: CompiledSqlTest
+    kind: SqlTestAssemblyFailureKind
+    message: str
+
+
+@dataclass(frozen=True)
+class NativeSqlTestAssembly:
+    """One natively assembled test, its keyed diagnostics, and the error its assembly raises."""
+
+    test: CompiledSqlTest | None
     diagnostics: tuple[tuple[tuple[str, ...], CompilerDiagnostic], ...]
+    failure: NativeSqlTestFailure | None = None

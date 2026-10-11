@@ -77,15 +77,36 @@ pub(crate) const KNOWN_CAST_TYPE_NAMES: [(&str, &str); 13] = [
     ("varchar", "TEXT"),
 ];
 
-pub(crate) const TYPE_WORDS_PATTERN: &str = r"(?i)\b(timestamp|integer|varchar|boolean|date|interval|double|float|decimal|numeric|bigint|smallint|text|time|string|binary|array|struct)\b";
+/// Python's `_TYPE_WORDS` alternatives, tried in order between word boundaries.
+pub(crate) const TYPE_WORDS: [&str; 18] = [
+    "timestamp",
+    "integer",
+    "varchar",
+    "boolean",
+    "date",
+    "interval",
+    "double",
+    "float",
+    "decimal",
+    "numeric",
+    "bigint",
+    "smallint",
+    "text",
+    "time",
+    "string",
+    "binary",
+    "array",
+    "struct",
+];
 pub(crate) const MISSING_PATTERN: &str = r"Unknown column '([^']+)'(?: in table '([^']+)')?";
-pub(crate) const CONTEXT_SUFFIX_PATTERN: &str = r" \(context: [^)]*\)$";
+pub(crate) const CONTEXT_SUFFIX_PATTERN: &str = r" \(context: [^)]*\)";
 pub(crate) const QUOTED_PIECE_PATTERN: &str = r"'[^']*'";
-pub(crate) const OPERAND_PATTERN: &str = r"(?:TIMESTAMP\s+'[^']*'|DATE\s+'[^']*'|'(?:[^']|'')*'|-?\d+(?:\.\d+)?|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)";
-pub(crate) const QUALIFIER_PATTERN: &str = r#"(?:"((?:[^"]|"")+)"|([A-Za-z_]\w*))\.$"#;
-pub(crate) const TEMPORAL_OPERAND_PATTERN: &str = r"(?i)\A(TIMESTAMP|DATE)\s*'";
-pub(crate) const INTEGER_OPERAND_PATTERN: &str = r"\A-?\d+\z";
-pub(crate) const DECIMAL_OPERAND_PATTERN: &str = r"\A-?\d+\.\d+\z";
+/// Python's `_OPERAND` under `re.IGNORECASE`, as a `python_regex` template.
+pub(crate) const OPERAND_PATTERN: &str = r"(?:{TIMESTAMP}{S}+'[^']*'|{DATE}{S}+'[^']*'|'(?:[^']|'')*'|-?{D}+(?:\.{D}+)?|{L}{W}*(?:\.{L}{W}*)?)";
+pub(crate) const QUALIFIER_PATTERN: &str = r#"(?:"((?:[^"]|"")+)"|([A-Za-z_]{W}*))\.\z"#;
+pub(crate) const TEMPORAL_OPERAND_PATTERN: &str = r"\A({TIMESTAMP}|{DATE}){S}*'";
+pub(crate) const INTEGER_OPERAND_PATTERN: &str = r"\A-?{D}+\z";
+pub(crate) const DECIMAL_OPERAND_PATTERN: &str = r"\A-?{D}+\.{D}+\z";
 pub(crate) const SQL_TEST_COLUMN_PATTERN: &str =
     r"'__(?:expected|ref)__(.+)' names unknown column '([^']+)'";
 

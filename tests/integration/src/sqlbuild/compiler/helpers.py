@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import dataclasses
+import functools
+import hashlib
+import itertools
 import json
 import math
 import random
+import re
 import struct
 from collections.abc import Callable
 from contextlib import suppress
+from enum import Enum
 from itertools import compress
 from operator import ne
 from pathlib import Path
+from typing import Any, cast
 
 import orjson
 
@@ -337,3 +344,185 @@ def mutated_word(*, rng: random.Random, candidates: list[str]) -> str:
     for _ in range(rng.randint(0, 4)):
         rng.choice(MUTATIONS)(rng=rng, word=word, position=rng.randint(0, len(word)))
     return "".join(word)
+
+
+GOLDEN_DIR: Path = Path(__file__).resolve().parents[4] / "goldens" / "python_oracle"
+
+type GoldenEntry = list[object]
+type GoldenDifference = tuple[int, str, object, object]
+
+
+def canonical(value: object) -> object:
+    """A JSON value standing for `value`, equal exactly when the Python values are equal."""
+
+    return _CANONICAL_VIEWS[_canonical_kind(value)](value)
+
+
+def _canonical_kind(value: object) -> str:
+    kinds: tuple[tuple[str, bool], ...] = (
+        ("enum", isinstance(value, Enum)),
+        ("dataclass", dataclasses.is_dataclass(value) and not isinstance(value, type)),
+        ("dict", isinstance(value, dict)),
+        ("sequence", isinstance(value, list | tuple)),
+        ("set", isinstance(value, frozenset | set)),
+        ("scalar", value is None or isinstance(value, bool | int | float | str)),
+        ("repr", True),
+    )
+    return _first_matching(kinds)
+
+
+def _canonical_enum(value: object) -> object:
+    return [type(value).__name__, canonical(cast(Enum, value).value)]
+
+
+def _canonical_dataclass(value: object) -> object:
+    fields: tuple[dataclasses.Field[object], ...] = dataclasses.fields(cast(Any, value))
+    return [
+        type(value).__name__,
+        {field.name: canonical(getattr(value, field.name)) for field in fields},
+    ]
+
+
+def _canonical_dict(value: object) -> object:
+    items: list[tuple[object, object]] = sorted(
+        cast(dict[object, object], value).items(),
+        key=lambda pair: json.dumps(canonical(pair[0]), sort_keys=True),
+    )
+    return [["key", canonical(key), canonical(item)] for key, item in items]
+
+
+def _canonical_sequence(value: object) -> object:
+    return [type(value).__name__, [canonical(item) for item in cast(tuple[object, ...], value)]]
+
+
+def _canonical_set(value: object) -> object:
+    return ["set", sorted((canonical(item) for item in cast(set[object], value)), key=json.dumps)]
+
+
+_CANONICAL_VIEWS: dict[str, Callable[[object], object]] = {
+    "enum": _canonical_enum,
+    "dataclass": _canonical_dataclass,
+    "dict": _canonical_dict,
+    "sequence": _canonical_sequence,
+    "set": _canonical_set,
+    "scalar": lambda value: value,
+    "repr": lambda value: ["repr", repr(value)],
+}
+
+
+def digest(value: object, *, masked: tuple[str, ...] = ()) -> str:
+    """The short SHA-256 of `value`'s canonical JSON, with `masked` texts replaced."""
+
+    text: str = functools.reduce(
+        lambda current, mask: current.replace(mask, "<masked>"),
+        masked,
+        json.dumps(canonical(value), sort_keys=True, ensure_ascii=False),
+    )
+    return hashlib.sha256(text.encode()).hexdigest()[:24]
+
+
+def golden_entry(kind: str, view: object, *, masked: tuple[str, ...] = ()) -> GoldenEntry:
+    """One seam call's golden entry: a digest per named item for mappings, else one digest."""
+
+    entries: tuple[Callable[[], GoldenEntry], ...] = (
+        lambda: [kind, digest(view, masked=masked)],
+        lambda: [
+            kind,
+            {
+                str(name): digest(item, masked=masked)
+                for name, item in cast(dict[object, object], view).items()
+            },
+        ],
+    )
+    return entries[isinstance(view, dict)]()
+
+
+def golden_name(prefix: str, description: str) -> str:
+    """The golden file name of a test case: its prefix and its description as a slug."""
+
+    return f"{prefix}_{re.sub(r'[^a-z0-9]+', '_', description.lower()).strip('_')}"
+
+
+def read_golden(name: str) -> list[GoldenEntry]:
+    """The entries recorded once from the pre-port Python implementation, in call order."""
+
+    return json.loads((GOLDEN_DIR / f"{name}.json").read_text(encoding="utf-8"))
+
+
+def write_golden(name: str, entries: list[GoldenEntry]) -> None:
+    """Record one golden file; used only by the one-off oracle recording."""
+
+    GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    _ = (GOLDEN_DIR / f"{name}.json").write_text(
+        json.dumps(entries, indent=0, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def golden_differences(
+    expected: list[GoldenEntry], actual: list[GoldenEntry]
+) -> list[GoldenDifference]:
+    """`(index, kind, expected, actual)` for every entry that differs, names compared one by one."""
+
+    pairs: list[tuple[GoldenEntry | None, GoldenEntry | None]] = list(
+        itertools.zip_longest(expected, actual)
+    )
+    return list(
+        itertools.chain.from_iterable(
+            _entry_differences(index, want, got) for index, (want, got) in enumerate(pairs)
+        )
+    )
+
+
+def _entry_differences(
+    index: int, want: GoldenEntry | None, got: GoldenEntry | None
+) -> list[GoldenDifference]:
+    kinds: tuple[tuple[str, bool], ...] = (
+        ("equal", want == got),
+        ("named", _named_entries(want, got)),
+        ("whole", True),
+    )
+    kind: str = _first_matching(kinds)
+    return _ENTRY_DIFFERENCES[kind](index, want, got)
+
+
+def _named_entries(want: GoldenEntry | None, got: GoldenEntry | None) -> bool:
+    return (
+        want is not None
+        and got is not None
+        and want[0] == got[0]
+        and isinstance(want[1], dict)
+        and isinstance(got[1], dict)
+    )
+
+
+def _named_differences(
+    index: int, want: GoldenEntry | None, got: GoldenEntry | None
+) -> list[GoldenDifference]:
+    kind: object = cast(GoldenEntry, want)[0]
+    want_digests: dict[str, object] = cast(dict[str, object], cast(GoldenEntry, want)[1])
+    got_digests: dict[str, object] = cast(dict[str, object], cast(GoldenEntry, got)[1])
+    names: list[str] = sorted({*want_digests, *got_digests})
+    differing: list[bool] = [want_digests.get(name) != got_digests.get(name) for name in names]
+    return [
+        (index, f"{kind}:{name}", want_digests.get(name), got_digests.get(name))
+        for name in itertools.compress(names, differing)
+    ]
+
+
+def _whole_difference(
+    index: int, want: GoldenEntry | None, got: GoldenEntry | None
+) -> list[GoldenDifference]:
+    return [(index, str((want or got or ["?"])[0]), want and want[1], got and got[1])]
+
+
+_ENTRY_DIFFERENCES: dict[
+    str, Callable[[int, GoldenEntry | None, GoldenEntry | None], list[GoldenDifference]]
+] = {
+    "equal": lambda _index, _want, _got: [],
+    "named": _named_differences,
+    "whole": _whole_difference,
+}
+
+
+def _first_matching(kinds: tuple[tuple[str, bool], ...]) -> str:
+    return next(itertools.compress([kind for kind, _ in kinds], [matches for _, matches in kinds]))

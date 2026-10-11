@@ -1235,8 +1235,8 @@ def generated_declaration_outcomes(
         write_project(
             project_dir=project_dir, files=((test_case.relative_path, contents.encode("utf-8")),)
         )
-        python: tuple[object, ...] = declaration_files_outcome(
-            project_dir=project_dir, kind=test_case.kind, engine="python", monkeypatch=monkeypatch
+        shipped: tuple[object, ...] = declaration_files_outcome(
+            project_dir=project_dir, kind=test_case.kind, engine="native", monkeypatch=monkeypatch
         )
         native: tuple[object, ...] = declaration_files_outcome(
             project_dir=project_dir,
@@ -1249,7 +1249,7 @@ def generated_declaration_outcomes(
                 file_path=project_dir / test_case.relative_path, kind=test_case.kind
             )
         ] += 1
-        agreements.append(native == python)
+        agreements.append(native == shipped)
     return tuple(compress(range(test_case.case_count), map(not_, agreements))), tags
 
 

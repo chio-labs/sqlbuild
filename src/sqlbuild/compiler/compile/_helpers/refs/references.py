@@ -26,8 +26,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     SqlReferenceScanFailure,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import SourceLocation
 
@@ -61,7 +59,6 @@ def _reference_scan_outcome(
     outcome: SqlReferenceScan | SqlReferenceScanFailure = extract_native_sql_references(
         sql=sql, syntax=syntax
     )
-    report_native_answer(stage=NativeStage.REFERENCE_EXTRACTION, kind="reference_scans")
     return outcome
 
 

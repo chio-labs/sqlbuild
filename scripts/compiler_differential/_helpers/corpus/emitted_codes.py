@@ -16,12 +16,14 @@ from scripts.compiler_differential._helpers.goldens.goldens import golden_path_m
 from scripts.compiler_differential._helpers.running.execution import run_engine
 from scripts.compiler_differential.constants import (
     ANALYSIS_CODE_SCAN_ROOTS,
+    ANALYSIS_NATIVE_CODE_SCAN_ROOTS,
     COLD_COMPILE,
     CORPUS_FAILURES,
     DIAGNOSTIC_CODE_PATTERN,
     ERROR_SEVERITY,
     EXPECT_SUCCESS,
     LEFT_SIDE,
+    NATIVE_CODE_CONSTANT_PATTERN,
     RENDER_CODE_SCAN_EXCLUDED,
     RENDER_RAISED_CODES,
     WARNING_SEVERITY,
@@ -113,13 +115,17 @@ def render_error_codes() -> frozenset[str]:
 
 
 def analysis_error_codes(compiler_root: Path) -> frozenset[str]:
-    """Return the help-catalogue codes plus every code literal in the analysis-stage modules."""
+    """Return the help-catalogue codes plus every code in the analysis-stage modules and crates."""
 
     found: set[str] = set(semantic_help_catalogue())
     for root in ANALYSIS_CODE_SCAN_ROOTS:
         path: Path = compiler_root / root
         for module in sorted(path.rglob("*.py")) if path.is_dir() else (path,):
             found.update(_module_codes(module))
+    repo_root: Path = compiler_root.parents[2]
+    for native_module in ANALYSIS_NATIVE_CODE_SCAN_ROOTS:
+        text: str = (repo_root / native_module).read_text(encoding="utf-8")
+        found.update(NATIVE_CODE_CONSTANT_PATTERN.findall(text))
     return frozenset(found)
 
 

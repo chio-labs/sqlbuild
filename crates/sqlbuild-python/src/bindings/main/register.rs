@@ -41,6 +41,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 fn register_analysis_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    boundary::python_runtime::record_python_text(module.py())?;
     type_system::registration::register(module)?;
     analysis_session::registration::register(module)?;
     semantic_checks::registration::register(module)?;

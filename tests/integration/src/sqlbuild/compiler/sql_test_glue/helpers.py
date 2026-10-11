@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from itertools import chain, compress
 from pathlib import Path
 from typing import cast
@@ -13,31 +13,23 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
 from sqlbuild.compiler.compile.models import (
-    CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSqlTest,
     CompileProjectInputs,
-    CompileSqlTestCte,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
-from sqlbuild.compiler.planner._helpers.sql_tests import native_planning
-from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssembly,
     NativeSqlTestAssemblyRequest,
-    NativeSqlTestChainRequest,
-    NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import (
     NativeSqlTestAssemblyRow,
-    NativeSqlTestPlanRow,
 )
+from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 
 @dataclass(frozen=True)
@@ -185,12 +177,7 @@ _DIRECT_TEST_SHARE: float = 0.8
 _MOCK_SHARE: float = 0.85
 _MACRO_MOCK_SHARE: float = 0.5
 _HELPER_SHARE: float = 0.4
-_UNMOCKED_ASSERTION: CompileSqlTestCte = CompileSqlTestCte(
-    name="__assert__no_returns", sql_body='SELECT order_id FROM __source("raw_returns") WHERE 1 = 0'
-)
 _REGIONS_ASSERTION: str = 'SELECT * FROM __ref("fct_regions") WHERE 1 = 0'
-_NATIVE_ERROR_KIND_SEPARATOR: str = ":"
-_NATIVE_RAISED_PREFIX: str = "native_raised:"
 NO_WINDOW: str = ""
 VALID_WINDOW: str = ', cursor_start "2026-02-01", cursor_end "2026-02-03"'
 INVERTED_WINDOW: str = ', cursor_start "2026-02-03", cursor_end "2026-02-01"'
@@ -201,20 +188,7 @@ def generated_sql_test_files(
 ) -> dict[str, str]:
     """A project of mocked, expected, asserted, helper, direct and failing SQL tests."""
 
-    files: dict[str, str] = {
-        "sqlbuild_project.toml": _PROJECT_TOML,
-        "sources/raw.yml": _SOURCES,
-        "seeds/regions.yml": _SEEDS,
-        "seeds/regions.csv": "region,label\neast,East\n",
-        "macros/amounts.py": _MACROS,
-        "functions/sql/udf__is_big.sql": _UDF,
-        "functions/sql/table_fn__customer_orders.sql": _TABLE_FUNCTION,
-        "models/daily_orders.sql": _DAILY_ORDERS,
-    }
-    files.update(
-        (f"models/{name}.sql", f'MODEL (description "Model {name}.");\n\n{sql}\n')
-        for name, sql in _BASE_MODELS.items()
-    )
+    files: dict[str, str] = _project_files()
     files.update(
         (f"tests/unit/test_generated_{index}.sql", _model_test(rng=rng, index=index, shape=shape))
         for index in range(test_count)
@@ -229,6 +203,81 @@ def generated_sql_test_files(
         )
     )
     return files
+
+
+def _project_files() -> dict[str, str]:
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": _PROJECT_TOML,
+        "sources/raw.yml": _SOURCES,
+        "seeds/regions.yml": _SEEDS,
+        "seeds/regions.csv": "region,label\neast,East\n",
+        "macros/amounts.py": _MACROS,
+        "functions/sql/udf__is_big.sql": _UDF,
+        "functions/sql/table_fn__customer_orders.sql": _TABLE_FUNCTION,
+        "models/daily_orders.sql": _DAILY_ORDERS,
+    }
+    files.update(
+        (f"models/{name}.sql", f'MODEL (description "Model {name}.");\n\n{sql}\n')
+        for name, sql in _BASE_MODELS.items()
+    )
+    return files
+
+
+def edge_sql_test_files(*, extra_files: dict[str, str]) -> dict[str, str]:
+    """The planning project's models, sources and functions plus `extra_files`."""
+
+    return {**_project_files(), **extra_files}
+
+
+_DEEP_SUBQUERIES: int = 100
+EDGE_UNICODE_CONTENTS: str = (
+    'TEST (name "unicode_contents");\n\nWITH\n'
+    "-- r\u00e9sum\u00e9: \u212aelvin_rows AS (a comment, not the header)\n"
+    "kelvin_rows AS (\n"
+    "  SELECT order_id, amount, 'caf\u00e9 \u2603' AS note "
+    'FROM __source("raw_orders")\n),\n'
+    "via_rows AS (SELECT *, '\u017f' AS long_s FROM kelvin_rows),\n"
+    "__source__raw_orders AS (SELECT * FROM via_rows),\n"
+    "__expected__stg_orders AS (SELECT order_id FROM KELVIN_ROWS)\nSELECT 1\n"
+)
+EDGE_DEEP_HELPER: str = (
+    'TEST (name "deep_helper");\n\nWITH\n'
+    "deep_rows AS (SELECT * FROM "
+    + "(SELECT * FROM " * _DEEP_SUBQUERIES
+    + "(WITH shadow AS (SELECT 1 AS order_id) SELECT * FROM shadow) AS s"
+    + ") AS d" * _DEEP_SUBQUERIES
+    + "),\n"
+    'shadow AS (SELECT order_id, amount FROM __source("raw_orders")),\n'
+    "__source__raw_orders AS (SELECT * FROM deep_rows),\n"
+    "__expected__stg_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+)
+EDGE_DECIMAL_CONTEXT: str = (
+    'TEST (name "decimal_context", parameters (p_decimal (type decimal, nullable true)), '
+    'cases (rounded (p_decimal "1.23456789012345678901234567895"), '
+    'carried (p_decimal "9.99999999999999999999999999995E+999998"), '
+    'subnormal (p_decimal "123456E-1000030"), '
+    'flushed (p_decimal "-6E-1000028"), '
+    'half_even (p_decimal "5E-1000027")));\n\n'
+    'WITH\n__source__raw_orders AS (SELECT 1 AS order_id, @param("p_decimal") AS p),\n'
+    '__assert__stg_orders_rows AS (SELECT * FROM __ref("stg_orders") WHERE 1 = 0)\nSELECT 1\n'
+)
+EDGE_DECIMAL_OVERFLOW: str = EDGE_DECIMAL_CONTEXT.replace(
+    '"5E-1000027"', '"9.99999999999999999999999999995E+999999"'
+)
+EDGE_UNICODE_MACRO_SCOPE: dict[str, str] = {
+    "models/weird_amounts.sql": (
+        'MODEL (description "Model weird_amounts.");\n\n'
+        'WITH o AS (SELECT amount FROM __source("raw_orders"))\nSELECT amount@\u00f6re FROM o\n'
+    ),
+    "tests/unit/test_direct_macro.sql": _DIRECT_TESTS[0],
+}
+EDGE_INVALID_UNREAD_HELPER: str = (
+    'TEST (name "invalid_unread_helper");\n\nWITH\n'
+    "bad_rows AS (SELECT * FROM __ref(1)),\n"
+    'source_rows AS (SELECT order_id FROM __source("raw_orders")),\n'
+    "__source__raw_orders AS (SELECT * FROM source_rows),\n"
+    "__expected__stg_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+)
 
 
 def _model_test(*, rng: random.Random, index: int, shape: SqlTestCorpusShape) -> str:
@@ -402,59 +451,9 @@ def write_project(*, project_dir: Path, files: dict[str, str]) -> None:
         _ = path.write_text(contents, encoding="utf-8")
 
 
-def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledProject:
-    """Write and compile a project, keeping any compile diagnostics on it."""
+def assembly_outcome(*, project_dir: Path) -> PlanningCallOutcome:
+    """The compiled SQL tests and diagnostics with native assembly, or what it raises."""
 
-    write_project(project_dir=project_dir, files=files)
-    return build_project_graph(
-        discovered_inputs=discover_project_inputs(project_dir=project_dir),
-        adapter=DuckDbAdapter(),
-    ).project
-
-
-def with_unmocked_assertion(*, project: CompiledProject) -> CompiledSqlTest:
-    """The first model test with an assertion calling a source nothing mocks.
-
-    The compiler reports such a call itself, so this stands in for a reference it missed and
-    reaches the planner's own unresolved-reference error.
-    """
-
-    test: CompiledSqlTest = next(
-        filter(
-            lambda test: isinstance(test.payload, CompiledModelSqlTestPayload), project.sql_tests
-        )
-    )
-    payload: CompiledModelSqlTestPayload = cast(CompiledModelSqlTestPayload, test.payload)
-    return replace(
-        test,
-        payload=replace(
-            payload,
-            assertion_ctes=(*payload.assertion_ctes, _UNMOCKED_ASSERTION),
-            authored_ctes=(*payload.authored_ctes, _UNMOCKED_ASSERTION),
-        ),
-    )
-
-
-def use_sql_test_glue(*, monkeypatch: pytest.MonkeyPatch, enabled: bool) -> None:
-    """Route SQL-test planning through the native glue, or through the JSON request."""
-
-    monkeypatch.setattr(
-        native_planning,
-        "native_stage_enabled",
-        lambda stage: enabled and stage is NativeStage.SQL_TEST_GLUE,
-    )
-
-
-def assembly_outcome(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, native: bool
-) -> PlanningCallOutcome:
-    """The compiled SQL tests and diagnostics with native or Python assembly, or what it raises."""
-
-    monkeypatch.setattr(
-        sql_test_stage,
-        "native_stage_enabled",
-        lambda stage: native and stage is NativeStage.SQL_TEST_GLUE,
-    )
     return _outcome(lambda: _compiled_tests_and_diagnostics(project_dir=project_dir))
 
 
@@ -467,94 +466,51 @@ def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, objec
 
 
 def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count tests compile takes from the native assembly, with diagnostics, cases, or defers.
+    """Count tests compile takes from the native assembly, with diagnostics, cases or failures.
 
-    `native_assembled` counts only assemblies the stage seam hands compile; a deferred test
-    counts under `deferred_<kind>` and is assembled by Python, so it never counts as native work.
+    A test whose assembly raises counts under `failed_<kind>`.
     """
 
     answers: Counter[str] = Counter()
     assemble: Callable[[NativeSqlTestAssemblyRequest], list[NativeSqlTestAssemblyRow]] = (
         native_module.assemble_compiled_sql_tests
     )
-    seam: Callable[..., tuple[NativeSqlTestAssembly | None, ...]] = (
+    seam: Callable[..., tuple[NativeSqlTestAssembly, ...]] = (
         sql_test_stage.assemble_native_sql_tests
     )
 
-    def counted_deferrals(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
+    def counted_failures(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
         rows: list[NativeSqlTestAssemblyRow] = assemble(request)
-        deferrals: list[str] = list(filter(None, (row[1] for row in rows)))
-        answers.update(f"deferred_{kind}" for kind in deferrals)
+        failures: list[tuple[str, str] | None] = [failure for _, failure in rows]
+        answers.update(f"failed_{failure[0]}" for failure in filter(None, failures))
         return rows
 
-    def counted_assemblies(
-        *, inputs: CompileProjectInputs
-    ) -> tuple[NativeSqlTestAssembly | None, ...]:
-        assemblies: tuple[NativeSqlTestAssembly | None, ...] = seam(inputs=inputs)
-        native: list[NativeSqlTestAssembly] = list(filter(None, assemblies))
+    def counted_assemblies(*, inputs: CompileProjectInputs) -> tuple[NativeSqlTestAssembly, ...]:
+        assemblies: tuple[NativeSqlTestAssembly, ...] = seam(inputs=inputs)
+        tests: list[CompiledSqlTest | None] = [item.test for item in assemblies]
+        native: list[CompiledSqlTest] = list(filter(None, tests))
         answers["native_assembled"] += len(native)
-        answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in native)
+        answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in assemblies)
         answers["native_case_fingerprints"] += sum(
-            item.test.case_fingerprint is not None for item in native
+            test.case_fingerprint is not None for test in native
         )
         return assemblies
 
-    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted_deferrals)
+    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted_failures)
     monkeypatch.setattr(sql_test_stage, "assemble_native_sql_tests", counted_assemblies)
     return answers
 
 
-def planning_outcome(
-    *,
-    project: CompiledProject,
-    tests: tuple[CompiledSqlTest, ...],
-    adapter: BaseAdapter,
-    render_sql: bool,
-) -> PlanningCallOutcome:
-    """The plans `plan_sql_tests_natively` returns, or what it raises."""
+def assembly_golden_entry(*, outcome: PlanningCallOutcome, project_dir: Path) -> GoldenEntry:
+    """One project's compiled SQL tests, diagnostics and raised error as a golden entry."""
 
-    return _outcome(
-        lambda: native_planning.plan_sql_tests_natively(
-            project=project,
-            tests=tests,
-            adapter=adapter,
-            sql_analysis_enabled=project.settings.sql_analysis,
-            render_sql=render_sql,
-            include_plan=not render_sql,
-        )
+    tests, diagnostics = cast(
+        tuple[object, object], (outcome.value, (None, None))[outcome.raised is not None]
     )
-
-
-def artifact_outcome(
-    *,
-    project: CompiledProject,
-    tests: tuple[CompiledSqlTest, ...],
-    adapter: BaseAdapter,
-    glue: bool,
-) -> PlanningCallOutcome:
-    """Rendered artifacts from the glue or from the JSON request, or what planning raises."""
-
-    plan: Callable[..., tuple[NativeSqlTestArtifact, ...]] = (
-        native_planning.plan_and_render_sql_test_artifacts,
-        native_planning.plan_compiled_sql_test_artifacts,
-    )[glue]
-    return _outcome(
-        lambda: plan(
-            project=project,
-            tests=tests,
-            adapter=adapter,
-            sql_analysis_enabled=project.settings.sql_analysis,
-        )
-    )
-
-
-def chain_outcome(
-    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...]
-) -> PlanningCallOutcome:
-    """Each test's model chain, or what chain resolution raises."""
-
-    return _outcome(
-        lambda: native_planning.resolve_sql_test_model_chains(project=project, tests=tests)
+    return golden_entry(
+        "sql_test_assembly",
+        {"sql_tests": tests, "diagnostics": diagnostics, "raised": outcome.raised},
+        masked=(str(project_dir),),
     )
 
 
@@ -565,64 +521,15 @@ def outcome_kind(outcome: object) -> str:
     return ("answered", "raised")[called.raised is not None]
 
 
-def record_native_answers(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count the plans, chains and errors the native glue itself returns for the rest of the test.
-
-    A plan with native error messages counts as `native_with_errors`, any other as
-    `native_planned`; an error a glue binding raises counts as `native_raised` and under
-    `native_raised:<kind>`. JSON-path planning never reaches these bindings, and errors Python
-    raises before calling them are never counted.
-    """
-
-    answers: Counter[str] = Counter()
-    plan: Callable[[NativeSqlTestPlanningRequest], tuple[list[NativeSqlTestPlanRow], int, int]] = (
-        native_module.plan_compiled_sql_tests
-    )
-    resolve: Callable[[NativeSqlTestChainRequest], list[list[str]]] = (
-        native_module.resolve_compiled_sql_test_chains
-    )
-
-    def counted_plans(
-        request: NativeSqlTestPlanningRequest,
-    ) -> tuple[list[NativeSqlTestPlanRow], int, int]:
-        response: tuple[list[NativeSqlTestPlanRow], int, int] = _counting_raises(
-            call=lambda: plan(request), answers=answers
-        )
-        answers.update(
-            ("native_planned", "native_with_errors")[bool(row[5])] for row in response[0]
-        )
-        return response
-
-    def counted_chains(request: NativeSqlTestChainRequest) -> list[list[str]]:
-        chains: list[list[str]] = _counting_raises(call=lambda: resolve(request), answers=answers)
-        answers["native_chains"] += len(chains)
-        return chains
-
-    monkeypatch.setattr(native_module, "plan_compiled_sql_tests", counted_plans)
-    monkeypatch.setattr(native_module, "resolve_compiled_sql_test_chains", counted_chains)
-    return answers
-
-
-def native_raised_kinds(*, answers: Counter[str]) -> frozenset[str]:
-    """The kinds (message prefixes) of the errors the native glue bindings raised."""
-
-    return frozenset(
-        kind.removeprefix(_NATIVE_RAISED_PREFIX)
-        for kind in filter(lambda kind: kind.startswith(_NATIVE_RAISED_PREFIX), answers)
-    )
-
-
-def _counting_raises[T](*, call: Callable[[], T], answers: Counter[str]) -> T:
-    try:
-        return call()
-    except ValueError as error:
-        answers["native_raised"] += 1
-        answers[_NATIVE_RAISED_PREFIX + str(error).partition(_NATIVE_ERROR_KIND_SEPARATOR)[0]] += 1
-        raise
-
-
 def _outcome(call: Callable[[], object]) -> PlanningCallOutcome:
     try:
         return PlanningCallOutcome(value=call(), raised=None)
     except Exception as error:  # noqa: BLE001 - both paths must raise the same error
         return PlanningCallOutcome(value=None, raised=(type(error).__name__, str(error)))
+
+
+def helper_reads_view(sql: str, keys: frozenset[str]) -> tuple[str, ...] | None:
+    """The native helper reads of `sql` as Python's `_parsed_reads` returned them."""
+
+    reads: list[str] | None = native_module.sql_test_helper_reads(sql, sorted(keys))
+    return {True: lambda: None, False: lambda: tuple(cast(list[str], reads))}[reads is None]()

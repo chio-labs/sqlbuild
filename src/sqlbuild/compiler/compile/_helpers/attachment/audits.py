@@ -69,8 +69,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -653,7 +651,6 @@ def build_attached_audit_input(
         explicit_arguments=audit_instance.arguments,
         policies=_native_audit_policies(audit_instance=audit_instance, context=context),
     )
-    report_native_answer(stage=NativeStage.ATTACHMENTS, kind="audit_renderings")
     if native_rendering.render_error is not None:
         raise CompileInputError(native_rendering.render_error)
     rendered_sql_body: str = native_rendering.sql_body

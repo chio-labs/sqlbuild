@@ -3,6 +3,7 @@
 use crate::scope_index::models::{
     DeclarationIdentity, GrantRecord, GrantThrough, ResourceIdentity, ScopeIndex,
 };
+use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 /// Python's `format_identity` for a resource.
 pub(crate) fn resource_text(identity: &ResourceIdentity) -> String {
@@ -31,38 +32,6 @@ pub(crate) fn grant_through_text(index: &ScopeIndex, grant: &GrantRecord) -> Str
             declaration_text(&index.declarations[*declaration].identity)
         }
     }
-}
-
-/// Python's `repr` of a string, or `None` when it holds text whose escaping needs Unicode tables.
-pub(crate) fn python_str_repr(value: &str) -> Option<String> {
-    if !value.is_ascii() {
-        return None;
-    }
-    let quote: char = if value.contains('\'') && !value.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut text: String = String::with_capacity(value.len() + 2);
-    text.push(quote);
-    for character in value.chars() {
-        match character {
-            '\\' => text.push_str("\\\\"),
-            '\t' => text.push_str("\\t"),
-            '\n' => text.push_str("\\n"),
-            '\r' => text.push_str("\\r"),
-            _ if character == quote => {
-                text.push('\\');
-                text.push(character);
-            }
-            _ if character < ' ' || character == '\x7f' => {
-                text.push_str(&format!("\\x{:02x}", u32::from(character)));
-            }
-            _ => text.push(character),
-        }
-    }
-    text.push(quote);
-    Some(text)
 }
 
 /// Python's dataclass `repr` of a `ResourceIdentity`.

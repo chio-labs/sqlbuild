@@ -1,5 +1,4 @@
 use crate::semantic_checks::_helpers::explanation::columns::{closest_column, ordered_columns};
-use crate::semantic_checks::models::SemanticDeferral;
 use crate::semantic_checks::tests::helpers::shape;
 use crate::semantic_checks::tests::test_types::ClosestColumnTestCase;
 
@@ -45,8 +44,15 @@ fn given_unknown_column_names_when_suggesting_then_matches_python_order_and_choi
             description: "a column Python case-folds beyond ASCII",
             name: "strasse",
             columns: &[("stra\u{df}e", "VARCHAR")],
-            expected_closest: Err(SemanticDeferral::NonAsciiText),
-            expected_order: Err(SemanticDeferral::NonAsciiText),
+            expected_closest: Ok(Some("stra\u{df}e")),
+            expected_order: Ok(&["stra\u{df}e"]),
+        },
+        ClosestColumnTestCase {
+            description: "an abbreviation whose first character case-folds to two",
+            name: "\u{df}ab",
+            columns: &[("ssxab", "X"), ("sab", "Y")],
+            expected_closest: Ok(Some("ssxab")),
+            expected_order: Ok(&["ssxab", "sab"]),
         },
     ];
     for test_case in test_cases {

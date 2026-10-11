@@ -30,7 +30,7 @@ from tests.unit.scripts.compiler_differential._helpers.running.helpers import (
         FailureEvidenceTestCase(
             description="differing warm stderr keeps both engines' evidence",
             stderr_by_engine={
-                "python": "Semantic checks were partial for 1 models:\n",
+                "native": "Semantic checks were partial for 1 models:\n",
                 "native-preview": "SQL test planning  START\n",
             },
             expected_files=(
@@ -38,16 +38,16 @@ from tests.unit.scripts.compiler_differential._helpers.running.helpers import (
                 "example__orders/native-preview/compiled-tests-stat.tsv",
                 "example__orders/native-preview/target/compiled/tests/orders/test_orders.sql",
                 "example__orders/native-preview/target/sql-test-artifacts.json",
-                "example__orders/python/0-compile-warm.stderr",
-                "example__orders/python/compiled-tests-stat.tsv",
-                "example__orders/python/target/compiled/tests/orders/test_orders.sql",
-                "example__orders/python/target/sql-test-artifacts.json",
+                "example__orders/native/0-compile-warm.stderr",
+                "example__orders/native/compiled-tests-stat.tsv",
+                "example__orders/native/target/compiled/tests/orders/test_orders.sql",
+                "example__orders/native/target/sql-test-artifacts.json",
             ),
-            expected_evidence_engines=("native-preview", "python"),
+            expected_evidence_engines=("native", "native-preview"),
         ),
         FailureEvidenceTestCase(
             description="identical runs keep nothing",
-            stderr_by_engine={"python": "done\n", "native-preview": "done\n"},
+            stderr_by_engine={"native": "done\n", "native-preview": "done\n"},
             expected_files=(),
             expected_evidence_engines=(),
         ),
@@ -74,7 +74,7 @@ def test_given_engine_runs_when_comparing_then_only_differing_projects_keep_evid
             source_dir=tmp_path,
         ),
         options=DifferentialOptions(
-            engines=("python", "native-preview"),
+            engines=("native", "native-preview"),
             work_dir=tmp_path / "work",
             jobs=1,
             stage_captures=False,

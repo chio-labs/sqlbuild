@@ -52,3 +52,19 @@ pub(super) struct CleandocTestCase {
     pub(super) text: &'static str,
     pub(super) expected_text: &'static str,
 }
+
+pub(super) struct CaseMappingTestCase {
+    pub(super) description: &'static str,
+    pub(super) unicode_version: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_casefold: &'static str,
+    pub(super) expected_upper: &'static str,
+}
+
+/// `re.fullmatch(re.escape(pattern), text, re.IGNORECASE)` under Python 3.12.
+pub(crate) struct IgnorecaseTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) pattern: char,
+    pub(crate) text: char,
+    pub(crate) expected_match: bool,
+}

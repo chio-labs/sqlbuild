@@ -11,6 +11,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use std::sync::Arc;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
@@ -41,9 +42,8 @@ type RequestInput = (
 );
 /// `(code, message, line, column)`.
 type ErrorRow = (&'static str, String, i64, i64);
-/// `(deferral, [(function, reference findings)], source, SQL test findings, fallback types)`.
+/// `([(function, reference findings)], source, SQL test findings, fallback types)`.
 type OutcomeRow = (
-    Option<&'static str>,
     Vec<(Vec<ErrorRow>, Vec<ErrorRow>)>,
     Vec<(usize, ErrorRow)>,
     Vec<(usize, ErrorRow, i64)>,
@@ -59,33 +59,24 @@ fn check_semantic_metadata_rows(
 ) -> PyResult<OutcomeRow> {
     let request = metadata_request(request)?;
     let catalog = &catalog.inner;
-    let checked = py
-        .compiler_detach(|| check_semantic_metadata(&request, catalog))
-        .map_err(compiler_error)?;
-    Ok(match checked {
-        Err(deferral) => (
-            Some(deferral.as_str()),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        ),
-        Ok(outcome) => (
-            None,
-            outcome.models.into_iter().map(model_rows).collect(),
-            outcome
-                .sources
-                .into_iter()
-                .map(|(index, error)| (index, error_row(error)))
-                .collect(),
-            outcome
-                .sql_tests
-                .into_iter()
-                .map(|(index, error, end)| (index, error_row(error), end))
-                .collect(),
-            outcome.fallback_types,
-        ),
-    })
+    let outcome = py
+        .compiler_detach(|| Ok(check_semantic_metadata(&request, catalog)))
+        .map_err(compiler_error)?
+        .map_err(|failure| semantic_error(py, &failure))?;
+    Ok((
+        outcome.models.into_iter().map(model_rows).collect(),
+        outcome
+            .sources
+            .into_iter()
+            .map(|(index, error)| (index, error_row(error)))
+            .collect(),
+        outcome
+            .sql_tests
+            .into_iter()
+            .map(|(index, error, end)| (index, error_row(error), end))
+            .collect(),
+        outcome.fallback_types,
+    ))
 }
 
 fn error_row(error: MetadataFinding) -> ErrorRow {

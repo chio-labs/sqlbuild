@@ -37,9 +37,6 @@ pub(crate) const DIALECT_ALIASES: [(&str, &str); 3] = [
 ];
 /// The quote that marks an exact identifier.
 pub(crate) const QUOTED_IDENTIFIER_DELIMITER: char = '"';
-/// Python's names for a legacy-analysis and an enrichment deferral.
-pub(crate) const DEFERRAL_ANALYSIS: &str = "analysis";
-pub(crate) const DEFERRAL_ENRICHMENT: &str = "enrichment";
 /// Python's `ColumnTransformKind` compact codes.
 pub(crate) const TRANSFORM_DIRECT: u8 = 0;
 pub(crate) const TRANSFORM_CAST: u8 = 1;
@@ -193,6 +190,10 @@ pub(crate) const JOIN_FULL: &str = "FULL";
 /// Ids of the adapter nullability rules Python registers, by the function it calls.
 pub(crate) const FIRST_ARG_RULE: &str = "first_arg";
 pub(crate) const CONDITIONAL_RESULT_RULE: &str = "conditional_result";
+/// The rule id of `safe_cast_nullability`.
+pub(crate) const SAFE_CAST_RULE: &str = "safe_cast";
+/// The rule id of a project-local adapter's own rule, which the callback runs.
+pub(crate) const PYTHON_RULE: &str = "python";
 pub(crate) const NON_NULL_NULLABILITY: &str = "non_null";
 pub(crate) const NULLABLE_NULLABILITY: &str = "nullable";
 /// Bumped whenever the stored outcome or a key's fields change; older entries never match.
@@ -205,3 +206,31 @@ pub(crate) const VARINT_PAYLOAD_MASK: u8 = 0x7f;
 pub(crate) const VARINT_PAYLOAD_BITS: u32 = 7;
 /// The most bytes one stored `u64` varint takes.
 pub(crate) const VARINT_MAX_BYTES: usize = 10;
+/// Payload kinds and literal types Python's fixture projection facts read.
+pub(crate) const NULL_PAYLOAD_KIND: &str = "null";
+pub(crate) const LITERAL_PAYLOAD_KIND: &str = "literal";
+pub(crate) const ARRAY_PAYLOAD_KIND: &str = "array_func";
+pub(crate) const STRUCTURED_PAYLOAD_KINDS: [&str; 2] = ["parse_json", "struct"];
+pub(crate) const FUNCTION_PAYLOAD_KIND: &str = "function";
+pub(crate) const SELECT_PAYLOAD_KEY: &str = "select";
+/// `{literal_type: type}` Python's `_simple_expression_type` maps a literal to.
+pub(crate) const LITERAL_FIXTURE_TYPES: [(&str, &str); 3] = [
+    ("string", "VARCHAR"),
+    ("number", "NUMBER"),
+    ("boolean", "BOOLEAN"),
+];
+/// `{function name: type}` Python's `_simple_expression_type` maps a function to.
+pub(crate) const FUNCTION_FIXTURE_TYPES: [(&str, &str); 3] = [
+    ("ARRAY_CONSTRUCT", "ARRAY"),
+    ("OBJECT_CONSTRUCT", "OBJECT"),
+    ("PARSE_JSON", "VARIANT"),
+];
+pub(crate) const ARRAY_FIXTURE_TYPE: &str = "ARRAY";
+pub(crate) const VARIANT_FIXTURE_TYPE: &str = "VARIANT";
+/// Dialect, payload keys and table args Python's SQL-test `_parsed_reads` reads.
+pub(crate) const HELPER_READS_DIALECT: &str = "generic";
+pub(crate) const CTE_LIST_PAYLOAD_KEY: &str = "ctes";
+pub(crate) const CTE_ALIAS_PAYLOAD_KEY: &str = "alias";
+pub(crate) const NAME_PAYLOAD_KEY: &str = "name";
+pub(crate) const SCHEMA_TABLE_ARG: &str = "schema";
+pub(crate) const CATALOG_TABLE_ARG: &str = "catalog";

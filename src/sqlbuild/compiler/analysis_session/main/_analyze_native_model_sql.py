@@ -9,7 +9,7 @@ from sqlbuild.compiler.analysis_session.models import (
 )
 
 
-def analyze_native_model_sql(*, request: NativeModelAnalysisRequest) -> NativeModelAnalyses | None:
-    """Return each model's analysis (and pivot proof) and the session, or None to defer."""
+def analyze_native_model_sql(*, request: NativeModelAnalysisRequest) -> NativeModelAnalyses:
+    """Return each model's analysis (and pivot proof) and the session."""
 
     return native_model_analyses(request=request)

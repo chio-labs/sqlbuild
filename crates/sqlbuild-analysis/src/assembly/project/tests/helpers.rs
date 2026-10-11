@@ -8,8 +8,8 @@ use crate::assembly::project::_helpers::targets::{managed_source, seed_target};
 use crate::assembly::project::_helpers::templates::TemplateInputs;
 use crate::assembly::project::main::check_sql_syntax::check_sql_syntax;
 use crate::assembly::project::models::{
-    AuditFacts, InputRead, Namespace, Reference, SeedDefaults, SeedFacts, SourceFacts, SyntaxCheck,
-    TargetNamespace, Variable,
+    AuditFacts, InputRead, Namespace, OpaqueRender, OpaqueVariable, Reference, SeedDefaults,
+    SeedFacts, SourceFacts, SyntaxCheck, TargetNamespace, Variable,
 };
 use crate::assembly::project::tests::test_types::{ExpectedNamespace, SeedSpec};
 use crate::assembly::project::types::ObjectKey;
@@ -42,6 +42,7 @@ pub(crate) fn seed(
     seed_target(
         &SeedFacts {
             name: name.to_owned(),
+            tags: Vec::new(),
             database: database.map(str::to_owned),
             schema: schema.map(str::to_owned),
         },
@@ -72,6 +73,7 @@ pub(crate) fn seed_reads(
     let resolved = seed_target(
         &SeedFacts {
             name: name.to_owned(),
+            tags: Vec::new(),
             database: database.map(str::to_owned),
             schema: schema.map(str::to_owned),
         },
@@ -123,7 +125,7 @@ pub(crate) fn all_valid(sqls: &[&str]) -> Option<bool> {
             placeholders: vec![("x".to_owned(), "1".to_owned())],
         })
         .collect();
-    check_sql_syntax("generic", &checks).ok()
+    check_sql_syntax("generic", &checks).ok()?.ok()
 }
 
 pub(crate) fn namespace(expected: ExpectedNamespace) -> Namespace {
@@ -173,6 +175,16 @@ fn variables() -> Vec<(String, Variable)> {
             Variable::Scalar(Scalar::Text("3".to_owned())),
         ),
         ("flag".to_owned(), Variable::Scalar(Scalar::Bool(true))),
-        ("tags".to_owned(), Variable::Unsupported),
+        (
+            "tags".to_owned(),
+            Variable::Opaque(OpaqueVariable {
+                text: "['daily']".to_owned(),
+                render: OpaqueRender::Rejected(
+                    " is an array and cannot be interpolated as text: [\"daily\"]. Use a macro \
+                     to consume structured vars."
+                        .to_owned(),
+                ),
+            }),
+        ),
     ]
 }

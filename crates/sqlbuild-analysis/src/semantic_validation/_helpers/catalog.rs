@@ -310,14 +310,7 @@ impl ProjectCatalog {
         if let Some(pool) = pool.as_ref() {
             return Ok(Arc::clone(pool));
         }
-        let built = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(ANALYSIS_WORKERS)
-                .stack_size(ANALYSIS_WORKER_STACK_BYTES)
-                .thread_name(|index| format!("sqlbuild-analysis-{index}"))
-                .build()
-                .map_err(|error| error.to_string())?,
-        );
+        let built = Arc::new(new_analysis_pool()?);
         *pool = Some(Arc::clone(&built));
         Ok(built)
     }
@@ -614,4 +607,14 @@ fn has_exact_columns(table: &SchemaTable) -> bool {
         .columns
         .iter()
         .any(|column| column.name.starts_with('"'))
+}
+
+/// A deep-stack analysis pool, for work that runs without a compile's catalog.
+pub(crate) fn new_analysis_pool() -> Result<rayon::ThreadPool, String> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(ANALYSIS_WORKERS)
+        .stack_size(ANALYSIS_WORKER_STACK_BYTES)
+        .thread_name(|index| format!("sqlbuild-analysis-{index}"))
+        .build()
+        .map_err(|error| error.to_string())
 }

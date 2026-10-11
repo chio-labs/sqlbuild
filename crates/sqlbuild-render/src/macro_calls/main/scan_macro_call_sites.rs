@@ -4,39 +4,60 @@ use sqlbuild_core::text::models::PythonText;
 
 use crate::macro_calls::_helpers::offsets::char_offsets;
 use crate::macro_calls::_helpers::scanner::{
-    mentions_typed_reference, nested_names, top_level_calls,
+    call_name, mentions_typed_reference, nested_names, top_level_calls,
 };
-use crate::macro_calls::models::{MacroCallSite, ScanDeferral};
+use crate::macro_calls::models::{MacroCallScan, MacroCallSite, MacroScanFailure};
 
-/// Every top-level call site in order under `python`'s character classes, or a deferral.
-pub fn scan_macro_call_sites(
-    python: PythonText,
-    sql: &str,
-) -> Result<Vec<MacroCallSite>, ScanDeferral> {
-    let calls = top_level_calls(python, sql)?;
-    let boundaries: Vec<usize> = calls
+/// Every complete top-level call site in order, and where Python's scan raises, if it does.
+pub fn scan_macro_call_sites(python: PythonText, sql: &str) -> MacroCallScan {
+    let (calls, failure) = top_level_calls(python, sql);
+    let mut boundaries: Vec<usize> = calls
         .iter()
-        .flat_map(|call| [call.start, call.close + 1])
+        .flat_map(|call| [call.start, call.open + 1, call.close + 1])
         .collect();
+    let failed_call: Option<usize> = failure.as_ref().and_then(|failure| failure.call_start);
+    boundaries.extend(failed_call);
     let offsets = char_offsets(sql, &boundaries);
-    calls
+    let sites: Vec<MacroCallSite> = calls
         .into_iter()
-        .zip(offsets.as_chunks::<2>().0)
+        .zip(offsets.as_chunks::<3>().0)
         .map(|(call, offsets)| {
             let args = &sql[call.open + 1..call.close];
-            let mut tree_names: Vec<String> = vec![call.name.clone()];
-            for name in nested_names(python, args)? {
-                if !tree_names.contains(&name) {
-                    tree_names.push(name);
-                }
-            }
-            Ok(MacroCallSite {
+            let tree_names: Option<Vec<String>> = call_tree_names(python, &call.name, args);
+            MacroCallSite {
                 start: offsets[0],
-                end: offsets[1],
+                args_start: offsets[1],
+                end: offsets[2],
                 name: call.name,
                 tree_names,
                 typed_reference_text: mentions_typed_reference(args),
-            })
+            }
         })
-        .collect()
+        .collect();
+    let failure: Option<MacroScanFailure> = failure.map(|failure| MacroScanFailure {
+        call_start: failure.call_start.and(offsets.last().copied()),
+        call_name: failed_call_name(python, sql, failure.call_start),
+        error: failure.error,
+    });
+    MacroCallScan { sites, failure }
+}
+
+/// The name of the call at byte `start` that Python's evaluation raises in, if any.
+fn failed_call_name(python: PythonText, sql: &str, start: Option<usize>) -> Option<String> {
+    Some(call_name(python, sql, start?))
+}
+
+/// The call's name, then each nested call's once; None where a nested scan raises.
+fn call_tree_names(python: PythonText, name: &str, args: &str) -> Option<Vec<String>> {
+    let nested: Vec<String> = match nested_names(python, args) {
+        Ok(nested) => nested,
+        Err(_scan_error) => return None,
+    };
+    let mut tree_names: Vec<String> = vec![name.to_owned()];
+    for nested_name in nested {
+        if !tree_names.contains(&nested_name) {
+            tree_names.push(nested_name);
+        }
+    }
+    Some(tree_names)
 }

@@ -6,30 +6,12 @@ from enum import StrEnum
 class CompilerEngine(StrEnum):
     """Which compiler implementation produces the frontier objects."""
 
-    PYTHON = "python"
     NATIVE = "native"
     NATIVE_PREVIEW = "native-preview"
 
 
 class NativeStage(StrEnum):
-    """A native implementation that replaces one Python compiler stage when its tier is active."""
-
-    DISCOVERY = "discovery"
-    DECLARATION_SCOPES = "declaration_scopes"
-    MODEL_CONFIG = "model_config"
-    REFERENCE_EXTRACTION = "reference_extraction"
-    DECLARATION_FILES = "declaration_files"
-    MODEL_LOOP = "model_loop"
-    MACRO_CALLS = "macro_calls"
-    MACRO_CALL_STORE = "macro_call_store"
-    ATTACHMENTS = "attachments"
-    TYPE_SYSTEM = "type_system"
-    MODEL_ANALYSIS = "model_analysis"
-    SEMANTIC_CHECKS = "semantic_checks"
-    CONTRACTS = "contracts"
-    LINEAGE_FACTS = "lineage_facts"
-    SQL_TEST_GLUE = "sql_test_glue"
-    PROJECT_ASSEMBLY = "project_assembly"
+    """A native implementation behind the preview engine until its tier is shipped."""
 
 
 class NativeStageTier(StrEnum):
@@ -48,15 +30,9 @@ class CompilerStage(StrEnum):
 
 
 class NativeFallbackSite(StrEnum):
-    """A place where a shipped native stage still hands its work to the Python implementation."""
+    """A place where native hands work to Python: a fallback or a user's extension callback."""
 
     SCOPE_REBIND_LOOKUP = "declaration_scopes.rebind_lookup"
     LINT_EXPANSION = "model_loop.lint_expansion"
-    MACRO_CALL_SCAN = "macro_calls.scan"
-    MACRO_CALL_RESOLUTION = "macro_calls.resolution"
-    MACRO_UNBRIDGED_EXPANSION = "macro_calls.unbridged_expansion"
-    MACRO_BRIDGE_UNAVAILABLE = "macro_calls.bridge_unavailable"
     MACRO_CALL_MOCKED = "macro_calls.mocked_evaluation"
-    PROJECT_ASSEMBLY = "project_assembly.assembly"
-    TYPE_NORMALIZATION = "type_system.normalization"
-    SQL_TEST_ASSEMBLY = "sql_test_glue.assembly"
+    SQL_TEST_MACRO_MOCK_QUERIES = "sql_test_glue.macro_mock_queries"

@@ -16,18 +16,9 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
     DiagnosticSeverity,
 )
-from sqlbuild.compiler.contracts._helpers.columns import (
-    _output_column_location,
-    _output_related_locations,
-)
-from sqlbuild.compiler.contracts._helpers.evaluation import (
-    python_model_contract_diagnostics,
-    requires_contract_evaluation,
-)
-from sqlbuild.compiler.contracts._helpers.native_deferrals import record_contract_deferral
-from sqlbuild.compiler.contracts.constants import (
-    NATIVE_CONTRACTS_DEFERRAL_SITE,
-    NATIVE_CONTRACTS_UNSUPPORTED_INPUT,
+from sqlbuild.compiler.contracts._helpers.output_locations import (
+    output_column_location,
+    output_related_locations,
 )
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.types import InferredNullability
@@ -53,33 +44,19 @@ type _DiagnosticRow = tuple[
 
 def native_model_contracts(
     *, project: CompiledProject, dialect: TypeDialect | str | None
-) -> ContractValidationResult | None:
-    """Return `evaluate_model_contracts`'s result, with deferred models evaluated by Python."""
+) -> ContractValidationResult:
+    """Return every model's column contract diagnostics, in model order."""
 
-    if not isinstance(dialect, str | None):
-        record_contract_deferral(
-            kind=NATIVE_CONTRACTS_UNSUPPORTED_INPUT, site=NATIVE_CONTRACTS_DEFERRAL_SITE
-        )
-        return None
     mode: ColumnContractMode = project.settings.column_contract_mode
-    outcomes: list[tuple[str | None, list[_DiagnosticRow]]] = (
-        _native.evaluate_native_model_contracts(
-            (
-                str(dialect or "generic"),
-                mode == ColumnContractMode.IMPLICIT,
-                [_model_row(model) for model in project.models],
-            )
+    outcomes: list[list[_DiagnosticRow]] = _native.evaluate_native_model_contracts(
+        (
+            str(dialect or "generic"),
+            mode == ColumnContractMode.IMPLICIT,
+            [_model_row(model) for model in project.models],
         )
     )
     diagnostics: list[CompilerDiagnostic] = []
-    for model, (deferral, rows) in zip(project.models, outcomes, strict=True):
-        if deferral is not None:
-            record_contract_deferral(kind=deferral, site=NATIVE_CONTRACTS_DEFERRAL_SITE)
-            if requires_contract_evaluation(model=model, mode=mode):
-                diagnostics.extend(
-                    python_model_contract_diagnostics(model=model, mode=mode, dialect=dialect)
-                )
-            continue
+    for model, rows in zip(project.models, outcomes, strict=True):
         diagnostics.extend(_diagnostic(model=model, row=row) for row in rows)
     return ContractValidationResult(diagnostics=tuple(diagnostics))
 
@@ -159,7 +136,7 @@ def _location(
     if declared_index is not None and model.schema_entry is not None:
         return model.schema_entry.columns[declared_index].location
     if output_column is not None:
-        return _output_column_location(model=model, column_name=output_column)
+        return output_column_location(model=model, column_name=output_column)
     return None
 
 
@@ -169,4 +146,4 @@ def _related_locations(
     if related is None:
         return ()
     column_name, message = related
-    return _output_related_locations(model=model, column_name=column_name, message=message)
+    return output_related_locations(model=model, column_name=column_name, message=message)

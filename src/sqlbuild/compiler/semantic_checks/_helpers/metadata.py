@@ -24,10 +24,8 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
 )
 from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_CONFIG_KEY
-from sqlbuild.compiler.semantic_checks._helpers.deferrals import record_semantic_deferral
 from sqlbuild.compiler.semantic_checks.constants import (
     METADATA_CONFIG_KEYS,
-    METADATA_DEFERRAL_SITE,
     METADATA_FUNCTION_REFERENCE_KINDS,
 )
 from sqlbuild.spec.contracts.models import SourceLocation
@@ -42,8 +40,8 @@ def native_metadata_diagnostics(
     profile: ExpressionInferenceProfile,
     resource_sql_analysis: bool,
     catalog: object,
-) -> tuple[CompilerDiagnostic, ...] | None:
-    """Return `get_semantic_metadata_diagnostics`' result, or None where Python must check."""
+) -> tuple[CompilerDiagnostic, ...]:
+    """The project's semantic metadata diagnostics; a native internal failure raises."""
 
     if not project.settings.sql_analysis:
         return ()
@@ -78,12 +76,9 @@ def native_metadata_diagnostics(
             for test in tests
         ],
     )
-    deferral, model_rows, source_rows, test_rows, fallback_types = (
-        _native.check_semantic_metadata_rows(catalog, request)
+    model_rows, source_rows, test_rows, fallback_types = _native.check_semantic_metadata_rows(
+        catalog, request
     )
-    if deferral is not None:
-        record_semantic_deferral(kind=deferral, site=METADATA_DEFERRAL_SITE)
-        return None
     for type_sql in fallback_types:
         _ = normalize_type(type_sql=type_sql, dialect=profile.sql_analysis_dialect)
     diagnostics: list[CompilerDiagnostic] = []

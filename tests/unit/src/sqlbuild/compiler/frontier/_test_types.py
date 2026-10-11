@@ -9,7 +9,6 @@ from sqlbuild.compiler.frontier.types import (
     CompilerEngine,
     CompilerStage,
     NativeFallbackSite,
-    NativeStage,
 )
 
 
@@ -119,35 +118,6 @@ class SharedCaptureTestCase:
     description: str
     value: Callable[[], object]
     expected_shared_nodes: int
-
-
-@dataclass(frozen=True)
-class NativeStageTierTestCase:
-    """One engine, one native stage, and whether that engine runs it."""
-
-    description: str
-    engine: CompilerEngine
-    stage: NativeStage
-    expected_enabled: bool
-
-
-@dataclass(frozen=True)
-class DefaultEngineStageTestCase:
-    """With no engine selected, the native stages the default compile runs and those it skips."""
-
-    description: str
-    expected_enabled: frozenset[NativeStage]
-    expected_disabled: frozenset[NativeStage]
-
-
-@dataclass(frozen=True)
-class NativeStageCouplingTestCase:
-    """A native stage that may only run where the stage it relies on also runs natively."""
-
-    description: str
-    dependent: NativeStage
-    dependency: NativeStage
-    expected_engines_without_dependency: frozenset[CompilerEngine]
 
 
 @dataclass(frozen=True)

@@ -4,19 +4,13 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import replace
 from pathlib import Path
 
 from sqlbuild.compiler.compile._helpers.analysis.validation import (
     hook_sql_statements,
-    validate_hook_sql_syntax,
-    validate_sql_syntax,
 )
 from sqlbuild.compiler.compile.constants import UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledProject,
     CompilerDiagnostic,
     SqlAnalysisOptOutRequest,
 )
@@ -32,8 +26,6 @@ from sqlbuild.compiler.discovery.constants import (
     SQL_ANALYSIS_CONFIG_KEY,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
-from sqlbuild.compiler.frontier.main.native_stage_enabled import native_stage_enabled
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.project_assembly.main._check_native_sql_syntax import (
     check_native_sql_syntax,
 )
@@ -44,7 +36,6 @@ from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.spec.contracts.models import SettingsConfig, SourceLocation
 
 _LEGACY_KEY: str = "sql_validation"
-_SEMANTIC_CODE_PREFIX: str = "B"
 _OPT_OUT_KEYS: tuple[str, ...] = (SQL_ANALYSIS_CONFIG_KEY, _LEGACY_KEY)
 _HOOK_KEYS: tuple[str, ...] = ("pre_hooks", "post_hooks")
 _OPT_OUT_KEY_PATTERN: re.Pattern[str] = re.compile(r"\b(?:sql_analysis|sql_validation)\b")
@@ -80,76 +71,12 @@ def rejected_sql_analysis_opt_out(request: SqlAnalysisOptOutRequest) -> SourceLo
 def _parses(request: SqlAnalysisOptOutRequest) -> bool:
     """Whether the model query and every hook pass Python's syntax validation."""
 
-    if native_stage_enabled(NativeStage.PROJECT_ASSEMBLY):
-        statements: list[str] = [request.query_sql]
-        for hook_name in _HOOK_KEYS:
-            statements.extend(hook_sql_statements(request.config.values.get(hook_name)))
-        native: bool | None = check_native_sql_syntax(
-            checks=tuple((statement, request.placeholders) for statement in statements),
-            dialect=None,
-        )
-        if native is not None:
-            return native
-    model_name: str = request.model_file.file_path.stem
-    try:
-        validate_sql_syntax(
-            query_sql=request.query_sql,
-            model_name=model_name,
-            file_path=request.model_file.file_path,
-            placeholders=request.placeholders,
-        )
-        for hook_name in _HOOK_KEYS:
-            validate_hook_sql_syntax(
-                value=request.config.values.get(hook_name),
-                hook_name=hook_name,
-                model_name=model_name,
-                file_path=request.model_file.file_path,
-                placeholders=request.placeholders,
-            )
-    except CompileInputError:
-        return False
-    return True
-
-
-def reject_unneeded_sql_analysis_opt_outs(project: CompiledProject) -> CompiledProject:
-    """Replace each rejected opt-out model's findings with one error that counts them."""
-
-    rejected: dict[str, CompiledModel] = {
-        model.name: model
-        for model in project.models
-        if model.rejected_sql_analysis_opt_out is not None
-    }
-    if not rejected:
-        return project
-    hidden: dict[str, list[CompilerDiagnostic]] = {name: [] for name in rejected}
-    kept: list[CompilerDiagnostic] = []
-    for diagnostic in project.diagnostics:
-        if (
-            diagnostic.resource_name in hidden
-            and diagnostic.resource_type in (None, CompiledResourceType.MODEL)
-            and diagnostic.code.startswith(_SEMANTIC_CODE_PREFIX)
-        ):
-            hidden[diagnostic.resource_name].append(diagnostic)
-        else:
-            kept.append(diagnostic)
-    kept.extend(
-        _opt_out_diagnostic(model=model, hidden=tuple(hidden[name]))
-        for name, model in sorted(rejected.items())
-    )
-    return replace(project, diagnostics=tuple(kept))
-
-
-def _opt_out_diagnostic(
-    *, model: CompiledModel, hidden: tuple[CompilerDiagnostic, ...]
-) -> CompilerDiagnostic:
-    location: SourceLocation | None = model.rejected_sql_analysis_opt_out
-    return unneeded_opt_out_diagnostic(
-        resource_type=CompiledResourceType.MODEL,
-        kind="model",
-        name=model.name,
-        location=location,
-        hidden=hidden,
-        path_default=location is not None and location.path.name == PROJECT_CONFIG_FILENAME,
+    statements: list[str] = [request.query_sql]
+    for hook_name in _HOOK_KEYS:
+        statements.extend(hook_sql_statements(request.config.values.get(hook_name)))
+    return check_native_sql_syntax(
+        checks=tuple((statement, request.placeholders) for statement in statements),
+        dialect=None,
     )
 
 

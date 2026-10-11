@@ -14,26 +14,38 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 @dataclass(frozen=True, slots=True)
 class NativeProjectResources:
-    """Per-resource facts in input order; every requested SQL string passed syntax validation."""
+    """Per-resource facts in input order, and whether each model's SQL passed syntax validation."""
 
     model_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    model_syntax_valid: tuple[bool, ...]
     source_entries: tuple[SourceEntry, ...]
     seed_destinations: tuple[CompiledRelationLocation, ...]
     function_deps: tuple[tuple[CompiledObjectKey, ...], ...]
     audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    failure: NativeResourceFailure | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NativeResourceFailure:
+    """The resource Python's assembly raises at, and the exception it raises there."""
+
+    slot: str
+    index: int
+    error: Exception
 
 
 @dataclass(frozen=True, slots=True)
 class NativeModelFacts:
-    """One model's native facts; each None where Python derives it."""
+    """One model's native facts."""
 
-    deps: tuple[CompiledObjectKey, ...] | None
+    deps: tuple[CompiledObjectKey, ...]
     dynamic_contract: DynamicColumnContractProof | None
+    syntax_valid: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class NativeProjectFacts:
-    """Every model's native facts, and the resource facts unless Python must assemble them."""
+    """Every model's native facts and the resource facts."""
 
     models: tuple[NativeModelFacts, ...]
-    resources: NativeProjectResources | None
+    resources: NativeProjectResources

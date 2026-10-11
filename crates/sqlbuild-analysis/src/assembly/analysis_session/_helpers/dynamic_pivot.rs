@@ -1,16 +1,16 @@
 //! Python's `analyze_dynamic_column_contract` over the crate's parse of the model SQL.
 
 use std::collections::{HashMap, HashSet};
-use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use rayon::ThreadPool;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use serde_json::{Map, Value};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
     casefold, column_name, dict_list, identifier_name, is_single_wildcard, nested, node_key,
-    parse_one, payload, relation_name, render_type, to_dict, truthy,
+    parse_one_or_error, payload, relation_name, render_type, to_dict, truthy, upper,
 };
 use crate::assembly::analysis_session::constants::{
     ALIAS_AST_KIND, CAST_AST_KIND, CTE_AST_KIND, DUCKDB_DIALECT, DYNAMIC_VALUE_SOURCE_KINDS,
@@ -21,7 +21,10 @@ use crate::assembly::analysis_session::constants::{
 use crate::assembly::analysis_session::models::{
     ColumnFact, ContractProof, DynamicFamily, PivotModel, PivotOutcome, PivotTables,
 };
-use crate::assembly::analysis_session::types::{Pairs, Shapes};
+use crate::assembly::analysis_session::types::Shapes;
+
+/// What an internal native failure of a pivot proof names.
+const PIVOT_CONTEXT: &str = "native dynamic pivot proof";
 
 /// Stands in for Python's `{}`: neither has a node key.
 static MISSING_EXPRESSION: Value = Value::Null;
@@ -35,28 +38,32 @@ pub(crate) struct PivotFacts<'a> {
     pub(crate) families_by_table: &'a [(String, Vec<DynamicFamily>)],
 }
 
-/// Each model's proof in order; a model whose proof panics is deferred to Python.
-pub(crate) fn pivot_outcomes(models: &[PivotModel], tables: &PivotTables) -> Vec<PivotOutcome> {
+/// Each model's proof in order; the first model whose proof fails internally fails them all.
+pub(crate) fn pivot_outcomes(
+    models: &[PivotModel],
+    tables: &PivotTables,
+) -> Result<Vec<PivotOutcome>, String> {
     let facts = pivot_facts(tables);
     models
         .iter()
-        .map(|model| guarded_outcome(model, &facts))
+        .map(|model| pivot_outcome(&model.sql, &model.families, &facts))
         .collect()
 }
 
-/// Each model's proof in order on `pool`; a model whose proof panics is deferred to Python.
+/// Each model's proof in order on `pool`; the first internal failure in model order fails them all.
 pub(crate) fn pooled_pivot_outcomes(
     pool: &ThreadPool,
     models: &[PivotModel],
     tables: &PivotTables,
-) -> Vec<PivotOutcome> {
+) -> Result<Vec<PivotOutcome>, String> {
     let facts = pivot_facts(tables);
-    pool.install(|| {
+    let outcomes: Vec<Result<PivotOutcome, String>> = pool.install(|| {
         models
             .par_iter()
-            .map(|model| guarded_outcome(model, &facts))
+            .map(|model| pivot_outcome(&model.sql, &model.families, &facts))
             .collect()
-    })
+    });
+    outcomes.into_iter().collect()
 }
 
 fn pivot_facts(tables: &PivotTables) -> PivotFacts<'_> {
@@ -69,13 +76,6 @@ fn pivot_facts(tables: &PivotTables) -> PivotFacts<'_> {
     }
 }
 
-fn guarded_outcome(model: &PivotModel, facts: &PivotFacts<'_>) -> PivotOutcome {
-    catch_unwind(AssertUnwindSafe(|| {
-        pivot_outcome(&model.sql, &model.families, facts)
-    }))
-    .unwrap_or(PivotOutcome::Deferred)
-}
-
 /// One CTE body by folded name; None for a CTE with column aliases.
 type CteMap<'a> = HashMap<String, Option<&'a Value>>;
 
@@ -85,68 +85,41 @@ enum Boundary<'a> {
     Passthrough(&'a str),
 }
 
-/// The proof Python computes, or a deferral where its result is not reproduced exactly.
+/// The proof Python computes; fails on a panic or a parsed tree the proof cannot read.
 pub(crate) fn pivot_outcome(
     sql: &str,
     families: &[DynamicFamily],
     facts: &PivotFacts<'_>,
-) -> PivotOutcome {
+) -> Result<PivotOutcome, String> {
     if families.is_empty() {
-        return PivotOutcome::Absent;
+        return Ok(PivotOutcome::Absent);
     }
     let folded_dialect: String = casefold(facts.dialect);
     if !SUPPORTED_PIVOT_DIALECTS.contains(&folded_dialect.as_str()) {
-        return failure(format!(
+        return Ok(failure(format!(
             "adapter dialect '{}' does not support compiler-proven dynamic pivots",
             facts.dialect
-        ));
-    }
-    if !ascii_inputs(sql, families, facts) {
-        return PivotOutcome::Deferred;
+        )));
     }
     let parse_dialect: &str = if folded_dialect == MOTHERDUCK_DIALECT {
         DUCKDB_DIALECT
     } else {
         folded_dialect.as_str()
     };
-    let outcome: Result<PivotOutcome, String> = catch_compiler_panic(|| {
+    catch_compiler_panic(|| {
         Ok(match parsed(sql, parse_dialect)? {
-            Some(root) => proof(&root, &folded_dialect, families, facts),
-            None => PivotOutcome::Deferred,
+            Ok(root) => proof(&root, &folded_dialect, families, facts),
+            Err(error) => failure(format!("dynamic pivot SQL could not be parsed: {error}")),
         })
-    });
-    match outcome {
-        Ok(outcome) => outcome,
-        Err(_) => PivotOutcome::Deferred,
-    }
+    })
+    .map_err(|reason| native_failure(PIVOT_CONTEXT, &reason))
 }
 
-/// Python's `parse_one(...).to_dict()`, or None where Python reports a parse error.
-fn parsed(sql: &str, dialect: &str) -> Result<Option<Value>, String> {
-    parse_one(sql, dialect)?
+/// Python's `parse_one(...).to_dict()`, or the parse error Python reports.
+fn parsed(sql: &str, dialect: &str) -> Result<Result<Value, String>, String> {
+    parse_one_or_error(sql, dialect)?
         .map(|expression| to_dict(&expression))
-        .transpose()
-}
-
-/// Casefolding equals Python's only for ASCII text.
-fn ascii_inputs(sql: &str, families: &[DynamicFamily], facts: &PivotFacts<'_>) -> bool {
-    let shapes = [
-        facts.column_types,
-        facts.authoritative_types,
-        facts.column_nullability,
-    ];
-    sql.is_ascii()
-        && families.iter().all(ascii_family)
-        && facts.families_by_table.iter().all(ascii_families)
-        && shapes.into_iter().flatten().all(ascii_shape)
-}
-
-fn ascii_families((name, families): &(String, Vec<DynamicFamily>)) -> bool {
-    name.is_ascii() && families.iter().all(ascii_family)
-}
-
-fn ascii_shape((name, shape): &(String, Pairs)) -> bool {
-    name.is_ascii() && shape.iter().all(|(column, _)| column.is_ascii())
+        .map_or_else(|error| Ok(Err(error)), |value| value.map(Ok))
 }
 
 fn proof(
@@ -378,7 +351,7 @@ fn aggregate_fact<'a>(
     source_columns: &[ColumnFact],
 ) -> (String, Option<&'a str>, Option<String>) {
     let key: &str = node_key(Some(aggregate));
-    let mut name: String = key.to_ascii_uppercase();
+    let mut name: String = upper(key);
     let Some(payload) = aggregate.get(key).and_then(Value::as_object) else {
         return (name, None, None);
     };
@@ -387,7 +360,7 @@ fn aggregate_fact<'a>(
         .and_then(Value::as_str)
         .filter(|authored| !authored.is_empty())
     {
-        name = authored.to_ascii_uppercase();
+        name = upper(authored);
     }
     let preserving: bool = TYPE_PRESERVING_AGGREGATES.contains(&name.as_str());
     let value: Option<&Value> = payload.get("this");
@@ -675,18 +648,6 @@ fn failure(reason: String) -> PivotOutcome {
         failure_reason: Some(reason),
         bare_dynamic_pivot: false,
     })
-}
-
-fn ascii_family(family: &DynamicFamily) -> bool {
-    [
-        &family.name,
-        &family.pivot_column,
-        &family.value_column,
-        &family.aggregate,
-        &family.data_type,
-    ]
-    .iter()
-    .all(|text| text.is_ascii())
 }
 
 /// Python's `_families_equal` key for one family.

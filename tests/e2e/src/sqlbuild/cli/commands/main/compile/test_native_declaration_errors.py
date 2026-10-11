@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_project_file,
 )
 
-_ENGINES: tuple[str, ...] = ("python", "native", "native-preview")
+_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _CALL_LOG: str = "macro_calls.log"
 _COUNTED_MACRO: str = (
     "from pathlib import Path\n\n\n"
@@ -156,7 +156,7 @@ def test_given_declaration_error_when_compiling_natively_then_error_matches_pyth
                 **_STATUS_ENUM,
                 _STAGING_PATH: _STAGING_PREFIX + 'status = @enum("missing_status").PLACED\n',
             },
-            expected_error_types=("CompileInputError",) * 3,
+            expected_error_types=("CompileInputError",) * 2,
         ),
         DeclarationErrorLifecycleTestCase(
             description="unclosed_quote_after_a_reference_only_python_scans",
@@ -164,7 +164,7 @@ def test_given_declaration_error_when_compiling_natively_then_error_matches_pyth
                 **_STATUS_ENUM,
                 _STAGING_PATH: _STAGING_PREFIX + "status = @enum\u00e9 OR status = 'open\n",
             },
-            expected_error_types=("CompileInputError",) * 3,
+            expected_error_types=("CompileInputError",) * 2,
         ),
     ],
     ids=lambda case: case.description,
@@ -173,7 +173,7 @@ def test_given_declaration_error_when_compiling_with_each_engine_then_lifecycle_
     test_case: DeclarationErrorLifecycleTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     error_types: list[str] = []
-    for engine in ("python", "native", "native-preview"):
+    for engine in ("native", "native-preview"):
         project_dir: Path = tmp_path / engine
         for relative_path, contents in {
             **FAILURE_BASE_FILES,

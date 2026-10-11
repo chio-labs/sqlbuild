@@ -7,3 +7,5 @@ pub(crate) const OUTSIDE_KEY: &str = "outside";
 pub(crate) const SQL_HOOK: &str = "sql";
 pub(crate) const THRESHOLDS_KEY: &str = "thresholds";
 pub(crate) const TYPE_KEY: &str = "type";
+/// The prefix that opens a SQL placeholder.
+pub(crate) const PLACEHOLDER_PREFIX: &str = "@@@";

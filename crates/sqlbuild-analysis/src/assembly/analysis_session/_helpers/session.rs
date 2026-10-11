@@ -8,11 +8,13 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::errors::StoreDecodeError;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::assembly::analysis_session::_helpers::analysis_cache::{
     CachedOutcome, decode_outcome, encode_outcome,
 };
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
+use crate::assembly::analysis_session::_helpers::catalog_state::{ShapeOptions, ShapeSource};
 use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
 };
@@ -27,44 +29,47 @@ use crate::assembly::analysis_session::_helpers::mappings::{
     ShapeTable, dict_from_pairs, same_keys, same_relations,
 };
 use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
-use crate::assembly::analysis_session::_helpers::publication::{ShapeOptions, ShapeSource};
-use crate::assembly::analysis_session::constants::{
-    DEFERRAL_ANALYSIS, DEFERRAL_ENRICHMENT, UNKNOWN_NULLABILITY, UNKNOWN_TYPE,
-};
+use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_TYPE};
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, Awaiting, ColumnFact, Deferral, DeferredAnalysis, FinishedSession,
-    LineageFacts, LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome,
-    PivotTables, SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
+    AnalysisSession, ColumnFact, ContractProof, FinishedSession, LineageFacts, LineageRow,
+    ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables, SessionModelFacts,
+    SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
 use crate::semantic_validation::types::DiagnosticRow;
 
-/// The enrichment deferrals of one wave and whether each model's star was pending.
-type Enrichments = (Vec<Deferral>, HashMap<usize, bool>);
+/// What an internal native failure of the session names.
+const SESSION_CONTEXT: &str = "native model analysis";
 
 impl AnalysisSession {
-    /// A session over `request`, or None where Python's cycle handling must analyse.
-    pub(crate) fn start(request: SessionRequest, catalog: &ProjectCatalog) -> Option<Self> {
-        let waves: Vec<Vec<usize>> = waves(&producers(&request.models)?)?;
+    /// A session over `request`; a `ref` cycle is one wave.
+    pub(crate) fn start(request: SessionRequest, catalog: &ProjectCatalog) -> Result<Self, String> {
+        let producers: Vec<Vec<usize>> = producers(&request.models)
+            .ok_or_else(|| native_failure(SESSION_CONTEXT, "two analysed models share a name"))?;
+        let scheduled: Option<Vec<Vec<usize>>> = waves(&producers);
         let complete_shapes: ShapeTable = ShapeTable::from_shapes(&request.complete_schemas);
-        let dependency_ordered: bool = request
-            .models
-            .iter()
-            .flat_map(|model| model.required_names.iter())
-            .any(|name| complete_shapes.get(name).is_none_or(Vec::is_empty));
-        Some(Self {
+        let dependency_ordered: bool = scheduled.is_some()
+            && request
+                .models
+                .iter()
+                .flat_map(|model| model.required_names.iter())
+                .any(|name| complete_shapes.get(name).is_none_or(Vec::is_empty));
+        let cyclic: bool = scheduled.is_none();
+        let waves: Vec<Vec<usize>> = scheduled.unwrap_or_default();
+        Ok(Self {
             catalog: SessionCatalog::new(catalog, &request.catalog_schemas),
             available_types: ShapeTable::from_shapes(&request.column_types),
             available_nullability: ShapeTable::from_shapes(&request.column_nullability),
             complete_shapes,
             outcomes: vec![None; request.models.len()],
-            waves: if dependency_ordered || waves.is_empty() {
+            waves: if dependency_ordered || request.models.is_empty() {
                 waves
             } else {
                 vec![(0..request.models.len()).collect()]
             },
             dependency_ordered,
+            cyclic,
             next_wave: 0,
             phase: Phase::Analyze,
             publications: Vec::new(),
@@ -74,41 +79,23 @@ impl AnalysisSession {
         })
     }
 
-    /// Advance until Python must answer deferrals; a step without deferrals means done.
+    /// Analyse every wave; any internal native failure fails the whole analysis.
     pub(crate) fn run(&mut self) -> Result<SessionStep, String> {
         loop {
             match std::mem::replace(&mut self.phase, Phase::Done) {
-                Phase::Await(awaiting) => {
-                    self.phase = Phase::Await(awaiting);
-                    return Err("the session is waiting for deferred analyses".to_owned());
-                }
-                Phase::Done => return Ok(self.step(Vec::new())),
+                Phase::Done => return Ok(self.step()),
                 Phase::Analyze => {
                     let Some(models) = self.waves.get(self.next_wave).cloned() else {
-                        return Ok(self.step(Vec::new()));
+                        return Ok(self.step());
                     };
                     let wave: usize = self.next_wave;
                     self.next_wave += 1;
-                    let deferrals: Vec<Deferral> = self.analyze_wave(&models)?;
-                    if deferrals.is_empty() {
-                        self.phase = Phase::Complete(wave);
-                        continue;
-                    }
-                    let deferred: Vec<usize> = deferrals.iter().map(Deferral::model).collect();
-                    self.phase = Phase::Await(Awaiting::Analyses {
-                        wave,
-                        models: deferred,
-                    });
-                    return Ok(self.step(deferrals));
+                    self.analyze_wave(&models)?;
+                    self.phase = Phase::Complete(wave);
                 }
                 Phase::Complete(wave) => {
-                    let (deferrals, star_pending) = self.complete_wave(wave)?;
-                    if deferrals.is_empty() {
-                        self.phase = Phase::Finish(wave);
-                        continue;
-                    }
-                    self.phase = Phase::Await(Awaiting::Enrichments { wave, star_pending });
-                    return Ok(self.step(deferrals));
+                    self.complete_wave(wave)?;
+                    self.phase = Phase::Finish(wave);
                 }
                 Phase::Finish(wave) => {
                     self.finish_wave(wave)?;
@@ -116,50 +103,6 @@ impl AnalysisSession {
                 }
             }
         }
-    }
-
-    /// Answer the deferrals of the last step.
-    pub(crate) fn provide(&mut self, results: Vec<DeferredAnalysis>) -> Result<(), String> {
-        let Phase::Await(awaiting) = std::mem::replace(&mut self.phase, Phase::Done) else {
-            return Err("the session is not waiting for deferred analyses".to_owned());
-        };
-        match awaiting {
-            Awaiting::Analyses { wave, models } => {
-                let mut answered: Vec<usize> = results.iter().map(|result| result.model).collect();
-                answered.sort_unstable();
-                let mut expected: Vec<usize> = models;
-                expected.sort_unstable();
-                if answered != expected {
-                    return Err("deferred analyses do not match the deferrals".to_owned());
-                }
-                for result in results {
-                    let model: usize = result.model;
-                    self.mark_uncacheable(model);
-                    self.outcome_mut(model)?.analysis = python_analysis(result);
-                }
-                self.phase = Phase::Complete(wave);
-            }
-            Awaiting::Enrichments { wave, star_pending } => {
-                if results.len() != star_pending.len() {
-                    return Err("deferred enrichments do not match the deferrals".to_owned());
-                }
-                for result in results {
-                    let pending: bool = *star_pending
-                        .get(&result.model)
-                        .ok_or("an enrichment answers no deferral")?;
-                    self.mark_uncacheable(result.model);
-                    let outcome: &mut ModelOutcome = self.outcome_mut(result.model)?;
-                    outcome.analysis = enriched_analysis(
-                        &outcome.analysis,
-                        result,
-                        pending,
-                        LineageFacts::PythonEnrichment,
-                    );
-                }
-                self.phase = Phase::Finish(wave);
-            }
-        }
-        Ok(())
     }
 
     /// Every model's outcome and the binding catalog changes Python records.
@@ -177,9 +120,14 @@ impl AnalysisSession {
         let (schema_additions, analysis_names) = self.catalog.into_changes();
         let request: SessionRequest = self.request;
         let mut model_facts: HashMap<String, SessionModelFacts> = HashMap::new();
-        for (model, outcome) in request.models.iter().zip(&models) {
+        let mut dynamic_proofs: HashMap<String, ContractProof> = HashMap::new();
+        for ((model, outcome), proof) in request.models.iter().zip(&models).zip(&dynamic_contracts)
+        {
             if let Some(facts) = session_model_facts(&outcome.analysis) {
                 model_facts.insert(model.name.clone(), facts);
+            }
+            if let PivotOutcome::Proof(proof) = proof {
+                dynamic_proofs.insert(model.name.clone(), proof.clone());
             }
         }
         let finished = FinishedSession {
@@ -192,6 +140,7 @@ impl AnalysisSession {
             },
             pool,
             models: model_facts,
+            dynamic_proofs,
         };
         let outcome = SessionOutcome {
             models,
@@ -216,18 +165,18 @@ impl AnalysisSession {
             families_by_table: &self.request.dynamic_families_by_table,
         };
         let pool = self.catalog.native.analysis_pool()?;
-        Ok(pool.install(|| {
+        let outcomes: Vec<Result<PivotOutcome, String>> = pool.install(|| {
             models
                 .par_iter()
                 .map(|model| pivot_outcome(&model.pivot_sql, &model.dynamic_families, &facts))
                 .collect()
-        }))
+        });
+        outcomes.into_iter().collect()
     }
 
-    fn step(&mut self, deferrals: Vec<Deferral>) -> SessionStep {
+    fn step(&mut self) -> SessionStep {
         SessionStep {
             publications: std::mem::take(&mut self.publications),
-            deferrals,
             failures: std::mem::take(&mut self.failures),
         }
     }
@@ -236,11 +185,11 @@ impl AnalysisSession {
         self.outcomes
             .get_mut(model)
             .and_then(Option::as_mut)
-            .ok_or_else(|| "a deferral names an unanalysed model".to_owned())
+            .ok_or_else(|| native_failure(SESSION_CONTEXT, "a model was left unanalysed"))
     }
 
     /// Python's `_analyze_model_sql_requests` for one wave, less the models the cache answers.
-    fn analyze_wave(&mut self, models: &[usize]) -> Result<Vec<Deferral>, String> {
+    fn analyze_wave(&mut self, models: &[usize]) -> Result<(), String> {
         let schemas: Vec<Shapes> = models
             .iter()
             .map(|model| self.binding_schema(&self.request.models[*model]))
@@ -260,7 +209,6 @@ impl AnalysisSession {
             nullability: &self.available_nullability,
         };
         let results: Vec<MemberResult> = self.catalog.analyze_batch(&batch)?;
-        let mut deferrals: Vec<Deferral> = Vec::new();
         let mut tables: Option<ContentDigest> = None;
         for (position, result) in misses.into_iter().zip(results) {
             let model: &usize = &models[position];
@@ -288,22 +236,12 @@ impl AnalysisSession {
                     failed_analysis(LineageFacts::Native(Vec::new()), diagnostics)
                 }
                 MemberAnalysis::Legacy { lineage } => {
-                    match self.native_legacy(&self.request.models[*model], &result.cleaned_sql) {
-                        Ok(legacy) => {
-                            self.record_legacy_tables(*model, &mut tables);
-                            legacy_outcome(legacy, lineage, diagnostics)
-                        }
-                        Err(_deferred) => {
-                            deferrals.push(Deferral::Analysis {
-                                model: *model,
-                                cleaned_sql: result.cleaned_sql.clone(),
-                                binding_schema: schema.clone(),
-                                binding_diagnostics: diagnostics.clone(),
-                                lineage,
-                            });
-                            failed_analysis(LineageFacts::PythonAnalysis, diagnostics)
-                        }
-                    }
+                    let request: &ModelRequest = &self.request.models[*model];
+                    let legacy: LegacyAnalysis =
+                        self.native_legacy(request, &result.cleaned_sql)
+                            .map_err(|reason| native_failure(&model_context(request), &reason))?;
+                    self.record_legacy_tables(*model, &mut tables);
+                    legacy_outcome(legacy, lineage, diagnostics)
                 }
             };
             self.outcomes[*model] = Some(ModelOutcome {
@@ -313,7 +251,7 @@ impl AnalysisSession {
                 fused_binding_validated: true,
             });
         }
-        Ok(deferrals)
+        Ok(())
     }
 
     /// Python's legacy analysis of a model the engine handed back, or why Python must answer.
@@ -327,12 +265,14 @@ impl AnalysisSession {
                 cleaned_sql,
                 lineage_references: &model.lineage_references,
                 recover: model.recover_cte_facts,
+                full_nullability: false,
                 types: &self.available_types,
                 nullability: &self.available_nullability,
                 profile: RecoveryProfile {
                     dialect: &self.request.dialect,
                     function_return_types: &self.request.function_return_types,
                     rules: self.request.nullability_rules.as_ref(),
+                    callback: self.request.nullability_callback.as_ref(),
                 },
             })
         })
@@ -353,9 +293,10 @@ impl AnalysisSession {
     }
 
     /// Python's `_complete_inferred_bindings` star and type pass for one wave.
-    fn complete_wave(&mut self, wave: usize) -> Result<Enrichments, String> {
-        let mut deferrals: Vec<Deferral> = Vec::new();
-        let mut star_pending_by_model: HashMap<usize, bool> = HashMap::new();
+    fn complete_wave(&mut self, wave: usize) -> Result<(), String> {
+        if self.cyclic {
+            return Ok(());
+        }
         let mut candidates: Vec<(usize, Shapes, bool)> = Vec::new();
         for model in self.waves[wave].clone() {
             if self.cached(model) {
@@ -387,39 +328,19 @@ impl AnalysisSession {
                 candidates.push((model, input_schemas, star_pending));
             }
         }
-        let enrichments: Vec<Option<Enrichment>> = self.native_enrichments(&candidates)?;
-        for ((model, input_schemas, star_pending), native) in
-            candidates.into_iter().zip(enrichments)
-        {
-            let Some(native) = native else {
-                star_pending_by_model.insert(model, star_pending);
-                deferrals.push(Deferral::Enrichment {
-                    model,
-                    input_schemas,
-                });
-                continue;
-            };
+        let enrichments: Vec<Enrichment> = self.native_enrichments(&candidates)?;
+        for ((model, _, star_pending), native) in candidates.into_iter().zip(enrichments) {
             let outcome: &mut ModelOutcome = self.outcome_mut(model)?;
-            outcome.analysis = enriched_analysis(
-                &outcome.analysis,
-                native_answer(
-                    model,
-                    native.analysis_succeeded,
-                    native.columns,
-                    native.has_star,
-                ),
-                star_pending,
-                LineageFacts::NativeFacts(native.lineage),
-            );
+            outcome.analysis = enriched_analysis(&outcome.analysis, native, star_pending);
         }
-        Ok((deferrals, star_pending_by_model))
+        Ok(())
     }
 
-    /// Python's re-analysis of each candidate natively, None where Python must answer it.
+    /// Python's re-analysis of each candidate; the first failure in model order fails it.
     fn native_enrichments(
         &self,
         candidates: &[(usize, Shapes, bool)],
-    ) -> Result<Vec<Option<Enrichment>>, String> {
+    ) -> Result<Vec<Enrichment>, String> {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
@@ -431,10 +352,24 @@ impl AnalysisSession {
                 dialect: &self.request.dialect,
                 function_return_types: &self.request.function_return_types,
                 nullability_rules: self.request.nullability_rules.as_ref(),
+                nullability_callback: self.request.nullability_callback.as_ref(),
             })
             .collect();
         let pool = self.catalog.native.analysis_pool()?;
-        Ok(pool.install(|| inputs.par_iter().map(enrichment).collect()))
+        let enrichments: Vec<Result<Enrichment, String>> =
+            pool.install(|| inputs.par_iter().map(enrichment).collect());
+        enrichments
+            .into_iter()
+            .zip(&inputs)
+            .map(|(enrichment, input)| {
+                enrichment.map_err(|reason| {
+                    native_failure(
+                        &format!("{} enrichment", model_context(input.model)),
+                        &reason,
+                    )
+                })
+            })
+            .collect()
     }
 
     fn input_schemas(&self, required: &[String]) -> Shapes {
@@ -460,7 +395,8 @@ impl AnalysisSession {
     fn finish_wave(&mut self, wave: usize) -> Result<(), String> {
         let models: Vec<usize> = self.waves[wave].clone();
         let mut validations: Vec<(usize, String, Shapes)> = Vec::new();
-        for model in &models {
+        let validated: &[usize] = if self.cyclic { &[] } else { &models };
+        for model in validated {
             let schema: Shapes = self.binding_schema(&self.request.models[*model]);
             let outcome: &ModelOutcome = self.outcomes[*model]
                 .as_ref()
@@ -598,23 +534,16 @@ impl AnalysisSession {
             return;
         };
         for model in models {
-            if cache.hits[*model] || cache.uncacheable[*model] {
+            if cache.hits[*model] {
                 continue;
             }
             let (Some(key), Some(outcome)) = (cache.keys[*model], self.outcomes[*model].as_ref())
             else {
                 continue;
             };
-            if let Some(bytes) = encode_outcome(outcome, cache.legacy_tables[*model].as_ref()) {
-                cache.store.put(key, bytes);
-                cache.stats.stored += 1;
-            }
-        }
-    }
-
-    fn mark_uncacheable(&mut self, model: usize) {
-        if let Some(cache) = self.cache.as_mut() {
-            cache.uncacheable[model] = true;
+            let bytes: Vec<u8> = encode_outcome(outcome, cache.legacy_tables[*model].as_ref());
+            cache.store.put(key, bytes);
+            cache.stats.stored += 1;
         }
     }
 
@@ -756,41 +685,11 @@ fn legacy_outcome(
     }
 }
 
-fn python_analysis(result: DeferredAnalysis) -> ModelAnalysis {
-    ModelAnalysis {
-        analysis_succeeded: result.analysis_succeeded,
-        columns: result.columns,
-        lineage: LineageFacts::PythonAnalysis,
-        has_star: result.has_star,
-        star_resolved: result.star_resolved,
-        binding_diagnostics: result.binding_diagnostics,
-        binding_validated: result.binding_validated,
-    }
-}
-
-impl Deferral {
-    /// The deferred model's request index.
-    pub fn model(&self) -> usize {
-        match self {
-            Self::Analysis { model, .. } | Self::Enrichment { model, .. } => *model,
-        }
-    }
-
-    /// Python's name for the deferral's kind.
-    pub fn kind(&self) -> &'static str {
-        match self {
-            Self::Analysis { .. } => DEFERRAL_ANALYSIS,
-            Self::Enrichment { .. } => DEFERRAL_ENRICHMENT,
-        }
-    }
-}
-
 /// Python's merge of a re-analysis with known inputs into the model's analysis.
 fn enriched_analysis(
     analysis: &ModelAnalysis,
-    enriched: DeferredAnalysis,
+    enriched: Enrichment,
     star_pending: bool,
-    lineage: LineageFacts,
 ) -> ModelAnalysis {
     let mut recovered: HashMap<String, String> = HashMap::new();
     for column in enriched
@@ -810,9 +709,9 @@ fn enriched_analysis(
         ModelAnalysis {
             analysis_succeeded: enriched.analysis_succeeded,
             columns: enriched.columns,
-            lineage,
+            lineage: LineageFacts::NativeFacts(enriched.lineage),
             has_star: enriched.has_star,
-            star_resolved: enriched.star_resolved,
+            star_resolved: false,
             binding_diagnostics: analysis.binding_diagnostics.clone(),
             binding_validated: analysis.binding_validated,
         }
@@ -830,38 +729,13 @@ fn enriched_analysis(
     merged
 }
 
-/// A native re-analysis as Python's successful answer.
-fn native_answer(
-    model: usize,
-    analysis_succeeded: bool,
-    columns: Option<Vec<ColumnFact>>,
-    has_star: bool,
-) -> DeferredAnalysis {
-    DeferredAnalysis {
-        model,
-        analysis_succeeded,
-        columns,
-        has_star,
-        star_resolved: false,
-        binding_diagnostics: Vec::new(),
-        binding_validated: false,
-    }
-}
-
-/// A compiled model's output names and lineage from a successful analysis with native lineage.
+/// A model's typed output columns and lineage from a successful native-lineage analysis.
 fn session_model_facts(analysis: &ModelAnalysis) -> Option<SessionModelFacts> {
-    let rows: &Vec<LineageRow> = match &analysis.lineage {
-        LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows) => rows,
-        LineageFacts::PythonAnalysis | LineageFacts::PythonEnrichment => return None,
-    };
+    let (LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows)) = &analysis.lineage;
     analysis.analysis_succeeded.then(|| SessionModelFacts {
-        columns: analysis.columns.as_deref().map(column_names),
+        columns: analysis.columns.clone(),
         lineage: rows.iter().map(output_sources).collect(),
     })
-}
-
-fn column_names(columns: &[ColumnFact]) -> Vec<String> {
-    columns.iter().map(|column| column.name.clone()).collect()
 }
 
 /// One lineage row as `(output column, [(resource name, column name)])`.
@@ -871,4 +745,9 @@ fn output_sources(row: &LineageRow) -> (String, Vec<(String, String)>) {
         sources.push((name.clone(), column.clone()));
     }
     (row.output_column.clone(), sources)
+}
+
+/// The failure context naming one model.
+fn model_context(model: &ModelRequest) -> String {
+    format!("{SESSION_CONTEXT} of model '{}'", model.name)
 }

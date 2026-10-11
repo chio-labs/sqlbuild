@@ -27,6 +27,16 @@ fn given_sql_test_when_scanning_expected_models_then_names_and_errors_match_pyth
             expected_outcome: scanned(&["a"]),
         },
         ExpectedNamesTestCase {
+            description: "an alphabetic mark Python's isalpha rejects does not start a CTE name",
+            sql: "WITH \u{345}x AS (SELECT 1)",
+            expected_outcome: failed("SQL test 'tests/unit/test_orders.sql' expected a CTE name"),
+        },
+        ExpectedNamesTestCase {
+            description: "an alphabetic mark Python's isalnum rejects ends a CTE name",
+            sql: "WITH __expected__a\u{345} AS (SELECT 1)",
+            expected_outcome: failed("SQL test 'tests/unit/test_orders.sql' expected keyword AS"),
+        },
+        ExpectedNamesTestCase {
             description: "no top-level WITH has no expected models",
             sql: "SELECT 1",
             expected_outcome: scanned(&[]),

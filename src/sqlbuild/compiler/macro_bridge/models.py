@@ -11,10 +11,29 @@ class MacroCallSite:
     """One top-level macro call in an authored string, in Python string offsets."""
 
     start: int
+    args_start: int
     end: int
     name: str
-    tree_names: tuple[str, ...]
+    tree_names: tuple[str, ...] | None
+    """Every macro name of the call; None where a nested call is not one the scan completes."""
     typed_reference_text: bool
+
+
+@dataclass(frozen=True)
+class MacroScanFailure:
+    """Where Python's scan of a string raises: in the call at `call_start`, or between calls."""
+
+    call_start: int | None
+    call_name: str | None
+    message: str
+
+
+@dataclass(frozen=True)
+class MacroCallScan:
+    """A string's complete top-level call sites in order, and where its scan raises, if it does."""
+
+    sites: tuple[MacroCallSite, ...]
+    failure: MacroScanFailure | None
 
 
 @dataclass(frozen=True)

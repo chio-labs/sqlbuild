@@ -25,6 +25,7 @@ from scripts.compiler_differential.models import (
     RecordedRun,
 )
 from scripts.compiler_differential.types import FallbackKey
+from sqlbuild.compiler.frontier.types import NativeStage
 
 
 def native_fallback_gate(
@@ -118,6 +119,7 @@ def fallback_problems(
     allowed_answers: Counter[tuple[str, str, str]] = _answer_totals(
         {**allowed.counts, **allowed.max_counts}
     )
+    switchable_stages: frozenset[str] = frozenset(stage.value for stage in NativeStage)
     problems: list[str] = []
     for key in sorted({*allowed.counts, *allowed.max_counts, *observed}):
         if key[0] not in run.engines:
@@ -134,6 +136,7 @@ def fallback_problems(
                 bound=None if bound is None else bound.get(corpus, 0),
                 answers_rose=observed_answers[(key[0], key[1], corpus)]
                 > allowed_answers[(key[0], key[1], corpus)],
+                switchable=key[1] in switchable_stages,
             )
             if problem is not None:
                 problems.append(problem)
@@ -196,6 +199,7 @@ def _corpus_problem(
     exact: int | None,
     bound: int | None,
     answers_rose: bool,
+    switchable: bool,
 ) -> str | None:
     if answer and exact is None and bound is None:
         return f"{label}: native answered {actual}, not on the allow-list; record it"
@@ -206,7 +210,7 @@ def _corpus_problem(
         )
     if exact is None and bound is None:
         return f"{label}: {actual} not on the allow-list; port it or list it with a reason"
-    if actual == 0 and not answers_rose:
+    if actual == 0 and switchable and not answers_rose:
         return (
             f"{label}: fallback disappeared but native answers did not appear; the stage may be "
             "switched off. A port that removes a fallback must report native answers for the "

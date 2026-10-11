@@ -7,6 +7,7 @@ use std::time::Instant;
 use polyglot_sql::{Dialect, Expression};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use regex::Regex;
+#[cfg(test)]
 use serde::Serialize;
 
 use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
@@ -65,6 +66,7 @@ pub(crate) const DBT_REF_FUNCTION: &str = "__dbt_ref";
 const UDF_FUNCTION: &str = "__udf";
 const TABLE_FUNCTION: &str = "__table_fn";
 
+#[cfg(test)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChainBatchResponse {
@@ -426,6 +428,7 @@ impl GeneratedCteState {
 }
 
 /// Return each test's topologically ordered unmocked model chain without planning SQL.
+#[cfg(test)]
 pub(crate) fn resolve_chains_json(request_json: &str) -> Result<String, String> {
     let request: SqlTestChainBatch =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;
@@ -496,6 +499,7 @@ fn chain_root_names(
     dedupe(expected_names)
 }
 
+#[cfg(test)]
 pub(crate) fn plan_and_render_json(request_json: &str) -> Result<String, String> {
     let request: SqlTestPlanBatch =
         serde_json::from_str(request_json).map_err(|error| error.to_string())?;

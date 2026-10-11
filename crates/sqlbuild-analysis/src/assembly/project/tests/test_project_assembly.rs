@@ -59,7 +59,7 @@ fn given_references_when_deriving_deps_then_matches_python_keys() {
 }
 
 #[test]
-fn given_seeds_when_resolving_targets_then_matches_python_or_defers() {
+fn given_seeds_when_resolving_targets_then_matches_python_or_raises() {
     let test_cases = [
         SeedTestCase {
             description: "defaults and the seed's templates read variables and updated context",
@@ -116,15 +116,22 @@ fn given_seeds_when_resolving_targets_then_matches_python_or_defers() {
             expected_namespace: None,
         },
         SeedTestCase {
-            description: "environment reads stay with Python",
+            description: "an environment name the request did not list is an internal failure",
             seed: ("countries", None, Some("${ENV:SEED_SCHEMA}")),
             defaults: (None, None, None, None),
             target: None,
             expected_namespace: None,
         },
         SeedTestCase {
-            description: "a variable only Python renders",
+            description: "a whole-template list variable is Python's str of the list",
             seed: ("countries", None, Some("${tags}")),
+            defaults: (None, None, None, None),
+            target: None,
+            expected_namespace: Some((None, Some("['daily']"), None, Some("['daily']"))),
+        },
+        SeedTestCase {
+            description: "a list variable inside text raises Python's interpolation error",
+            seed: ("countries", None, Some("s_${tags}")),
             defaults: (None, None, None, None),
             target: None,
             expected_namespace: None,
@@ -181,7 +188,7 @@ fn given_sources_when_resolving_managed_targets_then_matches_python() {
 }
 
 #[test]
-fn given_model_sql_when_validating_syntax_then_matches_python_or_defers() {
+fn given_model_sql_when_validating_syntax_then_matches_python_or_raises() {
     let test_cases = [
         SyntaxTestCase {
             dialect: "duckdb",
@@ -206,17 +213,17 @@ fn given_model_sql_when_validating_syntax_then_matches_python_or_defers() {
         },
         SyntaxTestCase {
             dialect: "duckdb",
-            description: "a placeholder followed by text Python's \\w may extend",
+            description: "a placeholder name Python's \\w extends past ASCII stays authored",
             sql: "SELECT @@@x\u{e9} AS a",
             placeholders: &[("x", "1")],
-            expected_valid: None,
+            expected_valid: Some(true),
         },
         SyntaxTestCase {
             dialect: "trino",
-            description: "a dialect this parser build does not carry",
+            description: "a dialect outside the old parser build reads as the wheel does",
             sql: "SELECT 1 AS a FROM t QUALIFY a = 1",
             placeholders: &[],
-            expected_valid: None,
+            expected_valid: Some(false),
         },
     ];
     for test_case in test_cases {
@@ -261,7 +268,7 @@ fn given_environment_templates_when_resolving_seeds_then_matches_python_values_a
             expected_reads: vec![InputRead::Environment("SQB_UNSET_SCHEMA".to_owned())],
         },
         EnvironmentTestCase {
-            description: "a name Python did not resolve stays with Python",
+            description: "a name the request did not list is an internal failure",
             seed: (
                 "countries",
                 None,
@@ -292,7 +299,7 @@ fn given_environment_templates_when_resolving_seeds_then_matches_python_values_a
 }
 
 #[test]
-fn given_sql_batches_when_checking_syntax_then_stops_at_python_first_rejection_or_defers() {
+fn given_sql_batches_when_checking_syntax_then_stops_at_python_first_rejection_or_raise() {
     let test_cases = [
         SyntaxBatchTestCase {
             description: "every statement parses",
@@ -310,9 +317,9 @@ fn given_sql_batches_when_checking_syntax_then_stops_at_python_first_rejection_o
             expected_valid: Some(false),
         },
         SyntaxBatchTestCase {
-            description: "a statement native defers before any rejection",
+            description: "a non-ASCII placeholder name before a rejection",
             sqls: &["SELECT @@@x\u{e9}", "SELECT FROM WHERE ("],
-            expected_valid: None,
+            expected_valid: Some(false),
         },
     ];
     for test_case in test_cases {

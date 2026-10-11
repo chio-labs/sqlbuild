@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from pathlib import Path
 
 import pytest
@@ -14,27 +13,18 @@ from tests.e2e.scripts.compiler_differential._test_types import (
     CoverageFailureTestCase,
     HarnessRunTestCase,
     ProjectExpectationTestCase,
-    SharedAnalysisSeedTestCase,
     WheelSiteReportTestCase,
 )
 from tests.e2e.scripts.compiler_differential.helpers import (
     CATALOG_PERTURBATION,
-    COMPILED_PROJECT_CAPTURE,
     DEFERRAL_PERTURBATION,
     DISCOVERY_PERTURBATION,
     NATIVE_ONLY_STDERR_LINE,
     RENDER_PERTURBATION,
-    SHARED_ANALYSIS_SEED,
     harness_arguments,
     perturbation_arguments,
-    shared_analysis_seed_arguments,
     write_broken_ref_project,
     write_failure_case_project,
-)
-from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
-    CompiledProjectRun,
-    compiled_project_capture,
-    use_wave_analysis,
 )
 
 
@@ -47,7 +37,7 @@ from tests.integration.src.sqlbuild.compiler.pipeline.helpers import (
             expected_exit_code=0,
             expected_lines=(
                 "OK   project/waffle_shop",
-                "Compiler differential passed: 1 projects identical (python vs native-preview)",
+                "Compiler differential passed: 1 projects identical (native vs native-preview)",
             ),
             expected_patterns=(),
             expected_absent=("DIFF",),
@@ -341,62 +331,6 @@ def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_s
 @pytest.mark.parametrize(
     "test_case",
     [
-        SharedAnalysisSeedTestCase(
-            description="shared_analysis_seed_against_itself",
-            seed=SHARED_ANALYSIS_SEED,
-            expected_lines=(
-                f"OK   seed/{SHARED_ANALYSIS_SEED}",
-                "Compiler differential passed: 3 projects identical (python vs python)",
-            ),
-            expected_capture_sides=("left-python-captures", "right-python-captures"),
-            expected_compile_exit_code=0,
-            expected_minimum_shareable_members=1,
-            expected_minimum_shared_reuse=1,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-@pytest.mark.usefixtures("python_compiler_engine")
-def test_given_python_engine_twice_when_capturing_stages_then_captures_are_identical(
-    test_case: SharedAnalysisSeedTestCase,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    work_dir: Path = tmp_path / "work"
-    exit_code: int = run_compiler_differential(
-        shared_analysis_seed_arguments(work_dir=work_dir, seed=test_case.seed)
-    )
-    output: str = capsys.readouterr().out
-    seed_dir: Path = work_dir / f"seed__{test_case.seed}"
-    project_dir: Path = Path(shutil.copytree(seed_dir / "source", tmp_path / "project"))
-    with monkeypatch.context() as waves_patch:
-        use_wave_analysis(waves_patch)
-        compiled: CompiledProjectRun = compiled_project_capture(
-            project_dir=project_dir,
-            capture_dir=tmp_path / "captures",
-            capsys=capsys,
-            monkeypatch=waves_patch,
-        )
-
-    assert (exit_code, all(line in output for line in test_case.expected_lines)) == (0, True), (
-        output
-    )
-    assert "DIFF" not in output, output
-    assert all(
-        (seed_dir / side / COMPILED_PROJECT_CAPTURE).is_file()
-        for side in test_case.expected_capture_sides
-    ), output
-    assert (
-        compiled.exit_code,
-        compiled.shareable_members >= test_case.expected_minimum_shareable_members,
-        compiled.shared_reuse >= test_case.expected_minimum_shared_reuse,
-    ) == (test_case.expected_compile_exit_code, True, True), compiled
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         ProjectExpectationTestCase(
             description="expected_code_only_reported_as_warning",
             extra_arguments=("--expect", "failure:P003"),
@@ -437,19 +371,19 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
     "test_case",
     [
         WheelSiteReportTestCase(
-            description="python_and_preview_wheel_calls_without_preview_deferrals",
+            description="native_and_preview_wheel_calls_without_preview_deferrals",
             perturbation="",
             expected_lines=(
-                "Polyglot wheel calls (python):",
+                "Polyglot wheel calls (native):",
                 "Polyglot wheel calls (native-preview):",
-                "Analysis deferrals (python): none recorded",
+                "Analysis deferrals (native): none recorded",
                 "Analysis deferrals (native-preview): none recorded",
                 "Compiler differential passed: 1 projects identical",
             ),
             expected_sites=frozenset(
                 {
-                    "compiler/compile/_helpers/analysis/validation.py:"
-                    "_validate_sql_syntax_with_message parse_one",
+                    "compiler/compile/_helpers/analysis/required_columns.py:"
+                    "resolve_required_external_columns parse_one",
                 }
             ),
             expected_deferrals=frozenset(),
@@ -458,7 +392,7 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
             description="preview_deferrals_are_counted_per_kind_and_site",
             perturbation=DEFERRAL_PERTURBATION,
             expected_lines=(
-                "Analysis deferrals (python): none recorded",
+                "Analysis deferrals (native): none recorded",
                 "Analysis deferrals (native-preview):",
                 " legacy_fallback orders.sql (project ",
             ),
@@ -490,10 +424,10 @@ def test_given_wheel_site_report_when_comparing_then_sites_and_deferrals_are_rep
     preview: dict[str, dict[str, dict[str, int]]] = report["native-preview"]
     assert exit_code == 0, output
     assert all(line in output for line in test_case.expected_lines), output
-    assert test_case.expected_sites <= set(report["python"]["wheel_sites"]), report
+    assert test_case.expected_sites <= set(report["native"]["wheel_sites"]), report
     assert set(preview["deferrals"]) == test_case.expected_deferrals
     assert all(sum(by_corpus.values()) > 0 for by_corpus in preview["deferrals"].values())
-    assert report["python"]["deferrals"] == {}
+    assert report["native"]["deferrals"] == {}
 
 
 if __name__ == "__main__":

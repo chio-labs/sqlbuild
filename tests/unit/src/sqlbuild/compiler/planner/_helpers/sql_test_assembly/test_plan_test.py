@@ -22,7 +22,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.planner._helpers.sql_tests.native_planning import (
-    plan_and_render_sql_test_artifacts,
+    plan_compiled_sql_test_artifacts,
     sql_test_plan_error_messages,
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -1339,7 +1339,7 @@ def test_given_sql_analysis_enabled_when_generated_cte_name_conflicts_then_it_ra
             sql_analysis_enabled=True,
         )
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragments[0]):
-        plan_and_render_sql_test_artifacts(
+        plan_compiled_sql_test_artifacts(
             project=project,
             tests=(compiled_test,),
             adapter=DuckDbAdapter(),
@@ -1606,7 +1606,7 @@ def test_given_reference_the_compiler_missed_when_planning_then_it_fails_with_lo
     compiled_test, project = build_test_and_project(test_case)
 
     with pytest.raises(SqlTestReferenceError) as raised:
-        plan_and_render_sql_test_artifacts(
+        plan_compiled_sql_test_artifacts(
             project=project,
             tests=(compiled_test,),
             adapter=DuckDbAdapter(),

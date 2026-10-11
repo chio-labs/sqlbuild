@@ -18,7 +18,6 @@ class MacroBridgeMemoTestCase:
 
     description: str
     files: dict[str, str]
-    expected_python_executions: int
     expected_native_executions: int
 
 
@@ -32,8 +31,18 @@ class MacroBridgeFailureTestCase:
 
 
 @dataclass(frozen=True)
+class MacroExpansionEdgeTestCase:
+    """Hand-picked SQL texts whose expansion must match Python's expansion recorded in a golden."""
+
+    description: str
+    texts: tuple[str, ...]
+    expected_mismatches: list[tuple[object, object, object]]
+
+
+@dataclass(frozen=True)
 class MacroExpansionDifferentialTestCase:
-    """Seeded random SQL text that must expand identically with and without the bridge."""
+    """Seeded random SQL text that must expand, with and without the bridge, as Python's
+    expansion recorded in its golden did."""
 
     description: str
     seed: int
@@ -55,3 +64,12 @@ class FailingMacroProjectParityTestCase:
     expected_minimum_errors_after_macro_runs: int
     expected_minimum_distinct_errors: int
     expected_mismatches: list[tuple[object, object, object]]
+
+
+@dataclass(frozen=True)
+class DeclarationUsageTestCase:
+    """SQL texts whose declaration usages Python's usage walk recorded in a golden."""
+
+    description: str
+    texts: tuple[str, ...]
+    expected_differences: list[tuple[int, str, object, object]]
