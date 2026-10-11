@@ -225,6 +225,41 @@ MODEL_SCHEMA_FILES: dict[str, str] = {
 }
 
 
+PYTHON_HOOK_FILES: dict[str, str] = {
+    "hooks/python/notifications.py": (
+        "from sqlbuild.hooks import hook\n\n\n"
+        "@hook\ndef notify(ctx, channel, *, level='info'):\n"
+        '    """Notify a channel."""\n    return None\n\n\n'
+        "@hook\ndef positional(warehouse, /, ctx):\n"
+        '    """Take a positional-only warehouse."""\n    return None\n\n\n'
+        "@hook\ndef flexible(ctx, **options):\n"
+        '    """Accept any configured argument."""\n    return None\n'
+    ),
+}
+
+
+PYTHON_HOOK_PARITY_FILES: dict[str, str] = PYTHON_HOOK_FILES | {
+    "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+    "models/marts/_sqlbuild/hooks/python/local.py": (
+        "from sqlbuild.hooks import hook\n\n\n"
+        "@hook\ndef refresh(ctx):\n"
+        '    """Refresh marts."""\n    return None\n'
+    ),
+    "models/orders.sql": (
+        'MODEL (\n  pre_hooks [python("notify", channel: "ops")],\n'
+        '  post_hooks [python("flexible", any: 1), python("notify", channel: "c", level: "x")],\n'
+        ");\n"
+        "SELECT 1 AS order_id\n"
+    ),
+    "models/marts/summary.sql": (
+        'MODEL (post_hooks [python("refresh"), python("flexible")]);\nSELECT 1 AS order_id\n'
+    ),
+    "models/staging/hidden.sql": (
+        'MODEL (post_hooks [python("refresh")]);\nSELECT 1 AS order_id\n'
+    ),
+}
+
+
 def build_inputs_with_native_loop(
     *, project_dir: Path, native: bool, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[CompileProjectInputs, list[int]]:
@@ -301,7 +336,10 @@ class _FallbackHost:
     def plain_input(
         self, *, index: int, config: object, visible: object, **_: object
     ) -> tuple[object, tuple[list[object], list[object]]]:
-        return self.host.fallback(index=index, config=config, visible=visible), ([], [])
+        attached: object = self.host.fallback(
+            index=index, config=config, visible=visible, python_hooks=None
+        )
+        return attached, ([], [])
 
 
 def expansions(inputs: CompileProjectInputs) -> list[tuple[object, object]]:

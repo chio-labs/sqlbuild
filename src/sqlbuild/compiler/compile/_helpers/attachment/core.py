@@ -252,7 +252,6 @@ class _ModelLoopHost:
     loop: _ModelInputLoop
     interpolations: dict[Path, SqlInterpolation]
     macros: dict[int, MacroExpansionResult] = field(default_factory=dict)
-    python_hooks: dict[int, tuple[UsageRecord, ...]] = field(default_factory=dict)
     hooks: dict[int, HookExpansionResult] = field(default_factory=dict)
 
     def constant_text(self, *, declaration: ConstantDeclaration, file_path: Path) -> str:
@@ -264,7 +263,12 @@ class _ModelLoopHost:
         )
 
     def fallback(
-        self, *, index: int, config: CompileModelConfig, visible: _VisibleModelDeclarations
+        self,
+        *,
+        index: int,
+        config: CompileModelConfig,
+        visible: _VisibleModelDeclarations,
+        python_hooks: list[UsageRecord] | None,
     ) -> CompileModelInput:
         model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
         return _build_model_input(
@@ -274,14 +278,8 @@ class _ModelLoopHost:
             declarations=visible,
             effective_config=config,
             expanded_macros=self.macros.pop(index, None),
-            checked_hooks=self.python_hooks.pop(index, None),
+            checked_hooks=None if python_hooks is None else tuple(python_hooks),
             expanded_hooks=self.hooks.pop(index, None),
-        )
-
-    def check_hooks(self, *, index: int, config: CompileModelConfig) -> None:
-        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        self.python_hooks[index] = _checked_python_hooks(
-            loop=self.loop, model_file=model_file, values=config.values
         )
 
     def expand_hooks(
@@ -366,7 +364,7 @@ class _ModelLoopHost:
                     dict.fromkeys(
                         (
                             *dict.fromkeys(declarations[2]),
-                            *self._hook_usages(index=index, schema_usages=declarations[3]),
+                            *self._hook_usages(index=index, named_usages=declarations[3]),
                         )
                     )
                 ),
@@ -375,14 +373,10 @@ class _ModelLoopHost:
         )
 
     def _hook_usages(
-        self, *, index: int, schema_usages: list[UsageRecord]
+        self, *, index: int, named_usages: list[UsageRecord]
     ) -> tuple[UsageRecord, ...]:
         expansion: HookExpansionResult | None = self.hooks.pop(index, None)
-        return (
-            *(() if expansion is None else expansion.usages),
-            *schema_usages,
-            *self.python_hooks.pop(index, ()),
-        )
+        return (*(() if expansion is None else expansion.usages), *named_usages)
 
     def model_row(self, *, model_input: CompileModelInput) -> tuple[object, ...]:
         return model_input_row(model_input)
@@ -548,6 +542,10 @@ def _run_native_model_loop(
                     "record_template_reads": record_template_reads,
                     "visible_declarations": _VisibleModelDeclarations,
                     "config_session": loop.validation_context.validators.native_config,
+                    "hook_functions": loop.discovered_inputs.hook_functions,
+                    "provider_names": frozenset(
+                        provider.name for provider in loop.discovered_inputs.providers
+                    ),
                 },
             ),
         ),

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,7 @@ class ModelLoopErrorTestCase:
     model_sql: str
     expected_message: str
     expected_code: str
+    files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

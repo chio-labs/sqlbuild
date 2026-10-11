@@ -19,6 +19,7 @@ use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
+use std::cell::RefCell;
 
 use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
 use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
@@ -33,11 +34,17 @@ use crate::bindings::_helpers::compiled_project::model_loop_host::{
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     analysis_override, hook_presence, reference_row,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_named::{
+    SCHEMA_DECLARATION, named_usages,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
     OptOut, OptOutModel, rejected_opt_out,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_python_hooks::{
+    HookClasses, HookSignatures,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_schema::{
-    ModelSchema, model_schema, schema_column_names, schema_usages,
+    ModelSchema, model_schema, schema_column_names,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_visibility::{
     ModelVisibility, VisibilityClasses, VisibilityModel,
@@ -63,7 +70,7 @@ const VALIDATE_METHOD: &str = "validate";
 const CONFIG_ARGUMENT: &str = "config";
 const VISIBLE_ARGUMENT: &str = "visible";
 const FILE_PATH_ARGUMENT: &str = "file_path";
-const CHECK_HOOKS_CALLBACK: &str = "check_hooks";
+const PYTHON_HOOKS_ARGUMENT: &str = "python_hooks";
 const EXPAND_MACROS_CALLBACK: &str = "expand_macros";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const INDEX_ARGUMENT: &str = "index";
@@ -103,8 +110,8 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) contract_enforced: Bound<'py, PyAny>,
     /// Public reusable model schemas by name.
     pub(crate) model_schemas: Bound<'py, PyDict>,
-    /// Each indexed schema's declaration record, by name; empty without a scope resolver.
-    pub(crate) schema_records: Bound<'py, PyDict>,
+    /// Each indexed schema's and Python hook's declaration record, by `(kind, name)`.
+    pub(crate) named_records: Bound<'py, PyDict>,
     /// Project enums by name, as a schema's column types resolve them.
     pub(crate) schema_enums: Bound<'py, PyDict>,
     /// `CompilerDiagnostic` and `report_compile_diagnostic`, for S006.
@@ -122,6 +129,8 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) config: ConfigClasses<'py>,
     /// What a model's visible declarations are resolved from.
     pub(crate) visibility: VisibilityClasses<'py>,
+    /// What a model's Python hooks are checked against.
+    pub(crate) hooks: HookClasses<'py>,
 }
 
 /// The ordered model loop of one compile-input stage.
@@ -160,6 +169,9 @@ struct LoopModel<'a, 'py> {
     visible: &'a VisibleDeclarations<'py>,
     /// The index, config and declarations every host callback for the model receives.
     arguments: &'a [(&'static str, Bound<'py, PyAny>)],
+    /// The model's checked Python hook usages, once its hooks are checked.
+    python_hooks: &'a RefCell<Option<Vec<Bound<'py, PyAny>>>>,
+    signatures: &'a HookSignatures,
 }
 
 #[pymethods]
@@ -222,6 +234,7 @@ impl NativeModelLoop {
         let mut finished_natively: usize = 0;
         let configs: ModelConfigs<'py> = ModelConfigs::default();
         let visibility: ModelVisibility<'py> = ModelVisibility::default();
+        let signatures: HookSignatures = HookSignatures::default();
         for (index, row) in models.into_iter().enumerate() {
             let ModelLoopRow((name, _, relative_path, file_path), header, _, _, _, _) = &row;
             let (_, header_values, enums, constants) = header;
@@ -240,18 +253,28 @@ impl NativeModelLoop {
                 (CONFIG_ARGUMENT, config.clone()),
                 (VISIBLE_ARGUMENT, visible.declarations.clone()),
             ];
+            let python_hooks: RefCell<Option<Vec<Bound<'py, PyAny>>>> = RefCell::new(None);
             let model: LoopModel<'_, 'py> = LoopModel {
                 row: &row,
                 config,
                 visible: &visible,
                 arguments: &arguments,
+                python_hooks: &python_hooks,
+                signatures: &signatures,
             };
             let (input, facts) = match self.finish(py, &context, model)? {
                 Some(finished) => {
                     finished_natively += 1;
                     plain_input(&host, &arguments, row, finished)?
                 }
-                None => attached_input(&host, &arguments)?,
+                None => {
+                    let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = arguments.to_vec();
+                    arguments.push((
+                        PYTHON_HOOKS_ARGUMENT,
+                        python_hooks.into_inner().into_pyobject(py)?.into_any(),
+                    ));
+                    attached_input(&host, &arguments)?
+                }
             };
             project.retain(facts);
             inputs.push(input);
@@ -276,6 +299,8 @@ impl NativeModelLoop {
             config,
             visible,
             arguments,
+            python_hooks,
+            signatures,
         } = model;
         let ModelLoopRow(
             (name, posix_path, relative_path, file_path),
@@ -289,11 +314,22 @@ impl NativeModelLoop {
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
         let hooked: bool = hook_presence(&values)?;
         if hooked {
-            callback(context.host, CHECK_HOOKS_CALLBACK, &arguments[..2])?;
+            match signatures.checked(context, &values, &visible.consumer, (name, relative_path))? {
+                Some(usages) => *python_hooks.borrow_mut() = Some(usages),
+                None => return Ok(None),
+            }
+        } else {
+            *python_hooks.borrow_mut() = Some(Vec::new());
         }
         let schema_usages: Vec<Bound<'py, PyAny>> = match &schema {
             Some(schema) => {
-                match schema_usages(context, schema, &visible.consumer, (name, relative_path))? {
+                let declaration = (&SCHEMA_DECLARATION, schema.name.as_str());
+                match named_usages(
+                    context,
+                    declaration,
+                    &visible.consumer,
+                    (name, relative_path),
+                )? {
                     Some(usages) => usages,
                     None => return Ok(None),
                 }
@@ -431,6 +467,8 @@ impl NativeModelLoop {
         {
             return Err(compile_error(context.classes, &message, None));
         }
+        let mut named_usages: Vec<Bound<'py, PyAny>> = schema_usages;
+        named_usages.extend(python_hooks.borrow_mut().take().unwrap_or_default());
         Ok(Some(FinishedModel {
             config,
             values,
@@ -440,7 +478,7 @@ impl NativeModelLoop {
             declarations,
             hook_statements,
             analysis,
-            schema_usages,
+            named_usages,
         }))
     }
 

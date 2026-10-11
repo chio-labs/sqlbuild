@@ -1,13 +1,7 @@
 //! A model's `model_schema`: resolved, checked for visibility, and merged into its header columns.
 
-use std::path::Path;
-
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
-use sqlbuild_scopes::scope_index::main::path_visible::path_visible;
-use sqlbuild_scopes::scope_index::models::{
-    DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
-};
 
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, compile_error};
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
@@ -23,21 +17,8 @@ const LOCATION_FIELD: &str = "location";
 const PATH_FIELD: &str = "path";
 const LINE_FIELD: &str = "line";
 const COLUMNS_FIELD: &str = "columns";
-const SCOPE_FIELD: &str = "scope";
-const VALUE_FIELD: &str = "value";
-const IDENTITY_FIELD: &str = "identity";
-const OWNER_FIELD: &str = "owner";
-const KIND_FIELD: &str = "kind";
-const OWNING_PATH_FIELD: &str = "owning_path";
-const OWNERSHIP_ROOT_FIELD: &str = "ownership_root";
-const CONSUMER_FIELD: &str = "consumer";
-const DECLARATION_FIELD: &str = "declaration";
 const LOWER_METHOD: &str = "lower";
 const STRIP_METHOD: &str = "strip";
-const CURRENT_FOLDER: &str = ".";
-const SCHEMA_ROLE: &str = "schemas";
-const INACCESSIBLE_CODE: &str = "S006";
-const SCHEMA_KIND: &str = "schema";
 /// `SchemaColumn` fields a named-schema column keeps when a header column augments it.
 const KEPT_NAMED_FIELDS: [&str; 6] = [
     "name",
@@ -88,32 +69,6 @@ pub(crate) fn model_schema<'py>(
         declaration,
         name: name.extract()?,
     }))
-}
-
-/// `named_declaration_usages`: the schema usage, reporting S006; `None` defers to Python.
-pub(crate) fn schema_usages<'py>(
-    context: &LoopContext<'_, 'py>,
-    schema: &ModelSchema<'py>,
-    consumer: &Bound<'py, PyAny>,
-    model: (&str, &str),
-) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
-    let (model_name, relative_path) = model;
-    let Some(record) = context.classes.schema_records.get_item(&schema.name)? else {
-        return Ok(Some(Vec::new()));
-    };
-    let label: String = relative_path.replace(std::path::MAIN_SEPARATOR, "/");
-    let Ok(visible) = path_visible(&declared_scope(&record)?, &label) else {
-        return Ok(None);
-    };
-    if !visible {
-        report_inaccessible(context, &record, &schema.name, (model_name, &label))?;
-    }
-    let fields: Bound<'py, PyDict> = PyDict::new(consumer.py());
-    fields.set_item(CONSUMER_FIELD, consumer)?;
-    fields.set_item(DECLARATION_FIELD, record.getattr(IDENTITY_FIELD)?)?;
-    Ok(Some(vec![
-        context.classes.usage_record.call((), Some(&fields))?,
-    ]))
 }
 
 /// The schema's column names, which validation reads as the declared columns.
@@ -261,91 +216,4 @@ fn check_augmentation(
 fn invalid_name(context: &LoopContext<'_, '_>, model_name: &str) -> pyo3::PyErr {
     let message: String = format!("model '{model_name}': model_schema must be a non-empty string");
     compile_error(context.classes, &message, None)
-}
-
-/// The scope facts of a Python `DeclarationRecord`.
-fn declared_scope(record: &Bound<'_, PyAny>) -> PyResult<DeclaredScope> {
-    let scope: String = record
-        .getattr(SCOPE_FIELD)?
-        .getattr(VALUE_FIELD)?
-        .extract()?;
-    let owner: Bound<'_, PyAny> = record.getattr(IDENTITY_FIELD)?.getattr(OWNER_FIELD)?;
-    let owner: Option<ResourceIdentity> = if owner.is_none() {
-        None
-    } else {
-        let kind: String = owner.getattr(KIND_FIELD)?.getattr(VALUE_FIELD)?.extract()?;
-        let name: String = owner.getattr(NAME_FIELD)?.extract()?;
-        ResourceKind::parse(&kind).map(|kind| ResourceIdentity { kind, name })
-    };
-    Ok(DeclaredScope {
-        scope: ScopeKind::parse(&scope).unwrap_or(ScopeKind::Global),
-        owner,
-        owning_path: record.getattr(OWNING_PATH_FIELD)?.extract()?,
-    })
-}
-
-/// Report Python's S006 diagnostic for a schema the model's folder cannot see.
-fn report_inaccessible(
-    context: &LoopContext<'_, '_>,
-    record: &Bound<'_, PyAny>,
-    name: &str,
-    model: (&str, &str),
-) -> PyResult<()> {
-    let py: Python<'_> = record.py();
-    let (model_name, label) = model;
-    let folder: &str = Path::new(label)
-        .parent()
-        .and_then(Path::to_str)
-        .filter(|parent| !parent.is_empty())
-        .unwrap_or(CURRENT_FOLDER);
-    let owning_path: Bound<'_, PyAny> = record.getattr(OWNING_PATH_FIELD)?;
-    let owner: String = if owning_path.is_truthy()? {
-        owning_path.str()?.to_string()
-    } else {
-        record
-            .getattr(OWNERSHIP_ROOT_FIELD)?
-            .getattr(PATH_FIELD)?
-            .str()?
-            .to_string()
-    };
-    let record_path: String = record.getattr(PATH_FIELD)?.str()?.to_string();
-    let scope: String = record
-        .getattr(SCOPE_FIELD)?
-        .getattr(VALUE_FIELD)?
-        .extract()?;
-    let fields: Bound<'_, PyDict> = PyDict::new(py);
-    fields.set_item("phase", "compile")?;
-    fields.set_item("severity", "error")?;
-    fields.set_item("code", INACCESSIBLE_CODE)?;
-    fields.set_item(
-        "message",
-        format!(
-            "Schema '{name}' is not visible from '{label}'. It is defined at {record_path} with \
-             {scope} scope owned by '{owner}'"
-        ),
-    )?;
-    fields.set_item("resource_type", "model")?;
-    fields.set_item("resource_name", model_name)?;
-    fields.set_item("path", context.classes.path_class.call1((label,))?)?;
-    fields.set_item(
-        "help",
-        format!(
-            "move '{record_path}' to a {SCHEMA_ROLE}/ role owned by '{folder}' or one of its \
-             parent folders, or to the project-wide {SCHEMA_ROLE}/ when consumers span resource \
-             trees"
-        ),
-    )?;
-    let diagnostic: Bound<'_, PyAny> = context
-        .classes
-        .compiler_diagnostic
-        .call((), Some(&fields))?;
-    let key: Bound<'_, PyTuple> = PyTuple::new(py, [INACCESSIBLE_CODE, label, SCHEMA_KIND, name])?;
-    let arguments: Bound<'_, PyDict> = PyDict::new(py);
-    arguments.set_item("key", key)?;
-    arguments.set_item("diagnostic", diagnostic)?;
-    context
-        .classes
-        .report_diagnostic
-        .call((), Some(&arguments))?;
-    Ok(())
 }

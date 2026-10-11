@@ -1,5 +1,9 @@
 """Project declarations and scope classes the native model loop resolves models with."""
 
+import inspect
+from collections.abc import Callable
+from inspect import Parameter
+
 from sqlbuild.compiler.compile.models import DeclarationScopeResolver, ModelInputBuildContext
 from sqlbuild.compiler.discovery.models import EnumDeclaration
 from sqlbuild.compiler.scopes.models import (
@@ -15,17 +19,32 @@ from sqlbuild.compiler.scopes.types import (
     VisibilityReason,
 )
 
+_NAMED_KINDS: frozenset[DeclarationKind] = frozenset(
+    {DeclarationKind.SCHEMA, DeclarationKind.PYTHON_HOOK}
+)
 
-def schema_records(resolver: DeclarationScopeResolver | None) -> dict[str, DeclarationRecord]:
-    """Each project-owned schema's first declaration record, as `named_declaration_record` reads."""
+
+def named_records(
+    resolver: DeclarationScopeResolver | None,
+) -> dict[tuple[str, str], DeclarationRecord]:
+    """Each project-owned schema's and Python hook's first record, by `(kind, name)`."""
 
     if resolver is None:
         return {}
-    records: dict[str, DeclarationRecord] = {}
+    records: dict[tuple[str, str], DeclarationRecord] = {}
     for identity, declarations in resolver.lookup.declarations.items():
-        if identity.kind is DeclarationKind.SCHEMA and identity.owner is None and declarations:
-            records[identity.name] = declarations[0]
+        if identity.kind in _NAMED_KINDS and identity.owner is None and declarations:
+            records[identity.kind.value, identity.name] = declarations[0]
     return records
+
+
+def hook_signature(function: Callable[..., object]) -> list[tuple[str, int, bool]]:
+    """A hook function's parameters as `inspect.signature` reads them: name, kind, default."""
+
+    return [
+        (parameter.name, int(parameter.kind), parameter.default is not Parameter.empty)
+        for parameter in inspect.signature(function).parameters.values()
+    ]
 
 
 def schema_enums(resolver: DeclarationScopeResolver | None) -> dict[str, EnumDeclaration]:

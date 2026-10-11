@@ -24,6 +24,8 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     MODEL_SCHEMA_FILES,
     OPT_OUT_FILES,
     PARITY_FILES,
+    PYTHON_HOOK_FILES,
+    PYTHON_HOOK_PARITY_FILES,
     TYPE_PROOF_FILES,
     WAFFLE_SHOP_NATIVE_MODELS,
     build_inputs_with_native_loop,
@@ -119,6 +121,12 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
             fixtures=(),
             files=MODEL_SCHEMA_FILES,
             expected_native_models=2,
+        ),
+        ModelLoopParityTestCase(
+            description="python hooks, checked and scoped",
+            fixtures=(),
+            files=PYTHON_HOOK_PARITY_FILES,
+            expected_native_models=3,
         ),
         ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",
@@ -237,6 +245,67 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
             expected_code="P001",
         ),
         ModelLoopErrorTestCase(
+            description="python hook that is not discovered",
+            model_sql='MODEL (post_hooks [python("flexible"), python("missing")]);\nSELECT 1 AS id\n',
+            expected_message=(
+                "model 'orders' post_hooks[1] python(\"missing\") references an unknown hook. "
+                "Discovered hooks: flexible, notify, positional"
+            ),
+            expected_code="P001",
+            files=PYTHON_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="python hook argument shadowing a context parameter",
+            model_sql=(
+                'MODEL (pre_hooks [python("notify", hook_context: "x", ctx: "y")]);\n'
+                "SELECT 1 AS id\n"
+            ),
+            expected_message=(
+                "model 'orders' pre_hooks[0] python(\"notify\") argument 'ctx' conflicts with "
+                "reserved context parameter 'ctx'. Rename the hook argument; context parameters "
+                "are injected by SQLBuild."
+            ),
+            expected_code="P001",
+            files=PYTHON_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="python hook arguments the function does not accept",
+            model_sql=(
+                'MODEL (pre_hooks [python("notify", zone: "x", channel: "c", area: "y")]);\n'
+                "SELECT 1 AS id\n"
+            ),
+            expected_message=(
+                "model 'orders' pre_hooks[0] python(\"notify\") has unknown argument(s): area, "
+                "zone. Accepted configured arguments: channel, level"
+            ),
+            expected_code="P001",
+            files=PYTHON_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="python hook with a required positional-only parameter",
+            model_sql='MODEL (post_hooks [python("positional")]);\nSELECT 1 AS id\n',
+            expected_message=(
+                "model 'orders' post_hooks[0] python(\"positional\") cannot be configured "
+                "because the hook function has required positional-only parameter(s): "
+                "warehouse. Use keyword-capable parameters for values supplied from MODEL hooks."
+            ),
+            expected_code="P001",
+            files=PYTHON_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="python hook missing a required argument after valid hooks",
+            model_sql=(
+                'MODEL (post_hooks [python("flexible", any: 1)], pre_hooks [python("notify")]);\n'
+                "SELECT 1 AS id\n"
+            ),
+            expected_message=(
+                "model 'orders' pre_hooks[0] python(\"notify\") is missing required "
+                "argument(s): channel"
+            ),
+            expected_code="P001",
+            files=PYTHON_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
             description="unknown enum member",
             model_sql='MODEL ();\nSELECT @enum("order_status").LOST AS status\n',
             expected_message=(
@@ -267,7 +336,8 @@ def test_given_invalid_model_when_running_native_model_loop_then_attachment_erro
             "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
             "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
             "models/orders.sql": test_case.model_sql,
-        },
+        }
+        | test_case.files,
         project_dir=tmp_path / "project",
     )
 

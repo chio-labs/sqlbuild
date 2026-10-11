@@ -12,12 +12,18 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigSession,
 )
 from sqlbuild.compiler.compiled_project._helpers.loop_inputs import (
+    hook_signature,
+    named_records,
     schema_enums,
-    schema_records,
     visibility_classes,
 )
 from sqlbuild.compiler.compiled_project.main._native_config_classes import native_config_classes
-from sqlbuild.compiler.discovery.models import DiscoveredAuditFactory, SqlHookEntry
+from sqlbuild.compiler.discovery.models import (
+    DiscoveredAuditFactory,
+    DiscoveredHookFunction,
+    PythonHookEntry,
+    SqlHookEntry,
+)
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
@@ -35,6 +41,10 @@ def model_loop_classes(
     """Return the classes, error factories and project declarations the model loop reads."""
 
     resolver: DeclarationScopeResolver | None = context.declaration_resolver
+    hook_functions: tuple[DiscoveredHookFunction, ...] = cast(
+        tuple[DiscoveredHookFunction, ...], host_inputs["hook_functions"]
+    )
+    provider_names: frozenset[str] = cast(frozenset[str], host_inputs["provider_names"])
     session: NativeModelConfigSession = cast(
         NativeModelConfigSession, host_inputs["config_session"]
     )
@@ -47,7 +57,7 @@ def model_loop_classes(
         "generated_usage": UsageKind.GENERATED,
         "contract_enforced": ContractPolicy.ENFORCED,
         "model_schemas": context.public_model_schemas,
-        "schema_records": schema_records(resolver),
+        "named_records": named_records(resolver),
         "schema_enums": schema_enums(resolver),
         "compiler_diagnostic": CompilerDiagnostic,
         "report_diagnostic": host_inputs["report_diagnostic"],
@@ -58,6 +68,12 @@ def model_loop_classes(
         "config": native_config_classes(
             session=session, record_template_reads=host_inputs["record_template_reads"]
         ),
+        "hooks": {
+            "functions": {function.name: function for function in hook_functions},
+            "provider_names": sorted(provider_names),
+            "python_hook_entry": PythonHookEntry,
+            "signature": hook_signature,
+        },
         "visibility": visibility_classes(
             context=context, visible_declarations=host_inputs["visible_declarations"]
         ),
