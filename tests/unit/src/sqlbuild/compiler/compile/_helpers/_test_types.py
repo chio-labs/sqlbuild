@@ -19,7 +19,6 @@ from sqlbuild.compiler.scopes.models import UsageRecord
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention, SourceLocation
 from sqlbuild.sql_values.models import SqlValue
-from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import RequiredDescriptionInputs
 
 
 @dataclass(frozen=True)
@@ -989,16 +988,6 @@ class QualifiedReferenceScanTestCase:
 
 
 @dataclass(frozen=True)
-class RequiredDescriptionUnitCase:
-    """One resource kind checked by the required-description compile rule."""
-
-    description: str
-    build: Callable[[str | None], RequiredDescriptionInputs]
-    expected_message: str
-    expected_location: tuple[str, int, int]
-
-
-@dataclass(frozen=True)
 class DescriptionInputClassificationCase:
     """Discovered input fields split between required and exempt description kinds."""
 
@@ -1006,26 +995,6 @@ class DescriptionInputClassificationCase:
     required: frozenset[str]
     exempt: frozenset[str]
     expected_fields: frozenset[str]
-
-
-@dataclass(frozen=True)
-class RequiredDescriptionLocationCase:
-    """Where a P010 finding points when comments or docstrings precede the declaration."""
-
-    description: str
-    build: Callable[[], RequiredDescriptionInputs]
-    expected_location: tuple[str, int, int]
-
-
-@dataclass(frozen=True)
-class CursorModelWithoutInputsCase:
-    """One model header and query checked by the cursor-input compile check (P011)."""
-
-    description: str
-    config: dict[str, object]
-    reference_kinds: tuple[str, ...]
-    expected_codes: tuple[str, ...]
-    expected_locations: tuple[tuple[str, int, int, int], ...] = ()
 
 
 @dataclass(frozen=True)

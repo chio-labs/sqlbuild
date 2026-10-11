@@ -14,17 +14,8 @@ from sqlbuild.compiler.compile._helpers.attachment.core import (
     build_model_inputs,
 )
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
-from sqlbuild.compiler.compile._helpers.audit_factories.core import (
-    build_audit_factory_orphan_diagnostics,
-)
-from sqlbuild.compiler.compile._helpers.config.cursor_inputs import (
-    cursor_model_without_inputs_diagnostics,
-)
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     with_collected_compile_diagnostics,
-)
-from sqlbuild.compiler.compile._helpers.diagnostics.descriptions import (
-    missing_description_diagnostics,
 )
 from sqlbuild.compiler.compile._helpers.macro_bridge.call_store import (
     target_context_with_macro_call_store,
@@ -168,8 +159,8 @@ def build_compile_inputs(
     test_inputs: tuple[CompileSqlTestInput, ...]
     scenario_inputs: tuple[CompileSqlScenarioInput, ...]
     audit_inputs: tuple[AuditInput, ...]
-    audit_diagnostics: tuple[CompilerDiagnostic, ...]
-    test_inputs, scenario_inputs, audit_inputs, audit_diagnostics = attach_checks(
+    diagnostics: tuple[CompilerDiagnostic, ...]
+    test_inputs, scenario_inputs, audit_inputs, diagnostics = attach_checks(
         discovered_inputs=discovered_inputs,
         native_project=model_build.native_project,
         settings=(
@@ -178,18 +169,7 @@ def build_compile_inputs(
             model_context.sql_lexical_syntax,
         ),
         scan_cache=declaration_scope.sql_test_scans,
-    )
-    diagnostics: tuple[CompilerDiagnostic, ...] = (
-        *audit_diagnostics,
-        *model_build.diagnostics,
-        *missing_description_diagnostics(
-            discovered_inputs=discovered_inputs,
-            model_inputs=model_build.inputs,
-            seed_inputs=seed_inputs,
-            source_inputs=source_inputs,
-            function_inputs=sql_function_inputs,
-        ),
-        *cursor_model_without_inputs_diagnostics(model_inputs=model_build.inputs),
+        source_inputs=source_inputs,
     )
     fields: dict[str, Any] = {
         "project_config": discovered_inputs.project_config,
@@ -275,5 +255,4 @@ def _build_models_with_declarations(
             public_enums=declarations.enums,
             public_constants=declarations.constants,
         ),
-        diagnostics=build_audit_factory_orphan_diagnostics(discovered_inputs=discovered_inputs),
     )

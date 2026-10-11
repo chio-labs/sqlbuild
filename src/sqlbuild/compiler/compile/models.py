@@ -504,7 +504,6 @@ class ModelInputScopeBuild:
     declarations: DeclarationResolutionContext
     context: ModelInputBuildContext
     native_project: _native.NativeCompiledProject = field(repr=False, compare=False)
-    diagnostics: tuple[CompilerDiagnostic, ...] = ()
 
 
 @dataclass(frozen=True)

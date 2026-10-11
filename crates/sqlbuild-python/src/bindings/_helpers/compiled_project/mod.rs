@@ -23,6 +23,7 @@ pub(crate) mod model_loop_visibility;
 pub(crate) mod project;
 pub(crate) mod project_view;
 pub(crate) mod registration;
+pub(crate) mod resource_diagnostics;
 pub(crate) mod scenario_loop;
 pub(crate) mod seed_views;
 pub(crate) mod source_loop;

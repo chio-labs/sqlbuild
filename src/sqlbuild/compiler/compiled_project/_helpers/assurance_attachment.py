@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.main._builtins import builtin_audit_definitions
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.compile.classes.sql_test_cte_locator import SqlTestCteLocator
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import SQL_TEST_CTE_SCAN_ALGORITHM
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileDirectLogicSqlTestInputPayload,
     CompileModelSqlTestInputPayload,
@@ -17,8 +20,17 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestCte,
     CompileSqlTestInput,
 )
-from sqlbuild.compiler.compile.types import AuditInput, SqlTestMode, TypedSqlValueRenderer
-from sqlbuild.compiler.compiled_project._helpers import sql_test_text
+from sqlbuild.compiler.compile.types import (
+    AuditInput,
+    SourceInput,
+    SqlTestMode,
+    TypedSqlValueRenderer,
+)
+from sqlbuild.compiler.compiled_project._helpers import resource_locators, sql_test_text
+from sqlbuild.compiler.compiled_project._helpers.resource_rows import (
+    loader_rows,
+    python_resource_rows,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditFile,
     DiscoveredProjectInputs,
@@ -30,7 +42,7 @@ from sqlbuild.compiler.profiling.main.record import record_compile_timing
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, UsageKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.spec.contracts.models import SettingsConfig
+from sqlbuild.spec.contracts.models import SettingsConfig, SourceLocation
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError, SqlValueValidationError
 from sqlbuild.sql_values.models import SqlValue
 
@@ -160,3 +172,45 @@ def _audit_file_row(audit_file: DiscoveredAuditFile) -> tuple[object, ...]:
             for block in audit_file.blocks
         ],
     )
+
+
+def resource_diagnostics_impl(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    native_project: _native.NativeCompiledProject,
+    source_inputs: tuple[SourceInput, ...],
+) -> tuple[CompilerDiagnostic, ...]:
+    """Orphaned audit factory warnings, then missing descriptions, then cursor-input errors."""
+
+    orphans, descriptions, cursors = native_project.resource_diagnostics(
+        {
+            "compiler_diagnostic": CompilerDiagnostic,
+            "compile_error": CompileInputError,
+            "source_location": SourceLocation,
+            "path_class": Path,
+            "model_files": list(discovered_inputs.model_files),
+            "audit_factories": [
+                (factory.name, str(factory.relative_path), factory.line)
+                for factory in discovered_inputs.audit_factories
+            ],
+            "scenarios": [
+                (
+                    scenario.name,
+                    str(scenario.relative_path),
+                    scenario.contents,
+                    scenario.header_values.get("description"),
+                )
+                for scenario in discovered_inputs.scenario_files
+            ],
+            "sql_hooks": [
+                (hook.name, str(hook.relative_path), hook.contents, hook.description)
+                for hook in discovered_inputs.sql_hook_files
+            ],
+            "loaders": loader_rows(discovered_inputs),
+            "python_resources": python_resource_rows(
+                discovered_inputs=discovered_inputs, source_inputs=source_inputs
+            ),
+            "locators": resource_locators,
+        }
+    )
+    return (*orphans, *descriptions, *cursors)

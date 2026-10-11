@@ -13,6 +13,7 @@ pub mod graph;
 pub mod lineage;
 pub mod query_analysis;
 pub mod relation_names;
+pub mod resource_diagnostics;
 pub mod semantic_checks;
 pub mod semantic_usage;
 pub mod semantic_validation;

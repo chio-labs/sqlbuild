@@ -138,3 +138,12 @@ class NativeMeasurementPolicyTestCase:
     description: str
     files: dict[str, str]
     expected_policy: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class NativeResourceDiagnosticTestCase:
+    """A project's files and the P010, P011 and C216 diagnostics compiling it reports."""
+
+    description: str
+    files: dict[str, str]
+    expected_diagnostics: tuple[tuple[object, ...], ...]

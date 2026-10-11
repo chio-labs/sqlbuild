@@ -1,6 +1,5 @@
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast
@@ -19,9 +18,6 @@ from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQ
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,
 )
-from sqlbuild.compiler.compile._helpers.diagnostics.descriptions import (
-    missing_description_diagnostics,
-)
 from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     load_project_macros,
@@ -37,12 +33,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSqlTest,
-    CompileModelConfig,
-    CompileModelInput,
     CompilerDiagnostic,
-    CompileSeedInput,
-    CompileSourceInput,
-    CompileSqlFunctionInput,
     CompileSqlReference,
     DeclarationExpansionContext,
     DeclarationResolutionContext,
@@ -56,26 +47,12 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
     CompileInputsView,
-    FunctionInput,
-    FunctionLanguage,
     ModelInput,
-    SeedInput,
-    SourceInput,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredLoaderFunction,
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
-    DiscoveredProvider,
-    DiscoveredSchemaFile,
-    DiscoveredSeedFile,
-    DiscoveredSourceFile,
-    DiscoveredSqlFunctionFile,
-    DiscoveredSqlHookFile,
-    DiscoveredSqlModelFile,
-    DiscoveredSqlScenarioFile,
-    DiscoveredTaskFunction,
 )
 from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.lineage.types import (
@@ -100,15 +77,6 @@ from sqlbuild.compiler.scopes.models import (
     ScopeLookup,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind
-from sqlbuild.providers import Provider
-from sqlbuild.spec.contracts.models import (
-    LocalConfig,
-    ProjectConfig,
-    SchemaModelEntry,
-    SchemaSeedEntry,
-    SourceEntry,
-    SourceLocation,
-)
 from sqlbuild.sql_values.types import CollectionRendering
 
 DUCKDB_COMPILE_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
@@ -482,305 +450,6 @@ def write_scoped_macro_orders_project(project_dir: Path) -> None:
         "__expected__orders AS (SELECT order_id FROM __ref__orders @row_limit())\n"
         "SELECT 1\n",
         encoding="utf-8",
-    )
-
-
-REQUIRED_DESCRIPTION_BASE_INPUTS: DiscoveredProjectInputs = DiscoveredProjectInputs(
-    project_config=ProjectConfig(name="orders", adapter="duckdb"),
-    local_config=LocalConfig(),
-)
-
-
-@dataclass(frozen=True)
-class RequiredDescriptionInputs:
-    """Compile inputs passed to the required-description check."""
-
-    discovered_inputs: DiscoveredProjectInputs = REQUIRED_DESCRIPTION_BASE_INPUTS
-    model_inputs: tuple[CompileModelInput, ...] = ()
-    seed_inputs: tuple[SeedInput, ...] = ()
-    source_inputs: tuple[SourceInput, ...] = ()
-    function_inputs: tuple[FunctionInput, ...] = ()
-
-
-class OrdersApi(Provider):
-    """Client for the orders API."""
-
-
-class UndescribedApi(Provider):
-    pass
-
-
-_PROVIDER_CLASS_BY_UNDESCRIBED: dict[bool, type[Provider]] = {
-    False: OrdersApi,
-    True: UndescribedApi,
-}
-
-
-def refresh_exports_task(ctx: object) -> None:
-    del ctx
-
-
-def documented_returns_loader(ctx: object) -> None:
-    """Returned orders from the support desk."""
-
-    del ctx
-
-
-def model_description_inputs(
-    description: str | None,
-    *,
-    contents: str = "-- totals\nMODEL (materialized table);\nSELECT 1 AS id\n",
-) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        model_inputs=(
-            CompileModelInput(
-                model_file=DiscoveredSqlModelFile(
-                    file_path=Path("/project/models/order_totals.sql"),
-                    relative_path=Path("models/order_totals.sql"),
-                    contents=contents,
-                    header_values={},
-                    header_column_locations={},
-                    output_column_locations={},
-                    query_sql="SELECT 1 AS id",
-                ),
-                schema_entry=SchemaModelEntry(name="order_totals", description=description),
-            ),
-        )
-    )
-
-
-def scenario_description_inputs(
-    description: str | None, *, contents: str = "\nSCENARIO ();\nSELECT 1\n"
-) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        discovered_inputs=replace(
-            REQUIRED_DESCRIPTION_BASE_INPUTS,
-            scenario_files=(
-                DiscoveredSqlScenarioFile(
-                    file_path=Path("/project/tests/scenarios/orders__paid.sql"),
-                    relative_path=Path("tests/scenarios/orders__paid.sql"),
-                    contents=contents,
-                    header_values={"description": description},
-                    sql_body="SELECT 1",
-                    name="orders__paid",
-                ),
-            ),
-        )
-    )
-
-
-def seed_description_inputs(description: str | None) -> RequiredDescriptionInputs:
-    contents: str = "seeds:\n  - name: product_types\n"
-    return RequiredDescriptionInputs(
-        seed_inputs=(
-            CompileSeedInput(
-                seed_file=DiscoveredSeedFile(
-                    file_path=Path("/project/seeds/product_types.csv"),
-                    relative_path=Path("seeds/product_types.csv"),
-                ),
-                schema_entry=SchemaSeedEntry(name="product_types", description=description),
-                schema_file=DiscoveredSchemaFile(
-                    file_path=Path("/project/seeds/product_types.yml"),
-                    relative_path=Path("seeds/product_types.yml"),
-                    contents=contents,
-                    model_entries=(),
-                    seed_entries=(),
-                ),
-            ),
-        )
-    )
-
-
-def returns_source_input(*, description: str | None, loader: str | None) -> SourceInput:
-    return CompileSourceInput(
-        source_entry=SourceEntry(name="raw_returns", description=description, loader=loader),
-        source_file=DiscoveredSourceFile(
-            file_path=Path("/project/sources/raw.yml"),
-            relative_path=Path("sources/raw.yml"),
-            contents="sources:\n  - name: raw_orders\n    description: Orders\n"
-            "  - name: raw_returns\n",
-            source_entries=(),
-        ),
-    )
-
-
-def source_description_inputs(description: str | None) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        source_inputs=(returns_source_input(description=description, loader=None),)
-    )
-
-
-def returns_loader(description: str | None) -> DiscoveredLoaderFunction:
-    return DiscoveredLoaderFunction(
-        file_path=Path("/project/python/loaders/raw_returns.py"),
-        relative_path=Path("python/loaders/raw_returns.py"),
-        name="raw_returns",
-        function=documented_returns_loader,
-        description=description,
-    )
-
-
-def loader_backed_source_description_inputs(description: str | None) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        source_inputs=(returns_source_input(description=None, loader="raw_returns"),),
-        discovered_inputs=replace(
-            REQUIRED_DESCRIPTION_BASE_INPUTS, loader_functions=(returns_loader(description),)
-        ),
-    )
-
-
-def loader_only_description_inputs(description: str | None) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        discovered_inputs=replace(
-            REQUIRED_DESCRIPTION_BASE_INPUTS, loader_functions=(returns_loader(description),)
-        )
-    )
-
-
-def function_description_inputs(
-    description: str | None,
-    *,
-    contents: str = "FUNCTION (returns BOOLEAN);\n\nTRUE\n",
-    relative_path: Path = Path("functions/sql/is_large_order.sql"),
-    language: FunctionLanguage = FunctionLanguage.SQL,
-) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        function_inputs=(
-            CompileSqlFunctionInput(
-                function_file=DiscoveredSqlFunctionFile(
-                    file_path=Path("/project") / relative_path,
-                    relative_path=relative_path,
-                    contents=contents,
-                    header_values={},
-                    body_sql="TRUE",
-                ),
-                name="is_large_order",
-                arguments=(),
-                returns="BOOLEAN",
-                body_sql="TRUE",
-                description=description,
-                language=language,
-            ),
-        )
-    )
-
-
-def sql_hook_description_inputs(
-    description: str | None, *, contents: str = "HOOK ();\nSELECT 1\n"
-) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        discovered_inputs=replace(
-            REQUIRED_DESCRIPTION_BASE_INPUTS,
-            sql_hook_files=(
-                DiscoveredSqlHookFile(
-                    file_path=Path("/project/hooks/sql/analyze_orders.sql"),
-                    relative_path=Path("hooks/sql/analyze_orders.sql"),
-                    contents=contents,
-                    header_values={},
-                    sql_body="SELECT 1",
-                    name="analyze_orders",
-                    description=description,
-                ),
-            ),
-        )
-    )
-
-
-def task_description_inputs(description: str | None) -> RequiredDescriptionInputs:
-    return RequiredDescriptionInputs(
-        discovered_inputs=replace(
-            REQUIRED_DESCRIPTION_BASE_INPUTS,
-            task_functions=(
-                DiscoveredTaskFunction(
-                    file_path=Path("/project/python/tasks/refresh_exports.py"),
-                    relative_path=Path("python/tasks/refresh_exports.py"),
-                    name="refresh_exports",
-                    function=refresh_exports_task,
-                    description=description,
-                ),
-            ),
-        )
-    )
-
-
-def provider_description_inputs(description: str | None) -> RequiredDescriptionInputs:
-    provider_class: type[Provider] = _PROVIDER_CLASS_BY_UNDESCRIBED[description is None]
-    return RequiredDescriptionInputs(
-        discovered_inputs=replace(
-            REQUIRED_DESCRIPTION_BASE_INPUTS,
-            providers=(
-                DiscoveredProvider(
-                    file_path=Path("/project/providers/orders_api.py"),
-                    relative_path=Path("providers/orders_api.py"),
-                    name="orders_api",
-                    provider_class=provider_class,
-                    settings=provider_class(),
-                ),
-            ),
-        )
-    )
-
-
-def required_description_diagnostics(
-    inputs: RequiredDescriptionInputs,
-) -> tuple[CompilerDiagnostic, ...]:
-    return missing_description_diagnostics(
-        discovered_inputs=inputs.discovered_inputs,
-        model_inputs=inputs.model_inputs,
-        seed_inputs=inputs.seed_inputs,
-        source_inputs=inputs.source_inputs,
-        function_inputs=inputs.function_inputs,
-    )
-
-
-_CURSOR_MODEL_PATH: Path = Path("models/finance/daily_revenue.sql")
-_CURSOR_MODEL_CONTENTS: str = (
-    "MODEL (\n"
-    '  description "Daily revenue from successful payments",\n'
-    "  materialized incremental,\n"
-    "  incremental_strategy delete_insert,\n"
-    "  cursor revenue_date,\n"
-    "  cursor_type timestamp,\n"
-    "  cursor_grain day,\n"
-    ");\n\n"
-    "SELECT CAST('2026-04-01' AS DATE) AS revenue_date, 2850 AS total_revenue_cents\n"
-)
-
-
-def cursor_model_input(
-    *, config: dict[str, object], reference_kinds: tuple[str, ...]
-) -> CompileModelInput:
-    """Build the daily_revenue model input with the given config and reference kinds."""
-
-    return CompileModelInput(
-        model_file=DiscoveredSqlModelFile(
-            file_path=Path("/project") / _CURSOR_MODEL_PATH,
-            relative_path=_CURSOR_MODEL_PATH,
-            contents=_CURSOR_MODEL_CONTENTS,
-            header_values={},
-            header_column_locations={},
-            output_column_locations={},
-            query_sql="",
-        ),
-        config=CompileModelConfig(values=dict(config)),
-        references=tuple(
-            CompileSqlReference(ref_kind=kind, ref_name=f"input_{index}")
-            for index, kind in enumerate(reference_kinds)
-        ),
-    )
-
-
-def diagnostic_spans(
-    diagnostics: tuple[CompilerDiagnostic, ...],
-) -> tuple[tuple[str, int, int, int | None], ...]:
-    """Return each located diagnostic's path, line, column and end column."""
-
-    locations: tuple[SourceLocation, ...] = tuple(
-        cast(SourceLocation, diagnostic.location) for diagnostic in diagnostics
-    )
-    return tuple(
-        (location.path.as_posix(), location.line, location.column, location.end_column)
-        for location in locations
     )
 
 

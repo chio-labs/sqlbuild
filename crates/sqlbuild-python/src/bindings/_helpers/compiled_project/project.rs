@@ -2,6 +2,9 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use crate::bindings::_helpers::compiled_project::resource_diagnostics::{
+    DiagnosticSettings, ResourceDiagnostics, resource_diagnostics,
+};
 use crate::bindings::_helpers::compiled_project::scenario_loop::ScenarioRow;
 use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     AttachedSqlTests, SqlTestSettings, TestFileRow,
@@ -428,6 +431,15 @@ impl NativeCompiledProject {
         Ok((first..first + count)
             .map(|index| NativeFunctionInput::new(slf.clone().unbind(), index))
             .collect())
+    }
+
+    /// The orphaned audit factory warnings, missing descriptions and cursor-input errors.
+    fn resource_diagnostics<'py>(
+        &self,
+        py: Python<'py>,
+        settings: DiagnosticSettings,
+    ) -> PyResult<ResourceDiagnostics<'py>> {
+        resource_diagnostics(self, py, &settings)
     }
 
     /// Attach every SQL test case, then every scenario, with the kept loop.

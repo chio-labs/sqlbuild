@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -18,7 +18,7 @@ from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, Measure
 from sqlbuild.compiler.compile import models as compile_models
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileAdapterContext
+from sqlbuild.compiler.compile.models import CompileAdapterContext, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import (
     CompiledAuditView,
     CompiledFunctionView,
@@ -562,3 +562,54 @@ def measurement_policy(audit: CompiledAuditView) -> tuple[object, ...]:
 
 def _bound_parts(bound: MeasurementThresholdBound | None) -> tuple[object, object]:
     return (getattr(getattr(bound, "operator", None), "value", None), getattr(bound, "limit", None))
+
+
+RESOURCE_DIAGNOSTIC_CODES: frozenset[str] = frozenset({"P010", "P011", "C216"})
+RESOURCE_PROJECT_FILE: str = 'name = "orders"\nadapter = "duckdb"\n'
+
+
+def resource_diagnostics_of(
+    *, project_dir: Path, files: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> tuple[tuple[object, ...], ...]:
+    """Each P010, P011 and C216 diagnostic of compiling `files`, as code, message and location."""
+
+    write_files(
+        project_dir=project_dir, files={"sqlbuild_project.toml": RESOURCE_PROJECT_FILE, **files}
+    )
+    inputs, _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+    resource_diagnostics: Iterator[CompilerDiagnostic] = filter(
+        lambda diagnostic: diagnostic.code in RESOURCE_DIAGNOSTIC_CODES, inputs.diagnostics
+    )
+    return tuple(
+        (
+            diagnostic.code,
+            diagnostic.message,
+            str(diagnostic.path),
+            diagnostic.line,
+            diagnostic.column,
+            getattr(diagnostic.location, "end_column", None),
+        )
+        for diagnostic in resource_diagnostics
+    )
+
+
+_CURSOR_MODEL: str = (
+    "MODEL (\n"
+    '  description "Daily revenue",\n'
+    "  materialized incremental,\n"
+    "  incremental_strategy delete_insert,\n"
+    "  cursor revenue_date,\n"
+    "  cursor_type timestamp,\n"
+    "  cursor_grain day,\n"
+    ");\n\n"
+    "SELECT CAST('2026-04-01' AS DATE) AS revenue_date{read}\n"
+)
+
+
+def cursor_model_files(*, read: str = "") -> dict[str, str]:
+    """An upstream payments model and an incremental cursor model reading `read`."""
+
+    return {
+        "models/payments.sql": 'MODEL (description "Payments");\nSELECT 1 AS id\n',
+        "models/finance/daily_revenue.sql": _CURSOR_MODEL.format(read=read),
+    }
