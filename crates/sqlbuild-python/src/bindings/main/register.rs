@@ -5,8 +5,8 @@ use sqlbuild_rules::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
     analysis, analysis_session, attachments, boundary, cache, compile_outputs, compiled_project,
-    contracts, discovery, graph, lineage, model_config, project_assembly, refactor, render, rules, scopes,
-    semantic_checks, sql_test_glue, sqltext, type_system,
+    contracts, discovery, graph, lineage, model_config, project_assembly, refactor, render, rules,
+    scopes, semantic_checks, sql_test_glue, sqltext, type_system,
 };
 use crate::bindings::models;
 

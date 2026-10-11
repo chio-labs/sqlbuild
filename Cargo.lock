@@ -798,6 +798,7 @@ dependencies = [
  "sqlbuild-analysis",
  "sqlbuild-config",
  "sqlbuild-core",
+ "sqlbuild-model-config",
  "sqlbuild-sqltext",
  "tempfile",
 ]

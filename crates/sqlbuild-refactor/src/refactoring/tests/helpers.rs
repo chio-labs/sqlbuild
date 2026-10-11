@@ -597,3 +597,11 @@ pub(super) fn fact_orders_migration_entry(
     .into_iter()
     .collect())
 }
+
+/// Owned `(name, type)` physical columns.
+pub(crate) fn physical_columns(columns: &[(&str, &str)]) -> Vec<(String, String)> {
+    columns
+        .iter()
+        .map(|(name, column_type)| ((*name).to_owned(), (*column_type).to_owned()))
+        .collect()
+}

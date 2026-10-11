@@ -1,5 +1,7 @@
 #[path = "tests/test_column_references.rs"]
 mod column_references;
+#[path = "tests/test_contract_edits.rs"]
+mod contract_edits;
 #[path = "tests/test_declaration_edits.rs"]
 mod declaration_edits;
 #[path = "tests/test_header_edits.rs"]
