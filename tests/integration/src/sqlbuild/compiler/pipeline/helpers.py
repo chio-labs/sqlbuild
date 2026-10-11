@@ -10,6 +10,8 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -243,3 +245,27 @@ class _ResolutionCountingLoop(NamedTuple):
         inputs, counts = self.native_loop.run(*arguments)
         self.counts[0] += counts[2]
         return inputs, counts
+
+
+_OFFLINE_POSTGRES_CONNECTION: dict[str, object] = {
+    "host": "localhost",
+    "database": "warehouse",
+    "schema": "analytics",
+}
+
+
+def postgres_semantic_shapes(
+    *, project_dir: Path, files: dict[str, str]
+) -> dict[str, dict[str, str]]:
+    """Compile `files` offline as a Postgres project and return every published model shape."""
+
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    project: CompiledProjectView = compile_project(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=PostgresAdapter(),
+        resolved_connection=_OFFLINE_POSTGRES_CONNECTION,
+    )
+    return semantic_shapes(project=project)

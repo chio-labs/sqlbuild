@@ -386,6 +386,16 @@ class FunctionArgumentTypeCase:
     expected_codes: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class StarShapeOrderTestCase:
+    """A case-sensitive star model discovered before the upstream model it expands."""
+
+    description: str
+    files: dict[str, str]
+    star_model: str
+    expected_shape: dict[str, str]
+
+
 type CompileOutcome = tuple[int, dict[str, object], dict[str, bytes]]
 type PreparedCompile = tuple[
     CompileOutcome, tuple[str, ...], dict[str, object | None], tuple[bytes, ...]
