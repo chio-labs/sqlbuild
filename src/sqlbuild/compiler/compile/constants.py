@@ -9,6 +9,7 @@ from sqlbuild.compiler.compile.classes.compile_input_read_registry import (
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 PRESERVE_TARGET_VALUE: str = "preserve"
 
@@ -115,3 +116,8 @@ RETIRED_REFERENCE_CACHE_DIRECTORY_NAME: str = "references-v3"
 SQL_TEST_SCAN_STORE_VERSION: str = "sql-test-scan-store-v1"
 SQL_TEST_CTE_SCAN_ALGORITHM: str = "expanded-sql-test-ctes-v1"
 SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM: str = "sql-test-expected-models-v1"
+EXPLICIT_REFERENCE_KINDS: dict[str, SqlResourceRefKind] = {
+    SqlReferenceKind.REF.value: SqlResourceRefKind.MODEL,
+    SqlReferenceKind.SOURCE.value: SqlResourceRefKind.SOURCE,
+    SqlReferenceKind.SEED.value: SqlResourceRefKind.SEED,
+}

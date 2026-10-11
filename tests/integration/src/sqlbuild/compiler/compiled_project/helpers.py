@@ -258,6 +258,30 @@ PYTHON_HOOK_PARITY_FILES: dict[str, str] = PYTHON_HOOK_FILES | {
 }
 
 
+SQL_HOOK_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "eu"\n',
+    "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
+    "constants/limits.sql": "CONSTANT (name order_cap, value 3);\n",
+    "macros/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
+    "hooks/sql/grant_read.sql": (
+        "HOOK (description 'Grant read access.');\n\n"
+        "GRANT SELECT ON @@CTX:destination.qualified TO @'role'\n"
+    ),
+    "hooks/sql/log_load.sql": (
+        "HOOK (description 'Log a load.');\n\n"
+        'INSERT INTO @target SELECT @enum("order_status").PLACED, @const("order_cap"),'
+        " @cents(@amount), '@@region' FROM __ref(\"stg_orders\")\n"
+    ),
+    "models/staging/stg_orders.sql": "MODEL ();\nSELECT 1 AS order_id\n",
+    "models/marts/loaded.sql": (
+        "MODEL (\n  schema analytics,\n"
+        '  pre_hooks [sql("grant_read", role: ["reader", "writer"])],\n'
+        '  post_hooks [sql("log_load", target: "audit.loads", amount: 5),'
+        ' inline_sql(\'SELECT @const("order_cap") FROM __ref("stg_orders")\')],\n);\n'
+        'SELECT order_id FROM __ref("stg_orders")\n'
+    ),
+}
+
 MACRO_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "eu"\n',
     "macros/amounts.py": (

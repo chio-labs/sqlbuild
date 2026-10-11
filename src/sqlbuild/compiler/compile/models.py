@@ -415,15 +415,6 @@ class AuthoredSqlExpansionResult:
 
 
 @dataclass(frozen=True)
-class HookExpansionResult:
-    """Expanded model hook values and declaration usage facts."""
-
-    values: dict[str, object]
-    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class DeclarationResolutionContext:
     """Declarations visible during one authored SQL expansion."""
 

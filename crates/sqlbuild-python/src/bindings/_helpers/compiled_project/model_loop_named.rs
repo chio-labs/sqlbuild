@@ -39,6 +39,12 @@ pub(crate) const SCHEMA_DECLARATION: NamedKind = NamedKind {
     label: "Schema",
     role: "schemas",
 };
+/// Named SQL lifecycle hooks.
+pub(crate) const SQL_HOOK_DECLARATION: NamedKind = NamedKind {
+    value: "sql_hook",
+    label: "SQL hook",
+    role: "hooks/sql",
+};
 /// Python lifecycle hooks.
 pub(crate) const PYTHON_HOOK_DECLARATION: NamedKind = NamedKind {
     value: "python_hook",

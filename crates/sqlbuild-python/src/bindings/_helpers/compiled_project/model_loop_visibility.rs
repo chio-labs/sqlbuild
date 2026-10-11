@@ -187,8 +187,8 @@ impl<'py> ModelVisibility<'py> {
         classes.visible_declarations.call((), Some(&fields))
     }
 
-    /// `resolve_declaration_context` for the model file.
-    fn resolved(
+    /// `resolve_declaration_context` for an authored file.
+    pub(crate) fn resolved(
         &self,
         context: &LoopContext<'_, 'py>,
         file_path: &str,

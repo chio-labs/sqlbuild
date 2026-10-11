@@ -14,6 +14,7 @@ from sqlbuild.compiler.compile._helpers.refs.references import (
     scan_sql_reference_calls,
 )
 from sqlbuild.compiler.compile.constants import (
+    EXPLICIT_REFERENCE_KINDS,
     MACRO_GENERATED_REFERENCE_CODE,
     REFERENCE_CALL_SYNTAX_CODE,
 )
@@ -45,11 +46,6 @@ _TYPED_REFERENCE_KINDS: dict[str, SqlResourceRefKind] = {
 }
 _REFERENCE_FUNCTION_BY_KIND: dict[SqlResourceRefKind, str] = {
     kind: function for function, kind in _TYPED_REFERENCE_KINDS.items()
-}
-_EXPLICIT_REFERENCE_KINDS: dict[str, SqlResourceRefKind] = {
-    SqlReferenceKind.REF.value: SqlResourceRefKind.MODEL,
-    SqlReferenceKind.SOURCE.value: SqlResourceRefKind.SOURCE,
-    SqlReferenceKind.SEED.value: SqlResourceRefKind.SEED,
 }
 _RESOURCE_TYPE_BY_CONSUMER_KIND: dict[ResourceKind, CompiledResourceType] = {
     ResourceKind.MODEL: CompiledResourceType.MODEL,
@@ -83,19 +79,6 @@ def call_site_sql_references(
     return extract_sql_references(
         sql=" ".join(reference_call_text(ref) for ref in refs), syntax=_GENERIC_SQL_SYNTAX
     )
-
-
-def resource_references(
-    references: tuple[CompileSqlReference, ...],
-) -> tuple[SqlResourceRef, ...]:
-    """Return the model, source, and seed references among SQL references, once each."""
-
-    resources: dict[SqlResourceRef, None] = {}
-    for reference in references:
-        kind: SqlResourceRefKind | None = _EXPLICIT_REFERENCE_KINDS.get(str(reference.ref_kind))
-        if kind is not None:
-            resources[SqlResourceRef(kind=kind, name=reference.ref_name)] = None
-    return tuple(resources)
 
 
 def merge_call_site_references(
@@ -236,7 +219,7 @@ def _generated_references(sql: str) -> tuple[SqlResourceRef, ...]:
         return ()
     generated: dict[SqlResourceRef, None] = {}
     for reference in references:
-        kind: SqlResourceRefKind | None = _EXPLICIT_REFERENCE_KINDS.get(str(reference.ref_kind))
+        kind: SqlResourceRefKind | None = EXPLICIT_REFERENCE_KINDS.get(str(reference.ref_kind))
         if kind is not None:
             generated[SqlResourceRef(kind=kind, name=reference.ref_name)] = None
     return tuple(generated)

@@ -43,11 +43,11 @@ pub(crate) struct MacroClasses<'py> {
     /// The active `MacroBridge`, or `None`.
     bridge: Bound<'py, PyAny>,
     /// Whether a declaration scope resolver indexes the project, so declarations are scoped.
-    scoped: bool,
-    declaration_context: Bound<'py, PyAny>,
+    pub(crate) scoped: bool,
+    pub(crate) declaration_context: Bound<'py, PyAny>,
     macro_argument_error: Bound<'py, PyAny>,
     expansion: Py<PyDict>,
-    generic_syntax: LexicalSyntaxInput,
+    pub(crate) generic_syntax: LexicalSyntaxInput,
 }
 
 /// The model whose query is expanded: its paths, authored text and declaration passes.
@@ -86,14 +86,37 @@ pub(crate) fn expanded_macros<'py>(
     } else {
         py.None().into_bound(py)
     };
+    let output: ExpansionOutput = match expanded_with(
+        context,
+        (&declarations, &visible.consumer),
+        model.file_path,
+        sql,
+    ) {
+        Ok(output) => output,
+        Err(error) => return Err(located(context, error, (sql, model))),
+    };
+    let references: Vec<ReferenceRow> = argument_references(context, &output)?;
+    Ok(ExpandedMacros { references, output })
+}
+
+/// `expand_sql_macros_result`: expand `sql` with the declarations (or `None`) and consumer.
+pub(crate) fn expanded_with<'py>(
+    context: &LoopContext<'_, 'py>,
+    reader: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    file_path: &str,
+    sql: &str,
+) -> PyResult<ExpansionOutput> {
+    let (declarations, consumer) = reader;
+    let classes: &MacroClasses<'py> = &context.classes.macros;
+    let py: Python<'py> = consumer.py();
     let expansion: NativeMacroExpansion = NativeMacroExpansion::new(
-        &context.classes.path_class.call1((model.file_path,))?,
+        &context.classes.path_class.call1((file_path,))?,
         (
             classes.loaded_macros.clone_ref(py),
             PyDict::new(py).unbind(),
             classes.macro_context.clone().unbind(),
-            declarations.unbind(),
-            visible.consumer.clone().unbind(),
+            declarations.clone().unbind(),
+            consumer.clone().unbind(),
         ),
         classes
             .macro_context
@@ -102,16 +125,11 @@ pub(crate) fn expanded_macros<'py>(
         classes.expansion.clone_ref(py),
     )?;
     let expansion: Bound<'py, NativeMacroExpansion> = Bound::new(py, expansion)?;
-    let output: ExpansionOutput = match expanded(&expansion, sql, &classes.bridge) {
-        Ok(output) => output,
-        Err(error) => return Err(located(context, error, (sql, model))),
-    };
-    let references: Vec<ReferenceRow> = argument_references(context, &output)?;
-    Ok(ExpandedMacros { references, output })
+    expanded(&expansion, sql, &classes.bridge)
 }
 
 /// `call_site_sql_references`: typed macro arguments as the generic SQL reference scan reads them.
-fn argument_references(
+pub(crate) fn argument_references(
     context: &LoopContext<'_, '_>,
     output: &ExpansionOutput,
 ) -> PyResult<Vec<ReferenceRow>> {

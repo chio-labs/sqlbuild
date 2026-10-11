@@ -54,6 +54,7 @@ def model_loop_classes(
         "compile_error": CompileInputError,
         "syntax_help": host_inputs["syntax_help"],
         "macros": host_inputs["macros"],
+        "sql_hooks": host_inputs["sql_hooks"],
         "scope_path_error": InvalidScopePathError,
         "sql_hook_entry": SqlHookEntry,
         "config_error": native_config_error,

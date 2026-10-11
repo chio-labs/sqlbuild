@@ -6,7 +6,9 @@ use crate::bindings::_helpers::compiled_project::model_loop_external::external_e
 use crate::bindings::_helpers::compiled_project::model_loop_header::{
     AttachedHeader, HeaderSource, header_schema,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_hooks::expanded_hooks;
+use crate::bindings::_helpers::compiled_project::model_loop_hooks::{
+    ExpandedHooks, HookModel, SqlHookClasses, expanded_hooks,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
     FinishedModel, ModelLoopRow, ReferenceRow, plain_input,
 };
@@ -128,6 +130,8 @@ pub(crate) struct LoopClasses<'py> {
     pub(crate) visibility: VisibilityClasses<'py>,
     /// What a model's Python hooks are checked against.
     pub(crate) hooks: HookClasses<'py>,
+    /// What each model's SQL hooks are expanded with.
+    pub(crate) sql_hooks: SqlHookClasses<'py>,
     /// What each model's macro calls are expanded with.
     pub(crate) macros: MacroClasses<'py>,
     /// `sql_analysis_opt_out_help(model_owned=True)`, the help of a model's syntax error.
@@ -140,7 +144,7 @@ pub(crate) struct LoopClasses<'py> {
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct NativeModelLoop {
     pub(crate) validator: Py<PyAny>,
-    syntax: LexicalSyntax,
+    pub(crate) syntax: LexicalSyntax,
     pub(crate) reserved_markers: Vec<String>,
     pub(crate) python: PythonText,
     pub(crate) settings: ModelLoopSettings,
@@ -168,9 +172,8 @@ struct LoopModel<'a, 'py> {
     row: &'a ModelLoopRow,
     config: Bound<'py, PyAny>,
     visible: &'a VisibleDeclarations<'py>,
-    /// The index, config and declarations every host callback for the model receives.
-    arguments: &'a [(&'static str, Bound<'py, PyAny>)],
     signatures: &'a HookSignatures,
+    visibility: &'a ModelVisibility<'py>,
 }
 
 #[pymethods]
@@ -254,8 +257,8 @@ impl NativeModelLoop {
                 row: &row,
                 config,
                 visible: &visible,
-                arguments: &arguments,
                 signatures: &signatures,
+                visibility: &visibility,
             };
             let finished: FinishedModel<'py> = self.finish(py, &context, model)?;
             finished_natively += 1;
@@ -282,8 +285,8 @@ impl NativeModelLoop {
             row,
             config,
             visible,
-            arguments,
             signatures,
+            visibility,
         } = model;
         let ModelLoopRow(
             (name, posix_path, relative_path, file_path),
@@ -431,10 +434,21 @@ impl NativeModelLoop {
             (name, &query_sql, relative_path),
             (&references, declared_columns),
         )?;
-        let (values, hook_statements): (Bound<'py, PyDict>, usize) = if hooked {
-            expanded_hooks(self, context, arguments, (name, relative_path))?
+        let (values, hook_statements, hook_usages) = if hooked {
+            let hook_model: HookModel<'_, 'py> = HookModel {
+                name,
+                posix_path,
+                relative_path,
+                file_path,
+                contents,
+                authored_query,
+                visible,
+                visibility,
+            };
+            let hooks: ExpandedHooks<'py> = expanded_hooks(self, context, &values, &hook_model)?;
+            (hooks.values, hooks.statements, hooks.usages)
         } else {
-            (values, 0)
+            (values, 0, Vec::new())
         };
         let source: HeaderSource<'_, 'py> = HeaderSource {
             name,
@@ -449,7 +463,8 @@ impl NativeModelLoop {
         {
             return Err(compile_error(context.classes, &message, None));
         }
-        let mut named_usages: Vec<Bound<'py, PyAny>> = schema_usages;
+        let mut named_usages: Vec<Bound<'py, PyAny>> = hook_usages;
+        named_usages.extend(schema_usages);
         named_usages.extend(python_hooks);
         Ok(FinishedModel {
             config,
@@ -583,6 +598,18 @@ fn applied_interpolation(
     interpolation: &(String, Vec<(String, String)>, Option<String>),
 ) -> PyResult<String> {
     let (sql, reads, error) = interpolation;
+    record_reads(context, reads)?;
+    match error {
+        Some(message) => Err(compile_error(context.classes, message, None)),
+        None => Ok(sql.clone()),
+    }
+}
+
+/// Record interpolation's environment and context reads for compile reuse.
+pub(crate) fn record_reads(
+    context: &LoopContext<'_, '_>,
+    reads: &[(String, String)],
+) -> PyResult<()> {
     if !reads.is_empty() {
         let py: Python<'_> = context.host.py();
         context
@@ -591,10 +618,7 @@ fn applied_interpolation(
             .record_template_reads
             .call1((PyTuple::new(py, reads)?,))?;
     }
-    match error {
-        Some(message) => Err(compile_error(context.classes, message, None)),
-        None => Ok(sql.clone()),
-    }
+    Ok(())
 }
 
 /// `CompileInputError(message, code=...)`, raised as the attachment raises it.

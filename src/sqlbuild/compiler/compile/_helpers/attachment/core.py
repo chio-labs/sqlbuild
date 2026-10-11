@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.attachments.main._pair_native_seed_files import pair_native_seed_files
+from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile._helpers.analysis.validation import sql_analysis_opt_out_help
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     legacy_schema_rows,
@@ -23,32 +23,16 @@ from sqlbuild.compiler.compile._helpers.attachment.references import (
     build_known_table_function_names,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
-from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
-    merge_call_site_references,
-    resource_references,
-)
-from sqlbuild.compiler.compile._helpers.named_declarations.core import (
-    named_declaration_usages,
-)
-from sqlbuild.compiler.compile._helpers.refs.references import (
-    extract_sql_references,
-)
-from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
-from sqlbuild.compiler.compile._helpers.render.context_templates import (
-    build_model_context_values,
-)
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsic_semantics,
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     render_constant_declaration,
-    resolve_declaration_context,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     macro_expansion_classes,
 )
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    expand_authored_sql_result,
     interpolate_sql_batch,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import (
@@ -56,28 +40,23 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_template_data,
     record_template_reads,
 )
+from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
+from sqlbuild.compiler.compile.constants import EXPLICIT_REFERENCE_KINDS
 from sqlbuild.compiler.compile.exceptions import CompileInputError, MacroArgumentError
 from sqlbuild.compiler.compile.models import (
-    AuthoredSqlExpansionResult,
     CompileModelConfig,
     CompileModelInput,
     CompileSeedInput,
-    CompileSqlReference,
-    DeclarationExpansionContext,
     DeclarationResolutionContext,
     ExpansionSpan,
-    HookExpansionResult,
     LoadedMacro,
-    MacroContext,
     MacroExpansionResult,
     ModelInputBuildContext,
     ModelResourceNames,
     ModelValidatorContext,
     NativeModelConfigInputs,
     SqlInterpolation,
-    SqlReferenceOrigin,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
 from sqlbuild.compiler.compiled_project.main._plain_model_input import plain_model_input
 from sqlbuild.compiler.compiled_project.models import PlainModelFacts
@@ -93,7 +72,6 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     NamedSqlHookEntry,
     PythonHookEntry,
-    SqlHookEntry,
 )
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
@@ -107,13 +85,11 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
-    ResourceIdentity,
     UsageRecord,
     VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
-    ResourceKind,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.python_nodes.models import SqlResourceRef
@@ -125,9 +101,6 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
-
-_HOOK_TEMPLATE_PATTERN: re.Pattern[str] = re.compile(r"\$\{[^}]+\}")
-_MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 
 
 @dataclass(frozen=True)
@@ -172,43 +145,12 @@ class _ModelInputLoop:
     native_declaration_references: dict[Path, NativeDeclarationScan]
 
 
-@dataclass(frozen=True)
-class _HookExpansionContext:
-    file_path: Path
-    effective_vars: dict[str, object]
-    context_values: dict[str, str | None]
-    loaded_macros: dict[str, LoadedMacro]
-    macro_context: MacroContext
-    declaration_expansion: DeclarationExpansionContext
-    sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
-    consumer: ResourceIdentity | DeclarationIdentity
-    facts: _HookExpansionFacts
-    sql_lexical_syntax: SqlLexicalSyntax
-    reference_origin: SqlReferenceOrigin | None = None
-
-
-@dataclass
-class _HookExpansionFacts:
-    usages: list[UsageRecord]
-    references: list[CompileSqlReference] = field(default_factory=list)
-
-    def add(self, usages: tuple[UsageRecord, ...]) -> None:
-        self.usages.extend(usages)
-
-    def add_references(self, references: tuple[CompileSqlReference, ...]) -> None:
-        self.references.extend(references)
-
-    def reads_since(self, start: int) -> tuple[SqlResourceRef, ...]:
-        return resource_references(tuple(self.references[start:]))
-
-
 @dataclass
 class _ModelLoopHost:
     """The attachment steps the native model loop calls back into, one model index at a time."""
 
     loop: _ModelInputLoop
     interpolations: dict[Path, SqlInterpolation]
-    hooks: dict[int, HookExpansionResult] = field(default_factory=dict)
 
     def constant_text(self, *, declaration: ConstantDeclaration, file_path: Path) -> str:
         return render_constant_declaration(
@@ -217,21 +159,6 @@ class _ModelLoopHost:
             collection_rendering=self.loop.context.collection_rendering,
             file_path=file_path,
         )
-
-    def expand_hooks(
-        self, *, index: int, config: CompileModelConfig, visible: _VisibleModelDeclarations
-    ) -> tuple[dict[str, object], list[ReferenceRow]]:
-        expansion: HookExpansionResult = _model_hook_expansion(
-            loop=self.loop,
-            model_file=self.loop.discovered_inputs.model_files[index],
-            declarations=visible,
-            config=config,
-        )
-        self.hooks[index] = expansion
-        return expansion.values, [
-            (str(item.ref_kind), item.ref_name, item.ref_package, item.call_argument_count)
-            for item in expansion.references
-        ]
 
     def plain_input(
         self,
@@ -277,19 +204,13 @@ class _ModelLoopHost:
                     dict.fromkeys(
                         (
                             *dict.fromkeys(declarations[2]),
-                            *self._hook_usages(index=index, named_usages=declarations[3]),
+                            *declarations[3],
                         )
                     )
                 ),
             ),
             declarations=(visible.local_enums, visible.local_constants),
         )
-
-    def _hook_usages(
-        self, *, index: int, named_usages: list[UsageRecord]
-    ) -> tuple[UsageRecord, ...]:
-        expansion: HookExpansionResult | None = self.hooks.pop(index, None)
-        return (*(() if expansion is None else expansion.usages), *named_usages)
 
 
 def build_model_inputs(
@@ -460,6 +381,18 @@ def _run_native_model_loop(
                         "expansion": macro_expansion_classes(),
                         "generic_syntax": SqlLexicalSyntax().native_mapping,
                     },
+                    "sql_hooks": {
+                        "named_sql_hook_entry": NamedSqlHookEntry,
+                        "python_hook_entry": PythonHookEntry,
+                        "definitions": loop.sql_hook_definitions,
+                        "effective_vars": loop.context.effective_vars,
+                        "environment": UnicodeEnvironment(),
+                        "render_project_var": render_project_var_text,
+                        "sql_resource_ref": SqlResourceRef,
+                        "explicit_kinds": EXPLICIT_REFERENCE_KINDS,
+                        "declaration_identity": DeclarationIdentity,
+                        "sql_hook_kind": DeclarationKind.SQL_HOOK,
+                    },
                     "hook_functions": loop.discovered_inputs.hook_functions,
                     "provider_names": frozenset(
                         provider.name for provider in loop.discovered_inputs.providers
@@ -547,56 +480,6 @@ def _native_macro_expansion(
         spans=_expansion_spans(spans),
         dependencies=tuple(dict.fromkeys(dependencies)),
         usages=tuple(dict.fromkeys(usages)),
-    )
-
-
-def _model_hook_expansion(
-    *,
-    loop: _ModelInputLoop,
-    model_file: DiscoveredSqlModelFile,
-    declarations: _VisibleModelDeclarations,
-    config: CompileModelConfig,
-) -> HookExpansionResult:
-    """Expand the model's hook macros and declarations, as the project's macros render them."""
-
-    context: ModelInputBuildContext = loop.context
-    return expand_model_hook_macros_result(
-        values=config.values,
-        model_file=_model_reference_origin(model_file=model_file),
-        effective_vars=context.effective_vars,
-        context_values=build_model_context_values(
-            values=config.values,
-            model_name=model_file.file_path.stem,
-            effective_target_name=context.effective_target_name,
-            run_id=context.run_id,
-            include_target_values=True,
-        ),
-        loaded_macros=context.loaded_macros,
-        macro_context=context.macro_context,
-        declaration_expansion=DeclarationExpansionContext(
-            declarations=DeclarationResolutionContext(
-                enums=declarations.enums,
-                constants=declarations.constants,
-                inaccessible_enums=declarations.inaccessible_enums,
-                inaccessible_constants=declarations.inaccessible_constants,
-            ),
-            value_renderer=context.value_renderer,
-            collection_rendering=context.collection_rendering,
-            resolver=context.declaration_resolver,
-        ),
-        sql_lexical_syntax=context.sql_lexical_syntax,
-        sql_hook_definitions=loop.sql_hook_definitions,
-        consumer=ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
-    )
-
-
-def _model_reference_origin(*, model_file: DiscoveredSqlModelFile) -> SqlReferenceOrigin:
-    return SqlReferenceOrigin(
-        file_path=model_file.file_path,
-        relative_path=model_file.relative_path,
-        contents=model_file.contents,
-        resource_type=CompiledResourceType.MODEL,
-        resource_name=model_file.file_path.stem,
     )
 
 
@@ -711,245 +594,6 @@ def build_effective_vars(
     values.update(local_config.vars)
     values.update(cli_vars)
     return expand_effective_vars(values)
-
-
-def expand_model_hook_macros_result(
-    *,
-    values: dict[str, object],
-    model_file: SqlReferenceOrigin,
-    effective_vars: dict[str, object],
-    context_values: dict[str, str | None],
-    loaded_macros: dict[str, LoadedMacro],
-    macro_context: MacroContext,
-    declaration_expansion: DeclarationExpansionContext,
-    sql_lexical_syntax: SqlLexicalSyntax,
-    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] | None = None,
-    consumer: ResourceIdentity | None = None,
-) -> HookExpansionResult:
-    """Expand hooks and retain declaration usages from inline and named SQL."""
-
-    expanded_values: dict[str, object] = dict(values)
-    facts: _HookExpansionFacts = _HookExpansionFacts(usages=[])
-    hook_key: str
-    for hook_key in _MODEL_HOOK_KEYS:
-        raw_hook_value: object | None = expanded_values.get(hook_key)
-        if raw_hook_value is None:
-            continue
-        expanded_values[hook_key] = expand_sql_macros_in_value(
-            value=raw_hook_value,
-            context=_HookExpansionContext(
-                file_path=model_file.file_path,
-                effective_vars=effective_vars,
-                context_values=context_values,
-                loaded_macros=loaded_macros,
-                macro_context=macro_context,
-                declaration_expansion=declaration_expansion,
-                sql_hook_definitions=sql_hook_definitions or {},
-                consumer=consumer
-                or ResourceIdentity(ResourceKind.MODEL, model_file.file_path.stem),
-                facts=facts,
-                sql_lexical_syntax=sql_lexical_syntax,
-                reference_origin=model_file,
-            ),
-            hook_key=hook_key,
-        )
-    return HookExpansionResult(
-        values=expanded_values,
-        usages=tuple(dict.fromkeys(facts.usages)),
-        references=tuple(dict.fromkeys(facts.references)),
-    )
-
-
-def expand_sql_macros_in_value(
-    *,
-    value: object,
-    context: _HookExpansionContext,
-    hook_key: str | None = None,
-    hook_index: int | None = None,
-) -> object:
-    """Recursively expand SQL interpolation and macros in hook container shapes."""
-
-    if isinstance(value, str):
-        if _HOOK_TEMPLATE_PATTERN.search(value) is not None:
-            hook_label: str = _format_sql_hook_label(hook_key=hook_key, hook_index=hook_index)
-            raise CompileInputError(
-                f"{hook_label} in '{context.file_path}' uses unsupported ${{...}} template syntax. "
-                "Use @@CTX:..., @@ENV:..., or @@project_var inside SQL hooks."
-            )
-        declaration_context: DeclarationResolutionContext = (
-            context.declaration_expansion.declarations
-        )
-        if context.declaration_expansion.resolver is not None:
-            declaration_context = resolve_declaration_context(
-                resolver=context.declaration_expansion.resolver,
-                file_path=context.file_path,
-            )
-        expansion: AuthoredSqlExpansionResult = expand_authored_sql_result(
-            sql=value,
-            file_path=context.file_path,
-            effective_vars=context.effective_vars,
-            context_values=context.context_values,
-            loaded_macros=context.loaded_macros,
-            macro_context=context.macro_context,
-            declaration_resolver=context.declaration_expansion.resolver,
-            value_renderer=context.declaration_expansion.value_renderer,
-            collection_rendering=context.declaration_expansion.collection_rendering,
-            declarations=replace(declaration_context, consumer=context.consumer),
-        )
-        facts: _HookExpansionFacts = context.facts
-        facts.add(expansion.usages)
-        facts.add_references(
-            merge_call_site_references(
-                references=extract_sql_references(
-                    sql=expansion.sql,
-                    syntax=context.sql_lexical_syntax,
-                    origin=context.reference_origin,
-                ),
-                argument_references=expansion.argument_references,
-            )
-        )
-        return expansion.sql
-    if isinstance(value, SqlHookEntry):
-        inline_start: int = len(context.facts.references)
-        expanded_statement: object = expand_sql_macros_in_value(
-            value=value.statement,
-            context=context,
-            hook_key=hook_key,
-            hook_index=hook_index,
-        )
-        expanded_statement_text: str = str(expanded_statement)
-        _require_nonempty_sql_hook_payload(
-            statement=expanded_statement_text,
-            hook_label=_format_sql_hook_label(hook_key=hook_key, hook_index=hook_index),
-            file_path=context.file_path,
-        )
-        return SqlHookEntry(
-            statement=expanded_statement_text,
-            name=value.name,
-            relative_path=value.relative_path,
-            definition_sql=value.definition_sql,
-            kwargs=value.kwargs,
-            description=value.description,
-            reads=context.facts.reads_since(inline_start),
-        )
-    if isinstance(value, NamedSqlHookEntry):
-        hook_definition: DiscoveredSqlHookFile | None = context.sql_hook_definitions.get(value.name)
-        if hook_definition is None:
-            known_hook_names: str = (
-                ", ".join(sorted(context.sql_hook_definitions)) or "none discovered"
-            )
-            hook_label = _format_named_sql_hook_label(
-                hook_name=value.name,
-                hook_key=hook_key,
-                hook_index=hook_index,
-            )
-            raise CompileInputError(
-                f"{hook_label} in '{context.file_path}' references an unknown SQL hook. "
-                f"Discovered SQL hooks: {known_hook_names}. If this is an inline SQL "
-                'statement, use inline_sql("...").'
-            )
-        hook_facts: _HookExpansionFacts = context.facts
-        hook_facts.add(
-            named_declaration_usages(
-                resolver=context.declaration_expansion.resolver,
-                kind=DeclarationKind.SQL_HOOK,
-                name=value.name,
-                consumer=context.consumer,
-                consumer_path=context.file_path,
-            )
-        )
-        rendered_statement: str = render_parameterized_sql(
-            sql=hook_definition.sql_body,
-            arguments=value.kwargs,
-            owner_label=(
-                f"{context.file_path} "
-                + _format_named_sql_hook_label(
-                    hook_name=value.name,
-                    hook_key=hook_key,
-                    hook_index=hook_index,
-                )
-            ),
-            definition_label=(f"SQL hook '{value.name}' in {hook_definition.relative_path}"),
-            reject_unused=True,
-        )
-        named_start: int = len(hook_facts.references)
-        expanded_statement = expand_sql_macros_in_value(
-            value=rendered_statement,
-            context=replace(
-                context,
-                file_path=hook_definition.file_path,
-                consumer=DeclarationIdentity(DeclarationKind.SQL_HOOK, value.name),
-            ),
-            hook_key=hook_key,
-            hook_index=hook_index,
-        )
-        expanded_statement_text: str = str(expanded_statement)
-        _require_nonempty_sql_hook_payload(
-            statement=expanded_statement_text,
-            hook_label=_format_named_sql_hook_label(
-                hook_name=value.name,
-                hook_key=hook_key,
-                hook_index=hook_index,
-            ),
-            file_path=context.file_path,
-        )
-        return SqlHookEntry(
-            statement=expanded_statement_text,
-            name=value.name,
-            relative_path=hook_definition.relative_path,
-            definition_sql=hook_definition.sql_body,
-            kwargs=dict(value.kwargs),
-            description=hook_definition.description,
-            reads=hook_facts.reads_since(named_start),
-        )
-    if isinstance(value, PythonHookEntry):
-        return value
-    if isinstance(value, list):
-        return [
-            expand_sql_macros_in_value(
-                value=item,
-                context=context,
-                hook_key=hook_key,
-                hook_index=index,
-            )
-            for index, item in enumerate(value)
-        ]
-    if isinstance(value, tuple):
-        return tuple(
-            expand_sql_macros_in_value(
-                value=item,
-                context=context,
-                hook_key=hook_key,
-                hook_index=index,
-            )
-            for index, item in enumerate(value)
-        )
-    return value
-
-
-def _format_sql_hook_label(*, hook_key: str | None, hook_index: int | None) -> str:
-    if hook_key is None:
-        return 'inline_sql("...") hook'
-    if hook_index is None:
-        return f'{hook_key} inline_sql("...")'
-    return f'{hook_key}[{hook_index}] inline_sql("...")'
-
-
-def _format_named_sql_hook_label(
-    *, hook_name: str, hook_key: str | None, hook_index: int | None
-) -> str:
-    if hook_key is None:
-        return f'sql("{hook_name}") hook'
-    if hook_index is None:
-        return f'{hook_key} sql("{hook_name}")'
-    return f'{hook_key}[{hook_index}] sql("{hook_name}")'
-
-
-def _require_nonempty_sql_hook_payload(*, statement: str, hook_label: str, file_path: Path) -> None:
-    if not statement.strip():
-        raise CompileInputError(
-            f"{hook_label} in '{file_path}' must render a non-empty SQL payload"
-        )
 
 
 def _index_sql_hook_definitions(

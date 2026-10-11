@@ -56,3 +56,13 @@ pub enum AuditRendering {
     Rendered(RenderedAudit),
     Failed(String),
 }
+
+/// Why `render_parameterized_sql` stops.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParameterRenderStop {
+    /// Passed arguments no parameter names, sorted.
+    UnusedArguments(Vec<String>),
+    MissingArgument(String),
+    /// The argument whose value cannot be rendered.
+    UnsupportedValue(String),
+}

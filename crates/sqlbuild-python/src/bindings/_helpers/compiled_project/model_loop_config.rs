@@ -29,7 +29,7 @@ const TRANSIENT_TABLE_TYPE: &str = "transient";
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
 pub(crate) struct ConfigClasses<'py> {
-    builder: Bound<'py, NativeModelConfigBuilder>,
+    pub(crate) builder: Bound<'py, NativeModelConfigBuilder>,
     /// Inherited `(retention, table type)` by table-backed materialization, or `None`.
     inherited_storage: Bound<'py, PyDict>,
     table_backed: Vec<String>,

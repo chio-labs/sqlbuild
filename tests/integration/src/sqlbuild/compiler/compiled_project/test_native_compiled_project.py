@@ -28,6 +28,7 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     PARITY_FILES,
     PYTHON_HOOK_FILES,
     PYTHON_HOOK_PARITY_FILES,
+    SQL_HOOK_FILES,
     TYPE_PROOF_FILES,
     WAFFLE_SHOP_NATIVE_MODELS,
     build_inputs_with_native_loop,
@@ -129,6 +130,13 @@ def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports
             files=PYTHON_HOOK_PARITY_FILES,
             expected_native_models=3,
             expected_summary="python_hooks",
+        ),
+        ModelLoopParityTestCase(
+            description="named and inline SQL hooks with arguments, context, declarations and macros",
+            fixtures=(),
+            files=SQL_HOOK_FILES,
+            expected_native_models=2,
+            expected_summary="sql_hooks",
         ),
         ModelLoopParityTestCase(
             description="neutral fixture with macros, enums and declared columns",
@@ -334,6 +342,59 @@ def test_given_project_when_running_native_model_loop_then_inputs_match_recorded
             ),
             expected_code="P001",
             files=MACRO_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="named SQL hook missing an argument",
+            model_sql='MODEL (post_hooks [sql("grant_read")]);\nSELECT 1 AS id\n',
+            expected_message=(
+                "{model_path} post_hooks[0] sql(\"grant_read\") is missing argument 'role' for "
+                "SQL hook 'grant_read' in hooks/sql/grant_read.sql"
+            ),
+            expected_code="P001",
+            files=SQL_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="named SQL hook passed an argument it does not use",
+            model_sql=(
+                'MODEL (pre_hooks [sql("grant_read", role: "reader", scope: "all", mode: 1)]);\n'
+                "SELECT 1 AS id\n"
+            ),
+            expected_message=(
+                '{model_path} pre_hooks[0] sql("grant_read") passes unknown argument(s) to '
+                "SQL hook 'grant_read' in hooks/sql/grant_read.sql: mode, scope"
+            ),
+            expected_code="P001",
+            files=SQL_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="unknown named SQL hook",
+            model_sql='MODEL (post_hooks [sql("vacuum")]);\nSELECT 1 AS id\n',
+            expected_message=(
+                "post_hooks[0] sql(\"vacuum\") in '{model_path}' references an unknown SQL hook. "
+                "Discovered SQL hooks: grant_read, log_load. If this is an inline SQL statement, "
+                'use inline_sql("...").'
+            ),
+            expected_code="P001",
+            files=SQL_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="inline SQL hook with a config template",
+            model_sql="MODEL (post_hooks [inline_sql('SELECT ${region}')]);\nSELECT 1 AS id\n",
+            expected_message=(
+                "post_hooks[0] inline_sql(\"...\") in '{model_path}' uses unsupported ${{...}} "
+                "template syntax. Use @@CTX:..., @@ENV:..., or @@project_var inside SQL hooks."
+            ),
+            expected_code="P001",
+            files=SQL_HOOK_FILES,
+        ),
+        ModelLoopErrorTestCase(
+            description="inline SQL hook with an unknown project variable",
+            model_sql="MODEL (pre_hooks [inline_sql('SELECT @@missing')]);\nSELECT 1 AS id\n",
+            expected_message=(
+                "unknown project variable '@@missing' in '{model_path}'. Available vars: region"
+            ),
+            expected_code="P001",
+            files=SQL_HOOK_FILES,
         ),
         ModelLoopErrorTestCase(
             description="unknown enum member",

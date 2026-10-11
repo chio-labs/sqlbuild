@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import random
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import filterfalse
 from pathlib import Path
 from typing import cast
 
@@ -18,9 +20,12 @@ from sqlbuild.compiler.compile._helpers.attachment.audits import (
     resolve_audit_severity,
 )
 from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
-from sqlbuild.compiler.compile._helpers.render.arguments import render_parameterized_sql
 from sqlbuild.compiler.compile._helpers.render.macros import find_macro_call_names
 from sqlbuild.compiler.compile._helpers.sql_tests.native import extract_unexpanded_sql_test
+from sqlbuild.compiler.compile.constants import (
+    SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN,
+    SQL_ARGUMENT_RAW_PARAMETER_PATTERN,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     SqlReferenceScan,
@@ -186,7 +191,7 @@ def _python_rendering(audit: GeneratedAudit) -> tuple[object, ...] | str:
             dict[str, object], {**audit.implicit_arguments, **audit.explicit_arguments}
         )
         rendered: tuple[str, ...] = tuple(
-            render_parameterized_sql(
+            _reference_parameterized_sql(
                 sql=sql,
                 arguments=merged,
                 owner_label=str(owner),
@@ -359,3 +364,81 @@ def native_reference_outcome(*, body: str, syntax: SqlLexicalSyntax) -> str:
         called: re.Match[str] | None = re.search(r"must not call (\w+);", str(error))
         return (called and f"calls {called.group(1)}") or f"error: {error}"
     return f"malformed calls {invalid_calls}"
+
+
+def _reference_parameterized_sql(
+    *, sql: str, arguments: dict[str, object], owner_label: str, definition_label: str
+) -> str:
+    """The reference rendering of raw `@name` and quoted `@'name'` arguments."""
+
+    matches: list[tuple[re.Match[str], bool]] = sorted(
+        [
+            *((match, True) for match in SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN.finditer(sql)),
+            *((match, False) for match in SQL_ARGUMENT_RAW_PARAMETER_PATTERN.finditer(sql)),
+        ],
+        key=lambda item: item[0].start(),
+    )
+    rendered: list[str] = []
+    previous_end: int = 0
+    for match, quoted in matches:
+        name: str = match.group("name")
+        for missing in filterfalse(arguments.__contains__, (name,)):
+            raise CompileInputError(
+                f"{owner_label} is missing argument '{missing}' for {definition_label}"
+            )
+        rendered.append(sql[previous_end : match.start()])
+        rendered.append(
+            _reference_value(
+                arguments[name],
+                quoted,
+                f"{owner_label} {definition_label} argument '{name}' uses an unsupported value",
+            )
+        )
+        previous_end = match.end()
+    rendered.append(sql[previous_end:])
+    return "".join(rendered)
+
+
+def _reference_value(value: object, quoted: bool, error: str) -> str:  # noqa: FBT001
+    renderer: Callable[[object, bool, str], str] = next(
+        filter(None, map(_REFERENCE_RENDERERS.get, type(value).__mro__)), _unsupported_value
+    )
+    return renderer(value, quoted, error)
+
+
+def _sequence_value(value: object, quoted: bool, error: str) -> str:  # noqa: FBT001
+    return ", ".join(
+        _reference_value(item, quoted, error) for item in cast(tuple[object, ...], value)
+    )
+
+
+def _boolean_value(value: object, _quoted: bool, _error: str) -> str:  # noqa: FBT001
+    return ("FALSE", "TRUE")[bool(value)]
+
+
+def _null_value(_value: object, _quoted: bool, _error: str) -> str:  # noqa: FBT001
+    return "NULL"
+
+
+def _number_value(value: object, _quoted: bool, _error: str) -> str:  # noqa: FBT001
+    return str(value)
+
+
+def _text_value(value: object, quoted: bool, _error: str) -> str:  # noqa: FBT001
+    text: str = cast(str, value)
+    return (text, "'" + text.replace("'", "''") + "'")[quoted]
+
+
+def _unsupported_value(_value: object, _quoted: bool, error: str) -> str:  # noqa: FBT001
+    raise CompileInputError(error)
+
+
+_REFERENCE_RENDERERS: dict[type, Callable[[object, bool, str], str]] = {
+    list: _sequence_value,
+    tuple: _sequence_value,
+    bool: _boolean_value,
+    type(None): _null_value,
+    int: _number_value,
+    float: _number_value,
+    str: _text_value,
+}
