@@ -14,6 +14,7 @@ import pytest
 
 import sqlbuild._native as _native
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
@@ -544,3 +545,20 @@ def audit_summary(audit: CompiledAuditView) -> tuple[object, ...]:
         (audit.attached_target_name, audit.attached_column_name),
         audit.sql_body,
     )
+
+
+def measurement_policy(audit: CompiledAuditView) -> tuple[object, ...]:
+    """A measurement audit's bound operators and limits, sample count and severity."""
+
+    thresholds: MeasurementThresholds | None = audit.thresholds
+    assert thresholds is not None
+    return (
+        *_bound_parts(thresholds.warn),
+        *_bound_parts(thresholds.error),
+        audit.minimum_samples,
+        str(audit.severity),
+    )
+
+
+def _bound_parts(bound: MeasurementThresholdBound | None) -> tuple[object, object]:
+    return (getattr(getattr(bound, "operator", None), "value", None), getattr(bound, "limit", None))

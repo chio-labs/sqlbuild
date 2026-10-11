@@ -129,3 +129,12 @@ class NativeAuditErrorTestCase:
     description: str
     files: dict[str, str]
     expected_message: str
+
+
+@dataclass(frozen=True)
+class NativeMeasurementPolicyTestCase:
+    """A standalone measurement audit whose header policy the native loop parses."""
+
+    description: str
+    files: dict[str, str]
+    expected_policy: tuple[object, ...]

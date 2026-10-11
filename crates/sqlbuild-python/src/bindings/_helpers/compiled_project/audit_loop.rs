@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use pyo3::FromPyObject;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{
     PyBool, PyBoolMethods, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods,
 };
@@ -38,9 +38,16 @@ use crate::bindings::_helpers::compiled_project::model_loop_named::{
 use crate::bindings::_helpers::compiled_project::source_loop::{
     AuthoredExpansion, expanded_authored_sql, file_declarations,
 };
+use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::header_metadata::thresholds;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
+use sqlbuild_model_config::errors::ConfigError;
+use sqlbuild_model_config::header_metadata::main::parse_measurement_policy::parse_measurement_policy;
 
-const MEASUREMENT_HEADER_KEYS: [&str; 2] = ["thresholds", "minimum_samples"];
+const THRESHOLDS_KEY: &str = "thresholds";
+const MINIMUM_SAMPLES_KEY: &str = "minimum_samples";
+const MEASUREMENT_HEADER_KEYS: [&str; 2] = [THRESHOLDS_KEY, MINIMUM_SAMPLES_KEY];
+const STANDALONE_MEASUREMENT_LABEL: &str = "standalone measurement audit";
 const SEVERITY_KEY: &str = "severity";
 const RUN_SCOPE_KEY: &str = "run_scope";
 const ALWAYS_RUN_KEY: &str = "always_run";
@@ -88,8 +95,6 @@ pub(crate) struct AuditSettings {
     audit_kind: Py<PyAny>,
     /// `ResourceKind` by value, for the resources singular audits read and attach to.
     resource_kinds: Py<PyDict>,
-    /// The discovery parser of a singular audit header's thresholds and minimum samples.
-    parse_policies: Py<PyAny>,
 }
 
 /// Generic definitions by name, and the warnings for project ones overriding built-ins.
@@ -269,12 +274,7 @@ impl<'py> AuditScope<'_, 'py> {
             Some(value) => value.downcast::<PyBool>().is_ok_and(|flag| flag.is_true()),
             None => false,
         };
-        let (thresholds, minimum_samples): (Bound<'py, PyAny>, Bound<'py, PyAny>) = self
-            .settings
-            .parse_policies
-            .bind(py)
-            .call((), Some(&policy_arguments(header, relative_path)?))?
-            .extract()?;
+        let (thresholds, minimum_samples) = self.measurement_policy(header, relative_path)?;
         let (severity, run_scope) = if *measurement {
             if severity.is_some() {
                 let message: String = format!(
@@ -592,6 +592,44 @@ impl<'py> AuditScope<'_, 'py> {
         }
     }
 
+    /// The header's `MeasurementThresholds` and authored `minimum_samples`, as Python parses them.
+    fn measurement_policy(
+        &self,
+        header: &Bound<'py, PyDict>,
+        relative_path: &str,
+    ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+        let py: Python<'py> = header.py();
+        let raw =
+            |key: &str| -> PyResult<Option<PyNode<'py>>> { Ok(header.get_item(key)?.map(PyNode)) };
+        let (thresholds_node, samples_node) = (raw(THRESHOLDS_KEY)?, raw(MINIMUM_SAMPLES_KEY)?);
+        let (parsed, minimum_samples) = parse_measurement_policy(
+            (thresholds_node.as_ref(), samples_node.as_ref()),
+            relative_path,
+            STANDALONE_MEASUREMENT_LABEL,
+        )
+        .map_err(|error| self.config_error(&error))?;
+        Ok((
+            thresholds(py, self.context.contracts, parsed.as_ref())?,
+            minimum_samples.map_or_else(|| py.None().into_bound(py), |node| node.0),
+        ))
+    }
+
+    /// `CompileInputError` with `error`'s message and help.
+    fn config_error(&self, error: &ConfigError) -> PyErr {
+        let raised = (|| {
+            let keywords: Bound<'_, PyDict> = PyDict::new(self.context.host.py());
+            keywords.set_item("help", &error.help)?;
+            self.context
+                .classes
+                .compile_error
+                .call((&error.message,), Some(&keywords))
+        })();
+        match raised {
+            Ok(instance) => PyErr::from_value(instance),
+            Err(failure) => failure,
+        }
+    }
+
     /// The resolved severity and run scope; a measurement (`None`) severity reads no default.
     fn policies(
         &self,
@@ -656,17 +694,6 @@ impl<'py> AuditScope<'_, 'py> {
             .call((), Some(&arguments))?;
         Ok(())
     }
-}
-
-/// The keyword arguments of the header policy parser.
-fn policy_arguments<'py>(
-    header: &Bound<'py, PyDict>,
-    relative_path: &str,
-) -> PyResult<Bound<'py, PyDict>> {
-    let arguments: Bound<'py, PyDict> = PyDict::new(header.py());
-    arguments.set_item("header_values", header)?;
-    arguments.set_item("relative_path", relative_path)?;
-    Ok(arguments)
 }
 
 fn reference_calls(references: &[ReferenceRow]) -> Vec<(&str, &str)> {

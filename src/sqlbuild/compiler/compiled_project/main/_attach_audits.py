@@ -2,9 +2,6 @@
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.main._builtins import builtin_audit_definitions
-from sqlbuild.compiler.auditing.main._parse_audit_header_policies import (
-    parse_audit_header_policies,
-)
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import AuditInput
@@ -33,7 +30,6 @@ def attach_audits(
             "singular_kind": DeclarationKind.SINGULAR_AUDIT,
             "audit_kind": DeclarationKind.AUDIT,
             "resource_kinds": {kind.value: kind for kind in ResourceKind},
-            "parse_policies": parse_audit_header_policies,
         },
     )
     return tuple(audits), tuple(diagnostics)

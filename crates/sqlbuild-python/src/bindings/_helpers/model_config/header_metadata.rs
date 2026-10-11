@@ -147,7 +147,8 @@ fn audit_instance<'py>(
     )
 }
 
-fn thresholds<'py>(
+/// `MeasurementThresholds` of `parsed`, or `None`.
+pub(crate) fn thresholds<'py>(
     py: Python<'py>,
     classes: &ContractClasses<'py>,
     parsed: Option<&ParsedThresholds>,

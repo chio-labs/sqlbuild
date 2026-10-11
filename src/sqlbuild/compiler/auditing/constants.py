@@ -19,4 +19,3 @@ SCHEMA_AUDIT_OPTION_KEYS: frozenset[str] = frozenset(
         "evidence_limit",
     }
 )
-STANDALONE_MEASUREMENT_LABEL: str = "standalone measurement audit"
