@@ -611,11 +611,6 @@ def expand_declaration_references(
     consumer: tuple[object | None, bool, str],
     renderers: tuple[object, dict[str, object]],
 ) -> tuple[str, list[tuple[int, int, int, int]], list[Any]]: ...
-def parse_model_header_metadata(
-    header: tuple[object, object],
-    source: tuple[dict[str, Any], str],
-    classes: dict[str, object],
-) -> tuple[tuple[Any, ...] | NativeConfigError, tuple[Any, ...] | NativeConfigError | None]: ...
 def expand_config_templates(
     value: object,
     sources: tuple[dict[str, object], object, dict[str, str | None]],

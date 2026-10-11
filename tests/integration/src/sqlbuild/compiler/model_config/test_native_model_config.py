@@ -32,11 +32,12 @@ from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_header_metadata_when_parsing_then_native_matches_yaml_schema_parsers(
-    test_case: HeaderMetadataParityTestCase,
+def test_given_generated_header_metadata_when_attaching_then_model_loop_matches_yaml_parsers(
+    test_case: HeaderMetadataParityTestCase, tmp_path: Path
 ) -> None:
     parity: HeaderMetadataParity = header_metadata_parity(
-        headers=generated_header_metadata(rng=random.Random(test_case.seed), count=test_case.count)
+        project_dir=tmp_path,
+        headers=generated_header_metadata(rng=random.Random(test_case.seed), count=test_case.count),
     )
 
     assert (

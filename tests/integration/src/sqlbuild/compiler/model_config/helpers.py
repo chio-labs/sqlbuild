@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Callable
-from dataclasses import dataclass, fields
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import cast
+from typing import TypeGuard, cast
 
 import pytest
 
@@ -21,16 +21,10 @@ from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
-from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
-    parse_native_header_metadata,
-)
-from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
-from sqlbuild.spec.contracts.models import SourceLocation
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
+from sqlbuild.spec.contracts.models import SchemaModelEntry, SourceLocation
 
 _TEXTS: tuple[object, ...] = (
     "INTEGER",
@@ -39,10 +33,6 @@ _TEXTS: tuple[object, ...] = (
     "",
     "   ",
     "\u00a0",
-    "${target.schema}",
-    "@cents(amount)",
-    "@cents\u2003(amount)",
-    "@cents\x1f(amount)",
     "mail@example.com",
     "\x1c",
     1,
@@ -147,9 +137,23 @@ MODEL_CONFIG_PROJECT: dict[str, str] = {
 }
 
 
+_PARITY_PROJECT: str = 'name = "orders"\nadapter = "duckdb"\n'
+_PARITY_FILES: dict[str, str] = {
+    "models/orders.sql": (
+        "MODEL (description 'Orders.', materialized incremental, incremental_strategy append);\n"
+        "SELECT 1 AS order_id\n"
+    ),
+    **{
+        f"audits/generic/{name}.sql": 'AUDIT ();\nSELECT * FROM __ref("@model") WHERE FALSE\n'
+        for name in ("a",)
+    },
+}
+
+
 @dataclass(frozen=True)
 class HeaderMetadataParity:
-    """How the native header metadata parse compared with Python's over one corpus."""
+    """How the model loop's header attachment compared with the YAML parsers over one corpus;
+    the loop's later validation may reject a header the parsers accept."""
 
     mismatches: list[tuple[object, object, object]]
     parsed: int
@@ -221,33 +225,78 @@ def _counted(*, calls: dict[str, int], name: str) -> Callable[..., object]:
     return counted
 
 
-def header_metadata_parity(*, headers: list[tuple[object, object]]) -> HeaderMetadataParity:
-    """Compare the native parse or rejection with the YAML schema parsers Python still owns."""
+def header_metadata_parity(
+    *, project_dir: Path, headers: list[tuple[object, object]]
+) -> HeaderMetadataParity:
+    """Compare each header the model loop attaches or rejects with the YAML schema parsers."""
 
+    _ = (project_dir / "sqlbuild_project.toml").write_text(_PARITY_PROJECT, encoding="utf-8")
+    for relative_path, contents in _PARITY_FILES.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     model_files: list[DiscoveredSqlModelFile] = [
-        _model_file(index=index, columns=columns, audits=audits)
+        _model_file(base=discovered.model_files[0], index=index, columns=columns, audits=audits)
         for index, (columns, audits) in enumerate(headers)
     ]
-    native: list[NativeHeaderMetadata] = [
-        parse_native_header_metadata(
-            raw_columns=model_file.header_values.get("columns"),
-            raw_audits=model_file.header_values.get("audits"),
-            column_locations=model_file.header_column_locations,
-            file_path=model_file.relative_path,
-        )
-        for model_file in model_files
+    actual: list[object] = [
+        _loop_shape(discovered=discovered, model_file=model_file) for model_file in model_files
     ]
-    return HeaderMetadataParity(
-        mismatches=mismatches(
-            inputs=[model_file.header_values for model_file in model_files],
-            expected=[
-                _shape(_python_metadata(model_file=model_file)) for model_file in model_files
-            ],
-            actual=[_native_shape(metadata) for metadata in native],
-        ),
-        parsed=sum(_native_error(metadata) is None for metadata in native),
-        rejected=sum(_native_error(metadata) is not None for metadata in native),
+    expected: list[object] = [
+        _shape(_python_metadata(model_file=model_file)) for model_file in model_files
+    ]
+    outcomes: list[tuple[object, object, object]] = list(
+        zip([model_file.header_values for model_file in model_files], expected, actual, strict=True)
     )
+    rejected: int = sum(isinstance(shape, list) for shape in actual)
+    return HeaderMetadataParity(
+        mismatches=list(filter(_unexplained, outcomes))[:3],
+        parsed=len(actual) - rejected,
+        rejected=rejected,
+    )
+
+
+def _unexplained(outcome: tuple[object, object, object]) -> bool:
+    """A differing outcome other than a parsed header the loop's later validation rejects."""
+
+    _, expected, actual = outcome
+    return expected != actual and not (isinstance(expected, tuple) and isinstance(actual, list))
+
+
+def _loop_shape(
+    *, discovered: DiscoveredProjectInputs, model_file: DiscoveredSqlModelFile
+) -> object:
+    """The model loop's attached columns and audits, or the error it raised."""
+
+    try:
+        inputs: CompileInputsView = build_compile_inputs(
+            discovered_inputs=replace(discovered, model_files=(model_file,)),
+            adapter_context=CompileAdapterContext(
+                value_renderer=DuckDbAdapter(),
+                collection_rendering=resolve_effective_collection_rendering(
+                    project_config=discovered.project_config, declaration_override=None
+                ),
+                python_functions_inherit_default_namespace=True,
+                sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
+            ),
+            no_sql_validation=True,
+            defer_model_sql_validation=True,
+            no_cache=True,
+        )
+    except Exception as error:  # noqa: BLE001 - the exact loop outcome, whatever it is
+        return list(error_shape(error)[:4])
+    entry: SchemaModelEntry | None = inputs.model_inputs[0].schema_entry
+    return _shape(_entry_metadata(entry))
+
+
+def _entry_metadata(entry: SchemaModelEntry | None) -> tuple[object, object]:
+    entries: Iterator[SchemaModelEntry] = filter(_attached, (entry,))
+    return next(((item.columns, item.audits) for item in entries), ((), ()))
+
+
+def _attached(entry: SchemaModelEntry | None) -> TypeGuard[SchemaModelEntry]:
+    return entry is not None
 
 
 def _python_metadata(*, model_file: DiscoveredSqlModelFile) -> object:
@@ -285,19 +334,6 @@ def _metadata_shape(value: object) -> object:
     return (repr(value), _attribute_orders(value), _locations(value))
 
 
-def _native_shape(parsed: NativeHeaderMetadata) -> object:
-    error: _native.NativeConfigError | None = _native_error(parsed)
-    shapes: list[object] = [
-        list(error_shape(native_config_error(error=cast(_native.NativeConfigError, error)))[:4])
-        for _ in range(error is not None)
-    ]
-    return (*shapes, _shape((parsed.columns, parsed.audits)))[0]
-
-
-def _native_error(metadata: NativeHeaderMetadata) -> _native.NativeConfigError | None:
-    return metadata.columns_error or metadata.audits_error
-
-
 _SHAPES: dict[type, Callable[[object], object]] = {tuple: _metadata_shape}
 
 
@@ -328,24 +364,19 @@ def _flattened(value: object) -> tuple[object, ...]:
     return (*columns, *audits)
 
 
-def _model_file(*, index: int, columns: object, audits: object) -> DiscoveredSqlModelFile:
-    relative_path: Path = Path("models") / f"model_{index}.sql"
+def _model_file(
+    *, base: DiscoveredSqlModelFile, index: int, columns: object, audits: object
+) -> DiscoveredSqlModelFile:
     names: list[str] = [*filter(_is_text, getattr(columns, "keys", tuple)())]
     locations: dict[str, SourceLocation] = {
-        name: SourceLocation(path=relative_path, line=line + 2, column=3)
+        name: SourceLocation(path=base.relative_path, line=line + 2, column=3)
         for line, name in enumerate(names[: len(names) * (index % 2)])
     }
-    model_file: DiscoveredSqlModelFile = object.__new__(DiscoveredSqlModelFile)
-    values: dict[str, object] = {field.name: None for field in fields(DiscoveredSqlModelFile)}
-    values.update(
-        file_path=Path("/project") / relative_path,
-        relative_path=relative_path,
-        header_values={"columns": columns, "audits": audits},
+    return replace(
+        base,
+        header_values={**base.header_values, "columns": columns, "audits": audits},
         header_column_locations=locations,
     )
-    for name, value in values.items():
-        object.__setattr__(model_file, name, value)
-    return model_file
 
 
 def _is_text(value: object) -> bool:

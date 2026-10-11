@@ -1,15 +1,13 @@
-//! MODEL header columns and audits parsed natively into the Python contract objects.
+//! Parsed MODEL header columns and audits built into the Python contract objects.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
-use pyo3::{FromPyObject, IntoPyObject, pyfunction, wrap_pyfunction};
-use sqlbuild_model_config::header_metadata::main::parse_header_metadata::parse_header_metadata;
+use pyo3::{FromPyObject, IntoPyObject};
 use sqlbuild_model_config::header_metadata::models::{
     ParsedAudit, ParsedColumn, ParsedThresholds, ThresholdBound,
 };
 
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
-use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 
 /// The Python classes the parsed metadata becomes, read from a Python mapping.
 #[derive(FromPyObject)]
@@ -24,30 +22,6 @@ pub(crate) struct ContractClasses<'py> {
     severities: Bound<'py, PyDict>,
     threshold_operators: Bound<'py, PyDict>,
     allocate: Bound<'py, PyAny>,
-}
-
-/// A model's columns and audits as contract tuples or errors; no audits after a column error.
-#[pyfunction]
-fn parse_model_header_metadata<'py>(
-    py: Python<'py>,
-    header: (Bound<'py, PyAny>, Bound<'py, PyAny>),
-    source: (Bound<'py, PyDict>, String),
-    classes: ContractClasses<'py>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    let (columns, audits) = header;
-    let (locations, path) = source;
-    let path: &str = &path;
-    let metadata = parse_header_metadata(&PyNode(columns), &PyNode(audits), path);
-    let columns = match metadata.columns {
-        Err(error) => {
-            return (native_config_error(py, error)?, py.None()).into_pyobject(py);
-        }
-        Ok(columns) => column_tuple(py, &classes, &columns, &locations)?,
-    };
-    match metadata.audits {
-        Err(error) => (columns, native_config_error(py, error)?).into_pyobject(py),
-        Ok(audits) => (columns, audit_tuple(py, &classes, &audits)?).into_pyobject(py),
-    }
 }
 
 pub(crate) fn column_tuple<'py>(
@@ -218,9 +192,4 @@ fn threshold_bound<'py>(
             ("upper", upper.into_pyobject(py)?.into_any()),
         ],
     )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(parse_model_header_metadata, module)?)?;
-    Ok(())
 }
