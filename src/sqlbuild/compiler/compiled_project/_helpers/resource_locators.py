@@ -1,25 +1,8 @@
-"""Locators the native resource diagnostics call: YAML entries, MODEL header entries, decorators."""
+"""The decorator locator the native resource diagnostics call for authored Python functions."""
 
 from __future__ import annotations
 
 import ast
-
-from sqlbuild.compiler.discovery.main._model_header_entry_span import get_model_header_entry_span
-from sqlbuild.compiler.discovery.main._yaml_entry_line import (
-    yaml_entry_line as _yaml_entry_line,
-)
-
-
-def yaml_entry_line(*, contents: str, name: str) -> int | None:
-    """The 1-based line of the outermost `- name: <name>` entry, if present."""
-
-    return _yaml_entry_line(contents=contents, name=name)
-
-
-def model_header_entry_span(*, contents: str, key: str) -> tuple[int, int] | None:
-    """The authored offsets of one top-level MODEL header entry."""
-
-    return get_model_header_entry_span(contents=contents, key=key)
 
 
 def decorator_location(*, contents: str, decorator: str) -> tuple[int, int]:

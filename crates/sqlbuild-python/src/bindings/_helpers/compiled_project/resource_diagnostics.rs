@@ -1,5 +1,8 @@
 //! Compile-input diagnostics of the project's resources, read from the native owner.
 
+use pyo3::exceptions::PyValueError;
+use sqlbuild_discovery::yaml_files::main::yaml_entry_lines::yaml_entry_lines;
+use sqlbuild_sqltext::compiler::main::model_header_entry_span::model_header_entry_span;
 use std::collections::{HashMap, HashSet};
 
 use pyo3::FromPyObject;
@@ -115,16 +118,11 @@ impl<'py> Diagnostics<'_, 'py> {
         contents: &str,
         name: &str,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let arguments: Bound<'py, PyDict> = PyDict::new(self.py);
-        arguments.set_item("contents", contents)?;
-        arguments.set_item("name", name)?;
-        let line: Option<usize> = self
-            .settings
-            .locators
-            .bind(self.py)
-            .call_method("yaml_entry_line", (), Some(&arguments))?
-            .extract()?;
-        self.location(relative_path, (line.unwrap_or(1), 1), None)
+        let line: usize = yaml_entry_lines(contents)
+            .into_iter()
+            .find(|(entry, _)| entry == name)
+            .map_or(1, |(_, line)| line);
+        self.location(relative_path, (line, 1), None)
     }
 
     /// One diagnostic: `(code, severity)`, `(message, help)`, the resource and its location.
@@ -487,15 +485,8 @@ fn cursor_without_inputs<'py>(
         };
         let path: String = model_file.getattr("relative_path")?.str()?.extract()?;
         let contents: String = model_file.getattr("contents")?.extract()?;
-        let arguments: Bound<'py, PyDict> = PyDict::new(py);
-        arguments.set_item("contents", &contents)?;
-        arguments.set_item("key", CURSOR_KEY)?;
-        let span: Option<(usize, usize)> = diagnostics
-            .settings
-            .locators
-            .bind(py)
-            .call_method("model_header_entry_span", (), Some(&arguments))?
-            .extract()?;
+        let span: Option<(usize, usize)> =
+            model_header_entry_span(&contents, CURSOR_KEY).map_err(PyValueError::new_err)?;
         let start: TextPosition = text_position(&contents, span.map_or(0, |span| span.0));
         let location: Bound<'py, PyAny> = diagnostics.location(
             &path,

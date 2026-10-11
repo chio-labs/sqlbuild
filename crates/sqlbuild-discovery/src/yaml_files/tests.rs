@@ -4,3 +4,5 @@ mod helpers;
 mod load_yaml_files;
 #[path = "tests/test_types.rs"]
 mod test_types;
+#[path = "tests/test_yaml_entry_lines.rs"]
+mod yaml_entry_lines;

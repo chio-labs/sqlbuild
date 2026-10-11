@@ -8,3 +8,5 @@ mod sql_test_attachment_checks;
 mod sql_test_classification_cases;
 #[path = "tests/test_types.rs"]
 mod test_types;
+#[path = "tests/test_text_matching.rs"]
+mod text_matching;

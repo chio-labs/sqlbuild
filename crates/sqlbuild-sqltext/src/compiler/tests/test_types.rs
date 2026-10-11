@@ -99,3 +99,9 @@ impl InterpolationHost for MapHost {
             .collect()
     }
 }
+
+pub(super) struct EntrySpanTestCase {
+    pub(super) description: &'static str,
+    pub(super) contents: &'static str,
+    pub(super) expected_span: Result<Option<(usize, usize)>, &'static str>,
+}

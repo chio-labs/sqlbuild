@@ -8,13 +8,14 @@ use crate::text::main::python_casefold::python_casefold;
 use crate::text::main::python_cleandoc::python_cleandoc;
 use crate::text::main::python_fnmatchcase::python_fnmatchcase;
 use crate::text::main::python_ignorecase_key::python_ignorecase_key;
+use crate::text::main::python_splitlines::python_splitlines;
 use crate::text::main::python_str_repr::python_str_repr;
 use crate::text::main::python_text::python_text;
 use crate::text::main::python_upper::python_upper;
 use crate::text::models::PythonText;
 use crate::text::tests::test_types::{
     CaseMappingTestCase, CharacterClassTestCase, CleandocTestCase, CloseMatchesTestCase,
-    GlobTestCase, IgnorecaseTestCase, PythonTextTestCase, ReprTestCase,
+    GlobTestCase, IgnorecaseTestCase, PythonTextTestCase, ReprTestCase, SplitlinesTestCase,
 };
 
 const KEYS: &[&str] = &[
@@ -660,6 +661,45 @@ fn given_glob_patterns_when_matching_then_results_match_fnmatchcase() {
         assert_eq!(
             python_fnmatchcase(test_case.name, test_case.pattern),
             test_case.expected_match,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_text_when_splitting_lines_then_it_matches_str_splitlines() {
+    let test_cases = [
+        SplitlinesTestCase {
+            description: "a newline separates two lines",
+            text: "a\nb",
+            expected_lines: &["a", "b"],
+        },
+        SplitlinesTestCase {
+            description: "CRLF is one break and a trailing break adds no line",
+            text: "a\r\nb\r",
+            expected_lines: &["a", "b"],
+        },
+        SplitlinesTestCase {
+            description: "Unicode separators, NEL and vertical tab break lines",
+            text: "a\u{2028}b\u{85}c\u{b}d",
+            expected_lines: &["a", "b", "c", "d"],
+        },
+        SplitlinesTestCase {
+            description: "leading breaks give empty lines",
+            text: "\n\nx",
+            expected_lines: &["", "", "x"],
+        },
+        SplitlinesTestCase {
+            description: "empty text has no lines",
+            text: "",
+            expected_lines: &[],
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            python_splitlines(test_case.text),
+            test_case.expected_lines,
             "{}",
             test_case.description
         );

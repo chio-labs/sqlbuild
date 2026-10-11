@@ -82,3 +82,9 @@ pub(super) struct GlobTestCase {
     pub(super) name: &'static str,
     pub(super) expected_match: bool,
 }
+
+pub(super) struct SplitlinesTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_lines: &'static [&'static str],
+}

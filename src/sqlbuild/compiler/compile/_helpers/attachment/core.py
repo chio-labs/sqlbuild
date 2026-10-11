@@ -465,9 +465,7 @@ def build_effective_vars(
     """Merge effective vars using the locked precedence order."""
 
     return expand_effective_vars(
-        _native.effective_config_vars(
-            (project_config, local_config), target_config, cli_vars
-        )
+        _native.effective_config_vars((project_config, local_config), target_config, cli_vars)
     )
 
 
