@@ -11,11 +11,10 @@ from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _build_cursor_input_relations,
     _runtime_cursor_producer_names,
@@ -402,7 +401,7 @@ def test_given_known_source_columns_when_building_relations_context_then_reuses_
 def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> None:
-    model: CompiledModel = build_source_cursor_input_model(test_case)
+    model: CompiledModelView = build_source_cursor_input_model(test_case)
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {}
     for source_name, column_names in test_case.source_columns.items():
         columns: list[ColumnInfo] = []
@@ -436,13 +435,13 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
 def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_is_physical(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     model, models_by_name = build_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,
     )
-    view_model: CompiledModel = models_by_name["orders_view"]
+    view_model: CompiledModelView = models_by_name["orders_view"]
 
     relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
         model=model,
@@ -521,7 +520,7 @@ def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_
 def test_given_missing_cursor_input_source_column_when_validating_then_raises_clear_error(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> None:
-    model: CompiledModel = build_source_cursor_input_model(test_case)
+    model: CompiledModelView = build_source_cursor_input_model(test_case)
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {}
     for source_name, column_names in test_case.source_columns.items():
         columns: list[ColumnInfo] = []
@@ -557,8 +556,8 @@ def test_given_missing_cursor_input_source_column_when_validating_then_raises_cl
 def test_given_transitive_watermark_when_validating_lineage_then_accepts_upstream_source(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     model, models_by_name = build_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,
@@ -589,8 +588,8 @@ def test_given_transitive_watermark_when_validating_lineage_then_accepts_upstrea
 def test_given_table_function_and_transitive_watermark_when_planning_then_source_is_accepted(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     functions_by_name: dict[str, CompiledFunction]
     model, models_by_name, functions_by_name = build_function_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
@@ -646,8 +645,8 @@ def test_given_table_function_and_transitive_watermark_when_planning_then_source
 def test_given_invalid_watermark_when_validating_lineage_then_raises_precise_error(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     model, models_by_name = build_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,

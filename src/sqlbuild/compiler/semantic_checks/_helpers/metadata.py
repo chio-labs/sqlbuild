@@ -11,7 +11,6 @@ from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSource,
@@ -19,6 +18,7 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -115,7 +115,7 @@ def _function_payload(*, key: str, function: CompiledFunction) -> tuple[str, lis
     return (key, [(argument.name, argument.type) for argument in function.arguments])
 
 
-def _checked(model: CompiledModel) -> bool:
+def _checked(model: CompiledModelView) -> bool:
     return model.config.values.get(SQL_ANALYSIS_CONFIG_KEY) is not False and model.binding_validated
 
 
@@ -123,7 +123,7 @@ def _string(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _model_payload(model: CompiledModel) -> tuple[Any, ...]:
+def _model_payload(model: CompiledModelView) -> tuple[Any, ...]:
     values: dict[str, object] = model.config.values
     references: list[_NamesRow] = [
         (key, list(SemanticCompletionInputs.column_names(values.get(key))))
@@ -189,7 +189,7 @@ def _sql_test_payload(
     )
 
 
-def _model_error(*, model: CompiledModel, row: _ErrorRow) -> CompilerDiagnostic:
+def _model_error(*, model: CompiledModelView, row: _ErrorRow) -> CompilerDiagnostic:
     code, message, line, column = row
     return CompilerDiagnostic(
         phase=DiagnosticPhase.COMPILE,

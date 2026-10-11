@@ -12,11 +12,11 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompileProjectInputs,
     CompilerDiagnostic,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -229,9 +229,9 @@ SELECT
         run_id="test_run",
     )
     project: CompiledProject = assemble_project(inputs=inputs)
-    models: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models: dict[str, CompiledModelView] = {model.name: model for model in project.models}
 
-    exact: CompiledModel = models["exact_orders"]
+    exact: CompiledModelView = models["exact_orders"]
     assert exact.schema_entry is not None
     assert (
         tuple(column.name for column in exact.schema_entry.columns)
@@ -265,7 +265,7 @@ SELECT
         "nullable": False,
     }
 
-    superset: CompiledModel = models["order_superset"]
+    superset: CompiledModelView = models["order_superset"]
     assert superset.schema_entry is not None
     assert superset.schema_entry.description == "Canonical order schema"
     assert (
@@ -461,8 +461,8 @@ SELECT * FROM __ref("customer_category_amounts")
         ),
         inference_profile=DuckDbAdapter().expression_inference_profile(),
     )
-    models_by_name: dict[str, CompiledModel] = {item.name: item for item in project.models}
-    model: CompiledModel = models_by_name["customer_category_amounts"]
+    models_by_name: dict[str, CompiledModelView] = {item.name: item for item in project.models}
+    model: CompiledModelView = models_by_name["customer_category_amounts"]
 
     assert model.schema_entry is not None
     assert tuple(column.name for column in model.inferred_columns or ()) == (
@@ -496,7 +496,7 @@ SELECT * FROM __ref("customer_category_amounts")
     manifest_meta: dict[str, object] = cast(dict[str, object], manifest_node["meta"])
     sqlbuild_meta: dict[str, object] = cast(dict[str, object], manifest_meta["sqlbuild"])
     assert sqlbuild_meta["dynamic_columns"] == contract_identity["dynamic_columns"]
-    passthrough: CompiledModel = models_by_name["customer_category_amounts_copy"]
+    passthrough: CompiledModelView = models_by_name["customer_category_amounts_copy"]
     assert passthrough.dynamic_column_contract is not None
     assert passthrough.dynamic_column_contract.output_proven is True
     assert tuple(column.name for column in passthrough.inferred_columns or ()) == ("customer_id",)
@@ -692,7 +692,7 @@ SELECT 1 AS order_id, 'feed' AS source
     }
     write_repo_files(tmp_path, repo_files)
 
-    initial: CompiledModel = compile_first_model(project_dir=tmp_path)
+    initial: CompiledModelView = compile_first_model(project_dir=tmp_path)
     write_repo_files(
         tmp_path,
         repo_files
@@ -703,7 +703,7 @@ SCHEMA (name sourced_order, extends order, columns (source (type VARCHAR)));
 """
         },
     )
-    changed: CompiledModel = compile_first_model(project_dir=tmp_path)
+    changed: CompiledModelView = compile_first_model(project_dir=tmp_path)
 
     assert (
         build_model_version_identity_metadata_json(model=initial)
@@ -747,7 +747,7 @@ SELECT 1::INTEGER AS event_id, CURRENT_TIMESTAMP::TIMESTAMP AS observed_at
         },
     )
 
-    model: CompiledModel = compile_first_model(project_dir=tmp_path)
+    model: CompiledModelView = compile_first_model(project_dir=tmp_path)
 
     assert model.schema_entry is not None
     assert (

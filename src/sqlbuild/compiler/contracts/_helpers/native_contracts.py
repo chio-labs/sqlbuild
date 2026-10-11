@@ -5,12 +5,12 @@ from __future__ import annotations
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompilerDiagnostic,
     RelatedLocation,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -49,7 +49,7 @@ def native_model_contracts(
     return ContractValidationResult(diagnostics=tuple(diagnostics))
 
 
-def _diagnostic(*, model: CompiledModel, row: _DiagnosticRow) -> CompilerDiagnostic:
+def _diagnostic(*, model: CompiledModelView, row: _DiagnosticRow) -> CompilerDiagnostic:
     code, is_error, message, column_name, declared_index, output_column, related, help_text = row
     return CompilerDiagnostic(
         phase=DiagnosticPhase.CONTRACT,
@@ -67,7 +67,7 @@ def _diagnostic(*, model: CompiledModel, row: _DiagnosticRow) -> CompilerDiagnos
 
 
 def _location(
-    *, model: CompiledModel, declared_index: int | None, output_column: str | None
+    *, model: CompiledModelView, declared_index: int | None, output_column: str | None
 ) -> SourceLocation | None:
     if declared_index is not None and model.schema_entry is not None:
         return model.schema_entry.columns[declared_index].location
@@ -77,7 +77,7 @@ def _location(
 
 
 def _related_locations(
-    *, model: CompiledModel, related: tuple[str, str] | None
+    *, model: CompiledModelView, related: tuple[str, str] | None
 ) -> tuple[RelatedLocation, ...]:
     if related is None:
         return ()

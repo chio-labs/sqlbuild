@@ -18,7 +18,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -509,7 +509,7 @@ def build_orders_project_graph() -> ProjectGraph:
         source_entry=SourceEntry(name="raw_orders", loader="raw_orders", managed=True),
         source_file=source_file,
     )
-    orders_model: CompiledModel = CompiledModel(
+    orders_model: CompiledModelView = CompiledModel(
         key=orders_key,
         deps=(raw_orders_key,),
         name="orders",

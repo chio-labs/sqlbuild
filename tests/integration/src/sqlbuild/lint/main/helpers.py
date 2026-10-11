@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 
@@ -31,5 +32,8 @@ def without_lineage(project: CompiledProject) -> CompiledProject:
 
     return replace(
         project,
-        models=tuple(replace(model, fast_lineage_columns=None) for model in project.models),
+        models=tuple(
+            replace(compiled_model_record(model), fast_lineage_columns=None)
+            for model in project.models
+        ),
     )

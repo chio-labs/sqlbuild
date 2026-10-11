@@ -15,14 +15,13 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.planner._helpers.fixtures.completion import build_relation_fixture_context
 from sqlbuild.compiler.planner._helpers.sql_tests.fixture_validation import (
     build_validated_test_fixtures,
@@ -83,7 +82,7 @@ def plan_sql_tests(
         render_sql=False,
     )
     plans_by_index: dict[int, NativeSqlTestPlan] = dict(zip(plannable_indexes, plans, strict=True))
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     results: list[SqlTestPlanResult] = []
     for index, test in enumerate(tests):
         plan: NativeSqlTestPlan | None = plans_by_index.get(index)
@@ -274,7 +273,7 @@ def _plan_entry(
     test: CompiledSqlTest,
     plan: NativeSqlTestPlan,
     project: CompiledProject,
-    models_by_name: dict[str, CompiledModel],
+    models_by_name: dict[str, CompiledModelView],
     sql_analysis_enabled: bool,
 ) -> SqlTestPlanEntry:
     mock_table_function_names: tuple[str, ...] = _prefixed_names(
@@ -315,12 +314,12 @@ def _plan_entry(
 def _chain_function_deps(
     *,
     model_names: tuple[str, ...],
-    models_by_name: dict[str, CompiledModel],
+    models_by_name: dict[str, CompiledModelView],
     mocked_table_functions: frozenset[str],
 ) -> tuple[CompiledObjectKey, ...]:
     deps: dict[CompiledObjectKey, None] = {}
     for model_name in model_names:
-        model: CompiledModel | None = models_by_name.get(model_name)
+        model: CompiledModelView | None = models_by_name.get(model_name)
         if model is None:
             continue
         for dep in model.deps:

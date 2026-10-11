@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -28,6 +27,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledModelView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -205,7 +205,7 @@ def _key_rows(keys: tuple[CompiledObjectKey, ...]) -> list[tuple[str, str]]:
     return [_key_row(key) for key in keys]
 
 
-def _model_row(*, model: CompiledModel, old_name_retention: str | None) -> dict[str, object]:
+def _model_row(*, model: CompiledModelView, old_name_retention: str | None) -> dict[str, object]:
     raw: object = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
     retained: bool = isinstance(raw, str) and (
         resolve_old_name_view_retention(

@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 from sqlbuild.adapter.contract.models import ColumnInfo, MigrationStagePlan, RelationInfo
 from sqlbuild.adapter.contract.types import BuiltinAdapter, MigrationTransfer
 from sqlbuild.compiler.compile.constants import MIGRATE_FORCE_CONFIG_KEY, MIGRATE_FROM_CONFIG_KEY
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationLocation
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.main._newest_event import newest_migration_event_mentioning
@@ -87,14 +87,14 @@ def manual_migration_requests(*, scope: PlannerScope) -> tuple[ModelMigrationReq
             CompiledResourceType.MODEL
         ):
             continue
-        model: CompiledModel | None = scope.models_by_name.get(getattr(key, "name", ""))
+        model: CompiledModelView | None = scope.models_by_name.get(getattr(key, "name", ""))
         request: ModelMigrationRequest | None = None if model is None else _declared_request(model)
         if request is not None:
             requests.append(request)
     return tuple(requests)
 
 
-def _declared_request(model: CompiledModel) -> ModelMigrationRequest | None:
+def _declared_request(model: CompiledModelView) -> ModelMigrationRequest | None:
     raw_origin: object | None = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
     if not isinstance(raw_origin, str):
         return None
@@ -114,7 +114,7 @@ def _project_declarations(
     """Resolve every project model's migrate_from, selected or not."""
 
     declarations: list[ModelMigrationDeclaration] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in runtime.project.models:
         request: ModelMigrationRequest | None = _declared_request(model)
         if request is None:
@@ -276,7 +276,7 @@ def _renamed_models(
 
 def _equivalent_definition(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     handover: Fingerprint | None,
     destination_fingerprints: tuple[str, ...],
     dialect: str | None,
@@ -373,7 +373,7 @@ def _resolve_named_origin(
     runtime: PlannerRuntime,
     state: MigrationStateInspection,
 ) -> tuple[CompiledRelationLocation, str | None]:
-    project_model: CompiledModel | None = next(
+    project_model: CompiledModelView | None = next(
         (model for model in runtime.project.models if model.name == name), None
     )
     if project_model is not None:
@@ -420,7 +420,7 @@ def _decide(
     state: MigrationStateInspection,
     snapshots_config: SnapshotsConfig,
 ) -> tuple[ModelMigrationPlanEntry, Fingerprint | None, bool]:
-    model: CompiledModel = request.model
+    model: CompiledModelView = request.model
     destination: CompiledRelationLocation = model.destination
     if _relation_key(origin) == _relation_key(destination):
         raise PlannerInputError(
@@ -522,7 +522,7 @@ def _decide(
 
 def _decide_rename(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     base: ModelMigrationPlanEntry,
     newest: MigrationEvent | None,
     origin: CompiledRelationLocation,
@@ -562,7 +562,7 @@ def _decide_rename(
 
 
 def _with_execution(
-    *, runtime: PlannerRuntime, model: CompiledModel, entry: ModelMigrationPlanEntry
+    *, runtime: PlannerRuntime, model: CompiledModelView, entry: ModelMigrationPlanEntry
 ) -> ModelMigrationPlanEntry:
     """Describe how the executor will stage and promote this migration."""
 
@@ -597,7 +597,7 @@ def _promotion(*, runtime: PlannerRuntime, decision: MigrationDecision) -> Migra
 
 
 def _done_handover_applies(
-    *, model: CompiledModel, event: MigrationEvent, snapshot: WarehouseSnapshot
+    *, model: CompiledModelView, event: MigrationEvent, snapshot: WarehouseSnapshot
 ) -> bool:
     own: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
     return own is None or _utc(own.ts) < _utc(event.created_at)
@@ -611,7 +611,7 @@ def _utc(value: datetime) -> datetime:
 
 def _done_handover(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     event: MigrationEvent,
     snapshot: WarehouseSnapshot,
     origin_fingerprint: Fingerprint | None,
@@ -624,7 +624,7 @@ def _done_handover(
 
 
 def _handover_fingerprint(
-    *, model: CompiledModel, fingerprint: Fingerprint | None, version_hash: str
+    *, model: CompiledModelView, fingerprint: Fingerprint | None, version_hash: str
 ) -> Fingerprint | None:
     if fingerprint is None:
         return None
@@ -756,7 +756,7 @@ def redirected_cursor_snapshots(
 
 
 def _has_cursor(*, runtime: PlannerRuntime, model_name: str) -> bool:
-    model: CompiledModel | None = next(
+    model: CompiledModelView | None = next(
         (model for model in runtime.project.models if model.name == model_name), None
     )
     return (

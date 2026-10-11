@@ -7,15 +7,15 @@ from dataclasses import replace
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledSource
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.contract_adoption.models import ContractEvidence, ContractFinding
 from sqlbuild.compiler.contract_adoption.types import ContractFindingKind
 from sqlbuild.spec.contracts.main.matching_dynamic_families import matching_dynamic_families
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily, SourceEntry
 
 
-def model_evidence(*, model: CompiledModel) -> ContractEvidence:
+def model_evidence(*, model: CompiledModelView) -> ContractEvidence:
     return ContractEvidence(
         resource_type=CompiledResourceType.MODEL,
         resource_name=model.name,

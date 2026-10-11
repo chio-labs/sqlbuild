@@ -8,9 +8,9 @@ import pytest
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ModelCursorSnapshot, WarehouseSnapshot
 from sqlbuild.compiler.planner.types import CursorType
@@ -76,7 +76,7 @@ def test_given_refs_when_resolving_and_executing_then_returns_expected_rows(
     for statement in test_case.setup_sql:
         connection.execute(statement)
 
-    model: CompiledModel = build_model(
+    model: CompiledModelView = build_model(
         name="test_model",
         query_sql=test_case.query_sql,
         config=test_case.model_config,
@@ -143,7 +143,7 @@ def test_given_incremental_source_when_resolving_and_executing_then_returns_curs
     for statement in test_case.setup_sql:
         connection.execute(statement)
 
-    model: CompiledModel = build_model(
+    model: CompiledModelView = build_model(
         name="fact_events",
         query_sql=test_case.query_sql,
         config=test_case.model_config,
@@ -236,7 +236,7 @@ def test_given_fully_bounded_overrides_when_snapshot_missing_then_sql_uses_exact
         "INSERT INTO staging.raw_events "
         f"SELECT row_number() OVER (), value FROM (VALUES {test_case.inserted_values}) AS v(value)"
     )
-    model: CompiledModel = build_model(
+    model: CompiledModelView = build_model(
         name="fact_events",
         query_sql=(
             "SELECT event_id, cursor_value, __cursor_start() AS range_start, "
@@ -321,7 +321,7 @@ def test_given_view_filter_and_physical_watermark_when_resolving_then_filters_on
     statement: str
     for statement in test_case.setup_sql:
         connection.execute(statement)
-    model: CompiledModel = build_model(
+    model: CompiledModelView = build_model(
         name="fact_events",
         query_sql=test_case.query_sql,
         config=test_case.model_config,
@@ -377,7 +377,7 @@ def test_given_unavailable_planning_watermark_when_resolving_then_fails_closed(
     test_case: ResolveWatermarkFailureTestCase,
     connection: Any,
 ) -> None:
-    model: CompiledModel = build_model(
+    model: CompiledModelView = build_model(
         name="fact_events",
         query_sql='SELECT event_id, event_time FROM __source("raw_events")',
         config={
@@ -583,7 +583,7 @@ def test_given_sources_when_resolving_and_executing_then_returns_expected_rows_a
     for statement in test_case.setup_sql:
         connection.execute(statement)
 
-    model: CompiledModel = build_model(
+    model: CompiledModelView = build_model(
         name="test_model",
         query_sql=test_case.query_sql,
         config=test_case.model_config,

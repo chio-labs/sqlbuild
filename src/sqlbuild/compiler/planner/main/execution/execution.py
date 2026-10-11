@@ -9,8 +9,8 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.changes.actions import resolve_model_actions
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_changes
 from sqlbuild.compiler.planner._helpers.planning.buildability import (
@@ -220,7 +220,7 @@ def _resolve_scopes_and_cursor_overrides(
         policies=policies,
     )
     selected_scope: PlannerScope = scopes.selected_scope
-    selected_models: tuple[CompiledModel, ...] = tuple(
+    selected_models: tuple[CompiledModelView, ...] = tuple(
         selected_scope.models_by_name[key.name]
         for key in selected_scope.selected_keys
         if key.resource_type == CompiledResourceType.MODEL

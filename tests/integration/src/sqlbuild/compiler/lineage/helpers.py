@@ -13,6 +13,7 @@ import pytest
 import sqlbuild._native as native_module
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
@@ -226,7 +227,10 @@ def without_compact_facts(project: CompiledProject) -> CompiledProject:
 
     return replace(
         project,
-        models=tuple(replace(model, fast_lineage_columns=None) for model in project.models),
+        models=tuple(
+            replace(compiled_model_record(model), fast_lineage_columns=None)
+            for model in project.models
+        ),
     )
 
 

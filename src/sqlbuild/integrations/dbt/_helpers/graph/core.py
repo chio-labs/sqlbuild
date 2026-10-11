@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
@@ -137,14 +136,14 @@ def _add_sqlbuild_model_edges(
 ) -> dict[DbtCombinedGraphKey, list[DbtCombinedGraphKey]]:
     sqlbuild_model_names: frozenset[str] = frozenset(model.name for model in project.models)
     dbt_refs_by_model_name: dict[str, list[DbtManifestModel]] = {}
-    sqlbuild_model: CompiledModel
+    sqlbuild_model: CompiledModelView
     dbt_model: DbtManifestModel
     for sqlbuild_model, dbt_model in resolve_sqlbuild_model_dbt_refs(
         project=project,
         manifest=manifest,
     ):
         dbt_refs_by_model_name.setdefault(sqlbuild_model.name, []).append(dbt_model)
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         key: DbtCombinedGraphKey = sqlbuild_model_graph_key(model.name)
         upstream.setdefault(key, [])

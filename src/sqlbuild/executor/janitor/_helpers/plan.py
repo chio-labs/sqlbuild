@@ -10,11 +10,11 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompiledSeed,
     CompiledSource,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.executor.janitor.constants import QUALIFIED_ORIGIN_PARTS
 from sqlbuild.executor.janitor.models import JanitorRelationKey
 
@@ -23,7 +23,7 @@ def collect_desired_keys(project: CompiledProject) -> set[JanitorRelationKey]:
     """Collect relation keys that belong to the compiled project."""
 
     keys: set[JanitorRelationKey] = set()
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         keys.add(
             JanitorRelationKey(
@@ -57,7 +57,7 @@ def pending_migration_origins(
         listed.update({_folded(relation_key(item)): relation_key(item) for item in relations})
     schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
     pending: dict[JanitorRelationKey, str] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         raw: object | None = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
         destination: JanitorRelationKey = JanitorRelationKey(
@@ -101,7 +101,7 @@ def collect_target_schemas(project: CompiledProject) -> set[tuple[str | None, st
     """Collect schemas where the compiled project writes relations, one spelling per schema."""
 
     schemas: list[tuple[str | None, str | None]] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         schemas.append((model.destination.database, model.destination.schema))
     seed: CompiledSeed

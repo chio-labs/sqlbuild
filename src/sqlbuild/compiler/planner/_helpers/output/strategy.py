@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-)
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.constants import (
     PROJECT_CONFIG_FILENAME,
     QUERY_CHANGE_TRACKING_SETTING_KEY,
@@ -49,7 +47,7 @@ _VIEW_CHANGE_REASONS: dict[ChangeKind, PlanReason] = {
 
 def resolve_model_plan_action(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     change_result: ChangeDetectionResult,
     full_refresh: bool,
 ) -> tuple[PlanAction, PlanReason]:
@@ -264,7 +262,7 @@ def build_model_warnings(
     return tuple(warnings)
 
 
-def _is_disabled(model: CompiledModel) -> bool:
+def _is_disabled(model: CompiledModelView) -> bool:
     """Check whether a model is explicitly disabled."""
 
     raw: object | None = model.config.values.get("enabled")
@@ -329,7 +327,7 @@ def _table_action(
 
 def _incremental_action(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     change_result: ChangeDetectionResult,
 ) -> tuple[PlanAction, PlanReason]:
     """Determine action for an incremental materialization."""
@@ -379,7 +377,7 @@ def _describe_finding(finding: SchemaFinding) -> str:
     return f"{finding.kind.value}"
 
 
-def get_materialization_type(model: CompiledModel) -> MaterializationType:
+def get_materialization_type(model: CompiledModelView) -> MaterializationType:
     """Extract materialization type from model config."""
 
     raw: object | None = model.config.values.get("materialized")

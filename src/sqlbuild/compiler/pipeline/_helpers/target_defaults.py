@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
     CompiledModel,
@@ -12,7 +14,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.compile.types import CompiledModelView, FunctionLanguage
+from sqlbuild.compiler.compiled_project.main._with_target_defaults import with_target_defaults
 
 
 def apply_target_defaults(
@@ -25,17 +28,14 @@ def apply_target_defaults(
 ) -> CompiledProject:
     """Apply adapter default schema/database to compiled project targets."""
 
-    models: tuple[CompiledModel, ...] = tuple(
-        replace(
-            m,
-            destination=_resolve_target(
-                target=m.destination,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-            ),
+    models: tuple[CompiledModelView, ...] = tuple(
+        _model_with_defaults(
+            model=model,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
         )
-        for m in project.models
+        for model in project.models
     )
     seeds: tuple[CompiledSeed, ...] = tuple(
         replace(
@@ -77,6 +77,30 @@ def apply_target_defaults(
         models=models,
         seeds=seeds,
         functions=functions,
+    )
+
+
+def _model_with_defaults(
+    *,
+    model: CompiledModelView,
+    default_schema: str | None,
+    default_database: str | None,
+    render_qualified_name: Callable[..., str | None],
+) -> CompiledModelView:
+    if not isinstance(model, CompiledModel):
+        return with_target_defaults(
+            model=cast(_native.NativeCompiledModel, model),
+            defaults=(default_schema, default_database),
+            render_qualified_name=render_qualified_name,
+        )
+    return replace(
+        model,
+        destination=_resolve_target(
+            target=model.destination,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
+        ),
     )
 
 

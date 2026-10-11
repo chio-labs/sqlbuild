@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.refactoring._helpers.project.project_files import (
     project_sql_files,
     python_string_locations,
@@ -58,10 +59,12 @@ from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
-def find_model(*, project: CompiledProject, name: str) -> CompiledModel:
+def find_model(*, project: CompiledProject, name: str) -> CompiledModelView:
     """Return the compiled model a target names."""
 
-    model: CompiledModel | None = next((item for item in project.models if item.name == name), None)
+    model: CompiledModelView | None = next(
+        (item for item in project.models if item.name == name), None
+    )
     if model is None:
         raise RefactorInputError(
             f"no model named '{name}' in this project",
@@ -85,7 +88,7 @@ def validate_identifier(*, name: str, noun: str) -> None:
 def model_target(*, project: RefactorProject, request: RefactorRequest) -> ModelTarget:
     """Resolve the model, its new name, and its destination file."""
 
-    model: CompiledModel = find_model(project=project.graph.project, name=request.model_name)
+    model: CompiledModelView = find_model(project=project.graph.project, name=request.model_name)
     source_path: str = model.relative_path.as_posix()
     destination: str = (
         _resolve_destination(
@@ -326,8 +329,8 @@ def decide_model_migration(
 ) -> ModelMigrationDecision:
     """Declare migrate_from whenever the relation moves, unless migrations cannot follow it."""
 
-    old_model: CompiledModel | None = _model(project=before, name=old)
-    new_model: CompiledModel | None = None if after is None else _model(project=after, name=new)
+    old_model: CompiledModelView | None = _model(project=before, name=old)
+    new_model: CompiledModelView | None = None if after is None else _model(project=after, name=new)
     if old_model is None:
         return ModelMigrationDecision(needed=False, reason="model not compiled")
     materialized: str | None = get_config_str(
@@ -353,7 +356,7 @@ def decide_model_migration(
 
 
 def _blocked_move(
-    *, after: CompiledProject, old_model: CompiledModel, new_model: CompiledModel
+    *, after: CompiledProject, old_model: CompiledModelView, new_model: CompiledModelView
 ) -> ModelMigrationDecision | None:
     old_database: str = (old_model.destination.database or "").lower()
     new_database: str = (new_model.destination.database or "").lower()
@@ -383,7 +386,7 @@ def _blocked_move(
     )
 
 
-def needs_column_migration(*, model: CompiledModel) -> bool:
+def needs_column_migration(*, model: CompiledModelView) -> bool:
     """Return whether renaming a column of this model must declare migrate_from."""
 
     materialized: str | None = get_config_str(values=model.config.values, key=MATERIALIZED_KEY)
@@ -395,11 +398,11 @@ def needs_column_migration(*, model: CompiledModel) -> bool:
     )
 
 
-def _model(*, project: CompiledProject, name: str) -> CompiledModel | None:
+def _model(*, project: CompiledProject, name: str) -> CompiledModelView | None:
     return next((model for model in project.models if model.name == name), None)
 
 
-def _location_key(model: CompiledModel) -> tuple[str, str, str]:
+def _location_key(model: CompiledModelView) -> tuple[str, str, str]:
     return (
         (model.destination.database or "").lower(),
         (model.destination.schema or "").lower(),

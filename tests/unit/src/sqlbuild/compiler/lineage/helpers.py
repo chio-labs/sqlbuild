@@ -11,14 +11,14 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredSchemaFile, DiscoveredSeedFile
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaSeedEntry, SettingsConfig
 
 
 def make_compiled_project(
     *,
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
     seeds: tuple[CompiledSeed, ...] = (),
     sql_analysis_enabled: bool = True,
 ) -> CompiledProject:
@@ -38,7 +38,7 @@ def make_compiled_model(
     name: str,
     query_sql: str,
     inferred_columns: tuple[str, ...] | None,
-) -> CompiledModel:
+) -> CompiledModelView:
     return CompiledModel(
         key=CompiledObjectKey(CompiledResourceType.MODEL, name),
         deps=(),
@@ -94,13 +94,13 @@ def edge_label(source_name: str, source_column: str, target_name: str, target_co
 
 def make_chain_models(
     *, chain_length: int, unrelated_model_count: int
-) -> tuple[CompiledModel, ...]:
-    root: CompiledModel = make_compiled_model(
+) -> tuple[CompiledModelView, ...]:
+    root: CompiledModelView = make_compiled_model(
         name="orders_0",
         query_sql="SELECT 1 AS order_id, 10 AS amount",
         inferred_columns=("order_id", "amount"),
     )
-    chain: tuple[CompiledModel, ...] = tuple(
+    chain: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=f"orders_{index}",
             query_sql=f'SELECT order_id, amount + 1 AS amount FROM __ref("orders_{index - 1}")',
@@ -108,7 +108,7 @@ def make_chain_models(
         )
         for index in range(1, chain_length)
     )
-    unrelated: tuple[CompiledModel, ...] = tuple(
+    unrelated: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=f"inventory_{index}",
             query_sql="SELECT 1 AS product_id, 5 AS quantity",

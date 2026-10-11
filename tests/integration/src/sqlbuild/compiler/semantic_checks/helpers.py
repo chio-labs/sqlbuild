@@ -20,7 +20,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import (
     complete_semantic_diagnostics,
 )
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -306,7 +307,7 @@ def completion_view(project: CompiledProject) -> tuple[object, ...]:
     )
 
 
-def _model_view(model: CompiledModel) -> tuple[object, ...]:
+def _model_view(model: CompiledModelView) -> tuple[object, ...]:
     return (
         model.name,
         model.binding_diagnostics,

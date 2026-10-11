@@ -13,7 +13,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _compute_microbatch_range,
     _compute_plan_cursor_bounds,
@@ -74,7 +74,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 def test_given_planner_owned_microbatch_with_cursor_end_when_planning_then_sentinels_are_deferred(
     test_case: MicrobatchCursorEndPlanTestCase,
 ) -> None:
-    model: CompiledModel = microbatch_model_with_cursor_end(test_case)
+    model: CompiledModelView = microbatch_model_with_cursor_end(test_case)
     snapshot: WarehouseSnapshot = WarehouseSnapshot(
         cursor_snapshots={
             model.name: ModelCursorSnapshot(
@@ -138,7 +138,7 @@ def test_given_planner_owned_microbatch_with_cursor_end_when_planning_then_senti
 def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_uses_overrides(
     test_case: PlanEntryCursorOverrideTestCase,
 ) -> None:
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=(),
         name="orders",
@@ -213,7 +213,7 @@ def test_given_explicit_cursor_overrides_without_snapshot_when_planning_then_use
 def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_ranges_match(
     test_case: AuthoritativeCursorOverrideTestCase,
 ) -> None:
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=(),
         name="orders",
@@ -247,7 +247,7 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
         }
     )
 
-    microbatch_model: CompiledModel = replace(
+    microbatch_model: CompiledModelView = replace(
         model,
         config=CompileModelConfig(
             values={
@@ -319,7 +319,7 @@ def test_given_runtime_owned_missing_snapshot_when_overrides_complete_then_all_r
 def test_given_planner_owned_model_backed_input_when_grain_is_coarser_then_range_is_concrete(
     test_case: PlannerOwnedMixedGrainRangeTestCase,
 ) -> None:
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="hourly_context"),
         deps=(),
         name="hourly_context",
@@ -397,7 +397,7 @@ def test_given_planner_owned_model_backed_input_when_grain_is_coarser_then_range
 def test_given_snapshot_cursor_grain_when_planning_then_dml_bound_matches_query_interval(
     test_case: PlanEntryCursorGrainTestCase,
 ) -> None:
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=(),
         name="orders",

@@ -8,11 +8,10 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner.models import (
     PlannerRelationsContext,
     PlannerScope,
@@ -86,7 +85,7 @@ def _collect_state_schemas(*, project: CompiledProject, scope: PlannerScope) -> 
     if not schemas:
         model_name: str
         for model_name in selected_model_names:
-            model: CompiledModel | None = scope.models_by_name.get(model_name)
+            model: CompiledModelView | None = scope.models_by_name.get(model_name)
             if model is not None and model.destination.schema is not None:
                 schemas.add(model.destination.schema)
     return tuple(sorted(schemas))

@@ -7,7 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, ExpansionSpan
+from sqlbuild.compiler.compile.models import CompiledObjectKey, ExpansionSpan
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint.constants import (
     DEFAULT_MAX_LITERAL_LENGTH,
@@ -220,7 +221,7 @@ class LintRunResult:
 class CompileFacts:
     """Per-model outputs and per-owner diagnostics of one compilation."""
 
-    models: dict[CompiledObjectKey, CompiledModel]
+    models: dict[CompiledObjectKey, CompiledModelView]
     model_paths: dict[CompiledObjectKey, Path]
     diagnostics: dict[Path, Counter[DiagnosticIdentity]]
 

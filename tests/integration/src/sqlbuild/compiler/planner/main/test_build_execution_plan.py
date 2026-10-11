@@ -11,6 +11,7 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.changes import detect as change_detection
 from sqlbuild.compiler.planner._helpers.planning import identities as identity_planning
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -529,7 +530,7 @@ def test_given_view_and_table_with_target_default_when_assembling_plan_then_only
         models=(
             view_model,
             replace(
-                table_model,
+                compiled_model_record(table_model),
                 config=replace(
                     table_model.config,
                     table_type=ResolvedTableType(

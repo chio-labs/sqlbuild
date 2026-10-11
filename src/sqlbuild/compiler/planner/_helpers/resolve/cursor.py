@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from datetime import datetime
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -496,14 +496,14 @@ def _parse_required(*, value: str, cursor_type: str | None) -> CursorScalar:
 def type_cursor_overrides(
     *,
     cursor_overrides: CursorOverrides | None,
-    selected_models: Iterable[CompiledModel],
+    selected_models: Iterable[CompiledModelView],
 ) -> CursorOverrides | None:
     """Type `--start-cursor`/`--end-cursor` from the selected cursor models, else the literal."""
 
     if cursor_overrides is None or not cursor_overrides.has_untyped:
         return cursor_overrides
     model_names_by_type: dict[CursorType, list[str]] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in selected_models:
         cursor_type: CursorType | None = _model_cursor_type(model=model)
         if cursor_type is not None:
@@ -529,7 +529,7 @@ def type_cursor_overrides(
     return cursor_overrides.typed_as(cursor_type=resolved_type)
 
 
-def _model_cursor_type(*, model: CompiledModel) -> CursorType | None:
+def _model_cursor_type(*, model: CompiledModelView) -> CursorType | None:
     materialized: str | None = get_config_str(values=model.config.values, key="materialized")
     cursor_column: str | None = get_config_str(values=model.config.values, key="cursor")
     if materialized != MaterializationType.INCREMENTAL or cursor_column is None:

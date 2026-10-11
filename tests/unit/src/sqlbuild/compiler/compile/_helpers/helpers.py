@@ -34,7 +34,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
@@ -57,6 +56,7 @@ from sqlbuild.compiler.compile.models import (
     MacroContext,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
     CompiledResourceType,
     FunctionLanguage,
     ModelInput,
@@ -215,7 +215,7 @@ def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, L
     )
 
 
-def compile_first_model(*, project_dir: Path) -> CompiledModel:
+def compile_first_model(*, project_dir: Path) -> CompiledModelView:
     """Compile a fixture project and return its first model."""
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)

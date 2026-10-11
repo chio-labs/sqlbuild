@@ -70,9 +70,9 @@ def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProject:
 
 
 def dropped_fields(*, before: object, after: object) -> frozenset[str]:
-    """Return dataclass fields whose values differ between two snapshots of one object."""
+    """Return the fields of `after`'s dataclass whose values differ between the two snapshots."""
 
-    names: tuple[str, ...] = tuple(field.name for field in dataclasses.fields(type(before)))
+    names: tuple[str, ...] = tuple(field.name for field in dataclasses.fields(type(after)))
     return frozenset(filter(lambda name: getattr(before, name) != getattr(after, name), names))
 
 

@@ -18,6 +18,7 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompactBatchResponseCallback,
+    CompiledModelView,
     CompiledResourceType,
     CompileInputsReadyCallback,
     DiagnosticPhase,
@@ -1116,7 +1117,7 @@ class CompiledProject:
     compile_cache_dir: Path | None = None
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
-    models: tuple[CompiledModel, ...] = field(default_factory=tuple)
+    models: tuple[CompiledModelView, ...] = field(default_factory=tuple)
     sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
     seeds: tuple[CompiledSeed, ...] = field(default_factory=tuple)
     functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)

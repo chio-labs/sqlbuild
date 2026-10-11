@@ -19,7 +19,6 @@ from sqlbuild.cli.output.models import (
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledProject,
@@ -30,6 +29,7 @@ from sqlbuild.compiler.compile.models import (
     RelatedLocation,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -71,7 +71,7 @@ def format_compile_text(
     """Format human-readable compile output."""
 
     style: CliStyle = CliStyle(use_color=use_color)
-    visible_project_models: tuple[CompiledModel, ...] = _selected_models(
+    visible_project_models: tuple[CompiledModelView, ...] = _selected_models(
         graph=graph,
         selected_keys=selected_keys,
     )
@@ -83,7 +83,7 @@ def format_compile_text(
         ),
         "",
     ]
-    visible_models: tuple[CompiledModel, ...] = visible_project_models[:_HUMAN_MODEL_LIMIT]
+    visible_models: tuple[CompiledModelView, ...] = visible_project_models[:_HUMAN_MODEL_LIMIT]
     model_name_width: int = _model_name_width(visible_models)
     error_models: frozenset[str] = _models_with_error_diagnostics(diagnostics)
     model_index: int
@@ -284,7 +284,7 @@ def _selected_models(
     *,
     graph: ProjectGraph,
     selected_keys: frozenset[CompiledObjectKey] | None,
-) -> tuple[CompiledModel, ...]:
+) -> tuple[CompiledModelView, ...]:
     if selected_keys is None:
         return graph.project.models
     selected_names: frozenset[str] = frozenset(
@@ -323,7 +323,7 @@ def _resources(*, graph: ProjectGraph, lineage: ProjectColumnLineage | None) -> 
 def _model_resource(
     *,
     graph: ProjectGraph,
-    model: CompiledModel,
+    model: CompiledModelView,
     lineage: ProjectColumnLineage | None,
 ) -> dict[str, object]:
     item: dict[str, object] = {
@@ -472,7 +472,7 @@ def _test_resource(test: CompiledSqlTest) -> dict[str, object]:
 
 
 def _lineage_summary(
-    *, lineage: ProjectColumnLineage | None, model: CompiledModel
+    *, lineage: ProjectColumnLineage | None, model: CompiledModelView
 ) -> dict[str, object]:
     if lineage is None:
         return {"available": False}
@@ -493,7 +493,7 @@ def _artifacts(*, written: WrittenTarget, manifest: bool) -> dict[str, object]:
     }
 
 
-def _column_count(model: CompiledModel) -> int:
+def _column_count(model: CompiledModelView) -> int:
     if model.inferred_columns is not None:
         return len(model.inferred_columns)
     if model.schema_entry is not None:
@@ -501,7 +501,7 @@ def _column_count(model: CompiledModel) -> int:
     return 0
 
 
-def _model_name_width(models: tuple[CompiledModel, ...]) -> int:
+def _model_name_width(models: tuple[CompiledModelView, ...]) -> int:
     longest: int = max((len(model.name) for model in models), default=0)
     return min(max(longest, _MIN_MODEL_NAME_WIDTH), _MAX_MODEL_NAME_WIDTH)
 
@@ -705,7 +705,7 @@ def _caret_line(*, location: SourceLocation, source_line: str, message: str | No
     return " " * (start_column - 1) + "^" * caret_count + suffix
 
 
-def _model_source_texts(models: tuple[CompiledModel, ...]) -> dict[Path, str]:
+def _model_source_texts(models: tuple[CompiledModelView, ...]) -> dict[Path, str]:
     return {model.relative_path: model.authored_sql for model in models if model.authored_sql}
 
 

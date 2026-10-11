@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledSource
+from sqlbuild.compiler.compile.models import CompiledSource
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.contract_adoption._helpers.compare import (
     compare_evidence,
     model_evidence,
@@ -18,7 +19,7 @@ def compare_contracts(
     *,
     adapter: BaseAdapter,
     connection: object,
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
     sources: tuple[CompiledSource, ...],
 ) -> tuple[ContractEvidence, ...]:
     """Compare selected declarations with one bulk read of physical columns."""

@@ -30,13 +30,13 @@ from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlExpansion,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -54,7 +54,7 @@ from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaVal
 
 
 def _model_shapes(
-    *, model: CompiledModel, shapes: dict[str, dict[str, str]]
+    *, model: CompiledModelView, shapes: dict[str, dict[str, str]]
 ) -> dict[str, dict[str, str]]:
     return {name: shapes.get(name, {}) for name in binding_relation_names(model.references)}
 
@@ -98,7 +98,7 @@ def get_source_binding_diagnostics(
         else None
     )
     profile = replace(profile, binding_catalog=physical_catalog)
-    by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     graph: dict[str, tuple[str, ...]] = {}
     for model in project.models:
         graph[model.name] = tuple(
@@ -107,9 +107,9 @@ def get_source_binding_diagnostics(
             if reference.ref_kind == SqlReferenceKind.REF and reference.ref_name in by_name
         )
     affected: set[str] = set()
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     for name in TopologicalSorter(graph).static_order():
-        model: CompiledModel = by_name[name]
+        model: CompiledModelView = by_name[name]
         if model.key not in selected_keys or model.config.values.get("sql_analysis") is False:
             continue
         if any(
@@ -217,7 +217,7 @@ def _adds_physical_evidence(*, physical: dict[str, str], known: dict[str, str] |
     )
 
 
-def _placeholders(model: CompiledModel) -> dict[str, str] | None:
+def _placeholders(model: CompiledModelView) -> dict[str, str] | None:
     values: object = model.config.values.get("placeholders")
     if isinstance(values, dict):
         return {str(key): str(value) for key, value in values.items()}

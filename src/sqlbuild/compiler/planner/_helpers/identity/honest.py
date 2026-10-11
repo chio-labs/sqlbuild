@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
     compose_native_graph_identity,
@@ -61,13 +61,13 @@ def with_honest_model_write_hashes(
         base_identity_hashes=base_hashes,
         compose_identity=compose_native_graph_identity,
     )
-    models_by_name: dict[str, CompiledModel] = scope.models_by_name
+    models_by_name: dict[str, CompiledModelView] = scope.models_by_name
     model_changes: dict[str, ChangeDetectionResult] = dict(changes.models)
     key: CompiledObjectKey
     for key in scope.execution_order:
         if key.resource_type != CompiledResourceType.MODEL:
             continue
-        model: CompiledModel | None = models_by_name.get(key.name)
+        model: CompiledModelView | None = models_by_name.get(key.name)
         if model is None:
             continue
         if key not in scope.selected_keys:
@@ -162,7 +162,7 @@ def _graph_identity_nodes(
             upstream_keys=(),
             local_hash=seed_hash,
         )
-    model: CompiledModel
+    model: CompiledModelView
     for model in scope.models_by_name.values():
         model_key: GraphNodeKey = graph_key_for_compiled_resource(
             resource_type=CompiledResourceType.MODEL,

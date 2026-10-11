@@ -15,13 +15,14 @@ import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as cont
 from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompilerDiagnostic,
     DynamicColumnContractProof,
     DynamicColumnFamilyProof,
     InferredColumn,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -198,7 +199,7 @@ def perturbed_project(*, project: CompiledProject, rng: random.Random) -> Compil
     )
 
 
-def perturbed_model(*, model: CompiledModel, rng: random.Random) -> CompiledModel:
+def perturbed_model(*, model: CompiledModelView, rng: random.Random) -> CompiledModelView:
     """One model with generated contract config, declared shape, inference and proof."""
 
     values: dict[str, object] = dict(model.config.values)
@@ -209,7 +210,7 @@ def perturbed_model(*, model: CompiledModel, rng: random.Random) -> CompiledMode
     ):
         values.update(rng.choice(({}, *({key: option} for option in options))))
     return replace(
-        model,
+        compiled_model_record(model),
         config=replace(model.config, values=values),
         schema_entry=rng.choice((None, *(_schema_entry(model=model, rng=rng),) * 9)),
         inferred_columns=rng.choice((None, *(_inferred_columns(rng=rng),) * 9)),
@@ -219,7 +220,7 @@ def perturbed_model(*, model: CompiledModel, rng: random.Random) -> CompiledMode
     )
 
 
-def _schema_entry(*, model: CompiledModel, rng: random.Random) -> SchemaModelEntry:
+def _schema_entry(*, model: CompiledModelView, rng: random.Random) -> SchemaModelEntry:
     columns: tuple[SchemaColumn, ...] = tuple(
         SchemaColumn(
             name=name,
@@ -344,7 +345,7 @@ def contract_statuses(
     return native_contract_statuses(request=request, diagnostics=len(result.diagnostics))
 
 
-def _status_row(model: CompiledModel) -> tuple[object, ...]:
+def _status_row(model: CompiledModelView) -> tuple[object, ...]:
     contract: object = model.config.values.get("contract")
     return (
         model.name,
@@ -419,14 +420,14 @@ def _compares_typed_column(*, model: Sequence[Any], implicit: bool) -> bool:
 def with_declared_type(*, project: CompiledProject, declared_type: str) -> CompiledProject:
     """The project with its enforced staging model declaring `declared_type` for every column."""
 
-    by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
-    staging: CompiledModel = by_name[_ENFORCED_MODEL]
+    by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
+    staging: CompiledModelView = by_name[_ENFORCED_MODEL]
     assert staging.schema_entry is not None
     columns: tuple[SchemaColumn, ...] = tuple(
         replace(column, type=declared_type) for column in staging.schema_entry.columns
     )
     by_name[_ENFORCED_MODEL] = replace(
-        staging, schema_entry=replace(staging.schema_entry, columns=columns)
+        compiled_model_record(staging), schema_entry=replace(staging.schema_entry, columns=columns)
     )
     return replace(
         project,

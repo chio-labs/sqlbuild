@@ -16,6 +16,7 @@ use sqlbuild_analysis::compiled_project::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
@@ -110,6 +111,13 @@ impl NativeCompiledProject {
     pub(crate) fn input(&self, index: usize) -> PyResult<&ModelInputRecord> {
         self.inputs
             .get(index)
+            .ok_or_else(|| PyIndexError::new_err(index))
+    }
+
+    /// The input record at `index`, for recording what later stages finish.
+    pub(crate) fn input_mut(&mut self, index: usize) -> PyResult<&mut ModelInputRecord> {
+        self.inputs
+            .get_mut(index)
             .ok_or_else(|| PyIndexError::new_err(index))
     }
 
@@ -308,5 +316,6 @@ fn declaration(row: DeclarationPy<'_>) -> PyResult<DeclarationFact> {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelInput>()?;
+    module.add_class::<NativeCompiledModel>()?;
     module.add_class::<NativeCompiledProject>()
 }

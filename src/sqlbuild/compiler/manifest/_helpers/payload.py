@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompiledSeed,
     CompiledSource,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.manifest._helpers.macros import (
     build_manifest_macro_nodes,
 )
@@ -58,7 +58,7 @@ def build_manifest_payload(
     )
     python_hook_metadata: dict[str, dict[str, object]] = _build_python_hook_metadata(project)
 
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         plan_entry: ModelPlanEntry | None = model_plan_map.get(model.name)
         unique_id: str = f"model.{project_name}.{model.name}"

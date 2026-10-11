@@ -10,10 +10,9 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModel,
     CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_BUILT,
     NATIVE_LINEAGE_UNKNOWN_DIALECT,
@@ -49,7 +48,7 @@ def build_native_fast_project_column_lineage(
 
     if not project.settings.sql_analysis:
         return None
-    models: tuple[CompiledModel, ...] = tuple(
+    models: tuple[CompiledModelView, ...] = tuple(
         model for model in project.models if model_names is None or model.name in model_names
     )
     requests: list[tuple[bool, str, list[str]]] = []
@@ -108,11 +107,11 @@ def build_native_fast_project_column_lineage(
     )
 
 
-def _needs_star_expansion(model: CompiledModel) -> bool:
+def _needs_star_expansion(model: CompiledModelView) -> bool:
     return model.fast_lineage_has_star and not model.fast_lineage_star_resolved
 
 
-def _native_request(model: CompiledModel) -> tuple[bool, str, list[str]] | None:
+def _native_request(model: CompiledModelView) -> tuple[bool, str, list[str]] | None:
     columns: Sequence[CompiledLineageColumnFact] | None = model.fast_lineage_columns
     if columns is None:
         return (False, model.query_sql, [column.name for column in model.inferred_columns or ()])

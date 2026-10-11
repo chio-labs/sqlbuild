@@ -1,3 +1,4 @@
+pub(crate) mod compiled_model_view;
 pub(crate) mod model_input_view;
 pub(crate) mod model_loop;
 pub(crate) mod model_loop_calls;

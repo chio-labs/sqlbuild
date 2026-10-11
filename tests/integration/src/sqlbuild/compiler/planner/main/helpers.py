@@ -26,7 +26,12 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     FunctionArgument,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledResourceType,
+    FunctionLanguage,
+)
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -76,7 +81,7 @@ def build_project_from_test_case(
 ) -> CompiledProject:
     """Build a CompiledProject from an integration test case."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     target_schema: str
     for model_name, target_schema in test_case.model_locations.items():
@@ -227,7 +232,7 @@ def build_project_from_source_cursor_input_test_case(
             source_entries=(source_entry,),
         ),
     )
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.MODEL,
             name=test_case.model_name,
@@ -282,12 +287,12 @@ def build_future_cursor_project() -> CompiledProject:
         expected_error_fragment="",
     )
     project: CompiledProject = build_project_from_source_cursor_input_test_case(case)
-    model: CompiledModel = project.models[0]
+    model: CompiledModelView = project.models[0]
     return replace(
         project,
         models=(
             replace(
-                model,
+                compiled_model_record(model),
                 config=replace(
                     model.config,
                     values={
@@ -349,7 +354,7 @@ def build_project_from_format_test_case(
 ) -> CompiledProject:
     """Build a CompiledProject from a format integration test case."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     target_schema: str
     for model_name, target_schema in test_case.model_locations.items():

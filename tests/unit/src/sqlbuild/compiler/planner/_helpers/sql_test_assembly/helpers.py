@@ -34,7 +34,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -263,7 +263,7 @@ def build_test_and_project(
         ),
     )
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     query_sql: str
     for model_name, query_sql in test_case.model_queries.items():
@@ -506,7 +506,7 @@ CURSOR_WINDOW_ADAPTERS: dict[str, BaseAdapter] = {
 }
 
 
-def build_cursor_model(*, cursor_type: str, cursor_grain: str | None) -> CompiledModel:
+def build_cursor_model(*, cursor_type: str, cursor_grain: str | None) -> CompiledModelView:
     """Build one incremental model whose query uses both cursor intrinsics."""
 
     values: dict[str, object] = {

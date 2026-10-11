@@ -10,7 +10,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import EnumDeclaration, EnumMember
 
 _ENUM_DECLARATION: EnumDeclaration = EnumDeclaration(
@@ -32,7 +32,7 @@ def build_project(
     authored_sql: str | None = None,
     enum_columns: tuple[str, ...] = (),
 ) -> CompiledProject:
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
         deps=(),
         name=name,

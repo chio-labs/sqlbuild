@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -226,7 +226,7 @@ def _model(
     relative_path: str,
     query_sql: str = "SELECT 1",
     inferred_columns: tuple[str, ...] = (),
-) -> CompiledModel:
+) -> CompiledModelView:
     return CompiledModel(
         key=key,
         deps=deps,

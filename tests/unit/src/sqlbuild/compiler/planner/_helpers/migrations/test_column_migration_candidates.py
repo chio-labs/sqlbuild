@@ -16,7 +16,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.migrations.columns import plan_column_migrations
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -49,7 +49,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.migrations.helpers import
 def test_given_untokenizable_tracked_model_when_planning_column_migrations_then_error_names_model(
     test_case: UnfingerprintableCandidateTestCase,
 ) -> None:
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=(),
         name="orders",

@@ -20,7 +20,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     LoadedMacro,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -101,7 +101,7 @@ def build_test_model(
     description: str | None = None,
     columns: tuple[SchemaColumn, ...] = (),
     meta: dict[str, object] | None = None,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a minimal CompiledModel for manifest tests."""
 
     effective_alias: str = cast(str, (name, alias)[alias is not None])
@@ -230,7 +230,7 @@ def build_test_plan_entry(
 
 def build_test_project(
     *,
-    models: tuple[CompiledModel, ...] = (),
+    models: tuple[CompiledModelView, ...] = (),
     sources: tuple[CompiledSource, ...] = (),
     seeds: tuple[CompiledSeed, ...] = (),
     sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = (),

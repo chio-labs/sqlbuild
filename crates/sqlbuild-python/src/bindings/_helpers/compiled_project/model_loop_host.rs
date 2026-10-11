@@ -9,7 +9,7 @@ use sqlbuild_analysis::compiled_project::models::{
 };
 
 use crate::bindings::_helpers::compiled_project::model_input_view::{
-    ExpansionRecord, ModelInputRecord, SchemaRecord,
+    ExpansionRecord, InputProjections, ModelInputRecord, SchemaRecord,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_header::AttachedHeader;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
@@ -209,6 +209,8 @@ pub(crate) fn finished_record<'py>(
             declaration_spans: span_rows(&finished.declarations.spliced),
             macro_spans,
         },
+        projections: InputProjections::default(),
+        compiled: None,
     };
     let (values, encoding_error) = config_values(&stripped);
     let facts: CompiledModelFacts = plain_model_facts(PlainModel {

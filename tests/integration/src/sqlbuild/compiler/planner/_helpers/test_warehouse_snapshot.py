@@ -9,12 +9,12 @@ import pytest
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
@@ -1041,8 +1041,8 @@ def test_given_full_refresh_with_time_only_watermark_contract_when_gathering_the
             ),
         ),
     )
-    upstream: CompiledModel = replace(
-        project.models[0],
+    upstream: CompiledModelView = replace(
+        compiled_model_record(project.models[0]),
         config=replace(
             project.models[0].config,
             values=project.models[0].config.values | {"contract": "enforced"},

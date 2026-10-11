@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledFunction, CompiledModel, CompiledSeed
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledFunction, CompiledSeed
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
     build_model_local_identity_hash,
@@ -113,7 +113,7 @@ def build_direct_model_version_identities(
     for key in scope.execution_order:
         if not hasattr(key, "resource_type") or key.resource_type != CompiledResourceType.MODEL:
             continue
-        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        model: CompiledModelView | None = scope.models_by_name.get(key.name)
         if model is None:
             continue
         metadata_json: str = build_model_version_identity_metadata_json(

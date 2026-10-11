@@ -7,7 +7,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     MacroGeneratedReferenceCollectionTestCase,
     MacroGeneratedReferenceErrorTestCase,
@@ -398,5 +399,5 @@ def test_given_typed_macro_arguments_when_compiling_then_every_argument_is_a_dep
 
     project: CompiledProject = compile_and_assemble(project_dir=tmp_path)
 
-    summary: CompiledModel = {model.name: model for model in project.models}["order_summary"]
+    summary: CompiledModelView = {model.name: model for model in project.models}["order_summary"]
     assert frozenset(dep.name for dep in summary.deps) == test_case.expected_dependency_names

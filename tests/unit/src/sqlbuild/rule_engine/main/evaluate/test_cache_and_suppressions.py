@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import RuleExemption, RuleIgnore, RulesConfig, RulesResult
@@ -72,11 +73,11 @@ def test_given_authored_sql_changes_when_compiled_sql_is_same_then_cache_is_inva
     constant_source: str = compiled_sql.replace("7", '@const("minimum_id")')
     first_project: CompiledProject = replace(
         project,
-        models=(replace(project.models[0], authored_sql=constant_source),),
+        models=(replace(compiled_model_record(project.models[0]), authored_sql=constant_source),),
     )
     bare_project: CompiledProject = replace(
         project,
-        models=(replace(project.models[0], authored_sql=compiled_sql),),
+        models=(replace(compiled_model_record(project.models[0]), authored_sql=compiled_sql),),
     )
     config: RulesConfig = RulesConfig(select=("SQBRDECLARATION102",))
     _ = evaluate(project=first_project, config=config, project_dir=tmp_path)

@@ -9,7 +9,8 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     FunctionReturnColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps
 from sqlbuild.compiler.planner._helpers.identity.direct import (
     build_direct_model_version_identities,
@@ -34,12 +35,12 @@ def build_table_function_graph_identities(*, base_query: str) -> DirectModelVers
         resource_type=CompiledResourceType.MODEL,
         name="customer_order_summary",
     )
-    base_model: CompiledModel = _build_model(
+    base_model: CompiledModelView = _build_model(
         key=base_key,
         query_sql=base_query,
         deps=(),
     )
-    consumer_model: CompiledModel = _build_model(
+    consumer_model: CompiledModelView = _build_model(
         key=consumer_key,
         query_sql='SELECT * FROM __table_fn("customer_orders")()',
         deps=(function_key,),
@@ -76,7 +77,7 @@ def _build_model(
     key: CompiledObjectKey,
     query_sql: str,
     deps: tuple[CompiledObjectKey, ...],
-) -> CompiledModel:
+) -> CompiledModelView:
     return CompiledModel(
         key=key,
         deps=deps,
@@ -94,11 +95,13 @@ def _build_model(
 
 
 def build_hooked_model_identity_json(*, hook_config: dict[str, object]) -> str:
-    model: CompiledModel = replace(
-        _build_model(
-            key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
-            query_sql="SELECT 1 AS order_id",
-            deps=(),
+    model: CompiledModelView = replace(
+        compiled_model_record(
+            _build_model(
+                key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
+                query_sql="SELECT 1 AS order_id",
+                deps=(),
+            )
         ),
         config=CompileModelConfig(values=hook_config),
     )

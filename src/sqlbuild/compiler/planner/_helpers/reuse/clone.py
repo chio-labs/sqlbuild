@@ -7,12 +7,12 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSource,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
@@ -100,7 +100,7 @@ def build_clone_model_entries(
         connection=connection,
     )
     entries_by_key: dict[CompiledObjectKey, ModelPlanEntry] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if model.key not in plan.selected_keys or is_disabled(model):
             continue
@@ -261,7 +261,7 @@ def build_origin_model_entries(
     selected_names: frozenset[str],
 ) -> tuple[ModelPlanEntry, ...]:
     entries: list[ModelPlanEntry] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if model.name not in selected_names or is_disabled(model):
             continue
@@ -325,6 +325,6 @@ def build_origin_seed_entries(
     )
 
 
-def is_disabled(model: CompiledModel) -> bool:
+def is_disabled(model: CompiledModelView) -> bool:
     raw: object | None = model.config.values.get("enabled")
     return isinstance(raw, bool) and not raw

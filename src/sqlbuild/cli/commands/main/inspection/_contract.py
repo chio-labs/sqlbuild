@@ -18,11 +18,11 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import AdapterConnectionContext, ContractCommandRequest
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledSource,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, ContractEvidence
 from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -68,7 +68,7 @@ def run_contract(request: ContractCommandRequest) -> int:
     selected: frozenset[CompiledObjectKey] = select_project_graph(
         graph=graph, select=request.select, exclude=request.exclude
     )
-    selected_models: tuple[CompiledModel, ...] = tuple(
+    selected_models: tuple[CompiledModelView, ...] = tuple(
         model for model in graph.project.models if model.key in selected
     )
     selected_sources: tuple[CompiledSource, ...] = tuple(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.changes.detect import (
     detect_model_changes as _detect_model_changes,
 )
@@ -11,7 +11,7 @@ from sqlbuild.compiler.planner.models import ChangeDetectionResult, WarehouseSna
 
 def detect_model_changes(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     sql_analysis_enabled: bool,
     query_change_tracking: bool,

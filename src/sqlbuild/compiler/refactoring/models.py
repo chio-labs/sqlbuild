@@ -7,7 +7,8 @@ from pathlib import Path
 
 from yaml.nodes import ScalarNode
 
-from sqlbuild.compiler.compile.models import CompiledModel, ExpansionSpan
+from sqlbuild.compiler.compile.models import ExpansionSpan
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.refactoring.types import (
@@ -46,7 +47,7 @@ class RefactorRequest:
 class ModelTarget:
     """The model a request names, and the request with its name and destination resolved."""
 
-    model: CompiledModel
+    model: CompiledModelView
     request: RefactorRequest
     source_path: str
 
@@ -296,7 +297,7 @@ class ColumnRenameContext:
     """Everything a column rename reads while it walks downstream models."""
 
     project: RefactorProject
-    owner: CompiledModel
+    owner: CompiledModelView
     dialect: str
     columns: ResourceColumns
     contents: dict[str, str]

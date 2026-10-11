@@ -14,8 +14,7 @@ from sqlbuild.adapter.contract.models import (
     RetentionState,
 )
 from sqlbuild.adapter.contract.types import BuiltinAdapter, RetentionChangePhase, RetentionScope
-from sqlbuild.compiler.compile.models import CompiledModel
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
     PlannerRuntime,
@@ -46,10 +45,10 @@ def plan_table_types(
     selected_names: frozenset[str] = frozenset(
         key.name for key in scope.selected_keys if key.resource_type == CompiledResourceType.MODEL
     )
-    selected_models: tuple[CompiledModel, ...] = tuple(
+    selected_models: tuple[CompiledModelView, ...] = tuple(
         model for model in runtime.project.models if model.name in selected_names
     )
-    declared_models: tuple[CompiledModel, ...] = tuple(
+    declared_models: tuple[CompiledModelView, ...] = tuple(
         model for model in selected_models if model.config.table_type.declared
     )
     if declared_models and runtime.adapter.adapter_name != BuiltinAdapter.SNOWFLAKE:
@@ -123,7 +122,7 @@ def plan_retention(
     selected_names: frozenset[str] = frozenset(
         key.name for key in scope.selected_keys if key.resource_type == CompiledResourceType.MODEL
     )
-    selected_models: tuple[CompiledModel, ...] = tuple(
+    selected_models: tuple[CompiledModelView, ...] = tuple(
         model
         for model in runtime.project.models
         if model.name in selected_names
@@ -147,7 +146,7 @@ def plan_retention(
 
 
 def _plan_relation_retention(
-    *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, model: CompiledModel
+    *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, model: CompiledModelView
 ) -> tuple[RetentionPlanEntry, ...]:
     retention: ResolvedTimeTravelRetention = model.config.time_travel_retention
     if retention.desired_days is None or retention.source is None:
@@ -262,7 +261,7 @@ def _plan_relation_retention(
 
 
 def _plan_bigquery_retention(
-    *, runtime: PlannerRuntime, models: tuple[CompiledModel, ...]
+    *, runtime: PlannerRuntime, models: tuple[CompiledModelView, ...]
 ) -> tuple[RetentionPlanEntry, ...]:
     target: TargetConfig = effective_target_config(runtime=runtime)
     if not target.owns_time_travel_retention_namespace:
@@ -270,8 +269,8 @@ def _plan_bigquery_retention(
             "BigQuery managed time_travel_retention requires target "
             "owns_time_travel_retention_namespace = true"
         )
-    all_managed: dict[tuple[str | None, str], list[CompiledModel]] = defaultdict(list)
-    model: CompiledModel
+    all_managed: dict[tuple[str | None, str], list[CompiledModelView]] = defaultdict(list)
+    model: CompiledModelView
     for model in runtime.project.models:
         retention: ResolvedTimeTravelRetention = model.config.time_travel_retention
         if (
@@ -286,7 +285,7 @@ def _plan_bigquery_retention(
     }
     entries: list[RetentionPlanEntry] = []
     for database, schema in sorted(selected_scopes, key=lambda item: (item[0] or "", item[1])):
-        scope_models: list[CompiledModel] = all_managed[(database, schema)]
+        scope_models: list[CompiledModelView] = all_managed[(database, schema)]
         desired_values: set[int] = {
             desired
             for item in scope_models

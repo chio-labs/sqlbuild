@@ -11,11 +11,11 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.constants import DEFERRED_TARGET_CONTEXT_KEYS
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -37,7 +37,7 @@ def build_deferred_locations(
     """Build physical locations for all models and seeds under a deferred target."""
 
     locations: dict[str, CompiledRelationLocation] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         locations[model.name] = _resolve_deferred_location(
             target=model.destination,

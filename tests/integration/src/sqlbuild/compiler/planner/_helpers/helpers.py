@@ -18,7 +18,8 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -91,7 +92,7 @@ def build_project_with_targets(
 ) -> CompiledProject:
     """Build a minimal CompiledProject with explicit target schemas."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     target_schema: str | None
     for model_name, target_schema in (model_locations or {}).items():
@@ -219,12 +220,12 @@ def with_leading_enforced_model_contracts(
 ) -> CompiledProject:
     """Attach enforced contracts to leading models in a compiled test project."""
 
-    models: list[CompiledModel] = list(project.models)
+    models: list[CompiledModelView] = list(project.models)
     for index, (model_name, column_names) in enumerate(columns_by_model.items()):
-        model: CompiledModel = models[index]
+        model: CompiledModelView = models[index]
         assert model.name == model_name
         models[index] = replace(
-            model,
+            compiled_model_record(model),
             config=replace(model.config, values=model.config.values | {"contract": "enforced"}),
             schema_entry=SchemaModelEntry(
                 name=model.name,

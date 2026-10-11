@@ -7,11 +7,14 @@ from typing import cast
 
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
+    CompiledObjectKey,
+    CompiledRelationLocation,
     CompiledSqlExpansion,
     CompilerDiagnostic,
     CompileSqlReference,
     DeclarationScopeResolver,
     ExpansionSpan,
+    InferredColumn,
     ModelInputBuildContext,
     NativeModelConfigSession,
 )
@@ -29,6 +32,7 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
     SqlHookEntry,
 )
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
@@ -95,5 +99,11 @@ def model_loop_classes(
             "schema_model_entry": SchemaModelEntry,
             "sql_expansion": CompiledSqlExpansion,
             "expansion_span": ExpansionSpan,
+            "compiled": {
+                "object_key": CompiledObjectKey,
+                "relation_location": CompiledRelationLocation,
+                "inferred_column": InferredColumn,
+                "nullability": InferredNullability,
+            },
         },
     }

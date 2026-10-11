@@ -28,7 +28,6 @@ from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -36,7 +35,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_TABLE_NAME,
     FUNCTION_NODE_TYPES,
@@ -401,7 +400,7 @@ def gather_redirected_cursor_snapshots(
             origin_cursor_column_overrides=origin_cursor_columns,
         ),
     )
-    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    model_map: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     return {
         name: replace(snapshot, target_relation=model_map[name].destination.qualified_name)
         for name, snapshot in snapshots.items()
@@ -461,7 +460,7 @@ def _resolve_database(
 ) -> str | None:
     """Extract the database from the first model target that declares one."""
 
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if selected_keys is not None and model.key not in selected_keys:
             continue
@@ -490,7 +489,7 @@ def _collect_target_schemas(
     """Collect distinct non-null target schemas from models, seeds, and functions."""
 
     schemas: set[str] = set()
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if selected_keys is not None and model.key not in selected_keys:
             continue
@@ -520,7 +519,7 @@ def _build_metadata_name_filter(
 ) -> tuple[str, ...] | None:
     names: set[str] = set()
     if selected_keys is None:
-        model: CompiledModel
+        model: CompiledModelView
         for model in project.models:
             names.add(model.destination.name)
         seed: CompiledSeed
@@ -528,14 +527,14 @@ def _build_metadata_name_filter(
             names.add(seed.destination.name)
     else:
         selected_names: frozenset[str] = frozenset(key.name for key in selected_keys)
-        model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+        model_map: dict[str, CompiledModelView] = {model.name: model for model in project.models}
         seed_map: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
         source_map: dict[str, SourceEntry] = {
             source.source_entry.name: source.source_entry for source in project.sources
         }
         key: CompiledObjectKey
         for key in selected_keys:
-            selected_model: CompiledModel | None = model_map.get(key.name)
+            selected_model: CompiledModelView | None = model_map.get(key.name)
             if selected_model is not None:
                 names.add(selected_model.destination.name)
                 names.update(
@@ -571,8 +570,8 @@ def _build_metadata_name_filter(
 
 def _model_upstream_names(
     *,
-    model: CompiledModel,
-    model_map: dict[str, CompiledModel],
+    model: CompiledModelView,
+    model_map: dict[str, CompiledModelView],
     seed_map: dict[str, CompiledSeed],
     selected_names: frozenset[str],
 ) -> frozenset[str]:
@@ -589,7 +588,7 @@ def _model_upstream_names(
         ):
             continue
         if reference.ref_kind == SqlReferenceKind.REF:
-            upstream_model: CompiledModel | None = model_map.get(reference.ref_name)
+            upstream_model: CompiledModelView | None = model_map.get(reference.ref_name)
             if upstream_model is not None:
                 names.add(upstream_model.destination.name)
             continue
@@ -617,7 +616,7 @@ def _gather_relations(
     )
     result: dict[str, RelationInfo] = {}
     logical_names_by_identity: dict[tuple[str | None, str | None, str], str] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         logical_names_by_identity[_location_identity(model.destination)] = model.name
     seed: CompiledSeed
@@ -808,7 +807,7 @@ def _gather_cursor_snapshots(
 ) -> dict[str, ModelCursorSnapshot]:
     """Gather cursor MIN/MAX values for selected incremental models."""
 
-    model_map: dict[str, CompiledModel] = {m.name: m for m in project.models}
+    model_map: dict[str, CompiledModelView] = {m.name: m for m in project.models}
     source_map: dict[str, CompiledSource] = {s.name: s for s in project.sources}
 
     cursor_models: list[_CursorModelInfo] = _collect_cursor_models(
@@ -857,7 +856,7 @@ def _collect_cursor_models(
     *,
     project: CompiledProject,
     adapter: BaseAdapter,
-    model_map: dict[str, CompiledModel],
+    model_map: dict[str, CompiledModelView],
     source_map: dict[str, CompiledSource],
     existing_relations: dict[str, RelationInfo],
     inputs: _CursorGatherInputs,
@@ -883,7 +882,7 @@ def _collect_cursor_models(
         selected_keys=effective_runtime_producer_keys,
     )
     cursor_models: list[_CursorModelInfo] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if inputs.selected_keys is not None:
             model_key: CompiledObjectKey = CompiledObjectKey(
@@ -1118,11 +1117,11 @@ def _build_cursor_queries(cursor_models: list[_CursorModelInfo]) -> list[_Physic
 
 
 def _cursor_input_grain(
-    *, ref: CompileSqlReference, model_map: dict[str, CompiledModel]
+    *, ref: CompileSqlReference, model_map: dict[str, CompiledModelView]
 ) -> str | None:
     if ref.ref_kind != SqlReferenceKind.REF:
         return None
-    upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
+    upstream_model: CompiledModelView | None = model_map.get(ref.ref_name)
     return (
         get_config_str(values=upstream_model.config.values, key="cursor_grain")
         if upstream_model is not None
@@ -1136,7 +1135,9 @@ def _parse_optional_cursor(*, value: str | None, cursor_type: str | None) -> Cur
     return parse(raw=value, cursor_type=cursor_type or CursorType.TIMESTAMP)
 
 
-def _has_start_override(*, model: CompiledModel, cursor_overrides: CursorOverrides | None) -> bool:
+def _has_start_override(
+    *, model: CompiledModelView, cursor_overrides: CursorOverrides | None
+) -> bool:
     if cursor_overrides is None:
         return False
     cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
@@ -1583,7 +1584,7 @@ def _resolve_upstream_qualified_name(
     *,
     ref: CompileSqlReference,
     adapter: BaseAdapter,
-    model_map: dict[str, CompiledModel],
+    model_map: dict[str, CompiledModelView],
     source_map: dict[str, CompiledSource],
     seed_map: dict[str, CompiledSeed],
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
@@ -1600,7 +1601,7 @@ def _resolve_upstream_qualified_name(
     ):
         return deferred_locations[ref.ref_name].qualified_name
     if ref.ref_kind == SqlReferenceKind.REF:
-        upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
+        upstream_model: CompiledModelView | None = model_map.get(ref.ref_name)
         if upstream_model is not None:
             return upstream_model.destination.qualified_name
         upstream_seed: CompiledSeed | None = seed_map.get(ref.ref_name)
@@ -1640,10 +1641,10 @@ def _selected_runtime_producer_names(
 
 def _validate_watermark_contract_column(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     ref: CompileSqlReference,
     cursor_column: str,
-    model_map: dict[str, CompiledModel],
+    model_map: dict[str, CompiledModelView],
     source_map: dict[str, CompiledSource],
     seed_map: dict[str, CompiledSeed],
 ) -> None:
@@ -1652,7 +1653,7 @@ def _validate_watermark_contract_column(
     declared_names: tuple[str, ...] = ()
     declared_types: dict[str, str] = {}
     if ref.ref_kind == SqlReferenceKind.REF:
-        upstream_model: CompiledModel | None = model_map.get(ref.ref_name)
+        upstream_model: CompiledModelView | None = model_map.get(ref.ref_name)
         if upstream_model is None:
             return
         upstream_cursor: str | None = get_config_str(

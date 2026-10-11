@@ -17,7 +17,6 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -25,7 +24,8 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_completion,
 )
@@ -328,7 +328,7 @@ def build_scenario_execution_plan(
     effective_source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = (
         source_warehouse_columns or {}
     )
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     functions_by_key: dict[CompiledObjectKey, CompiledFunction] = {
         function.key: function for function in project.functions
     }
@@ -406,7 +406,7 @@ def build_scenario_execution_plan(
     warnings: list[PlanWarning] = []
     key: CompiledObjectKey
     for key in ordered_model_keys:
-        model: CompiledModel = models_by_name[key.name]
+        model: CompiledModelView = models_by_name[key.name]
         scenario_target: CompiledRelationLocation = _required_target(
             targets=relation_plan.model_locations,
             name=model.name,
@@ -419,7 +419,11 @@ def build_scenario_execution_plan(
         entry: ModelPlanEntry
         model_warnings: tuple[PlanWarning, ...]
         entry, model_warnings = plan_model(
-            model=replace(model, destination=scenario_target, query_sql=scenario_query_sql),
+            model=replace(
+                compiled_model_record(model),
+                destination=scenario_target,
+                query_sql=scenario_query_sql,
+            ),
             snapshot=effective_snapshot,
             adapter=adapter,
             context=ModelPlanContext(

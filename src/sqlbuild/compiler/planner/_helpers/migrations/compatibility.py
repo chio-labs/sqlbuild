@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlbuild.adapter.contract.models import ColumnInfo, NormalizedType, RelationInfo
 from sqlbuild.adapter.contract.types import TypeFamily
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.migrations.types import MigrationCompatibility
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_model_changes
 from sqlbuild.compiler.planner.constants import VIEW_RELATION_TYPE_MARKER
@@ -35,7 +35,7 @@ _TEMPORAL_FAMILIES: frozenset[TypeFamily] = frozenset(
 
 def check_migration_compatibility(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     origin_relation: RelationInfo,
     origin_columns: tuple[ColumnInfo, ...],
     sql_analysis_enabled: bool,
@@ -82,7 +82,7 @@ def check_migration_compatibility(
     return MigrationCompatibilityResult(status=MigrationCompatibility.COMPATIBLE)
 
 
-def _has_expected_columns(*, model: CompiledModel) -> bool:
+def _has_expected_columns(*, model: CompiledModelView) -> bool:
     if model.schema_entry is not None and any(
         column.type is not None for column in model.schema_entry.columns
     ):
@@ -91,7 +91,7 @@ def _has_expected_columns(*, model: CompiledModel) -> bool:
 
 
 def _incremental_blocking_findings(
-    *, model: CompiledModel, findings: tuple[SchemaFinding, ...], dialect: str | None
+    *, model: CompiledModelView, findings: tuple[SchemaFinding, ...], dialect: str | None
 ) -> tuple[str, ...]:
     raw_policy: str | None = get_config_str(values=model.config.values, key="on_schema_change")
     policy: OnSchemaChange = OnSchemaChange(raw_policy) if raw_policy else _DEFAULT_ON_SCHEMA_CHANGE
@@ -110,7 +110,7 @@ def _incremental_blocking_findings(
 
 def _snapshot_blocking_findings(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     findings: tuple[SchemaFinding, ...],
     dialect: str | None,
     snapshots_config: SnapshotsConfig,

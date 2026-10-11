@@ -5,7 +5,8 @@ from datetime import datetime
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel, InferredColumn
+from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
@@ -361,7 +362,7 @@ _DIFFERENT_HASH: str = "completely_different_hash"
 def test_given_model_and_snapshot_when_detecting_changes_then_returns_expected(
     test_case: DetectModelChangesTestCase,
 ) -> None:
-    model: CompiledModel = build_model_from_test_case(test_case)
+    model: CompiledModelView = build_model_from_test_case(test_case)
     snapshot: WarehouseSnapshot = build_snapshot_from_test_case(test_case)
 
     result: ChangeDetectionResult = detect_model_changes(
@@ -433,7 +434,7 @@ def test_given_dropped_relation_with_recorded_build_when_planning_then_plans_fir
         expected_change_kind=ChangeKind.FIRST_RUN,
         expected_backfill_action=BackfillAction.FULL,
     )
-    model: CompiledModel = build_model_from_test_case(detection_case)
+    model: CompiledModelView = build_model_from_test_case(detection_case)
 
     change: ChangeDetectionResult = detect_model_changes(
         model=model,
@@ -547,7 +548,7 @@ def test_given_dropped_relation_with_recorded_build_when_planning_then_plans_fir
 def test_given_model_identity_metadata_when_detecting_changes_then_uses_aligned_metadata(
     test_case: DetectModelMetadataTestCase,
 ) -> None:
-    model: CompiledModel = build_model_from_metadata_test_case(test_case)
+    model: CompiledModelView = build_model_from_metadata_test_case(test_case)
     snapshot: WarehouseSnapshot = build_snapshot_for_metadata_test_case(test_case)
 
     result: ChangeDetectionResult = detect_model_changes(

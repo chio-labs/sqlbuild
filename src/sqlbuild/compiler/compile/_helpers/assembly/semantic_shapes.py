@@ -12,12 +12,11 @@ from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_sha
 from sqlbuild.compiler.compile._helpers.analysis.reference_names import table_function_analysis_name
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompileProjectInputs,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import ModelInput
+from sqlbuild.compiler.compile.types import CompiledModelView, ModelInput
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
@@ -260,9 +259,9 @@ def semantic_shapes(
     for (source_name, _), source_shape in zip(expression_sources, source_shapes, strict=True):
         if source_shape is not None:
             shapes[source_name] = source_shape
-    pending: list[CompiledModel] = list(project.models)
+    pending: list[CompiledModelView] = list(project.models)
     while pending:
-        remaining: list[CompiledModel] = []
+        remaining: list[CompiledModelView] = []
         for model in pending:
             if (
                 model.config.values.get("contract") == ContractPolicy.ENFORCED

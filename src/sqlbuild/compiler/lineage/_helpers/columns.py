@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.lineage.models import ColumnLineage, ColumnLineageSource, PhysicalResource
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
@@ -103,7 +103,7 @@ def _build_schema_mapping(project: CompiledProject) -> dict[str, dict[str, str]]
 
 def _build_star_lineage(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     schema: dict[str, dict[str, str]],
     physical_resources: tuple[PhysicalResource, ...],
     existing_columns: set[str],

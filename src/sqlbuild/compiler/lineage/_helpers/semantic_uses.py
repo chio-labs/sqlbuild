@@ -7,7 +7,7 @@ import re
 from typing import Any, cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.lineage._helpers.columns import _normalize_sqlbuild_refs
 from sqlbuild.compiler.lineage.exceptions import LineageAnalysisError
 from sqlbuild.compiler.lineage.models import (
@@ -19,7 +19,7 @@ from sqlbuild.compiler.lineage.types import ColumnLineageConfidence, NativeUsage
 
 
 def get_model_semantic_uses(  # noqa: FFS002 - one native request/response translation boundary
-    *, model: CompiledModel, schema: dict[str, dict[str, str]], dialect: str | None
+    *, model: CompiledModelView, schema: dict[str, dict[str, str]], dialect: str | None
 ) -> tuple[DirectSemanticColumnUse, ...]:
     normalized_sql, physical_resources = _normalize_sqlbuild_refs(model.query_sql)
     resource_by_physical_name: dict[str, PhysicalResource] = {

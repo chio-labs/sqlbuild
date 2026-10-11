@@ -52,13 +52,12 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompileAdapterContext,
     CompiledLineageColumnFact,
-    CompiledModel,
     CompileProjectInputs,
     DynamicColumnContractProof,
     InferredColumn,
     ModelSqlAnalysis,
 )
-from sqlbuild.compiler.compile.types import ModelInput
+from sqlbuild.compiler.compile.types import CompiledModelView, ModelInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
@@ -651,10 +650,10 @@ def analyse_natively(
         runs.native_enrichments += 1
         return native_lineage_facts(rows)
 
-    assembled_model: Callable[..., CompiledModel] = project_assembly._assemble_compiled_model
+    assembled_model: Callable[..., CompiledModelView] = project_assembly._assemble_compiled_model
 
-    def recorded_model(*arguments: Any, **keywords: Any) -> CompiledModel:
-        model: CompiledModel = assembled_model(*arguments, **keywords)
+    def recorded_model(*arguments: Any, **keywords: Any) -> CompiledModelView:
+        model: CompiledModelView = assembled_model(*arguments, **keywords)
         runs.golden.append(golden_entry("proof", model.dynamic_column_contract))
         return model
 

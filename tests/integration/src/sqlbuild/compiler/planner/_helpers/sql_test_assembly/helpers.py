@@ -20,7 +20,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -101,7 +101,7 @@ def build_test_and_project(
         ),
     )
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     query_sql: str
     for model_name, query_sql in test_case.model_queries.items():

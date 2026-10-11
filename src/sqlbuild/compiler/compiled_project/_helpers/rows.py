@@ -9,13 +9,13 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompileModelConfig,
     CompileSqlReference,
     DynamicColumnContractProof,
     InferredColumn,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SchemaModelEntry
@@ -31,7 +31,7 @@ class _ModelDeclarations:
 
 
 def record_model_analyses_impl(
-    *, project: _native.NativeCompiledProject, models: tuple[CompiledModel, ...]
+    *, project: _native.NativeCompiledProject, models: tuple[CompiledModelView, ...]
 ) -> int:
     """Transfer each assembled model's typed analysis to its retained facts; return how many."""
 

@@ -7,6 +7,7 @@ import os
 import stat
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.rule_engine.constants import PARENT_DIRECTORY_TOKEN
 from sqlbuild.rule_engine.exceptions import RuleUsageError
@@ -144,7 +145,7 @@ class ProjectTree:
 def public_model(model: object) -> Model:
     from sqlbuild.compiler.compile.models import CompiledModel
 
-    if not isinstance(model, CompiledModel):
+    if not isinstance(model, (CompiledModel, _native.NativeCompiledModel)):
         raise RuleUsageError("model is not a compiled SQL model")
     value: object = model.config.values.get("materialized")
     return Model(

@@ -16,7 +16,6 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlExpansion,
@@ -24,7 +23,7 @@ from sqlbuild.compiler.compile.models import (
     DeclarationScopeBuild,
     SqlExpansionContext,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, ModelInput
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType, ModelInput
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.types import NativeStage
@@ -520,7 +519,7 @@ def _run_sql_rules(
     codes: tuple[str, ...] = _sql_rule_codes(rules)
     if not codes:
         return _SqlRulesEvaluation(findings=(), cache_hits=0, cache_misses=0)
-    models_by_path: dict[str, CompiledModel] = _sql_rule_models(project)
+    models_by_path: dict[str, CompiledModelView] = _sql_rule_models(project)
     bucket: dict[str, dict[str, object]] = (
         _read_sql_rule_cache(project_dir) if cache_enabled else {}
     )
@@ -737,7 +736,7 @@ def _sql_rule_codes(rules: tuple[Rule, ...]) -> tuple[str, ...]:
     return tuple(rule.code for rule in rules if rule.code.startswith("SQBRSQL"))
 
 
-def _sql_rule_models(project: CompiledProject) -> dict[str, CompiledModel]:
+def _sql_rule_models(project: CompiledProject) -> dict[str, CompiledModelView]:
     return {
         model.relative_path.as_posix(): model
         for model in project.models
@@ -757,7 +756,7 @@ def _sql_model_rule_identities(
     }
 
 
-def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect: str) -> str:
+def _sql_rule_identity(*, model: CompiledModelView, codes: tuple[str, ...], dialect: str) -> str:
     digest: Any = hashlib.blake2b(digest_size=32)
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
     digest.update(_RULES_BUILD_IDENTITY.encode())

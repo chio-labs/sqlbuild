@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.classes.column_facts import ColumnFacts
 from sqlbuild.rule_engine.classes.contract_facts import ContractFacts
@@ -52,7 +53,7 @@ class EvaluationRuleContext:
     def __init__(
         self,
         *,
-        model: CompiledModel | None,
+        model: CompiledModelView | None,
         rule: Rule,
         config: RulesConfig,
         project: CompiledProject,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import (
@@ -66,7 +66,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve.helpers import (
 def test_given_cursor_interval_when_resolving_then_renders_expected_sql(
     test_case: CursorIntrinsicResolutionTestCase,
 ) -> None:
-    model: CompiledModel = build_cursor_intrinsic_model(config_values=test_case.model_config)
+    model: CompiledModelView = build_cursor_intrinsic_model(config_values=test_case.model_config)
 
     resolved_sql: str = resolve_model_sql(
         adapter=DuckDbAdapter(),
@@ -104,7 +104,7 @@ def test_given_cursor_interval_when_resolving_then_renders_expected_sql(
 def test_given_missing_cursor_interval_when_resolving_then_rejects_intrinsics(
     test_case: CursorIntrinsicResolutionTestCase,
 ) -> None:
-    model: CompiledModel = build_cursor_intrinsic_model(config_values=test_case.model_config)
+    model: CompiledModelView = build_cursor_intrinsic_model(config_values=test_case.model_config)
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):
         resolve_model_sql(

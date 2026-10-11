@@ -12,6 +12,7 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
 )
@@ -147,7 +148,11 @@ def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_i
     broken: CompiledProject = replace(
         project,
         models=(
-            replace(project.models[0], query_sql=test_case.query_sql, fast_lineage_columns=None),
+            replace(
+                compiled_model_record(project.models[0]),
+                query_sql=test_case.query_sql,
+                fast_lineage_columns=None,
+            ),
             *project.models[1:],
         ),
     )
@@ -271,7 +276,11 @@ def test_given_parser_panic_when_building_fast_lineage_then_raises_native_compil
     broken: CompiledProject = replace(
         project,
         models=(
-            replace(project.models[0], query_sql=test_case.query_sql, fast_lineage_columns=None),
+            replace(
+                compiled_model_record(project.models[0]),
+                query_sql=test_case.query_sql,
+                fast_lineage_columns=None,
+            ),
             *project.models[1:],
         ),
     )

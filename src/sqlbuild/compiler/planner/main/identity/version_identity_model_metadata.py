@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.compiler.compile.models import CompiledModel
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_IDENTITY_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.planner._helpers.identity.model_metadata import contract_output_signature
@@ -22,7 +21,7 @@ from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
 
 def build_model_version_identity_metadata_json(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     function_local_hashes: dict[str, str] | None = None,
     hook_version_hashes: dict[str, str] | None = None,
 ) -> str:
@@ -52,7 +51,7 @@ def build_model_version_identity_metadata_json(
 
 
 def _model_execution_signature(
-    *, model: CompiledModel, hook_version_hashes: dict[str, str]
+    *, model: CompiledModelView, hook_version_hashes: dict[str, str]
 ) -> dict[str, object]:
     signature: dict[str, object] = {}
     contract_signature: dict[str, object] | None = contract_output_signature(model=model)

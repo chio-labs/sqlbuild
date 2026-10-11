@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
     build_intermediate_source_map,
     expand_selected_loader_dependencies,
@@ -171,7 +171,7 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
 ) -> None:
     selected_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "fact_orders")
     upstream_key: CompiledObjectKey = CompiledObjectKey(CompiledResourceType.MODEL, "stg_orders")
-    selected_model: CompiledModel = CompiledModel(
+    selected_model: CompiledModelView = CompiledModel(
         key=selected_key,
         deps=(upstream_key,),
         name="fact_orders",
@@ -185,7 +185,7 @@ def test_given_unselected_upstream_in_closure_when_filtering_metadata_then_uses_
             qualified_name="ANALYTICS_DB.ANALYTICS.FACT_ORDERS_PHYSICAL",
         ),
     )
-    upstream_model: CompiledModel = CompiledModel(
+    upstream_model: CompiledModelView = CompiledModel(
         key=upstream_key,
         deps=(),
         name="stg_orders",

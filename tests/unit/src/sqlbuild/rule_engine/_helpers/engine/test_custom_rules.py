@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import CompactLineageFacts, CompiledProject
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
@@ -121,12 +122,14 @@ def test_given_lazy_lineage_when_materialized_then_project_rule_cache_is_stable(
     )
     project = replace(
         project,
-        models=(replace(project.models[0], fast_lineage_columns=lineage),),
+        models=(replace(compiled_model_record(project.models[0]), fast_lineage_columns=lineage),),
     )
     _ = evaluate(project=project, config=config, project_dir=tmp_path)
     materialized_project: CompiledProject = replace(
         project,
-        models=(replace(project.models[0], fast_lineage_columns=tuple(lineage)),),
+        models=(
+            replace(compiled_model_record(project.models[0]), fast_lineage_columns=tuple(lineage)),
+        ),
     )
 
     second: RulesResult = evaluate(

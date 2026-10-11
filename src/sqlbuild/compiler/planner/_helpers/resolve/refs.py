@@ -11,11 +11,11 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
 )
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledSeed,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.constants import (
     SQL_ALIAS_BOUNDARY_CHARACTERS,
     SQL_ALIAS_KEYWORD,
@@ -366,7 +366,7 @@ def _has_following_alias(*, sql: str, start: int) -> bool:
 
 
 def build_model_locations(
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
 ) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of model name to compiled relation location."""
 

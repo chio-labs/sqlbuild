@@ -8,10 +8,10 @@ import pytest
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModel,
     CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.lineage._helpers import rich_columns
 from sqlbuild.compiler.lineage._helpers.columns import _build_schema_mapping
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
@@ -154,7 +154,7 @@ from tests.unit.src.sqlbuild.compiler.lineage.helpers import (
 def test_given_compiled_project_when_building_column_lineage_then_infers_expected_column(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -162,7 +162,7 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,
@@ -286,7 +286,7 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
 def test_given_compiled_project_when_building_fast_column_lineage_then_infers_expected_column(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -294,7 +294,7 @@ def test_given_compiled_project_when_building_fast_column_lineage_then_infers_ex
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,
@@ -426,16 +426,18 @@ def test_given_linear_project_when_listing_column_consumers_then_returns_expecte
 def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_public_graph(
     test_case: ExpectedCountTestCase,
 ) -> None:
-    upstream: CompiledModel = make_compiled_model(
+    upstream: CompiledModelView = make_compiled_model(
         name="orders",
         query_sql="SELECT 1 AS order_id",
         inferred_columns=("order_id",),
     )
-    target: CompiledModel = replace(
-        make_compiled_model(
-            name="order_summary",
-            query_sql='SELECT order_id FROM __ref("orders")',
-            inferred_columns=("order_id",),
+    target: CompiledModelView = replace(
+        compiled_model_record(
+            make_compiled_model(
+                name="order_summary",
+                query_sql='SELECT order_id FROM __ref("orders")',
+                inferred_columns=("order_id",),
+            )
         ),
         fast_lineage_columns=(
             CompiledLineageColumnFact(
@@ -532,7 +534,7 @@ def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_
 def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolves_upstream(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -540,7 +542,7 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,
@@ -593,7 +595,7 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
 def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_polyglot_name(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -601,7 +603,7 @@ def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_poly
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,

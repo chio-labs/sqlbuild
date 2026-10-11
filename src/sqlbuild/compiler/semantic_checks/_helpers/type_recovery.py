@@ -8,12 +8,11 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledProject,
     CompilerDiagnostic,
-    InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main._with_type_recovery import with_type_recovery
 from sqlbuild.compiler.semantic_checks._helpers.payloads import (
     diagnostic_ids,
     has_blocking_binding,
@@ -80,10 +79,10 @@ def recover_native_output_types(
         _with_note(diagnostic=project.diagnostics[index], note=note) for index, note in kept
     )
     poisoned_outputs: frozenset[tuple[str, str]] = frozenset(poisoned)
-    models: tuple[CompiledModel, ...] = tuple(
-        _recovered_model(
+    models: tuple[CompiledModelView, ...] = tuple(
+        with_type_recovery(
             model=model,
-            bindings=_positions(diagnostics=diagnostics, positions=positions),
+            diagnostics=_positions(diagnostics=diagnostics, positions=positions),
             poisoned=poisoned_outputs,
         )
         for model, positions in zip(project.models, model_bindings, strict=True)
@@ -116,7 +115,7 @@ def _revalidated(
 
 def _model_payload(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
     ids: dict[CompilerDiagnostic, int],
     raw_ids: dict[SqlBindingDiagnostic, int],
@@ -146,27 +145,6 @@ def _positions(
     *, diagnostics: tuple[CompilerDiagnostic, ...], positions: list[int]
 ) -> tuple[CompilerDiagnostic, ...]:
     return tuple(diagnostics[position] for position in positions)
-
-
-def _recovered_model(
-    *,
-    model: CompiledModel,
-    bindings: tuple[CompilerDiagnostic, ...],
-    poisoned: frozenset[tuple[str, str]],
-) -> CompiledModel:
-    columns: tuple[InferredColumn, ...] | None = None
-    if model.inferred_columns is not None:
-        columns = tuple(
-            replace(column, type=None) if (model.name, column.name) in poisoned else column
-            for column in model.inferred_columns
-        )
-    unchecked: frozenset[str] = frozenset(column for name, column in poisoned if name == model.name)
-    return replace(
-        model,
-        binding_diagnostics=bindings,
-        inferred_columns=columns,
-        unchecked_output_columns=unchecked,
-    )
 
 
 def _unknown_shapes(

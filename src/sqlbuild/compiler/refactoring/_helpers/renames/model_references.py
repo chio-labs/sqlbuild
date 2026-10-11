@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.refactoring._helpers.text.header_edits import model_name_header_edits
 from sqlbuild.compiler.refactoring._helpers.text.schema_edits import schema_model_name_edits
 from sqlbuild.compiler.refactoring._helpers.text.sql_sites import (
@@ -79,7 +79,7 @@ def macro_reference_locations(
     compiled: CompiledProject = project.graph.project
     contents: dict[str, str] = {item.relative_path: item.contents for item in files}
     locations: list[ManualLocation] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in compiled.models:
         text: str | None = contents.get(model.relative_path.as_posix())
         if text is None or not _depends_on(model=model, name=old):
@@ -132,7 +132,7 @@ def _generated_references(
     *,
     compiled: CompiledProject,
     project: RefactorProject,
-    model: CompiledModel,
+    model: CompiledModelView,
     text: str,
     old: str,
     dialect: str,
@@ -182,7 +182,7 @@ def _ref_sites(*, text: str, name: str, dialect: str) -> tuple[ResourceSite, ...
     )
 
 
-def _depends_on(*, model: CompiledModel, name: str) -> bool:
+def _depends_on(*, model: CompiledModelView, name: str) -> bool:
     return any(
         dep.resource_type == CompiledResourceType.MODEL and dep.name == name for dep in model.deps
     )

@@ -38,9 +38,11 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledModelView,
     CompiledResourceType,
     SqlTestMode,
 )
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -100,7 +102,7 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 def microbatch_model_with_cursor_end(
     test_case: MicrobatchCursorEndPlanTestCase,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a microbatch model with a configured terminal cursor bound."""
 
     return CompiledModel(
@@ -244,7 +246,7 @@ def build_selection_model(
     key: CompiledObjectKey,
     name: str,
     materialized: str,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a minimal model for selection helper tests."""
 
     values: dict[str, object] = {"materialized": materialized}
@@ -363,7 +365,7 @@ def build_test_project(
     seed_name_set: set[str] = set(seed_names)
     dbt_ref_name_set: set[str] = set(dbt_ref_names)
     function_name_set: set[str] = set(function_names)
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     dep_names: tuple[str, ...]
     for model_name, dep_names in (model_deps or {}).items():
@@ -724,9 +726,9 @@ def build_scenario_relation_test_project() -> CompiledProject:
         source_names=("raw__orders",),
         seed_names=("country_codes",),
     )
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     models_by_name["daily_revenue"] = replace(
-        models_by_name["daily_revenue"],
+        compiled_model_record(models_by_name["daily_revenue"]),
         query_sql=(
             'SELECT * FROM __source("raw__orders") '
             'JOIN __ref("stg_customers") USING (customer_id) '
@@ -734,7 +736,7 @@ def build_scenario_relation_test_project() -> CompiledProject:
             'JOIN __dbt_ref("stripe", "payments") USING (customer_id)'
         ),
     )
-    models: list[CompiledModel] = [models_by_name[model.name] for model in project.models]
+    models: list[CompiledModelView] = [models_by_name[model.name] for model in project.models]
     return replace(project, models=tuple(models))
 
 
@@ -841,7 +843,7 @@ def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledP
 
 def build_source_cursor_input_model(
     test_case: SourceCursorInputColumnsTestCase,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build an incremental model for source cursor input column validation."""
 
     config_values: dict[str, object] = (
@@ -873,10 +875,10 @@ def build_source_cursor_input_model(
 
 def build_transitive_watermark_models(
     *, watermark_name: str, watermark_column: str
-) -> tuple[CompiledModel, dict[str, CompiledModel]]:
+) -> tuple[CompiledModelView, dict[str, CompiledModelView]]:
     """Build a consumer, direct view, and transitive source watermark lineage."""
 
-    view_model: CompiledModel = CompiledModel(
+    view_model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders_view"),
         deps=(),
         name="orders_view",
@@ -893,7 +895,7 @@ def build_transitive_watermark_models(
             qualified_name="staging.orders_view",
         ),
     )
-    consumer: CompiledModel = CompiledModel(
+    consumer: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),
         name="test_model",
@@ -925,11 +927,11 @@ def build_transitive_watermark_models(
 
 def build_function_transitive_watermark_models(
     *, watermark_name: str, watermark_column: str
-) -> tuple[CompiledModel, dict[str, CompiledModel], dict[str, CompiledFunction]]:
+) -> tuple[CompiledModelView, dict[str, CompiledModelView], dict[str, CompiledFunction]]:
     """Build a consumer whose physical watermark is upstream of a table function."""
 
-    consumer: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    consumer: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     consumer, models_by_name = build_transitive_watermark_models(
         watermark_name=watermark_name,
         watermark_column=watermark_column,
@@ -954,7 +956,7 @@ def build_function_transitive_watermark_models(
         references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders_view"),),
     )
     consumer = replace(
-        consumer,
+        compiled_model_record(consumer),
         query_sql=f'SELECT * FROM __table_fn("{function_name}")()',
         references=(
             CompileSqlReference(
@@ -968,8 +970,8 @@ def build_function_transitive_watermark_models(
 
 def build_cursor_input_contract_models(
     test_case: SourceCursorInputColumnsTestCase,
-) -> dict[str, CompiledModel]:
-    models: dict[str, CompiledModel] = {
+) -> dict[str, CompiledModelView]:
+    models: dict[str, CompiledModelView] = {
         test_case.reference_name: CompiledModel(
             key=CompiledObjectKey(
                 resource_type=CompiledResourceType.MODEL,
@@ -1043,7 +1045,7 @@ def _resolve_dep_key(
     return CompiledObjectKey(resource_type=resource_type, name=name)
 
 
-def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledModel:
+def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledModelView:
     """Build a CompiledModel from an action resolution test case."""
 
     config_values: dict[str, object] = (
@@ -1087,7 +1089,7 @@ def build_strategy_change_result(
     )
 
 
-def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> CompiledModel:
+def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> CompiledModelView:
     """Build a CompiledModel from a strategy error test case."""
 
     config_values: dict[str, object] = {"materialized": test_case.materialized} | (
@@ -1204,10 +1206,10 @@ def build_cursor_ref(ref_name: str) -> CompileSqlReference:
 def build_cursor_model_map(
     ref_name: str,
     qualified_name: str | None,
-) -> dict[str, CompiledModel]:
+) -> dict[str, CompiledModelView]:
     """Build a model map with one entry for cursor resolution tests."""
 
-    model_map: dict[str, CompiledModel] = {
+    model_map: dict[str, CompiledModelView] = {
         ref_name: CompiledModel(
             key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=ref_name),
             deps=(),
@@ -1243,7 +1245,7 @@ def build_cursor_deferred_locations(
     return (None, locations)[qualified_name is not None]
 
 
-def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
+def build_cursor_override_model(cursor_type: str | None) -> CompiledModelView:
     """Build a minimal model with optional cursor_type for override resolution tests."""
 
     config_values: dict[str, object] = {"materialized": "incremental"} | (
@@ -1271,7 +1273,7 @@ def build_microbatch_lookback_model(
     incremental_strategy: str,
     batch_size: str,
     lookback: str | None,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a microbatch model for lookback resolution tests."""
 
     config_values: dict[str, object] = {

@@ -6,8 +6,8 @@ import logging
 from typing import Any
 
 from sqlbuild.adapter.contract.types import BuiltinAdapter, TypeDialect
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.lineage._helpers.columns import (
     _build_schema_mapping,
     _build_star_lineage,
@@ -123,7 +123,7 @@ def build_rich_project_column_lineage(
 
 def _build_polyglot_model_column_lineage(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     schema: dict[str, dict[str, str]],
     polyglot_tables: dict[str, dict[str, object]],
     dialect: str | None,

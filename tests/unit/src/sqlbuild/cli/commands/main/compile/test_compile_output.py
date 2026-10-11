@@ -14,8 +14,9 @@ from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompileModelConfig
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompileModelConfig
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -49,8 +50,8 @@ def test_given_large_hook_integer_when_formatting_json_then_preserves_value(
     test_case: CompileJsonLargeIntegerTestCase,
 ) -> None:
     graph: ProjectGraph = build_compile_output_graph(model_names=("orders",))
-    model: CompiledModel = replace(
-        graph.project.models[0],
+    model: CompiledModelView = replace(
+        compiled_model_record(graph.project.models[0]),
         config=CompileModelConfig(
             values={
                 "pre_hooks": [

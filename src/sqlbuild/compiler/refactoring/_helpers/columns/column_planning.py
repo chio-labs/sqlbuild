@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from sqlbuild.compiler.compile.models import CompiledModel
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.refactoring._helpers.columns.column_references import (
     analyze_column,
     consumer_edits,
@@ -83,7 +82,7 @@ def column_rename_context(
 ) -> ColumnRenameContext:
     """Validate a column rename and collect everything its walk reads."""
 
-    owner: CompiledModel = find_model(project=project.graph.project, name=request.model_name)
+    owner: CompiledModelView = find_model(project=project.graph.project, name=request.model_name)
     old: str = request.column_name or ""
     new: str = request.new_name
     validate_identifier(name=new, noun="column")
@@ -116,15 +115,15 @@ def column_rename_parts(*, context: ColumnRenameContext) -> RefactorParts:
     """Return every edit of the rename; `cascaded` lists each model whose column is renamed."""
 
     parts: list[RefactorParts] = [_collision(context=context), _owner_output(context=context)]
-    queue: deque[CompiledModel] = deque([context.owner])
+    queue: deque[CompiledModelView] = deque([context.owner])
     seen: set[str] = set()
     while queue:
-        model: CompiledModel = queue.popleft()
+        model: CompiledModelView = queue.popleft()
         if model.name in seen:
             continue
         seen.add(model.name)
         consumers: RefactorParts
-        cascaded: tuple[CompiledModel, ...]
+        cascaded: tuple[CompiledModelView, ...]
         consumers, cascaded = _consumers(context=context, model=model)
         parts.extend(
             (
@@ -151,7 +150,7 @@ def column_rename_parts(*, context: ColumnRenameContext) -> RefactorParts:
 
 
 def _schema_edits(
-    *, context: ColumnRenameContext, model: CompiledModel
+    *, context: ColumnRenameContext, model: CompiledModelView
 ) -> tuple[tuple[str, TextEdit], ...]:
     edits: list[tuple[str, TextEdit]] = []
     item: ProjectSqlFile
@@ -232,7 +231,7 @@ def _owner_output(*, context: ColumnRenameContext) -> RefactorParts:
     )
 
 
-def _declarations(*, context: ColumnRenameContext, model: CompiledModel) -> RefactorParts:
+def _declarations(*, context: ColumnRenameContext, model: CompiledModelView) -> RefactorParts:
     path: str = model.relative_path.as_posix()
     declared: SchemaColumn | None = next(
         (
@@ -278,7 +277,7 @@ def _declarations(*, context: ColumnRenameContext, model: CompiledModel) -> Refa
     )
 
 
-def _header_parts(*, context: ColumnRenameContext, model: CompiledModel) -> RefactorParts:
+def _header_parts(*, context: ColumnRenameContext, model: CompiledModelView) -> RefactorParts:
     path: str = model.relative_path.as_posix()
     contents: str = context.contents.get(path, "")
     tokens: tuple[HeaderToken, ...] = header_tokens(contents=contents) or ()
@@ -323,11 +322,11 @@ def _header_parts(*, context: ColumnRenameContext, model: CompiledModel) -> Refa
 
 
 def _consumers(
-    *, context: ColumnRenameContext, model: CompiledModel
-) -> tuple[RefactorParts, tuple[CompiledModel, ...]]:
+    *, context: ColumnRenameContext, model: CompiledModelView
+) -> tuple[RefactorParts, tuple[CompiledModelView, ...]]:
     parts: list[RefactorParts] = []
-    cascaded: list[CompiledModel] = []
-    consumer: CompiledModel
+    cascaded: list[CompiledModelView] = []
+    consumer: CompiledModelView
     for consumer in context.project.graph.project.models:
         if not any(
             dep.resource_type == CompiledResourceType.MODEL and dep.name == model.name
@@ -346,7 +345,7 @@ def _consumers(
 
 
 def _consumer(
-    *, context: ColumnRenameContext, upstream: CompiledModel, consumer: CompiledModel
+    *, context: ColumnRenameContext, upstream: CompiledModelView, consumer: CompiledModelView
 ) -> tuple[RefactorParts, bool]:
     body: BodyContext | None
     compiled_sql: str
@@ -384,7 +383,9 @@ def _consumer(
     )
 
 
-def _authored_body_parts(*, context: ColumnRenameContext, model: CompiledModel) -> RefactorParts:
+def _authored_body_parts(
+    *, context: ColumnRenameContext, model: CompiledModelView
+) -> RefactorParts:
     return merge_parts(
         parts=tuple(
             _authored_body(context=context, model=model, body=body)
@@ -395,7 +396,7 @@ def _authored_body_parts(*, context: ColumnRenameContext, model: CompiledModel) 
 
 
 def _authored_body(
-    *, context: ColumnRenameContext, model: CompiledModel, body: AuthoredBody
+    *, context: ColumnRenameContext, model: CompiledModelView, body: AuthoredBody
 ) -> RefactorParts:
     lowered: str = body.text.lower()
     analysis: AnalysisSql = analysis_sql(text=body.text, dialect=context.dialect)
@@ -471,7 +472,7 @@ def _python_locations(*, context: ColumnRenameContext, merged: RefactorParts) ->
     )
 
 
-def _model_context(*, context: ColumnRenameContext, model: CompiledModel) -> _ModelContext:
+def _model_context(*, context: ColumnRenameContext, model: CompiledModelView) -> _ModelContext:
     path: str = model.relative_path.as_posix()
     contents: str | None = context.contents.get(path)
     if contents is None:

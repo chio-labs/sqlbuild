@@ -17,7 +17,9 @@ from typing import Any, cast
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_ABANDONED_SUFFIX,
@@ -119,11 +121,11 @@ def host_payload_project(project: CompiledProject) -> CompiledProject:
     return replace(project, models=tuple(map(_payload_model, project.models)), native_project=None)
 
 
-def _payload_model(model: CompiledModel) -> CompiledModel:
+def _payload_model(model: CompiledModelView) -> CompiledModelView:
     """Drop model state no Rule fact reads, so hosts decode less of every model."""
 
     return replace(
-        model,
+        compiled_model_record(model),
         references=(),
         fast_lineage_columns=None,
         authored_query_sql="",

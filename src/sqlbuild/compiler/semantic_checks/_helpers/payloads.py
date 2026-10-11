@@ -6,15 +6,15 @@ from typing import Any, cast
 
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
-    CompiledModel,
     CompiledProject,
     CompilerDiagnostic,
     DynamicColumnContractProof,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 
 
-def lineage_payload(model: CompiledModel) -> list[tuple[str, list[tuple[str, str]]]]:
+def lineage_payload(model: CompiledModelView) -> list[tuple[str, list[tuple[str, str]]]]:
     """Each output column with the `(resource, column)` pairs it reads."""
 
     return [_output_payload(output) for output in model.fast_lineage_columns or ()]

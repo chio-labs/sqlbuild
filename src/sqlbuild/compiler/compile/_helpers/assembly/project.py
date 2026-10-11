@@ -102,6 +102,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledModelView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -478,7 +479,7 @@ def _assemble_compiled_model(
     inference_profile: ExpressionInferenceProfile | None = None,
     sql_analysis: _ModelSqlAnalysis | None = None,
     allow_compact_analysis: bool = False,
-) -> CompiledModel:
+) -> CompiledModelView:
     model_name: str = model_input.model_file.file_path.stem
     syntax_validated: bool = native_model.syntax_valid
     profile: ExpressionInferenceProfile = inference_profile or ExpressionInferenceProfile()
@@ -549,6 +550,32 @@ def _assemble_compiled_model(
     if dynamic_column_contract is not None and dynamic_column_contract.output_proven:
         inferred_columns = dynamic_column_contract.fixed_columns
         fast_lineage_has_star = True
+    binding_diagnostics: tuple[CompilerDiagnostic, ...] = _binding_compiler_diagnostics(
+        model_input=model_input,
+        cleaned_sql=sql_analysis.cleaned_sql if sql_analysis is not None else None,
+        dialect=profile.sql_analysis_dialect,
+        diagnostics=(polyglot_analysis.binding_diagnostics if sql_analysis_enabled else ()),
+    )
+    binding_validated: bool = polyglot_analysis.binding_validated if sql_analysis_enabled else False
+    macro_deps: tuple[str, ...] = model_input.macro_deps or find_macro_call_names(
+        model_input.macro_source_sql
+    )
+    if isinstance(model_input, _native.NativeModelInput):
+        return model_input.compiled_model(
+            (
+                [(str(key.resource_type), key.name) for key in native_model.deps],
+                None
+                if inferred_columns is None
+                else [
+                    (column.name, column.type, str(column.nullability))
+                    for column in inferred_columns
+                ],
+                (fast_lineage_columns, fast_lineage_has_star, fast_lineage_star_resolved),
+                (binding_diagnostics, binding_validated),
+                dynamic_column_contract,
+                list(macro_deps),
+            )
+        )
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=model_name),
         deps=native_model.deps,
@@ -567,17 +594,12 @@ def _assemble_compiled_model(
         authored_query_sql=model_input.model_file.query_sql,
         output_column_locations=model_input.model_file.output_column_locations,
         extract_implicit_alias_columns=model_input.model_file.extract_implicit_alias_columns,
-        macro_deps=model_input.macro_deps or find_macro_call_names(model_input.macro_source_sql),
+        macro_deps=macro_deps,
         enum_declarations=model_input.enum_declarations,
         constant_declarations=model_input.constant_declarations,
         enum_columns=model_input.enum_columns,
-        binding_diagnostics=_binding_compiler_diagnostics(
-            model_input=model_input,
-            cleaned_sql=sql_analysis.cleaned_sql if sql_analysis is not None else None,
-            dialect=profile.sql_analysis_dialect,
-            diagnostics=(polyglot_analysis.binding_diagnostics if sql_analysis_enabled else ()),
-        ),
-        binding_validated=(polyglot_analysis.binding_validated if sql_analysis_enabled else False),
+        binding_diagnostics=binding_diagnostics,
+        binding_validated=binding_validated,
         dynamic_column_contract=dynamic_column_contract,
         rejected_sql_analysis_opt_out=model_input.rejected_sql_analysis_opt_out,
     )

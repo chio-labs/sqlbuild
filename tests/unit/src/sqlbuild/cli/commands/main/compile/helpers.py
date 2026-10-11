@@ -24,7 +24,11 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     FunctionArgument,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledResourceType,
+    FunctionLanguage,
+)
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -384,7 +388,7 @@ def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledPro
 def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
     """Build a static project graph for compile output formatter tests."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
     all_keys: dict[str, CompiledObjectKey] = {}
     name: str
@@ -440,7 +444,7 @@ def build_linear_compile_output_graph(*, model_count: int) -> ProjectGraph:
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
         model.key: () for model in graph.project.models
     }
-    first_model: CompiledModel = graph.project.models[0]
+    first_model: CompiledModelView = graph.project.models[0]
     upstream_deps[first_model.key] = ()
     for previous_model, model in zip(graph.project.models, graph.project.models[1:], strict=False):
         upstream_deps[model.key] = (previous_model.key,)

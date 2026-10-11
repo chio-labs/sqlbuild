@@ -6,13 +6,13 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledSqlTest,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.fixtures import completion as fixture_completion
 from sqlbuild.compiler.planner._helpers.output.plan_output import build_selected_test_entries
 from sqlbuild.compiler.planner._helpers.sql_tests import assembly as sql_test_assembly
@@ -72,8 +72,8 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
         ref_kind=SqlReferenceKind.SOURCE,
         ref_name="raw_orders",
     )
-    model: CompiledModel = replace(
-        project.models[0],
+    model: CompiledModelView = replace(
+        compiled_model_record(project.models[0]),
         references=(source_reference,),
     )
     tests: tuple[CompiledSqlTest, ...] = tuple(
@@ -211,7 +211,9 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
         ref_kind=SqlReferenceKind.SOURCE,
         ref_name="raw_orders",
     )
-    model: CompiledModel = replace(project.models[0], references=(source_reference,))
+    model: CompiledModelView = replace(
+        compiled_model_record(project.models[0]), references=(source_reference,)
+    )
     source_key: tuple[CompiledResourceType, str] = (
         CompiledResourceType.SOURCE,
         "raw_orders",

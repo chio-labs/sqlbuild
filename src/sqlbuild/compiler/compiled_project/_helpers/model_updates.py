@@ -1,0 +1,74 @@
+"""Record what later compile stages finish for a model, natively when its owner holds it."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import fields, replace
+from typing import cast
+
+import sqlbuild._native as _native
+from sqlbuild.compiler.compile.models import (
+    CompiledModel,
+    CompilerDiagnostic,
+    InferredColumn,
+)
+from sqlbuild.compiler.compile.types import CompiledModelView
+
+
+def compiled_model_record_impl(model: CompiledModelView) -> CompiledModel:
+    """The model as a `CompiledModel`, projected from its owner when it is a native view."""
+
+    if isinstance(model, CompiledModel):
+        return model
+    return CompiledModel(
+        **{field.name: getattr(model, field.name) for field in fields(CompiledModel)}
+    )
+
+
+def with_binding_diagnostics_impl(
+    *, model: CompiledModelView, diagnostics: tuple[CompilerDiagnostic, ...]
+) -> CompiledModelView:
+    """The model with these final binding diagnostics."""
+
+    if isinstance(model, CompiledModel):
+        return replace(model, binding_diagnostics=diagnostics)
+    return cast(_native.NativeCompiledModel, model).with_binding_diagnostics(diagnostics)
+
+
+def with_type_recovery_impl(
+    *,
+    model: CompiledModelView,
+    diagnostics: tuple[CompilerDiagnostic, ...],
+    poisoned: frozenset[tuple[str, str]],
+) -> CompiledModelView:
+    """The model with its recovered bindings and its poisoned outputs' types forgotten."""
+
+    if not isinstance(model, CompiledModel):
+        native: _native.NativeCompiledModel = cast(_native.NativeCompiledModel, model)
+        return native.with_type_recovery(
+            diagnostics, [column for name, column in poisoned if name == native.name]
+        )
+    columns: tuple[InferredColumn, ...] | None = None
+    if model.inferred_columns is not None:
+        columns = tuple(
+            replace(column, type=None) if (model.name, column.name) in poisoned else column
+            for column in model.inferred_columns
+        )
+    unchecked: frozenset[str] = frozenset(column for name, column in poisoned if name == model.name)
+    return replace(
+        model,
+        binding_diagnostics=diagnostics,
+        inferred_columns=columns,
+        unchecked_output_columns=unchecked,
+    )
+
+
+def with_target_defaults_impl(
+    *,
+    model: _native.NativeCompiledModel,
+    defaults: tuple[str | None, str | None],
+    render_qualified_name: Callable[..., str | None],
+) -> CompiledModelView:
+    """The model with the adapter's `(schema, database)` defaults filled into its destination."""
+
+    return model.with_target_defaults(defaults, render_qualified_name)

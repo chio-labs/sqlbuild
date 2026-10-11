@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.output.plan_entry import resolve_cursor_overrides
 from sqlbuild.compiler.planner.models import CursorOverrides
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
@@ -84,7 +84,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 def test_given_model_and_overrides_when_resolving_then_returns_expected(
     test_case: CursorOverrideResolutionTestCase,
 ) -> None:
-    model: CompiledModel = build_cursor_override_model(test_case.cursor_type)
+    model: CompiledModelView = build_cursor_override_model(test_case.cursor_type)
     has_typed: bool = any(
         v is not None
         for v in (test_case.start_ts, test_case.end_ts, test_case.start_int, test_case.end_int)

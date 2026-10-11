@@ -19,7 +19,8 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile._helpers.diagnostics.resource_sql import get_resource_sql_diagnostics
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.models import SqlSchemaValidationRequest
 
@@ -35,7 +36,7 @@ class SemanticCompletionInputs:
 
     @staticmethod
     def revalidation_request(
-        *, project: CompiledProject, model: CompiledModel, shapes: dict[str, dict[str, str]]
+        *, project: CompiledProject, model: CompiledModelView, shapes: dict[str, dict[str, str]]
     ) -> SqlSchemaValidationRequest:
         """Type recovery's request revalidating one failed model against `shapes`."""
 
@@ -74,7 +75,7 @@ class SemanticCompletionInputs:
     @staticmethod
     def audit_diagnostics(
         *,
-        model: CompiledModel,
+        model: CompiledModelView,
         project: CompiledProject,
         shape: dict[str, str],
         shapes: dict[str, dict[str, str]],

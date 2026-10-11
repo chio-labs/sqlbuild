@@ -17,8 +17,9 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject, CompiledSqlTest
-from sqlbuild.compiler.compile.types import CompiledResourceType, DiagnosticPhase
+from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType, DiagnosticPhase
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -227,7 +228,9 @@ def test_given_compiled_project_when_writing_static_target_then_expected_files_a
 
     changed_project: CompiledProject = replace(
         project,
-        models=(replace(project.models[0], query_sql="SELECT 3 AS order_id"),),
+        models=(
+            replace(compiled_model_record(project.models[0]), query_sql="SELECT 3 AS order_id"),
+        ),
     )
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -256,7 +259,12 @@ def test_given_unicode_sql_when_writing_static_target_twice_then_bytes_remain_un
     project: CompiledProject = build_static_target_writer_project()
     project = replace(
         project,
-        models=(replace(project.models[0], query_sql="SELECT 'café' AS product_name  \n\n"),),
+        models=(
+            replace(
+                compiled_model_record(project.models[0]),
+                query_sql="SELECT 'café' AS product_name  \n\n",
+            ),
+        ),
     )
     target_dir: Path = tmp_path / "target"
 
@@ -453,7 +461,9 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
     monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
     changed_project: CompiledProject = replace(
         project,
-        models=(replace(project.models[0], query_sql="SELECT 3 AS order_id"),),
+        models=(
+            replace(compiled_model_record(project.models[0]), query_sql="SELECT 3 AS order_id"),
+        ),
     )
 
     _ = write_static_compile_target(
@@ -482,8 +492,8 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    unrelated_model: CompiledModel = replace(
-        project.models[0],
+    unrelated_model: CompiledModelView = replace(
+        compiled_model_record(project.models[0]),
         key=replace(project.models[0].key, name="unrelated"),
         name="unrelated",
         relative_path=Path("models/unrelated.sql"),

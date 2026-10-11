@@ -2,8 +2,7 @@ import pytest
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledModel
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.contract_adoption._helpers.compare import compare_evidence
 from sqlbuild.compiler.contract_adoption._helpers.repository_edits import (
     _declared_type_span,
@@ -75,7 +74,7 @@ def test_given_dynamic_family_when_generating_contract_then_does_not_freeze_runt
 );
 SELECT * FROM category_amounts
 """
-    model: CompiledModel = make_contract_project(
+    model: CompiledModelView = make_contract_project(
         declared_columns=(("customer_id", "INTEGER"),),
         inferred_columns=(("customer_id", "INTEGER"),),
         type_enforcement=True,

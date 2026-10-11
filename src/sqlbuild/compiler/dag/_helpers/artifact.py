@@ -10,7 +10,6 @@ from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -19,7 +18,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlScenario,
     CompiledSqlTest,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledModelView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.dag.constants import REQUIRED_DAG_COLLECTION_KEYS
 from sqlbuild.compiler.dag.models import (
     DagArtifact,
@@ -209,7 +212,7 @@ def _build_function_node(function: CompiledFunction) -> DagNode:
     )
 
 
-def _build_model_node(model: CompiledModel) -> DagNode:
+def _build_model_node(model: CompiledModelView) -> DagNode:
     return DagNode(
         id=_node_id(model.key),
         kind=NodeKind.MODEL.value,
@@ -543,7 +546,7 @@ def _source_column(column: SourceColumnEntry) -> DagColumn:
     )
 
 
-def _model_columns(model: CompiledModel) -> tuple[DagColumn, ...]:
+def _model_columns(model: CompiledModelView) -> tuple[DagColumn, ...]:
     if model.schema_entry is not None and model.schema_entry.columns:
         return tuple(_schema_column(column) for column in model.schema_entry.columns)
     if model.inferred_columns is not None:
@@ -553,7 +556,7 @@ def _model_columns(model: CompiledModel) -> tuple[DagColumn, ...]:
     return ()
 
 
-def _model_tags(model: CompiledModel) -> tuple[str, ...]:
+def _model_tags(model: CompiledModelView) -> tuple[str, ...]:
     schema_tags: tuple[str, ...] = ()
     if model.schema_entry is not None:
         schema_tags = model.schema_entry.tags

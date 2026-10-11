@@ -15,12 +15,12 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_function_names,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
     CompiledResourceType,
     DiagnosticPhase,
     DiagnosticSeverity,
@@ -38,7 +38,7 @@ _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
 
 def _audit_errors(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     project: CompiledProject,
     shape: dict[str, str],
     shapes: dict[str, dict[str, str]],
@@ -223,7 +223,7 @@ def _names(value: object) -> tuple[str, ...]:
 
 def _model_error(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     code: str,
     name: str,
     message: str,

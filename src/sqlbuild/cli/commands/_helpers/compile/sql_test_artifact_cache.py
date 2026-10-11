@@ -20,12 +20,12 @@ from sqlbuild.cli.compile.models import (
 )
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledProject,
     CompiledSqlTest,
     CompileSqlTestCte,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 
 _CACHE_VERSION: int = 4
 _ALGORITHM_FINGERPRINT: str = "sql-test-artifact-v4-orjson-identity"
@@ -204,7 +204,7 @@ def build_sql_test_artifact_cache_record(
     )
 
 
-def _model_identity(*, model: CompiledModel) -> str:
+def _model_identity(*, model: CompiledModelView) -> str:
     return _payload_digest(
         {
             "name": model.name,

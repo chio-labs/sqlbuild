@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledSeed, CompileModelConfig
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.discovery.models import DiscoveredSeedFile
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
@@ -52,7 +53,7 @@ def test_given_incremental_attached_audit_when_planning_then_no_warehouse_method
         project,
         models=(
             replace(
-                project.models[0],
+                compiled_model_record(project.models[0]),
                 config=CompileModelConfig(values={"materialized": "incremental", "cursor": "id"}),
             ),
         ),

@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledSource
+from sqlbuild.compiler.compile.models import CompiledSource
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.contract_adoption.exceptions import ContractAdoptionError
 from sqlbuild.compiler.contract_adoption.models import ContractFinding
 from sqlbuild.compiler.contract_adoption.types import ContractFindingKind
@@ -38,7 +39,7 @@ _UNQUOTED_MODEL_TYPE_PATTERN: re.Pattern[str] = re.compile(
 
 
 def edit_model(
-    *, model: CompiledModel, physical_columns: tuple[ColumnInfo, ...], overwrite: bool
+    *, model: CompiledModelView, physical_columns: tuple[ColumnInfo, ...], overwrite: bool
 ) -> tuple[str | None, str | None]:
     if model.schema_entry is not None and model.schema_entry.model_schema is not None:
         return None, "model uses a shared SCHEMA declaration"

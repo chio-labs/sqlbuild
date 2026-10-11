@@ -9,11 +9,11 @@ from sqlbuild.compiler.authored_values.main._project_var_values import render_pr
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
     CompiledSource,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner.constants import (
     MODEL_POST_HOOKS_CONFIG_KEY,
@@ -112,7 +112,7 @@ def with_declared_source_reads(
     return result
 
 
-def _sql_hook_source_reads(model: CompiledModel) -> tuple[str, ...]:
+def _sql_hook_source_reads(model: CompiledModelView) -> tuple[str, ...]:
     names: list[str] = []
     for hook_key in (MODEL_PRE_HOOKS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY):
         value: object = model.config.values.get(hook_key)
@@ -132,7 +132,7 @@ def _selected_managed_source_refs(
     managed_source_names: frozenset[str],
 ) -> tuple[str, ...]:
     names: set[str] = set()
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if model.key not in selected_keys:
             continue
