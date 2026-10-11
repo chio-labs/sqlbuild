@@ -819,7 +819,10 @@ name = "sqlbuild-scopes"
 version = "0.155.0"
 dependencies = [
  "serde_json",
+ "sha2",
+ "sqlbuild-config",
  "sqlbuild-core",
+ "sqlbuild-discovery",
  "sqlbuild-render",
  "sqlbuild-sqltext",
 ]

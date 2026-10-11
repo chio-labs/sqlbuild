@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_SCHEMA_VERSION
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
@@ -190,7 +189,7 @@ class CacheFaultCase:
 
     description: str
     mutate: Callable[..., None]
-    expected_schema_version: int = SCOPE_CACHE_SCHEMA_VERSION
+    expected_schema_version: int = 3
 
 
 @dataclass(frozen=True)

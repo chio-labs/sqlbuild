@@ -5,35 +5,8 @@ from __future__ import annotations
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeKind
 
 SCOPE_METADATA_SCHEMA_VERSION: int = 3
-SCOPE_CACHE_SCHEMA_VERSION: int = 3
-SCOPE_FINGERPRINT_ALGORITHM_VERSION: int = 2
 SCOPE_CACHE_DIRECTORY_NAME: str = "declaration-scopes-v2"
 SCOPE_CACHE_FILENAME: str = "scope-index.json"
-SCOPE_CACHE_MAX_BYTES: int = 16 * 1024 * 1024
-SCOPE_SOURCE_SUFFIXES: frozenset[str] = frozenset({".sql", ".yml", ".yaml", ".py"})
-SCOPE_MACRO_SUFFIX: str = ".py"
-SCOPE_RELATIONSHIP_ROOTS: frozenset[tuple[str, str]] = frozenset(
-    {("tests", "unit"), ("tests", "scenarios")}
-)
-SCOPE_LOCAL_CONFIG_KEYS: frozenset[str] = frozenset(
-    {"adapter", "settings", "target", "targets", "vars"}
-)
-SCOPE_PROJECT_CONFIG_KEYS: frozenset[str] = frozenset(
-    {
-        "adapter",
-        "constants",
-        "default_target",
-        "defaults",
-        "path_defaults",
-        "scopes",
-        "settings",
-        "targets",
-        "vars",
-    }
-)
-SCOPE_TARGET_VARS_KEY: str = "vars"
-SCOPE_TARGETS_KEY: str = "targets"
-SCOPE_ENUM_MEMBER_FIELDS: frozenset[str] = frozenset({"name"})
 DEFAULT_ENUM_MEMBER_PREVIEW: int = 20
 QUALIFIED_IDENTITY_SEPARATOR: str = ":"
 PATH_SEPARATOR: str = "/"

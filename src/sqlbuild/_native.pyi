@@ -965,6 +965,13 @@ def build_native_scope_lookup(
         str | None,
     ],
 ]: ...
+def scope_index_fingerprint(
+    project_dir: Path,
+    inputs: tuple[list[str], list[str], list[str], list[str], str],
+    /,
+) -> str | None: ...
+def read_scope_index_cache(path: Path, fingerprint: str, /) -> Any: ...
+def write_scope_index_cache(location: tuple[Path, str], fingerprint: str, rows: Any, /) -> bool: ...
 def scope_schema_usages(
     schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
     records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],

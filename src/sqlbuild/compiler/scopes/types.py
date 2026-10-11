@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.scopes.models import DeclarationRecord
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
-type JsonObject = dict[str, object]
 type NativeIdentityRow = tuple[str, str]
 type NativeDeclarationIdentityRow = tuple[str, str, NativeIdentityRow | None]
 type NativeResourceRow = tuple[str, str, str, str]
@@ -40,13 +39,6 @@ type NativePlacementRows = tuple[
     list[tuple[NativeQualifiedRow, str, int, int, str, NativeRootRow, str | None]],
     list[tuple[NativeQualifiedRow, NativeQualifiedRow, NativeQualifiedRow | None]],
 ]
-
-
-class ScopeCacheIdentityType(StrEnum):
-    """Identity discriminator values persisted by the scope cache codec."""
-
-    RESOURCE = "resource"
-    DECLARATION = "declaration"
 
 
 class ResourceKind(StrEnum):

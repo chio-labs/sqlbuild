@@ -37,11 +37,7 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
     """Load or build scope facts without credentials, a connection, or warehouse access."""
 
     resolved_project_dir: Path = project_dir.resolve()
-    fingerprint: str | None
-    try:
-        fingerprint = scope_index_fingerprint(project_dir=resolved_project_dir)
-    except (OSError, UnicodeError, ValueError):
-        fingerprint = None
+    fingerprint: str | None = scope_index_fingerprint(project_dir=resolved_project_dir)
     if not no_cache and fingerprint is not None:
         cached: ScopeIndex | None = read_cached_scope_index(
             project_dir=resolved_project_dir, fingerprint=fingerprint
