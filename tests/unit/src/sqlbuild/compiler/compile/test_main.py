@@ -10,9 +10,9 @@ import pytest
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
-    CompileProjectInputs,
     CompileSqlFunctionInput,
 )
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -2767,7 +2767,7 @@ def test_given_discovered_inputs_when_building_compile_inputs_then_it_attaches_m
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         selected_target=test_case.selected_target,
@@ -3125,7 +3125,7 @@ def main():
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=replace(
             DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -3162,7 +3162,7 @@ def main():
         functions["unqualified"].fingerprint_schema,
     ) == test_case.expected_unqualified_fingerprint_namespace
 
-    physical_inputs: CompileProjectInputs = build_compile_inputs(
+    physical_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=replace(
             DUCKDB_COMPILE_ADAPTER_CONTEXT,
@@ -3300,7 +3300,7 @@ def test_given_rejected_reference_calls_when_building_compile_inputs_then_report
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
 
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
@@ -4746,7 +4746,7 @@ def test_given_authored_retention_header_when_building_inputs_then_typed_policy_
     write_repo_files(tmp_path, test_case.repo_files)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
@@ -4846,7 +4846,7 @@ def test_given_model_referencing_seed_when_building_compile_inputs_then_succeeds
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )

@@ -7,7 +7,8 @@ import re
 from collections.abc import Iterable
 
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
-from sqlbuild.compiler.compile.models import CompileProjectInputs, CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.project_assembly.constants import (
     BOOLEAN_VARIABLE,
     ENVIRONMENT_NAME_PATTERN,
@@ -36,7 +37,7 @@ from sqlbuild.spec.contracts.models import DefaultsConfig, TargetConfig
 
 def project_request(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     dialect: str | None,
     syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
 ) -> tuple[ProjectRequestRow, list[Exception | None]]:

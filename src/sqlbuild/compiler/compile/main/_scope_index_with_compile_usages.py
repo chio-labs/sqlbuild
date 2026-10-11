@@ -7,7 +7,7 @@ from dataclasses import replace
 from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import (
     model_schema_scope_usages,
 )
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
     get_placement_validated_scope_index,
 )
@@ -19,7 +19,7 @@ from sqlbuild.compiler.scopes.models import (
 )
 
 
-def scope_index_with_compile_usages(*, inputs: CompileProjectInputs) -> ScopeIndex:
+def scope_index_with_compile_usages(*, inputs: CompileInputsView) -> ScopeIndex:
     """Return compile inputs' canonical index with all usage and placement facts."""
 
     collected_usages: list[UsageRecord] = list(

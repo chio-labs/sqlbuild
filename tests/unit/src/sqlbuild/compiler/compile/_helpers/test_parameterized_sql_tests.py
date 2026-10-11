@@ -15,11 +15,11 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlTest,
-    CompileProjectInputs,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledResourceType,
+    CompileInputsView,
     TypedSqlValueRenderer,
 )
 from sqlbuild.compiler.planner._helpers.output.plan_entry import scope_overlaps
@@ -248,7 +248,7 @@ def test_given_parameterized_sql_tests_when_compiling_then_cases_have_typed_uniq
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_repo_files(tmp_path, test_case.repo_files)
-    compile_inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    compile_inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
     compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
 
     assert tuple(test.name for test in compiled.sql_tests) == test_case.expected_names

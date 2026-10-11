@@ -13,9 +13,9 @@ from sqlbuild.compiler.compile.models import (
     CompiledModelSqlTestPayload,
     CompiledSqlTest,
     CompileModelSqlTestInputPayload,
-    CompileProjectInputs,
     CompileSqlTestInput,
 )
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
 from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.sql_test_glue.constants import (
@@ -31,7 +31,7 @@ from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly
 
 def assemble_sql_tests_by_engine(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     macro_mock_queries: Callable[[CompileSqlTestInput], dict[str, str]],
 ) -> tuple[CompiledSqlTest, ...]:
     """Assemble every SQL test natively, raising errors in Python's assembly order."""

@@ -22,10 +22,10 @@ from sqlbuild.compiler.analysis_session.models import (
 from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import standalone_pivot_models
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_syntax_checks
 from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
     DynamicColumnContractProof,
     ModelSqlAnalysis,
 )
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
     assemble_native_project_resources,
@@ -40,7 +40,7 @@ from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 def project_facts_by_engine(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     dialect: str | None,
     analysis_model_names: frozenset[str] | None,
     analyses: dict[str, ModelSqlAnalysis],

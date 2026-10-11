@@ -6,12 +6,11 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledObjectKey,
-    CompileProjectInputs,
     CompileSqlReference,
     ExpansionSpan,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, SqlTestMode
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompileInputsView, SqlTestMode
 from sqlbuild.compiler.lineage.types import (
     InferredNullability,
 )
@@ -263,7 +262,7 @@ class ScopedDeclarationErrorTestCase:
 class ScopedDeclarationSurfaceTestCase:
     description: str
     files: dict[str, str]
-    result: Callable[[CompileProjectInputs], str | None]
+    result: Callable[[CompileInputsView], str | None]
     expected_sql: str
 
 

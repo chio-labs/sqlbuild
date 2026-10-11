@@ -12,9 +12,8 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.dag.types import NodeKind
@@ -233,7 +232,7 @@ seeds:
         },
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    inputs: CompileProjectInputs = build_compile_inputs(
+    inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )

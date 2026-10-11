@@ -10,10 +10,12 @@ import pytest
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompileInputsView,
+    ModelInput,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, ModelInput
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
@@ -150,7 +152,7 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
         },
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
@@ -375,7 +377,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         },
     )
 
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter_context=DUCKDB_ARRAY_COMPILE_ADAPTER_CONTEXT,
         run_id="typed_constants",

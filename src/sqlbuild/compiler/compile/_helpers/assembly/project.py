@@ -84,7 +84,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompiledSqlScenario,
     CompileModelSqlTestInputPayload,
-    CompileProjectInputs,
     CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
@@ -105,6 +104,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompileInputsView,
     DiagnosticPhase,
     DiagnosticSeverity,
     ModelInput,
@@ -153,7 +153,7 @@ class _DynamicContractAnalysisInputs:
 
 def assemble_compiled_project(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,
@@ -450,9 +450,7 @@ def assemble_compiled_project(
     )
 
 
-def _assembled_project(
-    *, inputs: CompileProjectInputs, fields: dict[str, Any]
-) -> CompiledProjectView:
+def _assembled_project(*, inputs: CompileInputsView, fields: dict[str, Any]) -> CompiledProjectView:
     """The native owner's project view when it holds every model; else a `CompiledProject`."""
 
     models: tuple[CompiledModelView, ...] = fields["models"]
@@ -476,7 +474,7 @@ def _str_or_none(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _connection_database_fallback(*, inputs: CompileProjectInputs) -> str | None:
+def _connection_database_fallback(*, inputs: CompileInputsView) -> str | None:
     adapter_name: str = resolve_effective_adapter_name(
         project_config=inputs.project_config,
         local_config=inputs.local_config,
@@ -629,7 +627,7 @@ def _model_name(model_input: ModelInput) -> str:
 
 
 def _build_dynamic_families_by_table(
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
 ) -> dict[str, tuple[SchemaDynamicColumnFamily, ...]]:
     return {
         model_input.schema_entry.name: model_input.schema_entry.dynamic_columns
@@ -846,7 +844,7 @@ def _build_test_model_query_overrides(
     *,
     test_input: CompileSqlTestInput,
     model_inputs: tuple[ModelInput, ...],
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
 ) -> dict[str, str]:
     """Re-expand each model from its pre-macro macro_source_sql with test macro mocks applied."""
 

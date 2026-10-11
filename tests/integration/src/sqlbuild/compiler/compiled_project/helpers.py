@@ -17,7 +17,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile import models as compile_models
 from sqlbuild.compiler.compile._helpers.attachment import core as attachment_core
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
+from sqlbuild.compiler.compile.models import CompileAdapterContext
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.sql_values.types import CollectionRendering
@@ -294,7 +295,7 @@ MACRO_FILES: dict[str, str] = {
 
 def build_inputs_with_native_loop(
     *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, defer_validation: bool = True
-) -> tuple[CompileProjectInputs, list[int]]:
+) -> tuple[CompileInputsView, list[int]]:
     """Build compile inputs, counting the models the native loop finishes."""
 
     finished: list[int] = []
@@ -305,7 +306,7 @@ def build_inputs_with_native_loop(
 
     with monkeypatch.context() as patch:
         patch.setattr(_native, "NativeModelLoop", counting_loop)
-        inputs: CompileProjectInputs = build_compile_inputs(
+        inputs: CompileInputsView = build_compile_inputs(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),
             adapter_context=CompileAdapterContext(
                 value_renderer=DuckDbAdapter(),
@@ -349,7 +350,7 @@ _SUMMARY_FIELDS: tuple[str, ...] = (
 )
 
 
-def inputs_summary(*, inputs: CompileProjectInputs, project_dir: Path) -> dict[str, object]:
+def inputs_summary(*, inputs: CompileInputsView, project_dir: Path) -> dict[str, object]:
     """Each model input's fields and the diagnostics, as text with the project path elided."""
 
     return {

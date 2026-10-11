@@ -9,9 +9,8 @@ from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
-    CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions
 from sqlbuild.compiler.planner.main.selection._resolve_planner_scopes import (
@@ -106,7 +105,7 @@ def resolve_configured_rule_selection(
 
 def resolve_analysis_model_names(
     *,
-    compile_inputs: CompileProjectInputs,
+    compile_inputs: CompileInputsView,
     inference_profile: ExpressionInferenceProfile,
     selection: CompileAnalysisSelection | None,
 ) -> frozenset[str] | None:

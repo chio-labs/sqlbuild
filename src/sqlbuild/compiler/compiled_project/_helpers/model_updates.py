@@ -10,10 +10,15 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledProject,
+    CompileProjectInputs,
     CompilerDiagnostic,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompileInputsView,
+)
 
 
 def compiled_model_record_impl(model: CompiledModelView) -> CompiledModel:
@@ -89,3 +94,23 @@ def project_with_impl(*, project: CompiledProjectView, **changes: Any) -> Compil
     if isinstance(project, CompiledProject):
         return replace(project, **changes)
     return cast(_native.NativeProjectView, project).with_changes(**changes)
+
+
+def inputs_with_impl(*, inputs: CompileInputsView, **changes: Any) -> CompileInputsView:
+    """The compile inputs with `changes`; a native view shares its owner's model inputs."""
+
+    if isinstance(inputs, CompileProjectInputs):
+        return replace(inputs, **changes)
+    return cast(_native.NativeInputsView, inputs).with_changes(**changes)
+
+
+def compile_inputs_view_impl(
+    *, fields: dict[str, Any], native_project: _native.NativeCompiledProject | None
+) -> CompileInputsView:
+    """The native owner's inputs view when it holds every model input; else a record."""
+
+    if native_project is not None and all(
+        isinstance(model, _native.NativeModelInput) for model in fields["model_inputs"]
+    ):
+        return native_project.inputs_view(fields)
+    return CompileProjectInputs(**fields, native_project=native_project)

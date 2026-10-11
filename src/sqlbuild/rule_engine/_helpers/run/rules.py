@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSqlExpansion,
-    CompileProjectInputs,
     DeclarationScopeBuild,
     SqlExpansionContext,
 )
@@ -26,6 +25,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompileInputsView,
     ModelInput,
 )
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
@@ -285,7 +285,7 @@ def _config_references_custom_rules(config: RulesConfig) -> bool:
 
 
 def prepare_sql_rules(
-    *, inputs: CompileProjectInputs, executor: Executor, dialect: str, stop: Event
+    *, inputs: CompileInputsView, executor: Executor, dialect: str, stop: Event
 ) -> PreparedSqlLint | None:
     project_dir: Path | None = inputs.discovered_inputs.project_dir
     if project_dir is None or any(diagnostic.is_error for diagnostic in inputs.diagnostics):

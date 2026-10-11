@@ -11,9 +11,8 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAnalysisSelection,
-    CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.contracts.main.promotion_conflicts import promotion_conflict_diagnostics
 from sqlbuild.compiler.discovery.constants import (
@@ -101,7 +100,7 @@ def _build_python_compiled_project(
     )
     no_cache: bool = analysis_selection is not None and analysis_selection.no_cache
     with record_compile_timing("attachment_ms"):
-        compile_inputs: CompileProjectInputs = _frontier_compile_inputs(
+        compile_inputs: CompileInputsView = _frontier_compile_inputs(
             discovered_inputs=discovered_inputs,
             adapter=adapter,
             selected_target=selected_target,
@@ -172,7 +171,7 @@ def _frontier_compile_inputs(
     resolved_connection: dict[str, object] | None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
     no_cache: bool,
-) -> CompileProjectInputs:
+) -> CompileInputsView:
     return compile_frontier(
         until=CompilerStage.COMPILE_PROJECT_INPUTS,
         python_stage=partial(

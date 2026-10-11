@@ -12,10 +12,7 @@ import pytest
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
-)
-from sqlbuild.compiler.compile.types import CompiledProjectView, ModelInput
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView, ModelInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -91,7 +88,7 @@ def test_given_models_in_one_folder_when_compiling_then_folder_visibility_is_reb
         },
     )
 
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
 
     consumers: list[set[ResourceIdentity | DeclarationIdentity]] = [
         usage_consumers(model_input) for model_input in inputs.model_inputs
@@ -165,7 +162,7 @@ def test_given_scoped_declaration_when_compiling_model_then_only_lexically_visib
         | {test_case.model_path: test_case.model_sql},
     )
 
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
 
     assert inputs.model_inputs[0].query_sql == test_case.expected_sql
     assert inputs.scope_index.declarations
@@ -362,7 +359,7 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
     actual: str | None = test_case.result(inputs)
 
     assert actual == test_case.expected_sql
@@ -526,8 +523,8 @@ def test_given_expected_models_when_compiling_then_public_declarations_are_grant
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    first: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
-    second: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    first: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
+    second: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
     compiled: CompiledProjectView = assemble_project(inputs=first, skip_column_inference=True)
     sql_body: str = getattr(first, test_case.input_collection)[0].sql_body
     grants: tuple[tuple[str, str, str], ...] = tuple(
@@ -585,7 +582,7 @@ def test_given_relationship_granted_reference_when_compiling_then_usage_retains_
         {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files,
     )
 
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
     compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     assert test_case.expected_usage in compiled.scope_index.usages
@@ -622,7 +619,7 @@ def test_given_exact_declaration_placement_when_assembling_then_project_is_accep
         {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files,
     )
 
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
     compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     assert compiled.scope_index.completeness.runtime_usage is test_case.expected_complete
@@ -655,7 +652,7 @@ def test_given_models_in_same_directory_when_reusing_visibility_then_usage_consu
         },
     )
 
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
     compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
     consumers: set[ResourceIdentity] = {
@@ -712,7 +709,7 @@ def test_given_invalid_declaration_placement_when_assembling_then_it_reports_an_
         tmp_path,
         {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files,
     )
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
 
     project: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
@@ -747,7 +744,7 @@ def test_given_disabled_placement_enforcement_when_assembling_then_project_and_w
         tmp_path,
         {"sqlbuild_project.toml": project_file} | test_case.files,
     )
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
 
     compiled: CompiledProjectView = assemble_project(inputs=inputs, skip_column_inference=True)
 
@@ -835,7 +832,7 @@ def test_given_scoped_declaration_when_compiling_source_then_uses_authored_sourc
         ),
     )
 
-    inputs: CompileProjectInputs = build_compile_inputs(
+    inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="source_scope_test",
@@ -885,7 +882,7 @@ def test_given_sources_in_same_file_when_reusing_visibility_then_usage_consumers
         ),
     )
 
-    inputs: CompileProjectInputs = build_compile_inputs(
+    inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="source_scope_reuse_test",
@@ -931,7 +928,7 @@ def test_given_tests_in_same_directory_when_reusing_visibility_then_usage_consum
         },
     )
 
-    inputs: CompileProjectInputs = compile_project_inputs(project_dir=tmp_path)
+    inputs: CompileInputsView = compile_project_inputs(project_dir=tmp_path)
 
     test_usages: Iterator[UsageRecord] = chain.from_iterable(
         test.declaration_usages for test in inputs.test_inputs

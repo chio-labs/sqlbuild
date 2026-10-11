@@ -16,10 +16,9 @@ from sqlbuild.compiler.compile._helpers.explicit_references.checks import (
     explicit_reference_report,
 )
 from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
     PythonSqlReferenceReport,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.compiled_project.main._record_model_analyses import record_model_analyses
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -30,7 +29,7 @@ from sqlbuild.compiler.macro_bridge.main.run_with_macro_bridge import run_with_m
 @with_collected_compile_diagnostics
 def assemble_project(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     inference_profile: ExpressionInferenceProfile | None = None,
     skip_column_inference: bool = False,
     column_lineage_mode: ColumnLineageMode = ColumnLineageMode.FAST,

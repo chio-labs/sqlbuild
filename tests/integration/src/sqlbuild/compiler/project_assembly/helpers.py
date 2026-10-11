@@ -7,7 +7,6 @@ import os
 import random
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +20,9 @@ from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
-    CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
@@ -143,7 +142,7 @@ def seed_yml(schema: str) -> str:
     )
 
 
-def project_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjectInputs:
+def project_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileInputsView:
     """Write `files` and attach their compile inputs as the compile pipeline does."""
 
     _ = [
@@ -159,7 +158,7 @@ def project_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjec
 
 
 def assemble_with(
-    *, inputs: CompileProjectInputs, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+    *, inputs: CompileInputsView, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> CompiledProjectView:
     """Assemble `inputs` with `engine`."""
 
@@ -168,7 +167,7 @@ def assemble_with(
 
 
 def recorded_assembly(
-    *, inputs: CompileProjectInputs, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+    *, inputs: CompileInputsView, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[object, tuple[tuple[str, ...], bool]]:
     """Assemble `inputs` with `engine`; return its assembly view and the input reads recorded."""
 
@@ -189,9 +188,9 @@ def assembly_outcome(
     """Attach and assemble `files`: `("ok", view)`, or the error's class, message, help and code."""
 
     try:
-        inputs: CompileProjectInputs = project_inputs(project_dir=project_dir, files=files)
-        merged: CompileProjectInputs = replace(
-            inputs, effective_vars={**inputs.effective_vars, **(effective_vars or {})}
+        inputs: CompileInputsView = project_inputs(project_dir=project_dir, files=files)
+        merged: CompileInputsView = inputs_with(
+            inputs=inputs, effective_vars={**inputs.effective_vars, **(effective_vars or {})}
         )
         return (
             "ok",
@@ -231,7 +230,7 @@ def rejected_opt_outs(
     """Attach `files` with `engine`; return whether each opt-out is rejected."""
 
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
-    inputs: CompileProjectInputs = project_inputs(project_dir=project_dir, files=files)
+    inputs: CompileInputsView = project_inputs(project_dir=project_dir, files=files)
     return {
         model_input.model_file.file_path.stem: model_input.rejected_sql_analysis_opt_out is not None
         for model_input in inputs.model_inputs

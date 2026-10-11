@@ -15,7 +15,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_instances
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
+from sqlbuild.compiler.compile.models import CompileAdapterContext
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
@@ -176,7 +177,7 @@ def model_config_engine_outcome(
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     adapter: DuckDbAdapter = DuckDbAdapter()
-    inputs: CompileProjectInputs = build_compile_inputs(
+    inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=CompileAdapterContext(
             value_renderer=adapter,

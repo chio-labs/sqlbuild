@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import sqlbuild._native as _native
     from sqlbuild.compiler.compile.models import (
         CompactBatchPreparation,
+        CompileAuditInput,
         CompiledAudit,
         CompiledFunction,
         CompiledLineageColumnFact,
@@ -25,18 +26,25 @@ if TYPE_CHECKING:
         CompiledSqlScenario,
         CompiledSqlTest,
         CompileModelConfig,
-        CompileProjectInputs,
         CompilerDiagnostic,
+        CompileSeedInput,
+        CompileSourceInput,
+        CompileSqlFunctionInput,
         CompileSqlReference,
+        CompileSqlScenarioInput,
+        CompileSqlTestInput,
+        DeclarationScopeBuild,
         DynamicColumnContractProof,
         InferredColumn,
         LoadedMacro,
+        MacroContext,
     )
     from sqlbuild.compiler.discovery.models import (
         ConstantDeclaration,
         DiscoveredHookFunction,
         DiscoveredLoaderFunction,
         DiscoveredMaterializationFile,
+        DiscoveredProjectInputs,
         DiscoveredSchemaFile,
         DiscoveredSqlHookFile,
         DiscoveredSqlModelFile,
@@ -47,11 +55,75 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
     from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
     from sqlbuild.spec.contracts.models import (
+        LocalConfig,
+        ProjectConfig,
         ScenarioConfig,
         SchemaModelEntry,
         SettingsConfig,
         SourceLocation,
+        TargetConfig,
     )
+
+
+class CompileInputsView(Protocol):
+    """A compile's attached inputs: a native owner view, or hand-built `CompileProjectInputs`."""
+
+    @property
+    def project_config(self) -> ProjectConfig: ...
+    @property
+    def local_config(self) -> LocalConfig: ...
+    @property
+    def discovered_inputs(self) -> DiscoveredProjectInputs: ...
+    @property
+    def sql_lexical_syntax(self) -> SqlLexicalSyntax: ...
+    @property
+    def run_id(self) -> str: ...
+    @property
+    def effective_target_name(self) -> str | None: ...
+    @property
+    def effective_target(self) -> TargetConfig | None: ...
+    @property
+    def compile_cache_dir(self) -> Path | None: ...
+    @property
+    def effective_connection(self) -> dict[str, object]: ...
+    @property
+    def effective_settings(self) -> SettingsConfig: ...
+    @property
+    def no_sql_validation(self) -> bool: ...
+    @property
+    def effective_vars(self) -> dict[str, object]: ...
+    @property
+    def macro_context(self) -> MacroContext | None: ...
+    @property
+    def loaded_macros(self) -> dict[str, LoadedMacro]: ...
+    @property
+    def public_enums(self) -> dict[str, EnumDeclaration]: ...
+    @property
+    def public_constants(self) -> dict[str, ConstantDeclaration]: ...
+    @property
+    def model_inputs(self) -> tuple[ModelInput, ...]: ...
+    @property
+    def seed_inputs(self) -> tuple[CompileSeedInput, ...]: ...
+    @property
+    def source_inputs(self) -> tuple[CompileSourceInput, ...]: ...
+    @property
+    def sql_function_inputs(self) -> tuple[CompileSqlFunctionInput, ...]: ...
+    @property
+    def test_inputs(self) -> tuple[CompileSqlTestInput, ...]: ...
+    @property
+    def scenario_inputs(self) -> tuple[CompileSqlScenarioInput, ...]: ...
+    @property
+    def audit_inputs(self) -> tuple[CompileAuditInput, ...]: ...
+    @property
+    def diagnostics(self) -> tuple[CompilerDiagnostic, ...]: ...
+    @property
+    def external_sql_reference_resolver(self) -> ExternalSqlReferenceResolver | None: ...
+    @property
+    def scope_index(self) -> ScopeIndex: ...
+    @property
+    def declaration_scope(self) -> DeclarationScopeBuild | None: ...
+    @property
+    def native_project(self) -> _native.NativeCompiledProject | None: ...
 
 
 class CompiledProjectView(Protocol):
@@ -249,7 +321,7 @@ class CompactBatchResponseCallback(Protocol):
 class CompileInputsReadyCallback(Protocol):
     """Invocation-local observer for the completed pre-semantic input snapshot."""
 
-    def __call__(self, *, inputs: CompileProjectInputs) -> None: ...
+    def __call__(self, *, inputs: CompileInputsView) -> None: ...
 
 
 class AttachedAuditTargetKind(StrEnum):

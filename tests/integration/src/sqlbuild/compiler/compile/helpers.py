@@ -21,12 +21,12 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
-    CompileProjectInputs,
     DeclarationResolutionContext,
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
 )
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
@@ -232,7 +232,7 @@ def write_project(*, root: Path, files: dict[str, str]) -> Path:
 
 def render_compile_inputs(
     *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
-) -> CompileProjectInputs:
+) -> CompileInputsView:
     """Render the project's compile inputs through the frontier under one compiler engine."""
 
     with monkeypatch.context() as patch:
@@ -261,7 +261,7 @@ def render_compile_inputs(
         )
 
 
-def comparable_capture(inputs: CompileProjectInputs) -> str:
+def comparable_capture(inputs: CompileInputsView) -> str:
     """Render compile inputs as canonical JSON without the per-run identifier."""
 
     return STAGE_CAPTURE_INVOCATION_ID_PATTERN.sub(

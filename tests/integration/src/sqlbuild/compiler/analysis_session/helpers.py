@@ -52,12 +52,11 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompileAdapterContext,
     CompiledLineageColumnFact,
-    CompileProjectInputs,
     DynamicColumnContractProof,
     InferredColumn,
     ModelSqlAnalysis,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, ModelInput
+from sqlbuild.compiler.compile.types import CompiledModelView, CompileInputsView, ModelInput
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
@@ -513,7 +512,7 @@ def started_sessions(*, monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     return started
 
 
-def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileProjectInputs:
+def compile_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileInputsView:
     """Write a project and attach its compile inputs with the DuckDB compile context."""
 
     for relative_path, contents in files.items():
@@ -580,7 +579,7 @@ class NativeAnalysisRuns:
 
 def analyse_natively(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     inference_profile: ExpressionInferenceProfile,
     lineage_mode: ColumnLineageMode,
     runs: NativeAnalysisRuns,
@@ -692,7 +691,7 @@ def custom_nullability_rule(arguments: tuple[InferredNullability, ...]) -> Infer
 
 def analysis_request(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     monkeypatch: pytest.MonkeyPatch,
     inference_profile: ExpressionInferenceProfile = _DUCKDB_PROFILE,
 ) -> NativeModelAnalysisRequest:

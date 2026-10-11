@@ -12,10 +12,14 @@ from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_sha
 from sqlbuild.compiler.compile._helpers.analysis.reference_names import table_function_analysis_name
 from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, ModelInput
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompileInputsView,
+    ModelInput,
+)
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
@@ -108,7 +112,7 @@ def inferred_binding_shape(
     )
 
 
-def build_declared_column_types(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
+def build_declared_column_types(inputs: CompileInputsView) -> dict[str, dict[str, str]]:
     """Collect declared type hints independently of closed-schema authority."""
     facts: dict[str, dict[str, str]] = {}
     for model_input in inputs.model_inputs:
@@ -133,7 +137,7 @@ def build_declared_column_types(inputs: CompileProjectInputs) -> dict[str, dict[
 
 
 def build_column_nullability_by_table(
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
 ) -> dict[str, dict[str, InferredNullability]]:
     """Return what each model, seed, source and table function declares about column nulls."""
 
@@ -191,7 +195,7 @@ def _declared_column_nullability(
     return InferredNullability.UNKNOWN
 
 
-def build_complete_binding_schemas(inputs: CompileProjectInputs) -> dict[str, dict[str, str]]:
+def build_complete_binding_schemas(inputs: CompileInputsView) -> dict[str, dict[str, str]]:
     """Collect authoritative declared interfaces before SQL inference."""
     schemas: dict[str, dict[str, str]] = {}
     for model in inputs.model_inputs:

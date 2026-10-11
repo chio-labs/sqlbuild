@@ -17,9 +17,8 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
 from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
-    CompileProjectInputs,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.sql_test_glue.models import (
@@ -485,7 +484,7 @@ def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]
         answers.update(f"failed_{failure[0]}" for failure in filter(None, failures))
         return rows
 
-    def counted_assemblies(*, inputs: CompileProjectInputs) -> tuple[NativeSqlTestAssembly, ...]:
+    def counted_assemblies(*, inputs: CompileInputsView) -> tuple[NativeSqlTestAssembly, ...]:
         assemblies: tuple[NativeSqlTestAssembly, ...] = seam(inputs=inputs)
         tests: list[CompiledSqlTest | None] = [item.test for item in assemblies]
         native: list[CompiledSqlTest] = list(filter(None, tests))

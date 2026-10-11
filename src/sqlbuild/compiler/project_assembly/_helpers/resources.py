@@ -11,11 +11,10 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompileProjectInputs,
     CompileSeedInput,
     CompileSourceInput,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, CompileInputsView
 from sqlbuild.compiler.project_assembly.constants import (
     COMPILE_INPUT_FAILURE,
     ENVIRONMENT_READ,
@@ -34,7 +33,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 
 def project_resources(
-    *, inputs: CompileProjectInputs, row: ProjectResourcesRow, held: list[Exception | None]
+    *, inputs: CompileInputsView, row: ProjectResourcesRow, held: list[Exception | None]
 ) -> NativeProjectResources:
     """Return the resource facts the native row describes, in input order, up to the failure."""
 

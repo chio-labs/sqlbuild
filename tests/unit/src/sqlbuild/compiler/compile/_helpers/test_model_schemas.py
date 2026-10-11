@@ -12,10 +12,13 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
     CompilerDiagnostic,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompileInputsView,
+)
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -81,7 +84,7 @@ sql_validation = false
         },
     )
 
-    inputs: CompileProjectInputs = build_compile_inputs(
+    inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
@@ -222,7 +225,7 @@ SELECT
         tuple(str(schema_file.relative_path) for schema_file in discovered.model_schema_files)
         == test_case.expected_schema_paths
     )
-    inputs: CompileProjectInputs = build_compile_inputs(
+    inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",

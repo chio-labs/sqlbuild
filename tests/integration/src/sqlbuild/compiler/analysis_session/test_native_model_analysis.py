@@ -20,10 +20,7 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
-)
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
@@ -197,7 +194,7 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
     rng: random.Random = random.Random(test_case.seed)
     runs: NativeAnalysisRuns = NativeAnalysisRuns()
     for index in range(test_case.count):
-        inputs: CompileProjectInputs = compile_inputs(
+        inputs: CompileInputsView = compile_inputs(
             project_dir=tmp_path / f"project_{index}",
             files={
                 **generated_analysis_files(rng=rng, model_count=test_case.model_count),
@@ -256,7 +253,7 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
 ) -> None:
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
-    inputs: CompileProjectInputs = compile_inputs(
+    inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project",
         files=shared_analysis_files(
             regions=test_case.regions, inexact_regions=test_case.inexact_regions
@@ -324,7 +321,7 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ca
 ) -> None:
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
-    inputs: CompileProjectInputs = compile_inputs(
+    inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
     sessions: list[Any] = started_sessions(monkeypatch=monkeypatch)
@@ -423,7 +420,7 @@ def test_given_internal_native_failure_when_assembling_then_raises_without_pytho
 ) -> None:
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
-    inputs: CompileProjectInputs = compile_inputs(
+    inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
     duplicate_analysed_model_names(monkeypatch=monkeypatch)
@@ -471,7 +468,7 @@ def test_given_internal_native_failure_when_assembling_then_raises_without_pytho
 def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_without_the_wheel(
     test_case: StandalonePivotProofTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    inputs: CompileProjectInputs = compile_inputs(
+    inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=pivot_project_files()
     )
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)

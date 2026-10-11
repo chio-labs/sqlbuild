@@ -40,7 +40,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileModelConfig,
     CompileModelInput,
-    CompileProjectInputs,
     CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
@@ -58,6 +57,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
+    CompileInputsView,
     FunctionLanguage,
     ModelInput,
     SqlTestMode,
@@ -219,7 +219,7 @@ def compile_first_model(*, project_dir: Path) -> CompiledModelView:
     """Compile a fixture project and return its first model."""
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
@@ -231,7 +231,7 @@ def compile_first_model(*, project_dir: Path) -> CompiledModelView:
     return compiled_project.models[0]
 
 
-def compile_project_inputs(*, project_dir: Path) -> CompileProjectInputs:
+def compile_project_inputs(*, project_dir: Path) -> CompileInputsView:
     """Compile a discovered DuckDB fixture through the input attachment boundary."""
 
     return build_compile_inputs(

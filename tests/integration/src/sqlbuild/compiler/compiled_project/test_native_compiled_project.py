@@ -493,10 +493,6 @@ def test_given_unparseable_model_when_validating_immediately_then_syntax_error_i
     assert test_case.expected_help_fragment in (raised.value.help or "")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="final gate: compile inputs, assembly, planner and artifacts still build Python objects",
-)
 @pytest.mark.parametrize(
     "test_case",
     [

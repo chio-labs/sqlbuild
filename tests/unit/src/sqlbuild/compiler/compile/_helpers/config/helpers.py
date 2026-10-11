@@ -17,11 +17,11 @@ from sqlbuild.compiler.compile._helpers.attachment.model_config import (
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
-    CompileProjectInputs,
     ModelResourceNames,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.spec.contracts.models import (
@@ -42,7 +42,7 @@ def compile_with_config_build_count(
     *,
     project_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> tuple[CompileProjectInputs, int]:
+) -> tuple[CompileInputsView, int]:
     """Compile a project while counting its native model config builds."""
 
     build_counts: list[int] = [0]
@@ -75,7 +75,7 @@ class _ConfigCountingLoop:
         return inputs, counts
 
 
-def compile_input_schema_columns(inputs: CompileProjectInputs) -> tuple[SchemaColumn, ...]:
+def compile_input_schema_columns(inputs: CompileInputsView) -> tuple[SchemaColumn, ...]:
     """Flatten attached schema columns in model input order."""
 
     columns: list[SchemaColumn] = []

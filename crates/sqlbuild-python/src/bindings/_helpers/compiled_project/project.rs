@@ -17,6 +17,7 @@ use sqlbuild_analysis::compiled_project::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
@@ -189,6 +190,11 @@ impl NativeCompiledProject {
         record_model_analysis(&mut self.facts, name, analysis)
     }
 
+    /// The compile inputs view of this owner's model inputs with these input fields.
+    fn inputs_view(slf: Bound<'_, Self>, fields: Bound<'_, PyDict>) -> PyResult<NativeInputsView> {
+        NativeInputsView::new(slf.unbind(), &fields)
+    }
+
     /// The compiled project view of this owner's models with these project fields.
     fn project_view(
         slf: Bound<'_, Self>,
@@ -344,5 +350,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelInput>()?;
     module.add_class::<NativeCompiledModel>()?;
     module.add_class::<NativeProjectView>()?;
+    module.add_class::<NativeInputsView>()?;
     module.add_class::<NativeCompiledProject>()
 }

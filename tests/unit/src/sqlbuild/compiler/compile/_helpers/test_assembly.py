@@ -12,12 +12,12 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledSeed,
-    CompileProjectInputs,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledProjectView,
     CompiledResourceType,
+    CompileInputsView,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
@@ -514,7 +514,7 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     monkeypatch.setenv("USE_SEED_DB", "1")
     write_repo_files(tmp_path, test_case.repo_files)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
@@ -618,7 +618,7 @@ SELECT * FROM @relation WHERE NOT (@expression)
             + "\n",
         },
     )
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
@@ -691,7 +691,7 @@ seeds:
         },
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
@@ -715,7 +715,7 @@ seeds:
         seeds["currencies"].destination.logical_schema,
     ) == test_case.expected_defaulted_location * 2
 
-    physical_inputs: CompileProjectInputs = build_compile_inputs(
+    physical_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         selected_target="physical",
@@ -793,7 +793,7 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
         base_repo_files() | {"sqlbuild_project.toml": test_case.project_toml},
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
@@ -855,7 +855,7 @@ def test_given_sql_hooks_when_assembling_then_applies_adapter_aware_validation(
         },
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",

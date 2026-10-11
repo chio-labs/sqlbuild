@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.attachment.audits import build_project_audit_inputs
@@ -48,7 +49,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileAuditInput,
-    CompileProjectInputs,
     CompilerDiagnostic,
     CompileSeedInput,
     CompileSourceInput,
@@ -63,7 +63,8 @@ from sqlbuild.compiler.compile.models import (
     ModelInputBuildContext,
     ModelInputScopeBuild,
 )
-from sqlbuild.compiler.compile.types import ModelInput
+from sqlbuild.compiler.compile.types import CompileInputsView, ModelInput
+from sqlbuild.compiler.compiled_project.main._compile_inputs_view import compile_inputs_view
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
@@ -90,7 +91,7 @@ def build_compile_inputs(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolved_connection: dict[str, object] | None = None,
     no_cache: bool = False,
-) -> CompileProjectInputs:
+) -> CompileInputsView:
     """Attach discovered metadata into the first compile input snapshot."""
 
     effective_target_name: str | None
@@ -216,16 +217,16 @@ def build_compile_inputs(
         ),
         *cursor_model_without_inputs_diagnostics(model_inputs=model_build.inputs),
     )
-    return CompileProjectInputs(
-        project_config=discovered_inputs.project_config,
-        local_config=discovered_inputs.local_config,
-        discovered_inputs=discovered_inputs,
-        sql_lexical_syntax=adapter_context.sql_lexical_syntax,
-        run_id=resolved_run_id,
-        effective_target_name=effective_target_name,
-        effective_target=effective_target,
-        compile_cache_dir=compile_cache_dir,
-        effective_connection=(
+    fields: dict[str, Any] = {
+        "project_config": discovered_inputs.project_config,
+        "local_config": discovered_inputs.local_config,
+        "discovered_inputs": discovered_inputs,
+        "sql_lexical_syntax": adapter_context.sql_lexical_syntax,
+        "run_id": resolved_run_id,
+        "effective_target_name": effective_target_name,
+        "effective_target": effective_target,
+        "compile_cache_dir": compile_cache_dir,
+        "effective_connection": (
             resolved_connection
             if resolved_connection is not None
             else build_effective_connection(
@@ -235,26 +236,26 @@ def build_compile_inputs(
                 effective_vars=effective_vars,
             )
         ),
-        effective_settings=effective_settings,
-        no_sql_validation=no_sql_validation,
-        effective_vars=effective_vars,
-        macro_context=macro_context,
-        loaded_macros=declaration_scope.loaded_macros,
-        public_enums=model_build.declarations.enums,
-        public_constants=model_build.declarations.constants,
-        model_inputs=model_build.inputs,
-        seed_inputs=seed_inputs,
-        source_inputs=source_inputs,
-        sql_function_inputs=sql_function_inputs,
-        test_inputs=test_inputs,
-        scenario_inputs=scenario_inputs,
-        audit_inputs=audit_inputs,
-        diagnostics=diagnostics,
-        external_sql_reference_resolver=external_sql_reference_resolver,
-        scope_index=declaration_scope.index,
-        declaration_scope=declaration_scope,
-        native_project=model_build.native_project,
-    )
+        "effective_settings": effective_settings,
+        "no_sql_validation": no_sql_validation,
+        "effective_vars": effective_vars,
+        "macro_context": macro_context,
+        "loaded_macros": declaration_scope.loaded_macros,
+        "public_enums": model_build.declarations.enums,
+        "public_constants": model_build.declarations.constants,
+        "model_inputs": model_build.inputs,
+        "seed_inputs": seed_inputs,
+        "source_inputs": source_inputs,
+        "sql_function_inputs": sql_function_inputs,
+        "test_inputs": test_inputs,
+        "scenario_inputs": scenario_inputs,
+        "audit_inputs": audit_inputs,
+        "diagnostics": diagnostics,
+        "external_sql_reference_resolver": external_sql_reference_resolver,
+        "scope_index": declaration_scope.index,
+        "declaration_scope": declaration_scope,
+    }
+    return compile_inputs_view(fields=fields, native_project=model_build.native_project)
 
 
 def _build_sql_functions(
