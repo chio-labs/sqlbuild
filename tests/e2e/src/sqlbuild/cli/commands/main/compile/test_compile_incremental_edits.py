@@ -537,22 +537,22 @@ def test_given_stored_sql_test_scans_when_inputs_change_then_only_changed_files_
         NativeAnalysisStoreTestCase(
             description="staging_type_reaches_consumers",
             change=edit_staging_type,
-            expected_misses=10,
+            expected_misses=13,
         ),
         NativeAnalysisStoreTestCase(
             description="native_build_upgraded",
             change=upgrade_native_build,
-            expected_misses=14,
+            expected_misses=17,
         ),
         NativeAnalysisStoreTestCase(
             description="installed_python_code_changed",
             change=edit_installed_code,
-            expected_misses=14,
+            expected_misses=17,
         ),
         NativeAnalysisStoreTestCase(
             description="store_file_corrupted",
             change=corrupt_native_analysis_store,
-            expected_misses=14,
+            expected_misses=17,
         ),
     ],
     ids=lambda case: case.description,
