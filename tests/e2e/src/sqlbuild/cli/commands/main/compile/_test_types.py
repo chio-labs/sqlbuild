@@ -797,10 +797,9 @@ type DensePreparedCompile = PreparedCompile
 
 @dataclass(frozen=True)
 class SharedCacheKeyTestCase:
-    """A model analysis schedule under which two models share one analysis cache key."""
+    """Expected parity when identical SQL models share native cached analysis."""
 
     description: str
-    schedule: Callable[[pytest.MonkeyPatch], None]
     expected_matches_uncached: bool = True
 
 

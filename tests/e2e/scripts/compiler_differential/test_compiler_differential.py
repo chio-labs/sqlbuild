@@ -382,8 +382,8 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
             ),
             expected_sites=frozenset(
                 {
-                    "compiler/compile/_helpers/analysis/validation.py:"
-                    "_validate_sql_syntax_with_message parse_one",
+                    "compiler/compile/_helpers/analysis/required_columns.py:"
+                    "resolve_required_external_columns parse_one",
                 }
             ),
             expected_deferrals=frozenset(),

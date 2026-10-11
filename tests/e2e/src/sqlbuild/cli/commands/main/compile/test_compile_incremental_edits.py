@@ -21,7 +21,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     RandomEditChain,
     adapter_switched,
     add_external_flavor_macro,
-    analyze_in_one_batch,
     build_between,
     change_adapter_lexical_rules,
     compare_incremental_compile,
@@ -411,9 +410,7 @@ def test_given_broken_cache_invalidation_when_compiling_an_edit_then_the_oracle_
 
 @pytest.mark.parametrize(
     "test_case",
-    [
-        SharedCacheKeyTestCase(description="one_batch", schedule=analyze_in_one_batch),
-    ],
+    [SharedCacheKeyTestCase(description="native_dependency_order")],
     ids=lambda case: case.description,
 )
 def test_given_models_sharing_an_analysis_cache_key_when_upstream_changes_then_it_matches_uncached(
@@ -424,7 +421,6 @@ def test_given_models_sharing_an_analysis_cache_key_when_upstream_changes_then_i
 ) -> None:
     project_dir: Path = compile_reuse_project
     enable_compile_reuse(monkeypatch)
-    test_case.schedule(monkeypatch)
     star_chain_with_twin_added(project_dir)
     assert compile_in_process(project_dir=project_dir) == 0
     staging_extra_flag(project_dir)

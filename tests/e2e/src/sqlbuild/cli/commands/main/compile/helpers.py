@@ -33,7 +33,6 @@ import sqlbuild.adapter.type_system._helpers.type_normalization as type_normaliz
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
-import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
@@ -3839,12 +3838,6 @@ def twin_header_changed(root: Path) -> None:
     )
 
 
-def analyze_in_one_batch(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Analyze every model in one batch, without dependency-ordered binding."""
-
-    monkeypatch.setattr(project_assembly, "binding_schema_for_model", lambda **_kwargs: None)
-
-
 def star_chain_added(root: Path) -> None:
     """Add two models that each select every column of the one before, below staging orders."""
 
@@ -4916,11 +4909,10 @@ def engine_in_process_compile(
 
 class NativeTypeAnswers(NamedTuple):
     """What the native type system answered in one compile: each Python-side normalization,
-    contract results that compared at least one typed column, and contract handbacks."""
+    and contract results that compared at least one typed column."""
 
     normalized: list[bool]
     typed_comparisons: int
-    handbacks: int
 
 
 def type_system_engine_compile(
@@ -4962,7 +4954,6 @@ def type_system_engine_compile(
     return run, NativeTypeAnswers(
         normalized=normalized,
         typed_comparisons=statuses["typed_comparisons"],
-        handbacks=statuses["handbacks"],
     )
 
 

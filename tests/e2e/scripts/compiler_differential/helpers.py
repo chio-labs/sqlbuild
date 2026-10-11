@@ -99,10 +99,12 @@ if _directory:
         _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
 """
 
-MODEL_ANALYSIS_SABOTAGE: str = """
-import sqlbuild._native as native
+FALLBACK_RECORD_PERTURBATION: str = """
+from sqlbuild.compiler.frontier._helpers.process_recorder import process_recorder
 
-native.start_model_analysis_session = lambda *_args: None
+recorder = process_recorder()
+if recorder is not None:
+    recorder.record(site="analysis_session", kind="session")
 """
 
 _BROKEN_REF_FILES: dict[str, str] = {
