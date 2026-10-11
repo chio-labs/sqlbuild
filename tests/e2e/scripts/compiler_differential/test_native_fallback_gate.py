@@ -37,8 +37,8 @@ _VANISHED_ENTRY: str = (
             expected_exit_code=1,
             expected_lines=(
                 "Native fallback allow-list: native-preview macro_calls "
-                "macro_calls.resolution deferred (project): listed but no longer occurs; remove it "
-                "from the allow-list",
+                "macro_calls.resolution deferred (project): fallback disappeared but native "
+                "answers did not appear; the stage may be switched off.",
             ),
         ),
         NativeFallbackGateTestCase(

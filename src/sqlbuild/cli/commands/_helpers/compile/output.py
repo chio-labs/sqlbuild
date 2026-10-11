@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-import orjson
-
+import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.compile.semantic_notice import (
     selected_semantic_coverage,
     semantic_coverage_notice,
@@ -19,26 +17,28 @@ from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledFunction,
-    CompiledModel,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledProject,
-    CompiledSeed,
-    CompiledSource,
     CompiledSqlTest,
     CompilerDiagnostic,
     RelatedLocation,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
+    CompiledSourceView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
 from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
@@ -71,7 +71,7 @@ def format_compile_text(
     """Format human-readable compile output."""
 
     style: CliStyle = CliStyle(use_color=use_color)
-    visible_project_models: tuple[CompiledModel, ...] = _selected_models(
+    visible_project_models: tuple[CompiledModelView, ...] = _selected_models(
         graph=graph,
         selected_keys=selected_keys,
     )
@@ -83,7 +83,7 @@ def format_compile_text(
         ),
         "",
     ]
-    visible_models: tuple[CompiledModel, ...] = visible_project_models[:_HUMAN_MODEL_LIMIT]
+    visible_models: tuple[CompiledModelView, ...] = visible_project_models[:_HUMAN_MODEL_LIMIT]
     model_name_width: int = _model_name_width(visible_models)
     error_models: frozenset[str] = _models_with_error_diagnostics(diagnostics)
     model_index: int
@@ -94,7 +94,7 @@ def format_compile_text(
         lines.append(
             f"{connector} {style.object_name(model_name)} "
             f"{format_status_cell(style=style, status=status, width=4)} "
-            f"{style.muted(f'{_column_count(model)} columns')}"
+            f"{style.muted(f'{model.output_column_count} columns')}"
         )
     hidden_model_count: int = len(visible_project_models) - len(visible_models)
     if hidden_model_count > 0:
@@ -214,10 +214,9 @@ def format_compile_json(
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
     }
-    try:
-        return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
-    except TypeError:
-        return json.dumps(result, indent=2)
+    emitted: str = _native.emit_json_report(result)
+    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
+    return emitted
 
 
 def format_compile_error_json(
@@ -244,7 +243,9 @@ def format_compile_error_json(
         "stopped": True,
         "diagnostics": [_diagnostic_to_json(diagnostic)],
     }
-    return orjson.dumps(result, option=orjson.OPT_INDENT_2).decode()
+    emitted: str = _native.emit_orjson_report(result)
+    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
+    return emitted
 
 
 def _summary(
@@ -253,7 +254,7 @@ def _summary(
     diagnostics: tuple[CompilerDiagnostic, ...],
     selected_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> dict[str, int]:
-    project: CompiledProject = graph.project
+    project: CompiledProjectView = graph.project
     return {
         "models": len(project.models),
         "selected_models": len(_selected_models(graph=graph, selected_keys=selected_keys)),
@@ -283,7 +284,7 @@ def _selected_models(
     *,
     graph: ProjectGraph,
     selected_keys: frozenset[CompiledObjectKey] | None,
-) -> tuple[CompiledModel, ...]:
+) -> tuple[CompiledModelView, ...]:
     if selected_keys is None:
         return graph.project.models
     selected_names: frozenset[str] = frozenset(
@@ -298,14 +299,14 @@ def _selected_resource_count(
     selected_keys: frozenset[CompiledObjectKey] | None,
     resource_types: set[CompiledResourceType],
 ) -> int:
-    effective_keys: frozenset[CompiledObjectKey] = (
-        frozenset(graph.all_keys.values()) if selected_keys is None else selected_keys
-    )
-    return sum(key.resource_type in resource_types for key in effective_keys)
+    if selected_keys is None:
+        type_names: frozenset[str] = frozenset(map(str, resource_types))
+        return sum(kind in type_names for kind, _ in graph.native.keys())
+    return sum(key.resource_type in resource_types for key in selected_keys)
 
 
 def _resources(*, graph: ProjectGraph, lineage: ProjectColumnLineage | None) -> dict[str, object]:
-    project: CompiledProject = graph.project
+    project: CompiledProjectView = graph.project
     return {
         "models": [
             _model_resource(graph=graph, model=model, lineage=lineage) for model in project.models
@@ -322,15 +323,18 @@ def _resources(*, graph: ProjectGraph, lineage: ProjectColumnLineage | None) -> 
 def _model_resource(
     *,
     graph: ProjectGraph,
-    model: CompiledModel,
+    model: CompiledModelView,
     lineage: ProjectColumnLineage | None,
 ) -> dict[str, object]:
     item: dict[str, object] = {
         "name": model.name,
         "relative_path": str(model.relative_path),
         "materialized": str(model.config.values.get("materialized", "view")),
-        "column_count": _column_count(model),
-        "depends_on": [_serialize_key(dep) for dep in graph.upstream_deps.get(model.key, ())],
+        "column_count": model.output_column_count,
+        "depends_on": [
+            {"resource_type": kind, "name": name}
+            for kind, name in graph.native.upstream((str(model.key.resource_type), model.key.name))
+        ],
         "lineage": _lineage_summary(lineage=lineage, model=model),
         "query_sql": model.query_sql,
     }
@@ -347,7 +351,7 @@ def _hook_resources(*, hooks: object) -> list[dict[str, object]]:
     return serialize_hook_entries(value=hooks, sql_fields=SQL_HOOK_OUTPUT_FIELDS)
 
 
-def _hook_definitions(project: CompiledProject) -> list[dict[str, object]]:
+def _hook_definitions(project: CompiledProjectView) -> list[dict[str, object]]:
     definitions: list[dict[str, object]] = [
         {
             "type": "sql",
@@ -372,7 +376,7 @@ def _hook_definitions(project: CompiledProject) -> list[dict[str, object]]:
     return definitions
 
 
-def _source_resource(source: CompiledSource) -> dict[str, object]:
+def _source_resource(source: CompiledSourceView) -> dict[str, object]:
     return {
         "name": source.name,
         "relative_path": str(source.source_file.relative_path),
@@ -380,7 +384,7 @@ def _source_resource(source: CompiledSource) -> dict[str, object]:
     }
 
 
-def _seed_resource(seed: CompiledSeed) -> dict[str, object]:
+def _seed_resource(seed: CompiledSeedView) -> dict[str, object]:
     item: dict[str, object] = {
         "name": seed.name,
         "relative_path": str(seed.seed_file.relative_path),
@@ -391,7 +395,7 @@ def _seed_resource(seed: CompiledSeed) -> dict[str, object]:
     return item
 
 
-def _function_resource(function: CompiledFunction) -> dict[str, object]:
+def _function_resource(function: CompiledFunctionView) -> dict[str, object]:
     item: dict[str, object] = {
         "name": function.name,
         "relative_path": str(function.relative_path),
@@ -408,7 +412,7 @@ def _function_resource(function: CompiledFunction) -> dict[str, object]:
     return item
 
 
-def _audit_resource(audit: CompiledAudit) -> dict[str, object]:
+def _audit_resource(audit: CompiledAuditView) -> dict[str, object]:
     item: dict[str, object] = {
         "name": audit.name,
         "relative_path": str(audit.audit_file.relative_path),
@@ -468,7 +472,7 @@ def _test_resource(test: CompiledSqlTest) -> dict[str, object]:
 
 
 def _lineage_summary(
-    *, lineage: ProjectColumnLineage | None, model: CompiledModel
+    *, lineage: ProjectColumnLineage | None, model: CompiledModelView
 ) -> dict[str, object]:
     if lineage is None:
         return {"available": False}
@@ -476,7 +480,7 @@ def _lineage_summary(
         return {"available": False}
     return {
         "available": True,
-        "column_count": _column_count(model),
+        "column_count": model.output_column_count,
         "edge_count": lineage.edge_count_targeting(model.name),
         "has_star": lineage.model_has_star(model.name),
     }
@@ -489,15 +493,7 @@ def _artifacts(*, written: WrittenTarget, manifest: bool) -> dict[str, object]:
     }
 
 
-def _column_count(model: CompiledModel) -> int:
-    if model.inferred_columns is not None:
-        return len(model.inferred_columns)
-    if model.schema_entry is not None:
-        return len(model.schema_entry.columns)
-    return 0
-
-
-def _model_name_width(models: tuple[CompiledModel, ...]) -> int:
+def _model_name_width(models: tuple[CompiledModelView, ...]) -> int:
     longest: int = max((len(model.name) for model in models), default=0)
     return min(max(longest, _MIN_MODEL_NAME_WIDTH), _MAX_MODEL_NAME_WIDTH)
 
@@ -701,7 +697,7 @@ def _caret_line(*, location: SourceLocation, source_line: str, message: str | No
     return " " * (start_column - 1) + "^" * caret_count + suffix
 
 
-def _model_source_texts(models: tuple[CompiledModel, ...]) -> dict[Path, str]:
+def _model_source_texts(models: tuple[CompiledModelView, ...]) -> dict[Path, str]:
     return {model.relative_path: model.authored_sql for model in models if model.authored_sql}
 
 
@@ -713,47 +709,8 @@ def _style_diagnostic(*, text: str, diagnostic: CompilerDiagnostic, style: CliSt
     return style.muted(text)
 
 
-def _serialize_key(key: CompiledObjectKey) -> dict[str, str]:
-    return {"resource_type": str(key.resource_type), "name": key.name}
-
-
 def _execution_layer_count(graph: ProjectGraph) -> int:
-    model_keys: set[CompiledObjectKey] = {model.key for model in graph.project.models}
-    if not model_keys:
-        return 0
-    remaining_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {}
-    downstream_model_deps: dict[CompiledObjectKey, set[CompiledObjectKey]] = {}
-    for key in model_keys:
-        upstream_models: set[CompiledObjectKey] = set()
-        for dependency in graph.upstream_deps.get(key, ()):
-            if dependency in model_keys:
-                upstream_models.add(dependency)
-        remaining_model_deps[key] = upstream_models
-        downstream_models: set[CompiledObjectKey] = set()
-        for dependency in graph.downstream_deps.get(key, ()):
-            if dependency in model_keys:
-                downstream_models.add(dependency)
-        downstream_model_deps[key] = downstream_models
-    current_layer: set[CompiledObjectKey] = {
-        key for key, deps in remaining_model_deps.items() if not deps
-    }
-    visited: set[CompiledObjectKey] = set()
-    layer_count: int = 0
-    while current_layer:
-        layer_count += 1
-        next_layer: set[CompiledObjectKey] = set()
-        for key in current_layer:
-            visited.add(key)
-            for downstream_key in downstream_model_deps.get(key, set()):
-                if downstream_key in visited:
-                    continue
-                remaining_model_deps[downstream_key].discard(key)
-                if not remaining_model_deps[downstream_key]:
-                    next_layer.add(downstream_key)
-        current_layer = next_layer
-    if len(visited) != len(model_keys):
-        return max(layer_count, 1)
-    return layer_count
+    return graph.native.model_layer_count()
 
 
 def _relative_target_path(path: Path) -> str:

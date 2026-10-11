@@ -1,11 +1,12 @@
 //! Contract, materialization, storage, migration and placeholder rules with Python's errors.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use sqlbuild_core::text::main::is_python_word::is_python_word;
 use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_core::text::models::PythonText;
 
+use crate::errors::ConfigError;
 use crate::model_validation::_helpers::config::python_lower;
 use crate::model_validation::_helpers::config::{
     ConfigView, one_of, sorted_values, text_if_string,
@@ -15,6 +16,10 @@ use crate::model_validation::constants::{
     HISTORY_MATERIALIZATIONS, INCREMENTAL_MATERIALIZATION, INCREMENTAL_ONLY_KEYS,
     MICROBATCH_CONCURRENCY_HELP, MICROBATCH_CONCURRENCY_NOTE, OLD_NAME_VIEW_KEY, PLACEHOLDER_SIGIL,
     TABLE_BACKED_MATERIALIZATIONS, VIEW_MATERIALIZATION,
+};
+use crate::model_validation::constants::{
+    CHAINED_HELP, CLAIMED_HELP, MATERIALIZATION_HELP, MIGRATABLE_MATERIALIZATIONS, ORIGIN_HELP,
+    QUALIFIED_NAME_SEPARATOR,
 };
 use crate::model_validation::models::{
     ModelValidationFacts, ProjectValidationFacts, ValidationStop,
@@ -285,4 +290,80 @@ fn placeholder_names(python: PythonText, sql: &str) -> BTreeSet<String> {
         rest = &after[length..];
     }
     names
+}
+
+/// Column renames need a history model, or a table or view that migrates itself.
+pub(crate) fn column_materialization_problem(
+    model_name: &str,
+    materialized: Option<&str>,
+    model_migrates: bool,
+    first: &str,
+) -> Result<(), ConfigError> {
+    let history: bool = materialized.is_some_and(|value| HISTORY_MATERIALIZATIONS.contains(&value));
+    let migratable: bool =
+        materialized.is_some_and(|value| MIGRATABLE_MATERIALIZATIONS.contains(&value));
+    if !history && (!migratable || !model_migrates) {
+        let shown: &str = materialized.unwrap_or("None");
+        return Err(ConfigError::compile(format!(
+            "model '{model_name}': column '{first}' declares migrate_from, which is only valid \
+             for incremental and snapshot models, or for table and view models that declare \
+             migrate_from themselves (the old name's compatibility view then presents the column \
+             under its old name); '{shown}' models are rebuilt with their new columns"
+        ))
+        .with_help(MATERIALIZATION_HELP));
+    }
+    Ok(())
+}
+
+/// Each origin names one other column, claimed by only one rename.
+pub(crate) fn origin_problem(
+    model_name: &str,
+    declared: &[(&str, &str)],
+) -> Result<(), ConfigError> {
+    let mut sources: HashMap<String, &str> = HashMap::new();
+    for &(name, origin) in declared {
+        let origin: &str = python_strip(origin);
+        if origin.is_empty() || origin.contains(QUALIFIED_NAME_SEPARATOR) {
+            return Err(ConfigError::compile(format!(
+                "model '{model_name}': column '{name}' migrate_from must name one column of the \
+                 model's existing table"
+            ))
+            .with_help(ORIGIN_HELP));
+        }
+        if python_lower(origin) == python_lower(name) {
+            return Err(ConfigError::compile(format!(
+                "model '{model_name}': column '{name}' migrate_from cannot name the column itself"
+            )));
+        }
+        if let Some(claimed_by) = sources.get(&python_lower(origin)) {
+            return Err(ConfigError::compile(format!(
+                "model '{model_name}': columns '{claimed_by}' and '{name}' both declare \
+                 migrate_from {origin}; a column can be renamed to only one new name"
+            ))
+            .with_help(CLAIMED_HELP));
+        }
+        sources.insert(python_lower(origin), name);
+    }
+    Ok(())
+}
+
+/// No rename may start from another renamed column.
+pub(crate) fn chained_problem(
+    model_name: &str,
+    declared: &[(&str, &str)],
+) -> Result<(), ConfigError> {
+    let destinations: HashMap<String, &str> = declared
+        .iter()
+        .map(|&(name, _)| (python_lower(name), name))
+        .collect();
+    for &(name, origin) in declared {
+        if destinations.contains_key(&python_lower(python_strip(origin))) {
+            return Err(ConfigError::compile(format!(
+                "model '{model_name}': column '{name}' migrates from '{origin}', which itself \
+                 declares migrate_from; chained or swapped column renames are not supported"
+            ))
+            .with_help(CHAINED_HELP));
+        }
+    }
+    Ok(())
 }

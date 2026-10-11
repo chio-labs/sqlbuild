@@ -12,3 +12,10 @@ pub(super) struct HostileYamlTestCase {
     pub(super) text: String,
     pub(super) expected_error: ConfigErrorKind,
 }
+
+pub(super) struct ComposeMarksTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    /// `(start, end, value)` of every scalar, sorted, as PyYAML 6 marks them.
+    pub(super) expected_scalars: Result<&'static [(usize, usize, &'static str)], ConfigErrorKind>,
+}

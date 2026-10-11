@@ -17,12 +17,7 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_text_runtime,
     seed_snapshot_listings,
 )
-from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_header_values
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import build_sql_scenario_file
-from sqlbuild.compiler.discovery._helpers.sql.tests import (
-    build_sql_test_block,
-    validate_sql_test_names,
-)
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
     SQL_SCENARIO_HEADER_KEYS,
@@ -162,18 +157,13 @@ def _test_blocks(
     block_failure: tuple[object, ...] | None,
 ) -> tuple[DiscoveredSqlTestBlock, ...]:
     blocks: tuple[DiscoveredSqlTestBlock, ...] = tuple(
-        build_sql_test_block(
-            header_values=project_native_header_values(values),
-            sql_body=sql_body,
-            file_path=file_path,
-            test_index=test_index,
-            sql_body_span=sql_body_span,
-        )
-        for test_index, (values, sql_body, sql_body_span) in enumerate(native_blocks, start=1)
+        cast(list[DiscoveredSqlTestBlock], _native.sql_test_blocks(str(file_path), native_blocks))
     )
     if block_failure is not None:
         raise native_failure(block_failure)
-    validate_sql_test_names(file_path=file_path, blocks=blocks)
+    _native.validate_sql_test_block_names(
+        str(file_path), [(block.test_index, block.name) for block in blocks]
+    )
     return blocks
 
 
@@ -193,7 +183,7 @@ def _scenario_file_from_payload(
         raise error
     _tag, contents, values, sql_body, sql_body_span = payload
     return build_sql_scenario_file(
-        header_values=project_native_header_values(cast(dict[str, object], values)),
+        header_values=cast(dict[str, object], values),
         sql_body=str(sql_body),
         sql_body_span=cast(tuple[int, int], sql_body_span),
         contents=str(contents),

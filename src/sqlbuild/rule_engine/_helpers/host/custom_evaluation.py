@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine._helpers.host.module_state import rule_namespaces
 from sqlbuild.rule_engine._helpers.host.tracked_facts import tracked_fact_views
 from sqlbuild.rule_engine.classes.fact_reads import FactReads
@@ -47,7 +47,7 @@ type _FindingKey = tuple[str, str, int, int, str, str]
 
 @dataclass(frozen=True)
 class _PassInputs:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project_dir: Path
     selected_rules: tuple[Rule, ...]
@@ -60,7 +60,7 @@ class _PassInputs:
 
 def evaluate_custom_rules(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     selected_rules: tuple[Rule, ...],
@@ -78,7 +78,7 @@ def evaluate_custom_rules(
     )
     if not custom_rules:
         return CustomRuleRun(evaluations=(), untracked_codes=frozenset())
-    models: tuple[CompiledModel, ...] = tuple(
+    models: tuple[CompiledModelView, ...] = tuple(
         sorted(project.models, key=lambda item: item.relative_path.as_posix())
     )
     facts: RuleFactViews = build_rule_fact_views(
@@ -105,7 +105,7 @@ def evaluate_custom_rules(
     )
 
     def run_pass(
-        *, rules: tuple[Rule, ...], subjects: tuple[CompiledModel, ...], active: _ReadTracker
+        *, rules: tuple[Rule, ...], subjects: tuple[CompiledModelView, ...], active: _ReadTracker
     ) -> list[CustomRuleEvaluation]:
         return _evaluate_pass(inputs=inputs, rules=rules, models=subjects, tracker=active)
 
@@ -183,11 +183,11 @@ def _evaluate_pass(
     *,
     inputs: _PassInputs,
     rules: tuple[Rule, ...],
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
     tracker: _ReadTracker,
 ) -> list[CustomRuleEvaluation]:
     evaluations: list[CustomRuleEvaluation] = []
-    project: CompiledProject = inputs.project
+    project: CompiledProjectView = inputs.project
     plan: CustomRulePlan | None = inputs.plan
     guard: RuntimeGuard | None = inputs.guard
     context_facts: RuleFactViews = (

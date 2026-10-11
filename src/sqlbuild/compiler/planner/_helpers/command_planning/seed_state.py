@@ -6,14 +6,14 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.models import CompiledSeed
+from sqlbuild.compiler.compile.types import CompiledSeedView
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME, NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 
 
 def read_seed_fingerprints(
-    *, adapter: BaseAdapter, connection: Any, seeds: tuple[CompiledSeed, ...]
+    *, adapter: BaseAdapter, connection: Any, seeds: tuple[CompiledSeedView, ...]
 ) -> dict[str, Fingerprint]:
     """Read only fingerprint state required to classify selected direct seeds."""
 

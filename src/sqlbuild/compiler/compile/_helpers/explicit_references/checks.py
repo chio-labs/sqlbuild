@@ -17,17 +17,17 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
-    CompiledSource,
     CompilerDiagnostic,
     PythonSqlReferenceReport,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSourceView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -71,7 +71,10 @@ class _LiteralSql:
 
 
 def explicit_reference_report(
-    *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs, enforce_explicit: bool
+    *,
+    project: CompiledProjectView,
+    discovered_inputs: DiscoveredProjectInputs,
+    enforce_explicit: bool,
 ) -> PythonSqlReferenceReport:
     """Return P005, P007 and P008 errors and unmatched Python-SQL relations; raise P001."""
 
@@ -107,7 +110,10 @@ def explicit_reference_report(
                     ],
                     "sources": [_source_row(source) for source in project.sources],
                     "seeds": [
-                        {"name": seed.name, "relation": _location_row(seed.destination)}
+                        {
+                            "name": seed.name,
+                            "relation": _location_row(seed.destination),
+                        }
                         for seed in project.seeds
                     ],
                     "audits": [_audit_row(audit) for audit in project.audits],
@@ -190,11 +196,18 @@ def _owner_row(
     }
 
 
-def _resource_rows(project: CompiledProject) -> list[dict[str, object]]:
+def _resource_rows(project: CompiledProjectView) -> list[dict[str, object]]:
     return [
-        {"key": _key_row(resource.key), "deps": _key_rows(resource.deps)}
-        for resource in (*project.models, *project.sources, *project.seeds, *project.functions)
+        *(_graph_row(key=model.key_row, deps=model.dep_rows) for model in project.models),
+        *(
+            _graph_row(key=_key_row(resource.key), deps=_key_rows(resource.deps))
+            for resource in (*project.sources, *project.seeds, *project.functions)
+        ),
     ]
+
+
+def _graph_row(*, key: tuple[str, str], deps: list[tuple[str, str]]) -> dict[str, object]:
+    return {"key": key, "deps": deps}
 
 
 def _key_row(key: CompiledObjectKey) -> tuple[str, str]:
@@ -205,7 +218,7 @@ def _key_rows(keys: tuple[CompiledObjectKey, ...]) -> list[tuple[str, str]]:
     return [_key_row(key) for key in keys]
 
 
-def _model_row(*, model: CompiledModel, old_name_retention: str | None) -> dict[str, object]:
+def _model_row(*, model: CompiledModelView, old_name_retention: str | None) -> dict[str, object]:
     raw: object = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
     retained: bool = isinstance(raw, str) and (
         resolve_old_name_view_retention(
@@ -216,7 +229,7 @@ def _model_row(*, model: CompiledModel, old_name_retention: str | None) -> dict[
     return {
         "name": model.name,
         "path": str(model.relative_path),
-        "destination": _location_row(model.destination),
+        "destination": _destination_row(model.destination_row),
         "python_hooks": list(model_python_hook_names(model=model)),
         "sql_hooks": list(
             chain.from_iterable(
@@ -245,7 +258,7 @@ def _sql_hook_rows(*, hook_key: str, entries: object) -> list[dict[str, object]]
     ]
 
 
-def _source_row(source: CompiledSource) -> dict[str, object]:
+def _source_row(source: CompiledSourceView) -> dict[str, object]:
     entry: SourceEntry = source.source_entry
     return {
         "name": source.name,
@@ -256,7 +269,7 @@ def _source_row(source: CompiledSource) -> dict[str, object]:
     }
 
 
-def _audit_row(audit: CompiledAudit) -> dict[str, object]:
+def _audit_row(audit: CompiledAuditView) -> dict[str, object]:
     target: tuple[str, str] | None = (
         (
             str(AttachedAuditTargetKind(audit.attached_target_kind).resource_type),
@@ -274,7 +287,12 @@ def _audit_row(audit: CompiledAudit) -> dict[str, object]:
 
 
 def _location_row(location: CompiledRelationLocation) -> dict[str, str | None]:
-    return {"name": location.name, "schema": location.schema, "database": location.database}
+    return _destination_row((location.database, location.schema, location.name))
+
+
+def _destination_row(row: tuple[str | None, str | None, str]) -> dict[str, str | None]:
+    database, schema, name = row
+    return {"name": name, "schema": schema, "database": database}
 
 
 def _ref_rows(refs: tuple[SqlResourceRef, ...]) -> list[tuple[str, str]]:
@@ -282,7 +300,7 @@ def _ref_rows(refs: tuple[SqlResourceRef, ...]) -> list[tuple[str, str]]:
 
 
 def _owners(
-    *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
+    *, project: CompiledProjectView, discovered_inputs: DiscoveredProjectInputs
 ) -> tuple[_PythonSqlOwner, ...]:
     owners: list[_PythonSqlOwner] = []
     for label, nodes in (
@@ -320,7 +338,7 @@ def _owners(
 
 
 def _loader_owners(
-    *, project: CompiledProject, discovered_inputs: DiscoveredProjectInputs
+    *, project: CompiledProjectView, discovered_inputs: DiscoveredProjectInputs
 ) -> tuple[_PythonSqlOwner, ...]:
     sources_by_loader: dict[str, set[str]] = {}
     for source in project.sources:

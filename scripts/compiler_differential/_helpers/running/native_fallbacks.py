@@ -17,6 +17,7 @@ from scripts.compiler_differential.constants import (
     NATIVE_FALLBACK_MODE_UPDATE,
     NATIVE_FALLBACK_PROJECT_CORPUS,
     NATIVE_FALLBACK_SITE_SEPARATOR,
+    NATIVE_TIMING_DEPENDENT_METRICS,
 )
 from scripts.compiler_differential.models import (
     AllowList,
@@ -53,13 +54,15 @@ def native_fallback_gate(
 def observed_fallbacks(
     *, comparisons: list[ProjectComparison], engines: tuple[str, ...]
 ) -> dict[FallbackKey, dict[str, int]]:
-    """Sum every engine's fallback and analysis deferral records by entry and corpus."""
+    """Sum fallbacks and deterministic native answers, excluding timing-dependent metrics."""
 
     counts: Counter[tuple[FallbackKey, str]] = Counter()
     for comparison in comparisons:
         corpus: str = comparison.project.split("/", 1)[0]
         for engine, records in zip(engines, comparison.records or (), strict=False):
             for (site, kind), count in records.fallbacks.items():
+                if (site, kind) in NATIVE_TIMING_DEPENDENT_METRICS:
+                    continue
                 stage: str = site.split(NATIVE_FALLBACK_SITE_SEPARATOR, 1)[0]
                 counts[((engine, stage, site, kind), corpus)] += count
             for (kind, site), count in records.deferrals.items():

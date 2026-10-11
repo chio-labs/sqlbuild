@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
-from scripts.compiler_differential.constants import COLD_COMPILE
+from scripts.compiler_differential.constants import COLD_COMPILE, DIALECT_RICH_LINEAGE
 from scripts.compiler_differential.models import CorpusProject, ExpectedOutcome
 from tests.unit.scripts.compiler_differential._helpers.corpus._test_types import (
     CorpusExpectationTestCase,
@@ -79,12 +79,12 @@ def test_given_corpus_selection_when_building_then_entries_declare_expected_outc
                 "seed/5-postgres",
                 "seed/5-snowflake",
             ),
-            expected_variant_commands=(COLD_COMPILE,),
+            expected_variant_commands=(COLD_COMPILE, DIALECT_RICH_LINEAGE),
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_seed_range_when_building_then_first_seed_adds_compile_only_dialect_variants(
+def test_given_seed_range_when_building_then_first_seed_adds_compile_and_rich_lineage_variants(
     test_case: DialectVariantTestCase,
 ) -> None:
     corpus: list[CorpusProject] = build_corpus(

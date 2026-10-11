@@ -12,7 +12,7 @@ from typing import Any, cast
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledResourceType, CompiledSourceView
 from sqlbuild.compiler.discovery.models import DiscoveredSourceFile
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     _CursorModelInfo,
@@ -177,7 +177,7 @@ def check_one_source_table(
     source_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.SOURCE, name=source.name
     )
-    compiled_source: CompiledSource = CompiledSource(
+    compiled_source: CompiledSourceView = CompiledSource(
         key=source_key,
         deps=(),
         name=source.name,

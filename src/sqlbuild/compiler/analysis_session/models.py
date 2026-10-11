@@ -9,11 +9,10 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.types import QueryColumnsMode
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
-    CompileModelInput,
     CompileSqlReference,
     InferredColumn,
-    ModelSqlAnalysis,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
@@ -24,7 +23,7 @@ class NativeModelAnalysisRequest:
 
     known_functions: tuple[str, ...]
     known_types: tuple[str, ...]
-    model_inputs: tuple[CompileModelInput, ...]
+    model_inputs: tuple[ModelInput, ...]
     column_nullability_by_table: dict[str, dict[str, InferredNullability]]
     column_types_by_table: dict[str, dict[str, str]]
     inference_profile: ExpressionInferenceProfile
@@ -37,9 +36,10 @@ class NativeModelAnalysisRequest:
 
 @dataclass(frozen=True, slots=True)
 class NativeModelAnalyses:
-    """Each model's native analysis by name, and the finished session that produced them."""
+    """Each analysed model's position in the finished session that keeps its outcome."""
 
-    analyses: dict[str, ModelSqlAnalysis]
+    positions: dict[str, int]
+    succeeded: frozenset[str]
     session: Any | None
 
 

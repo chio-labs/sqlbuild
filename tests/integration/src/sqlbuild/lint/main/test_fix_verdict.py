@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.lint.main.compile_facts import compile_facts
 from sqlbuild.lint.main.fix_verdict import fix_verdict
 from sqlbuild.lint.models import FixVerdict
@@ -80,8 +80,12 @@ def test_given_baseline_and_fixed_compiles_when_comparing_then_failures_belong_t
     after_dir: Path = tmp_path / "after"
     before_dir.mkdir()
     after_dir.mkdir()
-    before: CompiledProject = compile_models(project_dir=before_dir, models=test_case.before_models)
-    after: CompiledProject = compile_models(project_dir=after_dir, models=test_case.after_models)
+    before: CompiledProjectView = compile_models(
+        project_dir=before_dir, models=test_case.before_models
+    )
+    after: CompiledProjectView = compile_models(
+        project_dir=after_dir, models=test_case.after_models
+    )
 
     verdict: FixVerdict = fix_verdict(
         before=compile_facts(project=before, project_dir=before_dir),
@@ -119,10 +123,10 @@ def test_given_lineage_unavailable_on_both_sides_when_comparing_then_matching_co
     after_dir: Path = tmp_path / "after"
     before_dir.mkdir()
     after_dir.mkdir()
-    before: CompiledProject = without_lineage(
+    before: CompiledProjectView = without_lineage(
         compile_models(project_dir=before_dir, models=test_case.before_models)
     )
-    after: CompiledProject = without_lineage(
+    after: CompiledProjectView = without_lineage(
         compile_models(project_dir=after_dir, models=test_case.after_models)
     )
 

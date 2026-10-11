@@ -25,14 +25,24 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
 from sqlbuild.compiler.discovery._helpers.native.sql_test_files import discover_native_test_files
 from sqlbuild.compiler.discovery._helpers.native.yaml_files import discover_native_schema_files
-from sqlbuild.compiler.discovery._helpers.sql.model_files import match_model_header
 from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
 )
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, ModelHeaderMatch
+from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
+# Test-only reference grammar of the MODEL header the native matcher replaced.
+_REFERENCE_MODEL_HEADER_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*MODEL\s*\("
+    r"(?P<header>(?>(?:[^\"')\\]|\\.)++"
+    r"|\"(?:[^\"\\]|\\.)*+\""
+    r"|'(?:[^'\\]|\\.)*+'"
+    r"|[\"'](?:[^\\)]|\\.)*+"
+    r"|\)(?!\s*;))*+)"
+    r"\)\s*;\s*(?P<sql>.*)\Z",
+    re.DOTALL,
+)
 _DIRECTORY_NAMES: tuple[str, ...] = (
     "orders",
     "customers",
@@ -202,16 +212,16 @@ def header_match_mismatches(*, seed: int, count: int) -> tuple[str, ...]:
 
 
 def _python_header_offsets(contents: str) -> tuple[int, int, int] | None:
-    return _mapped_offsets(match_model_header(contents))
+    return _mapped_offsets(_REFERENCE_MODEL_HEADER_PATTERN.match(contents))
 
 
-def _mapped_offsets(header_match: ModelHeaderMatch | None) -> tuple[int, int, int] | None:
+def _mapped_offsets(header_match: re.Match[str] | None) -> tuple[int, int, int] | None:
     return {
         True: lambda: None,
         False: lambda: (
-            cast(ModelHeaderMatch, header_match).header_start,
-            cast(ModelHeaderMatch, header_match).header_end,
-            cast(ModelHeaderMatch, header_match).sql_start,
+            cast(re.Match[str], header_match).start("header"),
+            cast(re.Match[str], header_match).end("header"),
+            cast(re.Match[str], header_match).start("sql"),
         ),
     }[header_match is None]()
 

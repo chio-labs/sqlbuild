@@ -37,22 +37,6 @@ def validate_sql_syntax(
     ) from None
 
 
-def validate_function_sql_syntax(
-    *,
-    body_sql: str,
-    function_name: str,
-    file_path: Path,
-    placeholders: dict[str, str] | None = None,
-) -> None:
-    """Validate that a SQL function body is parseable by Polyglot."""
-
-    _validate_sql_syntax_with_message(
-        query_sql=body_sql,
-        error_prefix=f"SQL syntax error in function '{function_name}' ({file_path})",
-        placeholders=placeholders,
-    )
-
-
 def validate_hook_sql_syntax(
     *,
     value: object,
@@ -130,44 +114,6 @@ def hook_sql_statements(value: object) -> tuple[str, ...]:
         for item in value:
             statements.extend(hook_sql_statements(item))
     return tuple(statements)
-
-
-def validate_source_expression_syntax(
-    *,
-    expression: str,
-    source_name: str,
-    file_path: Path,
-) -> None:
-    """Validate that a source expression is parseable as a FROM target."""
-
-    from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
-    from sqlbuild.spec.contracts.models import SourceEntry
-
-    rendered: str = render_source_relation(
-        entry=SourceEntry(name=source_name, expression=expression)
-    )
-    _validate_sql_syntax_with_message(
-        query_sql=f"SELECT * FROM {rendered}",
-        error_prefix=f"SQL syntax error in source expression '{source_name}' ({file_path})",
-    )
-
-
-def _validate_sql_syntax_with_message(
-    *,
-    query_sql: str,
-    error_prefix: str,
-    placeholders: dict[str, str] | None = None,
-    dialect: str | None = None,
-) -> None:
-    """Parse one SQL expression with Polyglot and raise a contextual error."""
-
-    error_message: str | None = _native.sql_syntax_error(
-        query_sql, placeholders, dialect, parse_one=True
-    )
-    if error_message is not None:
-        _raise_sql_validation_error(
-            error_prefix=error_prefix, error_message=error_message, model_owned=False
-        )
 
 
 def _validate_hook_sql_with_message(

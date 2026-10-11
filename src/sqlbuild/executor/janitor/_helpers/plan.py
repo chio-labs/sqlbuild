@@ -9,21 +9,21 @@ from datetime import UTC, datetime
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledProject,
-    CompiledSeed,
-    CompiledSource,
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSeedView,
+    CompiledSourceView,
 )
 from sqlbuild.executor.janitor.constants import QUALIFIED_ORIGIN_PARTS
 from sqlbuild.executor.janitor.models import JanitorRelationKey
 
 
-def collect_desired_keys(project: CompiledProject) -> set[JanitorRelationKey]:
+def collect_desired_keys(project: CompiledProjectView) -> set[JanitorRelationKey]:
     """Collect relation keys that belong to the compiled project."""
 
     keys: set[JanitorRelationKey] = set()
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         keys.add(
             JanitorRelationKey(
@@ -32,7 +32,7 @@ def collect_desired_keys(project: CompiledProject) -> set[JanitorRelationKey]:
                 name=model.destination.name,
             )
         )
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         keys.add(
             JanitorRelationKey(
@@ -46,7 +46,7 @@ def collect_desired_keys(project: CompiledProject) -> set[JanitorRelationKey]:
 
 def pending_migration_origins(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]],
 ) -> dict[JanitorRelationKey, str]:
     """Return listed origins of migrations whose destination relation does not exist yet."""
@@ -57,7 +57,7 @@ def pending_migration_origins(
         listed.update({_folded(relation_key(item)): relation_key(item) for item in relations})
     schemas: set[tuple[str | None, str | None]] = collect_target_schemas(project)
     pending: dict[JanitorRelationKey, str] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         raw: object | None = model.config.values.get(MIGRATE_FROM_CONFIG_KEY)
         destination: JanitorRelationKey = JanitorRelationKey(
@@ -97,14 +97,14 @@ def _folded(key: JanitorRelationKey) -> tuple[str | None, str | None, str]:
     return RelationLookup.key(database=key.database, schema=key.schema, name=key.name)
 
 
-def collect_target_schemas(project: CompiledProject) -> set[tuple[str | None, str | None]]:
+def collect_target_schemas(project: CompiledProjectView) -> set[tuple[str | None, str | None]]:
     """Collect schemas where the compiled project writes relations, one spelling per schema."""
 
     schemas: list[tuple[str | None, str | None]] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         schemas.append((model.destination.database, model.destination.schema))
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         schemas.append((seed.destination.database, seed.destination.schema))
     return _dedupe_schema_keys(schemas)
@@ -141,14 +141,14 @@ def _schema_sort_key(schema_key: tuple[str | None, str | None]) -> tuple[str, st
 
 def collect_source_schemas(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     default_database: str | None,
     default_schema: str | None,
 ) -> dict[tuple[str | None, str | None], set[str]]:
     """Collect schemas containing active configured sources."""
 
     source_schemas: dict[tuple[str | None, str | None], set[str]] = defaultdict(set)
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         if source.source_entry.expression is not None:
             continue

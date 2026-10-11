@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_sql
 from sqlbuild.compiler.planner.models import (
     BackfillResult,
@@ -35,7 +35,7 @@ def build_model(
     query_sql: str,
     config: dict[str, object],
     ref_names: tuple[str, ...],
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a minimal CompiledModel for resolve integration tests."""
 
     raw_schema: object | None = config.get("schema")
@@ -72,7 +72,7 @@ class _ResolveResult:
 
 def resolve_and_execute(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     model_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
@@ -114,7 +114,7 @@ def resolve_and_execute(
     return _ResolveResult(resolved_sql=resolved_sql, rows=rows, column_types=column_types)
 
 
-def build_empty_input_model(*, cursor_start: str | None) -> CompiledModel:
+def build_empty_input_model(*, cursor_start: str | None) -> CompiledModelView:
     """Build a delete_insert cursor model reading the raw_events source."""
 
     config: dict[str, object] = {

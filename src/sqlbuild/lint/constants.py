@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlbuild.lint.types import LintSeverity
 
 LINT_ENGINE_SQLBUILD: str = "sqlbuild"
@@ -118,20 +120,7 @@ GENERATED_SQL_MESSAGE_SUFFIX: str = "(in generated SQL)"
 LINE_FEED: str = "\n"
 CARRIAGE_RETURN_LINE_FEED: str = "\r\n"
 TAB_CHARACTER: str = "\t"
-UNIQUE_AUDIT_NAME: str = "unique"
-UNIQUE_AUDIT_COLUMN_ARGUMENT: str = "column"
-UNIQUE_KEY_CONFIG: str = "unique_key"
-NOT_NULL_AUDIT_NAME: str = "not_null"
-MATERIALIZED_CONFIG: str = "materialized"
-INCREMENTAL_MATERIALIZATION: str = "incremental"
-INCREMENTAL_MODE_CONFIG: str = "incremental_mode"
-MICROBATCH_MODE: str = "microbatch"
-INCREMENTAL_STRATEGY_CONFIG: str = "incremental_strategy"
-CURSOR_CONFIG: str = "cursor"
-KEYED_DELETE_INSERT_STRATEGY: str = "delete_insert"
-KEY_PRESERVING_STRATEGIES: frozenset[str] = frozenset({"merge", KEYED_DELETE_INSERT_STRATEGY})
 RELATION_IDENTITY_TEMPLATE: str = "{kind}:{name}"
-RELATION_KIND_REF: str = "ref"
 RELATION_KIND_SOURCE: str = "source"
 RELATION_KIND_SEED: str = "seed"
 
@@ -140,3 +129,10 @@ FIX_COLUMNS_CHANGED: str = "The fix would change output columns, types or nullab
 FIX_DEPENDENCIES_CHANGED: str = "The fix would change model dependencies"
 FIX_LINEAGE_CHANGED: str = "The fix would change column lineage"
 FIX_NEW_DIAGNOSTICS: str = "The fix would add compile diagnostics: "
+
+SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
+    r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
+)
+SQL_ARGUMENT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
+    r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_])(?!\s*\()"
+)

@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledSqlTest
+from sqlbuild.compiler.compile.models import CompiledSqlTest
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics import (
     render_cursor_intrinsic_bounds,
 )
@@ -52,7 +53,7 @@ def declares_cursor_window(*, test: CompiledSqlTest) -> bool:
 def render_test_cursor_intrinsics(
     *,
     sql: str,
-    model: CompiledModel,
+    model: CompiledModelView,
     adapter: BaseAdapter,
     test: CompiledSqlTest | None,
 ) -> str:
@@ -71,11 +72,11 @@ def render_test_cursor_intrinsics(
 
 
 def declared_window_cursor_models(
-    *, test: CompiledSqlTest, chain_models: tuple[CompiledModel, ...]
-) -> tuple[CompiledModel, ...]:
+    *, test: CompiledSqlTest, chain_models: tuple[CompiledModelView, ...]
+) -> tuple[CompiledModelView, ...]:
     """Validate a declared window against every chain model using intrinsics and return them."""
 
-    cursor_models: tuple[CompiledModel, ...] = tuple(
+    cursor_models: tuple[CompiledModelView, ...] = tuple(
         model for model in chain_models if uses_cursor_intrinsics(sql=model.query_sql)
     )
     if not cursor_models:
@@ -146,7 +147,7 @@ def _bound(
     return value
 
 
-def _model_cursor(*, model: CompiledModel) -> _ModelCursor:
+def _model_cursor(*, model: CompiledModelView) -> _ModelCursor:
     cursor_type: CursorType = CursorType(
         get_config_str(values=model.config.values, key="cursor_type") or CursorType.TIMESTAMP
     )

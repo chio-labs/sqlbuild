@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.output.plan_entry import resolve_microbatch_lookback
 from sqlbuild.compiler.planner.types import IncrementalStrategy
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
@@ -60,7 +60,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 def test_given_microbatch_model_when_resolving_lookback_then_returns_expected_value(
     test_case: MicrobatchLookbackTestCase,
 ) -> None:
-    model: CompiledModel = build_microbatch_lookback_model(
+    model: CompiledModelView = build_microbatch_lookback_model(
         incremental_strategy=test_case.incremental_strategy,
         batch_size=test_case.batch_size,
         lookback=test_case.lookback,

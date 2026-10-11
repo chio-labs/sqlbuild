@@ -84,3 +84,47 @@ fn text(value: Option<&Value>) -> String {
         .and_then(AuthoredNode::text)
         .unwrap_or_else(|| "-".to_owned())
 }
+
+/// Families as `name:aggregate:pattern`.
+pub(super) fn dynamic_summary(raw: &Value) -> Result<Vec<String>, String> {
+    crate::header_metadata::main::parse_dynamic_columns::parse_dynamic_columns(
+        raw,
+        ("orders", "models/orders.sql"),
+    )
+    .map(|families| {
+        families
+            .iter()
+            .map(|family| {
+                format!(
+                    "{}:{}:{}",
+                    family.name,
+                    family.aggregate,
+                    family.name_pattern.as_deref().unwrap_or("-")
+                )
+            })
+            .collect()
+    })
+    .map_err(stop_summary)
+}
+
+/// References of `orders` against the discovered `daily_checks` and `freshness` factories.
+pub(super) fn factory_summary(raw: &Value) -> Result<Vec<String>, String> {
+    crate::header_metadata::main::audit_factory_references::audit_factory_references(
+        raw,
+        ("orders", "models/orders.sql"),
+        &["freshness".to_owned(), "daily_checks".to_owned()],
+    )
+    .map_err(stop_summary)
+}
+
+/// One revenue family, with `pattern` as its `name_pattern` when given.
+pub(super) fn family(pattern: Option<&'static str>) -> Value {
+    let entries = [
+        ("pivot_column", Value::Str("channel")),
+        ("value_column", Value::Str("amount")),
+        ("aggregate", Value::Str("sum")),
+        ("type", Value::Str("DECIMAL")),
+    ];
+    let pattern = pattern.map(|pattern| ("name_pattern", Value::Str(pattern)));
+    map(&entries.into_iter().chain(pattern).collect::<Vec<_>>())
+}

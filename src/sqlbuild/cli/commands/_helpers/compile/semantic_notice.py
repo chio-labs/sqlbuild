@@ -1,8 +1,8 @@
 """One actionable semantic-check notice for human and machine commands."""
 
 from sqlbuild.compiler.compile.main.semantic_coverage import get_semantic_coverage
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 
 _DISPLAY_LIMIT: int = 10
 _ACTIONS: dict[str, str] = {
@@ -20,7 +20,7 @@ _ACTIONS: dict[str, str] = {
 
 def selected_semantic_coverage(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey] | None,
     sql_validation_enabled: bool = True,
 ) -> dict[str, tuple[str, ...]]:
@@ -38,7 +38,7 @@ def selected_semantic_coverage(
 
 def semantic_coverage_notice(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     sql_validation_enabled: bool = True,
 ) -> str | None:

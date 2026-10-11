@@ -4,13 +4,12 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::Python;
 use pyo3::{PyResult, pyclass, pymethods};
 use sqlbuild_cache::store::models::NativeStore;
-use sqlbuild_render::macro_calls::models::MacroCallEntry;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
 
-use crate::bindings::_helpers::render::macro_call_rows::{EntryRow, event_from_row, event_row};
+use crate::bindings::_helpers::render::macro_call_classes::CallClassState;
 
 /// The native store kind holding recorded macro calls.
 const MACRO_CALL_STORE_KIND: &str = "macro-calls";
@@ -20,9 +19,12 @@ const MACRO_CALL_STORE_KIND: &str = "macro-calls";
 #[derive(Debug, Default)]
 pub(crate) struct MacroCallMemo {
     pub(crate) inner: Mutex<sqlbuild_render::macro_calls::models::MacroCallMemo>,
+    pub(crate) classes: Mutex<CallClassState>,
+    /// `len(sys.modules)` when the store was last trusted, or `None` once it is not.
+    pub(crate) observed_modules: Mutex<Option<usize>>,
 }
 
-fn poisoned<T>(_: T) -> pyo3::PyErr {
+pub(crate) fn poisoned<T>(_: T) -> pyo3::PyErr {
     PyValueError::new_err("macro call memo is poisoned")
 }
 
@@ -33,37 +35,18 @@ impl MacroCallMemo {
         Self::default()
     }
 
-    /// The recorded result of a call in `class_id`, or `None` when it must execute.
-    fn lookup(&self, class_id: u64, call_text: &str) -> PyResult<Option<EntryRow>> {
-        let found = self
-            .inner
+    /// Forget call tokens after attaching a store; `store_tokens` when its keys are computed.
+    fn reset_call_classes(&self, store_tokens: bool) -> PyResult<()> {
+        self.classes
             .lock()
             .map_err(poisoned)?
-            .lookup(class_id, call_text);
-        Ok(found.map(|entry| {
-            (
-                entry.sql.clone(),
-                entry.relations.clone(),
-                entry.events.iter().map(event_row).collect(),
-            )
-        }))
+            .reset_tokens(store_tokens);
+        Ok(())
     }
 
-    /// Record the `(sql, relations, events)` result of one executed call.
-    fn record(&self, class_id: u64, call_text: String, entry: EntryRow) -> PyResult<()> {
-        let (sql, relations, events) = entry;
-        let entry = MacroCallEntry {
-            sql,
-            relations,
-            events: events
-                .into_iter()
-                .map(event_from_row)
-                .collect::<PyResult<_>>()?,
-        };
-        self.inner
-            .lock()
-            .map_err(poisoned)?
-            .record(class_id, call_text, entry);
+    /// Note how many modules were loaded when the store was trusted, or `None` once it is not.
+    fn observe_modules(&self, count: Option<usize>) -> PyResult<()> {
+        *self.observed_modules.lock().map_err(poisoned)? = count;
         Ok(())
     }
 
@@ -90,15 +73,6 @@ impl MacroCallMemo {
         if let Some(store) = self.inner.lock().map_err(poisoned)?.store_mut() {
             store.discard();
         }
-        Ok(())
-    }
-
-    /// Store results of `class_id` under `class_text` and everything the store key covers.
-    fn set_persistent_class(&self, class_id: u64, class_text: &str) -> PyResult<()> {
-        self.inner
-            .lock()
-            .map_err(poisoned)?
-            .set_persistent_class(class_id, class_text);
         Ok(())
     }
 

@@ -6,22 +6,83 @@ from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.main.resolve_target_config import resolve_target_config
 from sqlbuild.spec.contracts.models import (
     AuthoredTimeTravelRetention,
+    ClonePolicy,
     ExecutionLimitsConfig,
     LocalConfig,
     LocalTargetConfig,
     ProjectConfig,
     TargetConfig,
+    TargetDiffConfig,
     TargetWarehousesConfig,
 )
-from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
+from sqlbuild.spec.contracts.types import (
+    MissingMigrationOriginPolicy,
+    RetentionDecreasePolicy,
+    TableType,
+    TableTypeDowngradePolicy,
+)
 from tests.unit.src.sqlbuild.spec.contracts.main._test_types import (
     AmbiguousTargetConnectionTestCase,
     ExecutionLimitsResolutionTestCase,
+    FullTargetResolutionTestCase,
     MissingOriginPolicyResolutionTestCase,
     TargetConnectionDefaultTestCase,
     TargetRetentionResolutionTestCase,
     TargetWarehousesResolutionTestCase,
 )
+
+_FULL_TARGET: TargetConfig = TargetConfig(
+    connection={"database": "orders.duckdb"},
+    connection_name="warehouse",
+    vars={"region": "eu"},
+    database="orders",
+    schema="sales",
+    loader_schema="raw",
+    defer_sources_to="prod",
+    defer_clone_from="prod",
+    clone=ClonePolicy(allow_as_clone_origin=True, allow_as_clone_destination=True),
+    compile_cache=False,
+    time_travel_retention=AuthoredTimeTravelRetention(desired_days=3),
+    time_travel_retention_by_materialization={"table": AuthoredTimeTravelRetention(desired_days=5)},
+    owns_time_travel_retention_namespace=True,
+    default_table_type=TableType.TRANSIENT,
+    table_type_downgrade=TableTypeDowngradePolicy.DENY,
+    time_travel_retention_decrease=RetentionDecreasePolicy.REQUIRE_CONFIRMATION,
+    missing_migration_origin=MissingMigrationOriginPolicy.DENY,
+    execution_limits=ExecutionLimitsConfig(
+        max_models=4, max_duration="1h", max_duration_seconds=3600, remediation="stop"
+    ),
+    diff=TargetDiffConfig(max_full_rows=10),
+    warehouses=TargetWarehousesConfig(build="build_wh", query="query_wh"),
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FullTargetResolutionTestCase(
+            description="every project target field survives an empty local target",
+            project_target=_FULL_TARGET,
+            expected_target=_FULL_TARGET,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_full_project_target_when_resolving_with_empty_local_then_every_field_is_kept(
+    test_case: FullTargetResolutionTestCase,
+) -> None:
+    resolved: TargetConfig = resolve_target_config(
+        project_config=ProjectConfig(
+            name="demo",
+            adapter="snowflake",
+            connections={"warehouse": {}},
+            targets={"dev": test_case.project_target},
+        ),
+        local_config=LocalConfig(targets={"dev": LocalTargetConfig()}),
+        target_name="dev",
+    )
+
+    assert resolved == test_case.expected_target
 
 
 @pytest.mark.parametrize(

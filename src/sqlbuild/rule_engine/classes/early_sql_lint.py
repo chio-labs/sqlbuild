@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from types import TracebackType
 
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.rule_engine.main._prepare_sql_rules import prepare_sql_rules
 from sqlbuild.rule_engine.models import PreparedSqlLint, SqlExpansionReuse
 
@@ -33,7 +33,7 @@ class EarlySqlLint:
     ) -> None:
         _ = self.stop()
 
-    def start(self, *, inputs: CompileProjectInputs, dialect: str) -> None:
+    def start(self, *, inputs: CompileInputsView, dialect: str) -> None:
         if self.enabled:
             self.preparation = prepare_sql_rules(
                 inputs=inputs,

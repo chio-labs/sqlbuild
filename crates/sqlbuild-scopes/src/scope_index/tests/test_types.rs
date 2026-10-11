@@ -74,16 +74,8 @@ pub(super) struct LookupTestCase {
     pub(super) declarations: &'static [DeclarationRow],
     /// First resource identity of each resource group, in mapping order.
     pub(super) expected_resource_groups: &'static [&'static str],
-    pub(super) expected_repr_ordered: bool,
     /// `global`, `private`, `local` and `inherited` position groups as text.
     pub(super) expected_visibility: &'static [&'static str],
-}
-
-/// One Python `repr` case for a lookup key string.
-pub(super) struct ReprTestCase {
-    pub(super) description: &'static str,
-    pub(super) value: &'static str,
-    pub(super) expected_repr: Option<&'static str>,
 }
 
 /// `(position, reason, through)` of one visible record.
@@ -96,4 +88,23 @@ pub(super) struct ClassifyTestCase {
     pub(super) private: &'static [usize],
     pub(super) grants: &'static [(u32, VisibilityReason, usize)],
     pub(super) expected_classified: Option<(&'static [VisibleRow], &'static [usize])>,
+}
+
+/// One declaration's scope facts, an authored consumer path, and whether it is visible.
+pub(super) struct PathVisibleTestCase {
+    pub(super) description: &'static str,
+    pub(super) scope: crate::scope_index::models::ScopeKind,
+    pub(super) owning_path: Option<&'static str>,
+    pub(super) path: &'static str,
+    pub(super) expected_visible: bool,
+}
+
+/// One qualified value and the identity or failure Python's `parse_identity` gives it.
+pub(super) struct ParseIdentityTestCase {
+    pub(super) description: &'static str,
+    pub(super) value: &'static str,
+    pub(super) expected_identity: Result<
+        crate::scope_index::models::QualifiedIdentity,
+        crate::scope_index::models::IdentityFailure,
+    >,
 }

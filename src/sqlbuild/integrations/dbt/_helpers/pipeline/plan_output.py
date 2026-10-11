@@ -11,7 +11,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.execution.command_warehouse import apply_command_warehouse
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.resolve_model_deferral_inputs import (
     resolve_model_deferral_inputs,
@@ -57,7 +57,7 @@ def build_sqlbuild_plan_output(
 
     if not request.selected_model_names:
         return None
-    planning_project: CompiledProject = environment.project
+    planning_project: CompiledProjectView = environment.project
     connection_config: dict[str, object] = apply_command_warehouse(
         config=resolve_connection_config(
             raw_config=build_effective_connection_config(

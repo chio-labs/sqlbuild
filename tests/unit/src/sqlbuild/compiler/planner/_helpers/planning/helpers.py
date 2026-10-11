@@ -13,7 +13,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner.models import (
     PlannerRelationsContext,
     PlannerRuntime,
@@ -44,7 +48,7 @@ def build_retention_planner_inputs(
     table_type_downgrade: TableTypeDowngradePolicy = TableTypeDowngradePolicy.REQUIRE_CONFIRMATION,
     model_names: tuple[str, ...] = ("orders",),
 ) -> tuple[PlannerRuntime, PlannerWarehouseState, PlannerScope]:
-    models: tuple[CompiledModel, ...] = tuple(
+    models: tuple[CompiledModelView, ...] = tuple(
         _retention_model(
             name=name,
             desired_days=desired_days,
@@ -54,7 +58,7 @@ def build_retention_planner_inputs(
         for name in model_names
     )
     keys: tuple[CompiledObjectKey, ...] = tuple(model.key for model in models)
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-1",
         effective_target_name="test",
         effective_connection={},
@@ -121,7 +125,7 @@ def _retention_model(
     desired_days: int,
     config_values: dict[str, object],
     table_type: ResolvedTableType | None,
-) -> CompiledModel:
+) -> CompiledModelView:
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
         deps=(),
@@ -146,7 +150,7 @@ def _retention_model(
     )
 
 
-def build_full_refresh_model(*, config_values: dict[str, object]) -> CompiledModel:
+def build_full_refresh_model(*, config_values: dict[str, object]) -> CompiledModelView:
     """Build an incremental model with the given header configuration."""
 
     return CompiledModel(

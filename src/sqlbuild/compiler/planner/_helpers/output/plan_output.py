@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledFunction,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
+)
+from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledProjectView,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredHookFunction,
@@ -18,10 +20,8 @@ from sqlbuild.compiler.discovery.models import (
     PythonHookEntry,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
-    build_lineage_downstream_deps,
-)
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
+from sqlbuild.compiler.graph.models import LineageGraphViews
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_context,
 )
@@ -67,7 +67,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 def build_plan_output(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
@@ -204,7 +204,7 @@ def _resolve_seed_plan_reason(
 
 def _build_provider_usages(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     model_entries: tuple[ModelPlanEntry, ...],
     source_load_entries: tuple[SourceLoadPlanEntry, ...],
 ) -> tuple[PlanProviderUsage, ...]:
@@ -309,7 +309,7 @@ def _to_plan_provider_usages(
 
 def _validate_skipped_intermediate_loader_targets(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     snapshot: WarehouseSnapshot,
     relations: PlannerRelationsContext,
     source_load_entries: tuple[SourceLoadPlanEntry, ...],
@@ -347,7 +347,7 @@ def _validate_skipped_intermediate_loader_targets(
 
 def _build_function_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     snapshot: WarehouseSnapshot,
     relations: PlannerRelationsContext,
@@ -355,7 +355,7 @@ def _build_function_entries(
     selected_keys: frozenset[CompiledObjectKey],
 ) -> list[FunctionPlanEntry]:
     entries: list[FunctionPlanEntry] = []
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if function.key not in selected_keys:
             continue
@@ -379,7 +379,7 @@ def _build_function_entries(
 
 def plan_function(
     *,
-    function: CompiledFunction,
+    function: CompiledFunctionView,
     adapter: BaseAdapter,
     relations: PlannerRelationsContext,
     fingerprint_query_sql: str,
@@ -420,23 +420,29 @@ def plan_function(
 
 def build_selected_audit_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
     model_materializations: dict[str, str],
 ) -> list[AuditPlanEntry]:
     entries: list[AuditPlanEntry] = []
+    selected_audits: tuple[CompiledAuditView, ...] = tuple(
+        audit
+        for audit in project.audits
+        if audit_is_selected(audit=audit, selected_keys=scope.selected_keys)
+    )
+    if not selected_audits:
+        return entries
+    lineage: LineageGraphViews = project_lineage_views(project)
     lineage_upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
+        lineage.upstream_deps
     )
     lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_downstream_deps(lineage_upstream_deps)
+        lineage.downstream_deps
     )
-    audit: CompiledAudit
-    for audit in project.audits:
-        if not audit_is_selected(audit=audit, selected_keys=scope.selected_keys):
-            continue
+    audit: CompiledAuditView
+    for audit in selected_audits:
         entries.append(
             plan_audit(
                 audit=audit,
@@ -454,7 +460,7 @@ def build_selected_audit_entries(
 
 def plan_selected_sql_tests(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
     sql_test_selection: SqlTestSelection,
@@ -495,7 +501,7 @@ def sql_test_is_selected(
 
 def build_selected_test_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
     sql_test_selection: SqlTestSelection,

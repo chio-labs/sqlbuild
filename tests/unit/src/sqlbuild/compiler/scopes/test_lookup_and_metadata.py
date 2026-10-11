@@ -15,6 +15,7 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     OwnershipRoot,
     ResourceIdentity,
+    ResourceRecord,
     ScopeIndex,
     ScopeLookup,
 )
@@ -27,6 +28,7 @@ from tests.unit.src.sqlbuild.compiler.scopes._test_types import (
     DeclarationContainerProjectionCase,
     ExpectedBooleanCase,
     ExpectedErrorCase,
+    UnicodeKeyOrderCase,
 )
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import scope_index
 
@@ -54,6 +56,56 @@ def test_given_unsorted_index_when_building_lookup_then_records_and_edges_are_ca
         "minimum_value",
         "order_status",
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnicodeKeyOrderCase(
+            description="non_ascii_keys_follow_python_repr",
+            names=("caf\u00e9", "cafe", "\u00a0x", "\U0001f600", "Zed", "\u200bz", "e\u0301"),
+            expected_names=(
+                "Zed",
+                "\u200bz",
+                "\u00a0x",
+                "cafe",
+                "caf\u00e9",
+                "e\u0301",
+                "\U0001f600",
+            ),
+            expected_paths=(
+                "models/Zed.sql",
+                "models/\u200bz.sql",
+                "models/\u00a0x.sql",
+                "models/cafe.sql",
+                "models/caf\u00e9.sql",
+                "models/e\u0301.sql",
+                "models/\U0001f600.sql",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_non_ascii_keys_when_building_lookup_then_mappings_follow_python_repr_order(
+    test_case: UnicodeKeyOrderCase,
+) -> None:
+    root: OwnershipRoot = OwnershipRoot("models", resource_kind=ResourceKind.MODEL)
+    resources: tuple[ResourceRecord, ...] = tuple(
+        ResourceRecord(
+            identity=ResourceIdentity(kind=ResourceKind.MODEL, name=name),
+            path=f"models/{name}.sql",
+            ownership_root=root,
+        )
+        for name in test_case.names
+    )
+
+    lookup: ScopeLookup = build_scope_lookup(
+        index=ScopeIndex(ownership_roots=(root,), resources=resources)
+    )
+
+    assert tuple(identity.name for identity in lookup.resources) == test_case.expected_names
+    assert tuple(lookup.resources_by_path) == test_case.expected_paths
+    assert tuple(sorted(lookup.resources, key=repr)) == tuple(lookup.resources)
 
 
 @pytest.mark.parametrize(

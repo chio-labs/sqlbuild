@@ -15,7 +15,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner.models import PlannerScope
 from tests.unit.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBoundaryTestCase,
@@ -132,7 +132,7 @@ def test_given_disabled_model_in_defer_clone_scope_when_counting_then_only_enabl
         "a": MODEL_A,
         "b": MODEL_B,
     }
-    models_by_name: dict[str, CompiledModel] = {
+    models_by_name: dict[str, CompiledModelView] = {
         name: CompiledModel(
             key=keys_by_name[name],
             deps=(),

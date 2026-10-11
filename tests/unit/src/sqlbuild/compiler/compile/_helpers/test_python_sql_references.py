@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     PythonSqlReferenceAllowedTestCase,
     PythonSqlReferenceErrorTestCase,
@@ -366,7 +366,7 @@ def test_given_explicit_or_non_project_relations_when_compiling_then_it_succeeds
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _PROJECT_FILE} | test_case.files)
 
-    project: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+    project: CompiledProjectView = compile_and_assemble(project_dir=tmp_path)
 
     assert tuple(sorted(model.name for model in project.models)) == test_case.expected_model_names
 
@@ -395,7 +395,7 @@ def test_given_enforcement_disabled_when_compiling_hard_coded_names_then_it_succ
 ) -> None:
     write_repo_files(tmp_path, {"sqlbuild_project.toml": _DISABLED_PROJECT_FILE} | test_case.files)
 
-    project: CompiledProject = compile_and_assemble(project_dir=tmp_path)
+    project: CompiledProjectView = compile_and_assemble(project_dir=tmp_path)
 
     assert tuple(sorted(model.name for model in project.models)) == test_case.expected_model_names
 

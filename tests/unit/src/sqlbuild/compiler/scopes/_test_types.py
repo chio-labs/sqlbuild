@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_SCHEMA_VERSION
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ResourceIdentity
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
@@ -28,36 +27,32 @@ class PathNormalizationCase:
 
 
 @dataclass(frozen=True)
-class PathNormalizationCacheCase:
-    """Expected bounded-cache behavior for repeated path normalization."""
-
-    description: str
-    path: str
-    call_count: int
-    expected_hits: int
-    expected_misses: int
-    expected_max_size: int
-    expected_current_size: int
-
-
-@dataclass(frozen=True)
-class PathVisibilityCase:
-    """One component-aware lexical visibility case."""
-
-    description: str
-    scope: ScopeKind
-    owner: str
-    resource: str
-    expected_visible: bool
-
-
-@dataclass(frozen=True)
 class QualifiedIdentityCase:
     """One qualified identity round-trip case."""
 
     description: str
     text: str
     expected_identity: ResourceIdentity | DeclarationIdentity
+
+
+@dataclass(frozen=True)
+class UnicodeKeyOrderCase:
+    """Resource names and paths, with the lookup mapping orders Python's `repr` sort gives."""
+
+    description: str
+    names: tuple[str, ...]
+    expected_names: tuple[str, ...]
+    expected_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class IdentityReportCase:
+    """One qualified identity text, the identity a report names, and its diagnostic messages."""
+
+    description: str
+    text: str
+    expected_identity: str | None
+    expected_messages: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -190,7 +185,7 @@ class CacheFaultCase:
 
     description: str
     mutate: Callable[..., None]
-    expected_schema_version: int = SCOPE_CACHE_SCHEMA_VERSION
+    expected_schema_version: int = 3
 
 
 @dataclass(frozen=True)

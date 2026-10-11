@@ -6,13 +6,16 @@ use crate::text::main::is_python_space::is_python_space;
 use crate::text::main::is_python_word::is_python_word;
 use crate::text::main::python_casefold::python_casefold;
 use crate::text::main::python_cleandoc::python_cleandoc;
+use crate::text::main::python_fnmatchcase::python_fnmatchcase;
 use crate::text::main::python_ignorecase_key::python_ignorecase_key;
+use crate::text::main::python_splitlines::python_splitlines;
+use crate::text::main::python_str_repr::python_str_repr;
 use crate::text::main::python_text::python_text;
 use crate::text::main::python_upper::python_upper;
 use crate::text::models::PythonText;
 use crate::text::tests::test_types::{
     CaseMappingTestCase, CharacterClassTestCase, CleandocTestCase, CloseMatchesTestCase,
-    IgnorecaseTestCase, PythonTextTestCase,
+    GlobTestCase, IgnorecaseTestCase, PythonTextTestCase, ReprTestCase, SplitlinesTestCase,
 };
 
 const KEYS: &[&str] = &[
@@ -434,6 +437,269 @@ fn given_character_pairs_when_matching_ignoring_case_then_python_re_agrees() {
             python_ignorecase_key(python, test_case.pattern)
                 == python_ignorecase_key(python, test_case.text),
             test_case.expected_match,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_text_when_taking_repr_then_it_matches_python() {
+    let test_cases = [
+        ReprTestCase {
+            description: "plain text uses single quotes",
+            unicode_version: "16.0.0",
+            value: "plain",
+            expected_repr: "'plain'",
+        },
+        ReprTestCase {
+            description: "a single quote alone switches to double quotes",
+            unicode_version: "16.0.0",
+            value: "it's",
+            expected_repr: "\"it's\"",
+        },
+        ReprTestCase {
+            description: "both quotes keep single quotes and escape them",
+            unicode_version: "16.0.0",
+            value: "both'\"",
+            expected_repr: "'both\\'\"'",
+        },
+        ReprTestCase {
+            description: "whitespace controls and backslashes use short escapes",
+            unicode_version: "16.0.0",
+            value: "tab\tnew\nline\r\\",
+            expected_repr: "'tab\\tnew\\nline\\r\\\\'",
+        },
+        ReprTestCase {
+            description: "other controls use hex escapes",
+            unicode_version: "16.0.0",
+            value: "bell\u{7}del\u{7f}",
+            expected_repr: "'bell\\x07del\\x7f'",
+        },
+        ReprTestCase {
+            description: "printable Latin-1 text stays literal",
+            unicode_version: "16.0.0",
+            value: "caf\u{e9}",
+            expected_repr: "'caf\u{e9}'",
+        },
+        ReprTestCase {
+            description: "non-printable Latin-1 uses hex escapes",
+            unicode_version: "16.0.0",
+            value: "\u{a0}\u{ad}",
+            expected_repr: "'\\xa0\\xad'",
+        },
+        ReprTestCase {
+            description: "format and separator characters use short Unicode escapes",
+            unicode_version: "16.0.0",
+            value: "\u{200b}\u{2028}\u{378}",
+            expected_repr: "'\\u200b\\u2028\\u0378'",
+        },
+        ReprTestCase {
+            description: "astral printable text stays literal and tags use long escapes",
+            unicode_version: "16.0.0",
+            value: "\u{1F600}\u{E0001}",
+            expected_repr: "'\u{1F600}\\U000e0001'",
+        },
+        ReprTestCase {
+            description: "a combining mark after a letter stays literal",
+            unicode_version: "16.0.0",
+            value: "e\u{301}",
+            expected_repr: "'e\u{301}'",
+        },
+        ReprTestCase {
+            description: "a quote with non-ASCII text still switches quotes",
+            unicode_version: "16.0.0",
+            value: "it\u{e9}'s",
+            expected_repr: "\"it\u{e9}'s\"",
+        },
+        ReprTestCase {
+            description: "a Unicode 16.0 emoji is escaped under Unicode 15.1",
+            unicode_version: "15.1.0",
+            value: "\u{1FAE9}",
+            expected_repr: "'\\U0001fae9'",
+        },
+        ReprTestCase {
+            description: "the same emoji is printable under Unicode 16.0",
+            unicode_version: "16.0.0",
+            value: "\u{1FAE9}",
+            expected_repr: "'\u{1FAE9}'",
+        },
+        ReprTestCase {
+            description: "a Unicode 16.0 capital is escaped under Unicode 15.0",
+            unicode_version: "15.0.0",
+            value: "\u{1C89}",
+            expected_repr: "'\\u1c89'",
+        },
+    ];
+    for test_case in test_cases {
+        let python: PythonText =
+            python_text((3, 13), test_case.unicode_version).expect("the version is supported");
+
+        assert_eq!(
+            python_str_repr(python, test_case.value),
+            test_case.expected_repr,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_glob_patterns_when_matching_then_results_match_fnmatchcase() {
+    let test_cases = [
+        GlobTestCase {
+            description: "ord* against orders",
+            pattern: "ord*",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "o?ders against orders",
+            pattern: "o?ders",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[a-c]* against customers",
+            pattern: "[a-c]*",
+            name: "customers",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[!a-c]* against customers",
+            pattern: "[!a-c]*",
+            name: "customers",
+            expected_match: false,
+        },
+        GlobTestCase {
+            description: "[z-a]x against x",
+            pattern: "[z-a]x",
+            name: "x",
+            expected_match: false,
+        },
+        GlobTestCase {
+            description: "[]] against ]",
+            pattern: "[]]",
+            name: "]",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[!] against !",
+            pattern: "[!]",
+            name: "!",
+            expected_match: false,
+        },
+        GlobTestCase {
+            description: "[a-] against -",
+            pattern: "[a-]",
+            name: "-",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[ against [",
+            pattern: "[",
+            name: "[",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "a[b against a[b",
+            pattern: "a[b",
+            name: "a[b",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "**s against orders",
+            pattern: "**s",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[^o]* against orders",
+            pattern: "[^o]*",
+            name: "orders",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[\\]x against \\x",
+            pattern: "[\\]x",
+            name: "\\x",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[!b-a] drops its empty range and matches any character",
+            pattern: "[!b-a]",
+            name: "\n",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "[a-b-a] reads the second hyphen as a literal",
+            pattern: "[a-b-a]",
+            name: "-",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "* matches across newlines",
+            pattern: "a*b",
+            name: "a\nb",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "? matches one non-ASCII character",
+            pattern: "caf?",
+            name: "caf\u{e9}",
+            expected_match: true,
+        },
+        GlobTestCase {
+            description: "matching is case-sensitive",
+            pattern: "Orders",
+            name: "orders",
+            expected_match: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            python_fnmatchcase(test_case.name, test_case.pattern),
+            test_case.expected_match,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_text_when_splitting_lines_then_it_matches_str_splitlines() {
+    let test_cases = [
+        SplitlinesTestCase {
+            description: "a newline separates two lines",
+            text: "a\nb",
+            expected_lines: &["a", "b"],
+        },
+        SplitlinesTestCase {
+            description: "CRLF is one break and a trailing break adds no line",
+            text: "a\r\nb\r",
+            expected_lines: &["a", "b"],
+        },
+        SplitlinesTestCase {
+            description: "Unicode separators, NEL and vertical tab break lines",
+            text: "a\u{2028}b\u{85}c\u{b}d",
+            expected_lines: &["a", "b", "c", "d"],
+        },
+        SplitlinesTestCase {
+            description: "leading breaks give empty lines",
+            text: "\n\nx",
+            expected_lines: &["", "", "x"],
+        },
+        SplitlinesTestCase {
+            description: "empty text has no lines",
+            text: "",
+            expected_lines: &[],
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            python_splitlines(test_case.text),
+            test_case.expected_lines,
             "{}",
             test_case.description
         );

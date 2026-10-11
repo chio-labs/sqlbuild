@@ -5,7 +5,6 @@ import random
 import shutil
 import time
 from collections.abc import Callable
-from dataclasses import replace
 from operator import attrgetter
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +13,8 @@ from typing import Protocol
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.host import custom_host_pool
@@ -74,7 +74,7 @@ def write_order_rules(
     )
 
 
-def orders_project(*, model_count: int, edits: dict[str, str] | None = None) -> CompiledProject:
+def orders_project(*, model_count: int, edits: dict[str, str] | None = None) -> CompiledProjectView:
     """Return numbered order models whose SQL marks them odd or even, with optional edits."""
 
     sql_by_name: dict[str, str] = {
@@ -82,15 +82,17 @@ def orders_project(*, model_count: int, edits: dict[str, str] | None = None) -> 
         for index in range(model_count)
     }
     sql_by_name.update(edits or {})
-    projects: list[CompiledProject] = [
+    projects: list[CompiledProjectView] = [
         build_project(name=name, relative_path=f"models/{name}.sql", sql=sql, config_values={})
         for name, sql in sql_by_name.items()
     ]
-    return replace(projects[0], models=tuple(project.models[0] for project in projects))
+    return project_with(
+        project=projects[0], models=tuple(project.models[0] for project in projects)
+    )
 
 
 def evaluate_order_rules(
-    *, project: CompiledProject, root: Path, cache_enabled: bool = True
+    *, project: CompiledProjectView, root: Path, cache_enabled: bool = True
 ) -> CustomRulesOutcome:
     """Evaluate both order rules through the incremental custom-rule cache."""
 
@@ -437,7 +439,7 @@ def delay_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> No
 
     write: Callable[..., None] = custom_host_pool._write_inputs
 
-    def delayed_write(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+    def delayed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
         time.sleep(delay_seconds)
         write(path=path, project=project, config=config)
 
@@ -447,7 +449,7 @@ def delay_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> No
 def fail_inputs(*, monkeypatch: pytest.MonkeyPatch, delay_seconds: float) -> None:
     """Fail to publish every host project payload after a delay."""
 
-    def failed_write(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+    def failed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
         del path, project, config
         time.sleep(delay_seconds)
         raise OSError("project payload disk is full")
@@ -462,7 +464,7 @@ def fail_inputs_without_directory(
 
     failures: list[float] = []
 
-    def failed_write(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+    def failed_write(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
         del project, config
         time.sleep(delay_seconds)
         shutil.rmtree(path.parent)

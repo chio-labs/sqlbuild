@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledFunction
+from sqlbuild.compiler.compile.types import CompiledFunctionView
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
     detect_function_change,
@@ -65,7 +65,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 def test_given_function_fingerprint_when_detecting_change_then_returns_reason(
     test_case: DetectFunctionChangeTestCase,
 ) -> None:
-    function: CompiledFunction = build_compiled_function(
+    function: CompiledFunctionView = build_compiled_function(
         body_sql=test_case.body_sql,
         target_schema=test_case.target_schema,
     )

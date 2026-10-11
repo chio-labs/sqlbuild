@@ -19,13 +19,10 @@ from sqlbuild.compiler.analysis_session.models import (
     NativeModelAnalysisRequest,
     NativePivotTables,
 )
+from sqlbuild.compiler.analysis_session.types import ProofRow
 from sqlbuild.compiler.compile._helpers.analysis.pivot_requests import standalone_pivot_models
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_syntax_checks
-from sqlbuild.compiler.compile.models import (
-    CompileProjectInputs,
-    DynamicColumnContractProof,
-    ModelSqlAnalysis,
-)
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.project_assembly.main._assemble_native_project_resources import (
     assemble_native_project_resources,
@@ -40,10 +37,10 @@ from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 def project_facts_by_engine(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     dialect: str | None,
     analysis_model_names: frozenset[str] | None,
-    analyses: dict[str, ModelSqlAnalysis],
+    analyses: NativeModelAnalyses | None,
     session: Any | None,
     column_types_by_table: dict[str, dict[str, str]],
     authoritative_column_types_by_table: dict[str, dict[str, str]],
@@ -58,17 +55,13 @@ def project_facts_by_engine(
         syntax_checks=model_syntax_checks(
             model_inputs=inputs.model_inputs,
             analysis_model_names=analysis_model_names,
-            analysis_succeeded=frozenset(
-                name
-                for name, analysis in analyses.items()
-                if analysis.polyglot_analysis.analysis_succeeded
-            ),
+            analysis_succeeded=frozenset() if analyses is None else analyses.succeeded,
         ),
     )
     pivots: dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]] = standalone_pivot_models(
-        model_inputs=inputs.model_inputs, analyses=analyses
+        model_inputs=inputs.model_inputs, analysed={} if analyses is None else analyses.positions
     )
-    proofs: dict[int, DynamicColumnContractProof | None] = dict(
+    proofs: dict[int, ProofRow | None] = dict(
         zip(
             pivots,
             prove_native_dynamic_contracts(
@@ -106,10 +99,7 @@ def expression_source_shapes_by_engine(
     return infer_native_expression_source_shapes(expressions=expressions, profile=profile)
 
 
-def analyze_model_sql(
-    request: NativeModelAnalysisRequest,
-) -> tuple[dict[str, ModelSqlAnalysis], Any | None]:
-    """Analyze models natively; also return the finished session."""
+def analyze_model_sql(request: NativeModelAnalysisRequest) -> NativeModelAnalyses:
+    """Analyze models natively; their outcomes stay in the finished session."""
 
-    native: NativeModelAnalyses = analyze_native_model_sql(request=request)
-    return native.analyses, native.session
+    return analyze_native_model_sql(request=request)

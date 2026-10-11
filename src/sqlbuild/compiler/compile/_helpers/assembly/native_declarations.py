@@ -1,10 +1,10 @@
 """Names and types registered with native validation from project declarations."""
 
-from sqlbuild.compiler.compile.models import CompiledFunction, CompileSqlFunctionInput
+from sqlbuild.compiler.compile.types import CompiledFunctionView, FunctionInput
 
 
 def known_function_names(
-    functions: tuple[CompiledFunction, ...] | tuple[CompileSqlFunctionInput, ...],
+    functions: tuple[CompiledFunctionView, ...] | tuple[FunctionInput, ...],
 ) -> tuple[str, ...]:
     """Register authored names and the analysis-only scalar/table function names."""
     names: set[str] = set()
@@ -21,7 +21,7 @@ def known_function_names(
 
 def known_declared_types(
     *,
-    functions: tuple[CompiledFunction, ...] | tuple[CompileSqlFunctionInput, ...],
+    functions: tuple[CompiledFunctionView, ...] | tuple[FunctionInput, ...],
     column_types: dict[str, dict[str, str]],
 ) -> tuple[str, ...]:
     """Register types named by relation contracts and scalar/table function signatures."""

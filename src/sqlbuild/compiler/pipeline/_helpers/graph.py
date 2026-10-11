@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-)
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.planner.main.selection._graph_selection import resolve_graph_selection
 
 
-def build_static_all_keys(project: CompiledProject) -> dict[str, CompiledObjectKey]:
-    """Build selector lookup keys for all named graph resources."""
+def build_project_graph_impl(project: CompiledProjectView) -> ProjectGraph:
+    """The project's natively held graph; dict views are built only when a boundary reads them."""
 
-    keys: dict[str, CompiledObjectKey] = {}
-    for model in project.models:
-        keys[model.name] = model.key
-    for source in project.sources:
-        keys[source.name] = source.key
-    for seed in project.seeds:
-        keys[seed.name] = seed.key
-    for function in project.functions:
-        keys[function.name] = function.key
-    return keys
+    return ProjectGraph(project=project, native=project.lineage_graph)
+
+
+def select_project_graph_impl(
+    *, graph: ProjectGraph, select: tuple[str, ...], exclude: tuple[str, ...]
+) -> frozenset[CompiledObjectKey]:
+    """Resolve selectors on the graph's native handle."""
+
+    return resolve_graph_selection(graph=graph.native, select=select, exclude=exclude)

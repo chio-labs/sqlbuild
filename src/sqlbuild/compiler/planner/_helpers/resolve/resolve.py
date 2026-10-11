@@ -10,11 +10,10 @@ from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationL
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledRelationLocation,
     CursorInputRoles,
 )
+from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
     resolve_bounded_cursor_override,
@@ -75,7 +74,7 @@ from sqlbuild.spec.contracts.models import FutureCursorsConfig, SourceEntry, Sta
 def resolve_model_sql(
     *,
     adapter: BaseAdapter,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     context: ModelPlanContext,
     backfill: BackfillResult,
@@ -185,7 +184,7 @@ def _unresolved_cursor_bounds_error(
 def resolve_function_sql(
     *,
     adapter: BaseAdapter,
-    function: CompiledFunction,
+    function: CompiledFunctionView,
     model_locations: dict[str, CompiledRelationLocation],
     seed_locations: dict[str, CompiledRelationLocation],
     function_locations: dict[str, CompiledRelationLocation],
@@ -214,7 +213,7 @@ def resolve_function_sql(
 
 def _compute_model_cursor_bounds(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     backfill: BackfillResult,
     full_refresh: bool,
@@ -347,7 +346,7 @@ def _compute_model_cursor_bounds(
     )
 
 
-def _destination_exists(*, model: CompiledModel, snapshot: WarehouseSnapshot) -> bool:
+def _destination_exists(*, model: CompiledModelView, snapshot: WarehouseSnapshot) -> bool:
     """Return whether the model's resolved destination, alias included, exists in full identity."""
 
     relation: RelationInfo | None = snapshot.existing_relations.get(model.name)
@@ -358,7 +357,7 @@ def _destination_exists(*, model: CompiledModel, snapshot: WarehouseSnapshot) ->
     )
 
 
-def _history_redirected(*, model: CompiledModel, cursor_snapshot: ModelCursorSnapshot) -> bool:
+def _history_redirected(*, model: CompiledModelView, cursor_snapshot: ModelCursorSnapshot) -> bool:
     """Return whether the model's cursor history lives in a relation other than its destination."""
 
     return (
@@ -369,7 +368,7 @@ def _history_redirected(*, model: CompiledModel, cursor_snapshot: ModelCursorSna
 
 def resolve_model_hook_entries(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     adapter: BaseAdapter,
     context: ModelPlanContext,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,

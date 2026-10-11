@@ -13,11 +13,10 @@ from sqlbuild.compiler.compile.constants import SQL_TEST_HELPER_REFERENCE_CODE
 from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
-    CompiledModel,
     CompiledModelSqlTestPayload,
-    CompiledProject,
     CompiledSqlTest,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.planner._helpers.sql_tests.cursor_window import (
     declared_window_cursor_models,
     declares_cursor_window,
@@ -53,7 +52,7 @@ _NATIVE_WORKERS: int = 4
 
 def plan_compiled_sql_test_artifacts(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     tests: tuple[CompiledSqlTest, ...],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
@@ -91,7 +90,7 @@ def sql_test_plan_error_messages(*, warnings: tuple[PlanWarning, ...]) -> tuple[
 
 def plan_sql_tests_natively(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     tests: tuple[CompiledSqlTest, ...],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
@@ -112,7 +111,7 @@ def plan_sql_tests_natively(
 
 def _plan_compiled_sql_tests(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     tests: tuple[CompiledSqlTest, ...],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,
@@ -212,11 +211,11 @@ def _mentions_cursor_intrinsic(sql: str) -> bool:
 
 
 def _rendered_test_overrides(
-    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...], adapter: BaseAdapter
+    *, project: CompiledProjectView, tests: tuple[CompiledSqlTest, ...], adapter: BaseAdapter
 ) -> dict[int, dict[str, str]]:
     """Cursor-rendered model overrides for the tests whose overrides cursor windows change."""
 
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     windowed_indexes: tuple[int, ...] = tuple(
         index
         for index, test in enumerate(tests)
@@ -262,7 +261,7 @@ def _record_planning_timing(*, start_ns: int, planning_ns: int, rendering_ns: in
 
 
 def resolve_sql_test_model_chains(
-    *, project: CompiledProject, tests: tuple[CompiledSqlTest, ...]
+    *, project: CompiledProjectView, tests: tuple[CompiledSqlTest, ...]
 ) -> tuple[tuple[str, ...], ...]:
     """Return each test's ordered unmocked model chain; direct-logic tests have none."""
 
@@ -327,7 +326,7 @@ def _unresolved_reference_error(
 
 
 def _function_templates(
-    *, project: CompiledProject, adapter: BaseAdapter
+    *, project: CompiledProjectView, adapter: BaseAdapter
 ) -> tuple[tuple[str, str, str, str, str], ...]:
     """Each function's name and the adapter's UDF and table-function call templates."""
 
@@ -357,7 +356,7 @@ def _function_templates(
 def _windowed_model_query_overrides(
     *,
     test: CompiledSqlTest,
-    models_by_name: dict[str, CompiledModel],
+    models_by_name: dict[str, CompiledModelView],
     adapter: BaseAdapter,
     chain: tuple[str, ...] | None,
 ) -> dict[str, str] | None:
@@ -367,7 +366,7 @@ def _windowed_model_query_overrides(
     chain_names: frozenset[str] = frozenset(chain or ())
     overrides: dict[str, str] = {}
     for model_name, sql in payload.model_query_overrides.items():
-        model: CompiledModel | None = models_by_name.get(model_name)
+        model: CompiledModelView | None = models_by_name.get(model_name)
         overrides[model_name] = (
             sql
             if model is None
@@ -379,7 +378,7 @@ def _windowed_model_query_overrides(
             )
         )
     if chain is not None:
-        chain_models: tuple[CompiledModel, ...] = tuple(
+        chain_models: tuple[CompiledModelView, ...] = tuple(
             models_by_name[name] for name in chain if name in models_by_name
         )
         for model in declared_window_cursor_models(test=test, chain_models=chain_models):

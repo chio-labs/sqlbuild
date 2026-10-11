@@ -24,6 +24,16 @@ exclude = ["tests/e2e/fixtures/**"]
 max_positional_args = 1
 
 [[targets.python.rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/compiler/compiled_project/main/compiled_project_record.py"
+reason = "Preserve the existing positional project argument while adding an optional keyword-only projection flag for custom-rule hosts."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR001"
+path = "src/sqlbuild/cli/commands/models.py"
+reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding executor and integration imports for read-only commands; runtime declarations remain structured models."
+
+[[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/adapters/bigquery/__init__.py"
 reason = "The BigQuery backend intentionally owns behavior through its adapter class rather than function entrypoints."
@@ -311,11 +321,13 @@ crate_names = [
     "sqlbuild-analysis",
     "sqlbuild-attachments",
     "sqlbuild-cache",
+    "sqlbuild-cli",
     "sqlbuild-config",
     "sqlbuild-core",
     "sqlbuild-discovery",
     "sqlbuild-model-config",
     "sqlbuild-python",
+    "sqlbuild-refactor",
     "sqlbuild-render",
     "sqlbuild-rules",
     "sqlbuild-scopes",

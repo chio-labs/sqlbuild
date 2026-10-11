@@ -11,7 +11,8 @@ from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_i
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )
-from sqlbuild.compiler.compile.models import CompileAdapterContext, CompileProjectInputs
+from sqlbuild.compiler.compile.models import CompileAdapterContext
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
@@ -36,11 +37,7 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
     """Load or build scope facts without credentials, a connection, or warehouse access."""
 
     resolved_project_dir: Path = project_dir.resolve()
-    fingerprint: str | None
-    try:
-        fingerprint = scope_index_fingerprint(project_dir=resolved_project_dir)
-    except (OSError, UnicodeError, ValueError):
-        fingerprint = None
+    fingerprint: str | None = scope_index_fingerprint(project_dir=resolved_project_dir)
     if not no_cache and fingerprint is not None:
         cached: ScopeIndex | None = read_cached_scope_index(
             project_dir=resolved_project_dir, fingerprint=fingerprint
@@ -60,7 +57,7 @@ def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> S
         )
         adapter: BaseAdapter = resolve_adapter(adapter_name=adapter_name)
         sql_lexical_syntax = adapter.sql_lexical_syntax
-        compile_inputs: CompileProjectInputs = compile_frontier(
+        compile_inputs: CompileInputsView = compile_frontier(
             until=CompilerStage.COMPILE_PROJECT_INPUTS,
             python_stage=partial(
                 build_compile_inputs,

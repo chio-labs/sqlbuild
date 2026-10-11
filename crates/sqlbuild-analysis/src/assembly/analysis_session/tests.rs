@@ -10,5 +10,7 @@ mod helpers;
 mod mappings;
 #[path = "tests/test_model_columns.rs"]
 mod model_columns;
+#[path = "tests/test_reference_facts.rs"]
+mod reference_facts;
 #[path = "tests/test_types.rs"]
 mod test_types;

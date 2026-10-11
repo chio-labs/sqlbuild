@@ -12,9 +12,8 @@ from duckdb import sqltypes
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
-    CompiledModel,
-    CompiledProject,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -61,7 +60,7 @@ def test_given_mixed_branch_types_when_compiling_then_known_types_match_duckdb(
         encoding="utf-8",
     )
 
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter=DuckDbAdapter(),
     )
@@ -113,11 +112,11 @@ def test_given_union_type_recovery_when_compiling_then_cte_lineage_is_preserved(
         encoding="utf-8",
     )
 
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter=DuckDbAdapter(),
     )
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     lineage: Sequence[CompiledLineageColumnFact] | None = models_by_name[
         "combined_orders"
     ].fast_lineage_columns

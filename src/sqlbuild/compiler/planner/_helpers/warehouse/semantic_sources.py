@@ -12,7 +12,8 @@ from sqlbuild.adapter.relations.main.get_columns_for_inspection import get_colum
 from sqlbuild.adapter.relations.main.list_relations_for_inspection import (
     list_relations_for_inspection,
 )
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SourceEntry
@@ -20,7 +21,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 def get_semantic_source_columns(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     source_read_map: dict[str, SourceEntry],

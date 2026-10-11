@@ -60,3 +60,10 @@ pub enum StringExpansion<V> {
     /// The templates inside the string were substituted.
     Text(String),
 }
+
+/// A piece of a deferred target template: literal text, or a variable to render.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DeferredSegment {
+    Text(String),
+    Variable(String),
+}

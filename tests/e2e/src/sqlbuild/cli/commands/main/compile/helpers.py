@@ -17,7 +17,7 @@ import time
 import zipfile
 from bisect import bisect_left
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
 from io import StringIO
@@ -32,13 +32,12 @@ import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.commands.main.project._compile as compile_command_module
-import sqlbuild.cli.compile_reuse._helpers.attempt as reuse_attempt
-import sqlbuild.cli.compile_reuse._helpers.project_files as reuse_project_files
-import sqlbuild.cli.compile_reuse._helpers.store as reuse_store
+import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
+import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
 import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
 import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
@@ -50,35 +49,30 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
 )
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
+from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.cli.compile_reuse._helpers.entry_file import (
-    read_entry_header,
-    read_entry_stdout,
-    write_entry,
-)
 from sqlbuild.cli.compile_reuse.constants import (
+    EXCLUDED_ROOT_DIRECTORIES,
+    NATIVE_REUSE_DIRECTORY_NAME,
+    NATIVE_REUSE_SUFFIX,
+    RETIRED_REUSE_DIRECTORY_NAME,
     REUSE_DISABLE_ENV_VAR,
-    REUSE_ENTRY_DIRECTORY_NAME,
-)
-from sqlbuild.cli.compile_reuse.models import (
-    ProjectFilesComparison,
-    StoredCompileHeader,
-    StoredCompileInputs,
 )
 from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
-from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import (
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
-    SQL_TEST_SCAN_STORE_FILE_NAME,
+    RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
     COMPILER_ENGINE_ENV_VAR,
     RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -93,9 +87,7 @@ from tests.integration.src.sqlbuild.compiler.compile.helpers import (
     MACRO_CALL_LOG_ENV_VAR,
 )
 from tests.integration.src.sqlbuild.compiler.contracts.helpers import (
-    NativeContractOutcome,
-    NativeContractRequest,
-    native_contract_statuses,
+    contract_statuses,
 )
 
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -2997,8 +2989,10 @@ COMPILE_REUSE_ENV: dict[str, str] = {
     COMPILE_REUSE_REGION_ENV_VAR: "north",
 }
 COMPILE_REUSE_HIT_LINE: str = "Inputs unchanged; reused the previous compile"
+REUSE_DIGESTED_FILES_KIND: str = "reuse_digested_files"
 _COMPILE_REUSE_RULES_CONFIG: str = (
     '\n[rules]\nselect = ["XSQBR"]\n\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n'
+    "\n[references]\nenforce_explicit = false\n"
 )
 _FUTURE_MTIME_OFFSET_NS: int = 5_000_000_000
 _PHASE_DURATION: re.Pattern[str] = re.compile(r"  \(\d+\.\d+s\)")
@@ -3019,6 +3013,24 @@ _COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
         "MODEL (description 'Orders tagged with the configured region.');\n\n"
         f"SELECT order_id, '@@ENV:{COMPILE_REUSE_REGION_ENV_VAR}' AS region "
         'FROM __ref("stg_orders")\n'
+    ),
+    "models/marts/_sqlbuild/_macros/order_source.py": (
+        '"""Mart relation macros."""\n\n\n'
+        "def order_source() -> str:\n"
+        '    """Return the relation orders are read from."""\n'
+        "    return '__ref(\"stg_orders\")'\n"
+    ),
+    "models/marts/referenced_orders.sql": (
+        "MODEL (description 'Orders read through a direct reference.');\n\n"
+        'SELECT order_id FROM __ref("stg_orders")\n'
+    ),
+    "models/marts/macro_sourced_orders.sql": (
+        "MODEL (description 'Orders read through a macro-built reference.');\n\n"
+        "SELECT order_id FROM @order_source()\n"
+    ),
+    "models/marts/var_sourced_orders.sql": (
+        "MODEL (description 'Orders read through a variable reference.');\n\n"
+        'SELECT order_id FROM __ref("@@orders_model")\n'
     ),
     "rules/limits.py": "MAX_NAME_LENGTH: int = 40\n",
     "rules/naming.py": (
@@ -3056,6 +3068,12 @@ def prepare_compile_reuse_project(*, project_dir: Path) -> None:
     prepare_compile_cache_invalidation_project(project_dir=project_dir)
     for relative_path, contents in _COMPILE_REUSE_EXTRA_PROJECT_FILES.items():
         write_project_file(project_dir, relative_path, contents)
+    replace_project_text(
+        project_dir,
+        "sqlbuild_project.toml",
+        'quantity_multiplier = "2"',
+        'quantity_multiplier = "2"\norders_model = "stg_orders"',
+    )
     config_path: Path = project_dir / "sqlbuild_project.toml"
     config_path.write_text(
         config_path.read_text(encoding="utf-8") + _COMPILE_REUSE_RULES_CONFIG, encoding="utf-8"
@@ -3174,55 +3192,14 @@ def recorded_events(*, path: Path) -> list[dict[str, object]]:
 
 
 def compile_reuse_entry_paths(*, project_dir: Path) -> tuple[Path, ...]:
-    """Return every stored compile reuse entry of a project."""
+    """Return every stored compile reuse slot of a project."""
 
     return tuple(
-        sorted((compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME).glob("*.entry"))
-    )
-
-
-def _rewrite_compile_reuse_entries(
-    *, project_dir: Path, rewrite: Callable[[StoredCompileInputs], StoredCompileInputs]
-) -> None:
-    for path in compile_reuse_entry_paths(project_dir=project_dir):
-        header: StoredCompileHeader | None = read_entry_header(path=path)
-        assert header is not None
-        stdout: str | None = read_entry_stdout(path=path, header=header)
-        assert stdout is not None
-        write_entry(path=path, inputs=rewrite(header.inputs), output=header.output, stdout=stdout)
-
-
-def simulate_native_build_change(project_dir: Path) -> None:
-    """Simulate an upgraded SQLBuild version and native build in the stored identity."""
-
-    _rewrite_compile_reuse_entries(
-        project_dir=project_dir,
-        rewrite=lambda inputs: replace(
-            inputs, runtime={**inputs.runtime, "native_build": "0.0.0+simulated"}
-        ),
-    )
-
-
-def simulate_python_version_change(project_dir: Path) -> None:
-    """Simulate a different Python interpreter in the stored identity."""
-
-    _rewrite_compile_reuse_entries(
-        project_dir=project_dir,
-        rewrite=lambda inputs: replace(
-            inputs, runtime={**inputs.runtime, "python": "3.0.0 (simulated)"}
-        ),
-    )
-
-
-def simulate_installed_module_change(project_dir: Path) -> None:
-    """Simulate reinstalled packages by aging every recorded module file stamp."""
-
-    _rewrite_compile_reuse_entries(
-        project_dir=project_dir,
-        rewrite=lambda inputs: replace(
-            inputs,
-            modules=tuple((path, mtime_ns - 1, size) for path, mtime_ns, size in inputs.modules),
-        ),
+        sorted(
+            (compiler_cache_directory(project_dir) / NATIVE_REUSE_DIRECTORY_NAME).glob(
+                f"*{NATIVE_REUSE_SUFFIX}"
+            )
+        )
     )
 
 
@@ -3352,27 +3329,6 @@ def write_orders_api_timeout_file(project_dir: Path) -> None:
     )
 
 
-def stored_stdout_path(entry_path: Path) -> Path:
-    """Return the stored stdout file that one entry references."""
-
-    header: StoredCompileHeader | None = read_entry_header(path=entry_path)
-    assert header is not None
-    return entry_path.parent / header.output.stdout_file
-
-
-def flip_stored_stdout_bytes(entry_path: Path) -> None:
-    """Corrupt the stored stdout without changing its length."""
-
-    path: Path = stored_stdout_path(entry_path)
-    path.write_bytes(path.read_bytes()[:-3] + b"xyz")
-
-
-def remove_stored_stdout(entry_path: Path) -> None:
-    """Delete the stored stdout while keeping the entry that references it."""
-
-    stored_stdout_path(entry_path).unlink()
-
-
 def enable_compile_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
     """Enable compile reuse and the fixture environment for in-process compiles."""
 
@@ -3419,24 +3375,24 @@ def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
     path.write_bytes(path.read_bytes())
 
 
-def record_digested_paths(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Record every project file compile reuse reads to compute a content digest."""
+def record_digested_files(*, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, int]]:
+    """Record every native reuse answer, among them the project files read for digests."""
 
-    paths: list[str] = []
-    original: Callable[..., str | None] = reuse_project_files.file_digest
+    reads: list[dict[str, int]] = []
+    original: Callable[..., None] = native_reuse.report_native_answer
 
-    def recording_digest(*, path: str) -> str | None:
-        paths.append(path)
-        return original(path=path)
+    def recording(*, stage: NativeStage, kind: str, units: int = 1) -> None:
+        reads.append({kind: units})
+        original(stage=stage, kind=kind, units=units)
 
-    monkeypatch.setattr(reuse_project_files, "file_digest", recording_digest)
-    return paths
+    monkeypatch.setattr(native_reuse, "report_native_answer", recording)
+    return reads
 
 
 def settle_racy_window(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Treat files written before a compile starts as settled instead of waiting two seconds."""
 
-    monkeypatch.setattr(reuse_project_files, "RACY_WINDOW_NS", 0)
+    monkeypatch.setattr(native_reuse, "RACY_WINDOW_NS", 0)
 
 
 def write_large_file(*, project_dir: Path, relative_path: str, size_bytes: int) -> Path:
@@ -3476,15 +3432,16 @@ def compile_in_process_reused(
 
 
 def in_process_compile_reads(
-    *, project_dir: Path, digested: list[str], path: Path, capsys: pytest.CaptureFixture[str]
+    *, project_dir: Path, digested: list[dict[str, int]], capsys: pytest.CaptureFixture[str]
 ) -> tuple[int, int, bool]:
-    """Compile in this process; return its exit code, reads of path, and whether it reused."""
+    """Compile in this process; return its exit code, project files read, and whether it reused."""
 
     start: int = len(digested)
     _ = capsys.readouterr()
     code: int = compile_in_process(project_dir=project_dir)
     reused: bool = COMPILE_REUSE_HIT_LINE in capsys.readouterr().err
-    return code, digested[start:].count(str(path)), reused
+    reads: int = sum(answer.get(REUSE_DIGESTED_FILES_KIND, 0) for answer in digested[start:])
+    return code, reads, reused
 
 
 def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -> None:
@@ -3493,7 +3450,7 @@ def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -
     def raise_error(**_kwargs: Any) -> None:
         raise error
 
-    monkeypatch.setattr(reuse_store, "provider_settings_inputs", raise_error)
+    monkeypatch.setattr(native_reuse, "provider_settings_inputs", raise_error)
 
 
 def compile_in_process_output(
@@ -4173,7 +4130,7 @@ def upgrade_native_build(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 def corrupt_sql_test_scan_store(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
     """Overwrite the stored SQL-test scans with bytes that are not a store file."""
 
-    path: Path = compiler_cache_directory(root) / SQL_TEST_SCAN_STORE_FILE_NAME
+    path: Path = compiler_cache_directory(root) / native_module.SQL_TEST_SCAN_STORE_FILE_NAME
     assert path.is_file()
     _ = path.write_bytes(b"not a native store")
 
@@ -4193,17 +4150,23 @@ RETIRED_RENDER_FILES: tuple[str, ...] = (
 
 
 def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
-    """Leave every engine's fact cache and render files of other target slots from old releases."""
+    """Leave every engine's fact and reference caches and other slots' render files behind."""
 
-    written: list[Path] = [
-        compiler_cache_directory(project_dir).parent
-        / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
-        / RETIRED_FACT_CACHE_DIRECTORY_NAME
-        / "sql-tests.sqlite3"
-        for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES
-    ]
+    written: list[Path] = []
+    for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES:
+        engine_root: Path = (
+            compiler_cache_directory(project_dir).parent
+            / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
+        )
+        written.extend(
+            engine_root / retired_directory / "sql-tests.sqlite3"
+            for retired_directory in (
+                RETIRED_FACT_CACHE_DIRECTORY_NAME,
+                RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
+            )
+        )
     written.extend(
-        compiler_cache_directory(project_dir) / REUSE_ENTRY_DIRECTORY_NAME / name
+        compiler_cache_directory(project_dir) / RETIRED_REUSE_DIRECTORY_NAME / name
         for name in RETIRED_RENDER_FILES
     )
     for path in written:
@@ -4212,56 +4175,62 @@ def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
     return tuple(written)
 
 
-_ORIGINAL_SCAN_WRITE: Callable[..., None] = SqlTestScanCache.write
+def _stored_scan_values_replaced(
+    replacement: bytes,
+) -> Callable[[Path, pytest.MonkeyPatch], None]:
+    def change(root: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+        """Rewrite every stored scan value on disk, keeping a valid store frame and checksum."""
+
+        path: Path = compiler_cache_directory(root) / native_module.SQL_TEST_SCAN_STORE_FILE_NAME
+        frame: bytes = path.read_bytes()
+        header: bytes = frame[:_STORE_PREFIX_LENGTH]
+        body: bytes = frame[_STORE_PREFIX_LENGTH + _STORE_CHECKSUM_LENGTH :]
+        fields: list[bytes] = []
+        cursor: int = 0
+        for _ in range(2):
+            text, cursor = _store_bytes(body, cursor)
+            fields.append(text)
+        generation: bytes = body[cursor : cursor + 8]
+        metadata, cursor = _store_bytes(body, cursor + 8)
+        count: int = int.from_bytes(body[cursor : cursor + 8], "little")
+        cursor += 8
+        entries: list[bytes] = []
+        for _ in range(count):
+            key, cursor = _store_bytes(body, cursor)
+            last_used: bytes = body[cursor : cursor + 8]
+            _value, cursor = _store_bytes(body, cursor + 8)
+            entries.append(_framed(key) + last_used + _framed(replacement))
+        assert cursor == len(body) and count > 0
+        rewritten: bytes = b"".join(
+            (*map(_framed, fields), generation, _framed(metadata), count.to_bytes(8, "little"))
+        ) + b"".join(entries)
+        checksum: bytes = hashlib.sha256(_framed(rewritten)).digest()
+        _ = path.write_bytes(header + checksum + rewritten)
+
+    return change
 
 
-def _stored_scans_replaced(replacement: bytes) -> Callable[[pytest.MonkeyPatch], None]:
-    def arrange(monkeypatch: pytest.MonkeyPatch) -> None:
-        def write(
-            self: SqlTestScanCache,
-            *,
-            algorithm: str,
-            syntax: SqlLexicalSyntax,
-            parts: Sequence[str],
-            value: bytes,
-        ) -> None:
-            del value
-            _ORIGINAL_SCAN_WRITE(
-                self, algorithm=algorithm, syntax=syntax, parts=parts, value=replacement
-            )
-
-        monkeypatch.setattr(SqlTestScanCache, "write", write)
-
-    return arrange
+_STORE_PREFIX_LENGTH: int = 12
+_STORE_CHECKSUM_LENGTH: int = 32
 
 
-store_undecodable_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(b"{]")
-store_misshapen_scans: Callable[[pytest.MonkeyPatch], None] = _stored_scans_replaced(
-    b'[{"mode": "model"}]'
+def _store_bytes(body: bytes, cursor: int) -> tuple[bytes, int]:
+    """One length-prefixed field of a native store body, and the cursor after it."""
+
+    length: int = int.from_bytes(body[cursor : cursor + 8], "little")
+    return body[cursor + 8 : cursor + 8 + length], cursor + 8 + length
+
+
+def _framed(value: bytes) -> bytes:
+    return len(value).to_bytes(8, "little") + value
+
+
+replace_stored_scans_undecodable: Callable[[Path, pytest.MonkeyPatch], None] = (
+    _stored_scan_values_replaced(b"{]")
 )
-
-
-def ignore_test_text_in_scan_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Key stored SQL-test scans by file path only, so an edited test reads a stale scan."""
-
-    read: Callable[..., object] = SqlTestScanCache.read
-    write: Callable[..., None] = SqlTestScanCache.write
-
-    def path_only(kwargs: dict[str, Any]) -> dict[str, Any]:
-        return {**kwargs, "parts": kwargs["parts"][:1]}
-
-    monkeypatch.setattr(
-        SqlTestScanCache, "read", lambda self, **kwargs: read(self, **path_only(kwargs))
-    )
-    monkeypatch.setattr(
-        SqlTestScanCache, "write", lambda self, **kwargs: write(self, **path_only(kwargs))
-    )
-
-
-def restore_sql_test_scan_writes(_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Store real scan results again after an arrangement replaced them."""
-
-    monkeypatch.setattr(SqlTestScanCache, "write", _ORIGINAL_SCAN_WRITE)
+replace_stored_scans_misshapen: Callable[[Path, pytest.MonkeyPatch], None] = (
+    _stored_scan_values_replaced(b'[{"mode": "model"}]')
+)
 
 
 def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4269,12 +4238,10 @@ def keep_invalidation(_monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def ignore_project_changes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make compile reuse believe no project file changed since the stored compile."""
+    """Make compile reuse stop watching the models folder, so a model edit goes unseen."""
 
     monkeypatch.setattr(
-        reuse_attempt,
-        "compare_project_files",
-        lambda **_kwargs: ProjectFilesComparison(unchanged=True, verified={}),
+        native_reuse, "EXCLUDED_ROOT_DIRECTORIES", EXCLUDED_ROOT_DIRECTORIES | {"models"}
     )
 
 
@@ -4684,7 +4651,7 @@ def freeze_macro_call_store_environment(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(macro_bridge_class, "store_environment", lambda **_kwargs: "frozen")
     monkeypatch.setattr(macro_bridge_class, "unchanged_module_digests", lambda **_kwargs: {})
-    monkeypatch.setattr(macro_bridge_class.MacroBridge, "_observe_modules", lambda _bridge: True)
+    monkeypatch.setattr(macro_bridge_class.MacroBridge, "observe_modules", lambda _bridge: True)
     monkeypatch.setattr(call_store_module, "claim_first_compile", lambda: True)
 
 
@@ -4961,10 +4928,10 @@ def type_system_engine_compile(
     """Compile in this process under `engine`; return the run and what native types answered."""
 
     normalized: list[bool] = []
-    contract_statuses: Counter[str] = Counter()
+    statuses: Counter[str] = Counter()
     normalize: Callable[[str, str], object] = native_module.normalize_type
-    evaluate_contracts: Callable[..., list[NativeContractOutcome]] = (
-        native_module.evaluate_native_model_contracts
+    evaluate_contracts: Callable[..., ContractValidationResult] = (
+        contract_entry.native_model_contracts
     )
 
     def recorded(type_sql: str, dialect: str) -> object:
@@ -4972,22 +4939,24 @@ def type_system_engine_compile(
         normalized.append(result is not None)
         return result
 
-    def recorded_contracts(request: NativeContractRequest) -> list[NativeContractOutcome]:
-        outcomes: list[NativeContractOutcome] = evaluate_contracts(request)
-        contract_statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
-        return outcomes
+    def recorded_contracts(
+        *, project: CompiledProjectView, dialect: TypeDialect | str | None
+    ) -> ContractValidationResult:
+        result: ContractValidationResult = evaluate_contracts(project=project, dialect=dialect)
+        statuses.update(contract_statuses(project=project, result=result))
+        return result
 
     type_normalization.normalize_type.cache_clear()
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
-        patch.setattr(native_module, "evaluate_native_model_contracts", recorded_contracts)
+        patch.setattr(contract_entry, "native_model_contracts", recorded_contracts)
         for name, value in {COMPILER_ENGINE_ENV_VAR: engine, REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     type_normalization.normalize_type.cache_clear()
     return run, NativeTypeAnswers(
         normalized=normalized,
-        typed_comparisons=contract_statuses["typed_comparisons"],
+        typed_comparisons=statuses["typed_comparisons"],
     )
 
 

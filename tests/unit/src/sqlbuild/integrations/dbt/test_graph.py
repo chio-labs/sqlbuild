@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.integrations.dbt._helpers.graph.core import (
     build_dbt_combined_graph,
     expand_combined_downstream,
@@ -118,7 +118,7 @@ def test_given_manifest_and_compiled_project_when_building_graph_then_returns_ex
     test_case: DbtCombinedGraphTestCase,
 ) -> None:
     manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=test_case.manifest_data)
-    project: CompiledProject = build_compiled_project_with_models(
+    project: CompiledProjectView = build_compiled_project_with_models(
         test_case.sqlbuild_model_sql_by_name
     )
 

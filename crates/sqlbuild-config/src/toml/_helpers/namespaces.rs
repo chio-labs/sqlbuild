@@ -1,6 +1,7 @@
 //! `tomllib`'s namespace rules: which tables, dotted keys and arrays of tables may be (re)opened.
 
 use crate::errors::{ConfigError, ConfigErrorKind};
+use crate::toml::constants::MAX_CONTAINER_DEPTH;
 use std::collections::HashMap;
 use toml_parser::decoder::Encoding;
 use toml_parser::parser::{EventReceiver, RecursionGuard, parse_document};
@@ -10,9 +11,6 @@ use toml_parser::{ErrorSink, ParseError, Raw, Source, Span};
 const FROZEN: u8 = 1;
 /// `Flags.EXPLICIT_NEST`: a table declared by a header or opened by a dotted key.
 const EXPLICIT_NEST: u8 = 2;
-/// The container depth the version check already enforces.
-const MAX_CONTAINER_DEPTH: u32 = 80;
-
 /// One key of `tomllib`'s `Flags` tree.
 #[derive(Default)]
 struct FlagNode {

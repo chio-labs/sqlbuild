@@ -56,3 +56,20 @@ pub enum AuditRendering {
     Rendered(RenderedAudit),
     Failed(String),
 }
+
+/// Why `render_parameterized_sql` stops.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParameterRenderStop {
+    /// Passed arguments no parameter names, sorted.
+    UnusedArguments(Vec<String>),
+    MissingArgument(String),
+    /// The argument whose value cannot be rendered.
+    UnsupportedValue(String),
+}
+
+/// The resources a singular audit reads, sorted, and its P004 `(message, help)`, if any.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SingularAuditResources {
+    pub resources: Vec<(String, String)>,
+    pub problem: Option<(String, String)>,
+}

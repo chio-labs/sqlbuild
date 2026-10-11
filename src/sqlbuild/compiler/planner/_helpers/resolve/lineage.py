@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompileSqlReference,
 )
+from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.references.types import SqlReferenceKind
 
 
 def resolve_lineage_reference(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     input_name: str,
-    models_by_name: dict[str, CompiledModel],
-    functions_by_name: dict[str, CompiledFunction],
+    models_by_name: dict[str, CompiledModelView],
+    functions_by_name: dict[str, CompiledFunctionView],
 ) -> CompileSqlReference:
     """Resolve one named input through model and SQL function references."""
 
@@ -31,14 +30,16 @@ def resolve_lineage_reference(
             continue
         visited.add(identity)
         if reference.ref_kind == SqlReferenceKind.REF:
-            upstream_model: CompiledModel | None = models_by_name.get(reference.ref_name)
+            upstream_model: CompiledModelView | None = models_by_name.get(reference.ref_name)
             if upstream_model is not None:
                 pending.extend(upstream_model.references)
         elif reference.ref_kind in {
             SqlReferenceKind.UDF,
             SqlReferenceKind.TABLE_FUNCTION,
         }:
-            upstream_function: CompiledFunction | None = functions_by_name.get(reference.ref_name)
+            upstream_function: CompiledFunctionView | None = functions_by_name.get(
+                reference.ref_name
+            )
             if upstream_function is not None:
                 pending.extend(upstream_function.references)
     raise PlannerInputError(

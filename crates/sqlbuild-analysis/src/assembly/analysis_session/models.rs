@@ -14,7 +14,7 @@ use crate::assembly::analysis_session::types::{NullabilityRuleFn, OutputSources,
 use crate::semantic_validation::types::DiagnosticRow;
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelReference {
     /// Python's `_analysis_reference_name`.
     pub analysis_name: String,
@@ -42,6 +42,14 @@ pub struct ModelRequest {
     /// The SQL Python's dynamic pivot proof parses: placeholders replaced by their defaults.
     pub pivot_sql: String,
     pub dynamic_families: Vec<DynamicFamily>,
+}
+
+/// The reference-derived fields of a `ModelRequest`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ModelReferenceFacts {
+    pub references: Vec<ModelReference>,
+    pub lineage_references: Vec<(String, String, String)>,
+    pub required_names: Vec<String>,
 }
 
 /// One declared family of columns a runtime-dynamic pivot generates.

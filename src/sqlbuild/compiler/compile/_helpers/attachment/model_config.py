@@ -4,23 +4,9 @@ from __future__ import annotations
 
 import sys
 import unicodedata
-from dataclasses import replace
-from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.authored_values.main._optional_named_string import optional_named_string
-from sqlbuild.compiler.compile._helpers.attachment.references import validate_external_reference
-from sqlbuild.compiler.compile._helpers.audit_factories.core import (
-    merge_validated_model_audits,
-    parse_model_header_audit_factories,
-)
-from sqlbuild.compiler.compile._helpers.config.dynamic_columns import (
-    parse_dynamic_column_families,
-)
-from sqlbuild.compiler.compile._helpers.config.model_validation import (
-    validate_column_migration_config,
-)
 from sqlbuild.compiler.compile._helpers.config.retention import resolve_time_travel_retention
 from sqlbuild.compiler.compile._helpers.config.table_type import resolve_table_type
 from sqlbuild.compiler.compile._helpers.render.templating import (
@@ -29,21 +15,18 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
 from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
 from sqlbuild.compiler.compile.constants import (
     MODEL_AUDIT_OVERRIDE_KEYS,
-    MODEL_HEADER_METADATA_KEYS,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
-    CompileModelInput,
-    CompileSqlReference,
     ModelResourceNames,
     ModelValidationRequest,
-    ModelValidatorContext,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
+from sqlbuild.compiler.compile.types import ModelInput
+from sqlbuild.compiler.compiled_project.main._native_config_classes import native_config_classes
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredAuditFactory,
     DiscoveredSchemaFile,
     DiscoveredSqlModelFile,
     ModelSchemaDeclaration,
@@ -52,28 +35,15 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
 )
 from sqlbuild.compiler.model_config.main._native_config_error import native_config_error
-from sqlbuild.compiler.model_config.main._parse_native_header_metadata import (
-    parse_native_header_metadata,
-)
-from sqlbuild.compiler.model_config.models import NativeHeaderMetadata
 from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from sqlbuild.compiler.planner.types import MaterializationType
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
     ProjectConfig,
-    ResolvedTableType,
-    ResolvedTimeTravelRetention,
-    SchemaAuditInstance,
-    SchemaColumn,
-    SchemaDynamicColumnFamily,
     SchemaModelEntry,
-    SettingsConfig,
-    SourceLocation,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import TableType, TableTypeSource, TimeTravelRetentionSource
 
 _MODEL_HOOK_KEYS: frozenset[str] = frozenset({"pre_hooks", "post_hooks"})
 _TABLE_BACKED_MATERIALIZATIONS: tuple[str, ...] = (
@@ -82,7 +52,6 @@ _TABLE_BACKED_MATERIALIZATIONS: tuple[str, ...] = (
     MaterializationType.SNAPSHOT,
 )
 _PYTHON_VERSION: tuple[int, int] = (sys.version_info[0], sys.version_info[1])
-_MATERIALIZED_CONFIG_KEY: str = "materialized"
 type _BuiltNamespace = tuple[str | None, bool, str | None]
 type _StorageOverrides = tuple[tuple[int | None, bool] | None, str | None]
 type _BuiltConfig = tuple[
@@ -192,219 +161,6 @@ def _as_string_list(value: object) -> list[str]:
     if isinstance(value, tuple):
         return [str(item) for item in value]
     return []
-
-
-def build_model_header_schema_entry(
-    *,
-    model_name: str,
-    model_header_values: dict[str, object],
-    file_path: Path,
-    column_locations: dict[str, SourceLocation] | None = None,
-    model_schema_columns: tuple[SchemaColumn, ...] | None = None,
-    model_schema_name: str | None = None,
-    model_schema_description: str | None = None,
-    audit_factories: tuple[DiscoveredAuditFactory, ...] = (),
-) -> SchemaModelEntry | None:
-    """Normalize model-owned MODEL(...) metadata into the existing schema entry shape."""
-
-    raw_description: object | None = model_header_values.get("description")
-    raw_columns: object | None = model_header_values.get("columns")
-    raw_dynamic_columns: object | None = model_header_values.get("dynamic_columns")
-    raw_audits: object | None = model_header_values.get("audits")
-    raw_audit_factories: object | None = model_header_values.get("audit_factories")
-    if (
-        raw_description is None
-        and raw_columns is None
-        and raw_dynamic_columns is None
-        and raw_audits is None
-        and raw_audit_factories is None
-        and model_schema_columns is None
-    ):
-        return None
-
-    model_description: str | None = optional_named_string(
-        raw_value=raw_description,
-        file_path=file_path,
-        label="model",
-        key="description",
-        error_class=CompileInputError,
-    )
-    description: str | None = model_description or model_schema_description
-    native: NativeHeaderMetadata = parse_native_header_metadata(
-        raw_columns=raw_columns,
-        raw_audits=raw_audits,
-        column_locations=column_locations or {},
-        file_path=file_path,
-    )
-    if native.columns_error is not None:
-        raise native_config_error(error=native.columns_error)
-    local_columns: tuple[SchemaColumn, ...] = native.columns
-    columns: tuple[SchemaColumn, ...] = _merge_model_schema_columns(
-        model_name=model_name,
-        file_path=file_path,
-        model_schema_columns=model_schema_columns,
-        local_columns=local_columns,
-    )
-    dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = parse_dynamic_column_families(
-        raw_value=raw_dynamic_columns,
-        model_name=model_name,
-        file_path=file_path,
-    )
-    if native.audits_error is not None:
-        raise native_config_error(error=native.audits_error)
-    audits: tuple[SchemaAuditInstance, ...] = native.audits
-    generated_audits: tuple[SchemaAuditInstance, ...] = parse_model_header_audit_factories(
-        raw_audit_factories=raw_audit_factories,
-        file_path=file_path,
-        model_name=model_name,
-        audit_factories=audit_factories,
-    )
-    audits = merge_validated_model_audits(
-        direct_audits=audits,
-        generated_audits=generated_audits,
-        model_name=model_name,
-        file_path=file_path,
-    )
-    validate_column_migration_config(
-        config_values=model_header_values, model_name=model_name, columns=columns
-    )
-    type_enforcement: bool | None = (
-        True if any(column.type is not None for column in columns) or dynamic_columns else None
-    )
-    return SchemaModelEntry(
-        name=model_name,
-        model_schema=model_schema_name,
-        description=description,
-        type_enforcement=type_enforcement,
-        columns=columns,
-        dynamic_columns=dynamic_columns,
-        audits=audits,
-    )
-
-
-def strip_model_header_metadata_from_config(config: CompileModelConfig) -> CompileModelConfig:
-    """Remove model metadata keys after they have been attached as schema metadata."""
-
-    filtered_values: dict[str, object] = {
-        key: value for key, value in config.values.items() if key not in MODEL_HEADER_METADATA_KEYS
-    }
-    if len(filtered_values) == len(config.values):
-        return config
-    return CompileModelConfig(
-        values=filtered_values,
-        model_header_keys=config.model_header_keys,
-        matched_path_default=config.matched_path_default,
-        logical_schema=config.logical_schema,
-        layer_schema=config.layer_schema,
-        logical_database=config.logical_database,
-        time_travel_retention=config.time_travel_retention,
-        table_type=config.table_type,
-    )
-
-
-def _merge_model_schema_columns(
-    *,
-    model_name: str,
-    file_path: Path,
-    model_schema_columns: tuple[SchemaColumn, ...] | None,
-    local_columns: tuple[SchemaColumn, ...],
-) -> tuple[SchemaColumn, ...]:
-    if model_schema_columns is None:
-        return local_columns
-    merged_named_columns: list[SchemaColumn] = list(model_schema_columns)
-    named_index_by_name: dict[str, int] = {
-        column.name.lower(): index for index, column in enumerate(model_schema_columns)
-    }
-    additional_columns: list[SchemaColumn] = []
-    local_column: SchemaColumn
-    for local_column in local_columns:
-        named_index: int | None = named_index_by_name.get(local_column.name.lower())
-        if named_index is None:
-            additional_columns.append(local_column)
-            continue
-        named_column: SchemaColumn = merged_named_columns[named_index]
-        _validate_model_schema_audit_augmentation(
-            model_name=model_name,
-            file_path=file_path,
-            local_column=local_column,
-            named_column=named_column,
-        )
-        merged_named_columns[named_index] = replace(
-            named_column,
-            audits=_merge_schema_audits(
-                inherited_audits=named_column.audits,
-                local_audits=local_column.audits,
-            ),
-            migrate_from=local_column.migrate_from,
-        )
-    return (*merged_named_columns, *additional_columns)
-
-
-def _merge_schema_audits(
-    *,
-    inherited_audits: tuple[SchemaAuditInstance, ...],
-    local_audits: tuple[SchemaAuditInstance, ...],
-) -> tuple[SchemaAuditInstance, ...]:
-    merged_audits: list[SchemaAuditInstance] = list(inherited_audits)
-    audit: SchemaAuditInstance
-    for audit in local_audits:
-        if audit not in merged_audits:
-            merged_audits.append(audit)
-    return tuple(merged_audits)
-
-
-def _validate_model_schema_audit_augmentation(
-    *,
-    model_name: str,
-    file_path: Path,
-    local_column: SchemaColumn,
-    named_column: SchemaColumn,
-) -> None:
-    named_origin: str = (
-        f"{named_column.location.path}:{named_column.location.line}"
-        if named_column.location is not None
-        else "the named schema"
-    )
-    overridden_fields: list[str] = []
-    if local_column.type is not None:
-        overridden_fields.append("type")
-    if local_column.nullable is not None:
-        overridden_fields.append("nullable")
-    if local_column.description is not None:
-        overridden_fields.append("description")
-    if overridden_fields:
-        raise CompileInputError(
-            f"model '{model_name}' in {file_path} cannot override "
-            f"{', '.join(overridden_fields)} for named-schema column '{local_column.name}' from "
-            f"{named_origin}; only audit augmentation is supported"
-        )
-    if not local_column.audits and local_column.migrate_from is None:
-        raise CompileInputError(
-            f"model '{model_name}' in {file_path} redeclares named-schema column "
-            f"'{local_column.name}' from {named_origin} without audits or migrate_from; only "
-            "audit augmentation and column migrations are supported"
-        )
-
-
-def _resolve_model_schema(
-    *,
-    values: dict[str, object],
-    model_name: str,
-    public_model_schemas: dict[str, ModelSchemaDeclaration],
-) -> ModelSchemaDeclaration | None:
-    raw_name: object | None = values.get("model_schema")
-    if raw_name is None:
-        return None
-    if not isinstance(raw_name, str) or not raw_name.strip():
-        raise CompileInputError(f"model '{model_name}': model_schema must be a non-empty string")
-    declaration: ModelSchemaDeclaration | None = public_model_schemas.get(raw_name)
-    if declaration is None:
-        available: str = ", ".join(sorted(public_model_schemas)) or "none"
-        raise CompileInputError(
-            f"model '{model_name}' references unknown model_schema '{raw_name}'; "
-            f"available schemas: {available}"
-        )
-    return declaration
 
 
 def has_resolved_model_description(
@@ -517,52 +273,28 @@ def project_defaults_to_mapping(defaults: DefaultsConfig) -> dict[str, object]:
     return values
 
 
-def find_schema_model_match(
-    *,
-    model_file: DiscoveredSqlModelFile,
+def legacy_schema_rows(
     schema_files: tuple[DiscoveredSchemaFile, ...],
-) -> tuple[SchemaModelEntry, DiscoveredSchemaFile] | None:
-    """Find the schema.yml model entry that applies to a discovered model file."""
+) -> list[tuple[str, list[str]]]:
+    """Each legacy schema file's relative path and the model names it declares."""
 
-    model_name: str = model_file.file_path.stem
-    matching_entries: list[tuple[SchemaModelEntry, DiscoveredSchemaFile]] = []
-    schema_file: DiscoveredSchemaFile
+    rows: list[tuple[str, list[str]]] = []
     for schema_file in schema_files:
-        schema_directory: Path = schema_file.relative_path.parent
-        try:
-            model_file.relative_path.relative_to(schema_directory)
-        except ValueError:
-            continue
-
-        schema_entry: SchemaModelEntry
-        for schema_entry in schema_file.model_entries:
-            if schema_entry.name == model_name:
-                matching_entries.append((schema_entry, schema_file))
-
-    if not matching_entries:
-        return None
-    if len(matching_entries) > 1:
-        matching_paths: str = ", ".join(
-            str(schema_file.relative_path) for _, schema_file in matching_entries
+        rows.append(
+            (str(schema_file.relative_path), [entry.name for entry in schema_file.model_entries])
         )
-        raise CompileInputError(
-            f"Model file {model_file.relative_path} matched multiple schema.yml declarations: "
-            f"{matching_paths}"
-        )
-    return matching_entries[0]
+    return rows
 
 
 def validate_declared_schema_models_are_attached(
     *,
-    model_inputs: tuple[CompileModelInput, ...],
+    model_inputs: tuple[ModelInput, ...],
     schema_files: tuple[DiscoveredSchemaFile, ...],
 ) -> None:
     """Ensure every declared schema.yml model entry attaches within its directory scope."""
 
-    attached_model_names: set[str] = {
-        model_input.schema_entry.name
-        for model_input in model_inputs
-        if model_input.schema_entry is not None
+    attached_model_names: set[str | None] = {
+        model_input.attached_schema_name for model_input in model_inputs
     }
     schema_file: DiscoveredSchemaFile
     for schema_file in schema_files:
@@ -590,40 +322,6 @@ def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
     if not isinstance(raw, bool):
         raise CompileInputError(f"AUDIT() '{key}' must be a boolean")
     return raw
-
-
-def _is_sql_validation_enabled(*, project_setting: bool, model_config: CompileModelConfig) -> bool:
-    """Apply the per-model unified SQL analysis override to the project setting."""
-
-    raw_analysis: object | None = model_config.values.get("sql_analysis")
-    raw_legacy: object | None = model_config.values.get("sql_validation")
-    if raw_analysis is not None and raw_legacy is not None and raw_analysis != raw_legacy:
-        raise CompileInputError(
-            "MODEL sql_analysis conflicts with legacy sql_validation",
-            code="P003",
-        )
-    raw: object | None = raw_analysis if raw_analysis is not None else raw_legacy
-    if isinstance(raw, bool):
-        return raw
-    return project_setting
-
-
-def _model_sql_validation_gate(
-    *,
-    effective_settings: SettingsConfig,
-    no_sql_validation: bool,
-    model_config: CompileModelConfig,
-) -> bool:
-    """Apply the unified project/model/CLI SQL analysis gate."""
-
-    return (
-        effective_settings.sql_analysis
-        and not no_sql_validation
-        and _is_sql_validation_enabled(
-            project_setting=effective_settings.sql_analysis,
-            model_config=model_config,
-        )
-    )
 
 
 def native_model_config_session(
@@ -679,19 +377,6 @@ def native_model_config_session(
     )
 
 
-def native_path_default(
-    *, session: NativeModelConfigSession, model_file: DiscoveredSqlModelFile
-) -> str | None:
-    """Select a model's path default natively, raising Python's error for equal matches."""
-
-    selected: str | _native.NativeConfigError | None = session.builder.path_default(
-        str(model_file.relative_path)
-    )
-    if isinstance(selected, _native.NativeConfigError):
-        raise native_config_error(error=selected)
-    return selected
-
-
 def build_native_model_config(
     *,
     session: NativeModelConfigSession,
@@ -700,47 +385,14 @@ def build_native_model_config(
 ) -> CompileModelConfig:
     """Build a model's effective config natively, raising its first config error."""
 
-    built: _BuiltConfig | _native.NativeConfigError = session.builder.build(
-        model_file.header_values, matched_path_default, model_file.file_path.stem
+    built: object = session.builder.model_config(
+        model_file.header_values,
+        (matched_path_default, model_file.file_path.stem),
+        native_config_classes(session=session, record_template_reads=record_template_reads),
     )
     if isinstance(built, _native.NativeConfigError):
         raise native_config_error(error=built)
-    values, header_keys, namespace, overrides, reads = built
-    logical_schema, layer_schema_configured, logical_database = namespace
-    retention_override, table_type_override = overrides
-    record_template_reads(tuple(reads))
-    materialized: object | None = values.get(_MATERIALIZED_CONFIG_KEY)
-    inherited_retention, inherited_table_type = session.inherited_storage[
-        materialized
-        if isinstance(materialized, str) and materialized in _TABLE_BACKED_MATERIALIZATIONS
-        else None
-    ]
-    return CompileModelConfig(
-        values=values,
-        model_header_keys=header_keys,
-        matched_path_default=matched_path_default,
-        logical_schema=logical_schema,
-        layer_schema=logical_schema if layer_schema_configured else None,
-        logical_database=logical_database,
-        time_travel_retention=(
-            inherited_retention
-            if retention_override is None
-            else ResolvedTimeTravelRetention(
-                desired_days=retention_override[0],
-                unmanaged=retention_override[1],
-                source=TimeTravelRetentionSource.MODEL,
-            )
-        ),
-        table_type=(
-            inherited_table_type
-            if table_type_override is None
-            else ResolvedTableType(
-                value=TableType(table_type_override),
-                source=TableTypeSource.MODEL,
-                declared=True,
-            )
-        ),
-    )
+    return cast(CompileModelConfig, built)
 
 
 def native_model_validation(
@@ -778,79 +430,3 @@ def native_validation_error(
     """Return a native validator error, unmarked because validators read macro-expanded SQL."""
 
     return native_config_error(error=error, values=values)
-
-
-def validate_model_config(
-    *, context: ModelValidatorContext, request: ModelValidationRequest
-) -> None:
-    """Validate one model natively, raising the first validator error."""
-
-    external_errors: list[Exception | None] = [
-        _external_reference_error(
-            context=context, model_file=request.model_file, reference=reference
-        )
-        for reference in request.references
-    ]
-    outcome: int | _native.NativeConfigError | None = native_model_validation(
-        session=context.native_config,
-        request=request,
-        rejected=[error is not None for error in external_errors],
-    )
-    _raise_validation_outcome(
-        outcome=outcome, external_errors=external_errors, values=request.config.values
-    )
-
-
-def validate_model_references(
-    *,
-    context: ModelValidatorContext,
-    model_file: DiscoveredSqlModelFile,
-    references: tuple[CompileSqlReference, ...],
-) -> None:
-    """Check references alone, as hook references are, raising the first problem."""
-
-    external_errors: list[Exception | None] = [
-        _external_reference_error(context=context, model_file=model_file, reference=reference)
-        for reference in references
-    ]
-    outcome: int | _native.NativeConfigError | None = context.native_config.validator.references(
-        (model_file.file_path.stem, str(model_file.relative_path)),
-        [
-            (str(reference.ref_kind), reference.ref_name, error is not None)
-            for reference, error in zip(references, external_errors, strict=True)
-        ],
-    )
-    _raise_validation_outcome(outcome=outcome, external_errors=external_errors, values={})
-
-
-def _raise_validation_outcome(
-    *,
-    outcome: int | _native.NativeConfigError | None,
-    external_errors: list[Exception | None],
-    values: dict[str, object],
-) -> None:
-    if isinstance(outcome, _native.NativeConfigError):
-        raise native_validation_error(error=outcome, values=values)
-    if outcome is not None:
-        raise cast(Exception, external_errors[outcome])
-
-
-def _external_reference_error(
-    *,
-    context: ModelValidatorContext,
-    model_file: DiscoveredSqlModelFile,
-    reference: CompileSqlReference,
-) -> Exception | None:
-    """The error the dbt manifest gives a `__dbt_ref`, or None when it accepts the reference."""
-
-    if reference.ref_kind != SqlReferenceKind.DBT_REF:
-        return None
-    try:
-        validate_external_reference(
-            reference=reference,
-            model_file=model_file,
-            external_sql_reference_resolver=context.external_sql_reference_resolver,
-        )
-    except CompileInputError as error:
-        return error
-    return None

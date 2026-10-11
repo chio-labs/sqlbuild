@@ -876,8 +876,18 @@ class SnapshotReappearingKeyBuildE2ETestCase:
 @dataclass(frozen=True)
 class DynamicColumnContractE2ETestCase:
     description: str
-    project_name: str
     expected_rows: tuple[tuple[object, ...], ...]
+    name_pattern_entry: str = ""
+
+
+@dataclass(frozen=True)
+class DynamicColumnRejectionE2ETestCase:
+    """Test case for a dynamic column name pattern that fails a build."""
+
+    description: str
+    name_pattern_entry: str
+    expected_output: str
+    expected_returncode: int = 1
 
 
 @dataclass(frozen=True)

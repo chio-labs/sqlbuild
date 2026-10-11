@@ -19,7 +19,7 @@ from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
 from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.cli.progress.main._execution_header import format_execution_header
 from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.models import (
     PlanOutput,
 )
@@ -40,7 +40,7 @@ def execute_sqlbuild_build_work(
     *,
     context: DbtSqlbuildWorkContext,
     command: DbtInteropCommand,
-    project: CompiledProject,
+    project: CompiledProjectView,
     project_dir: Path,
     fail_fast: bool,
     verbose: bool,

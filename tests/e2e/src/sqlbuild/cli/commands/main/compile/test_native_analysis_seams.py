@@ -9,7 +9,6 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalyses
-from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
@@ -95,7 +94,9 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
         planned_counts.append(len(planned_artifacts))
-        assert isinstance(seams["complete_native_semantic_diagnostics"][0], CompiledProject)
+        assert isinstance(
+            seams["complete_native_semantic_diagnostics"][0], native_module.NativeProjectView
+        )
         assert isinstance(seams["evaluate_native_model_contracts"][0], ContractValidationResult)
     assert [
         len(call.args[0].tests) for call in native_sql_test_planning.call_args_list

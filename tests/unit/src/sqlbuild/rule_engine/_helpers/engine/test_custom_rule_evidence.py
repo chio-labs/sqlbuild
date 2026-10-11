@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
     _RuleTestEvidence,
@@ -288,7 +288,7 @@ def test_given_collectable_rule_evidence_when_evaluating_then_coverage_fault_cle
     tmp_path: Path,
     test_case: CustomRuleEvidenceTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(
         tmp_path=tmp_path,
@@ -428,7 +428,7 @@ def test_given_cached_coverage_fault_when_evidence_changes_then_cache_is_invalid
     tmp_path: Path,
     test_case: CustomRuleEvidenceTestCase,
 ) -> None:
-    project: CompiledProject
+    project: CompiledProjectView
     config: RulesConfig
     project, config = custom_rule_inputs(
         tmp_path=tmp_path,

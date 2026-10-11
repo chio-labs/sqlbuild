@@ -6,14 +6,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.macro_bridge._helpers.store_keys import (
-    call_class_store_text,
     context_store_token,
     macro_store_token,
 )
-from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.python_nodes.types import SqlResourceRefKind
 from tests.unit.src.sqlbuild.compiler.macro_bridge._helpers._test_types import (
-    CallClassStoreTextTestCase,
     ContextStoreTokenTestCase,
     ContextValueTestCase,
     MacroStoreTokenTestCase,
@@ -175,46 +171,3 @@ def test_given_loaded_macro_change_when_naming_it_then_only_the_same_file_and_so
     )
 
     assert (original == changed) is test_case.expected_equal
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        CallClassStoreTextTestCase(
-            description="same class", context_token=None, prior_relations=None, expected_equal=True
-        ),
-        CallClassStoreTextTestCase(
-            description="no relations passed yet",
-            context_token=None,
-            prior_relations=(),
-            expected_equal=False,
-        ),
-        CallClassStoreTextTestCase(
-            description="one relation passed",
-            context_token=None,
-            prior_relations=(SqlResourceRef(kind=SqlResourceRefKind.MODEL, name="orders"),),
-            expected_equal=False,
-        ),
-        CallClassStoreTextTestCase(
-            description="context macro",
-            context_token="ctx",
-            prior_relations=None,
-            expected_equal=False,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_call_class_inputs_when_naming_it_then_only_identical_inputs_match(
-    test_case: CallClassStoreTextTestCase,
-) -> None:
-    plain: str | None = call_class_store_text(
-        macro_tokens=("cents",), context_token=None, prior_relations=None
-    )
-
-    text: str | None = call_class_store_text(
-        macro_tokens=("cents",),
-        context_token=test_case.context_token,
-        prior_relations=test_case.prior_relations,
-    )
-
-    assert (text == plain) is test_case.expected_equal

@@ -74,6 +74,15 @@
           "type": "toml",
           "path": "uv.lock",
           "jsonpath": "$.package[?(@.name.value == \"sqlbuild\")].version"
+        },
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value == \"sqlbuild-cli\")].version"
+        },
+        {
+          "type": "generic",
+          "path": "pyproject.toml"
         }
       ],
       "exclude-paths": [

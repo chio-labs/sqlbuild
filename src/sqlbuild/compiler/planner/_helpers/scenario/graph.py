@@ -5,12 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlScenario,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner.constants import SCENARIO_PLAN_GRAPH_VALIDATION
 from sqlbuild.compiler.planner.models import PlanWarning, ScenarioGraphPlan
 from sqlbuild.compiler.planner.types import WarningSeverity
@@ -32,13 +34,13 @@ class _UpstreamRequirements:
 def plan_scenario_graph(
     *,
     scenario: CompiledSqlScenario,
-    project: CompiledProject,
+    project: CompiledProjectView,
     sql_analysis_enabled: bool = True,
     sql_analysis_dialect: str | None = None,
 ) -> tuple[ScenarioGraphPlan, tuple[PlanWarning, ...]]:
     """Infer scenario target models, build closure, and required fixtures."""
 
-    model_map: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    model_map: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     source_names: frozenset[str] = frozenset(source.name for source in project.sources)
     seed_names: frozenset[str] = frozenset(seed.name for seed in project.seeds)
     del sql_analysis_enabled, sql_analysis_dialect
@@ -128,7 +130,7 @@ def _declared_name_warnings(
     scenario: CompiledSqlScenario,
     target_model_names: tuple[str, ...],
     assertion_target_names: tuple[str, ...],
-    model_map: dict[str, CompiledModel],
+    model_map: dict[str, CompiledModelView],
     source_names: frozenset[str],
     seed_names: frozenset[str],
 ) -> tuple[PlanWarning, ...]:
@@ -198,7 +200,7 @@ def _collect_upstream_requirements(
     *,
     target_model_names: tuple[str, ...],
     scenario_name: str,
-    model_map: dict[str, CompiledModel],
+    model_map: dict[str, CompiledModelView],
     ref_fixture_names: frozenset[str],
 ) -> _UpstreamRequirements:
     """Walk target model upstreams and collect required fixtures and functions."""
@@ -221,7 +223,7 @@ def _collect_upstream_requirements(
         if model_name in requirements.model_names:
             return requirements
 
-        model: CompiledModel | None = model_map.get(model_name)
+        model: CompiledModelView | None = model_map.get(model_name)
         if model is None:
             return requirements
         requirements = _UpstreamRequirements(

@@ -19,6 +19,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledProjectView,
     CompiledResourceType,
     FunctionLanguage,
 )
@@ -41,6 +42,7 @@ from sqlbuild.spec.contracts.models import (
     SourceColumnEntry,
     SourceEntry,
 )
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 
 def build_dag_artifact_test_graph() -> ProjectGraph:
@@ -98,7 +100,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         qualified_name="analytics_dev.normalize_email",
         logical_schema="analytics",
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-1",
         effective_target_name="dev",
         effective_connection={},
@@ -242,7 +244,7 @@ def build_dag_artifact_test_graph() -> ProjectGraph:
         function_key: (),
         model_key: (source_key, seed_key, function_key),
     }
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=project,
         upstream_deps=upstream_deps,
         downstream_deps={

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import time
 from dataclasses import replace
 from functools import partial
@@ -23,13 +22,13 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
     write_static_compile_target,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+from sqlbuild.cli.commands.classes.native_artifact_batch import NativeArtifactBatch
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileWriteResult,
 )
-from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
 from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.cli.output.models import (
     WrittenTarget,
@@ -46,13 +45,13 @@ from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.main.selected_graph import (
     build_project_graph_with_analysis_selection,
 )
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
 from sqlbuild.rule_engine.constants import RULE_FIX_AVAILABLE_NOTE
@@ -186,14 +185,8 @@ def _analyze_compile_project(
         _ = complete_compile_phase(
             status=status, message=f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
         )
-    selected_keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+    selected_keys: frozenset[CompiledObjectKey] = select_project_graph(
+        graph=graph, select=select, exclude=exclude
     )
     rules_result: RulesRunResult = RulesRunResult(
         findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0
@@ -278,19 +271,19 @@ def build_compile_manifest_payload(
 
     if not manifest:
         return None
-    from sqlbuild.compiler.manifest.main.build import build_manifest
+    from sqlbuild.compiler.manifest.main.build_graph_manifest import build_graph_manifest
 
     manifest_start: float = time.monotonic()
     _ = start_compile_phase(status=status, message="Building manifest...")
-    manifest_payload: dict[str, object] = build_manifest(
+    manifest_payload: dict[str, object] = build_graph_manifest(
         project=analysis.graph.project,
+        plan_output=None,
         project_name=analysis.discovered_inputs.project_config.name,
         adapter_type=resolve_effective_adapter_name(
             project_config=analysis.discovered_inputs.project_config,
             local_config=analysis.discovered_inputs.local_config,
         ),
-        upstream_deps=analysis.graph.upstream_deps,
-        downstream_deps=analysis.graph.downstream_deps,
+        graph=analysis.graph.native,
     )
     _ = complete_compile_phase(
         status=status, message=f"Built manifest. ({time.monotonic() - manifest_start:.2f}s)"
@@ -323,16 +316,14 @@ def write_compile_dag_artifact(
         project_dir=project_dir,
         dag_path=dag_path,
     )
-    resolved_dag_path.parent.mkdir(parents=True, exist_ok=True)
     dag_json: str = build_dag_json(
         graph=analysis.graph,
         project_name=analysis.discovered_inputs.project_config.name,
         python_graph=python_graph,
     )
-    _ = resolved_dag_path.write_text(dag_json, encoding="utf-8")
-    COMPILE_ARTIFACT_WRITES.written(
-        path=resolved_dag_path, contents=dag_json.replace("\n", os.linesep).encode("utf-8")
-    )
+    dag_batch: NativeArtifactBatch = NativeArtifactBatch(check_existing=False)
+    dag_batch.queue(path=resolved_dag_path, contents=dag_json.encode("utf-8"))
+    dag_batch.flush()
     _ = complete_compile_phase(
         status=status, message=f"Wrote DAG artifact. ({time.monotonic() - dag_start:.2f}s)"
     )

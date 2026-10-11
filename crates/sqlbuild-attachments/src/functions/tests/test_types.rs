@@ -14,3 +14,15 @@ pub(super) struct FunctionNamespaceTestCase {
     pub(super) inputs: NamespaceInputs,
     pub(super) expected_namespace: FunctionNamespace,
 }
+
+pub(super) struct FunctionReferenceTestCase {
+    pub(super) description: &'static str,
+    pub(super) references: Vec<(&'static str, &'static str)>,
+    pub(super) expected_error: Option<&'static str>,
+}
+
+pub(super) struct TableFunctionArityTestCase {
+    pub(super) description: &'static str,
+    pub(super) calls: Vec<(&'static str, &'static str, Option<usize>)>,
+    pub(super) expected_error: Option<&'static str>,
+}

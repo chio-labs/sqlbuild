@@ -1,3 +1,4 @@
+pub(crate) mod binding_locations;
 mod catalog;
 pub(crate) mod conversions;
 pub(crate) mod explicit_references;

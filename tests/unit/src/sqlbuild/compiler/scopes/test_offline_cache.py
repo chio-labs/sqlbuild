@@ -223,10 +223,10 @@ def test_given_project_mutation_when_fingerprinting_then_only_scope_inputs_inval
     path: Path = tmp_path / test_case.path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(test_case.initial, encoding="utf-8")
-    before: str = scope_index_fingerprint(project_dir=tmp_path)
+    before: str | None = scope_index_fingerprint(project_dir=tmp_path)
 
     path.write_text(test_case.updated, encoding="utf-8")
-    after: str = scope_index_fingerprint(project_dir=tmp_path)
+    after: str | None = scope_index_fingerprint(project_dir=tmp_path)
 
     assert (before != after) is test_case.expected_changes_fingerprint
 
@@ -264,15 +264,15 @@ def test_given_source_add_rename_and_delete_when_fingerprinting_then_paths_inval
     write_repo_files: Callable[[Path, dict[str, str]], None],
 ) -> None:
     write_scope_cache_project(root=tmp_path, write_repo_files=write_repo_files)
-    original: str = scope_index_fingerprint(project_dir=tmp_path)
+    original: str | None = scope_index_fingerprint(project_dir=tmp_path)
     added_path: Path = tmp_path / "models" / "added.sql"
     added_path.write_text(_MODEL, encoding="utf-8")
-    added: str = scope_index_fingerprint(project_dir=tmp_path)
+    added: str | None = scope_index_fingerprint(project_dir=tmp_path)
     renamed_path: Path = tmp_path / "models" / "renamed.sql"
     added_path.rename(renamed_path)
-    renamed: str = scope_index_fingerprint(project_dir=tmp_path)
+    renamed: str | None = scope_index_fingerprint(project_dir=tmp_path)
     renamed_path.unlink()
-    restored: str = scope_index_fingerprint(project_dir=tmp_path)
+    restored: str | None = scope_index_fingerprint(project_dir=tmp_path)
 
     result: bool = len({original, added, renamed}) == 3 and restored == original
     assert result is test_case.expected_result

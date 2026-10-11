@@ -16,16 +16,22 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlExpansion,
-    CompileProjectInputs,
     DeclarationScopeBuild,
     SqlExpansionContext,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompileInputsView,
+    ModelInput,
+)
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
+from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
@@ -33,9 +39,6 @@ from sqlbuild.lint.constants import (
     DEFAULT_MAX_RANKING_ORDER_BY,
     MAX_LITERAL_LENGTH_THRESHOLD,
     MAX_RANKING_ORDER_BY_THRESHOLD,
-    RELATION_KIND_REF,
-    RELATION_KIND_SEED,
-    RELATION_KIND_SOURCE,
     SAFE_RULE_FIX_CODES,
     TEMPLATE_INTERPOLATION_START,
 )
@@ -142,7 +145,7 @@ def evaluate_rules(
     model_paths: frozenset[str] | None = _selected_model_paths(
         graph=graph, selected_keys=selected_keys
     )
-    selected_project: CompiledProject = _selected_project(graph=graph, model_paths=model_paths)
+    selected_project: CompiledProjectView = _selected_project(graph=graph, model_paths=model_paths)
     selected_config: RulesConfig = replace(
         _selection_rules_config(
             config=effective_config,
@@ -241,7 +244,7 @@ def evaluate_rules(
 def _prepare_sql_rule_inputs(
     *,
     rules: tuple[Rule, ...],
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str,
     project_dir: Path,
     collect_files: bool,
@@ -279,7 +282,7 @@ def _config_references_custom_rules(config: RulesConfig) -> bool:
 
 
 def prepare_sql_rules(
-    *, inputs: CompileProjectInputs, executor: Executor, dialect: str, stop: Event
+    *, inputs: CompileInputsView, executor: Executor, dialect: str, stop: Event
 ) -> PreparedSqlLint | None:
     project_dir: Path | None = inputs.discovered_inputs.project_dir
     if project_dir is None or any(diagnostic.is_error for diagnostic in inputs.diagnostics):
@@ -305,42 +308,35 @@ def prepare_sql_rules(
                 thresholds=config.thresholds,
                 allow_suppressions=config.allow_exceptions,
                 relation_keys=declared_relation_keys(
-                    relations=(
-                        *(
-                            (
-                                RELATION_KIND_REF,
-                                model.model_file.file_path.stem,
-                                model.schema_entry,
-                                model.config.values,
-                            )
-                            for model in inputs.model_inputs
-                        ),
-                        *(
-                            (RELATION_KIND_SEED, seed.schema_entry.name, seed.schema_entry, {})
-                            for seed in inputs.seed_inputs
-                        ),
-                        *(
-                            (
-                                RELATION_KIND_SOURCE,
-                                source.source_entry.name,
-                                source.source_entry,
-                                {},
-                            )
-                            for source in inputs.source_inputs
-                        ),
-                    )
+                    model_rows=(model.relation_key_row for model in inputs.model_inputs),
+                    seeds=(seed.schema_entry for seed in inputs.seed_inputs),
+                    sources=(source.source_entry for source in inputs.source_inputs),
                 ),
             ),
             discovered_inputs=inputs.discovered_inputs,
             static_declaration_scope=inputs.declaration_scope,
-            compiled_expansions={
-                model.model_file.file_path: model.sql_expansion
-                for model in inputs.model_inputs
-                if model.sql_expansion is not None
-            },
+            compiled_expansions=early_lint_expansions(inputs.model_inputs),
             stop=stop,
         ),
     )
+
+
+def early_lint_expansions(
+    model_inputs: tuple[ModelInput, ...],
+) -> dict[Path, CompiledSqlExpansion]:
+    """Each model's compile expansion for early lint, whole when the compile handed one over."""
+
+    expansions: dict[Path, CompiledSqlExpansion] = {}
+    for model in model_inputs:
+        expansion: CompiledSqlExpansion | None = model.lint_expansion or model.sql_expansion
+        if expansion is not None:
+            expansions[model.model_file.file_path] = expansion
+    report_native_answer(
+        stage=NativeStage.COMPILE_LINT_INPUTS,
+        kind="lint_expansions",
+        units=sum(model.lint_expansion is not None for model in model_inputs),
+    )
+    return expansions
 
 
 def _prepare_sql_lint(
@@ -375,7 +371,7 @@ def _selection_rules_config(
     *,
     config: RulesConfig,
     model_paths: frozenset[str] | None,
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> RulesConfig:
     if model_paths is None:
         return config
@@ -408,11 +404,11 @@ def _selected_sql_codes(config: RulesConfig) -> tuple[str, ...]:
 
 def _selected_project(
     *, graph: ProjectGraph, model_paths: frozenset[str] | None
-) -> CompiledProject:
+) -> CompiledProjectView:
     if model_paths is None:
         return graph.project
-    return replace(
-        graph.project,
+    return project_with(
+        project=graph.project,
         models=tuple(
             model for model in graph.project.models if model.relative_path.as_posix() in model_paths
         ),
@@ -493,7 +489,7 @@ def _run_sql_rules(
     rules: tuple[Rule, ...],
     project_dir: Path,
     discovered_inputs: DiscoveredProjectInputs,
-    project: CompiledProject,
+    project: CompiledProjectView,
     lint_config: LintConfig,
     selected_model_paths: frozenset[str] | None,
     cache_enabled: bool,
@@ -504,7 +500,7 @@ def _run_sql_rules(
     codes: tuple[str, ...] = _sql_rule_codes(rules)
     if not codes:
         return _SqlRulesEvaluation(findings=(), cache_hits=0, cache_misses=0)
-    models_by_path: dict[str, CompiledModel] = _sql_rule_models(project)
+    models_by_path: dict[str, CompiledModelView] = _sql_rule_models(project)
     bucket: dict[str, dict[str, object]] = (
         _read_sql_rule_cache(project_dir) if cache_enabled else {}
     )
@@ -721,7 +717,7 @@ def _sql_rule_codes(rules: tuple[Rule, ...]) -> tuple[str, ...]:
     return tuple(rule.code for rule in rules if rule.code.startswith("SQBRSQL"))
 
 
-def _sql_rule_models(project: CompiledProject) -> dict[str, CompiledModel]:
+def _sql_rule_models(project: CompiledProjectView) -> dict[str, CompiledModelView]:
     return {
         model.relative_path.as_posix(): model
         for model in project.models
@@ -730,7 +726,7 @@ def _sql_rule_models(project: CompiledProject) -> dict[str, CompiledModel]:
 
 
 def _sql_model_rule_identities(
-    *, rules: tuple[Rule, ...], project: CompiledProject, dialect: str
+    *, rules: tuple[Rule, ...], project: CompiledProjectView, dialect: str
 ) -> dict[str, str]:
     codes: tuple[str, ...] = _sql_rule_codes(rules)
     if not codes:
@@ -741,7 +737,7 @@ def _sql_model_rule_identities(
     }
 
 
-def _sql_rule_identity(*, model: CompiledModel, codes: tuple[str, ...], dialect: str) -> str:
+def _sql_rule_identity(*, model: CompiledModelView, codes: tuple[str, ...], dialect: str) -> str:
     digest: Any = hashlib.blake2b(digest_size=32)
     digest.update(_SQL_RULE_CACHE_VERSION.encode())
     digest.update(_RULES_BUILD_IDENTITY.encode())
@@ -798,12 +794,18 @@ def _sql_rule_cache_path(project_dir: Path) -> Path:
 
 
 def _read_sql_rule_cache(project_dir: Path) -> dict[str, dict[str, object]]:
+    """Return usable entries so incompatible builds cannot suppress early lint."""
+
     path: Path = _sql_rule_cache_path(project_dir)
     try:
         payload: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return {}
-    if not isinstance(payload, dict) or payload.get("version") != _SQL_RULE_CACHE_VERSION:
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != _SQL_RULE_CACHE_VERSION
+        or payload.get("build_identity") != _RULES_BUILD_IDENTITY
+    ):
         return {}
     entries: object = payload.get("entries")
     if not isinstance(entries, dict):
@@ -844,7 +846,11 @@ def _write_sql_rule_cache(*, project_dir: Path, bucket: dict[str, dict[str, obje
     temporary: Path = path.with_suffix(f".tmp-{os.getpid()}")
     temporary.write_text(
         json.dumps(
-            {"version": _SQL_RULE_CACHE_VERSION, "entries": bucket},
+            {
+                "version": _SQL_RULE_CACHE_VERSION,
+                "build_identity": _RULES_BUILD_IDENTITY,
+                "entries": bucket,
+            },
             sort_keys=True,
             separators=(",", ":"),
         ),

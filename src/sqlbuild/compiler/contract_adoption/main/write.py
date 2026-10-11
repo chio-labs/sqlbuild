@@ -8,10 +8,12 @@ from pathlib import Path
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
-    CompiledModel,
-    CompiledSource,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledResourceType,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.contract_adoption._helpers.repository_edits import (
     edit_model,
     edit_source,
@@ -41,8 +43,10 @@ def write_contracts(
 ) -> ContractAdoptionResult:
     """Apply safe source-only edits atomically and validate the resulting project."""
 
-    models: dict[str, CompiledModel] = {model.name: model for model in graph.project.models}
-    sources: dict[str, CompiledSource] = {source.name: source for source in graph.project.sources}
+    models: dict[str, CompiledModelView] = {model.name: model for model in graph.project.models}
+    sources: dict[str, CompiledSourceView] = {
+        source.name: source for source in graph.project.sources
+    }
     updates: dict[Path, str] = {}
     updated_evidence: list[ContractEvidence] = []
     for evidence in result.evidence:

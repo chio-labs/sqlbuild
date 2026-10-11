@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
@@ -48,7 +48,7 @@ def test_given_cursor_start_layers_when_building_compile_inputs_then_model_uses_
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
@@ -97,7 +97,7 @@ def test_given_cursor_safety_layers_when_compiling_then_model_fields_use_model_p
     write_repo_files(tmp_path, test_case.repo_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )

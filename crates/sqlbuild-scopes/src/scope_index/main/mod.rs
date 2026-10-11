@@ -1,4 +1,13 @@
 pub mod build_scope_index;
+pub mod classify_report_resource;
 pub mod classify_resource;
+pub mod explain_report_declaration;
+pub mod format_identity;
+pub mod identity_repr;
+pub mod normalize_scope_path;
+pub mod parse_identity;
+pub mod path_visible;
 pub mod relationship_grants;
-pub mod scope_lookup;
+pub mod report_lookup;
+pub mod report_target;
+pub mod resolve_report_visibility;

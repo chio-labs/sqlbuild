@@ -14,18 +14,21 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
     CompilerDiagnostic,
     CompileSqlReference,
     CursorInputRoles,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSeedView,
+)
 from sqlbuild.compiler.discovery.main.microbatch_guidance import microbatch_guidance
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
@@ -209,7 +212,7 @@ class _CustomMaterializationConfig:
 
 def build_planner_relations_context(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
@@ -306,7 +309,7 @@ def build_planner_relations_context(
 
 def _resolve_source_warehouse_columns(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     source_read_map: dict[str, SourceEntry],
@@ -331,7 +334,7 @@ def _resolve_source_warehouse_columns(
 
 def plan_model(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
     context: ModelPlanContext,
@@ -366,7 +369,7 @@ def plan_model(
 
 def build_plan_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
@@ -422,7 +425,7 @@ def build_plan_entries(
     for key in scope.execution_order:
         if key not in scope.selected_keys or key.name not in resolved_actions.models:
             continue
-        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        model: CompiledModelView | None = scope.models_by_name.get(key.name)
         resolved: ResolvedModelAction = resolved_actions.models[key.name]
         if model is None:
             continue
@@ -675,7 +678,7 @@ def _apply_microbatch_limit(
 
 def plan_model_from_change(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     adapter: BaseAdapter,
     context: ModelPlanContext,
@@ -984,7 +987,7 @@ def plan_model_from_change(
 
 def resolve_cursor_overrides(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     cursor_overrides: CursorOverrides | None,
     start_cursor_override: str | None,
     end_cursor_override: str | None,
@@ -1038,7 +1041,7 @@ def resolve_cursor_overrides(
     return resolved_start, resolved_end
 
 
-def _get_on_schema_change(model: CompiledModel) -> OnSchemaChange | None:
+def _get_on_schema_change(model: CompiledModelView) -> OnSchemaChange | None:
     """Extract on_schema_change from model config."""
 
     raw: object | None = model.config.values.get("on_schema_change")
@@ -1049,7 +1052,7 @@ def _get_on_schema_change(model: CompiledModel) -> OnSchemaChange | None:
     raise PlannerInputError(f"model '{model.name}': unknown on_schema_change '{raw}'")
 
 
-def extract_seed_columns(seed: CompiledSeed) -> tuple[ColumnInfo, ...]:
+def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]:
     """Extract declared columns from seed schema entry."""
 
     columns: list[ColumnInfo] = []
@@ -1060,7 +1063,7 @@ def extract_seed_columns(seed: CompiledSeed) -> tuple[ColumnInfo, ...]:
     return tuple(columns)
 
 
-def _get_type_enforcement(model: CompiledModel) -> bool:
+def _get_type_enforcement(model: CompiledModelView) -> bool:
     """Resolve whether type enforcement is active for a model."""
 
     if model.schema_entry is not None and model.schema_entry.type_enforcement is not None:
@@ -1068,7 +1071,7 @@ def _get_type_enforcement(model: CompiledModel) -> bool:
     return False
 
 
-def _get_declared_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
+def _get_declared_columns(model: CompiledModelView) -> tuple[ColumnInfo, ...]:
     """Extract declared columns with types from schema entry."""
 
     if model.schema_entry is None:
@@ -1081,7 +1084,7 @@ def _get_declared_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
     return tuple(columns)
 
 
-def _get_contract_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
+def _get_contract_columns(model: CompiledModelView) -> tuple[ColumnInfo, ...]:
     if model.schema_entry is None:
         return ()
     return tuple(
@@ -1089,7 +1092,7 @@ def _get_contract_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
     )
 
 
-def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
+def _get_unique_key(model: CompiledModelView) -> tuple[str, ...]:
     """Extract unique_key from model config as a normalized tuple."""
 
     raw: object | None = model.config.values.get("unique_key")
@@ -1100,7 +1103,7 @@ def _get_unique_key(model: CompiledModel) -> tuple[str, ...]:
     return ()
 
 
-def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
+def _get_check_columns(model: CompiledModelView) -> tuple[str, ...]:
     """Extract check_columns from model config as a normalized tuple."""
 
     raw: object | None = model.config.values.get("check_columns")
@@ -1112,7 +1115,7 @@ def _get_check_columns(model: CompiledModel) -> tuple[str, ...]:
 
 
 def _resolve_cursor_safety_configs(
-    *, model: CompiledModel, context: ModelPlanContext
+    *, model: CompiledModelView, context: ModelPlanContext
 ) -> tuple[FutureCursorsConfig | None, StartCursorsConfig | None]:
     return (
         resolve_future_cursor_config(model=model, project_config=context.future_cursor_config),
@@ -1120,7 +1123,7 @@ def _resolve_cursor_safety_configs(
     )
 
 
-def _resolve_model_plan_config(*, model: CompiledModel) -> _ModelPlanConfig:
+def _resolve_model_plan_config(*, model: CompiledModelView) -> _ModelPlanConfig:
     return _ModelPlanConfig(
         incremental_strategy=get_config_str(values=model.config.values, key="incremental_strategy"),
         incremental_mode=get_config_str(values=model.config.values, key="incremental_mode"),
@@ -1151,7 +1154,7 @@ def _resolve_model_plan_config(*, model: CompiledModel) -> _ModelPlanConfig:
 
 
 def _resolve_custom_materialization_config(
-    *, model: CompiledModel, materialization_type: MaterializationType
+    *, model: CompiledModelView, materialization_type: MaterializationType
 ) -> _CustomMaterializationConfig:
     if materialization_type != MaterializationType.CUSTOM:
         return _CustomMaterializationConfig(name=None, config={}, placeholders={})
@@ -1174,7 +1177,7 @@ def _resolve_custom_materialization_config(
 
 
 def _compute_microbatch_range(
-    *, model: CompiledModel, inputs: _MicrobatchRangeInputs
+    *, model: CompiledModelView, inputs: _MicrobatchRangeInputs
 ) -> CursorBounds | None:
     """Compute the real overall cursor range for microbatch batch splitting."""
 
@@ -1279,7 +1282,7 @@ def _compute_microbatch_range(
 
 
 def resolve_microbatch_lookback(
-    *, model: CompiledModel, effective_grain: str | None = None
+    *, model: CompiledModelView, effective_grain: str | None = None
 ) -> str | None:
     """Resolve explicit or default lookback for one microbatch model."""
 
@@ -1310,7 +1313,7 @@ def resolve_microbatch_lookback(
 
 def _compute_plan_cursor_bounds(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     backfill: BackfillResult,
     full_refresh: bool,
@@ -1397,7 +1400,7 @@ def _compute_plan_cursor_bounds(
 
 def _resolve_empty_cursor_inputs(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     full_refresh: bool,
     runtime_owned_cursor_bounds: bool,
@@ -1570,11 +1573,11 @@ def _build_logical_ddl_from_adapter(
 
 def _build_cursor_input_relations(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     adapter: BaseAdapter,
     model_locations: dict[str, CompiledRelationLocation],
-    models_by_name: dict[str, CompiledModel],
-    functions_by_name: dict[str, CompiledFunction] | None = None,
+    models_by_name: dict[str, CompiledModelView],
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
     seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],
     cursor_column: str | None,
@@ -1599,7 +1602,7 @@ def _build_cursor_input_relations(
             models_by_name=models_by_name,
             functions_by_name=functions_by_name or {},
         )
-        producer_model: CompiledModel | None = (
+        producer_model: CompiledModelView | None = (
             models_by_name.get(ref.ref_name) if ref.ref_kind == SqlReferenceKind.REF else None
         )
         relation: str | None = _resolve_cursor_input_relation(
@@ -1671,10 +1674,10 @@ def _build_cursor_input_relations(
 
 def validate_source_cursor_input_columns(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     cursor_column: str | None,
-    models_by_name: dict[str, CompiledModel] | None = None,
-    functions_by_name: dict[str, CompiledFunction] | None = None,
+    models_by_name: dict[str, CompiledModelView] | None = None,
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
     source_map: dict[str, SourceEntry] | None = None,
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]],
 ) -> None:
@@ -1685,7 +1688,7 @@ def validate_source_cursor_input_columns(
         return
 
     cursor_roles: CursorInputRoles = resolve_cursor_input_roles(model=model)
-    effective_models_by_name: dict[str, CompiledModel] = models_by_name or {}
+    effective_models_by_name: dict[str, CompiledModelView] = models_by_name or {}
     effective_source_map: dict[str, SourceEntry] = source_map or {}
     authored_inputs: tuple[tuple[str, str], ...] = tuple(
         cursor_roles.filter_inputs.items()
@@ -1700,7 +1703,7 @@ def validate_source_cursor_input_columns(
             functions_by_name=functions_by_name or {},
         )
         if ref.ref_kind == SqlReferenceKind.REF:
-            upstream_model: CompiledModel | None = effective_models_by_name.get(ref.ref_name)
+            upstream_model: CompiledModelView | None = effective_models_by_name.get(ref.ref_name)
             if upstream_model is None:
                 continue
             has_enforced_contract: bool = (
@@ -1749,7 +1752,7 @@ def validate_source_cursor_input_columns(
         )
 
 
-def _model_declared_column_names(model: CompiledModel) -> tuple[str, ...]:
+def _model_declared_column_names(model: CompiledModelView) -> tuple[str, ...]:
     if model.schema_entry is None:
         return ()
     return tuple(column.name for column in model.schema_entry.columns)
@@ -1831,13 +1834,13 @@ def _cursor_input_kind(
 def _resolve_cursor_input_grain(
     *,
     ref: CompileSqlReference,
-    models_by_name: dict[str, CompiledModel],
+    models_by_name: dict[str, CompiledModelView],
 ) -> str | None:
     """Resolve timestamp grain metadata for a model-backed cursor input relation."""
 
     if ref.ref_kind != SqlReferenceKind.REF:
         return None
-    upstream_model: CompiledModel | None = models_by_name.get(ref.ref_name)
+    upstream_model: CompiledModelView | None = models_by_name.get(ref.ref_name)
     if upstream_model is None:
         return None
     return get_config_str(values=upstream_model.config.values, key="cursor_grain")
@@ -1859,7 +1862,7 @@ def scope_overlaps(
 
 def audit_is_selected(
     *,
-    audit: CompiledAudit,
+    audit: CompiledAuditView,
     selected_keys: frozenset[CompiledObjectKey],
 ) -> bool:
     """Return whether an audit belongs to the selected logical target scope."""
@@ -1875,13 +1878,13 @@ def audit_is_selected(
 
 def _selected_audit_relation_keys(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey],
 ) -> frozenset[CompiledObjectKey]:
     """Return relation keys needed to render selected audits without selecting those relations."""
 
     relation_keys: set[CompiledObjectKey] = set()
-    audit: CompiledAudit
+    audit: CompiledAuditView
     for audit in project.audits:
         if audit_is_selected(audit=audit, selected_keys=selected_keys):
             relation_keys.update(audit.scope_deps)
@@ -1897,7 +1900,7 @@ def build_model_materializations(
 
 
 def _rolling_window_bounds(
-    *, model: CompiledModel, invocation_time: datetime | None
+    *, model: CompiledModelView, invocation_time: datetime | None
 ) -> CursorBounds | None:
     grain: str | None = get_config_str(values=model.config.values, key="cursor_grain")
     lookback: str | None = resolve_microbatch_lookback(model=model, effective_grain=grain)
@@ -1938,7 +1941,9 @@ def _floor_utc_grain(*, moment: datetime, grain: str) -> datetime:
     return moment.replace(microsecond=0)
 
 
-def _clamp_cursor_end(*, bounds: CursorBounds | None, model: CompiledModel) -> CursorBounds | None:
+def _clamp_cursor_end(
+    *, bounds: CursorBounds | None, model: CompiledModelView
+) -> CursorBounds | None:
     cursor_end: str | None = get_config_cursor_bound(values=model.config.values, key="cursor_end")
     cursor_type: str | None = get_config_str(values=model.config.values, key="cursor_type")
     if bounds is None or cursor_end is None:

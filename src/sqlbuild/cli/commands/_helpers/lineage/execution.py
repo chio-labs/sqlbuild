@@ -26,7 +26,6 @@ from sqlbuild.cli.commands._helpers.lineage.selection import (
     select_selector_lineage,
     select_target_lineage,
 )
-from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.constants import (
     COLUMN_TARGET_SEPARATOR,
     JSON_OUTPUT_FORMAT,
@@ -42,16 +41,12 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.lineage.main.build_semantic_uses import build_direct_semantic_uses
 from sqlbuild.compiler.lineage.models import DirectSemanticColumnUse
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.constants import UNKNOWN_SELECTOR_ERROR_CODE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.selection import resolve_project_selectors
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
@@ -111,6 +106,10 @@ def _prepare_graph(
         )
         if cached is not None:
             return cached, None, parsed_depth
+    from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
+    from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+    from sqlbuild.compiler.pipeline.main.graph import build_project_graph
+
     discovered: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,
         sql_analysis_enabled_override=(None if requires_compiled_graph else False),
@@ -160,6 +159,8 @@ def _semantic_uses(
 ) -> tuple[DirectSemanticColumnUse, ...]:
     if not request.include_uses:
         return ()
+    from sqlbuild.compiler.lineage.main.build_semantic_uses import build_direct_semantic_uses
+
     if not isinstance(graph, ProjectGraph) or adapter is None:
         raise CliUserError(
             "semantic uses require a compiled project graph",
@@ -215,6 +216,8 @@ def _render_lineage(
             if error.code == UNKNOWN_SELECTOR_ERROR_CODE and isinstance(
                 graph, RelationLineageIndex
             ):
+                from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+
                 reject_unit_test_selectors(
                     select=request.select,
                     exclude=request.exclude,
@@ -254,14 +257,10 @@ def _semantic_use_model_names(
             )[0]
             for target in request.targets
         )
-    keys: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=request.select,
-        exclude=request.exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+    from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
+
+    keys: frozenset[CompiledObjectKey] = select_project_graph(
+        graph=graph, select=request.select, exclude=request.exclude
     )
     return frozenset(key.name for key in keys if key.resource_type == CompiledResourceType.MODEL)
 

@@ -140,9 +140,18 @@ pub(crate) fn batch_sizes_bound_workers_by_contract() -> bool {
 
 /// Spell a scan as `kind:name[.member]@start..end, ...` plus ` | stop:<error>` when it stops.
 pub(crate) fn scanned_references(sql: &str) -> Option<String> {
+    spelled_scan(sql, false)
+}
+
+/// The same spelling of the usage walk, which steps past malformed references.
+pub(crate) fn scanned_usages(sql: &str) -> Option<String> {
+    spelled_scan(sql, true)
+}
+
+fn spelled_scan(sql: &str, skip_malformed: bool) -> Option<String> {
     let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
     let scan: DeclarationReferenceScan =
-        scan_declaration_references(python, &[sql.to_owned()], false).pop()?;
+        scan_declaration_references(python, &[sql.to_owned()], skip_malformed).pop()?;
     let references: String = scan
         .references
         .iter()
@@ -251,4 +260,24 @@ pub(crate) fn interpolation_facts(
         |failure| (Vec::new(), failure.reads),
         |result| (result.spans, result.reads),
     )
+}
+
+/// Named locations from `[line, column, end_line, end_column]` rows.
+pub(crate) fn locations(
+    columns: Vec<(&str, [usize; 4])>,
+) -> Vec<(String, crate::compiler::models::TextLocation)> {
+    columns
+        .into_iter()
+        .map(|(name, [line, column, end_line, end_column])| {
+            (
+                name.to_owned(),
+                crate::compiler::models::TextLocation {
+                    line,
+                    column,
+                    end_line,
+                    end_column,
+                },
+            )
+        })
+        .collect()
 }

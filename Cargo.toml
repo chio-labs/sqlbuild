@@ -11,6 +11,8 @@ members = [
     "crates/sqlbuild-attachments",
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
+    "crates/sqlbuild-refactor",
+    "crates/sqlbuild-cli",
     "crates/sqlbuild-python",
 ]
 resolver = "2"
@@ -25,12 +27,14 @@ order = [
     "sqlbuild-sqltext",
     "sqlbuild-config",
     "sqlbuild-discovery",
+    "sqlbuild-render",
     "sqlbuild-scopes",
     "sqlbuild-model-config",
-    "sqlbuild-render",
     "sqlbuild-attachments",
     "sqlbuild-analysis",
     "sqlbuild-rules",
+    "sqlbuild-refactor",
+    "sqlbuild-cli",
     "sqlbuild-python",
 ]
 python-boundary = "sqlbuild-python"
@@ -45,6 +49,8 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 fensu-policy = "=0.22.0"
+# `sqb` names compute log captures with random ids, as `uuid.uuid4().hex`.
+getrandom = "0.4"
 globset = "0.4"
 # Windows only: tells NTFS junctions, which Python walks as directories, from symbolic links.
 junction = { version = "2.1.0", default-features = false }
@@ -63,8 +69,12 @@ polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.
     "dialect-duckdb",
 ] }
 blake3 = { version = "1", features = ["rayon"] }
+# Windows only: `sqb` ignores Ctrl+C while the Python CLI it started handles it.
+ctrlc = "3"
 quote = "1"
 rayon = "1"
+# Unix only: `sqb` shares the compute log prune lock with Python's `filelock` through `flock`.
+rustix = { version = "1.1.4", default-features = false, features = ["fs", "std"] }
 saphyr-parser = "0.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
@@ -78,6 +88,7 @@ sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-discovery = { path = "crates/sqlbuild-discovery" }
 sqlbuild-render = { path = "crates/sqlbuild-render" }
+sqlbuild-refactor = { path = "crates/sqlbuild-refactor" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-model-config = { path = "crates/sqlbuild-model-config" }
 sqlbuild-scopes = { path = "crates/sqlbuild-scopes" }
@@ -98,6 +109,13 @@ unused_must_use = "deny"
 
 [workspace.lints.clippy]
 await_holding_lock = "deny"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false
 
 [profile.release]
 strip = "symbols"

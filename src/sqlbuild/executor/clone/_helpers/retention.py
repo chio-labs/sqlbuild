@@ -11,7 +11,7 @@ from sqlbuild.adapter.contract.models import (
     RetentionState,
 )
 from sqlbuild.adapter.contract.types import BuiltinAdapter, RetentionScope
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.types import RetentionPlanPhase
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
@@ -26,7 +26,7 @@ from sqlbuild.spec.contracts.models import ResolvedTimeTravelRetention
 
 def build_clone_retention_requests(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter_name: str,
     namespace_owned: bool,
     selected_model_names: frozenset[str] | None = None,

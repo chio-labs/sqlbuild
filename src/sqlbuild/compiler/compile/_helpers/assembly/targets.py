@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledRelationLocation, CompileModelInput
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.compile.types import ModelInput
 
 
 def build_model_relation_target(
-    *, model_input: CompileModelInput, model_name: str
+    *, model_input: ModelInput, model_name: str
 ) -> CompiledRelationLocation:
     """Resolve one model's configured physical and logical destination."""
 

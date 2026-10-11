@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.executor.janitor.models import JanitorOldNameViewPlanning, JanitorRelationScope
 from sqlbuild.executor.old_name_views._helpers.janitor import (
     plan_old_name_views,
@@ -24,7 +24,7 @@ def plan_old_name_view_cleanup(
     relations_by_schema: dict[tuple[str | None, str | None], tuple[RelationInfo, ...]],
     target_name: str | None,
     early_drops: tuple[str, ...],
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: JanitorRelationScope,
     now: datetime,
 ) -> tuple[JanitorOldNameViewPlanning, JanitorRelationScope]:

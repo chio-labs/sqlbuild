@@ -6,8 +6,6 @@ use pyo3::{PyErr, pyfunction, wrap_pyfunction};
 use serde_json::{Value, json};
 use sqlbuild_config::errors::ConfigError;
 use sqlbuild_config::models::{ConfigDate, ConfigTime, ConfigValue};
-use sqlbuild_config::project::main::read_local_config::read_local_config;
-use sqlbuild_config::project::main::read_project_config::read_project_config;
 use sqlbuild_config::toml::main::load_toml::load_toml;
 use sqlbuild_config::yaml::main::safe_load::safe_load;
 use sqlbuild_core::json::main::dumps::dumps;
@@ -20,7 +18,6 @@ use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
 use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_core::text::models::LineIndex;
-use std::path::Path;
 
 fn oracle_error(message: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(message.to_string())
@@ -204,32 +201,6 @@ fn _oracle_toml_load(text: &str) -> String {
     outcome(load_toml(text).map(|value| canonical(&value)))
 }
 
-/// Read a project's discovery configuration natively, or return `{"error": kind}`.
-#[pyfunction]
-fn _oracle_project_config(project_dir: &str) -> String {
-    let directory = Path::new(project_dir);
-    outcome(read_project_config(directory).and_then(|project| {
-        let local = read_local_config(directory)?;
-        Ok(json!({
-            "name": project.name,
-            "adapter": project.adapter,
-            "default_target": project.default_target,
-            "sql_analysis": project.settings.sql_analysis,
-            "require_sql_analysis": project.settings.require_sql_analysis,
-            "enforce_placement": project.enforce_placement,
-            "enforce_explicit_references": project.enforce_explicit_references,
-            "vars": project.vars,
-            "path_default_keys": project.path_defaults.iter().map(|(key, _)| key).collect::<Vec<_>>(),
-            "target_names": project.target_names,
-            "local_target": local.target,
-            "local_adapter": local.adapter,
-            "local_sql_analysis": local.sql_analysis,
-            "local_vars": local.vars,
-            "local_target_names": local.target_names,
-        }))
-    }))
-}
-
 #[pyfunction]
 fn _oracle_python_alnum(
     python_version: (u8, u8),
@@ -282,6 +253,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_oracle_text_positions, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_yaml_load, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_toml_load, module)?)?;
-    module.add_function(wrap_pyfunction!(_oracle_project_config, module)?)?;
     Ok(())
 }

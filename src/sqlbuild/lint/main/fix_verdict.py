@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.lint.constants import (
     FIX_COLUMNS_CHANGED,
     FIX_COLUMNS_UNKNOWN,
@@ -52,7 +52,7 @@ def fix_verdict(
 
 
 def _model_change(
-    *, before: CompiledModel, after: CompiledModel, require_columns: bool
+    *, before: CompiledModelView, after: CompiledModelView, require_columns: bool
 ) -> str | None:
     """Edited models need known, equal columns; others must not change; absent lineage matches."""
 

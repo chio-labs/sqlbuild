@@ -17,7 +17,13 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     FunctionArgument,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    FunctionLanguage,
+)
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
@@ -34,7 +40,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types impor
 _STUB_TS: datetime = datetime(2026, 1, 15, 12, 0, 0)
 
 
-def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> CompiledModel:
+def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> CompiledModelView:
     """Build a CompiledModel from a test case."""
 
     schema_entry: SchemaModelEntry | None = _build_schema_entry(test_case)
@@ -56,7 +62,7 @@ def build_model_from_test_case(test_case: DetectModelChangesTestCase) -> Compile
 
 def build_model_from_metadata_test_case(
     test_case: DetectModelMetadataTestCase,
-) -> CompiledModel:
+) -> CompiledModelView:
     return CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=tuple(
@@ -131,12 +137,12 @@ def build_metadata_json_with_audit_gate(metadata_json: str) -> str:
     return json.dumps(metadata, sort_keys=True, separators=(",", ":"), default=str)
 
 
-def build_project_for_function_metadata_detection() -> CompiledProject:
+def build_project_for_function_metadata_detection() -> CompiledProjectView:
     function_key: CompiledObjectKey = CompiledObjectKey(
         resource_type=CompiledResourceType.UDF,
         name="is_large_order",
     )
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=(function_key,),
         name="orders",
@@ -153,7 +159,7 @@ def build_project_for_function_metadata_detection() -> CompiledProject:
         name="is_large_order",
         qualified_name=None,
     )
-    function: CompiledFunction = CompiledFunction(
+    function: CompiledFunctionView = CompiledFunction(
         key=function_key,
         deps=(),
         name="is_large_order",
@@ -184,7 +190,7 @@ def build_scope_for_function_metadata_detection() -> PlannerScope:
         resource_type=CompiledResourceType.UDF,
         name="is_large_order",
     )
-    project: CompiledProject = build_project_for_function_metadata_detection()
+    project: CompiledProjectView = build_project_for_function_metadata_detection()
     return PlannerScope(
         upstream_deps={model_key: (function_key,), function_key: ()},
         downstream_deps={function_key: (model_key,), model_key: ()},

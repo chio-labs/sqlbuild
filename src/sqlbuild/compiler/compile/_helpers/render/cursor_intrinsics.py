@@ -38,16 +38,6 @@ def get_validated_model_cursor_intrinsics(
     return str(canonical_sql)
 
 
-def reject_cursor_intrinsics(*, sql: str, context: str) -> None:
-    """Reject cursor intrinsics in SQL that does not own an execution interval."""
-
-    error: str | None = _native.cursor_intrinsics_rejection(
-        sql, _RESERVED_MARKERS, context, _PYTHON
-    )
-    if error is not None:
-        raise CompileInputError(error)
-
-
 def render_cursor_intrinsics(*, sql: str, start_sql: str, end_sql: str) -> str:
     """Render recognized intrinsics to complete adapter-specific bound expressions."""
 
@@ -82,3 +72,9 @@ def _replaced(*, sql: str, context: str, start_sql: str, end_sql: str) -> tuple[
     if error is not None:
         raise CompileInputError(error)
     return replaced, found
+
+
+def cursor_intrinsic_semantics() -> tuple[list[str], tuple[tuple[int, int], str]]:
+    """The reserved markers and Python release native cursor-intrinsic validation reads."""
+
+    return list(_RESERVED_MARKERS), _PYTHON

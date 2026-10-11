@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.contracts.main._native_promotion_conflicts import (
     native_promotion_conflict_diagnostics,
 )
@@ -11,7 +12,7 @@ from sqlbuild.compiler.contracts.main._native_promotion_conflicts import (
 
 def promotion_conflict_diagnostics(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter_default: TablePromotionMode,
     settings_file: str,
 ) -> tuple[CompilerDiagnostic, ...]:

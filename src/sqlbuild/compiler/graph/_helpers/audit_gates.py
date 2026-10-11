@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledAuditView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge
 
 _READABLE_RESOURCE_TYPES: frozenset[CompiledResourceType] = frozenset(
@@ -28,7 +33,7 @@ class _AuditGate:
 
 
 def attached_audit_gate_edges_impl(
-    *, project: CompiledProject
+    *, project: CompiledProjectView
 ) -> tuple[AttachedAuditGateEdge, ...]:
     """Return edges from each extra audit read to its model or seed target, or source triggers."""
 
@@ -58,9 +63,9 @@ def attached_audit_gate_edges_impl(
     return tuple(edges)
 
 
-def _audit_gates(*, project: CompiledProject) -> tuple[_AuditGate, ...]:
+def _audit_gates(*, project: CompiledProjectView) -> tuple[_AuditGate, ...]:
     gates: list[_AuditGate] = []
-    audit: CompiledAudit
+    audit: CompiledAuditView
     for audit in project.audits:
         if audit.attached_target_kind is None or audit.attached_target_name is None:
             continue
@@ -101,7 +106,7 @@ def _gate_edges(
 
 
 def _extra_reads(
-    *, audit: CompiledAudit, target: CompiledObjectKey
+    *, audit: CompiledAuditView, target: CompiledObjectKey
 ) -> tuple[CompiledObjectKey, ...]:
     return tuple(
         read

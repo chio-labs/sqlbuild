@@ -4,12 +4,11 @@ import pytest
 
 from sqlbuild.compiler.auditing.types import AuditAttachmentKind, AuditRunScope
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledAuditView
 from sqlbuild.compiler.planner._helpers.output.audit_entry import plan_audit
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.compiler.references.types import SqlReferenceKind
@@ -57,7 +56,7 @@ def test_given_logically_attached_audit_when_planning_then_scheduling_and_identi
         CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name=name)
         for name in test_case.referenced_model_names
     )
-    audit: CompiledAudit = build_scheduling_audit(
+    audit: CompiledAuditView = build_scheduling_audit(
         references=references,
         attached_target_kind=AttachedAuditTargetKind.MODEL,
         attached_target_name=test_case.attached_target_name,
@@ -142,7 +141,7 @@ def test_given_logically_attached_audit_when_planning_then_scheduling_and_identi
 def test_given_audit_when_planning_then_resolves_sql(
     test_case: PlanAuditTestCase,
 ) -> None:
-    audit: CompiledAudit = build_audit_from_test_case(test_case)
+    audit: CompiledAuditView = build_audit_from_test_case(test_case)
     model_locations: dict[str, CompiledRelationLocation] = build_audit_model_locations(
         test_case.model_locations
     )
@@ -180,7 +179,7 @@ def test_given_audit_when_planning_then_resolves_sql(
 def test_given_audit_with_unresolved_marker_when_planning_then_it_raises_clear_error(
     test_case: PlanAuditTestCase,
 ) -> None:
-    audit: CompiledAudit = build_audit_from_test_case(test_case)
+    audit: CompiledAuditView = build_audit_from_test_case(test_case)
     model_locations: dict[str, CompiledRelationLocation] = build_audit_model_locations(
         test_case.model_locations
     )

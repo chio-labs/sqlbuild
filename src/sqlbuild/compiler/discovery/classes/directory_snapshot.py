@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import fnmatch
 import os
-import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
@@ -12,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import ClassVar
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.types import DirectorySnapshotEntry
 
 _CASE_PROBE: str = "A"
@@ -138,6 +137,5 @@ def _is_dir(*, entry: os.DirEntry[str], follow_symlinks: bool) -> bool:
 def _name_matcher(pattern: str) -> Callable[[str], bool]:
     """Match names like ``Path.glob`` with the platform's default case sensitivity."""
 
-    flags: int = 0 if os.path.normcase(_CASE_PROBE) == _CASE_PROBE else re.IGNORECASE
-    compiled: re.Pattern[str] = re.compile(fnmatch.translate(pattern), flags)
-    return lambda name: compiled.match(name) is not None
+    ignore_case: bool = os.path.normcase(_CASE_PROBE) != _CASE_PROBE
+    return lambda name: _native.glob_name_match(name, pattern, ignore_case)

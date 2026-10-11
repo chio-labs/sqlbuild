@@ -12,7 +12,9 @@ import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
@@ -208,7 +210,7 @@ def generated_lineage_files(*, rng: random.Random, model_count: int) -> dict[str
     return files
 
 
-def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledProject:
+def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledProjectView:
     """Write and compile a project, keeping any diagnostics."""
 
     for relative_path, contents in files.items():
@@ -221,18 +223,21 @@ def compiled_project(*, project_dir: Path, files: dict[str, str]) -> CompiledPro
     ).project
 
 
-def without_compact_facts(project: CompiledProject) -> CompiledProject:
+def without_compact_facts(project: CompiledProjectView) -> CompiledProjectView:
     """The project with every model sent through the parse fallback."""
 
-    return replace(
-        project,
-        models=tuple(replace(model, fast_lineage_columns=None) for model in project.models),
+    return project_with(
+        project=project,
+        models=tuple(
+            replace(compiled_model_record(model), fast_lineage_columns=None)
+            for model in project.models
+        ),
     )
 
 
 def lineage_views(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str | None,
     model_names: frozenset[str] | None,
 ) -> tuple[list[object], list[object]]:
@@ -246,7 +251,7 @@ def lineage_views(
 
 
 def _public_views(
-    *, project: CompiledProject, lineage: ProjectColumnLineage
+    *, project: CompiledProjectView, lineage: ProjectColumnLineage
 ) -> tuple[list[object], list[object]]:
     names: list[object] = []
     values: list[object] = []

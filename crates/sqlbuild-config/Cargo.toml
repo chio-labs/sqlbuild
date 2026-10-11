@@ -11,6 +11,7 @@ rust-version.workspace = true
 saphyr-parser.workspace = true
 toml_edit.workspace = true
 toml_parser.workspace = true
+sqlbuild-core.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

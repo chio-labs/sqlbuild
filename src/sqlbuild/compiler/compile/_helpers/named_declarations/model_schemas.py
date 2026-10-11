@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+from itertools import chain
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
-from sqlbuild.compiler.compile._helpers.named_declarations.core import (
-    named_declaration_record,
-    named_declaration_usages,
-)
 from sqlbuild.compiler.compile.models import CompilerDiagnostic, DeclarationScopeResolver
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import (
@@ -16,13 +14,18 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
-from sqlbuild.compiler.scopes.main._declaration_visibility import declaration_visibility
+from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    ResourceIdentity,
     UsageRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ScopeDiagnosticCode
+
+_SCHEMA_USAGE_KINDS: frozenset[DeclarationKind] = frozenset(
+    {DeclarationKind.SCHEMA, DeclarationKind.ENUM}
+)
 
 
 def model_schema_scope_usages(
@@ -34,31 +37,62 @@ def model_schema_scope_usages(
 
     if resolver is None:
         return ()
-    usages: list[UsageRecord] = []
-    for schema_file in schema_files:
-        for declaration in schema_file.declarations:
-            record: DeclarationRecord | None = named_declaration_record(
-                resolver=resolver, kind=DeclarationKind.SCHEMA, name=declaration.name
-            )
-            if record is None:
-                continue
-            if declaration.extends is not None:
-                usages.extend(
-                    named_declaration_usages(
-                        resolver=resolver,
-                        kind=DeclarationKind.SCHEMA,
-                        name=declaration.extends,
-                        consumer=record.identity,
-                        consumer_path=record,
-                    )
-                )
-            usages.extend(
-                UsageRecord(consumer=record.identity, declaration=enum_record.identity)
-                for enum_record in _enum_type_records(
-                    declaration=declaration, record=record, resolver=resolver
-                )
-            )
-    return tuple(dict.fromkeys(usages))
+    records: list[DeclarationRecord] = [
+        found[0]
+        for identity, found in resolver.lookup.declarations.items()
+        if found and identity.owner is None and identity.kind in _SCHEMA_USAGE_KINDS
+    ]
+    usages: list[tuple[int, int]]
+    diagnostics: list[tuple[list[str], str, str, str]]
+    error: str | None
+    usages, diagnostics, error = _native.scope_schema_usages(
+        list(map(_schema_row, chain.from_iterable(item.declarations for item in schema_files))),
+        list(map(_record_row, records)),
+    )
+    if error is not None:
+        raise InvalidScopePathError(error)
+    for key, message, path, help_text in diagnostics:
+        report_compile_diagnostic(
+            key=tuple(key),
+            diagnostic=CompilerDiagnostic(
+                phase=DiagnosticPhase.COMPILE,
+                severity=DiagnosticSeverity.ERROR,
+                code=ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
+                message=message,
+                path=Path(path),
+                help=help_text,
+            ),
+        )
+    return tuple(
+        UsageRecord(consumer=records[consumer].identity, declaration=records[used].identity)
+        for consumer, used in usages
+    )
+
+
+def _schema_row(
+    declaration: ModelSchemaDeclaration,
+) -> tuple[str, str | None, list[tuple[str, str | None]]]:
+    return (
+        declaration.name,
+        declaration.extends,
+        [(column.name, column.type) for column in declaration.columns],
+    )
+
+
+def _record_row(
+    record: DeclarationRecord,
+) -> tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]:
+    owner: ResourceIdentity | None = record.identity.owner
+    return (
+        (record.identity.kind.value, record.identity.name),
+        (
+            record.path,
+            record.scope.value,
+            None if owner is None else (owner.kind.value, owner.name),
+            record.owning_path,
+            record.ownership_root.path,
+        ),
+    )
 
 
 def model_schema_enum_declarations(
@@ -78,48 +112,3 @@ def model_schema_enum_declarations(
         if isinstance(value, EnumDeclaration):
             enums[column.type] = value
     return enums
-
-
-def _enum_type_records(
-    *,
-    declaration: ModelSchemaDeclaration,
-    record: DeclarationRecord,
-    resolver: DeclarationScopeResolver,
-) -> tuple[DeclarationRecord, ...]:
-    records: list[DeclarationRecord] = []
-    for column in declaration.columns:
-        if column.type is None:
-            continue
-        enum_record: DeclarationRecord | None = named_declaration_record(
-            resolver=resolver, kind=DeclarationKind.ENUM, name=column.type
-        )
-        if enum_record is None:
-            continue
-        if declaration_visibility(declaration=enum_record, consumer=record) is None:
-            owner: str = enum_record.owning_path or enum_record.ownership_root.path
-            report_compile_diagnostic(
-                key=(
-                    ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
-                    record.path,
-                    declaration.name,
-                    column.name,
-                ),
-                diagnostic=CompilerDiagnostic(
-                    phase=DiagnosticPhase.COMPILE,
-                    severity=DiagnosticSeverity.ERROR,
-                    code=ScopeDiagnosticCode.INACCESSIBLE_DECLARATION.value,
-                    message=(
-                        f"Schema '{declaration.name}' in {record.path} column '{column.name}' "
-                        f"uses enum '{column.type}', which is not visible from the schema's "
-                        f"location. The enum is defined at {enum_record.path} with "
-                        f"{enum_record.scope.value} scope owned by '{owner}'"
-                    ),
-                    path=Path(record.path),
-                    help=(
-                        "move the enum to a role visible from the schema's owning folder, or "
-                        "move the schema next to the enum"
-                    ),
-                ),
-            )
-        records.append(enum_record)
-    return tuple(records)

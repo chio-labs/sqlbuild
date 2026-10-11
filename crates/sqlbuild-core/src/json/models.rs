@@ -8,6 +8,8 @@ pub enum JsonValue {
     Integer(JsonInteger),
     Float(f64),
     String(String),
+    /// A Python `str` as UTF-16 code units, for text holding lone surrogates.
+    Utf16(Vec<u16>),
     Array(Vec<JsonValue>),
     Object(Vec<(String, JsonValue)>),
 }

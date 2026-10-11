@@ -84,14 +84,6 @@ class DiagnosticUxCase:
 
 
 @dataclass(frozen=True)
-class ColumnSuggestionCase:
-    description: str
-    name: str
-    columns: tuple[str, ...]
-    expected_match: str | None
-
-
-@dataclass(frozen=True)
 class SemanticTriageCase:
     description: str
     column_type: str = "DATE"
@@ -384,6 +376,16 @@ class FunctionArgumentTypeCase:
     description: str
     projection: str
     expected_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StarShapeOrderTestCase:
+    """A case-sensitive star model discovered before the upstream model it expands."""
+
+    description: str
+    files: dict[str, str]
+    star_model: str
+    expected_shape: dict[str, str]
 
 
 type CompileOutcome = tuple[int, dict[str, object], dict[str, bytes]]

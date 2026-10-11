@@ -6,7 +6,8 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
@@ -19,7 +20,7 @@ from sqlbuild.spec.contracts.models import TargetConfig
 
 def resolve_model_deferral_inputs(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
     connection: Any,

@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
@@ -91,7 +92,7 @@ def test_given_generated_failing_projects_when_completing_natively_then_matches_
         )
         views: dict[str, object] = {}
         for dialect in test_case.dialects:
-            native: CompiledProject = completed_natively(with_dialect(captured, dialect))
+            native: CompiledProjectView = completed_natively(with_dialect(captured, dialect))
             codes.update(item.code for item in native.diagnostics)
             codes.update(note_kinds(native, _NOTE_KINDS))
             views[dialect] = completion_view(native)
@@ -210,7 +211,7 @@ def test_given_project_without_catalog_when_completing_then_raises_native_compil
 
     with pytest.raises(native_module.NativeCompilerError) as raised:
         _ = native_completion(
-            replace(captured, project=replace(captured.project, binding_catalog=None))
+            replace(captured, project=project_with(project=captured.project, binding_catalog=None))
         )
 
     assert str(raised.value) == test_case.expected_message
@@ -267,7 +268,7 @@ def test_given_preview_compiles_when_completing_from_the_session_then_matches_pa
     payload_views: list[tuple[object, ...]] = []
     session_views: list[tuple[object, ...]] = []
     for index, inputs in enumerate(captured):
-        completed: CompiledProject = completed_natively(inputs)
+        completed: CompiledProjectView = completed_natively(inputs)
         codes.update(item.code for item in completed.diagnostics)
         codes.update(note_kinds(completed, _NOTE_KINDS))
         session_views.append(completion_view(completed))

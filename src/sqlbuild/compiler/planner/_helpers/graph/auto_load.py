@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 
 
 def managed_source_upstream_keys(
     *,
     selected_keys: frozenset[CompiledObjectKey],
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> frozenset[CompiledObjectKey]:
     """Return selected managed source keys reachable from the current selection."""
 

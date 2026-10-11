@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Protocol
 
-
-class NativeUsageModule(Protocol):
-    """Native semantic-use analysis boundary."""
-
-    def analyze_sql_uses_json(self, request_json: str) -> str: ...
+type NativeSemanticUseRow = tuple[str, str, str, str, str, str, str, int | None, int | None]
 
 
 class ColumnTransformKind(StrEnum):

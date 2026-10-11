@@ -10,11 +10,11 @@ import pytest
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledProject,
-    CompileModelInput,
-    CompileProjectInputs,
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompileInputsView,
+    ModelInput,
 )
 from sqlbuild.compiler.discovery.exceptions import DeclarationParseError
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
@@ -152,13 +152,13 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
         },
     )
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run",
     )
 
-    model_input: CompileModelInput = compile_inputs.model_inputs[0]
+    model_input: ModelInput = compile_inputs.model_inputs[0]
     assert model_input.schema_entry is not None
     assert model_input.query_sql == test_case.expected_query_sql
     assert tuple(compile_inputs.public_enums) == ("fulfillment_method", "priority")
@@ -210,11 +210,11 @@ SELECT * FROM __ref("orders") WHERE threshold < @const("min_items")
         "WITH __ref__orders AS (\n  SELECT 7 AS threshold\n),\n"
         "__expected__orders AS (\n  SELECT 7 AS threshold\n)\nSELECT 1",
     )
-    compiled_project: CompiledProject = assemble_project(
+    compiled_project: CompiledProjectView = assemble_project(
         inputs=compile_inputs,
         skip_column_inference=True,
     )
-    compiled_model: CompiledModel = compiled_project.models[0]
+    compiled_model: CompiledModelView = compiled_project.models[0]
     assert tuple(compiled_project.public_enums) == ("fulfillment_method", "priority")
     assert tuple(compiled_project.public_constants) == ("min_items", "source_name")
     assert tuple(compiled_model.enum_columns) == ("fulfillment_method", "priority", "state")
@@ -377,7 +377,7 @@ SELECT * FROM __ref("@model") WHERE country NOT IN @const("countries")
         },
     )
 
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter_context=DUCKDB_ARRAY_COMPILE_ADAPTER_CONTEXT,
         run_id="typed_constants",
@@ -526,13 +526,13 @@ def test_given_declaration_change_when_compiling_then_updates_dependent_identity
         }
         | test_case.additional_files,
     )
-    initial_model: CompiledModel = compile_first_model(project_dir=tmp_path)
+    initial_model: CompiledModelView = compile_first_model(project_dir=tmp_path)
 
     write_repo_files(
         tmp_path,
         {test_case.declaration_path: test_case.changed_declaration},
     )
-    changed_model: CompiledModel = compile_first_model(project_dir=tmp_path)
+    changed_model: CompiledModelView = compile_first_model(project_dir=tmp_path)
 
     query_hash_changed: bool = compute_query_hash(
         query_sql=initial_model.query_sql, dialect=None

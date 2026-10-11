@@ -12,17 +12,15 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
-    CompileProjectInputs,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.dag.types import NodeKind
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
+from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
-    build_model_tag_index_impl,
-)
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
     DUCKDB_COMPILE_ADAPTER_CONTEXT,
 )
@@ -35,6 +33,7 @@ from tests.unit.src.sqlbuild.compiler.dag.main._test_types import (
     DagResourceNamespaceTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.dag.main.helpers import build_dag_artifact_test_graph
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 
 @pytest.mark.parametrize(
@@ -116,7 +115,9 @@ def test_given_project_graph_when_building_dag_artifact_then_includes_assets_edg
     assert nodes_by_id["loader:shared_order_feed"]["kind"] == "loader"
     assert tuple(checks[0]["checked_asset_ids"]) == ("model:orders",)
     assert checks[0]["severity"] == "warn"
-    tag_index: dict[str, frozenset[CompiledObjectKey]] = build_model_tag_index_impl(graph.project)
+    tag_index: dict[str, frozenset[CompiledObjectKey]] = project_lineage_views(
+        graph.project
+    ).tag_index
     assert tag_index["reference"] == frozenset({graph.project.seeds[0].key})
     assert tag_index["normalization"] == frozenset({graph.project.functions[0].key})
 
@@ -231,12 +232,12 @@ seeds:
         },
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    inputs: CompileProjectInputs = build_compile_inputs(
+    inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
-    project: CompiledProject = assemble_compiled_project(inputs=inputs)
-    graph: ProjectGraph = ProjectGraph(
+    project: CompiledProjectView = assemble_compiled_project(inputs=inputs)
+    graph: ProjectGraph = project_graph_from_indexes(
         project=project,
         upstream_deps={},
         downstream_deps={},
@@ -317,8 +318,8 @@ def test_given_qualified_loader_destination_when_building_dag_then_parses_loader
     graph: ProjectGraph = build_dag_artifact_test_graph()
     graph = replace(
         graph,
-        project=replace(
-            graph.project,
+        project=project_with(
+            project=graph.project,
             effective_target_database="default_db",
             effective_target_schema="default_schema",
             loader_functions=(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlbuild._native as native_module
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.sql_test_glue._helpers.assembly import native_sql_test_assemblies
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssembly,
@@ -12,7 +12,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow
 
 
-def assemble_native_sql_tests(*, inputs: CompileProjectInputs) -> tuple[NativeSqlTestAssembly, ...]:
+def assemble_native_sql_tests(*, inputs: CompileInputsView) -> tuple[NativeSqlTestAssembly, ...]:
     """Return one assembly per test input, with the error its assembly raises, if any."""
 
     rows: list[NativeSqlTestAssemblyRow] = native_module.assemble_compiled_sql_tests(

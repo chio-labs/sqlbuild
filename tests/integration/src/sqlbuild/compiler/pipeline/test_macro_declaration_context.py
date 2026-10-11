@@ -9,7 +9,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -72,7 +72,7 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
     adapter: BaseAdapter = test_case.adapter_factory()
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )

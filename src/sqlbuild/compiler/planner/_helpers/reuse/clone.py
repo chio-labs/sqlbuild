@@ -6,31 +6,22 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
-    CompiledSource,
 )
-from sqlbuild.compiler.graph.main._build_lineage_downstream_deps import (
-    build_lineage_downstream_deps,
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSourceView,
 )
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import (
-    build_lineage_upstream_deps,
-)
+from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
     topologically_order_keys,
 )
-from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
-    build_model_path_index_impl as build_model_path_index,
-)
-from sqlbuild.compiler.planner._helpers.graph.selector_indexes import (
-    build_model_tag_index_impl as build_model_tag_index,
-)
-from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_selectors
+from sqlbuild.compiler.planner._helpers.graph.selectors import resolve_graph_selectors
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
 )
@@ -67,7 +58,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 def build_clone_plan_output(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
 ) -> PlanOutput:
@@ -77,23 +68,8 @@ def build_clone_plan_output(
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = build_downstream_deps(
         upstream_deps
     )
-    all_keys: dict[str, CompiledObjectKey] = {
-        **{model.name: model.key for model in project.models},
-        **{source.name: source.key for source in project.sources},
-        **{seed.name: seed.key for seed in project.seeds},
-        **{function.name: function.key for function in project.functions},
-    }
-    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
-    )
-    selected_keys: frozenset[CompiledObjectKey] = resolve_selectors(
-        select=select,
-        exclude=exclude,
-        all_keys=all_keys,
-        upstream=lineage_upstream,
-        downstream=build_lineage_downstream_deps(lineage_upstream),
-        tag_index=build_model_tag_index(project),
-        path_index=build_model_path_index(project),
+    selected_keys: frozenset[CompiledObjectKey] = resolve_graph_selectors(
+        graph=build_native_project_graph(project), select=select, exclude=exclude
     )
     return PlanOutput(
         execution_order=topologically_order_keys(upstream=upstream_deps),
@@ -105,13 +81,13 @@ def build_clone_plan_output(
 
 def build_clone_model_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection: Any,
-    source_project: CompiledProject | None = None,
+    source_project: CompiledProjectView | None = None,
 ) -> tuple[ModelPlanEntry, ...]:
-    effective_source_project: CompiledProject = source_project or project
+    effective_source_project: CompiledProjectView = source_project or project
     model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
     seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
@@ -126,7 +102,7 @@ def build_clone_model_entries(
         connection=connection,
     )
     entries_by_key: dict[CompiledObjectKey, ModelPlanEntry] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if model.key not in plan.selected_keys or is_disabled(model):
             continue
@@ -172,12 +148,12 @@ def build_clone_model_entries(
 
 def build_clone_source_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
     adapter: BaseAdapter,
 ) -> tuple[CloneSourcePlanEntry, ...]:
     entries_by_key: dict[CompiledObjectKey, CloneSourcePlanEntry] = {}
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         source_entry: SourceEntry = source.source_entry
         if (
@@ -207,14 +183,14 @@ def build_clone_source_entries(
 
 def build_clone_function_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection: Any,
-    source_project: CompiledProject | None = None,
+    source_project: CompiledProjectView | None = None,
 ) -> tuple[FunctionPlanEntry, ...]:
     """Build destination-resolved function definitions for clone recreation."""
-    effective_source_project: CompiledProject = source_project or project
+    effective_source_project: CompiledProjectView = source_project or project
     model_locations: dict[str, CompiledRelationLocation] = build_model_locations(project.models)
     seed_locations: dict[str, CompiledRelationLocation] = build_seed_locations(project.seeds)
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
@@ -229,7 +205,7 @@ def build_clone_function_entries(
         connection=connection,
     )
     entries_by_key: dict[CompiledObjectKey, FunctionPlanEntry] = {}
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if function.key not in plan.selected_keys:
             continue
@@ -264,7 +240,7 @@ def build_clone_function_entries(
 
 def build_origin_source_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_names: frozenset[str],
     adapter: BaseAdapter,
 ) -> tuple[CloneSourcePlanEntry, ...]:
@@ -283,11 +259,11 @@ def build_origin_source_entries(
 
 def build_origin_model_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_names: frozenset[str],
 ) -> tuple[ModelPlanEntry, ...]:
     entries: list[ModelPlanEntry] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if model.name not in selected_names or is_disabled(model):
             continue
@@ -315,7 +291,7 @@ def build_origin_model_entries(
 
 def build_clone_seed_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan: PlanOutput,
 ) -> tuple[SeedPlanEntry, ...]:
     return tuple(
@@ -334,7 +310,7 @@ def build_clone_seed_entries(
 
 def build_origin_seed_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_names: frozenset[str],
 ) -> tuple[SeedPlanEntry, ...]:
     return tuple(
@@ -351,6 +327,6 @@ def build_origin_seed_entries(
     )
 
 
-def is_disabled(model: CompiledModel) -> bool:
+def is_disabled(model: CompiledModelView) -> bool:
     raw: object | None = model.config.values.get("enabled")
     return isinstance(raw, bool) and not raw

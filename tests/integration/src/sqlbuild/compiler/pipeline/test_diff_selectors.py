@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.diff import (
@@ -102,7 +102,7 @@ def test_given_compiled_project_when_resolving_diff_selectors_then_returns_expec
 ) -> None:
     write_repo_files(tmp_path, _PROJECT_FILES)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    project: CompiledProject = compile_project_for_diff_environment(
+    project: CompiledProjectView = compile_project_for_diff_environment(
         discovered_inputs=discovered_inputs,
         adapter=DuckDbAdapter(),
         target_name="dev",

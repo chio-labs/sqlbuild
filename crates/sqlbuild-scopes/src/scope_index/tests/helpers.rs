@@ -6,11 +6,11 @@ use std::collections::HashMap;
 use crate::scope_index::main::build_scope_index::build_scope_index;
 use crate::scope_index::main::classify_resource::classify_resource;
 use crate::scope_index::main::relationship_grants::relationship_grants;
-use crate::scope_index::main::scope_lookup::scope_lookup_groups;
+use crate::scope_index::main::report_lookup::report_lookup;
 use crate::scope_index::models::{
     ConsumerResource, DeclarationIdentity, DeclarationInput, DeclarationKind, GrantEntry,
-    RelationshipFact, ResourceIdentity, ResourceInput, ResourceKind, ResourceRoot,
-    ResourceVisibility, ScopeDeferral, ScopeIndex, ScopeInputs, ScopeKind, ScopeLookupGroups,
+    RelationshipFact, ReportLookup, ReportRecords, ResourceIdentity, ResourceInput, ResourceKind,
+    ResourceRoot, ResourceVisibility, ScopeDeferral, ScopeIndex, ScopeInputs, ScopeKind,
     VisibilityTable,
 };
 use crate::scope_index::tests::test_types::{
@@ -130,26 +130,33 @@ pub(super) fn grant_texts(test_case: &GrantTestCase) -> Vec<String> {
         .collect()
 }
 
-/// The first resource identity of each resource group of a lookup case, and its repr flag.
-pub(super) fn resource_groups(test_case: &LookupTestCase) -> (Vec<String>, bool) {
+/// The first resource identity of each resource group of a lookup case.
+pub(super) fn resource_groups(test_case: &LookupTestCase) -> Vec<String> {
     let index: ScopeIndex = built_index(test_case.resources, test_case.declarations);
-    let groups: ScopeLookupGroups = scope_lookup_groups(&index, &[]).expect("no deferral");
-    (
-        groups
-            .resources
-            .groups
-            .iter()
-            .map(|group| resource_text(&index.resources[group[0]].identity))
-            .collect(),
-        groups.resources.repr_ordered,
-    )
+    let lookup: ReportLookup = report_lookup(&report_records(&index)).expect("valid paths");
+    lookup
+        .groups
+        .resources
+        .groups
+        .iter()
+        .map(|group| resource_text(&index.resources[group[0]].identity))
+        .collect()
+}
+
+/// A built index's records as a full scope index's records.
+fn report_records(index: &ScopeIndex) -> ReportRecords {
+    ReportRecords {
+        resources: index.resources.clone(),
+        declarations: index.declarations.clone(),
+        ..ReportRecords::default()
+    }
 }
 
 /// The visibility position groups of a lookup case as `kind owner positions` text.
 pub(super) fn visibility_texts(test_case: &LookupTestCase) -> Vec<String> {
     let index: ScopeIndex = built_index(test_case.resources, test_case.declarations);
-    let visibility = scope_lookup_groups(&index, &[])
-        .expect("no deferral")
+    let visibility = report_lookup(&report_records(&index))
+        .expect("valid paths")
         .visibility;
     let mut texts: Vec<String> = vec![format!("global {:?}", visibility.global)];
     texts.extend(

@@ -10,7 +10,7 @@ use crate::yaml::constants::{
     FLOW_KEY_INDICATOR, MAP_TAG, MAX_NATIVE_IMPLICIT_KEY_CHARACTERS, MAX_NESTING_DEPTH,
     NON_SPECIFIC_TAG, PLAIN_FORBIDDEN_FIRST_CHARACTERS, SEQ_TAG, SEQUENCE_ENTRY_TOKEN,
 };
-use crate::yaml::models::{ComposedDocument, Node, NodeContent};
+use crate::yaml::models::{ComposedDocument, MarkStart, Node, NodeContent};
 use saphyr_parser::{Event, Parser, ScalarStyle, ScanError, Span, StrInput, Tag};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -55,7 +55,9 @@ struct Composer<'input> {
     anchors: HashMap<usize, usize>,
     anchor_names: HashSet<String>,
     open_anchors: HashSet<usize>,
+    previous_start: usize,
     previous_end: usize,
+    current_start: usize,
     current_end: usize,
 }
 
@@ -85,7 +87,9 @@ impl<'input> Composer<'input> {
     fn next(&mut self) -> Result<(Event<'input>, Span), ConfigError> {
         match self.parser.next_event() {
             Some(Ok(event)) => {
+                self.previous_start = self.current_start;
                 self.previous_end = self.current_end;
+                self.current_start = event.1.start.index();
                 self.current_end = event.1.end.index();
                 Ok(event)
             }
@@ -97,11 +101,19 @@ impl<'input> Composer<'input> {
         }
     }
 
-    fn push(&mut self, tag: String, content: NodeContent, span: Span) -> usize {
+    fn push(
+        &mut self,
+        tag: String,
+        content: NodeContent,
+        span: Span,
+        mark_start: MarkStart,
+    ) -> usize {
         self.document.nodes.push(Node {
             tag,
             content,
             position: start_position(span),
+            span: (span.start.index(), span.end.index()),
+            mark_start,
         });
         self.document.nodes.len() - 1
     }
@@ -262,6 +274,68 @@ impl<'input> Composer<'input> {
         None
     }
 
+    /// PyYAML's start mark: the first property after the last event or in an implicit start.
+    fn mark_start(&self, has_properties: bool, span: Span) -> MarkStart {
+        if has_properties {
+            let start: usize = span.start.index();
+            self.first_property(self.previous_end, start)
+                .or_else(|| self.first_property(self.previous_start, start))
+                .map_or(MarkStart::Unknown, MarkStart::Property)
+        } else {
+            MarkStart::Token
+        }
+    }
+
+    /// The first `&` or `!` token from `from` to `start`, skipping comments.
+    fn first_property(&self, from: usize, start: usize) -> Option<usize> {
+        let mut index = from.min(start);
+        let mut token_start = true;
+        while index < start {
+            let character = self.char_at(index)?;
+            let after_space =
+                index == 0 || self.char_at(index - 1).is_some_and(char::is_whitespace);
+            if character == '#' && after_space {
+                while !matches!(self.char_at(index), None | Some('\n' | '\r')) {
+                    index += 1;
+                }
+                continue;
+            }
+            if matches!(character, '&' | '!') && token_start {
+                return Some(index);
+            }
+            token_start = character.is_whitespace() || matches!(character, '[' | '{' | ',');
+            index += 1;
+        }
+        None
+    }
+
+    /// Just past the closing quote of the quoted scalar whose opening quote is at `start`.
+    fn quoted_end(&self, start: usize) -> Option<usize> {
+        let quote = self.char_at(start)?;
+        let mut index = start + 1;
+        loop {
+            let character = self.char_at(index)?;
+            match (quote, character) {
+                ('\'', '\'') if self.char_at(index + 1) == Some('\'') => index += 2,
+                ('"', '\\') => index += 2,
+                (_, character) if character == quote => return Some(index + 1),
+                _ => index += 1,
+            }
+        }
+    }
+
+    /// PyYAML's block scalar marks: indicator to just past the last consumed line break.
+    fn block_marks(&self, span: Span) -> (usize, usize) {
+        let start = self.block_indicator(span).unwrap_or(span.start.index());
+        let end = span.end.index().min(self.chars.len());
+        let mut trimmed = end;
+        while trimmed > start && self.chars[trimmed - 1] == ' ' {
+            trimmed -= 1;
+        }
+        let after_break = trimmed > start && matches!(self.chars[trimmed - 1], '\n' | '\r');
+        (start, if after_break { trimmed } else { end })
+    }
+
     /// The column of the `-` that starts the sequence entry holding the indicator at `indicator`.
     fn entry_column(&self, indicator: usize) -> Option<usize> {
         let mut end = indicator;
@@ -372,19 +446,34 @@ impl<'input> Composer<'input> {
                 if style == ScalarStyle::Plain && tag.is_none() && anchor_id == 0 {
                     self.check_plain(&value, span, placement)?;
                 }
-                let value = match style {
-                    ScalarStyle::Literal | ScalarStyle::Folded => {
-                        Cow::Owned(self.block_scalar(&value, span, placement)?)
+                let (value, marks) = match style {
+                    ScalarStyle::Literal | ScalarStyle::Folded => (
+                        Cow::Owned(self.block_scalar(&value, span, placement)?),
+                        self.block_marks(span),
+                    ),
+                    ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => {
+                        let start = span.start.index();
+                        (
+                            value,
+                            (start, self.quoted_end(start).unwrap_or(span.end.index())),
+                        )
                     }
-                    _ => value,
+                    _ => (value, (span.start.index(), span.end.index())),
                 };
                 let non_specific = full_tag(tag.as_ref()).as_deref() == Some(NON_SPECIFIC_TAG);
                 if non_specific && value.is_empty() && style == ScalarStyle::Plain {
                     return Err(unsupported("an empty scalar tagged '!'"));
                 }
                 self.open_anchor(anchor_id, span)?;
+                let mark_start = self.mark_start(anchor_id != 0 || tag.is_some(), span);
                 let tag = scalar_tag(&value, style, full_tag(tag.as_ref()));
-                let node = self.push(tag, NodeContent::Scalar(value.into_owned()), span);
+                let node = self.push(
+                    tag,
+                    NodeContent::Scalar(value.into_owned()),
+                    span,
+                    mark_start,
+                );
+                self.document.nodes[node].span = marks;
                 Ok(self.close_anchor(anchor_id, node))
             }
             Event::SequenceStart(anchor_id, tag) => {
@@ -404,6 +493,7 @@ impl<'input> Composer<'input> {
         placement: Placement,
     ) -> Result<usize, ConfigError> {
         let (anchor_id, tag) = properties;
+        let mark_start = self.mark_start(anchor_id != 0 || tag.is_some(), span);
         self.open_anchor(anchor_id, span)?;
         let item_placement = placement.child(self.is_flow(span), false, Parent::SequenceEntry);
         let mut items: Vec<usize> = Vec::new();
@@ -415,7 +505,7 @@ impl<'input> Composer<'input> {
             items.push(self.compose_node(event, item_span, item_placement)?);
         }
         let tag = collection_tag(full_tag(tag.as_ref()), SEQ_TAG);
-        let node = self.push(tag, NodeContent::Sequence(items), span);
+        let node = self.push(tag, NodeContent::Sequence(items), span, mark_start);
         Ok(self.close_anchor(anchor_id, node))
     }
 
@@ -426,6 +516,7 @@ impl<'input> Composer<'input> {
         placement: Placement,
     ) -> Result<usize, ConfigError> {
         let (anchor_id, tag) = properties;
+        let mark_start = self.mark_start(anchor_id != 0 || tag.is_some(), span);
         self.open_anchor(anchor_id, span)?;
         let flow = self.is_flow(span);
         let mut entries: Vec<(usize, usize)> = Vec::new();
@@ -443,7 +534,7 @@ impl<'input> Composer<'input> {
             entries.push((key, value));
         }
         let tag = collection_tag(full_tag(tag.as_ref()), MAP_TAG);
-        let node = self.push(tag, NodeContent::Mapping(entries), span);
+        let node = self.push(tag, NodeContent::Mapping(entries), span, mark_start);
         Ok(self.close_anchor(anchor_id, node))
     }
 
@@ -502,7 +593,9 @@ pub(crate) fn compose(text: &str) -> Result<ComposedDocument, ConfigError> {
         anchors: HashMap::new(),
         anchor_names: HashSet::new(),
         open_anchors: HashSet::new(),
+        previous_start: 0,
         previous_end: 0,
+        current_start: 0,
         current_end: 0,
     }
     .compose_stream()

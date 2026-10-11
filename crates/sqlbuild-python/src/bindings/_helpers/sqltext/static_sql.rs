@@ -7,6 +7,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyString, PyStringMethods};
 use pyo3::{FromPyObject, PyErr, pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_text::python_text;
+use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::main::sql_interpolation::interpolate_sql;
 use sqlbuild_sqltext::compiler::models::InterpolationRead;
 use sqlbuild_sqltext::compiler::types::InterpolationHost;
@@ -24,11 +25,11 @@ type InterpolationRow = (
 
 /// Project variables, the environment, context values (or `None`) and the variable renderer.
 #[derive(FromPyObject)]
-struct InterpolationSources<'py>(
-    Bound<'py, PyDict>,
-    Bound<'py, PyAny>,
-    Option<Bound<'py, PyDict>>,
-    Bound<'py, PyAny>,
+pub(crate) struct InterpolationSources<'py>(
+    pub(crate) Bound<'py, PyDict>,
+    pub(crate) Bound<'py, PyAny>,
+    pub(crate) Option<Bound<'py, PyDict>>,
+    pub(crate) Bound<'py, PyAny>,
 );
 
 struct PythonInterpolationHost<'py> {
@@ -175,6 +176,30 @@ fn interpolate_sql_batch<'py>(
         rows.push(row);
     }
     Ok(rows)
+}
+
+/// `(sql or None when unchanged, reads, error message or None)` for one SQL text.
+pub(crate) type InterpolatedRow = (Option<String>, Vec<(&'static str, String)>, Option<String>);
+
+/// One SQL text interpolated: the SQL (`None` when unchanged), its reads, and its error.
+pub(crate) fn interpolated(
+    python: PythonText,
+    sources: InterpolationSources<'_>,
+    sql: &str,
+    file_path: &str,
+) -> PyResult<InterpolatedRow> {
+    let host = PythonInterpolationHost {
+        sources,
+        raised: RefCell::new(None),
+    };
+    let row = match interpolate_sql(python, &host, sql, file_path) {
+        Ok(result) => (result.sql, read_rows(result.reads), None),
+        Err(failure) => (None, read_rows(failure.reads), Some(failure.message)),
+    };
+    if let Some(error) = host.raised.borrow_mut().take() {
+        return Err(error);
+    }
+    Ok(row)
 }
 
 fn read_rows(reads: Vec<InterpolationRead>) -> Vec<(&'static str, String)> {

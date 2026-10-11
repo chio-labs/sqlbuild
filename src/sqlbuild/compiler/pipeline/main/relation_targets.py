@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.pipeline._helpers.relation_targets import (
     build_python_relation_targets_impl,
 )
@@ -14,7 +14,7 @@ from sqlbuild.python_nodes.models import SqlResourceRef
 def build_python_relation_targets(
     *,
     adapter: BaseAdapter,
-    project: CompiledProject,
+    project: CompiledProjectView,
     plan_output: PlanOutput,
     required_refs: frozenset[SqlResourceRef] | None = None,
 ) -> dict[SqlResourceRef, str]:

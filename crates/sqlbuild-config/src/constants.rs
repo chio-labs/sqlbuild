@@ -9,3 +9,4 @@ pub(crate) const MAX_MINUTE: i64 = 59;
 pub(crate) const MAX_SECOND: i64 = 59;
 pub(crate) const MAX_MICROSECOND: i64 = 999_999;
 pub(crate) const BYTE_ORDER_MARK: char = '\u{feff}';
+pub(crate) const DECIMAL_BASE: u32 = 10;

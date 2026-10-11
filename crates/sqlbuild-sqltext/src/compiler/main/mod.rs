@@ -1,10 +1,15 @@
 pub mod declaration_references;
+pub mod header_word_value;
 pub mod model_header_byte_matching;
+pub mod model_header_column_locations;
+pub mod model_header_columns;
+pub mod model_header_entry_span;
 pub mod model_header_errors;
 pub mod model_header_matching;
 pub mod model_header_parsing;
 pub mod model_header_single_parsing;
 pub mod model_header_tokenizing;
+pub mod model_output_columns;
 pub mod placeholder_defaults;
 pub mod sql_interpolation;
 pub mod statement_header_matching;

@@ -11,7 +11,7 @@ from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_plac
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
-from sqlbuild.compiler.compile.models import CompileModelInput, ModelSqlAnalysis
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
@@ -23,7 +23,7 @@ def model_pivot_sql(*, query_sql: str, placeholders: dict[str, str] | None) -> s
     return substitute_placeholder_defaults(query_sql=query_sql, placeholders=placeholders)
 
 
-def model_dynamic_families(model_input: CompileModelInput) -> tuple[SchemaDynamicColumnFamily, ...]:
+def model_dynamic_families(model_input: ModelInput) -> tuple[SchemaDynamicColumnFamily, ...]:
     """Return the dynamic column families the model's schema declares."""
 
     if model_input.schema_entry is None:
@@ -32,14 +32,14 @@ def model_dynamic_families(model_input: CompileModelInput) -> tuple[SchemaDynami
 
 
 def standalone_pivot_models(
-    *, model_inputs: tuple[CompileModelInput, ...], analyses: Mapping[str, ModelSqlAnalysis]
+    *, model_inputs: tuple[ModelInput, ...], analysed: Mapping[str, int]
 ) -> dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]]:
     """Return `(sql, families)` by model index for each pivot model no analysis covered."""
 
     models: dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]] = {}
     for index, model_input in enumerate(model_inputs):
         families: tuple[SchemaDynamicColumnFamily, ...] = model_dynamic_families(model_input)
-        if not families or model_input.model_file.file_path.stem in analyses:
+        if not families or model_input.model_file.file_path.stem in analysed:
             continue
         query_sql: str = cursor_intrinsics_analysis_sql(
             sql=model_input.query_sql,

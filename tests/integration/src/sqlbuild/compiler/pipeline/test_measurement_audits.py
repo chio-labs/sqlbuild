@@ -7,7 +7,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, ThresholdOperator
-from sqlbuild.compiler.compile.models import CompiledAudit
+from sqlbuild.compiler.compile.types import CompiledAuditView
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -88,7 +88,7 @@ def test_given_attached_measurement_audit_when_compiling_then_full_contract_reac
         adapter=DuckDbAdapter(),
     )
 
-    compiled: CompiledAudit = result.project.audits[0]
+    compiled: CompiledAuditView = result.project.audits[0]
     planned: AuditPlanEntry = result.plan_output.audit_entries[0]
     assert compiled.evaluation_mode == AuditEvaluationMode.MEASUREMENT
     assert compiled.measurement_contract is not None
@@ -255,7 +255,7 @@ def test_given_standalone_measurement_with_header_policy_when_compiling_then_it_
         project_dir=tmp_path, adapter=DuckDbAdapter()
     )
 
-    audit: CompiledAudit = result.project.audits[0]
+    audit: CompiledAuditView = result.project.audits[0]
     assert audit.thresholds is not None and audit.thresholds.warn is not None
     assert audit.thresholds.warn.operator == ThresholdOperator.OUTSIDE
     assert audit.minimum_samples == test_case.expected_minimum_samples

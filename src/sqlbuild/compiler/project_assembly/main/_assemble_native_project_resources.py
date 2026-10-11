@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.project_assembly._helpers.request import project_request
 from sqlbuild.compiler.project_assembly._helpers.resources import project_resources
 from sqlbuild.compiler.project_assembly.models import NativeProjectResources
@@ -12,7 +12,7 @@ from sqlbuild.compiler.project_assembly.types import ProjectRequestRow, ProjectR
 
 def assemble_native_project_resources(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     dialect: str | None,
     syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
 ) -> NativeProjectResources:

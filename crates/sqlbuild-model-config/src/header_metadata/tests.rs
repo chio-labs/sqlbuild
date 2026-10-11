@@ -1,3 +1,5 @@
+#[path = "tests/test_header_extensions.rs"]
+mod header_extensions;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_parse_header_metadata.rs"]

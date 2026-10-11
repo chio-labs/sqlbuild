@@ -24,6 +24,9 @@ BASELINES_HINT: str = (
 NATIVE_FALLBACK_MAX_COUNTS_FIELD: str = "max_counts"
 NATIVE_FALLBACK_COUNTS_FIELD: str = "counts"
 NATIVE_FALLBACK_PROJECT_CORPUS: str = "project"
+NATIVE_TIMING_DEPENDENT_METRICS: frozenset[tuple[str, str]] = frozenset(
+    {("compile_outputs.native", "reuse_digested_files")}
+)
 NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
     "analysis_session": "model_analysis",
     "contracts/columns.py": "contracts",
@@ -48,6 +51,8 @@ GOLDEN_SEED_CORPUS: str = "seed"
 GOLDEN_SEED_RANGE_FILE: str = "seed_range.toml"
 GOLDEN_SUFFIX: str = ".json"
 GOLDEN_LABEL: str = "golden"
+GOLDEN_FULL_REPORT_LABEL_PREFIX: str = "refactor-"
+GOLDEN_REPORT_KEY: str = "report"
 GOLDEN_MANIFEST_DROPPED_KEYS: frozenset[str] = frozenset({"metadata", "child_map"})
 GOLDEN_MANIFEST_RESOURCE_SECTIONS: tuple[str, ...] = ("nodes", "sources", "macros")
 GOLDEN_RESOURCE_DROPPED_FIELDS: frozenset[str] = frozenset(
@@ -318,10 +323,31 @@ GENERATOR_DIALECT_BLOCKS: tuple[str, ...] = tuple(
     block for block in GENERATOR_ANALYSIS_BLOCKS if block not in GENERATOR_DIALECT_EXCLUDED_BLOCKS
 )
 GENERATOR_SELECTED_MODEL: str = "{model}"
+GENERATOR_ANALYSIS_MODEL: str = "{analysis_model}"
+GENERATOR_RICH_LINEAGE_ARGUMENTS: tuple[str, ...] = ("compile", "--json", "--lineage-mode", "rich")
 GENERATOR_ANALYSIS_MODE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("compile-select", ("compile", "--json", "--select", GENERATOR_SELECTED_MODEL)),
     ("compile-no-analysis", ("compile", "--json", "--no-sql-analysis")),
-    ("compile-rich-lineage", ("compile", "--json", "--lineage-mode", "rich")),
+    ("compile-rich-lineage", GENERATOR_RICH_LINEAGE_ARGUMENTS),
+    (
+        "lineage-rich-upstream",
+        ("lineage", "--json", f"{GENERATOR_ANALYSIS_MODEL}.amount", "--direction", "upstream"),
+    ),
+    (
+        "lineage-rich-downstream",
+        ("lineage", "--json", f"{GENERATOR_SELECTED_MODEL}.amount", "--direction", "downstream"),
+    ),
+    (
+        "lineage-fast-upstream",
+        ("lineage", "--json", "--mode", "fast", f"{GENERATOR_ANALYSIS_MODEL}.amount"),
+    ),
+    ("lineage-relations", ("lineage", "--json", GENERATOR_SELECTED_MODEL, "--direction", "both")),
+)
+GOLDEN_STDOUT_LABELS: frozenset[str] = frozenset(
+    label for label, _ in GENERATOR_ANALYSIS_MODE_COMMANDS if label.startswith("lineage-")
+)
+DIALECT_RICH_LINEAGE: DifferentialCommand = DifferentialCommand(
+    label="compile-rich-lineage", arguments=GENERATOR_RICH_LINEAGE_ARGUMENTS
 )
 GENERATOR_CHANNEL_ENV_VAR: str = "SQB_DIFFERENTIAL_CHANNEL"
 GENERATOR_MISSING_ENV_VAR: str = "SQB_DIFFERENTIAL_UNSET"
@@ -469,6 +495,7 @@ CONFIG_ONLY_KINDS: dict[str, str] = {
 RENDER_STAGE_CAPTURE_SUFFIX: str = "-compile_project_inputs.json"
 RENDER_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
     {
+        "native_project",
         "project_config",
         "local_config",
         "discovered_inputs",
@@ -560,7 +587,7 @@ RENDER_INDIRECT_KINDS: dict[str, str] = {
 }
 RENDER_CONFIG_ONLY_KINDS: dict[str, str] = {}
 DIAGNOSTIC_CODE_PATTERN: re.Pattern[str] = re.compile(r"[A-Z][0-9]{3}")
-RENDER_RAISED_CODES: frozenset[str] = frozenset({"C214", "C216", "K012"})
+RENDER_RAISED_CODES: frozenset[str] = frozenset({"C214", "C216", "K012", "P004", "P010", "P011"})
 RENDER_CODE_SCAN_EXCLUDED: dict[str, str] = {
     "_helpers/assembly": "semantic and metadata validation of the assembled CompiledProject (M4)",
     "_helpers/analysis": "SQL analysis of rendered SQL, after the CompileProjectInputs frontier",
@@ -600,8 +627,10 @@ RENDER_UNREACHABLE_CODES: dict[str, str] = {
 }
 ANALYSIS_STAGE_CAPTURE_SUFFIX: str = "-compiled_project.json"
 COMPILED_PROJECT_CAPTURE_TYPE: str = "sqlbuild.compiler.compile.models:CompiledProject"
+COMPILE_INPUTS_CAPTURE_TYPE: str = "sqlbuild.compiler.compile.models:CompileProjectInputs"
 ANALYSIS_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
     {
+        "native_project",
         "run_id",
         "effective_target_name",
         "effective_connection",
@@ -686,7 +715,16 @@ ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "sql_analysis",
 )
 ANALYSIS_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (
+    "crates/sqlbuild-analysis/src/semantic_checks/constants.rs",
+    "crates/sqlbuild-analysis/src/semantic_checks/_helpers/resource_sql/diagnostics.rs",
     "crates/sqlbuild-analysis/src/contracts/constants.rs",
+    "crates/sqlbuild-python/src/bindings/_helpers/compiled_project/model_loop.rs",
+)
+NATIVE_CODE_TEST_DIRECTORY: str = "tests"
+RENDER_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (
+    "crates/sqlbuild-attachments/src",
+    "crates/sqlbuild-render/src",
+    "crates/sqlbuild-python/src/bindings/_helpers/compiled_project",
 )
 NATIVE_CODE_CONSTANT_PATTERN: re.Pattern[str] = re.compile(
     r'const [A-Z0-9_]*_CODE: &str = "([A-Z][0-9]{3})";'

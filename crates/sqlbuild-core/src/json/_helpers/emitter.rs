@@ -1,9 +1,10 @@
 //! Serialize a [`JsonValue`] in the layout of one Python serializer.
 
 use crate::json::_helpers::floats::{orjson_text, python_repr};
-use crate::json::_helpers::strings::{StringEscaping, json_string};
+use crate::json::_helpers::strings::{StringEscaping, json_string, json_utf16_string};
 use crate::json::constants::{
-    MAX_NESTING_DEPTH, ORJSON_MAX_INTEGER, ORJSON_MIN_INTEGER, PYTHON_INT_MAX_STR_DIGITS,
+    ORJSON_MAX_CONTAINER_DEPTH, ORJSON_MAX_INTEGER, ORJSON_MIN_INTEGER, PYTHON_INT_MAX_STR_DIGITS,
+    STDLIB_MAX_CONTAINER_DEPTH,
 };
 use crate::json::errors::JsonEmitError;
 use crate::json::models::{JsonDialect, JsonInteger, JsonValue};
@@ -78,8 +79,23 @@ impl<'options> Layout<'options> {
         }
     }
 
+    /// Whether the serializer refuses this container at `level`; orjson skips empty lists.
+    fn too_deep(&self, value: &JsonValue, level: usize) -> bool {
+        let counted: bool = match value {
+            JsonValue::Object(_) => true,
+            JsonValue::Array(items) => !self.orjson || !items.is_empty(),
+            _ => false,
+        };
+        let limit: usize = if self.orjson {
+            ORJSON_MAX_CONTAINER_DEPTH
+        } else {
+            STDLIB_MAX_CONTAINER_DEPTH
+        };
+        counted && level >= limit
+    }
+
     fn value(&self, value: &JsonValue, level: usize) -> Result<String, JsonEmitError> {
-        if level > MAX_NESTING_DEPTH {
+        if self.too_deep(value, level) {
             return Err(JsonEmitError::NestingTooDeep);
         }
         match value {
@@ -88,6 +104,7 @@ impl<'options> Layout<'options> {
             JsonValue::Integer(number) => self.integer(number),
             JsonValue::Float(number) => self.float(*number),
             JsonValue::String(text) => Ok(json_string(text, self.escaping)),
+            JsonValue::Utf16(units) => json_utf16_string(units, self.escaping),
             JsonValue::Array(items) => {
                 let members = items
                     .iter()

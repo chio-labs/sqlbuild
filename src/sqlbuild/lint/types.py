@@ -20,6 +20,18 @@ type RuleFixStatus = Literal["applied", "refused", "unavailable"]
 
 type RelationKeys = dict[str, tuple[tuple[str, ...], ...]]
 
+type RelationKeyRow = tuple[
+    str,
+    str,
+    str,
+    str,
+    str,
+    bool,
+    list[str] | None,
+    list[tuple[str, list[str], bool]],
+    list[tuple[str, str | None]],
+]
+
 type DiagnosticIdentity = tuple[str, str, str, str]
 
 type NativeLintPreparationRequest = LintPreparationRequest

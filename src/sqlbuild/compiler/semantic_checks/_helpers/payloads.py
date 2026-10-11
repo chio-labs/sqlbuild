@@ -4,23 +4,22 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from sqlbuild.compiler.analysis_session.types import DiagnosticRow
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
-    CompiledModel,
-    CompiledProject,
     CompilerDiagnostic,
     DynamicColumnContractProof,
 )
-from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 
 
-def lineage_payload(model: CompiledModel) -> list[tuple[str, list[tuple[str, str]]]]:
+def lineage_payload(model: CompiledModelView) -> list[tuple[str, list[tuple[str, str]]]]:
     """Each output column with the `(resource, column)` pairs it reads."""
 
     return [_output_payload(output) for output in model.fast_lineage_columns or ()]
 
 
-def session_fact_models(*, project: CompiledProject, session: Any | None) -> frozenset[str]:
+def session_fact_models(*, project: CompiledProjectView, session: Any | None) -> frozenset[str]:
     """Models whose output names and lineage are the finished session's, so need no payload."""
 
     if session is None:
@@ -46,7 +45,7 @@ def _output_payload(output: CompiledLineageColumnFact) -> tuple[str, list[tuple[
     )
 
 
-def diagnostic_ids(project: CompiledProject) -> dict[CompilerDiagnostic, int]:
+def diagnostic_ids(project: CompiledProjectView) -> dict[CompilerDiagnostic, int]:
     """One id per distinct diagnostic value, as Python's value-keyed dicts and sets see them."""
 
     ids: dict[CompilerDiagnostic, int] = {}
@@ -59,18 +58,18 @@ def diagnostic_ids(project: CompiledProject) -> dict[CompilerDiagnostic, int]:
 
 
 def raw_binding_ids(
-    binding_results: dict[str, tuple[SqlBindingDiagnostic, ...]],
-) -> dict[SqlBindingDiagnostic, int]:
+    binding_results: dict[str, list[DiagnosticRow]],
+) -> dict[DiagnosticRow, int]:
     """One id per distinct raw binding row value."""
 
-    ids: dict[SqlBindingDiagnostic, int] = {}
+    ids: dict[DiagnosticRow, int] = {}
     for rows in binding_results.values():
         for row in rows:
             _ = ids.setdefault(row, len(ids))
     return ids
 
 
-def has_blocking_binding(project: CompiledProject) -> bool:
+def has_blocking_binding(project: CompiledProjectView) -> bool:
     """Whether any model owns a binding error, without which type recovery changes nothing."""
 
     for model in project.models:

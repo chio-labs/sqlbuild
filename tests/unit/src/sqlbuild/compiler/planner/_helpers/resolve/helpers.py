@@ -11,11 +11,11 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner.models import ModelPlanContext
 
 
-def build_cursor_intrinsic_model(*, config_values: dict[str, object]) -> CompiledModel:
+def build_cursor_intrinsic_model(*, config_values: dict[str, object]) -> CompiledModelView:
     """Build a cursor incremental model that projects both cursor intrinsics."""
 
     return CompiledModel(
@@ -69,7 +69,7 @@ class BracketTableFunctionCallAdapter(DuckDbAdapter):
 
 def build_cursor_models(
     *, model_cursor_types: tuple[tuple[str, str | None], ...]
-) -> tuple[CompiledModel, ...]:
+) -> tuple[CompiledModelView, ...]:
     """Build models named by `model_cursor_types`; a None type builds a non-cursor table."""
 
     return tuple(

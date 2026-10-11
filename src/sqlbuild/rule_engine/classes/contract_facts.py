@@ -1,6 +1,6 @@
 """Contract facts for custom rules."""
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.constants import CONTRACT_ENFORCED
 from sqlbuild.rule_engine.models import Model
 
@@ -8,8 +8,8 @@ from sqlbuild.rule_engine.models import Model
 class ContractFacts:
     """Compiler-resolved model contract facts."""
 
-    def __init__(self, *, project: CompiledProject) -> None:
-        self._models: dict[object, CompiledModel] = {
+    def __init__(self, *, project: CompiledProjectView) -> None:
+        self._models: dict[object, CompiledModelView] = {
             model.relative_path: model for model in project.models
         }
 

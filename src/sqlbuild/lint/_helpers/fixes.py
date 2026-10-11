@@ -10,8 +10,7 @@ from pathlib import Path
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
+from sqlbuild.compiler.compile.types import CompiledProjectView, TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.lint._helpers.native_format import with_newline_style
@@ -61,7 +60,7 @@ class _FixSession:
     reports: list[RuleFixResult] = field(default_factory=list)
     blocked: dict[Path, str] = field(default_factory=dict)
     skipped: dict[Path, str] = field(default_factory=dict)
-    baseline: CompiledProject | None = None
+    baseline: CompiledProjectView | None = None
     baseline_facts: CompileFacts | None = None
 
     def run(self) -> tuple[dict[Path, str], tuple[RuleFixResult, ...], list[LintViolation]]:
@@ -234,7 +233,7 @@ class _FixSession:
                 self.baseline_facts = compile_facts(
                     project=self.baseline, project_dir=self.project_dir
                 )
-            compiled: CompiledProject = compile_project(
+            compiled: CompiledProjectView = compile_project(
                 discovered_inputs=_updated_inputs(inputs=self.inputs, files=files),
                 adapter=self.adapter,
             )

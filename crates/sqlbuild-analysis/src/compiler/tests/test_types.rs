@@ -133,12 +133,6 @@ pub(crate) struct HelperReferenceTestCase {
     pub(crate) expected_absent_fragments: &'static [&'static str],
 }
 
-pub(crate) struct ScenarioExtractionTestCase {
-    pub(crate) description: &'static str,
-    pub(crate) sql: &'static str,
-    pub(crate) expected_json: &'static str,
-}
-
 pub(crate) struct UnresolvedReaderReferenceTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql_analysis_enabled: bool,

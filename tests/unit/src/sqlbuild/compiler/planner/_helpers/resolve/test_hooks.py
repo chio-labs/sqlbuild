@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner._helpers.resolve.resolve import resolve_model_hook_entries
 from sqlbuild.compiler.planner.models import ModelPlanContext
@@ -64,7 +64,7 @@ _CONTEXT: ModelPlanContext = replace(
 def test_given_sql_hook_references_when_planning_then_they_resolve_like_model_sql(
     test_case: HookSqlResolutionTestCase,
 ) -> None:
-    model: CompiledModel = build_cursor_intrinsic_model(
+    model: CompiledModelView = build_cursor_intrinsic_model(
         config_values={"pre_hooks": test_case.pre_hooks, "post_hooks": test_case.post_hooks}
     )
 

@@ -1,17 +1,16 @@
 from dataclasses import dataclass, field
 
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.planner.models import ModelPlanEntry, PlanOutput
 
 
 @dataclass(frozen=True)
 class ManifestTopLevelTestCase:
     description: str
-    project: CompiledProject
+    project: CompiledProjectView
     plan_output: PlanOutput
     project_name: str
     adapter_type: str
@@ -28,7 +27,7 @@ class ManifestTopLevelTestCase:
 @dataclass(frozen=True)
 class ManifestModelNodeTestCase:
     description: str
-    model: CompiledModel
+    model: CompiledModelView
     plan_entries: tuple[ModelPlanEntry, ...]
     project_name: str
     expected_unique_id: str

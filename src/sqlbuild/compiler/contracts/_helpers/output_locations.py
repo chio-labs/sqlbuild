@@ -5,7 +5,8 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledModel, RelatedLocation
+from sqlbuild.compiler.compile.models import RelatedLocation
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.main._model_output_column_locations import (
     extract_model_output_column_locations,
 )
@@ -13,7 +14,7 @@ from sqlbuild.spec.contracts.models import SourceLocation
 
 
 def output_related_locations(
-    *, model: CompiledModel, column_name: str, message: str
+    *, model: CompiledModelView, column_name: str, message: str
 ) -> tuple[RelatedLocation, ...]:
     """The output column's location as a related location, when the model has one."""
 
@@ -23,7 +24,7 @@ def output_related_locations(
     return (RelatedLocation(label="output", location=location, message=message),)
 
 
-def output_column_location(*, model: CompiledModel, column_name: str) -> SourceLocation | None:
+def output_column_location(*, model: CompiledModelView, column_name: str) -> SourceLocation | None:
     """Where the model's SQL produces one output column."""
 
     location: SourceLocation | None = model.output_column_locations.get(column_name)

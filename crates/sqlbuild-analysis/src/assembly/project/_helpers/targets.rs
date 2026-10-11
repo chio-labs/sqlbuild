@@ -114,7 +114,7 @@ pub(crate) fn seed_target(
 }
 
 /// `validate_preserved_logical_namespace` for the resource Python names `resource_label`.
-fn preserved_namespace(
+pub(crate) fn preserved_namespace(
     resource_label: &str,
     target: Option<&TargetNamespace>,
     logical_database: Option<&String>,

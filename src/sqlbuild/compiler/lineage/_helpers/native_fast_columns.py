@@ -10,10 +10,12 @@ from sqlbuild.compiler.compile.models import (
     CompactLineageFacts,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModel,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.lineage.constants import (
     NATIVE_LINEAGE_BUILT,
     NATIVE_LINEAGE_UNKNOWN_DIALECT,
@@ -41,7 +43,7 @@ type _NativeOutcome = tuple[str, list[_NativeColumn], bool, str | None]
 
 def build_native_fast_project_column_lineage(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str | None,
     model_names: frozenset[str] | None,
 ) -> ProjectColumnLineage | None:
@@ -49,7 +51,7 @@ def build_native_fast_project_column_lineage(
 
     if not project.settings.sql_analysis:
         return None
-    models: tuple[CompiledModel, ...] = tuple(
+    models: tuple[CompiledModelView, ...] = tuple(
         model for model in project.models if model_names is None or model.name in model_names
     )
     requests: list[tuple[bool, str, list[str]]] = []
@@ -108,14 +110,14 @@ def build_native_fast_project_column_lineage(
     )
 
 
-def _needs_star_expansion(model: CompiledModel) -> bool:
+def _needs_star_expansion(model: CompiledModelView) -> bool:
     return model.fast_lineage_has_star and not model.fast_lineage_star_resolved
 
 
-def _native_request(model: CompiledModel) -> tuple[bool, str, list[str]] | None:
+def _native_request(model: CompiledModelView) -> tuple[bool, str, list[str]] | None:
     columns: Sequence[CompiledLineageColumnFact] | None = model.fast_lineage_columns
     if columns is None:
-        return (False, model.query_sql, [column.name for column in model.inferred_columns or ()])
+        return (False, model.query_sql, [name for name, _, _ in model.inferred_rows or ()])
     if not _needs_star_expansion(model):
         return None
     if isinstance(columns, CompactLineageFacts):
@@ -123,12 +125,11 @@ def _native_request(model: CompiledModel) -> tuple[bool, str, list[str]] | None:
     return (True, model.query_sql, [column.output_column for column in columns])
 
 
-def _schema_resources(project: CompiledProject) -> list[tuple[str, str, list[str]]]:
+def _schema_resources(project: CompiledProjectView) -> list[tuple[str, str, list[str]]]:
     resources: list[tuple[str, str, list[str]]] = []
     for model in project.models:
-        columns: list[str] = [column.name for column in model.inferred_columns or ()]
-        if model.schema_entry is not None:
-            columns.extend(column.name for column in model.schema_entry.columns)
+        columns: list[str] = [name for name, _, _ in model.inferred_rows or ()]
+        columns.extend(name for name, _ in model.schema_column_rows or ())
         resources.append((CompiledResourceType.MODEL.value, model.name, columns))
     for source in project.sources:
         resources.append(

@@ -9,12 +9,12 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
 )
 from sqlbuild.compiler.planner._helpers.output.audit_scheduling import (
     reads_outside_target_lineage,
@@ -203,7 +203,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 def test_given_audit_refs_when_resolving_attachment_then_returns_expected(
     test_case: ResolveAttachmentTestCase,
 ) -> None:
-    audit: CompiledAudit = build_scheduling_audit(
+    audit: CompiledAuditView = build_scheduling_audit(
         references=test_case.references,
         attached_target_kind=test_case.attached_target_kind,
         attached_target_name=test_case.attached_target_name,
@@ -241,7 +241,7 @@ def test_given_audit_refs_when_resolving_attachment_then_returns_expected(
 def test_given_invalid_attachment_when_resolving_then_raises(
     test_case: ResolveAttachmentErrorTestCase,
 ) -> None:
-    audit: CompiledAudit = build_scheduling_audit(
+    audit: CompiledAuditView = build_scheduling_audit(
         references=test_case.references,
         attached_target_kind=test_case.attached_target_kind,
         attached_target_name=test_case.attached_target_name,

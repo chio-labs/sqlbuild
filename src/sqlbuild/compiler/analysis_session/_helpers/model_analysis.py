@@ -29,7 +29,7 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
     """Each model's analysis by name and the finished session; a native internal failure raises."""
 
     if not request.model_inputs:
-        return NativeModelAnalyses(analyses={}, session=None)
+        return NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None)
     catalog: Any = cast(Any, request.inference_profile.binding_catalog)
     python: PythonModelAnalysis = PythonModelAnalysis(
         model_inputs=request.model_inputs,
@@ -47,12 +47,7 @@ def native_model_analyses(*, request: NativeModelAnalysisRequest) -> NativeModel
         None if adapter_rules else _analysis_store(request),
         (adapter_rules, InferredNullability) if adapter_rules else None,
     )
-    return NativeModelAnalyses(
-        analyses=NativeModelAnalysis(request=request, python=python, catalog=catalog).analyses(
-            session
-        ),
-        session=session,
-    )
+    return NativeModelAnalysis(request=request, python=python, catalog=catalog).analyses(session)
 
 
 def _analysis_store(request: NativeModelAnalysisRequest) -> tuple[str, str] | None:

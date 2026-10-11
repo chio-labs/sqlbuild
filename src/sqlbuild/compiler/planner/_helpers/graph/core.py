@@ -6,18 +6,17 @@ import heapq
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
     CompiledResourceType,
     SqlTestMode,
 )
 from sqlbuild.compiler.graph.main._attached_audit_gate_edges import attached_audit_gate_edges
-from sqlbuild.compiler.graph.main._build_lineage_upstream_deps import build_lineage_upstream_deps
 from sqlbuild.compiler.graph.main._hook_read_edges import hook_read_edges
+from sqlbuild.compiler.graph.main._native_graph_key import native_graph_key
 from sqlbuild.compiler.graph.main.invert_edges import invert_edges
-from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -28,7 +27,7 @@ def _key_sort_key(key: CompiledObjectKey) -> tuple[str, str]:
 
 
 def build_execution_upstream_deps(
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]:
     """Return execution-order edges from lineage and woven SQL test nodes."""
 
@@ -64,7 +63,7 @@ def build_execution_upstream_deps(
 
 
 def build_execution_edge_origins(
-    project: CompiledProject,
+    project: CompiledProjectView,
 ) -> dict[tuple[CompiledObjectKey, CompiledObjectKey], str]:
     """Return human-readable origins for execution edges injected beyond pure lineage."""
 
@@ -75,12 +74,9 @@ def build_execution_edge_origins(
             origins[(target_key, test.key)] = (
                 f"SQL test '{test.name}' runs before '{target_key.name}'"
             )
-    lineage_upstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = (
-        build_lineage_upstream_deps(project)
-    )
     edge: AttachedAuditGateEdge
     for edge in attached_audit_gate_edges(project=project):
-        if edge.read in lineage_upstream.get(edge.gated, ()):
+        if _is_lineage_edge(project=project, gated=edge.gated, read=edge.read):
             continue
         origins.setdefault(
             (edge.gated, edge.read),
@@ -88,13 +84,19 @@ def build_execution_edge_origins(
         )
     hook_edge: HookReadEdge
     for hook_edge in hook_read_edges(project=project):
-        if hook_edge.read in lineage_upstream.get(hook_edge.gated, ()):
+        if _is_lineage_edge(project=project, gated=hook_edge.gated, read=hook_edge.read):
             continue
         origins.setdefault(
             (hook_edge.gated, hook_edge.read),
             f"{hook_edge.label} on '{hook_edge.gated.name}' reads '{hook_edge.read.name}'",
         )
     return origins
+
+
+def _is_lineage_edge(
+    *, project: CompiledProjectView, gated: CompiledObjectKey, read: CompiledObjectKey
+) -> bool:
+    return native_graph_key(read) in project.lineage_graph.upstream(native_graph_key(gated))
 
 
 def _function_scope_deps_for_test(*, test: CompiledSqlTest) -> tuple[CompiledObjectKey, ...]:
@@ -238,24 +240,3 @@ def expand_downstream(
     """Return all transitive downstream keys reachable from the given key."""
 
     return transitive_closure(start=key, edges=downstream)
-
-
-def find_path_keys(
-    *,
-    start: CompiledObjectKey,
-    end: CompiledObjectKey,
-    downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]:
-    """Return all keys on directed paths from start to end."""
-
-    on_path: frozenset[CompiledObjectKey] | None = path_nodes(
-        start=start,
-        end=end,
-        downstream=downstream,
-    )
-    if on_path is None:
-        raise PlannerInputError(
-            f"'{end.resource_type}:{end.name}' is not downstream of "
-            f"'{start.resource_type}:{start.name}'"
-        )
-    return on_path

@@ -10,6 +10,7 @@ use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 use sqlbuild_analysis::assembly::project::errors::AssemblyError;
 use sqlbuild_analysis::assembly::project::main::assemble_project_resources::assemble_project_resources;
 use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
+use sqlbuild_analysis::assembly::project::main::environment_template_names::environment_template_names as template_names;
 use sqlbuild_analysis::assembly::project::main::sql_syntax_error::sql_syntax_error as check_syntax_error;
 use sqlbuild_analysis::assembly::project::models::{
     AuditFacts, FunctionFacts, InputRead, ModelFacts, Namespace, OpaqueRender, OpaqueVariable,
@@ -145,7 +146,17 @@ fn sql_syntax_error(
     } else {
         SyntaxMode::Validate
     };
-    py.compiler_detach(|| Ok(check_syntax_error(&check, &dialect, mode)))
+    syntax_error_message(py, &check, &dialect, mode)
+}
+
+/// Python's syntax error message for one check, raising what Python's validation raises.
+pub(crate) fn syntax_error_message(
+    py: Python<'_>,
+    check: &SyntaxCheck,
+    dialect: &str,
+    mode: SyntaxMode,
+) -> PyResult<Option<String>> {
+    py.compiler_detach(|| Ok(check_syntax_error(check, dialect, mode)))
         .map_err(compiler_error)?
         .map_err(syntax_value_error)
 }
@@ -171,7 +182,16 @@ fn check_native_sql_syntax(
         .into_iter()
         .map(|(sql, placeholders)| SyntaxCheck { sql, placeholders })
         .collect();
-    py.compiler_detach(|| check_sql_syntax(&dialect, &checks))
+    syntax_valid(py, &dialect, &checks)
+}
+
+/// Whether every check parses, raising what Python's validation raises.
+pub(crate) fn syntax_valid(
+    py: Python<'_>,
+    dialect: &str,
+    checks: &[SyntaxCheck],
+) -> PyResult<bool> {
+    py.compiler_detach(|| check_sql_syntax(dialect, checks))
         .map_err(|reason| compiler_error(native_failure(SYNTAX_CHECK_CONTEXT, &reason)))?
         .map_err(syntax_value_error)
 }
@@ -371,9 +391,16 @@ fn namespace_row(namespace: Namespace) -> NamespaceRow {
     )
 }
 
+/// The distinct `ENV:` names target templates read, in first-seen order.
+#[pyfunction]
+fn environment_template_names(values: Vec<Option<String>>) -> Vec<String> {
+    template_names(&values)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(assemble_project_resource_facts, module)?)?;
     module.add_function(wrap_pyfunction!(check_native_sql_syntax, module)?)?;
     module.add_function(wrap_pyfunction!(sql_syntax_error, module)?)?;
+    module.add_function(wrap_pyfunction!(environment_template_names, module)?)?;
     Ok(())
 }

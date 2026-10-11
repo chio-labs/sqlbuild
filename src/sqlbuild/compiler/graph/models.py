@@ -10,6 +10,17 @@ from sqlbuild.compiler.graph.types import HookReadType
 
 
 @dataclass(frozen=True)
+class LineageGraphViews:
+    """A native project graph's lineage edges and selector indexes as Python dicts."""
+
+    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
+    tag_index: dict[str, frozenset[CompiledObjectKey]]
+    path_index: dict[CompiledObjectKey, str]
+    all_keys: dict[str, CompiledObjectKey]
+
+
+@dataclass(frozen=True)
 class AttachedAuditGateEdge:
     """One ordering edge: the gated node waits for a resource its attached audit reads."""
 

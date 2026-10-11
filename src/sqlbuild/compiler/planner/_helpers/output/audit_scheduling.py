@@ -7,11 +7,11 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
     CompiledResourceType,
 )
 from sqlbuild.compiler.planner._helpers.graph.core import expand_downstream, expand_upstream
@@ -28,7 +28,7 @@ _ATTACHMENT_KINDS: dict[AttachedAuditTargetKind, AuditAttachmentKind] = {
 
 def resolve_attachment_kind(
     *,
-    audit: CompiledAudit,
+    audit: CompiledAuditView,
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> tuple[AuditAttachmentKind, str | None]:
     """Resolve audit attachment kind and attached target name; attached audits gate their target."""
@@ -46,7 +46,7 @@ def resolve_attachment_kind(
 
 def reads_outside_target_lineage(
     *,
-    audit: CompiledAudit,
+    audit: CompiledAuditView,
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> bool:
     """Return whether an attached model audit reads anything besides its target and upstream."""
@@ -84,7 +84,7 @@ def resolve_effective_run_scope(
 
 def _infer_singular_attachment(
     *,
-    audit: CompiledAudit,
+    audit: CompiledAuditView,
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
 ) -> tuple[AuditAttachmentKind, str | None]:
     """Infer attachment for a singular audit from its refs and graph structure."""

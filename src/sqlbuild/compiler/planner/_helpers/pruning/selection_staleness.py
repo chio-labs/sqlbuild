@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.pruning.selection_classifier import (
     classify_selection_staleness_warnings,
@@ -201,7 +201,7 @@ def _model_own_identity_changed(
         model_changes_complete or selected_change.change_kind in _OWN_CHANGE_KINDS
     ):
         return selected_change.change_kind in _OWN_CHANGE_KINDS
-    model: CompiledModel | None = original_scope.models_by_name.get(model_name)
+    model: CompiledModelView | None = original_scope.models_by_name.get(model_name)
     if model is None:
         return False
     change: ChangeDetectionResult = detect_model_changes(

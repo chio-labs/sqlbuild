@@ -7,6 +7,8 @@ use sqlbuild_analysis::assembly::analysis_session::main::attach_analysis_cache::
 use sqlbuild_analysis::assembly::analysis_session::main::expression_shapes::expression_shapes;
 use sqlbuild_analysis::assembly::analysis_session::main::finish_analysis_session::finish_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::main::finished_fact_models::finished_fact_models;
+use sqlbuild_analysis::assembly::analysis_session::main::model_reference_facts::model_reference_facts;
+use sqlbuild_analysis::assembly::analysis_session::main::names_set_operation::names_set_operation;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
@@ -15,12 +17,13 @@ use sqlbuild_analysis::assembly::analysis_session::main::start_analysis_session:
 use sqlbuild_analysis::assembly::analysis_session::main::take_analysis_cache::take_analysis_cache;
 use sqlbuild_analysis::assembly::analysis_session::models::{
     AnalysisCacheStats, AnalysisSession, ColumnFact, DynamicFamily, ExpressionShape,
-    ExpressionShapeRequest, FinishedSession, LineageFacts, LineageRow, ModelOutcome,
-    ModelReference, ModelRequest, PivotBatchRequest, PivotModel, PivotOutcome, PivotTables,
-    SessionOutcome, SessionRequest, SessionStep,
+    ExpressionShapeRequest, FinishedSession, LineageFacts, LineageRow, ModelOutcome, ModelRequest,
+    PivotBatchRequest, PivotModel, PivotOutcome, PivotTables, SessionOutcome, SessionRequest,
+    SessionStep,
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::semantic_validation::types::DiagnosticRow;
+use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
 
 use sqlbuild_cache::store::models::NativeStore;
 use sqlbuild_core::constants::PANIC_MESSAGE;
@@ -48,13 +51,9 @@ type ModelRow = (
     String,
     String,
     Pairs,
-    Vec<(String, bool)>,
-    Vec<(String, String, String)>,
-    Vec<String>,
-    bool,
+    Vec<(String, String)>,
     bool,
     Option<(String, String)>,
-    String,
     Vec<FamilyRow>,
 );
 /// The profile settings, relation shapes and models one session analyses.
@@ -109,14 +108,16 @@ type PivotRequestRow = (
 type ContractRow = (&'static str, Option<ProofRow>);
 /// `(hits, misses, stored, why the store was not read or saved)`.
 type CacheStatsRow = (usize, usize, usize, Option<String>);
-/// `(models, catalog schema additions, analysis-shape names, dynamic pivot proofs)`.
-type FinishRow = (Vec<OutcomeRow>, Shapes, Vec<String>, Vec<ContractRow>);
+/// `(catalog schema additions, analysis-shape names, whether each model's analysis succeeded)`.
+type FinishRow = (Shapes, Vec<String>, Vec<bool>);
 
 /// One compile's native model analysis; an internal failure raises `NativeCompilerError`.
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct NativeModelAnalysisSession {
     inner: Option<AnalysisSession>,
     finished: Option<FinishedSession>,
+    /// Each requested model's outcome and dynamic pivot proof, in request order, once finished.
+    outcomes: Vec<(ModelOutcome, PivotOutcome)>,
     sharing: (usize, usize),
     cache_path: Option<PathBuf>,
     cache_stats: Option<CacheStatsRow>,
@@ -133,6 +134,13 @@ impl NativeModelAnalysisSession {
     /// The finished session later compile stages read, once `finish` has succeeded.
     pub(crate) fn finished_session(&self) -> Option<&FinishedSession> {
         self.finished.as_ref()
+    }
+
+    /// The finished outcome and dynamic pivot proof of the model requested at `index`.
+    pub(crate) fn outcome(&self, index: usize) -> PyResult<&(ModelOutcome, PivotOutcome)> {
+        self.outcomes
+            .get(index)
+            .ok_or_else(|| internal_error("the session returned no analysis for a model"))
     }
 
     /// The running session, or `NativeCompilerError` once it has failed or finished.
@@ -191,7 +199,32 @@ impl NativeModelAnalysisSession {
                 .map(|error| error.to_string());
             self.cache_stats = Some((stats.hits, stats.misses, stats.stored, saved));
         }
-        Ok(finish_row(outcome))
+        let SessionOutcome {
+            models,
+            schema_additions,
+            analysis_names,
+            dynamic_contracts,
+        } = outcome;
+        let succeeded: Vec<bool> = models
+            .iter()
+            .map(|model| model.analysis.analysis_succeeded)
+            .collect();
+        self.outcomes = models.into_iter().zip(dynamic_contracts).collect();
+        Ok((schema_additions, analysis_names, succeeded))
+    }
+
+    /// Each requested model's raw binding diagnostic rows, in request order.
+    fn binding_rows(&self) -> Vec<Vec<DiagnosticRow>> {
+        self.outcomes
+            .iter()
+            .map(|(outcome, _)| outcome.analysis.binding_diagnostics.clone())
+            .collect()
+    }
+
+    /// The model at `index`'s outcome and proof rows, for hand-built model inputs only.
+    fn outcome_rows(&self, index: usize) -> PyResult<(OutcomeRow, ContractRow)> {
+        let (outcome, contract) = self.outcome(index)?;
+        Ok((outcome_row(outcome.clone()), contract_row(contract.clone())))
     }
 
     /// The analysis cache's `(hits, misses, stored, failure)`; None without a cache.
@@ -256,6 +289,7 @@ fn start_model_analysis_session(
     Ok(NativeModelAnalysisSession {
         inner: Some(session),
         finished: None,
+        outcomes: Vec::new(),
         sharing: (0, 0),
         cache_path,
         cache_stats,
@@ -335,28 +369,25 @@ fn model_request(row: ModelRow) -> ModelRequest {
         name,
         query_sql,
         placeholders,
-        references,
-        lineage_references,
-        required_names,
+        reference_rows,
         recover_cte_facts,
-        has_set_operation,
         snapshot_columns,
-        pivot_sql,
         dynamic_families,
     ) = row;
+    let has_set_operation = names_set_operation(&query_sql);
+    let facts = model_reference_facts(&reference_rows);
+    let pivot_sql = if placeholders.is_empty() {
+        query_sql.clone()
+    } else {
+        placeholder_defaults(&query_sql, &placeholders)
+    };
     ModelRequest {
         name,
         query_sql,
         placeholders,
-        references: references
-            .into_iter()
-            .map(|(analysis_name, model_ref)| ModelReference {
-                analysis_name,
-                model_ref,
-            })
-            .collect(),
-        lineage_references,
-        required_names,
+        references: facts.references,
+        lineage_references: facts.lineage_references,
+        required_names: facts.required_names,
         recover_cte_facts,
         has_set_operation,
         snapshot_columns,
@@ -384,19 +415,6 @@ fn lineage_items(rows: Vec<LineageRow>) -> Vec<LineageItem> {
             )
         })
         .collect()
-}
-
-fn finish_row(outcome: SessionOutcome) -> FinishRow {
-    (
-        outcome.models.into_iter().map(outcome_row).collect(),
-        outcome.schema_additions,
-        outcome.analysis_names,
-        outcome
-            .dynamic_contracts
-            .into_iter()
-            .map(contract_row)
-            .collect(),
-    )
 }
 
 fn families_by_table(rows: Vec<(String, Vec<FamilyRow>)>) -> Vec<(String, Vec<DynamicFamily>)> {

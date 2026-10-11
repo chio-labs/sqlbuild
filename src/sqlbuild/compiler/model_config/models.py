@@ -5,17 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import sqlbuild._native as _native
-from sqlbuild.spec.contracts.models import SchemaAuditInstance, SchemaColumn
-
-
-@dataclass(frozen=True, slots=True)
-class NativeHeaderMetadata:
-    """One model's header columns and audits, or the error parsing each raises."""
-
-    columns: tuple[SchemaColumn, ...]
-    audits: tuple[SchemaAuditInstance, ...]
-    columns_error: _native.NativeConfigError | None = None
-    audits_error: _native.NativeConfigError | None = None
 
 
 @dataclass(frozen=True, slots=True)

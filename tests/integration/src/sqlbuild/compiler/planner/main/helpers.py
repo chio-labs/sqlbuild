@@ -26,7 +26,17 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     FunctionArgument,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSeedView,
+    CompiledSourceView,
+    FunctionLanguage,
+)
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
@@ -73,10 +83,10 @@ from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
 
 def build_project_from_test_case(
     test_case: BuildExecutionPlanTestCase,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a CompiledProject from an integration test case."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     target_schema: str
     for model_name, target_schema in test_case.model_locations.items():
@@ -110,7 +120,7 @@ def build_project_from_test_case(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name, target_schema in test_case.seed_locations.items():
         seed_file_path: Path = _ensure_test_seed_file(seed_name)
@@ -143,7 +153,7 @@ def build_project_from_test_case(
             )
         )
 
-    functions: list[CompiledFunction] = []
+    functions: list[CompiledFunctionView] = []
     function_name: str
     for function_name, target_schema in test_case.function_locations.items():
         body_sql: str = test_case.function_bodies.get(function_name, "value = 1")
@@ -204,7 +214,7 @@ def _settings_bool(settings: dict[str, object], key: str, *, default: bool) -> b
 
 def build_project_from_source_cursor_input_test_case(
     test_case: SourceCursorInputPlanErrorTestCase,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a project with one incremental model reading one source."""
 
     source_entry: SourceEntry = SourceEntry(
@@ -212,7 +222,7 @@ def build_project_from_source_cursor_input_test_case(
         schema=test_case.source_schema,
         table=test_case.source_table,
     )
-    source: CompiledSource = CompiledSource(
+    source: CompiledSourceView = CompiledSource(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.SOURCE,
             name=test_case.source_name,
@@ -227,7 +237,7 @@ def build_project_from_source_cursor_input_test_case(
             source_entries=(source_entry,),
         ),
     )
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(
             resource_type=CompiledResourceType.MODEL,
             name=test_case.model_name,
@@ -267,7 +277,7 @@ def build_project_from_source_cursor_input_test_case(
     )
 
 
-def build_future_cursor_project() -> CompiledProject:
+def build_future_cursor_project() -> CompiledProjectView:
     """Build one timestamp incremental source project for future safety tests."""
 
     case: SourceCursorInputPlanErrorTestCase = SourceCursorInputPlanErrorTestCase(
@@ -281,13 +291,13 @@ def build_future_cursor_project() -> CompiledProject:
         cursor_input_column="occurred_at",
         expected_error_fragment="",
     )
-    project: CompiledProject = build_project_from_source_cursor_input_test_case(case)
-    model: CompiledModel = project.models[0]
-    return replace(
-        project,
+    project: CompiledProjectView = build_project_from_source_cursor_input_test_case(case)
+    model: CompiledModelView = project.models[0]
+    return project_with(
+        project=project,
         models=(
             replace(
-                model,
+                compiled_model_record(model),
                 config=replace(
                     model.config,
                     values={
@@ -314,13 +324,13 @@ def write_previous_function_fingerprints(
         test_case,
         function_bodies={**test_case.function_bodies, **test_case.previous_function_bodies},
     )
-    previous_project: CompiledProject = build_project_from_test_case(previous_case)
-    function_map: dict[str, CompiledFunction] = {
+    previous_project: CompiledProjectView = build_project_from_test_case(previous_case)
+    function_map: dict[str, CompiledFunctionView] = {
         function.name: function for function in previous_project.functions
     }
     function_name: str
     for function_name in test_case.previous_function_bodies:
-        function: CompiledFunction = function_map[function_name]
+        function: CompiledFunctionView = function_map[function_name]
         fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
         write_fingerprint(
             connection=connection,
@@ -346,10 +356,10 @@ def write_previous_function_fingerprints(
 
 def build_project_from_format_test_case(
     test_case: FormatPlanIntegrationTestCase,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a CompiledProject from a format integration test case."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     target_schema: str
     for model_name, target_schema in test_case.model_locations.items():
@@ -379,7 +389,7 @@ def build_project_from_format_test_case(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name, target_schema in test_case.seed_locations.items():
         seed_file_path: Path = _ensure_test_seed_file(seed_name)

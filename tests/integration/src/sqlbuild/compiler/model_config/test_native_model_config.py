@@ -8,11 +8,13 @@ from pathlib import Path
 import pytest
 
 from tests.integration.src.sqlbuild.compiler.model_config._test_types import (
+    ColumnMetadataExpansionTestCase,
     HeaderMetadataParityTestCase,
     ModelConfigTierTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
     HeaderMetadataParity,
+    column_metadata_outcome,
     generated_header_metadata,
     header_metadata_parity,
     model_config_engine_outcome,
@@ -28,22 +30,65 @@ from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
             count=4000,
             expected_minimum_parsed=400,
             expected_minimum_rejected=2000,
+            expected_maximum_later_validated=60,
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_header_metadata_when_parsing_then_native_matches_yaml_schema_parsers(
-    test_case: HeaderMetadataParityTestCase,
+def test_given_generated_header_metadata_when_attaching_then_model_loop_matches_yaml_parsers(
+    test_case: HeaderMetadataParityTestCase, tmp_path: Path
 ) -> None:
     parity: HeaderMetadataParity = header_metadata_parity(
-        headers=generated_header_metadata(rng=random.Random(test_case.seed), count=test_case.count)
+        project_dir=tmp_path,
+        headers=generated_header_metadata(rng=random.Random(test_case.seed), count=test_case.count),
     )
 
     assert (
         parity.mismatches,
         parity.parsed >= test_case.expected_minimum_parsed,
         parity.rejected >= test_case.expected_minimum_rejected,
-    ) == ([], True, True), (parity.parsed, parity.rejected)
+        parity.later_validated <= test_case.expected_maximum_later_validated,
+    ) == ([], True, True, True), (parity.parsed, parity.rejected, parity.later_validated)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ColumnMetadataExpansionTestCase(
+            description="a project variable template expands in a column type",
+            header_column="amount (type '${column_type}')",
+            expected_type="BIGINT",
+            expected_error=None,
+        ),
+        ColumnMetadataExpansionTestCase(
+            description="an unknown template variable in a column type is rejected",
+            header_column="amount (type '${target.schema}')",
+            expected_type=None,
+            expected_error="model config references unknown variable 'target.schema'",
+        ),
+        ColumnMetadataExpansionTestCase(
+            description="a macro call in a column description is rejected",
+            header_column="amount (description '@cents(amount)')",
+            expected_type=None,
+            expected_error="model config field 'columns.amount.description' does not allow macros",
+        ),
+        ColumnMetadataExpansionTestCase(
+            description="a macro marker after a space in a column type is rejected",
+            header_column="amount (type '@cents\u2003(amount)')",
+            expected_type=None,
+            expected_error="model config field 'columns.amount.type' does not allow macros",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_template_or_macro_column_metadata_when_attaching_then_loop_expands_or_rejects(
+    test_case: ColumnMetadataExpansionTestCase, tmp_path: Path
+) -> None:
+    column_type, error = column_metadata_outcome(
+        project_dir=tmp_path, header_column=test_case.header_column
+    )
+
+    assert (column_type, error) == (test_case.expected_type, test_case.expected_error)
 
 
 @pytest.mark.parametrize(
@@ -53,16 +98,14 @@ def test_given_generated_header_metadata_when_parsing_then_native_matches_yaml_s
             description="shipped native stages",
             engine="native",
             expected_native_calls={
-                "parse_model_header_metadata": 2,
-                "expand_config_templates": 1,
+                "expand_config_templates": 0,
             },
         ),
         ModelConfigTierTestCase(
             description="native preview",
             engine="native-preview",
             expected_native_calls={
-                "parse_model_header_metadata": 2,
-                "expand_config_templates": 1,
+                "expand_config_templates": 0,
             },
         ),
     ],

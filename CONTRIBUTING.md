@@ -22,6 +22,46 @@ uv sync --python 3.12 --all-extras
 
 ## Checks
 
+### Native development loop
+
+After installing dependencies, rebuild the Python extension after Rust edits with:
+
+```bash
+make dev-native
+uv run --no-sync pytest tests/integration/src/sqlbuild/compiler/compiled_project/test_native_resource_diagnostics.py -n auto --dist loadfile
+```
+
+Choose the test file covering your change. `dev-native` builds the extension in place with
+Maturin's development profile and skips wheel installation and dependency resolution. Use
+`uv run --no-sync` for subsequent focused checks so the package manager does not replace that
+extension with a release build. Python-only source edits need no native rebuild.
+
+For a change confined to one Rust crate, run its focused tests before rebuilding the extension:
+
+```bash
+cargo test -p sqlbuild-sqltext given_model_files_when_matching_headers_then_offsets_follow_the_python_pattern
+```
+
+Keep the toolchain, `CARGO_TARGET_DIR`, profile and `RUSTFLAGS` consistent between iterations.
+Changing them can invalidate compiled artifacts. Coordinate builds that share a target directory;
+do not delete another task's artifacts or change global compiler-cache settings. The first build
+for a new profile is a setup cost, not an incremental-build measurement.
+
+The development profile keeps workspace crates unoptimised with line-table debug information;
+dependencies use light optimisation without debug information. This trades development runtime
+speed for faster changes to our code while avoiding fully unoptimised dependency execution.
+
+Development builds are for correctness iteration. Before measuring compiler performance, restore
+the production profile and run measurements without concurrent builds:
+
+```bash
+uv run --no-sync maturin develop --release --skip-install
+```
+
+Do not compare development-profile timings with release benchmarks. Dependency or packaging
+changes still require `uv sync --all-extras`; `--skip-install` does not refresh installed metadata,
+dependencies or console scripts.
+
 Before opening a pull request, run:
 
 ```bash

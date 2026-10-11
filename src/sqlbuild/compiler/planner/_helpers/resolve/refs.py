@@ -10,11 +10,13 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
-    CompiledSeed,
+)
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledSeedView,
 )
 from sqlbuild.compiler.planner.constants import (
     SQL_ALIAS_BOUNDARY_CHARACTERS,
@@ -26,7 +28,7 @@ from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.references.main._quoted_reference_call_pattern import (
     quoted_reference_call_pattern,
 )
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
@@ -366,7 +368,7 @@ def _has_following_alias(*, sql: str, start: int) -> bool:
 
 
 def build_model_locations(
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
 ) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of model name to compiled relation location."""
 
@@ -374,7 +376,7 @@ def build_model_locations(
 
 
 def build_seed_locations(
-    seeds: tuple[CompiledSeed, ...],
+    seeds: tuple[CompiledSeedView, ...],
 ) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of seed name to compiled relation location."""
 
@@ -382,7 +384,7 @@ def build_seed_locations(
 
 
 def build_function_locations(
-    functions: tuple[CompiledFunction, ...],
+    functions: tuple[CompiledFunctionView, ...],
 ) -> dict[str, CompiledRelationLocation]:
     """Build a lookup of function name to compiled relation location."""
 

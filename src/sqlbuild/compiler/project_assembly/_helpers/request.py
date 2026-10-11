@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Iterable
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
-from sqlbuild.compiler.compile.models import CompileProjectInputs, CompileSqlReference
+from sqlbuild.compiler.compile.models import CompileSqlReference
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.project_assembly.constants import (
     BOOLEAN_VARIABLE,
-    ENVIRONMENT_NAME_PATTERN,
     FALSE_TEXT,
     NATIVE_INT_MAX,
     NATIVE_INT_MIN,
@@ -24,19 +24,17 @@ from sqlbuild.compiler.project_assembly.constants import (
     TRUE_TEXT,
 )
 from sqlbuild.compiler.project_assembly.types import (
-    AuditRow,
     ProjectRequestRow,
     ReferenceRow,
     SyntaxCheckRow,
     VariableRow,
 )
-from sqlbuild.compiler.resource_names.main.function_node_type import function_node_type
 from sqlbuild.spec.contracts.models import DefaultsConfig, TargetConfig
 
 
 def project_request(
     *,
-    inputs: CompileProjectInputs,
+    inputs: CompileInputsView,
     dialect: str | None,
     syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
 ) -> tuple[ProjectRequestRow, list[Exception | None]]:
@@ -80,15 +78,7 @@ def project_request(
             )
             for model_input, checks in zip(inputs.model_inputs, syntax_checks, strict=True)
         ],
-        [
-            (
-                source_input.source_entry.name,
-                source_input.source_entry.loader is not None,
-                source_input.source_entry.database,
-                source_input.source_entry.schema,
-            )
-            for source_input in inputs.source_inputs
-        ],
+        [source_input.assembly_row for source_input in inputs.source_inputs],
         [
             (
                 seed_input.schema_entry.name,
@@ -98,23 +88,8 @@ def project_request(
             )
             for seed_input in inputs.seed_inputs
         ],
-        [
-            (
-                function_node_type(return_columns=function_input.return_columns),
-                function_input.name,
-                list(function_input.tags),
-                _reference_rows(function_input.references),
-            )
-            for function_input in inputs.sql_function_inputs
-        ],
-        [
-            _audit_row(
-                references=audit_input.references,
-                attached_kind=audit_input.attached_target_kind,
-                attached_name=audit_input.attached_target_name,
-            )
-            for audit_input in inputs.audit_inputs
-        ],
+        [function_input.assembly_row for function_input in inputs.sql_function_inputs],
+        [audit_input.assembly_row for audit_input in inputs.audit_inputs],
     )
     return row, [render if isinstance(render, Exception) else None for render in renders]
 
@@ -130,11 +105,9 @@ def _tag_rows(value: object) -> list[str]:
 def _environment_rows(values: Iterable[str | None]) -> list[tuple[str, str | None]]:
     """Python's own `os.environ` lookup of every name an `ENV:` template may read."""
 
-    names: dict[str, None] = {}
-    for value in values:
-        if value is not None:
-            names.update(dict.fromkeys(re.findall(ENVIRONMENT_NAME_PATTERN, value)))
-    return [(name, os.environ.get(name)) for name in names]
+    return [
+        (name, os.environ.get(name)) for name in _native.environment_template_names(list(values))
+    ]
 
 
 def _variable_row(
@@ -182,17 +155,3 @@ def _syntax_check_rows(
     checks: tuple[tuple[str, dict[str, str] | None], ...],
 ) -> list[SyntaxCheckRow]:
     return [(sql, list((placeholders or {}).items())) for sql, placeholders in checks]
-
-
-def _audit_row(
-    *,
-    references: tuple[CompileSqlReference, ...],
-    attached_kind: object,
-    attached_name: str | None,
-) -> AuditRow:
-    attached: tuple[str, str] | None = (
-        (str(attached_kind), attached_name)
-        if attached_kind is not None and attached_name is not None
-        else None
-    )
-    return (_reference_rows(references), attached)

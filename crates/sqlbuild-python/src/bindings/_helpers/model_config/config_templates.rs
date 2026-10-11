@@ -28,6 +28,12 @@ const EFFECTIVE_VARS_LABEL: &str = "effective vars";
 const PROJECT_VAR_VALUES_MODULE: &str =
     "sqlbuild.compiler.authored_values.main._project_var_values";
 const RENDER_PROJECT_VAR_TEXT: &str = "render_project_var_text";
+const VALUE_PATH: &str = "its value";
+const BUILTINS_MODULE: &str = "builtins";
+const ASCII_FUNCTION: &str = "ascii";
+const ENCODE: &str = "encode";
+const UTF32_LE: &str = "utf-32-le";
+const SURROGATE_PASS: &str = "surrogatepass";
 
 /// Variables, the process environment and context values, all read through Python.
 pub(crate) struct PythonHost<'py> {
@@ -283,6 +289,66 @@ fn expand_config_templates<'py>(
     outcome(py, host, result, &label)
 }
 
+/// The first `(var name, value path, UTF-8 byte offset)` of a lone surrogate in raw vars.
+#[pyfunction]
+fn lone_surrogate_site(
+    raw_values: Bound<'_, PyDict>,
+) -> PyResult<Option<(Bound<'_, PyString>, String, usize)>> {
+    for (key, value) in raw_values.iter() {
+        if let Some((path, offset)) = surrogate_path(&value, VALUE_PATH.to_owned())? {
+            return Ok(Some((key.str()?, path, offset)));
+        }
+    }
+    Ok(None)
+}
+
+/// Python's former `_reject_lone_surrogates` walk: dict keys then items, lists and tuples.
+fn surrogate_path(value: &Bound<'_, PyAny>, path: String) -> PyResult<Option<(String, usize)>> {
+    if let Ok(mapping) = value.downcast::<PyDict>() {
+        for (key, item) in mapping.iter() {
+            if let Some(site) = surrogate_path(&key, format!("{path} key"))? {
+                return Ok(Some(site));
+            }
+            let key_ascii = PyModule::import(value.py(), BUILTINS_MODULE)?
+                .getattr(ASCII_FUNCTION)?
+                .call1((&key,))?
+                .str()?
+                .to_string_lossy()
+                .into_owned();
+            if let Some(site) = surrogate_path(&item, format!("{path}[{key_ascii}]"))? {
+                return Ok(Some(site));
+            }
+        }
+        return Ok(None);
+    }
+    if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
+        for (index, item) in value.try_iter()?.enumerate() {
+            if let Some(site) = surrogate_path(&item?, format!("{path}[{index}]"))? {
+                return Ok(Some(site));
+            }
+        }
+        return Ok(None);
+    }
+    let Ok(text) = value.downcast::<PyString>() else {
+        return Ok(None);
+    };
+    Ok(first_surrogate_offset(text)?.map(|offset| (path, offset)))
+}
+
+/// The UTF-8 byte offset of the first lone surrogate in `text`.
+fn first_surrogate_offset(text: &Bound<'_, PyString>) -> PyResult<Option<usize>> {
+    let encoded = text.call_method1(ENCODE, (UTF32_LE, SURROGATE_PASS))?;
+    let mut offset = 0;
+    for unit in encoded.extract::<Vec<u8>>()?.as_chunks::<4>().0 {
+        let code_point = u32::from_le_bytes([unit[0], unit[1], unit[2], unit[3]]);
+        match char::from_u32(code_point) {
+            Some(character) => offset += character.len_utf8(),
+            None => return Ok(Some(offset)),
+        }
+    }
+    Ok(None)
+}
+
 /// Return `(resolved vars, reads)` as `expand_effective_vars` would, or `(error, reads)`.
 #[pyfunction]
 fn expand_effective_vars<'py>(
@@ -382,5 +448,6 @@ pub(crate) fn expanded<'py>(
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(expand_config_templates, module)?)?;
     module.add_function(wrap_pyfunction!(expand_effective_vars, module)?)?;
+    module.add_function(wrap_pyfunction!(lone_surrogate_site, module)?)?;
     Ok(())
 }

@@ -8,18 +8,21 @@ from enum import StrEnum
 
 from sqlbuild.compiler.auditing.types import AuditSeverity
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
-    CompiledSource,
     CompiledSqlScenario,
     CompiledSqlTest,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSeedView,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.dag.constants import REQUIRED_DAG_COLLECTION_KEYS
 from sqlbuild.compiler.dag.models import (
     DagArtifact,
@@ -85,7 +88,7 @@ def format_dag_json(*, artifact: DagArtifact) -> str:
     return json.dumps(_drop_none(asdict(artifact)), indent=2)
 
 
-def _build_source_node(source: CompiledSource) -> DagNode:
+def _build_source_node(source: CompiledSourceView) -> DagNode:
     entry: SourceEntry = source.source_entry
     target: DagTarget = DagTarget(
         database=entry.database,
@@ -110,7 +113,7 @@ def _build_source_node(source: CompiledSource) -> DagNode:
 
 def _build_loader_node(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     loader: DiscoveredLoaderFunction,
     source_by_loader: dict[str, SourceEntry],
 ) -> DagNode:
@@ -170,7 +173,7 @@ def _build_python_node(node: DiscoveredPythonNode) -> DagNode:
     )
 
 
-def _build_seed_node(seed: CompiledSeed) -> DagNode:
+def _build_seed_node(seed: CompiledSeedView) -> DagNode:
     return DagNode(
         id=_node_id(seed.key),
         kind=NodeKind.SEED.value,
@@ -185,7 +188,7 @@ def _build_seed_node(seed: CompiledSeed) -> DagNode:
     )
 
 
-def _build_function_node(function: CompiledFunction) -> DagNode:
+def _build_function_node(function: CompiledFunctionView) -> DagNode:
     node_type: str = function_node_type(return_columns=function.return_columns)
     return DagNode(
         id=f"{node_type}:{function.name}",
@@ -209,7 +212,7 @@ def _build_function_node(function: CompiledFunction) -> DagNode:
     )
 
 
-def _build_model_node(model: CompiledModel) -> DagNode:
+def _build_model_node(model: CompiledModelView) -> DagNode:
     return DagNode(
         id=_node_id(model.key),
         kind=NodeKind.MODEL.value,
@@ -229,18 +232,10 @@ def _build_model_node(model: CompiledModel) -> DagNode:
 def _build_edges(
     *, graph: ProjectGraph, python_graph: PythonNodeGraph | None = None
 ) -> tuple[DagEdge, ...]:
-    edges: list[DagEdge] = []
-    key: CompiledObjectKey
-    dep_keys: tuple[CompiledObjectKey, ...]
-    for key, dep_keys in graph.upstream_deps.items():
-        dep_key: CompiledObjectKey
-        for dep_key in dep_keys:
-            edges.append(
-                DagEdge(
-                    from_id=_node_id(dep_key),
-                    to_id=_node_id(key),
-                )
-            )
+    edges: list[DagEdge] = [
+        DagEdge(from_id=f"{dep_kind}:{dep_name}", to_id=f"{kind}:{name}")
+        for (dep_kind, dep_name), (kind, name) in graph.native.edges()
+    ]
     edges.extend(_build_loader_edges(graph))
     if python_graph is not None:
         edges.extend(_build_python_edges(python_graph))
@@ -368,7 +363,7 @@ def _sql_test_meta(test: CompiledSqlTest) -> dict[str, object]:
     }
 
 
-def _build_audit_check(audit: CompiledAudit) -> DagCheck:
+def _build_audit_check(audit: CompiledAuditView) -> DagCheck:
     checked_asset_ids: tuple[str, ...] = tuple(_node_id(key) for key in audit.scope_deps)
     if audit.attached_target_kind is not None and audit.attached_target_name is not None:
         resource_type: CompiledResourceType = AttachedAuditTargetKind(
@@ -392,7 +387,7 @@ def _build_audit_check(audit: CompiledAudit) -> DagCheck:
     )
 
 
-def _audit_check_id(audit: CompiledAudit) -> str:
+def _audit_check_id(audit: CompiledAuditView) -> str:
     parts: tuple[str | None, ...] = (
         _node_id(audit.key),
         audit.attached_target_kind.value if audit.attached_target_kind is not None else None,
@@ -507,7 +502,7 @@ def _source_by_loader(graph: ProjectGraph) -> dict[str, SourceEntry]:
 
 
 def _loader_to_source_entry(
-    *, project: CompiledProject, loader: DiscoveredLoaderFunction
+    *, project: CompiledProjectView, loader: DiscoveredLoaderFunction
 ) -> SourceEntry:
     destination: LoaderDestinationParts = loader_destination_parts(
         destination=(
@@ -551,7 +546,7 @@ def _source_column(column: SourceColumnEntry) -> DagColumn:
     )
 
 
-def _model_columns(model: CompiledModel) -> tuple[DagColumn, ...]:
+def _model_columns(model: CompiledModelView) -> tuple[DagColumn, ...]:
     if model.schema_entry is not None and model.schema_entry.columns:
         return tuple(_schema_column(column) for column in model.schema_entry.columns)
     if model.inferred_columns is not None:
@@ -561,7 +556,7 @@ def _model_columns(model: CompiledModel) -> tuple[DagColumn, ...]:
     return ()
 
 
-def _model_tags(model: CompiledModel) -> tuple[str, ...]:
+def _model_tags(model: CompiledModelView) -> tuple[str, ...]:
     schema_tags: tuple[str, ...] = ()
     if model.schema_entry is not None:
         schema_tags = model.schema_entry.tags

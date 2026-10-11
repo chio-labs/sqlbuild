@@ -1,4 +1,4 @@
-use crate::compiler::tests::helpers::scanned_references;
+use crate::compiler::tests::helpers::{scanned_references, scanned_usages};
 use crate::compiler::tests::test_types::DeclarationReferenceScanTestCase;
 
 #[test]
@@ -81,6 +81,127 @@ fn given_sql_when_scanning_declaration_references_then_python_offsets_are_return
 
         assert_eq!(
             scanned.as_deref(),
+            test_case.expected_references,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_sql_when_walking_declaration_usages_then_malformed_references_are_skipped() {
+    let test_cases = [
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum('status').OPEN, @const('rate')",
+            sql: "SELECT @enum('status').OPEN, @const('rate')",
+            expected_references: Some("enum:status.OPEN@7..27, const:rate@29..43"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum('status') , @const('rate')",
+            sql: "SELECT @enum('status') , @const('rate')",
+            expected_references: Some("const:rate@25..39"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum x 'unclosed",
+            sql: "SELECT @enum x 'unclosed",
+            expected_references: Some(""),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum x, @const('rate') 'unclosed",
+            sql: "SELECT @enum x, @const('rate') 'unclosed",
+            expected_references: Some("const:rate@16..30"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @const(rate), @enum(\"size\").S",
+            sql: "SELECT @const(rate), @enum(\"size\").S",
+            expected_references: Some("enum:size.S@21..36"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT '@enum(''status'').A', @const('rate') /* open",
+            sql: "SELECT '@enum(''status'').A', @const('rate') /* open",
+            expected_references: Some("const:rate@30..44"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enumx('status').A, @const_x('rate'), @consté, @const",
+            sql: "SELECT @enumx('status').A, @const_x('rate'), @consté, @const('rate')",
+            expected_references: Some("const:rate@54..68"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT $$ @enum('status').A $$, @enum('size').M -- @const('r",
+            sql: "SELECT $$ @enum('status').A $$, @enum('size').M -- @const('rate')\n",
+            expected_references: Some("enum:size.M@32..47"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT x$$ @const('rate') $$",
+            sql: "SELECT x$$ @const('rate') $$",
+            expected_references: Some("const:rate@11..25"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum ( 'status' ) . OPEN, @enum('status').OPEN, @con",
+            sql: "SELECT @enum ( 'status' ) . OPEN, @enum('status').OPEN, @const('missing')",
+            expected_references: Some(
+                "enum:status.OPEN@7..32, enum:status.OPEN@34..54, const:missing@56..73",
+            ),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT `@const('rate')`, \"@enum('size').A\"",
+            sql: "SELECT `@const('rate')`, \"@enum('size').A\"",
+            expected_references: Some(""),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @const('rate'), @const('rate'), 'é' @enum('size').XL",
+            sql: "SELECT @const('rate'), @const('rate'), 'é' @enum('size').XL",
+            expected_references: Some("const:rate@7..21, const:rate@23..37, enum:size.XL@43..59"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @@const, @enum, @const",
+            sql: "SELECT @@const, @enum, @const",
+            expected_references: Some(""),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT 1",
+            sql: "SELECT 1",
+            expected_references: Some(""),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum('status').OPEN /* @const('rate') */ 'it''s' @co",
+            sql: "SELECT @enum('status').OPEN /* @const('rate') */ 'it''s' @const('rate')",
+            expected_references: Some("enum:status.OPEN@7..27, const:rate@57..71"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @const('rate' ",
+            sql: "SELECT @const('rate' ",
+            expected_references: Some(""),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT /* x @const('rate')",
+            sql: "SELECT /* x @const('rate')",
+            expected_references: Some(" | stop:comment"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT 'a @enum('status').A",
+            sql: "SELECT 'a @enum('status').A",
+            expected_references: Some(" | stop:quote"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum x 'oops @const('rate')",
+            sql: "SELECT @enum x 'oops @const('rate')",
+            expected_references: Some(" | stop:quote"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @const('rate') $tag$ @enum('size').S",
+            sql: "SELECT @const('rate') $tag$ @enum('size').S",
+            expected_references: Some("const:rate@7..21 | stop:quote"),
+        },
+        DeclarationReferenceScanTestCase {
+            description: "usage walk: SELECT @enum(\"status\").OPEN, @const('rate') /* tail @enum('s",
+            sql: "SELECT @enum(\"status\").OPEN, @const('rate') /* tail @enum('size').S",
+            expected_references: Some("enum:status.OPEN@7..27, const:rate@29..43 | stop:comment"),
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            scanned_usages(test_case.sql).as_deref(),
             test_case.expected_references,
             "{}",
             test_case.description

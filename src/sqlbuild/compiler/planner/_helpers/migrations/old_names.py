@@ -8,8 +8,8 @@ from datetime import datetime
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RelationType
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledRelationLocation
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledRelationLocation
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.migrations.main._resolve_old_name_view_retention import (
     resolve_old_name_view_retention,
 )
@@ -86,10 +86,10 @@ def plan_old_name_views(
 ) -> OldNameViewPlanning:
     """Decide old-name steps for selected models and collect recorded compatibility views."""
 
-    models_by_name: dict[str, CompiledModel] = {
+    models_by_name: dict[str, CompiledModelView] = {
         model.name: model for model in runtime.project.models
     }
-    selected: tuple[CompiledModel, ...] = tuple(
+    selected: tuple[CompiledModelView, ...] = tuple(
         models_by_name[key.name]
         for key in scope.execution_order
         if key in scope.selected_keys
@@ -138,7 +138,7 @@ def plan_old_name_views(
         if planned is not None:
             entries.append(planned)
             covered.add(entry.model_name)
-    model: CompiledModel
+    model: CompiledModelView
     for model in selected:
         if model.name in covered:
             continue
@@ -164,13 +164,13 @@ class _OldNamePlanner:
         self,
         *,
         runtime: PlannerRuntime,
-        models_by_name: dict[str, CompiledModel],
+        models_by_name: dict[str, CompiledModelView],
         histories: tuple[OldNameViewHistory, ...],
         views: tuple[OldNameView, ...],
         column_entries: tuple[ColumnMigrationPlanEntry, ...],
     ) -> None:
         self._runtime: PlannerRuntime = runtime
-        self._models_by_name: dict[str, CompiledModel] = models_by_name
+        self._models_by_name: dict[str, CompiledModelView] = models_by_name
         self._histories: tuple[OldNameViewHistory, ...] = histories
         self._views: tuple[OldNameView, ...] = views
         self._column_entries: tuple[ColumnMigrationPlanEntry, ...] = column_entries
@@ -183,7 +183,7 @@ class _OldNamePlanner:
         self._now: datetime = runtime.invocation_time
 
     def for_migration(self, entry: ModelMigrationPlanEntry) -> OldNameViewPlanEntry | None:
-        model: CompiledModel | None = self._models_by_name.get(entry.model_name)
+        model: CompiledModelView | None = self._models_by_name.get(entry.model_name)
         if model is None or entry.blocks_build:
             return None
         if _starts_move(entry):
@@ -198,7 +198,7 @@ class _OldNamePlanner:
             return None if history is None else self._from_history(history=history, model=model)
         return None
 
-    def pending_for(self, model: CompiledModel) -> OldNameViewPlanEntry | None:
+    def pending_for(self, model: CompiledModelView) -> OldNameViewPlanEntry | None:
         history: OldNameViewHistory | None = self._newest_history(
             destination=migration_relation_for_location(model.destination), origin=None
         )
@@ -210,7 +210,7 @@ class _OldNamePlanner:
         return planned
 
     def _new_move(
-        self, *, entry: ModelMigrationPlanEntry, model: CompiledModel
+        self, *, entry: ModelMigrationPlanEntry, model: CompiledModelView
     ) -> OldNameViewPlanEntry:
         retention: str | None = resolve_old_name_view_retention(
             config_values=model.config.values, project_retention=self._project_retention
@@ -247,7 +247,7 @@ class _OldNamePlanner:
         if retention is None:
             return "old_name_view false"
         old: MigrationRelation = migration_relation_for_location(origin)
-        reuser: CompiledModel | None = next(
+        reuser: CompiledModelView | None = next(
             (
                 model
                 for model in self._models_by_name.values()
@@ -264,7 +264,7 @@ class _OldNamePlanner:
         return None
 
     def _from_history(
-        self, *, history: OldNameViewHistory, model: CompiledModel
+        self, *, history: OldNameViewHistory, model: CompiledModelView
     ) -> OldNameViewPlanEntry | None:
         """Resume a recorded move; its record proves SQLBuild owned the origin when it moved."""
 
@@ -325,7 +325,7 @@ class _OldNamePlanner:
             return None
         return max(matching, key=lambda item: (item.move.created_at, item.move.event_id))
 
-    def _planned_aliases(self, model: CompiledModel) -> tuple[tuple[str, str], ...]:
+    def _planned_aliases(self, model: CompiledModelView) -> tuple[tuple[str, str], ...]:
         if _stores_history(model):
             return tuple(
                 sorted(
@@ -337,7 +337,7 @@ class _OldNamePlanner:
         return declared_column_aliases(model)
 
 
-def declared_column_aliases(model: CompiledModel) -> tuple[tuple[str, str], ...]:
+def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]:
     """Return old-to-new column names a table or view model declares with migrate_from."""
 
     columns: tuple[SchemaColumn, ...] = (
@@ -378,7 +378,7 @@ def _skipped_resume(
     )
 
 
-def _stores_history(model: CompiledModel) -> bool:
+def _stores_history(model: CompiledModelView) -> bool:
     return (
         get_config_str(values=model.config.values, key="materialized") in _HISTORY_MATERIALIZATIONS
     )
@@ -398,7 +398,7 @@ def _skipped_entry(*, entry: ModelMigrationPlanEntry, reason: str) -> OldNameVie
 def _needed_schemas(
     *,
     runtime: PlannerRuntime,
-    selected: tuple[CompiledModel, ...],
+    selected: tuple[CompiledModelView, ...],
     snapshot: WarehouseSnapshot,
     migration_entries: tuple[ModelMigrationPlanEntry, ...],
 ) -> set[str]:
@@ -429,7 +429,7 @@ def _schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[st
     }
 
 
-def _may_claim_view(*, model: CompiledModel, snapshot: WarehouseSnapshot) -> bool:
+def _may_claim_view(*, model: CompiledModelView, snapshot: WarehouseSnapshot) -> bool:
     relation: RelationInfo | None = snapshot.existing_relations.get(model.name)
     return relation is not None and _is_view(relation)
 
@@ -440,7 +440,7 @@ def _is_view(relation: RelationInfo) -> bool:
 
 def _claim_errors(
     *,
-    selected: Iterable[CompiledModel],
+    selected: Iterable[CompiledModelView],
     snapshot: WarehouseSnapshot,
     views: tuple[OldNameView, ...],
     now: datetime,
@@ -448,7 +448,7 @@ def _claim_errors(
     """Refuse a model whose destination is a compatibility view still recorded at that name."""
 
     errors: list[PlanWarning] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in selected:
         if not _may_claim_view(model=model, snapshot=snapshot):
             continue
@@ -563,7 +563,7 @@ def claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str:
 
 
 def _recorded_view(
-    *, runtime: PlannerRuntime, history: OldNameViewHistory, models: Iterable[CompiledModel]
+    *, runtime: PlannerRuntime, history: OldNameViewHistory, models: Iterable[CompiledModelView]
 ) -> OldNameView:
     return OldNameView(
         destination_model=history.move.destination_model,

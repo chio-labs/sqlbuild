@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import chain
 from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar
@@ -14,9 +15,7 @@ import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile._helpers.sql_tests.core import (
-    extract_assertion_target_model_names,
-)
+from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,
@@ -38,9 +37,17 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
+    CompiledSourceView,
     SqlTestMode,
 )
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
@@ -100,7 +107,7 @@ _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 
 def microbatch_model_with_cursor_end(
     test_case: MicrobatchCursorEndPlanTestCase,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a microbatch model with a configured terminal cursor bound."""
 
     return CompiledModel(
@@ -244,7 +251,7 @@ def build_selection_model(
     key: CompiledObjectKey,
     name: str,
     materialized: str,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a minimal model for selection helper tests."""
 
     values: dict[str, object] = {"materialized": materialized}
@@ -278,7 +285,7 @@ def load_orders(_ctx: object) -> list[dict[str, object]]:
     return []
 
 
-def build_source_load_nodes_project() -> CompiledProject:
+def build_source_load_nodes_project() -> CompiledProjectView:
     raw_orders_entry: SourceEntry = SourceEntry(
         name="raw_orders",
         table="orders",
@@ -355,7 +362,7 @@ def build_test_project(
     sql_test_expected_model_names: tuple[str, ...] = (),
     table_fn_test_function_names: tuple[str, ...] = (),
     audit_model_source_deps: dict[str, tuple[str, ...]] | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal CompiledProject for graph tests."""
 
     effective_paths: dict[str, str] = model_paths or {}
@@ -363,7 +370,7 @@ def build_test_project(
     seed_name_set: set[str] = set(seed_names)
     dbt_ref_name_set: set[str] = set(dbt_ref_names)
     function_name_set: set[str] = set(function_names)
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     dep_names: tuple[str, ...]
     for model_name, dep_names in (model_deps or {}).items():
@@ -392,7 +399,7 @@ def build_test_project(
             )
         )
 
-    sources: list[CompiledSource] = []
+    sources: list[CompiledSourceView] = []
     source_name: str
     for source_name in source_names:
         source_entry: SourceEntry = SourceEntry(
@@ -413,7 +420,7 @@ def build_test_project(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name in seed_names:
         seeds.append(
@@ -433,7 +440,7 @@ def build_test_project(
             )
         )
 
-    functions: list[CompiledFunction] = []
+    functions: list[CompiledFunctionView] = []
     function_name: str
     for function_name in function_names:
         functions.append(
@@ -514,7 +521,7 @@ def build_test_project(
     )
     sql_tests.extend(((), (table_function_sql_test,))[bool(table_fn_test_function_names)])
 
-    audits: list[CompiledAudit] = []
+    audits: list[CompiledAuditView] = []
     model_name: str
     audit_source_names: tuple[str, ...]
     for model_name, audit_source_names in (audit_model_source_deps or {}).items():
@@ -588,8 +595,8 @@ def build_scenario_from_test_case(
         CompileSqlScenarioCte(name=f"__expected__{model_name}", sql_body="SELECT 1")
         for model_name in test_case.expected_model_names
     )
-    assertion_target_model_names: tuple[str, ...] = extract_assertion_target_model_names(
-        assertion_sql=test_case.assertion_sql_bodies, syntax=_GENERIC_SQL_SYNTAX
+    assertion_target_model_names: tuple[str, ...] = _assertion_ref_targets(
+        test_case.assertion_sql_bodies
     )
     return CompiledSqlScenario(
         key=scenario_key,
@@ -644,7 +651,7 @@ def build_scenario_cli_identifier_limit_pipeline(
 ) -> tuple[CompiledSqlScenario, CompilePipelineResult]:
     """Build a minimal pipeline result for CLI scenario identifier-limit tests."""
 
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={model_name: ("raw__orders",)},
         source_names=("raw__orders",),
     )
@@ -678,7 +685,7 @@ def build_scenario_cli_identifier_limit_pipeline(
         source_fixture_names=("raw__orders",),
         expected_model_names=(model_name,),
     )
-    project = replace(project, sql_scenarios=(scenario,))
+    project = project_with(project=project, sql_scenarios=(scenario,))
     return scenario, CompilePipelineResult(project=project, plan_output=PlanOutput())
 
 
@@ -712,10 +719,10 @@ def build_scenario_relation_test_map() -> ScenarioRelationMap:
     )
 
 
-def build_scenario_relation_test_project() -> CompiledProject:
+def build_scenario_relation_test_project() -> CompiledProjectView:
     """Build a project covering scenario relation planning tests."""
 
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={
             "daily_revenue": ("raw__orders", "stg_customers", "country_codes"),
             "customer_revenue": ("raw__orders",),
@@ -724,9 +731,9 @@ def build_scenario_relation_test_project() -> CompiledProject:
         source_names=("raw__orders",),
         seed_names=("country_codes",),
     )
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     models_by_name["daily_revenue"] = replace(
-        models_by_name["daily_revenue"],
+        compiled_model_record(models_by_name["daily_revenue"]),
         query_sql=(
             'SELECT * FROM __source("raw__orders") '
             'JOIN __ref("stg_customers") USING (customer_id) '
@@ -734,16 +741,16 @@ def build_scenario_relation_test_project() -> CompiledProject:
             'JOIN __dbt_ref("stripe", "payments") USING (customer_id)'
         ),
     )
-    models: list[CompiledModel] = [models_by_name[model.name] for model in project.models]
-    return replace(project, models=tuple(models))
+    models: list[CompiledModelView] = [models_by_name[model.name] for model in project.models]
+    return project_with(project=project, models=tuple(models))
 
 
-def build_scenario_relation_test_project_with_unused_seed() -> CompiledProject:
+def build_scenario_relation_test_project_with_unused_seed() -> CompiledProjectView:
     """Build a scenario relation test project with a seed outside the scenario graph."""
 
-    project: CompiledProject = build_scenario_relation_test_project()
-    unused_seed_project: CompiledProject = build_test_project(seed_names=("unused_seed",))
-    return replace(project, seeds=(*project.seeds, unused_seed_project.seeds[0]))
+    project: CompiledProjectView = build_scenario_relation_test_project()
+    unused_seed_project: CompiledProjectView = build_test_project(seed_names=("unused_seed",))
+    return project_with(project=project, seeds=(*project.seeds, unused_seed_project.seeds[0]))
 
 
 def build_scenario_relation_test_scenario(
@@ -815,10 +822,10 @@ def build_scenario_relation_test_scenario(
     )
 
 
-def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProject:
+def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledProjectView:
     """Build a minimal CompiledProject containing one source entry."""
 
-    source: CompiledSource = CompiledSource(
+    source: CompiledSourceView = CompiledSource(
         key=source_key(source_entry.name),
         deps=(),
         name=source_entry.name,
@@ -841,7 +848,7 @@ def build_test_project_with_source_entry(source_entry: SourceEntry) -> CompiledP
 
 def build_source_cursor_input_model(
     test_case: SourceCursorInputColumnsTestCase,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build an incremental model for source cursor input column validation."""
 
     config_values: dict[str, object] = (
@@ -873,10 +880,10 @@ def build_source_cursor_input_model(
 
 def build_transitive_watermark_models(
     *, watermark_name: str, watermark_column: str
-) -> tuple[CompiledModel, dict[str, CompiledModel]]:
+) -> tuple[CompiledModelView, dict[str, CompiledModelView]]:
     """Build a consumer, direct view, and transitive source watermark lineage."""
 
-    view_model: CompiledModel = CompiledModel(
+    view_model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders_view"),
         deps=(),
         name="orders_view",
@@ -893,7 +900,7 @@ def build_transitive_watermark_models(
             qualified_name="staging.orders_view",
         ),
     )
-    consumer: CompiledModel = CompiledModel(
+    consumer: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="test_model"),
         deps=(),
         name="test_model",
@@ -925,11 +932,11 @@ def build_transitive_watermark_models(
 
 def build_function_transitive_watermark_models(
     *, watermark_name: str, watermark_column: str
-) -> tuple[CompiledModel, dict[str, CompiledModel], dict[str, CompiledFunction]]:
+) -> tuple[CompiledModelView, dict[str, CompiledModelView], dict[str, CompiledFunctionView]]:
     """Build a consumer whose physical watermark is upstream of a table function."""
 
-    consumer: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    consumer: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     consumer, models_by_name = build_transitive_watermark_models(
         watermark_name=watermark_name,
         watermark_column=watermark_column,
@@ -941,7 +948,7 @@ def build_function_transitive_watermark_models(
         name=function_name,
         qualified_name=f"analytics.{function_name}",
     )
-    function: CompiledFunction = CompiledFunction(
+    function: CompiledFunctionView = CompiledFunction(
         key=CompiledObjectKey(resource_type=CompiledResourceType.TABLE_FN, name=function_name),
         deps=(),
         name=function_name,
@@ -954,7 +961,7 @@ def build_function_transitive_watermark_models(
         references=(CompileSqlReference(ref_kind=SqlReferenceKind.REF, ref_name="orders_view"),),
     )
     consumer = replace(
-        consumer,
+        compiled_model_record(consumer),
         query_sql=f'SELECT * FROM __table_fn("{function_name}")()',
         references=(
             CompileSqlReference(
@@ -968,8 +975,8 @@ def build_function_transitive_watermark_models(
 
 def build_cursor_input_contract_models(
     test_case: SourceCursorInputColumnsTestCase,
-) -> dict[str, CompiledModel]:
-    models: dict[str, CompiledModel] = {
+) -> dict[str, CompiledModelView]:
+    models: dict[str, CompiledModelView] = {
         test_case.reference_name: CompiledModel(
             key=CompiledObjectKey(
                 resource_type=CompiledResourceType.MODEL,
@@ -1043,7 +1050,7 @@ def _resolve_dep_key(
     return CompiledObjectKey(resource_type=resource_type, name=name)
 
 
-def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledModel:
+def build_strategy_model(test_case: ResolveModelPlanActionTestCase) -> CompiledModelView:
     """Build a CompiledModel from an action resolution test case."""
 
     config_values: dict[str, object] = (
@@ -1087,7 +1094,7 @@ def build_strategy_change_result(
     )
 
 
-def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> CompiledModel:
+def build_strategy_error_model(test_case: IncrementalStrategyErrorTestCase) -> CompiledModelView:
     """Build a CompiledModel from a strategy error test case."""
 
     config_values: dict[str, object] = {"materialized": test_case.materialized} | (
@@ -1140,7 +1147,7 @@ def build_warnings_change_result(
 
 def build_audit_from_test_case(
     test_case: PlanAuditTestCase,
-) -> CompiledAudit:
+) -> CompiledAuditView:
     """Build a minimal CompiledAudit from a test case."""
 
     return CompiledAudit(
@@ -1204,10 +1211,10 @@ def build_cursor_ref(ref_name: str) -> CompileSqlReference:
 def build_cursor_model_map(
     ref_name: str,
     qualified_name: str | None,
-) -> dict[str, CompiledModel]:
+) -> dict[str, CompiledModelView]:
     """Build a model map with one entry for cursor resolution tests."""
 
-    model_map: dict[str, CompiledModel] = {
+    model_map: dict[str, CompiledModelView] = {
         ref_name: CompiledModel(
             key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=ref_name),
             deps=(),
@@ -1243,7 +1250,7 @@ def build_cursor_deferred_locations(
     return (None, locations)[qualified_name is not None]
 
 
-def build_cursor_override_model(cursor_type: str | None) -> CompiledModel:
+def build_cursor_override_model(cursor_type: str | None) -> CompiledModelView:
     """Build a minimal model with optional cursor_type for override resolution tests."""
 
     config_values: dict[str, object] = {"materialized": "incremental"} | (
@@ -1271,7 +1278,7 @@ def build_microbatch_lookback_model(
     incremental_strategy: str,
     batch_size: str,
     lookback: str | None,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a microbatch model for lookback resolution tests."""
 
     config_values: dict[str, object] = {
@@ -1360,7 +1367,7 @@ def build_scheduling_audit(
     references: tuple[CompileSqlReference, ...],
     attached_target_kind: AttachedAuditTargetKind | None,
     attached_target_name: str | None,
-) -> CompiledAudit:
+) -> CompiledAuditView:
     """Build a minimal CompiledAudit for scheduling tests."""
 
     stub_file: DiscoveredAuditFile = DiscoveredAuditFile(
@@ -1423,7 +1430,7 @@ def build_seed_identity_compiled_seed(
     file_path: Path,
     *,
     csv_settings: SeedCsvSettings | None = None,
-) -> CompiledSeed:
+) -> CompiledSeedView:
     resolved_csv_settings: SeedCsvSettings = csv_settings or SeedCsvSettings()
     schema_entry: SchemaSeedEntry = SchemaSeedEntry(
         name="orders", csv_settings=resolved_csv_settings
@@ -1476,3 +1483,16 @@ def native_audit_scope_deps(
         CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)
         for kind, name in audit_deps[0]
     )
+
+
+def _assertion_ref_targets(assertion_sql: tuple[str, ...]) -> tuple[str, ...]:
+    """The unique `__ref` targets the assertion bodies read, in authored order."""
+
+    references: Iterator[CompileSqlReference] = chain.from_iterable(
+        scan_sql_reference_calls(sql=sql, syntax=_GENERIC_SQL_SYNTAX).references
+        for sql in assertion_sql
+    )
+    refs: Iterator[CompileSqlReference] = filter(
+        lambda reference: reference.ref_kind == SqlReferenceKind.REF, references
+    )
+    return tuple(dict.fromkeys(reference.ref_name for reference in refs))

@@ -10,10 +10,8 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile._helpers.diagnostics.details import closest_column
 from sqlbuild.compiler.compile._helpers.diagnostics.help import semantic_help_catalogue
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
-    ColumnSuggestionCase,
     DiagnosticUxCase,
 )
 
@@ -207,25 +205,6 @@ def test_given_semantic_codes_when_explaining_then_each_code_owns_distinct_help(
     assert all(
         "review the SQL expression, input types, and authoritative schema" not in value
         for value in help_by_code.values()
-    )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ColumnSuggestionCase("abbreviation", "qty", ("quantity", "id", "status"), "quantity"),
-        ColumnSuggestionCase("typo", "quantitty", ("quantity", "status"), "quantity"),
-        ColumnSuggestionCase("no close match", "unrelated_field", ("quantity", "id"), None),
-        ColumnSuggestionCase("unicode case folding", "straße", ("STRASSE",), "STRASSE"),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_column_spelling_when_suggesting_then_uses_bounded_edit_distance(
-    test_case: ColumnSuggestionCase,
-) -> None:
-    assert (
-        closest_column(name=test_case.name, columns=dict.fromkeys(test_case.columns, "INTEGER"))
-        == test_case.expected_match
     )
 
 

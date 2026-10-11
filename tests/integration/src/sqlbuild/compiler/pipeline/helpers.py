@@ -3,21 +3,21 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 
 import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
-    CompileAuditInput,
     CompiledLineageColumnFact,
-    CompiledModel,
-    CompiledProject,
 )
+from sqlbuild.compiler.compile.types import AuditInput, CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
@@ -57,7 +57,7 @@ _AUDIT_FACTORY_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
 )
 
 
-def compile_audits_for_project(*, project_dir: Path) -> tuple[CompileAuditInput, ...]:
+def compile_audits_for_project(*, project_dir: Path) -> tuple[AuditInput, ...]:
     """Compile one project's audit inputs with the real DuckDB compiler path."""
 
     return build_compile_inputs(
@@ -67,9 +67,7 @@ def compile_audits_for_project(*, project_dir: Path) -> tuple[CompileAuditInput,
     ).audit_inputs
 
 
-def audit_input_projection(
-    *, audits: tuple[CompileAuditInput, ...]
-) -> tuple[tuple[object, ...], ...]:
+def audit_input_projection(*, audits: tuple[AuditInput, ...]) -> tuple[tuple[object, ...], ...]:
     """Project attachment-relevant fields for direct/generated equivalence."""
 
     return tuple(
@@ -158,7 +156,7 @@ def write_semantic_binding_project(
 
 def compile_reshaped_star_model(
     *, project_dir: Path, query_sql: str
-) -> tuple[CompiledProject, CompiledModel]:
+) -> tuple[CompiledProjectView, CompiledModelView]:
     """Compile one reshaped-star model over the shared upstream order models."""
 
     (project_dir / "sqlbuild_project.toml").write_text(
@@ -174,11 +172,11 @@ def compile_reshaped_star_model(
         f"MODEL (description 'Test model reshaped_orders.', materialized table);\n{query_sql}",
         encoding="utf-8",
     )
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
     )
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     return project, models_by_name["reshaped_orders"]
 
 
@@ -221,3 +219,50 @@ def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...
 
     monkeypatch.setattr(native_module, "infer_expression_source_shapes", traced)
     return batches
+
+
+def count_declaration_resolutions(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Count the native model loop's declaration projections."""
+
+    counts: list[int] = [0]
+    native_loop_type: type = native_module.NativeModelLoop
+    monkeypatch.setattr(
+        native_module,
+        "NativeModelLoop",
+        lambda *arguments: _ResolutionCountingLoop(native_loop_type(*arguments), counts),
+    )
+    return counts
+
+
+class _ResolutionCountingLoop(NamedTuple):
+    native_loop: Any
+    counts: list[int]
+
+    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int, int, int]]:
+        inputs, counts = self.native_loop.run(*arguments)
+        self.counts[0] += counts[2]
+        return inputs, counts
+
+
+_OFFLINE_POSTGRES_CONNECTION: dict[str, object] = {
+    "host": "localhost",
+    "database": "warehouse",
+    "schema": "analytics",
+}
+
+
+def postgres_semantic_shapes(
+    *, project_dir: Path, files: dict[str, str]
+) -> dict[str, dict[str, str]]:
+    """Compile `files` offline as a Postgres project and return every published model shape."""
+
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    project: CompiledProjectView = compile_project(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=PostgresAdapter(),
+        resolved_connection=_OFFLINE_POSTGRES_CONNECTION,
+    )
+    return semantic_shapes(project=project)

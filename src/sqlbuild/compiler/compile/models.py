@@ -12,18 +12,27 @@ from typing import Any, overload
 import sqlbuild._native as _native
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
-from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE, MACRO_CONTEXT_PARAMETER_NAME
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    AuditInput,
     CompactBatchResponseCallback,
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledModelView,
     CompiledResourceType,
+    CompiledSeedView,
+    CompiledSourceView,
     CompileInputsReadyCallback,
     DiagnosticPhase,
     DiagnosticSeverity,
+    FunctionInput,
     FunctionLanguage,
+    ModelInput,
+    SeedInput,
+    SourceInput,
     SqlTestMode,
     TypedSqlValueRenderer,
 )
@@ -59,7 +68,6 @@ from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, Sql
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
-    GrantRecord,
     ResourceIdentity,
     ScopeIndex,
     ScopeLookup,
@@ -67,7 +75,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityRecord,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic, SqlLexicalSyntax
-from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     ProjectConfig,
@@ -282,22 +290,6 @@ class StaticMacroInventory:
 
 
 @dataclass(frozen=True)
-class ScopeRelationshipFault:
-    """One test or scenario relationship extraction fault."""
-
-    relative_path: Path
-    message: str
-
-
-@dataclass(frozen=True)
-class ScopeRelationshipBuild:
-    """Expected-model grants and independently retained relationship faults."""
-
-    grants: tuple[GrantRecord, ...] = field(default_factory=tuple)
-    faults: tuple[ScopeRelationshipFault, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class DeclarationRuntimeProjection:
     """Process-only declaration values keyed by canonical static identity."""
 
@@ -332,15 +324,6 @@ class DeclarationScopeBuild:
     index: ScopeIndex
     resolver: DeclarationScopeResolver
     sql_test_scans: SqlTestScanCache
-
-
-@dataclass(frozen=True)
-class ParsedMacroArguments:
-    """One macro call's argument objects and the typed references written in them, in order."""
-
-    args: tuple[object, ...]
-    kwargs: dict[str, object]
-    typed_references: tuple[SqlResourceRef, ...]
 
 
 @dataclass(frozen=True)
@@ -397,19 +380,6 @@ class MacroContext:
 
 
 @dataclass(frozen=True)
-class MacroExpansionState:
-    """Inputs and recorded facts of one authored string's macro expansion."""
-
-    loaded_macros: dict[str, LoadedMacro]
-    macro_overrides: dict[str, str]
-    macro_context: MacroContext
-    declaration_resolver: DeclarationScopeResolver | None
-    declarations: DeclarationResolutionContext | None
-    facts: MacroExpansionFacts
-    consumer: ResourceIdentity | DeclarationIdentity | None = None
-
-
-@dataclass(frozen=True)
 class MacroExpansionResult:
     """Expanded SQL and resolved macro usage facts from one authored string."""
 
@@ -436,15 +406,6 @@ class AuthoredSqlExpansionResult:
     sql: str
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     argument_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class HookExpansionResult:
-    """Expanded model hook values and declaration usage facts."""
-
-    values: dict[str, object]
-    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-    references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -522,10 +483,10 @@ class ModelInputBuildContext:
 class ModelInputScopeBuild:
     """Model inputs paired with public declaration artifacts and updated context."""
 
-    inputs: tuple[CompileModelInput, ...]
+    inputs: tuple[ModelInput, ...]
     declarations: DeclarationResolutionContext
     context: ModelInputBuildContext
-    diagnostics: tuple[CompilerDiagnostic, ...] = ()
+    native_project: _native.NativeCompiledProject = field(repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -749,21 +710,6 @@ class CompileSqlScenarioCte:
 
 
 @dataclass(frozen=True)
-class CompileSqlScenarioCtes:
-    """Extracted top-level SQL-native scenario CTE semantics."""
-
-    authored_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    expected_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    assertion_ctes: tuple[CompileSqlScenarioCte, ...] = field(default_factory=tuple)
-    source_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    seed_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    dbt_ref_fixture_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class FunctionArgument:
     """One SQL function argument with an adapter-native type string."""
 
@@ -806,6 +752,20 @@ class CompileSqlFunctionInput:
     tags: tuple[str, ...] = field(default_factory=tuple)
     description: str | None = None
 
+    @property
+    def assembly_row(self) -> tuple[str, str, list[str], list[tuple[str, str, str | None]]]:
+        """`(node type, name, tags, references)`, what assembly resolves dependencies from."""
+
+        return (
+            CompiledResourceType.TABLE_FN if self.return_columns else CompiledResourceType.UDF,
+            self.name,
+            list(self.tags),
+            [
+                (str(reference.ref_kind), reference.ref_name, reference.ref_package)
+                for reference in self.references
+            ],
+        )
+
 
 @dataclass(frozen=True)
 class CompileModelInput:
@@ -826,7 +786,52 @@ class CompileModelInput:
     macro_deps: tuple[str, ...] = field(default_factory=tuple)
     macro_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+    @property
+    def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]:
+        """Each reference as `(kind, name, package, call argument count)`."""
+
+        return [
+            (str(ref.ref_kind), ref.ref_name, ref.ref_package, ref.call_argument_count)
+            for ref in self.references
+        ]
+
+    @property
+    def relation_key_row(self) -> RelationKeyRow:
+        """The model's declared key facts, for deriving its unique keys."""
+
+        return _native.relation_key_row(
+            "ref", self.model_file.file_path.stem, self.config.values, self.schema_entry
+        )
+
+    @property
+    def attached_schema_name(self) -> str | None:
+        """The name of the schema entry attached to the model, or `None`."""
+
+        return self.schema_entry.name if self.schema_entry is not None else None
+
     sql_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
+    lint_expansion: CompiledSqlExpansion | None = field(default=None, compare=False, repr=False)
+    """The compile's whole expansion, variables included, which early SQL lint reuses."""
+
+
+@dataclass(frozen=True)
+class HandBuiltAnalysis:
+    """A hand-built model input's session position, fallback columns and standalone proof."""
+
+    session: tuple[Any, int] | None
+    fallback: list[tuple[str, str | None, str]] | None
+    standalone_proof: (
+        tuple[
+            bool,
+            list[tuple[str, str | None, str]],
+            list[tuple[str, str | None]],
+            list[str],
+            str | None,
+            bool,
+        ]
+        | None
+    )
 
 
 @dataclass(frozen=True)
@@ -846,7 +851,7 @@ class ModelSqlAnalysis:
 class ModelSqlAnalysisRequest:
     """Inputs to one model's SQL analysis."""
 
-    model_input: CompileModelInput
+    model_input: ModelInput
     query_sql: str
     placeholders: dict[str, str] | None
     cache_key: str | None
@@ -869,6 +874,13 @@ class CompileSourceInput:
     source_entry: SourceEntry
     source_file: DiscoveredSourceFile
     declaration_usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
+
+    @property
+    def assembly_row(self) -> tuple[str, bool, str | None, str | None]:
+        """`(name, has a loader, database, schema)`, what assembly resolves a namespace from."""
+
+        entry: SourceEntry = self.source_entry
+        return (entry.name, entry.loader is not None, entry.database, entry.schema)
 
 
 @dataclass(frozen=True)
@@ -924,6 +936,22 @@ class CompileAuditInput:
                 AttachedAuditTargetKind(self.attached_target_kind),
             )
 
+    @property
+    def assembly_row(
+        self,
+    ) -> tuple[list[tuple[str, str, str | None]], tuple[str, str] | None]:
+        """`(references, attached (kind, name))`, what assembly resolves scope deps from."""
+
+        return (
+            [
+                (str(reference.ref_kind), reference.ref_name, reference.ref_package)
+                for reference in self.references
+            ],
+            (str(self.attached_target_kind), self.attached_target_name)
+            if self.attached_target_kind is not None and self.attached_target_name is not None
+            else None,
+        )
+
 
 @dataclass(frozen=True)
 class CompileProjectInputs:
@@ -945,17 +973,20 @@ class CompileProjectInputs:
     loaded_macros: dict[str, LoadedMacro] = field(default_factory=dict)
     public_enums: dict[str, EnumDeclaration] = field(default_factory=dict)
     public_constants: dict[str, ConstantDeclaration] = field(default_factory=dict)
-    model_inputs: tuple[CompileModelInput, ...] = field(default_factory=tuple)
-    seed_inputs: tuple[CompileSeedInput, ...] = field(default_factory=tuple)
-    source_inputs: tuple[CompileSourceInput, ...] = field(default_factory=tuple)
-    sql_function_inputs: tuple[CompileSqlFunctionInput, ...] = field(default_factory=tuple)
+    model_inputs: tuple[ModelInput, ...] = field(default_factory=tuple)
+    seed_inputs: tuple[SeedInput, ...] = field(default_factory=tuple)
+    source_inputs: tuple[SourceInput, ...] = field(default_factory=tuple)
+    sql_function_inputs: tuple[FunctionInput, ...] = field(default_factory=tuple)
     test_inputs: tuple[CompileSqlTestInput, ...] = field(default_factory=tuple)
     scenario_inputs: tuple[CompileSqlScenarioInput, ...] = field(default_factory=tuple)
-    audit_inputs: tuple[CompileAuditInput, ...] = field(default_factory=tuple)
+    audit_inputs: tuple[AuditInput, ...] = field(default_factory=tuple)
     diagnostics: tuple[CompilerDiagnostic, ...] = field(default_factory=tuple)
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None
     scope_index: ScopeIndex = field(default_factory=ScopeIndex)
     declaration_scope: DeclarationScopeBuild | None = field(default=None, repr=False, compare=False)
+    native_project: _native.NativeCompiledProject | None = field(
+        default=None, repr=False, compare=False
+    )
 
 
 @dataclass(frozen=True)
@@ -1000,6 +1031,71 @@ class CompiledModel:
     dynamic_column_contract: DynamicColumnContractProof | None = None
     unchecked_output_columns: frozenset[str] = frozenset()
     rejected_sql_analysis_opt_out: SourceLocation | None = None
+
+    @property
+    def reference_rows(self) -> list[tuple[str, str, str | None, int | None]]:
+        """Each reference as `(kind, name, package, call argument count)`."""
+
+        return [
+            (str(ref.ref_kind), ref.ref_name, ref.ref_package, ref.call_argument_count)
+            for ref in self.references
+        ]
+
+    @property
+    def relation_key_row(self) -> RelationKeyRow:
+        """The model's declared key facts, for deriving its unique keys."""
+
+        return _native.relation_key_row("ref", self.name, self.config.values, self.schema_entry)
+
+    @property
+    def key_row(self) -> tuple[str, str]:
+        """`(resource type, name)` of the model's key."""
+
+        return (str(self.key.resource_type), self.key.name)
+
+    @property
+    def dep_rows(self) -> list[tuple[str, str]]:
+        """`(resource type, name)` of each dependency."""
+
+        return [(str(dep.resource_type), dep.name) for dep in self.deps]
+
+    @property
+    def destination_row(self) -> tuple[str | None, str | None, str]:
+        """`(database, schema, name)` of the model's destination."""
+
+        return (self.destination.database, self.destination.schema, self.destination.name)
+
+    @property
+    def inferred_rows(self) -> list[tuple[str, str | None, str]] | None:
+        """Each inferred column as `(name, type, nullability)`, or `None`."""
+
+        if self.inferred_columns is None:
+            return None
+        return [
+            (column.name, column.type, str(column.nullability)) for column in self.inferred_columns
+        ]
+
+    @property
+    def schema_column_rows(self) -> list[tuple[str, str | None]] | None:
+        """Each declared column of the attached schema as `(name, type)`, or `None`."""
+
+        if self.schema_entry is None:
+            return None
+        return [(column.name, column.type) for column in self.schema_entry.columns]
+
+    @property
+    def has_dynamic_columns(self) -> bool:
+        """Whether the attached schema declares dynamic columns."""
+
+        return self.schema_entry is not None and bool(self.schema_entry.dynamic_columns)
+
+    @property
+    def output_column_count(self) -> int:
+        """Inferred columns, else the attached schema's declared columns, else zero."""
+
+        if self.inferred_columns is not None:
+            return len(self.inferred_columns)
+        return len(self.schema_entry.columns) if self.schema_entry is not None else 0
 
 
 @dataclass(frozen=True)
@@ -1140,11 +1236,11 @@ class CompiledProject:
     compile_cache_dir: Path | None = None
     settings: SettingsConfig = field(default_factory=SettingsConfig)
     scenario: ScenarioConfig = field(default_factory=ScenarioConfig)
-    models: tuple[CompiledModel, ...] = field(default_factory=tuple)
-    sources: tuple[CompiledSource, ...] = field(default_factory=tuple)
-    seeds: tuple[CompiledSeed, ...] = field(default_factory=tuple)
-    functions: tuple[CompiledFunction, ...] = field(default_factory=tuple)
-    audits: tuple[CompiledAudit, ...] = field(default_factory=tuple)
+    models: tuple[CompiledModelView, ...] = field(default_factory=tuple)
+    sources: tuple[CompiledSourceView, ...] = field(default_factory=tuple)
+    seeds: tuple[CompiledSeedView, ...] = field(default_factory=tuple)
+    functions: tuple[CompiledFunctionView, ...] = field(default_factory=tuple)
+    audits: tuple[CompiledAuditView, ...] = field(default_factory=tuple)
     sql_tests: tuple[CompiledSqlTest, ...] = field(default_factory=tuple)
     sql_scenarios: tuple[CompiledSqlScenario, ...] = field(default_factory=tuple)
     loader_functions: tuple[DiscoveredLoaderFunction, ...] = field(default_factory=tuple)
@@ -1163,6 +1259,60 @@ class CompiledProject:
         default_factory=dict, compare=False, repr=False
     )
     native_session: Any | None = field(default=None, compare=False, repr=False)
+    native_project: _native.NativeCompiledProject | None = field(
+        default=None, compare=False, repr=False
+    )
+
+    @cached_property
+    def lineage_graph(self) -> _native.NativeProjectGraph:
+        """The lineage edges, tags, model folders and names, indexed natively once per project."""
+
+        rows: list[tuple[tuple[str, str], list[tuple[str, str]], list[str], str | None]] = [
+            (
+                self._graph_key(model.key),
+                self._graph_keys(model.deps),
+                self._graph_tags(model.config.values.get("tags")),
+                str(model.relative_path.parent),
+            )
+            for model in self.models
+        ]
+        rows.extend(
+            (self._graph_key(source.key), self._graph_keys(source.deps), [], None)
+            for source in self.sources
+        )
+        rows.extend(
+            (
+                self._graph_key(seed.key),
+                self._graph_keys(seed.deps),
+                list(seed.schema_entry.tags),
+                None,
+            )
+            for seed in self.seeds
+        )
+        rows.extend(
+            (
+                self._graph_key(function.key),
+                self._graph_keys(function.deps),
+                list(function.tags),
+                None,
+            )
+            for function in self.functions
+        )
+        return _native.NativeProjectGraph.from_resources(rows)
+
+    @staticmethod
+    def _graph_key(key: CompiledObjectKey) -> tuple[str, str]:
+        return (str(key.resource_type), key.name)
+
+    @classmethod
+    def _graph_keys(cls, keys: Sequence[CompiledObjectKey]) -> list[tuple[str, str]]:
+        return [cls._graph_key(key) for key in keys]
+
+    @staticmethod
+    def _graph_tags(value: object) -> list[str]:
+        if isinstance(value, list | tuple):
+            return [str(item) for item in value]
+        return []
 
 
 @dataclass(frozen=True)
@@ -1171,41 +1321,6 @@ class CompileSqlTestCte:
 
     name: str
     sql_body: str
-
-
-@dataclass(frozen=True)
-class CompileModelSqlTestCtes:
-    """Extracted model-mode SQL-native test CTE semantics."""
-
-    authored_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    macro_mocks: dict[str, str] = field(default_factory=dict)
-    mock_model_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_source_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_seed_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_dbt_ref_names: tuple[str, ...] = field(default_factory=tuple)
-    mock_table_function_names: tuple[str, ...] = field(default_factory=tuple)
-    expected_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    expected_model_names: tuple[str, ...] = field(default_factory=tuple)
-    assertion_ctes: tuple[CompileSqlTestCte, ...] = field(default_factory=tuple)
-    assertion_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class CompileDirectLogicSqlTestCtes:
-    """Extracted direct-logic SQL-native test CTE semantics."""
-
-    mode: SqlTestMode
-    helper_ctes: tuple[CompileSqlTestCte, ...]
-    actual_cte: CompileSqlTestCte
-    expected_cte: CompileSqlTestCte
-
-
-@dataclass(frozen=True)
-class CompileSqlTestCtes:
-    """Extracted top-level SQL-native test CTE semantics."""
-
-    mode: SqlTestMode
-    payload: CompileModelSqlTestCtes | CompileDirectLogicSqlTestCtes
 
 
 @dataclass(frozen=True)
@@ -1226,24 +1341,6 @@ class CompileModelSqlTestInputPayload:
     assertion_target_model_names: tuple[str, ...] = field(default_factory=tuple)
     read_helper_names: tuple[str, ...] = field(default_factory=tuple)
     reference_target_model_names: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class SqlTestReads:
-    """Helpers one SQL test reads and the unmocked models they and its expected rows reference."""
-
-    read_helper_names: tuple[str, ...]
-    reference_target_model_names: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class SqlTestCteGraph:
-    """Which authored helper and mock CTEs one SQL test reads, keyed by case-folded name."""
-
-    ctes: dict[str, CompileSqlTestCte]
-    reads: dict[str, tuple[str, ...]]
-    parsed_reads: dict[str, tuple[str, ...]]
-    reader_reads: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1627,16 +1724,3 @@ class ModelValidatorContext:
     settings: SettingsConfig
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
     native_config: NativeModelConfigSession
-
-
-@dataclass(frozen=True)
-class SqlAnalysisOptOutRequest:
-    """One model's opt-out, with what is needed to prove its SQL parses."""
-
-    model_file: DiscoveredSqlModelFile
-    config: CompileModelConfig
-    settings: SettingsConfig
-    no_sql_validation: bool
-    query_sql: str
-    placeholders: dict[str, str] | None
-    project_config_path: Path

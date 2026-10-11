@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSqlTest
+from sqlbuild.compiler.compile.models import CompiledSqlTest
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.main.execution._plan_compiled_sql_test_artifacts import (
     plan_compiled_sql_test_artifacts,
 )
@@ -12,7 +13,7 @@ from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 
 def plan_native_sql_test_artifacts(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     tests: tuple[CompiledSqlTest, ...],
     adapter: BaseAdapter,
     sql_analysis_enabled: bool,

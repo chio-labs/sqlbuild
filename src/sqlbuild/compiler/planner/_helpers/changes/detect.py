@@ -7,13 +7,15 @@ from collections.abc import Callable
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.changes.metadata import (
     changed_local_function_names,
@@ -61,7 +63,7 @@ from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 def detect_changes(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
     full_refresh: bool,
@@ -79,7 +81,7 @@ def detect_changes(
     )
 
     function_changes: dict[str, FunctionChangeResult] = {}
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
         if function.key not in scope.selected_keys:
@@ -104,7 +106,7 @@ def detect_changes(
 
 def detect_model_changes_in_scope(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: PlannerScope,
     snapshot: WarehouseSnapshot,
     query_change_tracking: bool | None = None,
@@ -130,7 +132,7 @@ def detect_model_changes_in_scope(
     for key in scope.execution_order:
         if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
             continue
-        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        model: CompiledModelView | None = scope.models_by_name.get(key.name)
         if model is None:
             continue
         model_changes[model.name] = detect_model_changes(
@@ -149,7 +151,7 @@ def detect_model_changes_in_scope(
 
 def detect_model_changes(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     snapshot: WarehouseSnapshot,
     sql_analysis_enabled: bool,
     query_change_tracking: bool,
@@ -353,7 +355,7 @@ def detect_model_changes(
     )
 
 
-def _get_type_enforcement(model: CompiledModel) -> bool:
+def _get_type_enforcement(model: CompiledModelView) -> bool:
     """Resolve whether type enforcement is active for a model."""
 
     if model.schema_entry is not None and model.schema_entry.type_enforcement is not None:
@@ -361,7 +363,7 @@ def _get_type_enforcement(model: CompiledModel) -> bool:
     return False
 
 
-def _build_yml_columns(model: CompiledModel) -> tuple[ColumnInfo, ...]:
+def _build_yml_columns(model: CompiledModelView) -> tuple[ColumnInfo, ...]:
     """Build expected columns from schema.yml declarations."""
 
     if model.schema_entry is None:

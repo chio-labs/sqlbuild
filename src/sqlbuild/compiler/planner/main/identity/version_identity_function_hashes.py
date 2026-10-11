@@ -5,13 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 
-from sqlbuild.compiler.compile.models import CompiledFunction
+from sqlbuild.compiler.compile.types import CompiledFunctionView
 from sqlbuild.compiler.planner._helpers.identity.hashing import function_definition_hash
 
 
 def build_function_local_hashes(
     *,
-    functions: tuple[CompiledFunction, ...],
+    functions: tuple[CompiledFunctionView, ...],
     dialect: str | None,
 ) -> dict[str, str]:
     """Derive local-only semantic hashes for functions; SQL bodies ignore layout and comments."""

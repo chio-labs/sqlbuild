@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompileAuditInput
+from sqlbuild.compiler.compile.types import AuditInput
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AuditFactoryCompileIntegrationTestCase,
 )
@@ -36,6 +36,7 @@ AUDIT ();
 SELECT * FROM __ref("@model") WHERE NOT (@expression)
 """,
             "python/factories/quality.py": """
+from sqlbuild.compiler.compile.types import AuditInput
 from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory
 
 @audit_factory
@@ -51,7 +52,7 @@ SELECT 10 AS amount
 """,
         },
     )
-    generated: tuple[CompileAuditInput, ...] = compile_audits_for_project(project_dir=tmp_path)
+    generated: tuple[AuditInput, ...] = compile_audits_for_project(project_dir=tmp_path)
 
     write_repo_files(
         tmp_path,
@@ -67,7 +68,7 @@ SELECT 10 AS amount
 """,
         },
     )
-    direct: tuple[CompileAuditInput, ...] = compile_audits_for_project(project_dir=tmp_path)
+    direct: tuple[AuditInput, ...] = compile_audits_for_project(project_dir=tmp_path)
 
     assert len(generated) == test_case.expected_audit_count
     assert audit_input_projection(audits=generated) == audit_input_projection(audits=direct)

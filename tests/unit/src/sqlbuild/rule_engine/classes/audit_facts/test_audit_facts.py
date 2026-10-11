@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledAudit, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.models import Model
 from tests.unit.src.sqlbuild.rule_engine.classes.audit_facts._test_types import (
@@ -32,17 +32,17 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
 def test_given_attached_and_project_audits_when_querying_model_then_returns_only_attached_audits(
     test_case: AuditFactsTestCase,
 ) -> None:
-    attached: CompiledAudit = build_audit(
+    attached: CompiledAuditView = build_audit(
         name=test_case.attached_name, attached_target_name="orders"
     )
-    other_model: CompiledAudit = build_audit(
+    other_model: CompiledAuditView = build_audit(
         name=test_case.other_model_name, attached_target_name="customers"
     )
-    project_audit: CompiledAudit = build_audit(
+    project_audit: CompiledAuditView = build_audit(
         name=test_case.project_audit_name, attached_target_name=None
     )
-    project: CompiledProject = replace(
-        build_project(
+    project: CompiledProjectView = project_with(
+        project=build_project(
             name="orders",
             relative_path="models/orders.sql",
             sql="SELECT 1 AS order_id",
@@ -53,7 +53,7 @@ def test_given_attached_and_project_audits_when_querying_model_then_returns_only
 
     facts: AuditFacts = AuditFacts(project=project)
 
-    attached_audits: tuple[CompiledAudit, ...] = facts.for_model(
+    attached_audits: tuple[CompiledAuditView, ...] = facts.for_model(
         Model(name="orders", path=Path("models/orders.sql"), materialization="view")
     )
     assert tuple(audit.name for audit in attached_audits) == test_case.expected_attached_names

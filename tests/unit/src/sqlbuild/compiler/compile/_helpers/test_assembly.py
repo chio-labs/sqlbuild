@@ -11,13 +11,13 @@ from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compile
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
-    CompiledSeed,
-    CompileProjectInputs,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
+    CompiledProjectView,
     CompiledResourceType,
+    CompiledSeedView,
+    CompileInputsView,
 )
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
@@ -514,12 +514,12 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
     monkeypatch.setenv("USE_SEED_DB", "1")
     write_repo_files(tmp_path, test_case.repo_files)
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
     )
-    compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
+    compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
 
     assert tuple(m.name for m in compiled.models) == test_case.expected_model_names
     assert tuple(m.deps for m in compiled.models) == test_case.expected_model_deps
@@ -618,13 +618,13 @@ SELECT * FROM @relation WHERE NOT (@expression)
             + "\n",
         },
     )
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
     )
 
-    compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
+    compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
 
     assert tuple(audit.name for audit in compiled.audits) == test_case.expected_names
 
@@ -691,12 +691,12 @@ seeds:
         },
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
 
-    seeds: dict[str, CompiledSeed] = {
+    seeds: dict[str, CompiledSeedView] = {
         seed.name: seed for seed in assemble_compiled_project(inputs=compile_inputs).seeds
     }
 
@@ -715,12 +715,12 @@ seeds:
         seeds["currencies"].destination.logical_schema,
     ) == test_case.expected_defaulted_location * 2
 
-    physical_inputs: CompileProjectInputs = build_compile_inputs(
+    physical_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         selected_target="physical",
     )
-    physical_seeds: tuple[CompiledSeed, ...] = assemble_compiled_project(
+    physical_seeds: tuple[CompiledSeedView, ...] = assemble_compiled_project(
         inputs=physical_inputs
     ).seeds
     assert {(seed.destination.database, seed.destination.schema) for seed in physical_seeds} == {
@@ -793,13 +793,13 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
         base_repo_files() | {"sqlbuild_project.toml": test_case.project_toml},
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
     )
 
-    compiled: CompiledProject = assemble_compiled_project(inputs=compile_inputs)
+    compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
 
     assert compiled.effective_target_database == test_case.expected_effective_target_database
     assert compiled.effective_target_schema == test_case.expected_effective_target_schema
@@ -855,13 +855,13 @@ def test_given_sql_hooks_when_assembling_then_applies_adapter_aware_validation(
         },
     )
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
     )
 
-    compiled: CompiledProject = assemble_compiled_project(
+    compiled: CompiledProjectView = assemble_compiled_project(
         inputs=compile_inputs,
         inference_profile=ExpressionInferenceProfile(
             sql_analysis_dialect=test_case.dialect,

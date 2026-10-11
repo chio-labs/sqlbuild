@@ -234,3 +234,17 @@ pub(crate) const CTE_ALIAS_PAYLOAD_KEY: &str = "alias";
 pub(crate) const NAME_PAYLOAD_KEY: &str = "name";
 pub(crate) const SCHEMA_TABLE_ARG: &str = "schema";
 pub(crate) const CATALOG_TABLE_ARG: &str = "catalog";
+/// The set-operation keywords `\b(?:UNION|INTERSECT|EXCEPT)\b` searches for, in lowercase.
+pub(crate) const SET_OPERATION_KEYWORDS: [&str; 3] = ["union", "intersect", "except"];
+/// The analysis relation name prefix of a table-function call.
+pub(crate) const TABLE_FUNCTION_ANALYSIS_PREFIX: &str = "__sqlbuild_table_function_";
+pub(crate) const REF_KIND: &str = "ref";
+pub(crate) const UDF_KIND: &str = "udf";
+pub(crate) const TABLE_FUNCTION_KIND: &str = "table_fn";
+/// Python's `_LINEAGE_RESOURCE_TYPES`: reference kind and the resource type lineage names.
+pub(crate) const LINEAGE_RESOURCE_TYPES: [(&str, &str); 4] = [
+    ("ref", "model"),
+    ("source", "source"),
+    ("seed", "seed"),
+    ("table_fn", "table_fn"),
+];

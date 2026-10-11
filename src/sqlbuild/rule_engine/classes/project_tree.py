@@ -7,7 +7,8 @@ import os
 import stat
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledProject
+import sqlbuild._native as _native
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.constants import PARENT_DIRECTORY_TOKEN
 from sqlbuild.rule_engine.exceptions import RuleUsageError
 from sqlbuild.rule_engine.models import Model, ProjectPath
@@ -19,12 +20,21 @@ _TRACKED_TEXT_SUFFIXES: frozenset[str] = frozenset({".py", ".sql", ".toml", ".ya
 class ProjectTree:
     """Deterministic compiler-owned view of supported project paths."""
 
-    def __init__(self, *, project_dir: Path, project: CompiledProject) -> None:
+    def __init__(
+        self,
+        *,
+        project_dir: Path,
+        project: CompiledProjectView,
+        models: tuple[Model, ...] | None = None,
+    ) -> None:
         self._root: Path = project_dir.resolve()
         self._discovered: tuple[ProjectPath, ...] | None = None
         self._directories: dict[Path, Path | None] = {}
+        model_views: tuple[Model, ...] = (
+            tuple(public_model(item) for item in project.models) if models is None else models
+        )
         self._resource_paths: dict[str, Model] = {
-            item.relative_path.as_posix(): public_model(item) for item in project.models
+            item.path.as_posix(): item for item in model_views
         }
 
     @property
@@ -144,7 +154,7 @@ class ProjectTree:
 def public_model(model: object) -> Model:
     from sqlbuild.compiler.compile.models import CompiledModel
 
-    if not isinstance(model, CompiledModel):
+    if not isinstance(model, (CompiledModel, _native.NativeCompiledModel)):
         raise RuleUsageError("model is not a compiled SQL model")
     value: object = model.config.values.get("materialized")
     return Model(

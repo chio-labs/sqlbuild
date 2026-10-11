@@ -95,6 +95,20 @@ impl DeclarationKind {
         }
     }
 
+    /// Python's `DECLARATION_ROLE_PARTS`: the folders a declaration of this kind lives under.
+    pub fn role_parts(self) -> &'static [&'static str] {
+        match self {
+            Self::Macro => &["macros"],
+            Self::Enum => &["enums"],
+            Self::Constant => &["constants"],
+            Self::Audit => &["audits", "generic"],
+            Self::SingularAudit => &["audits", "singular"],
+            Self::Schema => &["schemas"],
+            Self::SqlHook => &["hooks", "sql"],
+            Self::PythonHook => &["hooks", "python"],
+        }
+    }
+
     /// The kind with Python's enum value `value`.
     pub fn parse(value: &str) -> Option<Self> {
         [
@@ -154,6 +168,13 @@ impl OwnershipRootKind {
             Self::Resource => "resource",
             Self::Global => "global",
         }
+    }
+
+    /// The kind with Python's enum `value`.
+    pub fn parse(value: &str) -> Option<Self> {
+        [Self::Resource, Self::Global]
+            .into_iter()
+            .find(|kind| kind.as_str() == value)
     }
 }
 
@@ -354,9 +375,8 @@ pub struct GrantRecord {
 /// One lookup mapping's groups; members index the records the mapping groups.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KeyedGroups {
+    /// Groups in Python's `repr(key)` order.
     pub groups: Vec<Vec<usize>>,
-    /// Whether `groups` follow Python's `repr(key)` order; otherwise first-occurrence order.
-    pub repr_ordered: bool,
 }
 
 /// Python's `DeclarationVisibilityIndex` positions over the canonical declarations.
@@ -367,20 +387,6 @@ pub struct VisibilityGroups {
     pub private: Vec<(ResourceIdentity, Vec<usize>)>,
     pub local: Vec<(String, Vec<usize>)>,
     pub inherited: Vec<(String, Vec<usize>)>,
-}
-
-/// Every grouping Python's `build_lookup` derives from one index and its grants.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ScopeLookupGroups {
-    pub canonical_usages: Vec<usize>,
-    pub canonical_grants: Vec<usize>,
-    pub resources: KeyedGroups,
-    pub resources_by_path: KeyedGroups,
-    pub declarations: KeyedGroups,
-    pub usages_by_consumer: KeyedGroups,
-    pub usages_by_declaration: KeyedGroups,
-    pub grants_by_resource: KeyedGroups,
-    pub visibility: VisibilityGroups,
 }
 
 /// The native scope stage cannot reproduce Python for this project; the Python stage runs instead.
@@ -454,4 +460,198 @@ pub struct VisibleEntry {
 pub struct ResourceVisibility {
     pub visible: Vec<VisibleEntry>,
     pub inaccessible: Vec<usize>,
+}
+
+/// The scope facts that decide whether a declaration is visible from an authored path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeclaredScope {
+    pub scope: ScopeKind,
+    /// The owning resource of a private declaration.
+    pub owner: Option<ResourceIdentity>,
+    pub owning_path: Option<String>,
+}
+
+/// A qualified identity as Python's `parse_identity` reads it.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum QualifiedIdentity {
+    Resource(ResourceIdentity),
+    Declaration(DeclarationIdentity),
+}
+
+/// Why Python's `parse_identity` rejects a value; each names the value or the raw kind.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IdentityFailure {
+    /// `Qualified identity has no name: {value!r}`.
+    NoName,
+    /// `Unknown qualified identity kind: {raw_kind!r}`.
+    UnknownKind(String),
+    /// `Invalid private identity: {value!r}`.
+    InvalidPrivate,
+    /// `Expected a kind-qualified identity such as 'model:name': {value!r}`.
+    Unqualified,
+}
+
+/// Why Python's `normalize_path` raises `InvalidScopePathError`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScopePathFailure {
+    /// `Scope path must be project-relative: {path}`.
+    NotProjectRelative,
+    /// `Scope path escapes the project: {path}`.
+    EscapesProject,
+}
+
+/// One usage of a full scope index: consumer, declaration, usage kind and what it came through.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReportUsage {
+    pub consumer: QualifiedIdentity,
+    pub declaration: DeclarationIdentity,
+    pub kind: String,
+    pub through: Option<QualifiedIdentity>,
+}
+
+/// One relationship grant of a full scope index.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReportGrant {
+    pub resource: ResourceIdentity,
+    pub declaration: DeclarationIdentity,
+    pub through: QualifiedIdentity,
+    pub kind: GrantKind,
+}
+
+/// The parts of a diagnostic the lookup orders diagnostics by.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReportDiagnosticKey {
+    pub path: Option<String>,
+    pub line: Option<i64>,
+    pub column: Option<i64>,
+    pub code: String,
+}
+
+/// A full scope index's records as Python's `ScopeIndex` holds them, in its tuple orders.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReportRecords {
+    pub roots: Vec<OwnershipRoot>,
+    pub resources: Vec<ResourceRecord>,
+    pub declarations: Vec<DeclarationRecord>,
+    pub usages: Vec<ReportUsage>,
+    pub grants: Vec<ReportGrant>,
+    pub diagnostics: Vec<ReportDiagnosticKey>,
+}
+
+/// Python's `build_lookup` over report records: canonical orders, groups and visibility.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReportLookup {
+    pub roots: Vec<usize>,
+    pub resources: Vec<usize>,
+    pub declarations: Vec<usize>,
+    pub usages: Vec<usize>,
+    pub grants: Vec<usize>,
+    pub diagnostics: Vec<usize>,
+    pub groups: ReportGroups,
+    pub visibility: VisibilityGroups,
+    /// Each input resource's normalized path, the `resources_by_path` key.
+    pub resource_paths: Vec<String>,
+}
+
+/// The lookup's mappings as groups of record positions.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReportGroups {
+    pub resources: KeyedGroups,
+    pub resources_by_path: KeyedGroups,
+    pub declarations: KeyedGroups,
+    pub usages_by_consumer: KeyedGroups,
+    pub usages_by_declaration: KeyedGroups,
+    pub grants_by_resource: KeyedGroups,
+}
+
+/// A path Python's `normalize_path` rejects, and why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RejectedPath {
+    pub failure: ScopePathFailure,
+    pub path: String,
+}
+
+/// What a scope query targets: an identity, or text naming one or a resource path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReportTarget {
+    Identity(QualifiedIdentity),
+    Text(String),
+}
+
+/// Python's `ScopeTargetQuery` matches as record positions in lookup group order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TargetMatch {
+    Resources(Vec<usize>),
+    Declarations(Vec<usize>),
+}
+
+/// Why Python's `query_target` raises.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TargetFailure {
+    Identity(IdentityFailure),
+    Path(RejectedPath),
+}
+
+/// Python's `InaccessibleReason`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InaccessibleReason {
+    LocalBoundary,
+    SiblingScope,
+    DescendantScope,
+    UnrelatedScope,
+    PrivateOwner,
+}
+
+impl InaccessibleReason {
+    /// Python's enum value text.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LocalBoundary => "local_boundary",
+            Self::SiblingScope => "sibling_scope",
+            Self::DescendantScope => "descendant_scope",
+            Self::UnrelatedScope => "unrelated_scope",
+            Self::PrivateOwner => "private_owner",
+        }
+    }
+}
+
+/// One relationship-visible declaration: its position, reason and sorted `through` text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationshipEntry {
+    pub position: usize,
+    pub reason: VisibilityReason,
+    pub through: String,
+}
+
+/// The report's `_classify`: direct, relationship and unavailable declarations, each sorted.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReportClassification {
+    pub direct: Vec<(usize, VisibilityReason)>,
+    pub relationships: Vec<RelationshipEntry>,
+    pub unavailable: Vec<(usize, InaccessibleReason)>,
+}
+
+/// One visible fact: a canonical declaration position, the reason, and the granting grant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResolvedVisible {
+    pub position: usize,
+    pub reason: VisibilityReason,
+    pub grant: Option<usize>,
+}
+
+/// Python's `_classify_resource` with each inaccessible position's reason.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResolvedVisibility {
+    pub visible: Vec<ResolvedVisible>,
+    pub inaccessible: Vec<(usize, InaccessibleReason)>,
+}
+
+/// How one declaration stands for a resource in a scope explanation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DeclarationStanding {
+    Visible(VisibilityReason),
+    /// Granted by relationships: the reason and the sorted `through` identities joined by commas.
+    Granted(VisibilityReason, String),
+    Inaccessible(InaccessibleReason),
 }

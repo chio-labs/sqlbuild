@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
@@ -79,7 +79,7 @@ SELECT 1
             + "\n",
         },
     )
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter=adapter,
     )
@@ -310,7 +310,7 @@ def test_given_chain_when_executing_resolved_sql_then_produces_expected_rows(
     connection: Any,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry
@@ -478,7 +478,7 @@ def test_given_sql_analysis_enabled_when_planning_chain_then_step_sql_remains_ex
     connection: Any,
 ) -> None:
     compiled_test: CompiledSqlTest
-    project: CompiledProject
+    project: CompiledProjectView
     compiled_test, project = build_test_and_project(test_case)
 
     entry: SqlTestPlanEntry

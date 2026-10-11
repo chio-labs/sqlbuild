@@ -43,3 +43,7 @@ pub(crate) const UNLISTED_ENVIRONMENT: &str =
     "a target template read an environment variable the request did not list";
 /// `AttachedAuditTargetKind`'s name in the `ValueError` its constructor raises.
 pub(crate) const AUDIT_TARGET_KIND_ENUM: &str = "AttachedAuditTargetKind";
+/// The prefix of an environment read in a target template.
+pub(crate) const ENVIRONMENT_READ_PREFIX: &str = "ENV:";
+/// Characters that end an `ENV:` name besides Python whitespace.
+pub(crate) const ENVIRONMENT_NAME_TERMINATORS: [char; 6] = ['(', ')', ',', '\'', '"', '}'];

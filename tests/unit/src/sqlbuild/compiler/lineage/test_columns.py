@@ -5,15 +5,18 @@ from typing import Any
 
 import pytest
 
+import sqlbuild._native as native
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModel,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.lineage._helpers import rich_columns
-from sqlbuild.compiler.lineage._helpers.columns import _build_schema_mapping
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.lineage._helpers import native_rich_columns
 from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import ColumnLineage, ModelColumnLineage, ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import (
@@ -21,7 +24,6 @@ from sqlbuild.compiler.lineage.types import (
     ColumnLineageMode,
     ColumnTransformKind,
 )
-from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from tests.unit.src.sqlbuild.compiler.lineage._test_types import (
     ColumnLineageAnalyzerTestCase,
     ExpectedCountTestCase,
@@ -154,7 +156,7 @@ from tests.unit.src.sqlbuild.compiler.lineage.helpers import (
 def test_given_compiled_project_when_building_column_lineage_then_infers_expected_column(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -162,12 +164,12 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,
     )
-    project: CompiledProject = make_compiled_project(
+    project: CompiledProjectView = make_compiled_project(
         models=upstream_models + (target_model,),
         seeds=tuple(
             make_compiled_seed(name=seed_name, columns=columns)
@@ -286,7 +288,7 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
 def test_given_compiled_project_when_building_fast_column_lineage_then_infers_expected_column(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -294,12 +296,12 @@ def test_given_compiled_project_when_building_fast_column_lineage_then_infers_ex
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,
     )
-    project: CompiledProject = make_compiled_project(
+    project: CompiledProjectView = make_compiled_project(
         models=upstream_models + (target_model,),
         seeds=tuple(
             make_compiled_seed(name=seed_name, columns=columns)
@@ -349,7 +351,7 @@ def test_given_compiled_project_when_building_fast_column_lineage_then_infers_ex
 def test_given_select_star_when_building_column_lineage_then_expands_known_schema_columns(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    project: CompiledProject = make_compiled_project(
+    project: CompiledProjectView = make_compiled_project(
         models=(
             make_compiled_model(
                 name="orders",
@@ -391,7 +393,7 @@ def test_given_select_star_when_building_column_lineage_then_expands_known_schem
 def test_given_linear_project_when_listing_column_consumers_then_returns_expected_edges(
     test_case: ProjectLineageGraphTestCase,
 ) -> None:
-    project: CompiledProject = make_compiled_project(
+    project: CompiledProjectView = make_compiled_project(
         models=(
             make_compiled_model(name="a", query_sql="SELECT 1 AS id", inferred_columns=("id",)),
             make_compiled_model(
@@ -426,16 +428,18 @@ def test_given_linear_project_when_listing_column_consumers_then_returns_expecte
 def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_public_graph(
     test_case: ExpectedCountTestCase,
 ) -> None:
-    upstream: CompiledModel = make_compiled_model(
+    upstream: CompiledModelView = make_compiled_model(
         name="orders",
         query_sql="SELECT 1 AS order_id",
         inferred_columns=("order_id",),
     )
-    target: CompiledModel = replace(
-        make_compiled_model(
-            name="order_summary",
-            query_sql='SELECT order_id FROM __ref("orders")',
-            inferred_columns=("order_id",),
+    target: CompiledModelView = replace(
+        compiled_model_record(
+            make_compiled_model(
+                name="order_summary",
+                query_sql='SELECT order_id FROM __ref("orders")',
+                inferred_columns=("order_id",),
+            )
         ),
         fast_lineage_columns=(
             CompiledLineageColumnFact(
@@ -532,7 +536,7 @@ def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_
 def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolves_upstream(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -540,12 +544,12 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,
     )
-    project: CompiledProject = make_compiled_project(
+    project: CompiledProjectView = make_compiled_project(
         models=upstream_models + (target_model,),
     )
 
@@ -593,7 +597,7 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
 def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_polyglot_name(
     test_case: ColumnLineageAnalyzerTestCase,
 ) -> None:
-    upstream_models: tuple[CompiledModel, ...] = tuple(
+    upstream_models: tuple[CompiledModelView, ...] = tuple(
         make_compiled_model(
             name=model_name,
             query_sql="SELECT 1",
@@ -601,12 +605,12 @@ def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_poly
         )
         for model_name, columns in test_case.upstream_model_columns.items()
     )
-    target_model: CompiledModel = make_compiled_model(
+    target_model: CompiledModelView = make_compiled_model(
         name=test_case.model_name,
         query_sql=test_case.query_sql,
         inferred_columns=test_case.inferred_columns,
     )
-    project: CompiledProject = make_compiled_project(models=upstream_models + (target_model,))
+    project: CompiledProjectView = make_compiled_project(models=upstream_models + (target_model,))
 
     result: ProjectColumnLineage | None = build_project_column_lineage(
         project=project,
@@ -645,7 +649,7 @@ def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_poly
 def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_no_lineage(
     test_case: SqlAnalysisDisabledLineageTestCase,
 ) -> None:
-    project: CompiledProject = make_compiled_project(
+    project: CompiledProjectView = make_compiled_project(
         models=(
             make_compiled_model(
                 name="orders_out",
@@ -670,12 +674,6 @@ def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_n
             unrelated_model_counts=(0, 250),
             expected_schema_builds=1,
             expected_analysis_calls=4,
-            expected_schema_tables_per_call=(
-                (),
-                ("__sqlbuild_model__orders_0",),
-                ("__sqlbuild_model__orders_1",),
-                ("__sqlbuild_model__orders_2",),
-            ),
         )
     ],
     ids=lambda case: case.description,
@@ -684,29 +682,29 @@ def test_given_unrelated_models_when_tracing_rich_lineage_then_analysis_work_sta
     test_case: RichLineageAnalysisScalingTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    polyglot_module: Any = import_polyglot_sql()
-    analyze_query: Any = polyglot_module.analyze_query
-    schema_builds: list[CompiledProject] = []
-    analysed_tables: list[tuple[str, ...]] = []
+    build_lineage: Any = native.build_rich_column_lineage
+    schema_resources: Any = native_rich_columns._schema_resources
+    schema_builds: list[CompiledProjectView] = []
+    analysed_queries: list[str] = []
 
-    def counting_schema_mapping(project: CompiledProject) -> dict[str, dict[str, str]]:
+    def counting_schema_mapping(project: CompiledProjectView) -> Any:
         schema_builds.append(project)
-        return _build_schema_mapping(project)
+        return schema_resources(project)
 
-    def recording_analyze_query(sql: str, options: dict[str, Any]) -> object:
-        analysed_tables.append(tuple(table["name"] for table in options["schema"]["tables"]))
-        return analyze_query(sql, options)
+    def recording_native_lineage(request: Any) -> Any:
+        analysed_queries.extend(request[2])
+        return build_lineage(request)
 
-    monkeypatch.setattr(rich_columns, "_build_schema_mapping", counting_schema_mapping)
-    monkeypatch.setattr(polyglot_module, "analyze_query", recording_analyze_query)
+    monkeypatch.setattr(native_rich_columns, "_schema_resources", counting_schema_mapping)
+    monkeypatch.setattr(native, "build_rich_column_lineage", recording_native_lineage)
     chain_names: frozenset[str] = frozenset(
         f"orders_{index}" for index in range(test_case.chain_length)
     )
     edges_by_project_size: list[tuple[str, ...]] = []
     for unrelated_model_count in test_case.unrelated_model_counts:
         schema_builds.clear()
-        analysed_tables.clear()
-        project: CompiledProject = make_compiled_project(
+        analysed_queries.clear()
+        project: CompiledProjectView = make_compiled_project(
             models=make_chain_models(
                 chain_length=test_case.chain_length,
                 unrelated_model_count=unrelated_model_count,
@@ -719,8 +717,7 @@ def test_given_unrelated_models_when_tracing_rich_lineage_then_analysis_work_sta
 
         assert result is not None
         assert len(schema_builds) == test_case.expected_schema_builds
-        assert len(analysed_tables) == test_case.expected_analysis_calls
-        assert tuple(analysed_tables) == test_case.expected_schema_tables_per_call
+        assert len(analysed_queries) == test_case.expected_analysis_calls
         edges_by_project_size.append(
             tuple(
                 edge_label(

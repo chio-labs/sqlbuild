@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.identity.hashing import model_definition_hash
 from sqlbuild.compiler.planner.classes.migration_state_inspection import (
@@ -55,7 +55,7 @@ def plan_reference_renames(
 
 
 def _has_changed_referencing_query(*, scope: PlannerScope, snapshot: WarehouseSnapshot) -> bool:
-    selected: tuple[CompiledModel, ...] = tuple(
+    selected: tuple[CompiledModelView, ...] = tuple(
         model
         for key in scope.selected_keys
         if (model := scope.models_by_name.get(key.name)) is not None
@@ -63,7 +63,7 @@ def _has_changed_referencing_query(*, scope: PlannerScope, snapshot: WarehouseSn
     return any(_referencing_query_changed(model=model, snapshot=snapshot) for model in selected)
 
 
-def _referencing_query_changed(*, model: CompiledModel, snapshot: WarehouseSnapshot) -> bool:
+def _referencing_query_changed(*, model: CompiledModelView, snapshot: WarehouseSnapshot) -> bool:
     recorded: Fingerprint | None = snapshot.fingerprints.models.get(model.name)
     return (
         recorded is not None

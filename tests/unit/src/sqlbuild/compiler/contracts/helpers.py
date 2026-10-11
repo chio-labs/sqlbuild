@@ -12,7 +12,7 @@ from sqlbuild.compiler.compile.models import (
     DynamicColumnContractProof,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import (
     SchemaAuditInstance,
@@ -41,7 +41,7 @@ def make_contract_project(
     authored_sql: str = "",
     dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = (),
     dynamic_column_contract: DynamicColumnContractProof | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a compiled project for contract validation tests."""
 
     key: CompiledObjectKey = CompiledObjectKey(
@@ -122,7 +122,7 @@ def make_promotion_project(
     *,
     model_configs: tuple[tuple[str, dict[str, object]], ...],
     table_promotion_mode: str | None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a compiled project of models with the given configs and promotion setting."""
 
     return CompiledProject(

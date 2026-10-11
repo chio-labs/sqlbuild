@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.spec.contracts.constants import CURSOR_POLICY_DISABLED
 from sqlbuild.spec.contracts.models import FutureCursorsConfig, StartCursorsConfig
 from sqlbuild.spec.contracts.types import FutureCursorAction
 
 
 def resolve_start_cursor_config(
-    *, model: CompiledModel, project_config: StartCursorsConfig | None
+    *, model: CompiledModelView, project_config: StartCursorsConfig | None
 ) -> StartCursorsConfig | None:
     """Resolve automatic-start policy with model config taking precedence."""
 
@@ -26,7 +26,7 @@ def resolve_start_cursor_config(
 
 
 def resolve_future_cursor_config(
-    *, model: CompiledModel, project_config: FutureCursorsConfig | None
+    *, model: CompiledModelView, project_config: FutureCursorsConfig | None
 ) -> FutureCursorsConfig | None:
     """Resolve future-end policy with model config taking precedence."""
 

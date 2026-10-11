@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import re
 import sqlite3
+import sys
 import tempfile
 from contextlib import closing
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.models import LineageNode, RelationLineageIndex
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.constants import CACHE_DIRECTORY_NAME
 from sqlbuild.compiler.frontier.main.engine_cache_name import engine_cache_name
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -27,27 +27,10 @@ _CACHE_FILE_RELATIVE_PATH: Path = Path("v1/structural-graph.sqlite3")
 _CACHE_MAX_BYTES: int = 50_000_000
 _CACHE_MAX_ROWS: int = 1_000_000
 _SQLITE_TIMEOUT_SECONDS: float = 5.0
-_FINGERPRINT_SUFFIXES: frozenset[str] = frozenset({".csv", ".py", ".sql", ".toml", ".yaml", ".yml"})
-_FINGERPRINT_ROOT_FILES: frozenset[str] = frozenset({".gitignore", ".sqlbuildignore"})
-_EXCLUDED_ROOTS: frozenset[str] = frozenset(
-    {
-        ".git",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".tox",
-        ".venv",
-        "node_modules",
-        "target",
-        "venv",
-    }
+_FIRST_PYTHON_SKIPPING_INTERRUPTED_LISTINGS: tuple[int, int] = (3, 13)
+_INTERRUPTED_LISTING_UNCACHEABLE: bool = (
+    sys.version_info < _FIRST_PYTHON_SKIPPING_INTERRUPTED_LISTINGS
 )
-_EXCLUDED_PATH_PARTS: frozenset[str] = frozenset({"__pycache__"})
-_ENVIRONMENT_PATTERN: re.Pattern[bytes] = re.compile(rb"ENV:\s*([A-Za-z0-9_]+)")
-_ENVIRONMENT_MARKER: bytes = b"ENV:"
-_DYNAMIC_CONTEXT_MARKER: bytes = b"CTX:"
-_DYNAMIC_CONTEXT_GRAPH_SUFFIXES: frozenset[str] = frozenset({".py", ".toml"})
-_NON_ASCII_BYTE_START: int = 128
 
 
 def relation_lineage_fingerprint(
@@ -56,49 +39,25 @@ def relation_lineage_fingerprint(
     """Hash authored project inputs and invocation context without retaining their values."""
 
     try:
-        digest: Any = hashlib.sha256()
-        digest.update(_CACHE_ALGORITHM_VERSION.encode("ascii"))
-        digest.update(_sqlbuild_version().encode("utf-8"))
-        digest.update(
-            json.dumps(
-                {} if cli_vars is None else cli_vars,
-                ensure_ascii=True,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode("ascii")
-        )
-        environment_names: set[str] = set()
-        for path in _authored_files(project_dir=project_dir):
-            relative_path: str = path.relative_to(project_dir).as_posix()
-            contents: bytes = path.read_bytes()
-            if (
-                _DYNAMIC_CONTEXT_MARKER in contents
-                and path.suffix.lower() in _DYNAMIC_CONTEXT_GRAPH_SUFFIXES
-            ):
-                return None
-            environment_matches: list[re.Match[bytes]] = list(
-                _ENVIRONMENT_PATTERN.finditer(contents)
-            )
-            if contents.count(_ENVIRONMENT_MARKER) != len(environment_matches):
-                return None
-            if any(
-                match.end() < len(contents) and contents[match.end()] >= _NON_ASCII_BYTE_START
-                for match in environment_matches
-            ):
-                return None
-            environment_names.update(
-                match.group(1).decode("ascii") for match in environment_matches
-            )
-            digest.update(len(relative_path).to_bytes(8, byteorder="big"))
-            digest.update(relative_path.encode("utf-8"))
-            digest.update(len(contents).to_bytes(8, byteorder="big"))
-            digest.update(contents)
-        for name in sorted(environment_names):
-            digest.update(name.encode("ascii"))
-            digest.update(os.environ.get(name, "<missing>").encode("utf-8"))
-        return digest.hexdigest()
-    except (OSError, TypeError, UnicodeError, ValueError):
+        prefix: bytes = _fingerprint_prefix(cli_vars=cli_vars)
+    except (TypeError, UnicodeError, ValueError):
         return None
+    return _native.relation_lineage_fingerprint(
+        project_dir, prefix, _INTERRUPTED_LISTING_UNCACHEABLE
+    )
+
+
+def _fingerprint_prefix(*, cli_vars: dict[str, object] | None) -> bytes:
+    return (
+        _CACHE_ALGORITHM_VERSION.encode("ascii")
+        + _sqlbuild_version().encode("utf-8")
+        + json.dumps(
+            {} if cli_vars is None else cli_vars,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    )
 
 
 def read_relation_lineage_cache(
@@ -157,27 +116,6 @@ def write_relation_lineage_cache(
     return index
 
 
-def _authored_files(*, project_dir: Path) -> tuple[Path, ...]:
-    return tuple(
-        sorted(
-            path
-            for path in project_dir.rglob("*")
-            if path.is_file()
-            and not _is_excluded(path=path, project_dir=project_dir)
-            and (
-                path.suffix.lower() in _FINGERPRINT_SUFFIXES or path.name in _FINGERPRINT_ROOT_FILES
-            )
-        )
-    )
-
-
-def _is_excluded(*, path: Path, project_dir: Path) -> bool:
-    parts: tuple[str, ...] = path.relative_to(project_dir).parts
-    return (
-        not parts or parts[0] in _EXCLUDED_ROOTS or bool(_EXCLUDED_PATH_PARTS.intersection(parts))
-    )
-
-
 def _cache_path(*, project_dir: Path) -> Path:
     return (
         project_dir
@@ -200,7 +138,7 @@ def _relation_index(*, graph: ProjectGraph) -> RelationLineageIndex:
     )
 
 
-def _lineage_node(*, project: CompiledProject, key: CompiledObjectKey) -> LineageNode:
+def _lineage_node(*, project: CompiledProjectView, key: CompiledObjectKey) -> LineageNode:
     for model in project.models:
         if model.key == key:
             return LineageNode(

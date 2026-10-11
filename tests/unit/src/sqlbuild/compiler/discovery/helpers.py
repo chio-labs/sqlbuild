@@ -11,7 +11,6 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
 from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     parse_native_sql_test_contents,
 )
-from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_header_values
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import build_sql_scenario_file
 from sqlbuild.compiler.discovery._helpers.yml.schema import parse_loaded_schema_yml
 from sqlbuild.compiler.discovery._helpers.yml.sources import parse_loaded_sources_yml
@@ -63,7 +62,7 @@ def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object
     """Parse model contents as model discovery does, returning header values and query SQL."""
 
     payload: tuple[object, ...] = _parsed_model(contents=contents, file_path=file_path)
-    return project_native_header_values(cast(dict[str, object], payload[2])), str(payload[5])
+    return cast(dict[str, object], payload[2]), str(payload[5])
 
 
 def model_header_column_locations(
@@ -115,7 +114,7 @@ def parse_sql_scenario_file(
     )
     _raise_payload_error(payload=payload, file_path=file_path)
     return build_sql_scenario_file(
-        header_values=project_native_header_values(cast(dict[str, object], payload[2])),
+        header_values=cast(dict[str, object], payload[2]),
         sql_body=str(payload[3]),
         contents=str(payload[1]),
         file_path=file_path,

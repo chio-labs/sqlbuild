@@ -14,14 +14,14 @@ from sqlbuild.cli.commands.constants import (
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledSqlScenario,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 
 
 def select_scenarios(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selectors: tuple[str, ...],
     exclude: tuple[str, ...] = (),
     project_dir: Path,
@@ -71,7 +71,7 @@ def select_scenarios(
 
 
 def _select_scenarios_for_selector(
-    *, project: CompiledProject, selector: str, project_dir: Path
+    *, project: CompiledProjectView, selector: str, project_dir: Path
 ) -> tuple[CompiledSqlScenario, ...]:
     _validate_scenario_selector(selector)
     selector_path: Path = Path(selector)

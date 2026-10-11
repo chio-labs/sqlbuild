@@ -38,7 +38,6 @@ class RichLineageAnalysisScalingTestCase:
     unrelated_model_counts: tuple[int, ...]
     expected_schema_builds: int
     expected_analysis_calls: int
-    expected_schema_tables_per_call: tuple[tuple[str, ...], ...]
 
 
 @dataclass(frozen=True)

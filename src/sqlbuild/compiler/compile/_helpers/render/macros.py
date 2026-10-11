@@ -9,25 +9,21 @@ import inspect
 import sys
 import threading
 from collections.abc import Callable, Iterator, Mapping
-from contextvars import Token
 from dataclasses import dataclass, replace
+from functools import cache, partial
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import NoReturn, cast
+from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     call_site_sql_references,
-    reject_macro_generated_references,
-    report_macro_reference_call_syntax,
+    typed_reference_kinds,
 )
-from sqlbuild.compiler.compile._helpers.render.macro_argument_values import (
-    parse_macro_call_arguments,
-)
-from sqlbuild.compiler.compile.classes.macro_expansion_facts import MacroExpansionFacts
 from sqlbuild.compiler.compile.constants import (
     DECLARATION_REFERENCE_NAMES,
-    MACRO_CONTEXT_PARAMETER_NAME,
+    MACRO_TOKEN,
 )
 from sqlbuild.compiler.compile.exceptions import (
     CompileInputError,
@@ -35,33 +31,28 @@ from sqlbuild.compiler.compile.exceptions import (
     MacroDeclarationLookupError,
 )
 from sqlbuild.compiler.compile.models import (
+    CompilerDiagnostic,
     DeclarationResolutionContext,
     DeclarationScopeResolver,
     ExpansionSpan,
     LoadedMacro,
     MacroContext,
     MacroExpansionResult,
-    MacroExpansionState,
-    ParsedMacroArguments,
     StaticMacroExport,
     StaticMacroFault,
     StaticMacroInventory,
 )
+from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_references_help
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredMacroFile,
     EnumDeclaration,
 )
-from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import (
-    DECLARATION_READ_EVENT,
     GENERATED_REFERENCE_MARKERS,
-    GENERATED_SQL_EVENT,
-    MACRO_USE_EVENT,
 )
-from sqlbuild.compiler.macro_bridge.main._scan_macro_calls import scan_macro_calls
+from sqlbuild.compiler.macro_bridge.main._macro_store_tokens import macro_store_tokens
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
-from sqlbuild.compiler.macro_bridge.models import MacroCallScan, MacroCallSite, MacroScanFailure
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
@@ -70,10 +61,12 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
     ResourceIdentity,
     UsageRecord,
-    VisibilityRecord,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind, ResourceKind, ScopeKind, UsageKind
+from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.python_nodes.models import RELATION_RENDERER, SqlResourceRef
+from sqlbuild.python_nodes.types import SqlResourceRefKind
+from sqlbuild.spec.contracts.models import SourceLocation
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
@@ -1175,42 +1168,95 @@ def expand_sql_macros_result(
 ) -> MacroExpansionResult:
     """Expand macros and retain deterministic resolved dependency facts."""
 
-    facts: MacroExpansionFacts = MacroExpansionFacts()
-    state: MacroExpansionState = MacroExpansionState(
-        loaded_macros=loaded_macros,
-        macro_overrides={} if macro_overrides is None else macro_overrides,
-        macro_context=macro_context,
-        declaration_resolver=declaration_resolver,
-        declarations=declarations,
-        facts=facts,
-        consumer=consumer,
+    if MACRO_TOKEN not in sql:
+        return MacroExpansionResult(sql=sql)
+    if declarations is None and declaration_resolver is not None:
+        from sqlbuild.compiler.compile._helpers.render.declarations import (
+            resolve_declaration_context,
+        )
+
+        declarations = resolve_declaration_context(
+            resolver=declaration_resolver, file_path=file_path
+        )
+    expansion: _native.NativeMacroExpansion = _native.NativeMacroExpansion(
+        file_path,
+        (
+            loaded_macros,
+            {} if macro_overrides is None else macro_overrides,
+            macro_context,
+            declarations,
+            consumer,
+        ),
+        macro_context._enforce_explicit_references,
+        macro_expansion_classes(),
     )
-    bridge: MacroBridge | None = active_macro_bridge()
-    expanded_sql, spans = _bridged_sql_macros(
-        sql=sql, consumer_path=file_path, state=state, bridge=bridge
+    expanded_sql, spans, argument_references, dependencies, usages = expansion.expand(
+        sql, active_macro_bridge()
     )
     return MacroExpansionResult(
         sql=expanded_sql,
-        spans=spans,
-        argument_references=call_site_sql_references(tuple(facts.argument_references)),
-        dependencies=tuple(dict.fromkeys(facts.dependencies)),
-        usages=tuple(dict.fromkeys(facts.usages)),
+        spans=tuple(
+            ExpansionSpan(
+                source_start=source_start,
+                source_end=source_end,
+                output_start=output_start,
+                output_end=output_end,
+            )
+            for source_start, source_end, output_start, output_end in spans
+        ),
+        argument_references=call_site_sql_references(
+            tuple(
+                SqlResourceRef(kind=SqlResourceRefKind(kind), name=name)
+                for kind, name in argument_references
+            )
+        ),
+        dependencies=tuple(dict.fromkeys(dependencies)),
+        usages=tuple(dict.fromkeys(usages)),
     )
 
 
-def _bridged_sql_macros(
-    *, sql: str, consumer_path: Path, state: MacroExpansionState, bridge: MacroBridge | None
-) -> tuple[str, tuple[ExpansionSpan, ...]]:
-    from sqlbuild.compiler.compile._helpers.macro_bridge.expansion import (
-        expand_bridged_sql_macros,
-        expand_unbridged_sql_macros,
-    )
+@cache
+def macro_expansion_classes() -> dict[str, object]:
+    """The classes, enums and helpers the native expansion builds facts and errors from."""
 
-    if bridge is None:
-        return expand_unbridged_sql_macros(sql=sql, consumer_path=consumer_path, state=state)
-    return expand_bridged_sql_macros(
-        sql=sql, consumer_path=consumer_path, state=state, bridge=bridge
-    )
+    from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
+    from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
+    from sqlbuild.compiler.frontier.types import NativeFallbackSite
+
+    return {
+        "compile_error": CompileInputError,
+        "macro_argument_error": MacroArgumentError,
+        "mismatch_error": NativeStageMismatchError,
+        "declaration_identity": DeclarationIdentity,
+        "declaration_kind": DeclarationKind,
+        "macro_kind": DeclarationKind.MACRO,
+        "usage_record": UsageRecord,
+        "runtime_usage": UsageKind.RUNTIME,
+        "resource_identity": ResourceIdentity,
+        "model_kind": ResourceKind.MODEL,
+        "resource_ref": SqlResourceRef,
+        "ref_kinds": typed_reference_kinds(),
+        "ref_functions": {
+            kind.value: function for function, kind in typed_reference_kinds().items()
+        },
+        "store_tokens": macro_store_tokens(),
+        "relation_renderer": RELATION_RENDERER,
+        "invocation_context": macro_invocation_context,
+        "generated": {
+            "compiler_diagnostic": CompilerDiagnostic,
+            "report_diagnostic": report_compile_diagnostic,
+            "source_location": SourceLocation,
+            "resource_identity": ResourceIdentity,
+            "generic_syntax": SqlLexicalSyntax().native_mapping,
+            "generated_help": explicit_references_help(allowed="macro-generated references"),
+            "all_markers": list(GENERATED_REFERENCE_MARKERS),
+        },
+        "report_mocked": partial(
+            report_native_fallback, site=NativeFallbackSite.MACRO_CALL_MOCKED, kind="test_mock"
+        ),
+        "int_type": int,
+        "float_type": float,
+    }
 
 
 def _inventory_project_macros(
@@ -1227,37 +1273,12 @@ def _inventory_project_macros(
     return _inventory_from_analyses(macro_files=macro_files, analyses=analyses)
 
 
-def _expansion_declarations(
-    *, state: MacroExpansionState, consumer_path: Path
-) -> DeclarationResolutionContext | None:
-    declarations: DeclarationResolutionContext | None = state.declarations
-    if declarations is None and state.declaration_resolver is not None:
-        from sqlbuild.compiler.compile._helpers.render.declarations import (
-            resolve_declaration_context,
-        )
-
-        declarations = resolve_declaration_context(
-            resolver=state.declaration_resolver, file_path=consumer_path
-        )
-    return declarations
-
-
 def find_macro_call_names(sql: str) -> tuple[str, ...]:
     """Return unique authored macro call names in encounter order."""
 
     return tuple(
         name
         for name in _native_macro_call_names(sql=sql, nested=False)
-        if name not in DECLARATION_REFERENCE_NAMES
-    )
-
-
-def find_nested_macro_call_names(sql: str) -> tuple[str, ...]:
-    """Return unique macro call names, including calls inside other calls' arguments."""
-
-    return tuple(
-        name
-        for name in _native_macro_call_names(sql=sql, nested=True)
         if name not in DECLARATION_REFERENCE_NAMES
     )
 
@@ -1273,263 +1294,36 @@ def _native_macro_call_names(*, sql: str, nested: bool) -> tuple[str, ...]:
     return tuple(names)
 
 
-def raise_failed_macro_call(
+def macro_invocation_context(
     *,
-    failure: MacroScanFailure,
-    file_path: Path,
-    state: MacroExpansionState,
+    expansion: _native.NativeMacroExpansion,
     declarations: DeclarationResolutionContext | None,
-) -> NoReturn:
-    """Raise where Python's scan raises: the failing call's macro lookup error, else the scan's."""
-
-    if failure.call_name is not None:
-        _ = _resolved_macro(
-            macro_name=failure.call_name,
-            file_path=file_path,
-            state=state,
-            declarations=declarations,
-        )
-    raise CompileInputError(failure.message)
-
-
-def _resolved_macro(
-    *,
-    macro_name: str,
     file_path: Path,
-    state: MacroExpansionState,
-    declarations: DeclarationResolutionContext | None,
-) -> LoadedMacro:
-    loaded_macro: LoadedMacro | None = (
-        declarations.macros.get(macro_name)
-        if declarations is not None
-        else state.loaded_macros.get(macro_name)
-    )
-    if declarations is not None and macro_name in declarations.inaccessible_macros:
-        record: DeclarationRecord = declarations.inaccessible_macros[macro_name]
-        suggestions: str = ", ".join(sorted(declarations.macros)) or "none"
-        owner: str = record.owning_path or "global"
-        raise CompileInputError(
-            f"Macro '@{macro_name}' in '{file_path}' is inaccessible. Defined at "
-            f"'{record.path}:{record.line}:{record.column}' with scope owner '{owner}'; "
-            f"consumer/definition path is '{file_path}'. Visible macros: {suggestions}"
-        )
-    if loaded_macro is None:
-        available: object = declarations.macros if declarations is not None else state.loaded_macros
-        available_macro_names: str = ", ".join(sorted(available)) or "none"
-        raise CompileInputError(
-            f"Unknown macro '@{macro_name}' in '{file_path}'. Available macros: "
-            f"{available_macro_names}"
-        )
-    return loaded_macro
-
-
-def evaluate_macro_call(
-    *,
-    sql: str,
-    site: MacroCallSite,
-    file_path: Path,
-    state: MacroExpansionState,
-    declarations: DeclarationResolutionContext | None,
-    stack: tuple[DeclarationIdentity, ...],
-    top_level: bool,
-) -> object:
-    """Run one natively scanned call: its nested calls, then the macro, in Python's order."""
-
-    macro_name: str = site.name
-    loaded_macro: LoadedMacro = _resolved_macro(
-        macro_name=macro_name, file_path=file_path, state=state, declarations=declarations
-    )
-    override_value: str | None = state.macro_overrides.get(macro_name)
-    if override_value is not None:
-        _validate_final_macro_sql(
-            macro_name=macro_name, file_path=file_path, macro_result=override_value
-        )
-        return override_value
-    identity: DeclarationIdentity = (
-        declarations.macro_records[macro_name].identity
-        if declarations is not None
-        else DeclarationIdentity(kind=DeclarationKind.MACRO, name=macro_name)
-    )
-    if identity in stack:
-        cycle: tuple[DeclarationIdentity, ...] = (*stack[stack.index(identity) :], identity)
-        chain: str = " -> ".join(item.name for item in cycle)
-        paths: str = " -> ".join(
-            str(state.loaded_macros[item.name].relative_path) for item in cycle
-        )
-        raise CompileInputError(
-            f"Macro expansion cycle detected: {chain}. Definition paths: {paths}"
-        )
-    _record_macro_use(
-        macro_name=macro_name,
-        identity=identity,
-        state=state,
-        declarations=declarations,
-        stack=stack,
-    )
-    args_source: str = sql[site.args_start : site.end - 1]
-    args: tuple[object, ...]
-    kwargs: dict[str, object]
-    _ = state.facts.open_call_site()
-    try:
-        args, kwargs = _parse_macro_arguments(
-            macro_name=macro_name,
-            args_source=args_source,
-            file_path=file_path,
-            state=state,
-            declarations=declarations,
-            stack=stack,
-        )
-    except MacroArgumentError as error:
-        raise error.shifted(site.args_start) from None
-    finally:
-        approved: frozenset[SqlResourceRef] = state.facts.close_call_site()
-    try:
-        invocation_context: MacroContext = _build_macro_invocation_context(
-            macro_context=state.macro_context,
-            declarations=declarations,
-            file_path=file_path,
-            state=state,
-        )
-        renderer_token: Token[Callable[[object], str] | None] = RELATION_RENDERER.set(
-            state.facts.begin_rendering(approved).render_relation
-        )
-        try:
-            macro_result: object = _call_loaded_macro(
-                loaded_macro=loaded_macro,
-                macro_context=invocation_context,
-                args=args,
-                kwargs=kwargs,
-            )
-        finally:
-            RELATION_RENDERER.reset(renderer_token)
-            _ = state.facts.end_rendering()
-    except CompileInputError:
-        raise
-    except TypeError as error:
-        raise CompileInputError(
-            f"Macro '@{macro_name}' in '{file_path}' could not be called: {error}"
-        ) from error
-    except Exception as error:
-        raise CompileInputError(
-            f"Macro '@{macro_name}' in '{file_path}' failed: {error}"
-        ) from error
-    if top_level and not isinstance(macro_result, str):
-        raise CompileInputError(
-            f"Macro '@{macro_name}' in '{file_path}' must return a SQL string when "
-            "used directly in SQL"
-        )
-    if isinstance(macro_result, str):
-        _validate_final_macro_sql(
-            macro_name=macro_name, file_path=file_path, macro_result=macro_result
-        )
-        _report_generated_references(
-            macro_name=macro_name,
-            loaded_macro=loaded_macro,
-            macro_result=macro_result,
-            file_path=file_path,
-            state=state,
-        )
-    return macro_result
-
-
-def _record_macro_use(
-    *,
-    macro_name: str,
-    identity: DeclarationIdentity,
-    state: MacroExpansionState,
-    declarations: DeclarationResolutionContext | None,
-    stack: tuple[DeclarationIdentity, ...],
-) -> None:
-    state.facts.note_event((MACRO_USE_EVENT, macro_name, ""))
-    _ = state.facts.add_dependency(identity)
-    if stack:
-        state.facts.block_memo()
-        _ = state.facts.add_usage(
-            UsageRecord(stack[-1], identity, UsageKind.DECLARATION_DEPENDENCY),
-        )
-    elif state.consumer is not None:
-        visibility: tuple[VisibilityRecord, ...] = (
-            declarations.macro_visibility.get(macro_name, ()) if declarations is not None else ()
-        )
-        if visibility:
-            from sqlbuild.compiler.compile._helpers.render.declarations import usage_visibility
-
-            for visible in usage_visibility(visibility=visibility, consumer=state.consumer):
-                _ = state.facts.add_usage(
-                    UsageRecord(
-                        state.consumer,
-                        identity,
-                        UsageKind.RUNTIME,
-                        through=visible.through,
-                    )
-                )
-        else:
-            _ = state.facts.add_usage(UsageRecord(state.consumer, identity, UsageKind.RUNTIME))
-
-
-def _report_generated_references(
-    *,
-    macro_name: str,
-    loaded_macro: LoadedMacro,
-    macro_result: str,
-    file_path: Path,
-    state: MacroExpansionState,
-) -> None:
-    if any(marker in macro_result for marker in GENERATED_REFERENCE_MARKERS):
-        state.facts.note_event((GENERATED_SQL_EVENT, macro_name, macro_result))
-    report_macro_reference_call_syntax(
-        loaded_macro=loaded_macro,
-        macro_result=macro_result,
-        file_path=file_path,
-        consumer=state.consumer,
-    )
-    if state.macro_context._enforce_explicit_references:
-        reject_macro_generated_references(
-            loaded_macro=loaded_macro,
-            macro_result=macro_result,
-            file_path=file_path,
-            consumer=state.consumer,
-        )
-
-
-def _build_macro_invocation_context(
-    *,
     macro_context: MacroContext,
-    declarations: DeclarationResolutionContext | None,
-    file_path: Path,
-    state: MacroExpansionState,
 ) -> MacroContext:
+    """The context a macro is called with: visible constants and enums that record their reads."""
+
     if declarations is None:
         return macro_context
     constant_values: Mapping[str, object] = _build_constant_context_values(declarations.constants)
     enum_values: Mapping[str, object] = _build_enum_context_values(
-        declarations=declarations.enums, file_path=file_path, on_miss=state.facts.block_memo
+        declarations=declarations.enums, file_path=file_path, on_miss=expansion.block_memo
     )
     constants: Mapping[str, object] = _MacroDeclarationValues(
         values=constant_values,
         inaccessible=declarations.inaccessible_constants,
         declaration_kind="constant",
         file_path=file_path,
-        on_access=lambda name: _record_macro_declaration_usage(
-            name=name,
-            kind=DeclarationKind.CONSTANT,
-            declarations=declarations,
-            state=state,
-        ),
-        on_miss=state.facts.block_memo,
+        on_access=partial(expansion.declaration_read, DeclarationKind.CONSTANT.value),
+        on_miss=expansion.block_memo,
     )
     enum_mapping: Mapping[str, object] = _MacroDeclarationValues(
         values=enum_values,
         inaccessible=declarations.inaccessible_enums,
         declaration_kind="enum",
         file_path=file_path,
-        on_access=lambda name: _record_macro_declaration_usage(
-            name=name,
-            kind=DeclarationKind.ENUM,
-            declarations=declarations,
-            state=state,
-        ),
-        on_miss=state.facts.block_memo,
+        on_access=partial(expansion.declaration_read, DeclarationKind.ENUM.value),
+        on_miss=expansion.block_memo,
     )
     return replace(
         macro_context,
@@ -1605,134 +1399,3 @@ def _constant_object_items(value: SqlValue) -> tuple[tuple[str, SqlValue], ...]:
     ):
         raise CompileInputError("Invalid normalized object constant in macro context")
     return cast(tuple[tuple[str, SqlValue], ...], value.value)
-
-
-def _record_macro_declaration_usage(
-    *,
-    name: str,
-    kind: DeclarationKind,
-    declarations: DeclarationResolutionContext,
-    state: MacroExpansionState,
-) -> None:
-    from sqlbuild.compiler.compile._helpers.render.declarations import usage_visibility
-
-    state.facts.note_event((DECLARATION_READ_EVENT, kind.value, name))
-    consumer: ResourceIdentity | DeclarationIdentity | None = (
-        state.consumer or declarations.consumer
-    )
-    if consumer is None:
-        return
-    visibility: tuple[VisibilityRecord, ...] = (
-        declarations.constant_visibility.get(name, ())
-        if kind == DeclarationKind.CONSTANT
-        else declarations.enum_visibility.get(name, ())
-    )
-    if visibility:
-        visible_records: tuple[VisibilityRecord, ...] = usage_visibility(
-            visibility=visibility,
-            consumer=consumer,
-        )
-        for visible in visible_records:
-            _ = state.facts.add_usage(
-                UsageRecord(
-                    consumer=consumer,
-                    declaration=visible.declaration,
-                    kind=UsageKind.RUNTIME,
-                    through=visible.through,
-                )
-            )
-        return
-    else:
-        declaration: ConstantDeclaration | EnumDeclaration = (
-            declarations.constants[name]
-            if kind == DeclarationKind.CONSTANT
-            else declarations.enums[name]
-        )
-        owner: ResourceIdentity | None = (
-            ResourceIdentity(kind=ResourceKind.MODEL, name=declaration.model_name)
-            if declaration.model_name is not None
-            else None
-        )
-        identity: DeclarationIdentity = DeclarationIdentity(kind=kind, name=name, owner=owner)
-    _ = state.facts.add_usage(UsageRecord(consumer, identity, UsageKind.RUNTIME))
-
-
-def _validate_final_macro_sql(*, macro_name: str, file_path: Path, macro_result: str) -> None:
-    try:
-        _ = macro_result.encode("utf-8")
-    except UnicodeEncodeError as error:
-        raise CompileInputError(
-            f"Macro '@{macro_name}' in '{file_path}' returned text with the lone surrogate "
-            f"{macro_result[error.start]!r}, which is not valid Unicode",
-            help=(
-                "Return valid Unicode text from the macro; lone surrogates usually come from "
-                "bytes decoded with errors='surrogateescape'"
-            ),
-        ) from None
-    generated_calls: tuple[str, ...] = _native_macro_call_names(sql=macro_result, nested=False)
-    if not generated_calls:
-        return
-    calls: str = ", ".join(f"@{name}()" for name in generated_calls)
-    raise CompileInputError(
-        f"Macro '@{macro_name}' in '{file_path}' returned SQLBuild call(s) {calls}. "
-        "Macro output must be final SQL. Compose macros with ordinary Python imports and "
-        "function calls instead; nested @macro() calls are supported only when explicitly "
-        "authored in SQL"
-    )
-
-
-def _call_loaded_macro(
-    *,
-    loaded_macro: LoadedMacro,
-    macro_context: MacroContext,
-    args: tuple[object, ...],
-    kwargs: dict[str, object],
-) -> object:
-    if loaded_macro.injects_context:
-        if MACRO_CONTEXT_PARAMETER_NAME in kwargs:
-            raise CompileInputError(
-                f"Macro '@{loaded_macro.name}' must not be called with keyword argument 'ctx'; "
-                "'ctx' is reserved for injected macro context"
-            )
-        return loaded_macro.function(macro_context, *args, **kwargs)
-    return loaded_macro.function(*args, **kwargs)
-
-
-def _parse_macro_arguments(
-    *,
-    macro_name: str,
-    args_source: str,
-    file_path: Path,
-    state: MacroExpansionState,
-    declarations: DeclarationResolutionContext | None,
-    stack: tuple[DeclarationIdentity, ...],
-) -> tuple[tuple[object, ...], dict[str, object]]:
-    if not args_source.strip():
-        return (), {}
-    scan: MacroCallScan = scan_macro_calls(sql=args_source)
-    nested: list[tuple[int, int]] = [(site.start, site.end) for site in scan.sites]
-    nested_values: list[object] = [
-        evaluate_macro_call(
-            sql=args_source,
-            site=site,
-            file_path=file_path,
-            state=state,
-            declarations=declarations,
-            stack=stack,
-            top_level=False,
-        )
-        for site in scan.sites
-    ]
-    if scan.failure is not None:
-        raise_failed_macro_call(
-            failure=scan.failure, file_path=file_path, state=state, declarations=declarations
-        )
-    parsed: ParsedMacroArguments = parse_macro_call_arguments(
-        args_source=args_source,
-        nested=tuple(nested),
-        nested_values=nested_values,
-        macro_name=macro_name,
-        file_path=file_path,
-    )
-    state.facts.record_call_site_refs(parsed.typed_references)
-    return parsed.args, parsed.kwargs

@@ -8,7 +8,12 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+serde_json.workspace = true
+sha2.workspace = true
+sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
+sqlbuild-discovery.workspace = true
+sqlbuild-render.workspace = true
 sqlbuild-sqltext.workspace = true
 
 [lints]

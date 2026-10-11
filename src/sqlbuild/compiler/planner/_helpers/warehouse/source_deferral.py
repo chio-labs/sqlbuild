@@ -7,12 +7,14 @@ from dataclasses import replace
 
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
-    CompiledSource,
+)
+from sqlbuild.compiler.compile.types import (
+    CompiledAuditView,
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSourceView,
 )
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.compiler.planner.constants import (
@@ -36,7 +38,7 @@ _SOURCE_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKin
 
 def build_source_read_map(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     source_map: dict[str, SourceEntry],
     selected_keys: frozenset[CompiledObjectKey],
     project_config: ProjectConfig | None,
@@ -83,7 +85,7 @@ def build_source_read_map(
         target_name=source_target_name,
     )
     result: dict[str, SourceEntry] = dict(source_map)
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         if source.source_entry.name not in selected_managed_sources:
             continue
@@ -97,7 +99,10 @@ def build_source_read_map(
 
 
 def with_declared_source_reads(
-    *, project: CompiledProject, source_map: dict[str, SourceEntry], source_names: frozenset[str]
+    *,
+    project: CompiledProjectView,
+    source_map: dict[str, SourceEntry],
+    source_names: frozenset[str],
 ) -> dict[str, SourceEntry]:
     """Add declared project sources that no selected SQL resource reads to a source map."""
 
@@ -105,14 +110,14 @@ def with_declared_source_reads(
     if not missing:
         return source_map
     result: dict[str, SourceEntry] = dict(source_map)
-    source: CompiledSource
+    source: CompiledSourceView
     for source in project.sources:
         if source.source_entry.name in missing:
             result[source.source_entry.name] = source.source_entry
     return result
 
 
-def _sql_hook_source_reads(model: CompiledModel) -> tuple[str, ...]:
+def _sql_hook_source_reads(model: CompiledModelView) -> tuple[str, ...]:
     names: list[str] = []
     for hook_key in (MODEL_PRE_HOOKS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY):
         value: object = model.config.values.get(hook_key)
@@ -127,12 +132,12 @@ def _sql_hook_source_reads(model: CompiledModel) -> tuple[str, ...]:
 
 def _selected_managed_source_refs(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey],
     managed_source_names: frozenset[str],
 ) -> tuple[str, ...]:
     names: set[str] = set()
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         if model.key not in selected_keys:
             continue
@@ -142,7 +147,7 @@ def _selected_managed_source_refs(
             )
         )
         names.update(name for name in _sql_hook_source_reads(model) if name in managed_source_names)
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in project.functions:
         if function.key not in selected_keys:
             continue
@@ -151,7 +156,7 @@ def _selected_managed_source_refs(
                 sql=function.body_sql, managed_source_names=managed_source_names
             )
         )
-    audit: CompiledAudit
+    audit: CompiledAuditView
     for audit in project.audits:
         if audit.scope_deps and not any(dep in selected_keys for dep in audit.scope_deps):
             continue
@@ -179,7 +184,7 @@ def _direct_managed_source_refs(
 
 def _resolve_source_target_name(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     project_config: ProjectConfig | None,
     local_config: LocalConfig | None,
     defer_sources_to: str | None,
@@ -196,7 +201,7 @@ def _resolve_source_target_name(
     return active_target.defer_sources_to or project.effective_target_name
 
 
-def _raw_source_entry(source: CompiledSource) -> SourceEntry:
+def _raw_source_entry(source: CompiledSourceView) -> SourceEntry:
     source_entry: SourceEntry
     for source_entry in source.source_file.source_entries:
         if source_entry.name == source.source_entry.name:

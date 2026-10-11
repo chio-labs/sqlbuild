@@ -10,11 +10,10 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledAudit,
     CompiledObjectKey,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, CompiledAuditView
 from sqlbuild.compiler.planner._helpers.output.audit_scheduling import (
     reads_outside_target_lineage,
     resolve_attachment_kind,
@@ -29,7 +28,7 @@ from sqlbuild.spec.contracts.models import SourceEntry
 
 def plan_audit(
     *,
-    audit: CompiledAudit,
+    audit: CompiledAuditView,
     model_locations: dict[str, CompiledRelationLocation],
     seed_locations: dict[str, CompiledRelationLocation],
     source_map: dict[str, SourceEntry],

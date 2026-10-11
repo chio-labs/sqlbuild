@@ -15,6 +15,7 @@ from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_ENV_VAR,
     COMPILE_CACHE_DISABLE_VALUE,
     RETIRED_FACT_CACHE_DIRECTORY_NAME,
+    RETIRED_REFERENCE_CACHE_DIRECTORY_NAME,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier.constants import (
@@ -70,21 +71,18 @@ def compile_cache_root(
     ):
         return None
     root: Path = compiler_cache_directory(project_dir)
-    _remove_retired_fact_caches(root=root)
+    _remove_retired_caches(root=root)
     return root
 
 
-def _remove_retired_fact_caches(*, root: Path) -> None:
-    """Delete the per-file fact caches older releases kept under every engine's compiler root."""
+def _remove_retired_caches(*, root: Path) -> None:
+    """Delete the fact and reference caches older releases kept under every engine's root."""
 
     for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES:
-        retired: Path = (
-            root.parent
-            / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"
-            / (RETIRED_FACT_CACHE_DIRECTORY_NAME)
-        )
-        if retired.is_dir():
-            shutil.rmtree(retired, ignore_errors=True)
+        for name in (RETIRED_FACT_CACHE_DIRECTORY_NAME, RETIRED_REFERENCE_CACHE_DIRECTORY_NAME):
+            retired: Path = root.parent / f"{COMPILER_CACHE_DIRECTORY_NAME}{suffix}" / name
+            if retired.is_dir():
+                shutil.rmtree(retired, ignore_errors=True)
 
 
 def build_effective_target_namespace(

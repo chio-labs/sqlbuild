@@ -18,6 +18,8 @@ import orjson
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
     CUSTOM_HOST_ABANDONED_SUFFIX,
@@ -44,7 +46,7 @@ _MAX_HOSTS: int = 8
 
 def run_custom_hosts(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     dialect: str,
@@ -96,10 +98,10 @@ def run_custom_hosts(
     )
 
 
-def _write_inputs(*, path: Path, project: CompiledProject, config: RulesConfig) -> None:
+def _write_inputs(*, path: Path, project: CompiledProjectView, config: RulesConfig) -> None:
     """Publish the project payload atomically; hosts started earlier wait for it to appear."""
 
-    payload: CompiledProject = host_payload_project(project)
+    payload: CompiledProjectView = host_payload_project(project)
     with tempfile.NamedTemporaryFile(
         dir=path.parent, prefix="writing-", suffix=".pickle", delete=False
     ) as handle:
@@ -113,25 +115,38 @@ def _write_inputs(*, path: Path, project: CompiledProject, config: RulesConfig) 
     partial.replace(path)
 
 
-def host_payload_project(project: CompiledProject) -> CompiledProject:
+def host_payload_project(project: CompiledProjectView) -> CompiledProject:
     """Return the project hosts decode, without model state no Rule fact reads."""
 
-    return replace(project, models=tuple(map(_payload_model, project.models)))
+    return replace(
+        compiled_project_record(project),
+        models=tuple(map(_payload_model, project.models)),
+        native_project=None,
+    )
 
 
-def _payload_model(model: CompiledModel) -> CompiledModel:
+def _payload_model(model: CompiledModelView) -> CompiledModelView:
     """Drop model state no Rule fact reads, so hosts decode less of every model."""
 
-    return replace(
-        model,
-        references=(),
-        fast_lineage_columns=None,
-        authored_query_sql="",
-        output_column_locations={},
-        macro_deps=(),
-        enum_columns={},
-        binding_diagnostics=(),
-        unchecked_output_columns=frozenset(),
+    return CompiledModel(
+        key=model.key,
+        deps=model.deps,
+        name=model.name,
+        relative_path=model.relative_path,
+        query_sql=model.query_sql,
+        config=model.config,
+        destination=model.destination,
+        schema_entry=model.schema_entry,
+        inferred_columns=model.inferred_columns,
+        fast_lineage_has_star=model.fast_lineage_has_star,
+        fast_lineage_star_resolved=model.fast_lineage_star_resolved,
+        authored_sql=model.authored_sql,
+        extract_implicit_alias_columns=model.extract_implicit_alias_columns,
+        enum_declarations=model.enum_declarations,
+        constant_declarations=model.constant_declarations,
+        binding_validated=model.binding_validated,
+        dynamic_column_contract=model.dynamic_column_contract,
+        rejected_sql_analysis_opt_out=model.rejected_sql_analysis_opt_out,
     )
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.output.strategy import resolve_model_plan_action
 from sqlbuild.compiler.planner.models import ChangeDetectionResult, SchemaFinding
 from sqlbuild.compiler.planner.types import (
@@ -323,7 +323,7 @@ from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import (
 def test_given_model_and_changes_when_resolving_action_then_returns_expected(
     test_case: ResolveModelPlanActionTestCase,
 ) -> None:
-    model: CompiledModel = build_strategy_model(test_case)
+    model: CompiledModelView = build_strategy_model(test_case)
     change_result: ChangeDetectionResult = build_strategy_change_result(test_case)
 
     action: PlanAction
@@ -363,7 +363,7 @@ def test_given_model_and_changes_when_resolving_action_then_returns_expected(
 def test_given_incremental_with_bad_strategy_when_resolving_action_then_raises(
     test_case: IncrementalStrategyErrorTestCase,
 ) -> None:
-    model: CompiledModel = build_strategy_error_model(test_case)
+    model: CompiledModelView = build_strategy_error_model(test_case)
     change_result: ChangeDetectionResult = build_strategy_error_change_result(test_case)
 
     with pytest.raises(test_case.expected_error_type, match=test_case.expected_error_fragment):

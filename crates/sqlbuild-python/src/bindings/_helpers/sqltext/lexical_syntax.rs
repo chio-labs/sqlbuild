@@ -4,7 +4,7 @@ use pyo3::FromPyObject;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 /// One adapter's `SqlLexicalSyntax`, read from a Python mapping.
-#[derive(FromPyObject)]
+#[derive(Clone, FromPyObject)]
 #[pyo3(from_item_all)]
 pub(crate) struct LexicalSyntaxInput {
     backslash_escape_quotes: Vec<String>,

@@ -92,3 +92,10 @@ pub enum TableTypeOverride {
     Permanent,
     Transient,
 }
+
+/// One header column's name and the old column it renames, if any.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ColumnMigration {
+    pub name: String,
+    pub migrate_from: Option<String>,
+}

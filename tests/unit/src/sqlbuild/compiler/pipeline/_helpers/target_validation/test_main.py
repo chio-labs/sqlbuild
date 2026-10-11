@@ -13,9 +13,9 @@ from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompiledRelationLocation,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
 from sqlbuild.compiler.pipeline._helpers.target_validation import (
     validate_managed_loader_target_isolation,
@@ -112,7 +112,7 @@ def test_given_resolved_clone_connection_when_validating_loaders_then_origin_cre
 def test_given_adapter_with_missing_target_namespace_when_validating_then_raises_clear_error(
     test_case: ValidateProjectTargetsTestCase,
 ) -> None:
-    project: CompiledProject = build_project(target=test_case.target, effective_connection={})
+    project: CompiledProjectView = build_project(target=test_case.target, effective_connection={})
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
         validate_project_targets(adapter_name=test_case.adapter_name, project=project)
@@ -138,7 +138,7 @@ def test_given_adapter_with_missing_target_namespace_when_validating_then_raises
 def test_given_duckdb_with_missing_target_namespace_when_validating_then_it_passes(
     test_case: ValidateProjectTargetsTestCase,
 ) -> None:
-    project: CompiledProject = build_project(target=test_case.target, effective_connection={})
+    project: CompiledProjectView = build_project(target=test_case.target, effective_connection={})
 
     validate_project_targets(adapter_name=test_case.adapter_name, project=project)
     assert test_case.expected_error_fragment == ""
@@ -195,7 +195,7 @@ def test_given_duckdb_with_missing_target_namespace_when_validating_then_it_pass
 def test_given_warehouse_managed_write_without_schema_when_validating_then_error_is_raised(
     test_case: ValidateManagedWriteSchemaTestCase,
 ) -> None:
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         target=CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,
@@ -239,7 +239,7 @@ def test_given_warehouse_managed_write_without_schema_when_validating_then_error
 def test_given_explicit_or_permitted_schema_when_validating_managed_write_then_it_passes(
     test_case: ValidateManagedWriteSchemaTestCase,
 ) -> None:
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         target=CompiledRelationLocation(
             database=None,
             schema=test_case.target_schema,

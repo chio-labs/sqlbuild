@@ -34,7 +34,12 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -82,7 +87,7 @@ _MACRO_CONTEXT: MacroContext = MacroContext(
 def plan_single_test(
     *,
     test: CompiledSqlTest,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
 ) -> tuple[SqlTestPlanEntry, tuple[PlanWarning, ...]]:
@@ -102,7 +107,7 @@ def plan_single_test(
 def plan_single_test_allowing_errors(
     *,
     test: CompiledSqlTest,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     sql_analysis_enabled: bool = False,
 ) -> tuple[SqlTestPlanResult, NativeSqlTestPlan]:
@@ -128,7 +133,7 @@ def plan_single_test_allowing_errors(
 
 def assert_native_artifact_matches_runtime_plan(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     sql_test: CompiledSqlTest,
     entry: SqlTestPlanEntry,
     warnings: tuple[PlanWarning, ...],
@@ -166,7 +171,7 @@ def assert_native_artifact_matches_runtime_plan(
 
 def build_test_and_project(
     test_case: PlanTestChainTestCase,
-) -> tuple[CompiledSqlTest, CompiledProject]:
+) -> tuple[CompiledSqlTest, CompiledProjectView]:
     """Build a CompiledSqlTest and CompiledProject from a test case."""
 
     authored_ctes: list[CompileSqlTestCte] = []
@@ -263,7 +268,7 @@ def build_test_and_project(
         ),
     )
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     query_sql: str
     for model_name, query_sql in test_case.model_queries.items():
@@ -304,7 +309,7 @@ def build_test_and_project(
             )
         )
 
-    functions: list[CompiledFunction] = []
+    functions: list[CompiledFunctionView] = []
     function_name: str
     qualified_name: str
     for function_name, qualified_name in test_case.function_locations.items():
@@ -362,7 +367,7 @@ def build_test_and_project(
             )
         )
 
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test_run",
         effective_target_name=None,
         effective_connection={},
@@ -506,7 +511,7 @@ CURSOR_WINDOW_ADAPTERS: dict[str, BaseAdapter] = {
 }
 
 
-def build_cursor_model(*, cursor_type: str, cursor_grain: str | None) -> CompiledModel:
+def build_cursor_model(*, cursor_type: str, cursor_grain: str | None) -> CompiledModelView:
     """Build one incremental model whose query uses both cursor intrinsics."""
 
     values: dict[str, object] = {

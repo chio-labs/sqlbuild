@@ -18,6 +18,7 @@ from tests.unit.scripts.native_layering._helpers.helpers import write_versions
             workspace_version="1.2.0",
             pyproject_version="1.2.0",
             release_version="1.2.0",
+            cli_version="1.2.0",
             expected_errors=(),
         ),
     ],
@@ -39,10 +40,25 @@ def test_given_matching_versions_when_checking_then_returns_no_errors(
             workspace_version="1.1.9",
             pyproject_version="1.2.0",
             release_version="1.2.0",
+            cli_version="1.2.0",
             expected_errors=(
                 "Release versions differ: Cargo.toml [workspace.package] version is 1.1.9, "
                 "pyproject.toml [project] version is 1.2.0, "
-                ".release-please-manifest.json version is 1.2.0.",
+                ".release-please-manifest.json version is 1.2.0, "
+                "pyproject.toml sqlbuild-cli dependency is 1.2.0.",
+            ),
+        ),
+        NativeVersionTestCase(
+            description="native executable pin lags a release",
+            workspace_version="1.2.0",
+            pyproject_version="1.2.0",
+            release_version="1.2.0",
+            cli_version="1.1.9",
+            expected_errors=(
+                "Release versions differ: Cargo.toml [workspace.package] version is 1.2.0, "
+                "pyproject.toml [project] version is 1.2.0, "
+                ".release-please-manifest.json version is 1.2.0, "
+                "pyproject.toml sqlbuild-cli dependency is 1.1.9.",
             ),
         ),
     ],

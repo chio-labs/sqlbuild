@@ -8,6 +8,7 @@ from sqlbuild.spec.contracts.models import (
     LoaderDestinationParts,
     LocalConfig,
     ProjectConfig,
+    TargetConfig,
     TargetWarehousesConfig,
 )
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
@@ -91,3 +92,12 @@ class AmbiguousTargetConnectionTestCase:
     project_config: ProjectConfig
     local_config: LocalConfig
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class FullTargetResolutionTestCase:
+    """A project target setting every field, merged with an empty local target."""
+
+    description: str
+    project_target: TargetConfig
+    expected_target: TargetConfig

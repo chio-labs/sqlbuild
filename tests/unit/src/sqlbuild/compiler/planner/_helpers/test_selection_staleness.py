@@ -6,8 +6,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_SEED
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
@@ -66,7 +71,7 @@ def test_given_complete_change_results_when_building_stale_warnings_then_models_
     test_case: CompleteModelChangesWorkTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    model: CompiledModel = build_selection_model(
+    model: CompiledModelView = build_selection_model(
         key=MODEL_KEY,
         name=MODEL_KEY.name,
         materialized="table",
@@ -180,33 +185,37 @@ def test_given_partial_selection_when_resolving_scopes_then_inspects_only_upstre
         resource_type=CompiledResourceType.MODEL,
         name="unrelated",
     )
-    root: CompiledModel = build_selection_model(
+    root: CompiledModelView = build_selection_model(
         key=root_key,
         name=root_key.name,
         materialized="table",
     )
-    middle: CompiledModel = replace(
-        build_selection_model(
-            key=middle_key,
-            name=middle_key.name,
-            materialized="table",
+    middle: CompiledModelView = replace(
+        compiled_model_record(
+            build_selection_model(
+                key=middle_key,
+                name=middle_key.name,
+                materialized="table",
+            )
         ),
         deps=(root_key,),
     )
-    leaf: CompiledModel = replace(
-        build_selection_model(
-            key=leaf_key,
-            name=leaf_key.name,
-            materialized="table",
+    leaf: CompiledModelView = replace(
+        compiled_model_record(
+            build_selection_model(
+                key=leaf_key,
+                name=leaf_key.name,
+                materialized="table",
+            )
         ),
         deps=(middle_key,),
     )
-    unrelated: CompiledModel = build_selection_model(
+    unrelated: CompiledModelView = build_selection_model(
         key=unrelated_key,
         name=unrelated_key.name,
         materialized="table",
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run",
         effective_target_name=None,
         effective_connection={},

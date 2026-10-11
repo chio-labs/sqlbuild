@@ -11,7 +11,7 @@ from sqlbuild.cli.commands.models import AdapterConnectionContext, ContractComma
 from sqlbuild.cli.progress.classes.connection_progress_reporter import (
     ConnectionProgressReporter,
 )
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledSource
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledSourceView
 from sqlbuild.compiler.contract_adoption.main.compare import compare_contracts
 from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, ContractEvidence
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -22,8 +22,8 @@ def inspect_contracts_with_progress(
     *,
     context: AdapterConnectionContext,
     request: ContractCommandRequest,
-    selected_models: tuple[CompiledModel, ...],
-    selected_sources: tuple[CompiledSource, ...],
+    selected_models: tuple[CompiledModelView, ...],
+    selected_sources: tuple[CompiledSourceView, ...],
     progress_stream: TextIO,
     use_progress_color: bool,
 ) -> tuple[ContractEvidence, ...]:

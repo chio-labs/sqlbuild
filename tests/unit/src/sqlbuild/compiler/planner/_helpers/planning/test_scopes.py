@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.planning.scopes import resolve_planner_scopes
 from sqlbuild.compiler.planner.models import (
     PlannerPolicies,
@@ -64,7 +64,7 @@ _MODEL_DEPS: dict[str, tuple[str, ...]] = {
 def test_given_selection_when_resolving_scopes_then_stale_warning_scope_is_upstream_closure(
     test_case: PlannerScopesTestCase,
 ) -> None:
-    project: CompiledProject = build_test_project(model_deps=test_case.model_deps)
+    project: CompiledProjectView = build_test_project(model_deps=test_case.model_deps)
 
     resolution: PlannerScopeResolution = resolve_planner_scopes(
         project=project,

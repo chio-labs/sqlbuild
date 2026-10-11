@@ -1,4 +1,4 @@
-//! The generated `str.isalnum()`, `str.isalpha()` and `str.isdecimal()` tables, per Unicode version.
+//! The generated `str.isalnum()`, `isalpha()`, `isdecimal()` and `isprintable()` tables.
 
 /// `(unicodedata.unidata_version, ranges)` for every table native text helpers can select.
 pub(crate) const ALNUM_TABLES: [(&str, &[(u32, u32)]); 3] = [
@@ -19,4 +19,11 @@ pub(crate) const DECIMAL_TABLES: [(&str, &[(u32, u32)]); 3] = [
     ("15.0.0", include!("../decimal_ranges/unicode_15_0_0.in")),
     ("15.1.0", include!("../decimal_ranges/unicode_15_1_0.in")),
     ("16.0.0", include!("../decimal_ranges/unicode_16_0_0.in")),
+];
+
+/// `(unicodedata.unidata_version, ranges)` of `str.isprintable()`, in the same order.
+pub(crate) const PRINTABLE_TABLES: [(&str, &[(u32, u32)]); 3] = [
+    ("15.0.0", include!("../printable_ranges/unicode_15_0_0.in")),
+    ("15.1.0", include!("../printable_ranges/unicode_15_1_0.in")),
+    ("16.0.0", include!("../printable_ranges/unicode_16_0_0.in")),
 ];

@@ -4,74 +4,62 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     CompiledModel,
-    CompiledProject,
     CompiledRelationLocation,
     CompiledSeed,
 )
-from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSeedView,
+)
+from sqlbuild.compiler.compiled_project.main._with_target_defaults import with_target_defaults
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 
 
 def apply_target_defaults(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
     python_functions_inherit_default_namespace: bool,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Apply adapter default schema/database to compiled project targets."""
 
-    models: tuple[CompiledModel, ...] = tuple(
-        replace(
-            m,
-            destination=_resolve_target(
-                target=m.destination,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-            ),
+    models: tuple[CompiledModelView, ...] = tuple(
+        _model_with_defaults(
+            model=model,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
         )
-        for m in project.models
+        for model in project.models
     )
-    seeds: tuple[CompiledSeed, ...] = tuple(
-        replace(
-            s,
-            destination=_resolve_target(
-                target=s.destination,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-            ),
+    seeds: tuple[CompiledSeedView, ...] = tuple(
+        _seed_with_defaults(
+            seed=seed,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
         )
-        for s in project.seeds
+        for seed in project.seeds
     )
-    functions: tuple[CompiledFunction, ...] = tuple(
-        replace(
-            f,
-            destination=_resolve_function_target(
-                function=f,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-                python_functions_inherit_default_namespace=(
-                    python_functions_inherit_default_namespace
-                ),
-            ),
-            fingerprint_destination=_resolve_target(
-                target=f.fingerprint_destination,
-                default_schema=default_schema,
-                default_database=default_database,
-                render_qualified_name=render_qualified_name,
-            ),
+    functions: tuple[CompiledFunctionView, ...] = tuple(
+        cast(_native.NativeCompiledFunction, function).with_target_defaults(
+            (default_schema, default_database),
+            render_qualified_name,
+            python_functions_inherit_default_namespace,
         )
-        for f in project.functions
+        for function in project.functions
     )
-    return replace(
-        project,
+    return project_with(
+        project=project,
         effective_target_database=project.effective_target_database or default_database,
         effective_target_schema=project.effective_target_schema or default_schema,
         models=models,
@@ -80,26 +68,48 @@ def apply_target_defaults(
     )
 
 
-def _resolve_function_target(
+def _model_with_defaults(
     *,
-    function: CompiledFunction,
+    model: CompiledModelView,
     default_schema: str | None,
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
-    python_functions_inherit_default_namespace: bool,
-) -> CompiledRelationLocation:
-    apply_defaults: bool = (
-        function.language != FunctionLanguage.PYTHON or python_functions_inherit_default_namespace
+) -> CompiledModelView:
+    if not isinstance(model, CompiledModel):
+        return with_target_defaults(
+            model=cast(_native.NativeCompiledModel, model),
+            defaults=(default_schema, default_database),
+            render_qualified_name=render_qualified_name,
+        )
+    return replace(
+        model,
+        destination=_resolve_target(
+            target=model.destination,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
+        ),
     )
-    resolved: CompiledRelationLocation = _resolve_target(
-        target=function.destination,
-        default_schema=default_schema if apply_defaults else None,
-        default_database=default_database if apply_defaults else None,
-        render_qualified_name=render_qualified_name,
+
+
+def _seed_with_defaults(
+    *,
+    seed: CompiledSeedView,
+    default_schema: str | None,
+    default_database: str | None,
+    render_qualified_name: Callable[..., str | None],
+) -> CompiledSeedView:
+    if isinstance(seed, _native.NativeCompiledSeed):
+        return seed.with_target_defaults((default_schema, default_database), render_qualified_name)
+    return replace(
+        cast(CompiledSeed, seed),
+        destination=_resolve_target(
+            target=seed.destination,
+            default_schema=default_schema,
+            default_database=default_database,
+            render_qualified_name=render_qualified_name,
+        ),
     )
-    if not apply_defaults and resolved.qualified_name is None:
-        return replace(resolved, qualified_name=resolved.name)
-    return resolved
 
 
 def _resolve_target(

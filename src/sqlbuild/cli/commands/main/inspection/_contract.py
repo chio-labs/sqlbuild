@@ -18,10 +18,12 @@ from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import AdapterConnectionContext, ContractCommandRequest
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
-    CompiledSource,
+)
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSourceView,
 )
 from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, ContractEvidence
 from sqlbuild.compiler.contract_adoption.types import ContractAction
@@ -29,11 +31,9 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.project_graph import build_project_graph_from_compiled_project
+from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.compiler.planner.main.selection.selection import (
-    resolve_project_selectors,
-)
 from sqlbuild.presentation.main.supports_color import supports_color
 
 
@@ -58,7 +58,7 @@ def run_contract(request: ContractCommandRequest) -> int:
         selected_target=None,
         cli_vars=request.cli_vars,
     )
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered,
         adapter=context.adapter,
         selected_target=request.from_target,
@@ -67,19 +67,13 @@ def run_contract(request: ContractCommandRequest) -> int:
         analysis_selection=CompileAnalysisSelection(no_cache=True),
     )
     graph: ProjectGraph = build_project_graph_from_compiled_project(project=project)
-    selected: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=request.select,
-        exclude=request.exclude,
-        all_keys=graph.all_keys,
-        upstream_deps=graph.upstream_deps,
-        downstream_deps=graph.downstream_deps,
-        tag_index=graph.tag_index,
-        path_index=graph.path_index,
+    selected: frozenset[CompiledObjectKey] = select_project_graph(
+        graph=graph, select=request.select, exclude=request.exclude
     )
-    selected_models: tuple[CompiledModel, ...] = tuple(
+    selected_models: tuple[CompiledModelView, ...] = tuple(
         model for model in graph.project.models if model.key in selected
     )
-    selected_sources: tuple[CompiledSource, ...] = tuple(
+    selected_sources: tuple[CompiledSourceView, ...] = tuple(
         source for source in graph.project.sources if source.key in selected
     )
     if not selected_models and not selected_sources:

@@ -6,7 +6,7 @@ use pyo3::types::{
     PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods, PyTuple,
     PyTupleMethods,
 };
-use pyo3::{IntoPyObject, PyErr, pyclass, pymethods};
+use pyo3::{PyErr, pyclass, pymethods};
 use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_core::text::models::PythonText;
 use sqlbuild_model_config::config_presence::main::contains_template::contains_template;
@@ -22,11 +22,13 @@ use sqlbuild_model_config::templates::models::TemplateOptions;
 use sqlbuild_model_config::types::AuthoredNode;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, built_config};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_templates::{
     PythonHost, Stop, TemplateSources, expanded, template_error,
 };
+use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 
 const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 /// Hook keys in the sorted order `validate_model_hook_config` checks them.
@@ -99,15 +101,21 @@ pub(crate) struct NativeModelConfigBuilder {
 }
 
 /// One model's built config before Python wraps it in `CompileModelConfig`.
-struct BuiltConfig<'py> {
-    values: Bound<'py, PyDict>,
-    header_keys: Vec<String>,
-    logical_schema: Option<Bound<'py, PyAny>>,
-    layer_schema_configured: bool,
-    logical_database: Option<Bound<'py, PyAny>>,
-    retention: RetentionOverride,
-    table_type: TableTypeOverride,
-    reads: Vec<(&'static str, String)>,
+pub(crate) struct BuiltConfig<'py> {
+    pub(crate) values: Bound<'py, PyDict>,
+    pub(crate) header_keys: Vec<String>,
+    pub(crate) logical_schema: Option<Bound<'py, PyAny>>,
+    pub(crate) layer_schema_configured: bool,
+    pub(crate) logical_database: Option<Bound<'py, PyAny>>,
+    pub(crate) retention: RetentionOverride,
+    pub(crate) table_type: TableTypeOverride,
+    pub(crate) reads: Vec<(&'static str, String)>,
+}
+
+/// A native build's outcome: the built config, or the config error it raises.
+pub(crate) enum ConfigBuild<'py> {
+    Built(BuiltConfig<'py>),
+    Rejected(Py<NativeConfigError>),
 }
 
 /// `((target name, run id), (database, schema) or None)` of the active target.
@@ -155,35 +163,139 @@ impl NativeModelConfigBuilder {
         })
     }
 
-    /// Return the selected path-default key, `None`, or the conflict error Python raises.
-    fn path_default(&self, py: Python<'_>, model_path: &str) -> PyResult<Py<PyAny>> {
-        compiler_guard(|| {
-            Ok(match select_path_default(model_path, &self.path_keys) {
-                PathDefaultChoice::Selected(key) => key.into_pyobject(py)?.into_any().unbind(),
-                PathDefaultChoice::Conflict(error) => native_config_error(py, error)?.into_any(),
-            })
-        })
-    }
-
-    /// Return the built config parts or the first config error.
-    fn build<'py>(
+    /// Return the model's `CompileModelConfig` or the first config error.
+    fn model_config<'py>(
         &self,
         py: Python<'py>,
         header: Bound<'py, PyDict>,
-        matched_path_default: Option<&str>,
-        model_name: &str,
+        model: (Option<String>, String),
+        classes: ConfigClasses<'py>,
     ) -> PyResult<Py<PyAny>> {
+        let (matched_path_default, model_name) = model;
+        let matched_path_default: Option<&str> = matched_path_default.as_deref();
         compiler_guard(
-            || match self.build_config(py, &header, matched_path_default, model_name) {
-                Ok(built) => built_tuple(py, built).map(|built| built.into_any().unbind()),
-                Err(Halt::Config(error)) => Ok(native_config_error(py, error)?.into_any()),
-                Err(Halt::Error(error)) => Err(error),
+            || match self.built(py, &header, matched_path_default, &model_name)? {
+                ConfigBuild::Built(built) => {
+                    Ok(built_config(&classes, &built, matched_path_default)?.unbind())
+                }
+                ConfigBuild::Rejected(error) => Ok(error.into_any()),
             },
         )
     }
 }
 
 impl NativeModelConfigBuilder {
+    /// The selected path-default key, or the conflict error Python raises.
+    pub(crate) fn selected_path_default(
+        &self,
+        py: Python<'_>,
+        model_path: &str,
+    ) -> PyResult<Result<Option<String>, Py<NativeConfigError>>> {
+        Ok(match select_path_default(model_path, &self.path_keys) {
+            PathDefaultChoice::Selected(key) => Ok(key),
+            PathDefaultChoice::Conflict(error) => Err(native_config_error(py, error)?),
+        })
+    }
+
+    /// Build one model's config natively.
+    pub(crate) fn built<'py>(
+        &self,
+        py: Python<'py>,
+        header: &Bound<'py, PyDict>,
+        matched_path_default: Option<&str>,
+        model_name: &str,
+    ) -> PyResult<ConfigBuild<'py>> {
+        match self.build_config(py, header, matched_path_default, model_name) {
+            Ok(built) => Ok(ConfigBuild::Built(built)),
+            Err(Halt::Config(error)) => Ok(ConfigBuild::Rejected(native_config_error(py, error)?)),
+            Err(Halt::Error(error)) => Err(error),
+        }
+    }
+
+    /// `build_layered_model_values` with an empty header: what a path default's models inherit.
+    pub(crate) fn inherited_values<'py>(
+        &self,
+        py: Python<'py>,
+        matched_path_default: Option<&str>,
+    ) -> PyResult<Result<Bound<'py, PyDict>, Py<NativeConfigError>>> {
+        let layered = (|| -> Built<Bound<'py, PyDict>> {
+            let mut layered = self.project_defaults(py)?;
+            if let Some(key) = matched_path_default {
+                layered = merged_layer(py, &layered, &self.path_default_values(py, key)?)?;
+            }
+            merged_layer(py, &layered, &PyDict::new(py))
+        })();
+        match layered {
+            Ok(values) => Ok(Ok(values)),
+            Err(Halt::Config(error)) => Ok(Err(native_config_error(py, error)?)),
+            Err(Halt::Error(error)) => Err(error),
+        }
+    }
+
+    /// `build_run_context_values`: the run's id and target.
+    fn run_context_values<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let context = PyDict::new(py);
+        context.set_item(RUN_ID_CONTEXT, self.run_id.bind(py))?;
+        context.set_item(
+            RUN_TARGET_CONTEXT,
+            self.target_name
+                .as_ref()
+                .map_or_else(|| py.None().into_bound(py), |item| item.bind(py).clone()),
+        )?;
+        Ok(context)
+    }
+
+    /// `build_model_context_values` for a model's config values.
+    pub(crate) fn model_context_values<'py>(
+        &self,
+        values: &Bound<'py, PyDict>,
+        model_name: &str,
+        include_target_values: bool,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let py: Python<'py> = values.py();
+        let none = py.None().into_bound(py);
+        let database = string_entry(values, DATABASE_KEY)?;
+        let schema = string_entry(values, SCHEMA_KEY)?;
+        let alias = match string_entry(values, ALIAS_KEY)? {
+            Some(alias) => alias,
+            None => PyString::new(py, model_name).into_any(),
+        };
+        let context = self.run_context_values(py)?;
+        context.set_item(MODEL_NAME_CONTEXT, model_name)?;
+        context.set_item(MODEL_DATABASE_CONTEXT, database.as_ref().unwrap_or(&none))?;
+        context.set_item(MODEL_SCHEMA_CONTEXT, schema.as_ref().unwrap_or(&none))?;
+        context.set_item(MODEL_ALIAS_CONTEXT, &alias)?;
+        if !include_target_values {
+            return Ok(context);
+        }
+        let qualified = match (&database, &schema) {
+            (Some(database), Some(schema)) => Some(format!(
+                "{}.{}.{}",
+                text_of(database)?,
+                text_of(schema)?,
+                text_of(&alias)?
+            )),
+            (None, Some(schema)) => Some(format!("{}.{}", text_of(schema)?, text_of(&alias)?)),
+            _ => None,
+        };
+        context.set_item(
+            DESTINATION_DATABASE_CONTEXT,
+            database.as_ref().unwrap_or(&none),
+        )?;
+        context.set_item(DESTINATION_SCHEMA_CONTEXT, schema.as_ref().unwrap_or(&none))?;
+        context.set_item(DESTINATION_TABLE_CONTEXT, &alias)?;
+        context.set_item(DESTINATION_QUALIFIED_CONTEXT, qualified)?;
+        Ok(context)
+    }
+
+    /// The active target's `(database, schema)`, or `(None, None)` without a target.
+    pub(crate) fn target_namespace<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        match &self.target_namespace {
+            Some((database, schema)) => PyTuple::new(py, [database.bind(py), schema.bind(py)]),
+            None => PyTuple::new(py, [py.None(), py.None()]),
+        }
+    }
+
     fn build_config<'py>(
         &self,
         py: Python<'py>,
@@ -393,20 +505,7 @@ impl<'py> Expansion<'_, 'py> {
     }
 
     fn run_context(&self) -> Built<Bound<'py, PyDict>> {
-        let context = PyDict::new(self.py);
-        context.set_item(RUN_ID_CONTEXT, self.builder.run_id.bind(self.py))?;
-        context.set_item(
-            RUN_TARGET_CONTEXT,
-            self.optional(self.builder.target_name.as_ref()),
-        )?;
-        Ok(context)
-    }
-
-    fn optional(&self, value: Option<&Py<PyAny>>) -> Bound<'py, PyAny> {
-        value.map_or_else(
-            || self.py.None().into_bound(self.py),
-            |item| item.bind(self.py).clone(),
-        )
+        Ok(self.builder.run_context_values(self.py)?)
     }
 
     /// Return `build_model_context_values` for these values.
@@ -415,40 +514,9 @@ impl<'py> Expansion<'_, 'py> {
         values: &Bound<'py, PyDict>,
         include_target_values: bool,
     ) -> Built<Bound<'py, PyDict>> {
-        let py = self.py;
-        let none = py.None().into_bound(py);
-        let database = string_entry(values, DATABASE_KEY)?;
-        let schema = string_entry(values, SCHEMA_KEY)?;
-        let alias = match string_entry(values, ALIAS_KEY)? {
-            Some(alias) => alias,
-            None => PyString::new(py, self.model_name).into_any(),
-        };
-        let context = self.run_context()?;
-        context.set_item(MODEL_NAME_CONTEXT, self.model_name)?;
-        context.set_item(MODEL_DATABASE_CONTEXT, database.as_ref().unwrap_or(&none))?;
-        context.set_item(MODEL_SCHEMA_CONTEXT, schema.as_ref().unwrap_or(&none))?;
-        context.set_item(MODEL_ALIAS_CONTEXT, &alias)?;
-        if !include_target_values {
-            return Ok(context);
-        }
-        let qualified = match (&database, &schema) {
-            (Some(database), Some(schema)) => Some(format!(
-                "{}.{}.{}",
-                text_of(database)?,
-                text_of(schema)?,
-                text_of(&alias)?
-            )),
-            (None, Some(schema)) => Some(format!("{}.{}", text_of(schema)?, text_of(&alias)?)),
-            _ => None,
-        };
-        context.set_item(
-            DESTINATION_DATABASE_CONTEXT,
-            database.as_ref().unwrap_or(&none),
-        )?;
-        context.set_item(DESTINATION_SCHEMA_CONTEXT, schema.as_ref().unwrap_or(&none))?;
-        context.set_item(DESTINATION_TABLE_CONTEXT, &alias)?;
-        context.set_item(DESTINATION_QUALIFIED_CONTEXT, qualified)?;
-        Ok(context)
+        Ok(self
+            .builder
+            .model_context_values(values, self.model_name, include_target_values)?)
     }
 
     /// Check preserved namespaces and apply `apply_environment_database_schema_overrides`.
@@ -615,18 +683,17 @@ fn set_entry<'py>(values: &Bound<'py, PyDict>, key: &str) -> Built<Option<Bound<
 }
 
 /// Return the value when it is a string, as `isinstance(raw, str)` keeps it.
-fn string_entry<'py>(values: &Bound<'py, PyDict>, key: &str) -> Built<Option<Bound<'py, PyAny>>> {
+fn string_entry<'py>(
+    values: &Bound<'py, PyDict>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
     Ok(values
         .get_item(key)?
         .filter(|value| value.is_instance_of::<PyString>()))
 }
 
-fn text_of(value: &Bound<'_, PyAny>) -> Built<String> {
-    Ok(value
-        .downcast::<PyString>()
-        .map_err(PyErr::from)?
-        .to_string_lossy()
-        .into_owned())
+fn text_of(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    Ok(value.downcast::<PyString>()?.to_string_lossy().into_owned())
 }
 
 fn sequence_items<'py>(value: &Bound<'py, PyAny>) -> Option<Vec<Bound<'py, PyAny>>> {
@@ -709,31 +776,6 @@ fn sorted_keys(header: &Bound<'_, PyDict>) -> Built<Vec<String>> {
         .collect::<Built<Vec<_>>>()?;
     keys.sort();
     Ok(keys)
-}
-
-fn built_tuple<'py>(py: Python<'py>, built: BuiltConfig<'py>) -> PyResult<Bound<'py, PyTuple>> {
-    let retention = match built.retention {
-        RetentionOverride::Inherit => None,
-        RetentionOverride::Unmanaged => Some((None, true)),
-        RetentionOverride::Days(days) => Some((Some(days), false)),
-    };
-    let table_type = match built.table_type {
-        TableTypeOverride::Inherit => None,
-        TableTypeOverride::Permanent => Some("permanent"),
-        TableTypeOverride::Transient => Some("transient"),
-    };
-    (
-        built.values,
-        PyTuple::new(py, built.header_keys)?,
-        (
-            built.logical_schema,
-            built.layer_schema_configured,
-            built.logical_database,
-        ),
-        (retention, table_type),
-        built.reads,
-    )
-        .into_pyobject(py)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

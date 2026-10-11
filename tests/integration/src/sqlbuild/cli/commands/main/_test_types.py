@@ -148,6 +148,16 @@ class CombinedCompilationTestCase:
 
 
 @dataclass(frozen=True)
+class EarlyLintInputsTestCase:
+    """Early SQL lint: the expansions it took from the compile and redid."""
+
+    description: str
+    expected_findings: tuple[tuple[str, str, int | None, int | None], ...]
+    expected_compile_expansions: int
+    expected_python_expansions: int
+
+
+@dataclass(frozen=True)
 class RulesIntegrationTestCase:
     """One compiler-integrated Rules command expectation."""
 
@@ -1041,6 +1051,19 @@ class DefaultConnectionCliTestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     expected_order_rows: tuple[tuple[object, ...], ...] | None = None
+
+
+@dataclass(frozen=True)
+class LocalOverrideCliTestCase:
+    """One build whose target, vars and connection the local file and CLI override."""
+
+    description: str
+    local_toml: str
+    argv: tuple[str, ...]
+    expected_exit_code: int
+    expected_database: str
+    expected_schema: str
+    expected_order_rows: tuple[tuple[object, ...], ...]
 
 
 @dataclass(frozen=True)

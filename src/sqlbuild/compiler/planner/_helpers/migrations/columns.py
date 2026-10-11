@@ -6,8 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from sqlbuild.adapter.contract.models import ColumnInfo
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.main._newest_column_event import (
     newest_column_migration_event_mentioning,
@@ -60,7 +60,7 @@ _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
 class _ModelColumns:
     """Inputs gathered for one model that may rename columns this run."""
 
-    model: CompiledModel
+    model: CompiledModelView
     warehouse: dict[str, ColumnInfo]
     declared: dict[str, str]
     fingerprint: Fingerprint | None
@@ -179,7 +179,7 @@ def _candidate(
 ) -> _ModelColumns | None:
     if key not in scope.selected_keys or key.resource_type != CompiledResourceType.MODEL:
         return None
-    model: CompiledModel | None = scope.models_by_name.get(key.name)
+    model: CompiledModelView | None = scope.models_by_name.get(key.name)
     if (
         model is None
         or get_config_str(values=model.config.values, key="materialized")
@@ -478,7 +478,7 @@ def _with_renamed_cursors(
     old_cursor_columns: dict[str, str] = {}
     entry: ColumnMigrationPlanEntry
     for entry in entries:
-        model: CompiledModel | None = scope.models_by_name.get(entry.model_name)
+        model: CompiledModelView | None = scope.models_by_name.get(entry.model_name)
         cursor: str | None = (
             get_config_str(values=model.config.values, key="cursor") if model else None
         )

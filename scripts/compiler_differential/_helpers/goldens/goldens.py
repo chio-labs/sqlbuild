@@ -17,15 +17,18 @@ from scripts.compiler_differential._helpers.comparing.normalize import (
 )
 from scripts.compiler_differential.constants import (
     GOLDEN_CORPUS_PREFIXES,
+    GOLDEN_FULL_REPORT_LABEL_PREFIX,
     GOLDEN_LABEL,
     GOLDEN_MANIFEST_DROPPED_KEYS,
     GOLDEN_MANIFEST_RESOURCE_SECTIONS,
     GOLDEN_MISSING_HINT,
     GOLDEN_MODE_CHECK,
     GOLDEN_PATH_MASK,
+    GOLDEN_REPORT_KEY,
     GOLDEN_RESOURCE_DROPPED_FIELDS,
     GOLDEN_SEED_CORPUS,
     GOLDEN_SEED_RANGE_FILE,
+    GOLDEN_STDOUT_LABELS,
     GOLDEN_SUFFIX,
     GOLDEN_VERSION_MASK,
     GOLDEN_WORK_MASK,
@@ -151,7 +154,7 @@ def _command(
         report: dict[str, object] | None = as_json_object(json.loads(stdout))
     except json.JSONDecodeError:
         report = None
-    return {
+    command: dict[str, object] = {
         "label": outcome.label,
         "exit_code": "timed out" if outcome.timed_out else outcome.exit_code,
         "diagnostics": (
@@ -161,7 +164,15 @@ def _command(
                 text=normalize_stderr(_masked(text=outcome.stderr, masked_paths=masked_paths))
             )
         ),
+        **(
+            {GOLDEN_REPORT_KEY: report}
+            if outcome.label.startswith(GOLDEN_FULL_REPORT_LABEL_PREFIX)
+            else {}
+        ),
     }
+    if outcome.label in GOLDEN_STDOUT_LABELS:
+        command["stdout"] = report if report is not None else _lines(text=stdout)
+    return command
 
 
 def _manifest(*, text: str | None, masked_paths: tuple[tuple[str, str], ...]) -> object | None:

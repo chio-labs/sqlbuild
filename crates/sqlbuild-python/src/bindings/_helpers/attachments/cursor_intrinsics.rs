@@ -3,10 +3,9 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
-use sqlbuild_attachments::cursor_intrinsics::models::{IntrinsicCheck, IntrinsicModel};
+use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 use sqlbuild_core::text::models::PythonText;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
@@ -20,25 +19,6 @@ type PythonRelease = ((u8, u8), String);
 
 fn semantics((version, unicode): PythonRelease) -> PyResult<PythonText> {
     python_semantics(version, &unicode)
-}
-
-/// `None` if `sql` is free of cursor intrinsics and reserved markers, else the error for `context`.
-#[pyfunction]
-fn cursor_intrinsics_rejection(
-    sql: &str,
-    reserved_markers: Vec<String>,
-    context: &str,
-    python: PythonRelease,
-) -> PyResult<Option<String>> {
-    let python: PythonText = semantics(python)?;
-    compiler_guard(|| {
-        Ok(
-            match intrinsic_free(python, sql, &reserved_markers, context) {
-                IntrinsicCheck::Free => None,
-                IntrinsicCheck::Rejected(message) => Some(message),
-            },
-        )
-    })
 }
 
 /// A model query with canonical intrinsic calls and no error, or no query and the error.
@@ -104,7 +84,6 @@ fn replace_cursor_intrinsics(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(cursor_intrinsics_rejection, module)?)?;
     module.add_function(wrap_pyfunction!(validated_model_cursor_intrinsics, module)?)?;
     module.add_function(wrap_pyfunction!(replace_cursor_intrinsics, module)?)?;
     Ok(())

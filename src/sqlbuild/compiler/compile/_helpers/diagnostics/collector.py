@@ -5,18 +5,21 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import replace
 from functools import wraps
+from typing import cast
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.classes.collected_compile_diagnostics import (
     CollectedCompileDiagnostics,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompiledProject,
     CompileProjectInputs,
     CompilerDiagnostic,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
+from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 
 _ACTIVE_COLLECTOR: ContextVar[CollectedCompileDiagnostics | None] = ContextVar(
     "sqlbuild_collected_compile_diagnostics", default=None
@@ -35,7 +38,7 @@ def collect_compile_diagnostics() -> Iterator[CollectedCompileDiagnostics]:
         _ACTIVE_COLLECTOR.reset(token)
 
 
-def with_collected_compile_diagnostics[**P, R: (CompileProjectInputs, CompiledProject)](
+def with_collected_compile_diagnostics[**P, R: (CompileInputsView, CompiledProjectView)](
     build: Callable[P, R],
 ) -> Callable[P, R]:
     """Append every diagnostic reported while ``build`` runs to the diagnostics it returns."""
@@ -46,7 +49,14 @@ def with_collected_compile_diagnostics[**P, R: (CompileProjectInputs, CompiledPr
             built: R = build(*args, **kwargs)
         if not violations.diagnostics:
             return built
-        return replace(built, diagnostics=(*built.diagnostics, *violations.diagnostics))
+        diagnostics: tuple[CompilerDiagnostic, ...] = (
+            *built.diagnostics,
+            *violations.diagnostics,
+        )
+        if isinstance(built, CompileProjectInputs | _native.NativeInputsView):
+            return cast(R, inputs_with(inputs=built, diagnostics=diagnostics))
+        project: CompiledProjectView = cast(CompiledProjectView, built)
+        return cast(R, project_with(project=project, diagnostics=diagnostics))
 
     return collecting
 

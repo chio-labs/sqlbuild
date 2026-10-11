@@ -45,14 +45,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     enable_compile_reuse,
     fail_reuse_store,
     flip_header_byte,
-    flip_stored_stdout_bytes,
     flip_trailing_bytes,
     garbage_file,
     in_process_compile_reads,
     progress_only,
-    record_digested_paths,
+    record_digested_files,
     recorded_events,
-    remove_stored_stdout,
     replace_project_text,
     rewrite_compiled_model_unchanged,
     rewrite_macro_without_change,
@@ -60,9 +58,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     run_reuse_compile_into_file,
     run_reuse_text_compile,
     settle_racy_window,
-    simulate_installed_module_change,
-    simulate_native_build_change,
-    simulate_python_version_change,
     touch_back,
     touch_model_without_change,
     truncate_file,
@@ -90,6 +85,28 @@ _CONTRACT_ERROR_MODEL: str = (
             edit=lambda root: replace_project_text(
                 root, "models/staging/stg_orders.sql", "  quantity,", "  quantity + 0 AS quantity,"
             ),
+        ),
+        CompileReuseInvalidationTestCase(
+            description="model_reference_edit",
+            edit=lambda root: replace_project_text(
+                root,
+                "models/marts/referenced_orders.sql",
+                '__ref("stg_orders")',
+                '__ref("regional_orders")',
+            ),
+        ),
+        CompileReuseInvalidationTestCase(
+            description="macro_built_reference_edit",
+            edit=lambda root: replace_project_text(
+                root,
+                "models/marts/_sqlbuild/_macros/order_source.py",
+                '"stg_orders"',
+                '"regional_orders"',
+            ),
+        ),
+        CompileReuseInvalidationTestCase(
+            description="variable_reference_change",
+            edited_args=("--vars", json.dumps({"orders_model": "regional_orders"})),
         ),
         CompileReuseInvalidationTestCase(
             description="model_added",
@@ -218,15 +235,6 @@ _CONTRACT_ERROR_MODEL: str = (
         ),
         CompileReuseInvalidationTestCase(
             description="stale_compiled_artifact_added", edit=add_stale_compiled_file
-        ),
-        CompileReuseInvalidationTestCase(
-            description="native_build_and_version_simulated", edit=simulate_native_build_change
-        ),
-        CompileReuseInvalidationTestCase(
-            description="python_version_simulated", edit=simulate_python_version_change
-        ),
-        CompileReuseInvalidationTestCase(
-            description="installed_module_simulated", edit=simulate_installed_module_change
         ),
     ],
     ids=lambda case: case.description,
@@ -422,12 +430,6 @@ def test_given_reuse_bypass_when_compiling_twice_then_both_compiles_run_in_full(
     [
         CompileReuseCorruptEntryTestCase(description="truncated", corrupt=truncate_file),
         CompileReuseCorruptEntryTestCase(description="header_tail", corrupt=flip_trailing_bytes),
-        CompileReuseCorruptEntryTestCase(
-            description="stdout_bytes", corrupt=flip_stored_stdout_bytes
-        ),
-        CompileReuseCorruptEntryTestCase(
-            description="stdout_missing", corrupt=remove_stored_stdout
-        ),
         CompileReuseCorruptEntryTestCase(description="header_bytes", corrupt=flip_header_byte),
         CompileReuseCorruptEntryTestCase(description="empty", corrupt=empty_file),
         CompileReuseCorruptEntryTestCase(description="garbage", corrupt=garbage_file),
@@ -727,24 +729,24 @@ def test_given_large_data_file_when_storing_and_reusing_then_it_is_read_only_aft
     )
     enable_compile_reuse(monkeypatch)
     settle_racy_window(monkeypatch=monkeypatch)
-    digested: list[str] = record_digested_paths(monkeypatch=monkeypatch)
+    digested: list[dict[str, int]] = record_digested_files(monkeypatch=monkeypatch)
 
     stored: tuple[int, int, bool] = in_process_compile_reads(
-        project_dir=project_dir, digested=digested, path=data_file, capsys=capsys
+        project_dir=project_dir, digested=digested, capsys=capsys
     )
     reused: tuple[int, int, bool] = in_process_compile_reads(
-        project_dir=project_dir, digested=digested, path=data_file, capsys=capsys
+        project_dir=project_dir, digested=digested, capsys=capsys
     )
     touch_back(data_file, seconds=3600)
     restamped: tuple[int, int, bool] = in_process_compile_reads(
-        project_dir=project_dir, digested=digested, path=data_file, capsys=capsys
+        project_dir=project_dir, digested=digested, capsys=capsys
     )
     touch_back(data_file, seconds=7200)
     verified: tuple[int, int, bool] = in_process_compile_reads(
-        project_dir=project_dir, digested=digested, path=data_file, capsys=capsys
+        project_dir=project_dir, digested=digested, capsys=capsys
     )
     refreshed: tuple[int, int, bool] = in_process_compile_reads(
-        project_dir=project_dir, digested=digested, path=data_file, capsys=capsys
+        project_dir=project_dir, digested=digested, capsys=capsys
     )
     runs: tuple[tuple[int, int, bool], ...] = (stored, reused, restamped, verified, refreshed)
 

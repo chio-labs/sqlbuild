@@ -34,7 +34,7 @@ from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
             generator="toml",
             seed=51,
             case_count=5000,
-            expected_maximum_deferred=350,
+            expected_maximum_deferred=0,
         ),
         GeneratedDocumentOracleTestCase(
             description="tables, arrays of tables, inline tables and dotted keys reopening namespaces",

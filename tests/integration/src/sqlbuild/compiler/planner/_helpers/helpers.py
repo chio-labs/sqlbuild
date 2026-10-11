@@ -18,7 +18,15 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSeedView,
+    CompiledSourceView,
+)
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -88,10 +96,10 @@ def build_project_with_targets(
     seed_locations: dict[str, str | None] | None = None,
     incremental_models: tuple[_IncrementalModelSpec, ...] = (),
     source_names: tuple[tuple[str, str, str], ...] = (),
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal CompiledProject with explicit target schemas."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     target_schema: str | None
     for model_name, target_schema in (model_locations or {}).items():
@@ -152,7 +160,7 @@ def build_project_with_targets(
             )
         )
 
-    seeds: list[CompiledSeed] = []
+    seeds: list[CompiledSeedView] = []
     seed_name: str
     for seed_name, target_schema in (seed_locations or {}).items():
         seeds.append(
@@ -181,7 +189,7 @@ def build_project_with_targets(
             )
         )
 
-    sources: list[CompiledSource] = []
+    sources: list[CompiledSourceView] = []
     source_spec: tuple[str, str, str]
     for source_spec in source_names:
         sources.append(
@@ -215,23 +223,23 @@ def build_project_with_targets(
 
 
 def with_leading_enforced_model_contracts(
-    project: CompiledProject, *, columns_by_model: dict[str, tuple[str, ...]]
-) -> CompiledProject:
+    project: CompiledProjectView, *, columns_by_model: dict[str, tuple[str, ...]]
+) -> CompiledProjectView:
     """Attach enforced contracts to leading models in a compiled test project."""
 
-    models: list[CompiledModel] = list(project.models)
+    models: list[CompiledModelView] = list(project.models)
     for index, (model_name, column_names) in enumerate(columns_by_model.items()):
-        model: CompiledModel = models[index]
+        model: CompiledModelView = models[index]
         assert model.name == model_name
         models[index] = replace(
-            model,
+            compiled_model_record(model),
             config=replace(model.config, values=model.config.values | {"contract": "enforced"}),
             schema_entry=SchemaModelEntry(
                 name=model.name,
                 columns=tuple(SchemaColumn(name=name) for name in column_names),
             ),
         )
-    return replace(project, models=tuple(models))
+    return project_with(project=project, models=tuple(models))
 
 
 def build_deferred_locations_from_map(

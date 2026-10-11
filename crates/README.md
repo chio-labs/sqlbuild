@@ -1,7 +1,7 @@
 # Native crates
 
 SQLBuild's native code is a Cargo workspace that builds one Python extension module,
-`sqlbuild._native`. Only `sqlbuild-python` knows about Python; every other crate is plain Rust
+`sqlbuild._native`, and the `sqb`/`sqlbuild` executables in the `sqlbuild-cli` wheel. Only `sqlbuild-python` knows about Python; every other crate is plain Rust
 that can be tested and benchmarked with `cargo test` alone.
 
 | Crate | Responsibility |
@@ -11,12 +11,14 @@ that can be tested and benchmarked with `cargo test` alone.
 | `sqlbuild-sqltext` | Lexical SQL text without polyglot: comment, quote and parenthesis scanning, the rules quote policy, model header tokenization and matching, static variable substitution, static reference extraction, and the general reference scan with table-function call arguments under each adapter's lexical rules. |
 | `sqlbuild-config` | Configuration file reading without Python: `tomllib`-compatible TOML, PyYAML `safe_load`-compatible YAML 1.1, and typed project and local config readers for the fields discovery needs. Errors carry their kind and position; YAML outside the supported subset is an `Unsupported` error. |
 | `sqlbuild-discovery` | Native project discovery and the only implementation of the model, SQL test, scenario, source and schema file collections and the declaration layout: the shared directory walk with Python's glob and sort semantics, file reading with Python's newline handling and read errors, and parsing of authored files with Python's exact discovery messages. Results are plain data the Python discovery facade materialises. |
-| `sqlbuild-scopes` | Declaration scopes: the scope index with Python's record orders and diagnostics, declaration visibility, relationship grants, the scope lookup groups, and the dialect-aware scan of SQL tests and scenarios for their expected models and top-level CTEs, with Python's scanner errors. Anything it cannot reproduce exactly defers to Python. |
-| `sqlbuild-model-config` | Model configuration: MODEL header columns and audits, `${...}` template expansion with its environment and context reads, and the template and macro presence scans over authored config values, all read through a trait over the caller's values. Anything it cannot reproduce exactly defers to Python, which also raises every model config error. |
-| `sqlbuild-render` | Native rendering: the macro call scanner (a byte-for-byte port of Python's), splicing of rendered calls with code-point spans, and the in-compile memo of recorded macro calls and their replayable events, which can carry results across compiles through the shared native store. Anything it cannot reproduce exactly defers to Python. |
-| `sqlbuild-attachments` | Compile attachments for tests, audits, sources, functions, scenarios and seeds: attached generic audit argument merge, raw and quoted argument rendering, and severity and run scope resolution. Anything it cannot reproduce exactly defers to Python, which also raises every attachment error. |
-| `sqlbuild-analysis` | SQL analysis over polyglot: SQL tokens, query analysis, the binding catalog, semantic validation and usage, column references, type normalization, and SQL-test and scenario extraction, planning and rendering. Type normalization defers to Python for anything it cannot reproduce exactly. |
+| `sqlbuild-scopes` | Declaration scopes, visibility, relationship grants, placement, report queries and the offline scope cache, including dialect-aware SQL-test and scenario scans. |
+| `sqlbuild-model-config` | MODEL configuration, columns and audits, template expansion over caller values, and dynamic-column name patterns using Rust regex syntax. |
+| `sqlbuild-render` | Macro call scanning, argument evaluation, expansion, splicing, memoisation and persistent call-store keys. Python executes user macro bodies at the extension boundary. |
+| `sqlbuild-attachments` | Native attachment of tests, audits, sources, functions, scenarios and seeds, including argument merging, validation and audit policy resolution. Adapter value rendering remains an extension boundary. |
+| `sqlbuild-analysis` | SQL analysis over polyglot: query analysis, binding, semantic validation and usage, column references, type normalization, FAST/RICH lineage, and SQL-test/scenario extraction and compiler-side assembly. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
+| `sqlbuild-refactor` | Native rename/move plans, contract-adoption edits, MODEL/SCHEMA/YAML text edits and atomic staging/commit with rollback. Shared scope placement delegates to the native scope implementation; user Python source inspection remains at the Python AST boundary. |
+| `sqlbuild-cli` | The `sqb` and `sqlbuild` executables: `--version`, unchanged compiles replayed from the shared reuse store with Python's exact streams, exit code and compute log capture, and a handoff of every other invocation to the installed `sqlbuild-python` script. Built as its own wheel (`crates/sqlbuild-cli/pyproject.toml`). |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
 
 ## Layering
@@ -25,13 +27,14 @@ Dependencies point one way, from the top of this graph to the bottom:
 
 ```text
 sqlbuild-python
-  -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments -> sqlbuild-render
-  -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-discovery -> sqlbuild-config
+  -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
+  -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-render -> sqlbuild-discovery -> sqlbuild-config
   -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-core
+sqlbuild-cli -> sqlbuild-cache, sqlbuild-core
 ```
 
-`sqlbuild-config` and `sqlbuild-model-config` do not depend on the crates below them today, and
-`sqlbuild-scopes` uses only `sqlbuild-sqltext` and `sqlbuild-core`; their place in the order fixes which crates may
+`sqlbuild-scopes` reuses the macro scanner in `sqlbuild-render`; render itself depends only on
+`sqlbuild-cache` and `sqlbuild-core`. Their place in the order fixes which crates may
 use them. The JSON emitter
 lives in `sqlbuild-core` so that any layer can produce text that must equal Python's
 `json.dumps` output.
@@ -62,10 +65,11 @@ stages run natively:
 | `native-preview` | Opt-in: shipped stages plus stages still in development (`preview` tier). |
 
 The Python compiler and its `python` engine were removed once discovery, rendering and analysis
-shipped natively; setting `python` is an error that says so. Native stages still hand inputs they
-cannot reproduce exactly back to Python helpers (the allow-list in
-`scripts/compiler_differential/native_fallbacks.toml` lists every such deferral the corpus
-reaches). A failing render raises its first error directly and runs each macro call at most
+shipped natively; setting `python` is an error that says so. Generic compiler stages do not
+rescue native failures through a Python implementation. User macros, custom rules and adapter
+callbacks retain their explicit Python boundaries. The recorder in
+`scripts/compiler_differential/native_fallbacks.toml` tracks native answers and the remaining
+extension/test-mock callbacks. A failing render raises its first error directly and runs each macro call at most
 once; a divergence the bridge detects is reported as a native stage mismatch. Because the
 macro-call store is always on, the
 [macro determinism contract](../website/src/content/docs/docs/concepts/macros.mdx) applies to

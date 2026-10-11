@@ -2,32 +2,27 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile.constants import PRESERVE_TARGET_VALUE
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView, CompiledSeedView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.constants import DEFERRED_TARGET_CONTEXT_KEYS
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.spec.contracts.models import TargetConfig
 
-_CTX_PATTERN: re.Pattern[str] = re.compile(r"\$\{CTX:([^}]+)\}")
-_VAR_PATTERN: re.Pattern[str] = re.compile(r"\$\{([^}:]+)\}")
-
 
 def build_deferred_locations(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     deferred_target_config: TargetConfig,
     effective_vars: dict[str, object],
     default_schema: str | None,
@@ -37,7 +32,7 @@ def build_deferred_locations(
     """Build physical locations for all models and seeds under a deferred target."""
 
     locations: dict[str, CompiledRelationLocation] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in project.models:
         locations[model.name] = _resolve_deferred_location(
             target=model.destination,
@@ -47,7 +42,7 @@ def build_deferred_locations(
             default_database=default_database,
             render_qualified_name=render_qualified_name,
         )
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in project.seeds:
         locations[seed.name] = _resolve_deferred_location(
             target=seed.destination,
@@ -155,25 +150,17 @@ def _resolve_target_field(
     if target_value is None or target_value == PRESERVE_TARGET_VALUE:
         return logical_value
 
-    result: str = target_value
-
-    def _replace_ctx(match: re.Match[str]) -> str:
-        ctx_key: str = match.group(1)
-        if ctx_key in DEFERRED_TARGET_CONTEXT_KEYS:
-            return logical_value if logical_value is not None else ""
-        return match.group(0)
-
-    result = _CTX_PATTERN.sub(_replace_ctx, result)
-
-    def _replace_var(match: re.Match[str]) -> str:
-        var_name: str = match.group(1)
-        if var_name not in effective_vars:
-            return match.group(0)
-        return render_project_var_text(
-            value=effective_vars[var_name],
-            label=f"deferred target variable '${{{var_name}}}'",
+    segments: list[tuple[bool, str]] = _native.deferred_target_segments(
+        target_value,
+        "" if logical_value is None else logical_value,
+        sorted(DEFERRED_TARGET_CONTEXT_KEYS),
+        [name for name in effective_vars if isinstance(name, str)],
+    )
+    return "".join(
+        render_project_var_text(
+            value=effective_vars[text], label=f"deferred target variable '${{{text}}}'"
         )
-
-    result = _VAR_PATTERN.sub(_replace_var, result)
-
-    return result
+        if is_variable
+        else text
+        for is_variable, text in segments
+    )

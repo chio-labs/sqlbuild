@@ -99,10 +99,6 @@ class MacroDeclarationLookupError(CompileInputError, KeyError):
     """Retain authored diagnostics while honoring the Mapping lookup contract."""
 
 
-class NativeSqlTestResponseError(CompileInputError):
-    """Raised when native SQL-test extraction returns malformed data."""
-
-
 class SqlTestExtractionError(CompileInputError):
     """Raised when a SQL test cannot be split into CTEs; names the test and offending text."""
 

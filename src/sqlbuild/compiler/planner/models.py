@@ -20,15 +20,18 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
 )
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
     FunctionReturnColumn,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import AttachedAuditTargetKind, FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    AttachedAuditTargetKind,
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    FunctionLanguage,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, SqlTestParameterDeclaration
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.types import (
@@ -146,7 +149,7 @@ class FixtureRelationMetadata:
 class RelationFixturePlanningContext:
     """Project-wide fixture metadata shared across test and scenario planning."""
 
-    models_by_name: dict[str, CompiledModel]
+    models_by_name: dict[str, CompiledModelView]
     relations: dict[FixtureKey, FixtureRelationMetadata]
     authoritative_columns: dict[FixtureKey, frozenset[str]]
     expected_types: dict[FixtureKey, dict[str, str]]
@@ -809,7 +812,7 @@ class PlannerScope:
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     all_keys: dict[str, CompiledObjectKey]
-    models_by_name: dict[str, CompiledModel]
+    models_by_name: dict[str, CompiledModelView]
     selected_keys: frozenset[CompiledObjectKey]
     execution_order: tuple[CompiledObjectKey, ...]
     user_selected_keys: frozenset[CompiledObjectKey] = frozenset()
@@ -837,13 +840,13 @@ class ModelPlanContext:
     """Relation lookups and source columns for building one model plan entry."""
 
     model_locations: dict[str, CompiledRelationLocation]
-    models_by_name: dict[str, CompiledModel]
+    models_by_name: dict[str, CompiledModelView]
     seed_locations: dict[str, CompiledRelationLocation]
     function_locations: dict[str, CompiledRelationLocation]
     source_map: dict[str, SourceEntry]
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]]
     star_exclude_keyword: str
-    functions_by_name: dict[str, CompiledFunction] = field(default_factory=dict)
+    functions_by_name: dict[str, CompiledFunctionView] = field(default_factory=dict)
     runtime_cursor_producer_names: frozenset[str] = frozenset()
     future_cursor_config: FutureCursorsConfig | None = None
     start_cursor_config: StartCursorsConfig | None = None
@@ -1654,7 +1657,7 @@ class PlannerPolicies:
 class PlannerRuntime:
     """Resolved execution environment shared by planner phases."""
 
-    project: CompiledProject
+    project: CompiledProjectView
     adapter: BaseAdapter
     connection: Any
     project_config: ProjectConfig | None = None
@@ -1693,7 +1696,7 @@ class PlannerWarehouseState:
 class ModelMigrationRequest:
     """One destination model whose data should come from an earlier relation."""
 
-    model: CompiledModel
+    model: CompiledModelView
     discovery: MigrationDiscovery
     raw_origin: str | None = None
     origin_location: CompiledRelationLocation | None = None

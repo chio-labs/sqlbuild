@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
@@ -20,7 +20,7 @@ from sqlbuild.rule_engine.models import ResolvedRuleset, Rule, RulesConfig, Rule
 
 def evaluate_project(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     dialect: str = "generic",

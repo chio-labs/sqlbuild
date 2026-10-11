@@ -9,12 +9,16 @@ import pytest
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import gather_warehouse_snapshot
@@ -244,7 +248,7 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
             render_framework_type=adapter.render_framework_type,
         )
 
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations=test_case.model_locations,
         model_deps=test_case.model_deps,
         seed_locations=test_case.seed_locations,
@@ -288,7 +292,7 @@ def test_given_no_target_schemas_when_gathering_snapshot_then_returns_empty(
     connection: Any,
     execute: Any,
 ) -> None:
-    project: CompiledProject = build_project_with_targets(model_locations={}, seed_locations={})
+    project: CompiledProjectView = build_project_with_targets(model_locations={}, seed_locations={})
     snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
         project=project,
         adapter=adapter,
@@ -326,7 +330,7 @@ def test_given_sources_when_gathering_source_columns_then_filters_metadata_names
     for statement in test_case.setup_sql:
         connection.execute(statement)
     adapter: RecordingDuckDbAdapter = RecordingDuckDbAdapter()
-    project: CompiledProject = build_project_with_targets(source_names=test_case.source_names)
+    project: CompiledProjectView = build_project_with_targets(source_names=test_case.source_names)
 
     columns: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
         project=project,
@@ -470,7 +474,7 @@ def test_given_incremental_models_when_gathering_cursor_snapshots_then_returns_e
     def _track_progress(message: str) -> None:
         progress_calls.append(message)
 
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"raw_orders": "staging"},
         incremental_models=(
             _IncrementalModelSpec(
@@ -568,7 +572,7 @@ def test_given_deferred_locations_when_gathering_cursor_snapshots_then_resolves_
 
     deferred: dict[str, CompiledRelationLocation] | None = test_case.deferred_locations
 
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"raw_orders": "staging"},
         incremental_models=(_INCREMENTAL_MODEL,),
     )
@@ -622,7 +626,7 @@ def test_given_models_sharing_one_source_when_gathering_snapshot_then_executes_o
         statements.append(sql)
         return connection.execute(sql)
 
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"raw_events": "staging"},
         incremental_models=(
             _IncrementalModelSpec(
@@ -683,7 +687,7 @@ def test_given_timezone_cursor_text_when_gathering_snapshot_then_normalizes_ware
         "INSERT INTO staging.raw_events VALUES (?)",
         [(value,) for value in test_case.warehouse_values],
     )
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"raw_events": "staging"},
         incremental_models=(
             _IncrementalModelSpec(
@@ -732,7 +736,7 @@ def test_given_explicit_start_when_gathering_snapshot_then_eligible_query_is_nev
         statements.append(sql)
         return connection.execute(sql)
 
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"raw_events": "staging"},
         incremental_models=(
             _IncrementalModelSpec(
@@ -803,7 +807,7 @@ def test_given_mixed_model_grains_when_gathering_eligibility_then_warehouse_flow
         statements.append(sql)
         return connection.execute(sql)
 
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         incremental_models=(
             _IncrementalModelSpec(
                 name="daily_events",
@@ -880,7 +884,7 @@ def test_given_broad_metadata_scope_when_gathering_selected_cursor_then_ignores_
         statements.append(sql)
         return connection.execute(sql)
 
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"valid_upstream": "staging", "invalid_upstream": "staging"},
         incremental_models=(
             _IncrementalModelSpec(
@@ -954,7 +958,7 @@ def test_given_selected_invalid_cursor_model_when_gathering_snapshot_then_raises
     execute: Any,
 ) -> None:
     connection.execute("CREATE TABLE staging.invalid_upstream (id INTEGER)")
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"invalid_upstream": "staging"},
         incremental_models=(
             _IncrementalModelSpec(
@@ -1017,7 +1021,7 @@ def test_given_full_refresh_with_time_only_watermark_contract_when_gathering_the
     connection: Any,
     execute: Any,
 ) -> None:
-    project: CompiledProject = build_project_with_targets(
+    project: CompiledProjectView = build_project_with_targets(
         model_locations={"upstream_events": "staging"},
         incremental_models=(
             _IncrementalModelSpec(
@@ -1041,8 +1045,8 @@ def test_given_full_refresh_with_time_only_watermark_contract_when_gathering_the
             ),
         ),
     )
-    upstream: CompiledModel = replace(
-        project.models[0],
+    upstream: CompiledModelView = replace(
+        compiled_model_record(project.models[0]),
         config=replace(
             project.models[0].config,
             values=project.models[0].config.values | {"contract": "enforced"},
@@ -1052,7 +1056,7 @@ def test_given_full_refresh_with_time_only_watermark_contract_when_gathering_the
             columns=(SchemaColumn(name="event_time", type=test_case.declared_type),),
         ),
     )
-    project = replace(project, models=(upstream, project.models[1]))
+    project = project_with(project=project, models=(upstream, project.models[1]))
     daily_key: CompiledObjectKey = project.models[1].key
 
     with pytest.raises(PlannerInputError, match=test_case.expected_error_fragment):

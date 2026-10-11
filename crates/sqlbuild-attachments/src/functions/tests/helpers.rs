@@ -69,3 +69,8 @@ pub(super) fn failure(stage: HeaderStage, message: &str) -> Option<HeaderFailure
         message: message.to_owned(),
     })
 }
+
+/// The set of `values`, as owned names.
+pub(super) fn names(values: &[&str]) -> std::collections::HashSet<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}

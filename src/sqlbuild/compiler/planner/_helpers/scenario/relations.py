@@ -16,16 +16,19 @@ from sqlbuild.compiler.compile.constants import (
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
     CompiledRelationLocation,
-    CompiledSeed,
     CompiledSqlScenario,
     CompileSqlScenarioCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSeedView,
+)
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.planner._helpers.fixtures.completion import (
     build_relation_fixture_completion,
 )
@@ -73,7 +76,7 @@ from sqlbuild.compiler.planner.types import (
     FixtureKey,
     ScenarioArtifactKind,
 )
-from sqlbuild.compiler.references.main.reference_call_prefix_pattern_text import (
+from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text import (
     reference_call_prefix_pattern_text,
 )
 from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
@@ -99,7 +102,7 @@ _DBT_REF_PATTERN: re.Pattern[str] = re.compile(
 
 def build_scenario_relation_plan(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     graph_plan: ScenarioGraphPlan,
     relation_map: ScenarioRelationMap,
     render_qualified_name: Callable[..., str | None],
@@ -313,7 +316,7 @@ def _replace_relation_markers(
 def build_scenario_execution_plan(
     *,
     scenario: CompiledSqlScenario,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     graph_plan: ScenarioGraphPlan,
     relation_plan: ScenarioRelationPlan,
@@ -328,8 +331,8 @@ def build_scenario_execution_plan(
     effective_source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = (
         source_warehouse_columns or {}
     )
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
-    functions_by_key: dict[CompiledObjectKey, CompiledFunction] = {
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
+    functions_by_key: dict[CompiledObjectKey, CompiledFunctionView] = {
         function.key: function for function in project.functions
     }
     function_locations: dict[str, CompiledRelationLocation] = build_function_locations(
@@ -406,7 +409,7 @@ def build_scenario_execution_plan(
     warnings: list[PlanWarning] = []
     key: CompiledObjectKey
     for key in ordered_model_keys:
-        model: CompiledModel = models_by_name[key.name]
+        model: CompiledModelView = models_by_name[key.name]
         scenario_target: CompiledRelationLocation = _required_target(
             targets=relation_plan.model_locations,
             name=model.name,
@@ -419,7 +422,11 @@ def build_scenario_execution_plan(
         entry: ModelPlanEntry
         model_warnings: tuple[PlanWarning, ...]
         entry, model_warnings = plan_model(
-            model=replace(model, destination=scenario_target, query_sql=scenario_query_sql),
+            model=replace(
+                compiled_model_record(model),
+                destination=scenario_target,
+                query_sql=scenario_query_sql,
+            ),
             snapshot=effective_snapshot,
             adapter=adapter,
             context=ModelPlanContext(
@@ -484,7 +491,7 @@ def build_scenario_execution_plan(
 
 def _build_scenario_function_entry(
     *,
-    function: CompiledFunction,
+    function: CompiledFunctionView,
     adapter: BaseAdapter,
     relation_plan: ScenarioRelationPlan,
     function_locations: dict[str, CompiledRelationLocation],
@@ -698,20 +705,20 @@ def _apply_fixture_overrides(
 
 def build_scenario_seed_entries(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     graph_plan: ScenarioGraphPlan,
     relation_plan: ScenarioRelationPlan,
 ) -> tuple[SeedPlanEntry, ...]:
     """Build project seed load entries for required seeds not overridden by fixtures."""
 
-    seeds_by_name: dict[str, CompiledSeed] = {seed.name: seed for seed in project.seeds}
+    seeds_by_name: dict[str, CompiledSeedView] = {seed.name: seed for seed in project.seeds}
     seed_fixture_names: frozenset[str] = frozenset(graph_plan.seed_fixture_names)
     seed_entries: list[SeedPlanEntry] = []
     seed_name: str
     for seed_name in graph_plan.seed_names:
         if seed_name in seed_fixture_names:
             continue
-        seed: CompiledSeed | None = seeds_by_name.get(seed_name)
+        seed: CompiledSeedView | None = seeds_by_name.get(seed_name)
         if seed is None:
             raise PlannerInputError(
                 f"Scenario '{graph_plan.name}' requires unknown seed '{seed_name}'",

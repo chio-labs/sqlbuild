@@ -1,6 +1,6 @@
 """Plan a dbt interop command."""
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.integrations.dbt._helpers.planning.orchestration import (
     plan_dbt_interop_command as _plan,
 )
@@ -18,7 +18,7 @@ from sqlbuild.integrations.dbt.types import DbtInteropCommand
 def plan_dbt_interop_command(
     *,
     command: DbtInteropCommand | str,
-    project: CompiledProject,
+    project: CompiledProjectView,
     manifest: DbtManifestIndex,
     graph: DbtCombinedGraph,
     dbt_runner: DbtRunner,

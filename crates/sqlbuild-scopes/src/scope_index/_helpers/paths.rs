@@ -3,14 +3,19 @@
 use crate::scope_index::constants::{
     CURRENT_PATH_COMPONENT, PARENT_PATH_COMPONENT, PATH_SEPARATOR,
 };
-use crate::scope_index::models::ScopeDeferral;
+use crate::scope_index::models::{RejectedPath, ScopeDeferral, ScopePathFailure};
 
 /// Python's `normalize_path`; a path Python rejects defers the stage so Python raises its error.
 pub(crate) fn normalize_path(display_path: &str) -> Result<String, ScopeDeferral> {
+    normalized_path(display_path).map_err(|_| deferral(display_path))
+}
+
+/// Python's `normalize_path`, or why it raises `InvalidScopePathError`.
+pub(crate) fn normalized_path(display_path: &str) -> Result<String, ScopePathFailure> {
     let raw: String = display_path.replace('\\', "/");
     let has_drive: bool = raw.chars().nth(1) == Some(':');
     if raw.is_empty() || raw.starts_with(PATH_SEPARATOR) || has_drive {
-        return Err(deferral(display_path));
+        return Err(ScopePathFailure::NotProjectRelative);
     }
     let mut components: Vec<&str> = Vec::new();
     for component in raw.split(PATH_SEPARATOR) {
@@ -19,7 +24,7 @@ pub(crate) fn normalize_path(display_path: &str) -> Result<String, ScopeDeferral
         }
         if component == PARENT_PATH_COMPONENT {
             if components.pop().is_none() {
-                return Err(deferral(display_path));
+                return Err(ScopePathFailure::EscapesProject);
             }
             continue;
         }
@@ -71,4 +76,12 @@ fn deferral(display_path: &str) -> ScopeDeferral {
     ScopeDeferral {
         reason: format!("scope path Python rejects: {display_path}"),
     }
+}
+
+/// Python's `normalize_path`, or the path it rejects with why.
+pub(crate) fn checked_path(display_path: &str) -> Result<String, RejectedPath> {
+    normalized_path(display_path).map_err(|failure| RejectedPath {
+        failure,
+        path: display_path.to_owned(),
+    })
 }

@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledRelationLocation,
     CompileSqlReference,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     _resolve_upstream_qualified_name,
 )
@@ -65,7 +65,7 @@ def test_given_ref_and_deferred_locations_when_resolving_upstream_then_returns_e
     test_case: CursorUpstreamResolutionTestCase,
 ) -> None:
     ref: CompileSqlReference = build_cursor_ref(test_case.ref_name)
-    model_map: dict[str, CompiledModel] = build_cursor_model_map(
+    model_map: dict[str, CompiledModelView] = build_cursor_model_map(
         test_case.ref_name,
         test_case.model_qualified_name,
     )

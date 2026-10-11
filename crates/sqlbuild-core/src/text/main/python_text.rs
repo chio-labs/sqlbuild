@@ -1,6 +1,8 @@
 //! Select the Python string semantics of one CPython release.
 
-use crate::text::_helpers::alnum_tables::{ALNUM_TABLES, ALPHA_TABLES, DECIMAL_TABLES};
+use crate::text::_helpers::alnum_tables::{
+    ALNUM_TABLES, ALPHA_TABLES, DECIMAL_TABLES, PRINTABLE_TABLES,
+};
 use crate::text::_helpers::case_tables::{CASEFOLD_TABLES, IGNORECASE_KEY_TABLES, UPPER_TABLES};
 use crate::text::models::{CleandocMargin, PythonText};
 
@@ -23,6 +25,10 @@ pub fn python_text(python_version: (u8, u8), unicode_version: &str) -> Option<Py
         .iter()
         .find(|(version, _)| *version == unicode_version)
         .map(|(_, ranges)| *ranges)?;
+    let printable_ranges: &'static [(u32, u32)] = PRINTABLE_TABLES
+        .iter()
+        .find(|(version, _)| *version == unicode_version)
+        .map(|(_, ranges)| *ranges)?;
     let casefold_mappings: &'static [(u32, &'static str)] = CASEFOLD_TABLES
         .iter()
         .find(|(version, _)| *version == unicode_version)
@@ -42,6 +48,7 @@ pub fn python_text(python_version: (u8, u8), unicode_version: &str) -> Option<Py
         upper_mappings,
         alpha_ranges,
         decimal_ranges,
+        printable_ranges,
         cleandoc_margin,
         minor_version: python_version.1,
     })

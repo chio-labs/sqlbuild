@@ -15,14 +15,16 @@ from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
-    CompiledModel,
-    CompiledProject,
     CompileSqlReference,
     DynamicColumnContractProof,
     FixtureColumnInference,
     InferredColumn,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,
@@ -47,7 +49,7 @@ _DBT_REF_PATTERN: re.Pattern[str] = re.compile(r'__dbt_ref\("([^"]+)"\s*,\s*"([^
 
 def build_relation_fixture_completion(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     ordered_model_names: tuple[str, ...],
     fixture_groups: FixtureGroups,
@@ -58,7 +60,7 @@ def build_relation_fixture_completion(
     context: RelationFixturePlanningContext = planning_context or build_relation_fixture_context(
         project=project
     )
-    model_map: dict[str, CompiledModel] = context.models_by_name
+    model_map: dict[str, CompiledModelView] = context.models_by_name
     relations: dict[FixtureKey, FixtureRelationMetadata] = context.relations
     fixture_sql_by_key: dict[FixtureKey, str]
     inferred_by_fixture: dict[FixtureKey, tuple[InferredColumn, ...]]
@@ -359,12 +361,12 @@ def _fixture_keys_requiring_analysis(
 
 def build_relation_fixture_context(
     *,
-    project: CompiledProject,
-    models_by_name: dict[str, CompiledModel] | None = None,
+    project: CompiledProjectView,
+    models_by_name: dict[str, CompiledModelView] | None = None,
 ) -> RelationFixturePlanningContext:
     """Build immutable project-wide fixture metadata once per planning invocation."""
 
-    model_map: dict[str, CompiledModel] = (
+    model_map: dict[str, CompiledModelView] = (
         {model.name: model for model in project.models}
         if models_by_name is None
         else models_by_name
@@ -397,7 +399,7 @@ def _authoritative_fixture_columns(
 def _required_fixture_columns(
     *,
     ordered_model_names: tuple[str, ...],
-    model_map: dict[str, CompiledModel],
+    model_map: dict[str, CompiledModelView],
     fixture_keys: frozenset[FixtureKey],
     relations: dict[FixtureKey, FixtureRelationMetadata],
     authoritative_columns: dict[FixtureKey, frozenset[str]],
@@ -407,7 +409,7 @@ def _required_fixture_columns(
     star_fixture_keys: set[FixtureKey] = set()
     dialect: str | None = adapter.expression_inference_profile().sql_analysis_dialect
     for model_name in ordered_model_names:
-        model: CompiledModel | None = model_map.get(model_name)
+        model: CompiledModelView | None = model_map.get(model_name)
         if model is None:
             continue
         for upstream in _resolved_fixture_reads(
@@ -498,7 +500,7 @@ def _cached_resolved_column_reads(
 
 def _star_fixture_keys(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     fixture_keys: frozenset[FixtureKey],
     relations: dict[FixtureKey, FixtureRelationMetadata],
     adapter: BaseAdapter,
@@ -591,7 +593,7 @@ def _replace_relation_markers_with_stubs(query_sql: str) -> str:
 
 
 def _fixture_relation_metadata(
-    *, project: CompiledProject, model_map: dict[str, CompiledModel]
+    *, project: CompiledProjectView, model_map: dict[str, CompiledModelView]
 ) -> dict[FixtureKey, FixtureRelationMetadata]:
     relations: dict[FixtureKey, FixtureRelationMetadata] = {}
     for model_name, model in model_map.items():
@@ -624,7 +626,7 @@ def _fixture_relation_metadata(
     return relations
 
 
-def _model_fixture_metadata(*, model: CompiledModel) -> FixtureRelationMetadata:
+def _model_fixture_metadata(*, model: CompiledModelView) -> FixtureRelationMetadata:
     columns_by_name: dict[str, FixtureColumnMetadata] = {}
     order: list[str] = []
     for column in model.inferred_columns or ():
@@ -665,11 +667,11 @@ def _expected_fixture_types(
     *,
     base_expected_types: dict[FixtureKey, dict[str, str]],
     ordered_model_names: tuple[str, ...],
-    model_map: dict[str, CompiledModel],
+    model_map: dict[str, CompiledModelView],
 ) -> Mapping[FixtureKey, dict[str, str]]:
     expected_types: ChainMap[FixtureKey, dict[str, str]] = ChainMap({}, base_expected_types)
     for model_name in ordered_model_names:
-        model: CompiledModel | None = model_map.get(model_name)
+        model: CompiledModelView | None = model_map.get(model_name)
         if model is None:
             continue
         model_key: FixtureKey = (CompiledResourceType.MODEL, model_name)

@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import DeclarationResolutionContext, MacroContext
-from sqlbuild.python_nodes.models import SqlResourceRef
 
 
 @dataclass(frozen=True)
@@ -27,16 +26,6 @@ class ContextValueTestCase:
     description: str
     context: MacroContext
     expected_stored: bool
-
-
-@dataclass(frozen=True)
-class CallClassStoreTextTestCase:
-    """A call class's context and relations, compared with a plain class of the same macros."""
-
-    description: str
-    context_token: str | None
-    prior_relations: tuple[SqlResourceRef, ...] | None
-    expected_equal: bool
 
 
 @dataclass(frozen=True)

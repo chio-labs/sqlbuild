@@ -1,5 +1,10 @@
+pub(crate) mod authored_files;
+pub(crate) mod environment_markers;
+pub(crate) mod fingerprint_digest;
 pub(crate) mod parsed_lineage;
 pub(crate) mod projections;
 pub(crate) mod python_payload;
 pub(crate) mod references;
+pub(crate) mod rich_lineage;
+pub(crate) mod semantic_uses;
 pub(crate) mod stars;

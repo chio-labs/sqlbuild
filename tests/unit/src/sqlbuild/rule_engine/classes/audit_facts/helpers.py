@@ -1,11 +1,11 @@
 from pathlib import Path
 
 from sqlbuild.compiler.compile.models import CompiledAudit, CompiledObjectKey
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock, DiscoveredAuditFile
 
 
-def build_audit(*, name: str, attached_target_name: str | None) -> CompiledAudit:
+def build_audit(*, name: str, attached_target_name: str | None) -> CompiledAuditView:
     relative_path: Path = Path(f"audits/{name}.sql")
     audit_file: DiscoveredAuditFile = DiscoveredAuditFile(
         file_path=relative_path,

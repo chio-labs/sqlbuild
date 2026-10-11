@@ -132,7 +132,7 @@ def _corpus_differences(*, project: CorpusProject, run: EngineRun) -> list[Diffe
     problems: list[str] = [
         f"`{outcome.label}` exit {outcome.exit_code}"
         for outcome in run.outcomes
-        if outcome.exit_code != 0
+        if (outcome.exit_code != 0) != (outcome.label in project.expected.refused_commands)
     ]
     if errors:
         problems.append(f"compile errors {', '.join(errors)}")

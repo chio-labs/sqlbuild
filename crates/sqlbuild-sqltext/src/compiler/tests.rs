@@ -2,6 +2,10 @@
 mod declaration_references;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_model_columns.rs"]
+mod model_columns;
+#[path = "tests/test_model_header_entry_span.rs"]
+mod model_header_entry_span;
 #[path = "tests/test_model_header_matching.rs"]
 mod model_header_matching;
 #[path = "tests/test_model_header_nesting.rs"]

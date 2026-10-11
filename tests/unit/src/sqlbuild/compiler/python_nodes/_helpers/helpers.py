@@ -18,7 +18,12 @@ from sqlbuild.compiler.compile.models import (
     CompiledSource,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredAssetFunction,
     DiscoveredCheckFunction,
@@ -42,6 +47,7 @@ from sqlbuild.spec.contracts.models import (
     SourceEntry,
 )
 from sqlbuild.tasks import task
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 
 
 def fetch_events(_ctx: object) -> list[dict[str, object]]:
@@ -501,14 +507,14 @@ def build_orders_project_graph() -> ProjectGraph:
         contents="sources: []\n",
         source_entries=(),
     )
-    raw_orders_source: CompiledSource = CompiledSource(
+    raw_orders_source: CompiledSourceView = CompiledSource(
         key=raw_orders_key,
         deps=(),
         name="raw_orders",
         source_entry=SourceEntry(name="raw_orders", loader="raw_orders", managed=True),
         source_file=source_file,
     )
-    orders_model: CompiledModel = CompiledModel(
+    orders_model: CompiledModelView = CompiledModel(
         key=orders_key,
         deps=(raw_orders_key,),
         name="orders",
@@ -522,7 +528,7 @@ def build_orders_project_graph() -> ProjectGraph:
             qualified_name="orders",
         ),
     )
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-id",
         effective_target_name=None,
         effective_connection={},
@@ -530,7 +536,7 @@ def build_orders_project_graph() -> ProjectGraph:
         models=(orders_model,),
         sources=(raw_orders_source,),
     )
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=project,
         upstream_deps={raw_orders_key: (), orders_key: (raw_orders_key,)},
         downstream_deps={raw_orders_key: (orders_key,), orders_key: ()},
@@ -550,7 +556,7 @@ def build_model_depends_on_intermediate_loader_project_graph() -> ProjectGraph:
         resource_type=CompiledResourceType.SOURCE,
         name="fetch_pages",
     )
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=project_graph.project,
         upstream_deps={
             **project_graph.upstream_deps,

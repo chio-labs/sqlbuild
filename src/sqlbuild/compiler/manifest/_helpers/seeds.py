@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledSeed
+from sqlbuild.compiler.compile.types import CompiledSeedView
 from sqlbuild.compiler.manifest._helpers.shared import build_columns_dict, build_fqn
 from sqlbuild.compiler.manifest.constants import CHECKSUM_HASH_NAME, RESOURCE_TYPE_SEED
 
 
 def build_seed_node(
     *,
-    seed: CompiledSeed,
+    seed: CompiledSeedView,
     project_name: str,
 ) -> dict[str, object]:
     """Build one dbt-compatible seed node dict."""

@@ -7,13 +7,16 @@ from typing import Any
 import pytest
 
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
-    CompiledSeed,
-    CompiledSource,
     LoadedMacro,
 )
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledSeedView,
+    CompiledSourceView,
+)
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEntry
 from sqlbuild.compiler.manifest._helpers.shared import build_fqn
 from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
@@ -59,7 +62,7 @@ from tests.unit.src.sqlbuild.compiler.manifest.helpers import (
 _PROJECT: str = "demo"
 _ADAPTER: str = "duckdb"
 
-_MODEL_ORDERS: CompiledModel = build_test_model(
+_MODEL_ORDERS: CompiledModelView = build_test_model(
     name="orders",
     query_sql="SELECT * FROM raw",
     relative_path="models/staging/orders.sql",
@@ -69,14 +72,14 @@ _MODEL_ORDERS: CompiledModel = build_test_model(
     columns=(SchemaColumn(name="id", type="INTEGER"),),
 )
 
-_MODEL_ORPHAN: CompiledModel = build_test_model(
+_MODEL_ORPHAN: CompiledModelView = build_test_model(
     name="orphan",
     query_sql="SELECT 1",
     relative_path="models/orphan.sql",
     schema="public",
 )
 
-_MODEL_WITH_COLUMNS: CompiledModel = build_test_model(
+_MODEL_WITH_COLUMNS: CompiledModelView = build_test_model(
     name="typed_model",
     relative_path="models/typed_model.sql",
     description="Has columns",
@@ -86,13 +89,13 @@ _MODEL_WITH_COLUMNS: CompiledModel = build_test_model(
     ),
 )
 
-_MODEL_WITH_DEPS: CompiledModel = build_test_model(
+_MODEL_WITH_DEPS: CompiledModelView = build_test_model(
     name="joined",
     relative_path="models/joined.sql",
     deps=(model_key("orders"), source_key("raw_customers")),
 )
 
-_MODEL_WITH_ALIAS: CompiledModel = build_test_model(
+_MODEL_WITH_ALIAS: CompiledModelView = build_test_model(
     name="orders_aliased",
     relative_path="models/marts/orders_aliased.sql",
     database="analytics",
@@ -102,7 +105,7 @@ _MODEL_WITH_ALIAS: CompiledModel = build_test_model(
     config_values={"materialized": "incremental", "tags": ["core", "nightly"]},
 )
 
-_SOURCE_WITH_COLUMNS: CompiledSource = build_test_source(
+_SOURCE_WITH_COLUMNS: CompiledSourceView = build_test_source(
     name="raw_events",
     database="raw_db",
     schema="events",
@@ -114,14 +117,14 @@ _SOURCE_WITH_COLUMNS: CompiledSource = build_test_source(
     ),
 )
 
-_SOURCE_RAW_ORDERS: CompiledSource = build_test_source(
+_SOURCE_RAW_ORDERS: CompiledSourceView = build_test_source(
     name="raw_orders",
     database="raw_db",
     schema="public",
     table="orders_table",
     description="Raw order data",
 )
-_SOURCE_EVENTS: CompiledSource = build_test_source(
+_SOURCE_EVENTS: CompiledSourceView = build_test_source(
     name="events",
     database=None,
     schema="analytics",
@@ -422,7 +425,7 @@ def test_given_project_when_building_manifest_then_produces_correct_structure(
 def test_given_model_when_building_manifest_then_produces_correct_node(
     test_case: ManifestModelNodeTestCase,
 ) -> None:
-    project: CompiledProject = build_test_project(models=(test_case.model,))
+    project: CompiledProjectView = build_test_project(models=(test_case.model,))
     plan_output: PlanOutput = build_test_plan_output(model_entries=test_case.plan_entries)
 
     result: dict[str, Any] = run_manifest(
@@ -512,8 +515,8 @@ def test_given_model_when_building_manifest_then_produces_correct_node(
 def test_given_source_when_building_manifest_then_produces_correct_node(
     test_case: ManifestSourceNodeTestCase,
 ) -> None:
-    source: CompiledSource = _SOURCE_FIXTURES[test_case.expected_source_name]
-    project: CompiledProject = build_test_project(sources=(source,))
+    source: CompiledSourceView = _SOURCE_FIXTURES[test_case.expected_source_name]
+    project: CompiledProjectView = build_test_project(sources=(source,))
     plan_output: PlanOutput = build_test_plan_output()
 
     result: dict[str, Any] = run_manifest(
@@ -559,8 +562,8 @@ def test_given_source_when_building_manifest_then_produces_correct_node(
 def test_given_seed_when_building_manifest_then_produces_correct_node(
     test_case: ManifestSeedNodeTestCase,
 ) -> None:
-    seed: CompiledSeed = build_test_seed(name="country_codes", tags=test_case.expected_tags)
-    project: CompiledProject = build_test_project(seeds=(seed,))
+    seed: CompiledSeedView = build_test_seed(name="country_codes", tags=test_case.expected_tags)
+    project: CompiledProjectView = build_test_project(seeds=(seed,))
     plan_output: PlanOutput = build_test_plan_output()
 
     result: dict[str, Any] = run_manifest(
@@ -637,9 +640,9 @@ def test_given_relative_path_when_building_fqn_then_returns_expected_parts(
 def test_given_deps_when_building_manifest_then_parent_map_correct(
     test_case: ManifestParentMapTestCase,
 ) -> None:
-    source: CompiledSource = build_test_source(name="raw_orders")
-    model: CompiledModel = build_test_model(name="orders", deps=(source_key("raw_orders"),))
-    project: CompiledProject = build_test_project(models=(model,), sources=(source,))
+    source: CompiledSourceView = build_test_source(name="raw_orders")
+    model: CompiledModelView = build_test_model(name="orders", deps=(source_key("raw_orders"),))
+    project: CompiledProjectView = build_test_project(models=(model,), sources=(source,))
     plan_output: PlanOutput = build_test_plan_output(
         model_entries=(build_test_plan_entry(name="orders"),),
     )
@@ -744,11 +747,11 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
             raw_source=f"def {dependency_name}(): return 'SELECT 1'",
             function=lambda: "SELECT 1",
         )
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         loaded_macros=loaded_macros,
     )
-    project = replace(
-        project,
+    project = project_with(
+        project=project,
         scope_index=ScopeIndex(declarations=(declaration, *dependency_records)),
     )
     plan_output: PlanOutput = build_test_plan_output()
@@ -796,8 +799,8 @@ def test_given_macro_when_building_manifest_then_macro_node_present(
 def test_given_audit_when_building_manifest_then_produces_test_node(
     test_case: ManifestAuditNodeTestCase,
 ) -> None:
-    model: CompiledModel = build_test_model(name="orders")
-    project: CompiledProject = build_test_project(models=(model,))
+    model: CompiledModelView = build_test_model(name="orders")
+    project: CompiledProjectView = build_test_project(models=(model,))
     audit_entry: AuditPlanEntry = build_test_audit_plan_entry(
         name="not_null_orders_id",
         resolved_sql="SELECT id FROM staging.orders WHERE id IS NULL",
@@ -851,8 +854,8 @@ def test_given_audit_when_building_manifest_then_produces_test_node(
 def test_given_sql_test_when_building_manifest_then_produces_test_node(
     test_case: ManifestSqlTestNodeTestCase,
 ) -> None:
-    model: CompiledModel = build_test_model(name="orders")
-    project: CompiledProject = build_test_project(models=(model,))
+    model: CompiledModelView = build_test_model(name="orders")
+    project: CompiledProjectView = build_test_project(models=(model,))
     chain: tuple[ChainStep, ...] = (
         ChainStep(model_name="stg_orders", resolved_sql=""),
         ChainStep(
@@ -933,7 +936,7 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
     )
     schema: dict[str, Any] = json.loads(schema_path.read_text(encoding="utf-8"))
 
-    model: CompiledModel = build_test_model(
+    model: CompiledModelView = build_test_model(
         name="orders",
         query_sql="SELECT id FROM raw",
         relative_path="models/staging/orders.sql",
@@ -943,14 +946,14 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         columns=(SchemaColumn(name="id", type="INTEGER"),),
         deps=(source_key("raw_orders"),),
     )
-    source: CompiledSource = build_test_source(
+    source: CompiledSourceView = build_test_source(
         name="raw_orders",
         database="raw_db",
         schema="public",
         table="orders",
     )
-    seed: CompiledSeed = build_test_seed(name="codes")
-    project: CompiledProject = build_test_project(
+    seed: CompiledSeedView = build_test_seed(name="codes")
+    project: CompiledProjectView = build_test_project(
         models=(model,),
         sources=(source,),
         seeds=(seed,),
@@ -1010,7 +1013,7 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         function=lambda: "SELECT 1",
     )
 
-    project = replace(project, loaded_macros={"my_macro": macro})
+    project = project_with(project=project, loaded_macros={"my_macro": macro})
     result: dict[str, Any] = run_manifest(
         project=project,
         plan_output=plan_output,

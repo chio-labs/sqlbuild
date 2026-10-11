@@ -10,7 +10,9 @@ import pytest
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.main.plan import format_plan
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.planner._helpers.changes import detect as change_detection
 from sqlbuild.compiler.planner._helpers.planning import identities as identity_planning
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -98,7 +100,7 @@ def test_given_selected_model_when_planning_then_each_required_model_is_change_d
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     connection.execute("CREATE TABLE staging.stg_orders AS SELECT 1 AS order_id")
-    project: CompiledProject = build_project_from_test_case(
+    project: CompiledProjectView = build_project_from_test_case(
         BuildExecutionPlanTestCase(
             description=test_case.description,
             setup_sql=(),
@@ -118,8 +120,8 @@ def test_given_selected_model_when_planning_then_each_required_model_is_change_d
             expected_reason={},
         )
     )
-    project = replace(
-        project,
+    project = project_with(
+        project=project,
         settings=replace(
             project.settings,
             query_change_tracking=test_case.query_change_tracking,
@@ -507,7 +509,7 @@ def test_given_view_and_table_with_target_default_when_assembling_plan_then_only
 ) -> None:
     connection.execute("CREATE OR REPLACE VIEW staging.orders_view AS SELECT 1 AS id")
     connection.execute("CREATE OR REPLACE TABLE staging.orders AS SELECT 1 AS id")
-    project: CompiledProject = build_project_from_test_case(
+    project: CompiledProjectView = build_project_from_test_case(
         BuildExecutionPlanTestCase(
             description=test_case.description,
             setup_sql=(),
@@ -523,13 +525,13 @@ def test_given_view_and_table_with_target_default_when_assembling_plan_then_only
         )
     )
     view_model, table_model = project.models
-    project = replace(
-        project,
+    project = project_with(
+        project=project,
         effective_target_name="test",
         models=(
             view_model,
             replace(
-                table_model,
+                compiled_model_record(table_model),
                 config=replace(
                     table_model.config,
                     table_type=ResolvedTableType(
@@ -972,7 +974,7 @@ def test_given_future_upstream_when_building_real_plan_then_cap_has_structured_e
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
-    project: CompiledProject = build_future_cursor_project()
+    project: CompiledProjectView = build_future_cursor_project()
     connection.execute("CREATE SCHEMA IF NOT EXISTS raw")
     connection.execute("CREATE SCHEMA IF NOT EXISTS staging")
     connection.execute(f"CREATE TABLE raw.events (occurred_at {test_case.warehouse_type})")
@@ -1016,7 +1018,7 @@ def test_given_future_upstream_and_error_policy_when_building_real_plan_then_fai
     adapter: DuckDbAdapter,
     connection: Any,
 ) -> None:
-    project: CompiledProject = build_future_cursor_project()
+    project: CompiledProjectView = build_future_cursor_project()
     connection.execute("CREATE SCHEMA IF NOT EXISTS raw")
     connection.execute("CREATE SCHEMA IF NOT EXISTS staging")
     connection.execute("CREATE TABLE raw.events (occurred_at TIMESTAMP)")

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledFunction, CompiledModel, CompiledSeed
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledResourceType,
+    CompiledSeedView,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction
 from sqlbuild.compiler.planner._helpers.identity.hashing import (
     build_model_local_identity_hash,
@@ -33,8 +37,8 @@ from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_ident
 
 def build_direct_model_version_identities(
     *,
-    functions: tuple[CompiledFunction, ...],
-    seeds: tuple[CompiledSeed, ...] = (),
+    functions: tuple[CompiledFunctionView, ...],
+    seeds: tuple[CompiledSeedView, ...] = (),
     scope: PlannerScope,
     source_version_hashes: dict[str, str] | None = None,
     hook_functions: tuple[DiscoveredHookFunction, ...] = (),
@@ -51,7 +55,7 @@ def build_direct_model_version_identities(
     }
     seed_version_hashes: dict[str, str] = {}
     seed_metadata_jsons: dict[str, str] = {}
-    seed: CompiledSeed
+    seed: CompiledSeedView
     for seed in seeds:
         seed_hash: str
         seed_metadata_json: str
@@ -61,7 +65,7 @@ def build_direct_model_version_identities(
     model_metadata_jsons: dict[str, str] = {}
     model_local_hashes: dict[str, str] = {}
     graph_nodes: dict[GraphNodeKey, GraphIdentityNode] = {}
-    function: CompiledFunction
+    function: CompiledFunctionView
     for function in functions:
         function_hash: str | None = function_local_hashes.get(function.name)
         if function_hash is None:
@@ -113,7 +117,7 @@ def build_direct_model_version_identities(
     for key in scope.execution_order:
         if not hasattr(key, "resource_type") or key.resource_type != CompiledResourceType.MODEL:
             continue
-        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        model: CompiledModelView | None = scope.models_by_name.get(key.name)
         if model is None:
             continue
         metadata_json: str = build_model_version_identity_metadata_json(

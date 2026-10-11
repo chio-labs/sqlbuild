@@ -1,3 +1,5 @@
+#[path = "tests/test_call_class_store_text.rs"]
+mod call_class_store_text;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_macro_call_memo.rs"]

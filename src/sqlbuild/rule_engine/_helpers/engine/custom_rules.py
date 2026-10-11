@@ -14,6 +14,8 @@ from typing import Any
 import orjson
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
@@ -69,7 +71,7 @@ class _RuleCache:
 
 def evaluate_custom_rules_cached(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     rules: tuple[Rule, ...],
@@ -84,7 +86,7 @@ def evaluate_custom_rules_cached(
     custom: tuple[Rule, ...] = tuple(sorted(rules, key=lambda rule: rule.code))
     if not custom:
         return CustomRulesOutcome(findings=(), cache_hits=0, cache_misses=0, custom_ms=0)
-    facts_project: CompiledProject = host_project(project)
+    facts_project: CompiledProjectView = host_project(project)
     if not config.cache.enabled:
         uncached: CustomHostRun = run_custom_hosts(
             project=facts_project,
@@ -192,7 +194,7 @@ def evaluate_custom_rules_cached(
 
 
 def _views_factory(
-    *, project: CompiledProject, project_dir: Path, dialect: str
+    *, project: CompiledProjectView, project_dir: Path, dialect: str
 ) -> Callable[[], RuleFactViews]:
     def build() -> RuleFactViews:
         return build_rule_fact_views(project=project, project_dir=project_dir, dialect=dialect)
@@ -201,7 +203,7 @@ def _views_factory(
 
 
 def _subjects(
-    *, project: CompiledProject, rules: tuple[Rule, ...]
+    *, project: CompiledProjectView, rules: tuple[Rule, ...]
 ) -> dict[str, tuple[_Subject, ...]]:
     project_subject: tuple[_Subject, ...] = (
         _Subject(
@@ -209,12 +211,18 @@ def _subjects(
             identity=_digest([len(project.models), project.effective_target_name]),
         ),
     )
-    model_subjects: tuple[_Subject, ...] = tuple(
-        _Subject(
-            key=model.relative_path.as_posix(),
-            identity=_digest([model.name, model.relative_path.as_posix(), _materialization(model)]),
+    model_subjects: tuple[_Subject, ...] = (
+        tuple(
+            _Subject(
+                key=model.relative_path.as_posix(),
+                identity=_digest(
+                    [model.name, model.relative_path.as_posix(), _materialization(model)]
+                ),
+            )
+            for model in sorted(project.models, key=lambda item: item.relative_path.as_posix())
         )
-        for model in sorted(project.models, key=lambda item: item.relative_path.as_posix())
+        if any(rule.subject is not RuleSubject.PROJECT for rule in rules)
+        else ()
     )
     return {
         rule.code: project_subject if rule.subject is RuleSubject.PROJECT else model_subjects
@@ -222,7 +230,7 @@ def _subjects(
     }
 
 
-def _model_paths(project: CompiledProject) -> tuple[str, ...]:
+def _model_paths(project: CompiledProjectView) -> tuple[str, ...]:
     return tuple(sorted(model.relative_path.as_posix() for model in project.models))
 
 
@@ -274,11 +282,11 @@ def _readset_digest(
     return memo[index]
 
 
-def host_project(project: CompiledProject) -> CompiledProject:
+def host_project(project: CompiledProjectView) -> CompiledProject:
     """Drop project state no Rule fact reads, before digests and host payloads use it."""
 
     return replace(
-        project,
+        compiled_project_record(project, include_sql_expansions=False),
         binding_catalog=None,
         sql_expansions={},
         loaded_macros={},
@@ -296,7 +304,7 @@ def host_project(project: CompiledProject) -> CompiledProject:
 
 def _validate_paths(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     rules: tuple[Rule, ...],
     evaluated: dict[tuple[str, str], CustomHostEvaluation],
 ) -> None:

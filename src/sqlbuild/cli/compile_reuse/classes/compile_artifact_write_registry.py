@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+import sqlbuild._native as _native
 from sqlbuild.cli.compile_reuse.classes.compile_artifact_writes import CompileArtifactWrites
 from sqlbuild.cli.compile_reuse.models import RecordedArtifact
 
@@ -15,8 +15,7 @@ from sqlbuild.cli.compile_reuse.models import RecordedArtifact
 class CompileArtifactWriteRegistry:
     """Deliver artifact writes from every thread, including background staging threads."""
 
-    def __init__(self, *, digest_size: int) -> None:
-        self._digest_size: int = digest_size
+    def __init__(self) -> None:
         self._lock: threading.Lock = threading.Lock()
         self._recorders: tuple[CompileArtifactWrites, ...] = ()
 
@@ -39,9 +38,7 @@ class CompileArtifactWriteRegistry:
         recorders: tuple[CompileArtifactWrites, ...] = self._recorders
         if not recorders:
             return
-        artifact: RecordedArtifact = RecordedArtifact(
-            digest=hashlib.blake2b(contents, digest_size=self._digest_size).hexdigest()
-        )
+        artifact: RecordedArtifact = RecordedArtifact(digest=_native.artifact_digest(contents))
         for recorder in recorders:
             recorder.record(path=os.path.abspath(path), artifact=artifact)
 

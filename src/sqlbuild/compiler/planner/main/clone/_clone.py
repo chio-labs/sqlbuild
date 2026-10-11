@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.reuse.clone import (
     build_clone_function_entries,
     build_clone_model_entries,
@@ -27,14 +27,14 @@ from sqlbuild.compiler.planner.models import (
 
 def run_clone_planning(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     select: tuple[str, ...],
     exclude: tuple[str, ...],
     adapter: BaseAdapter,
     connection: Any,
-    origin_project: CompiledProject,
-    origin_source_project: CompiledProject,
-    destination_source_project: CompiledProject,
+    origin_project: CompiledProjectView,
+    origin_source_project: CompiledProjectView,
+    destination_source_project: CompiledProjectView,
 ) -> tuple[
     PlanOutput,
     tuple[CloneSourcePlanEntry, ...],

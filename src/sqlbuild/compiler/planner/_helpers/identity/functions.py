@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
     FunctionArgument,
     FunctionReturnColumn,
 )
+from sqlbuild.compiler.compile.types import CompiledFunctionView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.identity.hashing import function_definition_hash
 from sqlbuild.compiler.planner.types import PlanReason
 
 
-def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
+def build_compiled_function_fingerprint_sql(function: CompiledFunctionView) -> str:
     """Build stable function definition text used for change fingerprints."""
 
     return build_function_fingerprint_sql(
@@ -29,7 +29,7 @@ def build_compiled_function_fingerprint_sql(function: CompiledFunction) -> str:
 
 def detect_function_change(
     *,
-    function: CompiledFunction,
+    function: CompiledFunctionView,
     fingerprint_sql: str,
     fingerprint: Fingerprint | None,
     query_change_tracking: bool,

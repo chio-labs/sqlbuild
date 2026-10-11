@@ -1,0 +1,113 @@
+//! The digest updates of Python's `relation_lineage_fingerprint`, after its prefix.
+
+use std::collections::BTreeSet;
+use std::fmt::Write;
+
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use sha2::{Digest, Sha256};
+use sqlbuild_discovery::models::StageFailure;
+
+use crate::lineage::_helpers::authored_files::{AuthoredFile, AuthoredFiles};
+use crate::lineage::_helpers::environment_markers::environment_names;
+use crate::lineage::constants::{
+    DYNAMIC_CONTEXT_MARKER, DYNAMIC_CONTEXT_SUFFIXES, FINGERPRINT_SCAN_BATCH_SIZE,
+    MISSING_ENVIRONMENT_VALUE,
+};
+use crate::lineage::models::{InterruptedListingPolicy, RelationFingerprint};
+
+struct ScannedFile {
+    contents: Vec<u8>,
+    environment: Vec<String>,
+}
+
+/// The fingerprint of the walked files under `policy` for interrupted listings.
+pub(crate) fn fingerprint_outcome(
+    authored: AuthoredFiles,
+    prefix: &[u8],
+    policy: InterruptedListingPolicy,
+) -> RelationFingerprint {
+    match authored {
+        AuthoredFiles::Files {
+            interrupted: true, ..
+        } if policy == InterruptedListingPolicy::Uncacheable => RelationFingerprint::Uncacheable,
+        AuthoredFiles::Files { files, .. } => fingerprint_digest(&files, prefix).map_or(
+            RelationFingerprint::Uncacheable,
+            RelationFingerprint::Digest,
+        ),
+        AuthoredFiles::Undecodable => RelationFingerprint::Uncacheable,
+        AuthoredFiles::Unavailable(StageFailure::Unlistable { .. }) => {
+            RelationFingerprint::Uncacheable
+        }
+        AuthoredFiles::Unavailable(StageFailure::Internal(message)) => {
+            RelationFingerprint::Failed(message)
+        }
+    }
+}
+
+/// The hex digest, or `None` where Python returns `None`.
+fn fingerprint_digest(files: &[AuthoredFile], prefix: &[u8]) -> Option<String> {
+    let mut digest = Sha256::new();
+    digest.update(prefix);
+    let mut environment: BTreeSet<String> = BTreeSet::new();
+    for batch in files.chunks(FINGERPRINT_SCAN_BATCH_SIZE) {
+        let scanned: Vec<Option<ScannedFile>> = batch.par_iter().map(scanned_file).collect();
+        for (file, scanned) in batch.iter().zip(scanned) {
+            let scanned = scanned?;
+            environment.extend(scanned.environment);
+            digest.update((file.relative_path.chars().count() as u64).to_be_bytes());
+            digest.update(file.relative_path.as_bytes());
+            digest.update((scanned.contents.len() as u64).to_be_bytes());
+            digest.update(&scanned.contents);
+        }
+    }
+    for name in &environment {
+        digest.update(name.as_bytes());
+        digest.update(environment_value(name)?.as_bytes());
+    }
+    Some(
+        digest
+            .finalize()
+            .iter()
+            .fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            }),
+    )
+}
+
+/// `os.environ.get(name, "<missing>")`; `None` where its UTF-8 encoding fails.
+fn environment_value(name: &str) -> Option<String> {
+    let Some(value) = std::env::var_os(name) else {
+        return Some(MISSING_ENVIRONMENT_VALUE.to_owned());
+    };
+    let Ok(value) = value.into_string() else {
+        return None;
+    };
+    Some(value)
+}
+
+/// One file's bytes and environment names; `None` where Python returns `None`.
+fn scanned_file(file: &AuthoredFile) -> Option<ScannedFile> {
+    let Ok(contents) = std::fs::read(&file.path) else {
+        return None;
+    };
+    if contains(&contents, DYNAMIC_CONTEXT_MARKER)
+        && DYNAMIC_CONTEXT_SUFFIXES.contains(&file.lower_suffix().as_str())
+    {
+        return None;
+    }
+    let environment: Vec<String> = environment_names(&contents)?
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    Some(ScannedFile {
+        contents,
+        environment,
+    })
+}
+
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}

@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,
     CompileModelConfig,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.planner.main.execution.display_plan import (
     build_display_only_sqlbuild_plan,
 )
@@ -58,7 +58,7 @@ from tests.unit.src.sqlbuild.compiler.planner.main.execution._test_types import 
 def test_given_incremental_override_when_building_display_plan_then_uses_effective_refresh(
     test_case: DisplayFullRefreshTestCase,
 ) -> None:
-    model: CompiledModel = CompiledModel(
+    model: CompiledModelView = CompiledModel(
         key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name="orders"),
         deps=(),
         name="orders",

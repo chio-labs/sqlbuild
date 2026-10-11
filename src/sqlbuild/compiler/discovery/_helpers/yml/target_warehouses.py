@@ -1,15 +1,11 @@
-"""Loading and adapter validation for per-target command-group warehouses."""
+"""Adapter validation for per-target command-group warehouses."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 from sqlbuild.adapter.discovery.main.session_warehouse_support import (
     adapter_supports_session_warehouse,
-)
-from sqlbuild.compiler.discovery._helpers.validation.supported_keys import (
-    reject_unknown_mapping_keys,
 )
 from sqlbuild.compiler.discovery.constants import LOCAL_CONFIG_FILENAME, PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
@@ -19,38 +15,6 @@ from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
 )
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import WarehouseGroup
-
-
-def load_target_warehouses(
-    *, payload: object, target_name: str, file_path: Path
-) -> TargetWarehousesConfig:
-    """Parse one target's optional `[targets.<name>.warehouses]` section."""
-
-    label: str = f"targets.{target_name}.warehouses"
-    if payload is None:
-        return TargetWarehousesConfig()
-    if not isinstance(payload, dict):
-        raise ProjectConfigError(f"{file_path} {label} must be a mapping")
-    mapping: dict[str, object] = cast(dict[str, object], payload)
-    reject_unknown_mapping_keys(
-        mapping=mapping,
-        allowed=frozenset(group.value for group in WarehouseGroup),
-        file_path=file_path,
-        label=label,
-        error_class=ProjectConfigError,
-    )
-    values: dict[WarehouseGroup, str | None] = {}
-    group: WarehouseGroup
-    for group in WarehouseGroup:
-        value: object | None = mapping.get(group.value)
-        if value is not None and (not isinstance(value, str) or not value.strip()):
-            raise ProjectConfigError(
-                f"{file_path} {label}.{group.value} must be a non-empty warehouse name"
-            )
-        values[group] = value.strip() if isinstance(value, str) else None
-    return TargetWarehousesConfig(
-        build=values[WarehouseGroup.BUILD], query=values[WarehouseGroup.QUERY]
-    )
 
 
 def reject_unsupported_target_warehouses(

@@ -9,7 +9,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject, CompiledSeed, CompileModelConfig
+from sqlbuild.compiler.compile.models import CompileModelConfig
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledSeedView
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSeedFile
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
@@ -44,15 +47,15 @@ def test_given_incremental_attached_audit_when_planning_then_no_warehouse_method
     test_case: StaticCommandPlanningTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={"orders": ()},
         audit_model_source_deps={"orders": ()},
     )
-    project = replace(
-        project,
+    project = project_with(
+        project=project,
         models=(
             replace(
-                project.models[0],
+                compiled_model_record(project.models[0]),
                 config=CompileModelConfig(values={"materialized": "incremental", "cursor": "id"}),
             ),
         ),
@@ -95,7 +98,7 @@ def test_given_incremental_attached_audit_when_planning_then_no_warehouse_method
 def test_given_sql_test_with_function_dependency_when_planning_then_required_function_is_projected(
     test_case: StaticCommandPlanningTestCase,
 ) -> None:
-    project: CompiledProject = build_test_project(
+    project: CompiledProjectView = build_test_project(
         model_deps={"orders": ("is_valid_order",)},
         sql_test_expected_model_names=("orders",),
         function_names=("is_valid_order",),
@@ -133,9 +136,9 @@ def test_given_selected_seed_when_planning_then_identity_and_reason_are_preserve
 ) -> None:
     seed_path: Path = tmp_path / "countries.csv"
     seed_path.write_text("code,name\nGB,United Kingdom\n", encoding="utf-8")
-    project: CompiledProject = build_test_project(seed_names=("countries",))
-    project = replace(
-        project,
+    project: CompiledProjectView = build_test_project(seed_names=("countries",))
+    project = project_with(
+        project=project,
         seeds=(
             replace(
                 project.seeds[0],
@@ -205,8 +208,8 @@ def test_given_selected_seed_without_state_table_when_reading_reason_then_only_s
 ) -> None:
     seed_path: Path = tmp_path / "countries.csv"
     seed_path.write_text("code\nGB\n", encoding="utf-8")
-    project: CompiledProject = build_test_project(seed_names=("countries",))
-    seed: CompiledSeed = replace(
+    project: CompiledProjectView = build_test_project(seed_names=("countries",))
+    seed: CompiledSeedView = replace(
         project.seeds[0],
         seed_file=DiscoveredSeedFile(
             file_path=seed_path,

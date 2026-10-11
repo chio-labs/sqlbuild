@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::compiler::_helpers::sql_tests::authored_macro_calls::calls_macro;
 use crate::compiler::_helpers::sql_tests::reference_calls::body_calls;
+use crate::compiler::models::{SqlTestClassification, SqlTestCteText, SqlTestRequest};
 use crate::constants::{
     DIRECT_DEPENDENCY_PATH_LENGTH, MACRO_TEST_MODE, OPERAND_KEYWORDS, OPERATOR_CHARACTERS,
     SELECT_STAR_PROJECTION, TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE, VALUE_KEYWORDS,
@@ -51,27 +52,10 @@ const RESERVED_NAMES: [&str; 5] = [
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BatchRequest {
-    tests: Vec<TestRequest>,
+    tests: Vec<SqlTestRequest>,
     /// The adapter's lexical rules; generic SQL when absent.
     #[serde(default)]
     syntax: Option<LexicalSyntax>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TestRequest {
-    sql: String,
-    file_label: String,
-    mode: String,
-    /// The test before macro and variable expansion, where macro calls are still authored.
-    #[serde(default)]
-    raw: bool,
-    /// Read only the CTE names and body offsets of the authored block, before any expansion.
-    #[serde(default)]
-    authored: bool,
-    /// The authored text is a scenario rather than a SQL test block.
-    #[serde(default)]
-    scenario: bool,
 }
 
 /// One extraction error, with help and the offending text where the author can act on it.
@@ -106,49 +90,8 @@ struct ErrorResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum BatchResponse {
-    Tests(Vec<Classified>),
+    Tests(Vec<SqlTestClassification>),
     Error(ErrorResponse),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub(crate) struct Cte(pub(crate) String, pub(crate) String);
-
-#[derive(Debug, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum Classified {
-    /// Each CTE's name, its code-point offset in the authored block and its stripped body.
-    Authored { ctes: Vec<(String, usize, String)> },
-    Model {
-        mode: String,
-        authored: Vec<Cte>,
-        #[serde(rename = "macroMocks")]
-        macro_mocks: Vec<(String, String)>,
-        #[serde(rename = "mockModels")]
-        mock_models: Vec<String>,
-        #[serde(rename = "mockSources")]
-        mock_sources: Vec<String>,
-        #[serde(rename = "mockSeeds")]
-        mock_seeds: Vec<String>,
-        #[serde(rename = "mockDbtRefs")]
-        mock_dbt_refs: Vec<String>,
-        #[serde(rename = "mockTableFunctions")]
-        mock_table_functions: Vec<String>,
-        expected: Vec<Cte>,
-        #[serde(rename = "expectedModels")]
-        expected_models: Vec<String>,
-        assertions: Vec<Cte>,
-        #[serde(rename = "assertionNames")]
-        assertion_names: Vec<String>,
-    },
-    Direct {
-        mode: String,
-        helpers: Vec<Cte>,
-        actual: Cte,
-        expected: Cte,
-        /// Whether a helper or the expected CTE has a malformed reference call (P012).
-        #[serde(rename = "invalidCalls")]
-        invalid_calls: bool,
-    },
 }
 
 pub(crate) fn extract_batch_json(request_json: &str) -> Result<String, String> {
@@ -175,6 +118,18 @@ pub(crate) fn extract_batch_json(request_json: &str) -> Result<String, String> {
     serde_json::to_string(&BatchResponse::Tests(classified)).map_err(|error| error.to_string())
 }
 
+/// Each test's classification, or the first failure with the index of its test.
+pub(crate) fn extract_tests(
+    tests: &[SqlTestRequest],
+    syntax: &LexicalSyntax,
+) -> Result<Vec<SqlTestClassification>, (usize, Failure)> {
+    tests
+        .iter()
+        .enumerate()
+        .map(|(index, test)| extract_test(test, syntax).map_err(|failure| (index, failure)))
+        .collect()
+}
+
 /// Generic SQL lexical rules: `--` line comments and non-nested block comments.
 pub(crate) fn generic_syntax() -> LexicalSyntax {
     LexicalSyntax {
@@ -190,11 +145,15 @@ struct TestScope<'a> {
     raw: bool,
 }
 
-fn extract_test(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified, Failure> {
+fn extract_test(
+    test: &SqlTestRequest,
+    syntax: &LexicalSyntax,
+) -> Result<SqlTestClassification, Failure> {
     if test.authored {
         return authored_ctes(test, syntax);
     }
-    let ctes: Vec<Cte> = scan_ctes(&test.sql, &test.file_label, TEST_CONTEXT, syntax)?.ctes;
+    let ctes: Vec<SqlTestCteText> =
+        scan_ctes(&test.sql, &test.file_label, TEST_CONTEXT, syntax)?.ctes;
     let scope = TestScope {
         file: &test.file_label,
         syntax,
@@ -208,14 +167,17 @@ fn extract_test(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified
 }
 
 /// The authored block's CTEs, or the located error of a CTE name; other errors read as no CTEs.
-fn authored_ctes(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classified, Failure> {
+fn authored_ctes(
+    test: &SqlTestRequest,
+    syntax: &LexicalSyntax,
+) -> Result<SqlTestClassification, Failure> {
     let context: &str = if test.scenario {
         SCENARIO_CONTEXT
     } else {
         TEST_CONTEXT
     };
     match scan_ctes(&test.sql, &test.file_label, context, syntax) {
-        Ok(scanned) => Ok(Classified::Authored {
+        Ok(scanned) => Ok(SqlTestClassification::Authored {
             ctes: scanned
                 .ctes
                 .into_iter()
@@ -224,7 +186,7 @@ fn authored_ctes(test: &TestRequest, syntax: &LexicalSyntax) -> Result<Classifie
                 .collect(),
         }),
         Err(failure) if failure.token.is_some() => Err(failure),
-        Err(_) => Ok(Classified::Authored { ctes: Vec::new() }),
+        Err(_) => Ok(SqlTestClassification::Authored { ctes: Vec::new() }),
     }
 }
 
@@ -237,7 +199,7 @@ struct CteOwner<'a> {
 
 /// The top-level CTEs of one test, with the code-point offset of each stripped body.
 struct ScannedCtes {
-    ctes: Vec<Cte>,
+    ctes: Vec<SqlTestCteText>,
     body_starts: Vec<usize>,
 }
 
@@ -261,7 +223,7 @@ fn scan_ctes(
     if let Some(end) = consume_keyword(sql, index, "RECURSIVE") {
         index = skip_ignorable(sql, end, syntax)?;
     }
-    let mut ctes: Vec<Cte> = Vec::new();
+    let mut ctes: Vec<SqlTestCteText> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     loop {
         let (name, end) = read_cte_name(sql, index, &owner)?;
@@ -289,7 +251,7 @@ fn scan_ctes(
         let body = &sql[index + 1..close];
         let leading = body.len() - body.trim_start_matches(is_python_space).len();
         body_starts.push(sql[..index + 1 + leading].chars().count());
-        ctes.push(Cte(name, python_strip(body).to_owned()));
+        ctes.push(SqlTestCteText(name, python_strip(body).to_owned()));
         index = skip_ignorable(sql, close + 1, syntax)?;
         if byte_at(sql, index) == Some(b',') {
             index = skip_ignorable(sql, index + 1, syntax)?;
@@ -408,19 +370,22 @@ fn cte_name_failure(sql: &str, start: usize, end: usize, owner: &CteOwner<'_>) -
     }
 }
 
-fn classify_model(ctes: Vec<Cte>, scope: &TestScope<'_>) -> Result<Classified, Failure> {
+fn classify_model(
+    ctes: Vec<SqlTestCteText>,
+    scope: &TestScope<'_>,
+) -> Result<SqlTestClassification, Failure> {
     let (file, syntax) = (scope.file, scope.syntax);
     validate_independence(&ctes, file, syntax)?;
-    let mut authored: Vec<Cte> = Vec::new();
+    let mut authored: Vec<SqlTestCteText> = Vec::new();
     let mut macro_mocks: Vec<(String, String)> = Vec::new();
     let mut mock_models: Vec<String> = Vec::new();
     let mut mock_sources: Vec<String> = Vec::new();
     let mut mock_seeds: Vec<String> = Vec::new();
     let mut mock_dbt_refs: Vec<String> = Vec::new();
     let mut mock_table_functions: Vec<String> = Vec::new();
-    let mut expected: Vec<Cte> = Vec::new();
+    let mut expected: Vec<SqlTestCteText> = Vec::new();
     let mut expected_models: Vec<String> = Vec::new();
-    let mut assertions: Vec<Cte> = Vec::new();
+    let mut assertions: Vec<SqlTestCteText> = Vec::new();
     let mut assertion_names: Vec<String> = Vec::new();
     for cte in ctes {
         let name = cte.0.as_str();
@@ -489,7 +454,7 @@ fn classify_model(ctes: Vec<Cte>, scope: &TestScope<'_>) -> Result<Classified, F
         )
         .into());
     }
-    Ok(Classified::Model {
+    Ok(SqlTestClassification::Model {
         mode: "model".to_owned(),
         authored,
         macro_mocks,
@@ -515,17 +480,17 @@ fn direct_test_label(mode: &str) -> &'static str {
 }
 
 fn classify_direct(
-    ctes: Vec<Cte>,
+    ctes: Vec<SqlTestCteText>,
     mode: &str,
     scope: &TestScope<'_>,
-) -> Result<Classified, Failure> {
+) -> Result<SqlTestClassification, Failure> {
     let file = scope.file;
     let (_, actual_name, expected_name) = DIRECT_NAMES
         .iter()
         .find(|entry| entry.0 == mode)
         .copied()
         .ok_or_else(|| format!("SQL test '{file}' has unsupported mode '{mode}'"))?;
-    let mut helpers: Vec<Cte> = Vec::new();
+    let mut helpers: Vec<SqlTestCteText> = Vec::new();
     let mut actual = None;
     let mut expected = None;
     for cte in ctes {
@@ -596,7 +561,7 @@ fn classify_direct(
         allowed: actual_name,
         scope,
     })?;
-    Ok(Classified::Direct {
+    Ok(SqlTestClassification::Direct {
         mode: mode.to_owned(),
         helpers,
         actual,
@@ -668,7 +633,11 @@ fn require_suffix(value: &str, label: &str, file: &str) -> Result<(), String> {
     }
 }
 
-fn macro_mock_value(cte: &Cte, file: &str, syntax: &LexicalSyntax) -> Result<String, String> {
+fn macro_mock_value(
+    cte: &SqlTestCteText,
+    file: &str,
+    syntax: &LexicalSyntax,
+) -> Result<String, String> {
     let body = cte.1.as_str();
     let mut index = skip_ignorable(body, 0, syntax)?;
     index = consume_keyword(body, index, "SELECT")
@@ -701,7 +670,7 @@ fn macro_mock_shape(file: &str, name: &str, trailing: bool) -> String {
 }
 
 fn validate_expected(
-    cte: &Cte,
+    cte: &SqlTestCteText,
     label: &str,
     allow_empty_fixture: bool,
     scope: &TestScope<'_>,
@@ -979,7 +948,7 @@ fn qualified_projection_name(
 }
 
 pub(crate) fn validate_independence(
-    ctes: &[Cte],
+    ctes: &[SqlTestCteText],
     file: &str,
     syntax: &LexicalSyntax,
 ) -> Result<(), String> {

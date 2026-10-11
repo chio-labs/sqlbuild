@@ -7,6 +7,7 @@ import tomllib
 from pathlib import Path
 
 from scripts.compiler_differential._helpers.corpus.failure_cases import all_failure_cases
+from scripts.compiler_differential._helpers.refactor_corpus.refactor_cases import refactor_cases
 from scripts.compiler_differential.classes.dense_project import DenseProject
 from scripts.compiler_differential.classes.project_builder import ProjectBuilder
 from scripts.compiler_differential.constants import (
@@ -17,6 +18,7 @@ from scripts.compiler_differential.constants import (
     CORPUS_FAILURES,
     CORPUS_FIXTURES,
     CORPUS_SEEDS,
+    DIALECT_RICH_LINEAGE,
     DUCKDB_ADAPTER,
     EXAMPLE_ROOT,
     EXPECT_SUCCESS,
@@ -95,6 +97,7 @@ def build_corpus(
             )
             for case in all_failure_cases()
         )
+        entries.extend(refactor_cases())
     if CORPUS_DENSE in corpora:
         entries.extend(
             CorpusProject(
@@ -156,14 +159,14 @@ def _seed_project(seed: int) -> CorpusProject:
 
 
 def _dialect_seed_project(*, seed: int, dialect: str) -> CorpusProject:
-    """Compile a seed's analysis blocks under another adapter's dialect; plan needs a warehouse."""
+    """Compile a seed's analysis blocks, with rich lineage, under another adapter's dialect."""
 
     generated: GeneratedProject = ProjectBuilder(
         seed, blocks=GENERATOR_DIALECT_BLOCKS, dialect=dialect
     ).build()
     return CorpusProject(
         name=f"seed/{seed}-{dialect}",
-        commands=(COLD_COMPILE,),
+        commands=(COLD_COMPILE, DIALECT_RICH_LINEAGE),
         expected=EXPECT_SUCCESS,
         writer=generated.write,
         seed_coverage=True,

@@ -1,3 +1,4 @@
+pub(crate) mod deferred;
 pub(crate) mod evaluation;
 pub(crate) mod expressions;
 pub(crate) mod missing_values;

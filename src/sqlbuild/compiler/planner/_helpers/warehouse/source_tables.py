@@ -10,8 +10,12 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationReadProbe
 from sqlbuild.adapter.contract.types import RelationReadStatus
 from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject, CompiledSource
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import (
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.discovery.main._yaml_entry_line import yaml_entry_line
 from sqlbuild.compiler.planner._helpers.resolve.sources import render_source_read_relation
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -24,7 +28,7 @@ _WILDCARD_TABLE_CHARACTER: str = "*"
 
 @dataclass(frozen=True)
 class _MissingSourceTable:
-    source: CompiledSource
+    source: CompiledSourceView
     entry: SourceEntry
     read_by: tuple[str, ...]
     probe: RelationReadProbe
@@ -32,7 +36,7 @@ class _MissingSourceTable:
 
 def check_selected_source_tables_exist(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     connection: Any,
     scope: PlannerScope,
@@ -41,8 +45,8 @@ def check_selected_source_tables_exist(
     """Raise when a selected resource reads an external source table that does not exist."""
 
     readers_by_source: dict[str, list[str]] = _selected_source_readers(scope=scope)
-    candidates: list[tuple[CompiledSource, SourceEntry, tuple[str, ...]]] = []
-    source: CompiledSource
+    candidates: list[tuple[CompiledSourceView, SourceEntry, tuple[str, ...]]] = []
+    source: CompiledSourceView
     for source in project.sources:
         readers: list[str] | None = readers_by_source.get(source.name)
         if not readers:
@@ -55,7 +59,7 @@ def check_selected_source_tables_exist(
         candidates.append((source, entry, tuple(sorted(readers))))
     if not candidates:
         return
-    unlisted: tuple[tuple[CompiledSource, SourceEntry, tuple[str, ...]], ...] = tuple(
+    unlisted: tuple[tuple[CompiledSourceView, SourceEntry, tuple[str, ...]], ...] = tuple(
         candidate
         for candidate in candidates
         if candidate[0].name not in relations.listed_source_names
@@ -170,7 +174,7 @@ def _missing_source_tables_help(*, missing: tuple[_MissingSourceTable, ...]) -> 
     )
 
 
-def _declaration_location(source: CompiledSource) -> str:
+def _declaration_location(source: CompiledSourceView) -> str:
     path: str = source.source_file.relative_path.as_posix()
     line: int | None = yaml_entry_line(contents=source.source_file.contents, name=source.name)
     return path if line is None else f"{path}:{line}"

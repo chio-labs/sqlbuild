@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.classes.migration_fingerprint_cache import (
     MigrationFingerprintCache,
 )
@@ -16,7 +16,7 @@ from sqlbuild.compiler.planner.types import PlanAction
 def with_migration_fingerprints(
     *,
     entries: tuple[ModelPlanEntry, ...],
-    models_by_name: Mapping[str, CompiledModel],
+    models_by_name: Mapping[str, CompiledModelView],
     fingerprints: MigrationFingerprintCache,
     dialect: str | None,
 ) -> tuple[ModelPlanEntry, ...]:
@@ -25,7 +25,7 @@ def with_migration_fingerprints(
     attached: list[ModelPlanEntry] = []
     entry: ModelPlanEntry
     for entry in entries:
-        model: CompiledModel | None = models_by_name.get(entry.name)
+        model: CompiledModelView | None = models_by_name.get(entry.name)
         if (
             model is None
             or entry.fingerprint_metadata_json is None

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.fact_replay import fact_key_payload
 from sqlbuild.rule_engine._helpers.host.custom_evaluation import evaluate_custom_rules
@@ -118,7 +119,7 @@ def main() -> int:
 
 def _decode_inputs(
     *, payload: dict[str, Any], cancel_marker: Path | None
-) -> tuple[CompiledProject, RulesConfig]:
+) -> tuple[CompiledProjectView, RulesConfig]:
     project_dir: Path = Path(str(payload["project_dir"])).resolve()
     input_root: Path = (project_dir / "target" / "rules-cache" / "host-inputs").resolve()
     input_path: Path = Path(str(payload["project_pickle_path"]))

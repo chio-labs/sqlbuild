@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import TYPE_CHECKED_DIALECTS
 
 
-def semantic_coverage(project: CompiledProject) -> dict[str, tuple[str, ...]]:
+def semantic_coverage(project: CompiledProjectView) -> dict[str, tuple[str, ...]]:
     """Return partial-check reasons for machine reports."""
 
     if not project.settings.sql_analysis:
@@ -24,8 +24,8 @@ def semantic_coverage(project: CompiledProject) -> dict[str, tuple[str, ...]]:
             changed: bool = False
             for model in project.models:
                 causes: set[str] = set(blocked_by.get(model.name, ()))
-                for reference in model.references:
-                    causes.update(blocked_by.get(reference.ref_name, ()))
+                for _, name, _, _ in model.reference_rows:
+                    causes.update(blocked_by.get(name, ()))
                 if causes and causes != blocked_by.get(model.name):
                     blocked_by[model.name] = causes
                     changed = True
@@ -37,23 +37,21 @@ def semantic_coverage(project: CompiledProject) -> dict[str, tuple[str, ...]]:
             reasons[model.name] = ("SQL analysis disabled",)
             continue
         partial: list[str] = [
-            f"open source: {reference.ref_name}"
-            if reference.ref_kind == SqlReferenceKind.SOURCE
-            else f"open input: {reference.ref_name}"
-            for reference in model.references
-            if reference.ref_kind
-            in {SqlReferenceKind.SOURCE, SqlReferenceKind.REF, SqlReferenceKind.DBT_REF}
-            and reference.ref_name not in shapes
+            f"open source: {name}" if kind == SqlReferenceKind.SOURCE else f"open input: {name}"
+            for kind, name, _, _ in model.reference_rows
+            if kind in {SqlReferenceKind.SOURCE, SqlReferenceKind.REF, SqlReferenceKind.DBT_REF}
+            and name not in shapes
         ]
         partial.extend(
             f"depends on invalid model {name}"
             for name in sorted(blocked_by.get(model.name, set()) - {model.name})
         )
-        if not model.inferred_columns:
+        inferred: list[tuple[str, str | None, str]] | None = model.inferred_rows
+        if not inferred:
             partial.append("output shape could not be inferred")
         elif model.fast_lineage_has_star and model.name not in shapes:
             partial.append("unresolved star over open inputs")
-        if any(column.type is None for column in model.inferred_columns or ()):
+        if any(column_type is None for _, column_type, _ in inferred or ()):
             partial.append("some output types are unknown")
         if (project.sql_analysis_dialect or "generic") not in TYPE_CHECKED_DIALECTS:
             partial.append("type checking awaits dialect coercion support")

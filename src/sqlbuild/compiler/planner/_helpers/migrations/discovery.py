@@ -7,11 +7,10 @@ from collections import defaultdict
 from typing import Any
 
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.main._newest_event import newest_migration_event_mentioning
 from sqlbuild.compiler.migrations.main.relation_for_location import (
@@ -68,7 +67,7 @@ def discover_model_migrations(
 ) -> ModelMigrationDiscovery:
     """Add unique one-to-one fingerprint matches to the explicit migration requests."""
 
-    models: tuple[CompiledModel, ...] = _topological_models(runtime=runtime)
+    models: tuple[CompiledModelView, ...] = _topological_models(runtime=runtime)
     declared: frozenset[str] = frozenset(item.model_name for item in declarations)
     triggered: bool = bool(
         _new_model_names(models=models, scope=scope, snapshot=snapshot) - declared
@@ -160,7 +159,10 @@ def _declared_renames(
 
 
 def _event_renames(
-    *, runtime: PlannerRuntime, models: tuple[CompiledModel, ...], state: MigrationStateInspection
+    *,
+    runtime: PlannerRuntime,
+    models: tuple[CompiledModelView, ...],
+    state: MigrationStateInspection,
 ) -> dict[str, str]:
     """Map project models to the removed model their latest recorded move came from."""
 
@@ -183,7 +185,7 @@ def _event_renames(
 def _resumed_events(
     *,
     runtime: PlannerRuntime,
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
     unbuilt: frozenset[str],
     state: MigrationStateInspection,
 ) -> dict[str, MigrationEvent]:
@@ -191,7 +193,7 @@ def _resumed_events(
 
     target_name: str | None = runtime.project.effective_target_name
     resumed: dict[str, MigrationEvent] = {}
-    model: CompiledModel
+    model: CompiledModelView
     for model in models:
         if model.name not in unbuilt or not (_stores_history(model) or _hands_over_identity(model)):
             continue
@@ -235,14 +237,14 @@ def _automatic_requests(
     *,
     runtime: PlannerRuntime,
     scope: PlannerScope,
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
     matches: dict[str, Fingerprint],
     resumed: dict[str, MigrationEvent],
 ) -> tuple[ModelMigrationRequest, ...]:
     """Return automatic requests for selected destinations only."""
 
     requests: list[ModelMigrationRequest] = []
-    model: CompiledModel
+    model: CompiledModelView
     for model in models:
         if model.key not in scope.selected_keys:
             continue
@@ -288,7 +290,7 @@ def _event_origin_location(
 
 
 def _ambiguity_warnings(
-    *, models: tuple[CompiledModel, ...], scope: PlannerScope, ambiguous: dict[str, str]
+    *, models: tuple[CompiledModelView, ...], scope: PlannerScope, ambiguous: dict[str, str]
 ) -> tuple[PlanWarning, ...]:
     selected: frozenset[str] = frozenset(
         model.name for model in models if model.key in scope.selected_keys
@@ -308,9 +310,9 @@ def _ambiguity_warnings(
     )
 
 
-def _topological_models(*, runtime: PlannerRuntime) -> tuple[CompiledModel, ...]:
-    by_name: dict[str, CompiledModel] = {model.name: model for model in runtime.project.models}
-    ordered: list[CompiledModel] = []
+def _topological_models(*, runtime: PlannerRuntime) -> tuple[CompiledModelView, ...]:
+    by_name: dict[str, CompiledModelView] = {model.name: model for model in runtime.project.models}
+    ordered: list[CompiledModelView] = []
     visited: set[str] = set()
     pending: list[tuple[str, bool]] = [(name, False) for name in sorted(by_name, reverse=True)]
     while pending:
@@ -335,7 +337,7 @@ def _topological_models(*, runtime: PlannerRuntime) -> tuple[CompiledModel, ...]
 
 
 def _new_model_names(
-    *, models: tuple[CompiledModel, ...], scope: PlannerScope, snapshot: WarehouseSnapshot
+    *, models: tuple[CompiledModelView, ...], scope: PlannerScope, snapshot: WarehouseSnapshot
 ) -> frozenset[str]:
     relevant: set[CompiledObjectKey] = set(scope.selected_keys)
     frontier: list[CompiledObjectKey] = list(scope.selected_keys)
@@ -354,7 +356,7 @@ def _new_model_names(
 
 
 def _metadata_jsons(
-    *, runtime: PlannerRuntime, models: tuple[CompiledModel, ...]
+    *, runtime: PlannerRuntime, models: tuple[CompiledModelView, ...]
 ) -> dict[str, str]:
     function_hashes: dict[str, str] = build_function_local_hashes(
         functions=runtime.project.functions, dialect=runtime.project.sql_analysis_dialect
@@ -375,7 +377,7 @@ def _origin_candidates(
     *,
     runtime: PlannerRuntime,
     state: MigrationStateInspection,
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
     excluded: frozenset[tuple[str, str]],
 ) -> tuple[Fingerprint, ...]:
     project_model_names: frozenset[str] = frozenset(model.name for model in models)
@@ -408,7 +410,7 @@ def _superseded(*, events: tuple[MigrationEvent, ...], location: CompiledRelatio
 
 def _match(
     *,
-    models: tuple[CompiledModel, ...],
+    models: tuple[CompiledModelView, ...],
     new_names: frozenset[str],
     seed_variants: tuple[dict[str, str], ...],
     candidates: tuple[Fingerprint, ...],
@@ -430,7 +432,7 @@ def _match(
         variants: tuple[dict[str, str], ...] = tuple(dict(seed) for seed in seed_variants)
         matches: dict[str, Fingerprint] = {}
         claims: dict[str, list[str]] = defaultdict(list)
-        model: CompiledModel
+        model: CompiledModelView
         for model in models:
             if model.name not in new_names:
                 continue
@@ -469,7 +471,7 @@ def _match(
 
 def _variant_fingerprints(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     metadata_json: str,
     variants: tuple[dict[str, str], ...],
     dialect: str | None,
@@ -546,25 +548,25 @@ def _destination_fingerprints(
     return destinations
 
 
-def _moves_history(*, model: CompiledModel, origin: Fingerprint) -> bool:
+def _moves_history(*, model: CompiledModelView, origin: Fingerprint) -> bool:
     return _stores_history(model) and _stored_materialization(origin) in _HISTORY_MATERIALIZATIONS
 
 
-def _renames_identity(*, model: CompiledModel, origin: Fingerprint) -> bool:
+def _renames_identity(*, model: CompiledModelView, origin: Fingerprint) -> bool:
     return (
         _hands_over_identity(model)
         and _stored_materialization(origin) in _IDENTITY_MATERIALIZATIONS
     )
 
 
-def _hands_over_identity(model: CompiledModel) -> bool:
+def _hands_over_identity(model: CompiledModelView) -> bool:
     return (
         get_config_str(values=model.config.values, key=_MATERIALIZED_KEY)
         in _IDENTITY_MATERIALIZATIONS
     )
 
 
-def _stores_history(model: CompiledModel) -> bool:
+def _stores_history(model: CompiledModelView) -> bool:
     return (
         get_config_str(values=model.config.values, key=_MATERIALIZED_KEY)
         in _HISTORY_MATERIALIZATIONS

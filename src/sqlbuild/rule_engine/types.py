@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 type RuleOptionValue = bool | int | str | tuple[str, ...] | tuple[int, ...]
 type FactKey = tuple[str, ...]
+type FindingRow = tuple[bool, str, str, int, int, str, str]
 type CustomRulePlan = dict[str, frozenset[str] | None]
 
 type CustomHostPlan = dict[str, list[str] | None]

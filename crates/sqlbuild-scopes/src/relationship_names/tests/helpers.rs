@@ -73,3 +73,22 @@ pub(super) fn scanned_ctes(ctes: &[(&str, &str)]) -> TopLevelCtes {
 fn owned(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
+
+/// `kind:name expected=[..] called=[..] tested=[..]`.
+pub(super) fn fact_summary(fact: &crate::scope_index::models::RelationshipFact) -> String {
+    format!(
+        "{}:{} expected=[{}] called=[{}] tested=[{}]",
+        fact.resource.kind.as_str(),
+        fact.resource.name,
+        fact.expected_models.join(", "),
+        fact.called_macros.join(", "),
+        fact.tested_macros.join(", ")
+    )
+}
+
+pub(super) fn owned_names(names: &[&[&str]]) -> Vec<Vec<String>> {
+    names
+        .iter()
+        .map(|block| block.iter().map(|name| (*name).to_owned()).collect())
+        .collect()
+}

@@ -13,10 +13,6 @@ from sqlbuild.compiler.frontier.constants import (
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 
-MACRO_USE_EVENT: int = 0
-DECLARATION_READ_EVENT: int = 1
-GENERATED_SQL_EVENT: int = 2
-ARGUMENT_REFERENCE_EVENT: int = 3
 GENERATED_REFERENCE_MARKERS: tuple[str, ...] = tuple(
     f"{kind.function_name}(" for kind in SqlReferenceKind
 )

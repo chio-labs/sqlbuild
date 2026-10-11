@@ -10,12 +10,15 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledObjectKey,
     CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.planner._helpers.output.plan_entry import (
     _build_cursor_input_relations,
     _runtime_cursor_producer_names,
@@ -156,7 +159,7 @@ class _QualifiedSourceAdapter(_RecordingAdapter):
 def test_given_sources_when_gathering_columns_then_returns_expected_source_columns(
     test_case: SourceColumnsTestCase,
 ) -> None:
-    project: CompiledProject = build_test_project_with_source_entry(test_case.source_entry)
+    project: CompiledProjectView = build_test_project_with_source_entry(test_case.source_entry)
     adapter: _RecordingAdapter = _RecordingAdapter(test_case.adapter_column_names)
 
     result: dict[str, tuple[ColumnInfo, ...]] = gather_source_columns(
@@ -186,7 +189,7 @@ def test_given_sources_when_gathering_columns_then_returns_expected_source_colum
 def test_given_multi_database_sources_when_gathering_columns_then_matches_current_database_only(
     test_case: MultiDatabaseSourceColumnsTestCase,
 ) -> None:
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test",
         effective_target_name=None,
         effective_connection={},
@@ -237,7 +240,7 @@ def test_given_multi_database_sources_when_gathering_columns_then_matches_curren
 def test_given_known_source_columns_when_building_relations_context_then_reuses_prior_gather(
     test_case: KnownSourceColumnsReuseTestCase,
 ) -> None:
-    project: CompiledProject = build_test_project_with_source_entry(
+    project: CompiledProjectView = build_test_project_with_source_entry(
         SourceEntry(
             name="raw_payments",
             expression="SELECT 1 AS id, 1700 AS amount_cents, 'success' AS status",
@@ -402,7 +405,7 @@ def test_given_known_source_columns_when_building_relations_context_then_reuses_
 def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> None:
-    model: CompiledModel = build_source_cursor_input_model(test_case)
+    model: CompiledModelView = build_source_cursor_input_model(test_case)
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {}
     for source_name, column_names in test_case.source_columns.items():
         columns: list[ColumnInfo] = []
@@ -436,13 +439,13 @@ def test_given_valid_cursor_input_source_columns_when_validating_then_passes(
 def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_is_physical(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     model, models_by_name = build_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,
     )
-    view_model: CompiledModel = models_by_name["orders_view"]
+    view_model: CompiledModelView = models_by_name["orders_view"]
 
     relations: tuple[CursorInputRelation, ...] = _build_cursor_input_relations(
         model=model,
@@ -521,7 +524,7 @@ def test_given_view_filter_and_transitive_watermark_when_planning_then_relation_
 def test_given_missing_cursor_input_source_column_when_validating_then_raises_clear_error(
     test_case: SourceCursorInputColumnsTestCase,
 ) -> None:
-    model: CompiledModel = build_source_cursor_input_model(test_case)
+    model: CompiledModelView = build_source_cursor_input_model(test_case)
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] = {}
     for source_name, column_names in test_case.source_columns.items():
         columns: list[ColumnInfo] = []
@@ -557,8 +560,8 @@ def test_given_missing_cursor_input_source_column_when_validating_then_raises_cl
 def test_given_transitive_watermark_when_validating_lineage_then_accepts_upstream_source(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     model, models_by_name = build_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,
@@ -589,9 +592,9 @@ def test_given_transitive_watermark_when_validating_lineage_then_accepts_upstrea
 def test_given_table_function_and_transitive_watermark_when_planning_then_source_is_accepted(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
-    functions_by_name: dict[str, CompiledFunction]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
+    functions_by_name: dict[str, CompiledFunctionView]
     model, models_by_name, functions_by_name = build_function_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,
@@ -646,8 +649,8 @@ def test_given_table_function_and_transitive_watermark_when_planning_then_source
 def test_given_invalid_watermark_when_validating_lineage_then_raises_precise_error(
     test_case: WatermarkLineageTestCase,
 ) -> None:
-    model: CompiledModel
-    models_by_name: dict[str, CompiledModel]
+    model: CompiledModelView
+    models_by_name: dict[str, CompiledModelView]
     model, models_by_name = build_transitive_watermark_models(
         watermark_name=test_case.watermark_name,
         watermark_column=test_case.watermark_column,

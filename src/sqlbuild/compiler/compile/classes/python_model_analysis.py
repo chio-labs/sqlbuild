@@ -4,30 +4,21 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.analysis.cache import record_analysis_cache_metrics
-from sqlbuild.compiler.compile._helpers.analysis.reference_names import (
-    substitute_placeholder_defaults,
-    table_function_analysis_name,
-)
-from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import names_set_operation
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    binding_relation_names,
     binding_schema_for_model,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
-from sqlbuild.compiler.compile._helpers.sharing.binding import lineage_reference_map
 from sqlbuild.compiler.compile.models import (
-    CompileModelInput,
-    CompileSqlReference,
     ModelSqlAnalysisRequest,
 )
+from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
     SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
 )
 from sqlbuild.compiler.planner.types import ContractPolicy, MaterializationType
-from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
@@ -37,7 +28,7 @@ class PythonModelAnalysis:
     def __init__(
         self,
         *,
-        model_inputs: tuple[CompileModelInput, ...],
+        model_inputs: tuple[ModelInput, ...],
         inference_profile: ExpressionInferenceProfile,
         complete_binding_schemas: dict[str, dict[str, str]],
     ) -> None:
@@ -90,24 +81,15 @@ class PythonModelAnalysis:
 
 
 def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
-    model_input: CompileModelInput = request.model_input
-    references: tuple[CompileSqlReference, ...] = model_input.references
+    model_input: ModelInput = request.model_input
+    rows: list[tuple[str, str, str | None, int | None]] = model_input.reference_rows
     values: dict[str, object] = model_input.config.values
     return (
         model_input.model_file.file_path.stem,
         request.query_sql,
         list((request.placeholders or {}).items()),
-        [
-            (_analysis_name(reference), reference.ref_kind == SqlReferenceKind.REF)
-            for reference in references
-        ],
-        [
-            (name, resource_type.value, resource_name)
-            for name, (resource_type, resource_name) in lineage_reference_map(references).items()
-        ],
-        sorted(binding_relation_names(references)),
+        [(str(kind), name) for kind, name, _, _ in rows],
         _recovers_cte_facts(model_input),
-        names_set_operation(request.query_sql),
         (
             (
                 str(values.get("valid_from_column") or SNAPSHOT_DEFAULT_VALID_FROM_COLUMN),
@@ -115,13 +97,6 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
             )
             if values.get("materialized") == MaterializationType.SNAPSHOT
             else None
-        ),
-        (
-            substitute_placeholder_defaults(
-                query_sql=request.query_sql, placeholders=request.placeholders
-            )
-            if request.placeholders
-            else request.query_sql
         ),
         [
             PythonModelAnalysis.family_row(family)
@@ -134,13 +109,7 @@ def _model_row(request: ModelSqlAnalysisRequest) -> tuple[object, ...]:
     )
 
 
-def _analysis_name(reference: CompileSqlReference) -> str:
-    if reference.ref_kind == SqlReferenceKind.TABLE_FUNCTION:
-        return table_function_analysis_name(reference.ref_name)
-    return reference.ref_name
-
-
-def _placeholders(model_input: CompileModelInput) -> dict[str, str] | None:
+def _placeholders(model_input: ModelInput) -> dict[str, str] | None:
     raw_placeholders: object | None = model_input.config.values.get("placeholders")
     return (
         {str(key): str(value) for key, value in raw_placeholders.items()}
@@ -149,7 +118,7 @@ def _placeholders(model_input: CompileModelInput) -> dict[str, str] | None:
     )
 
 
-def _recovers_cte_facts(model_input: CompileModelInput) -> bool:
+def _recovers_cte_facts(model_input: ModelInput) -> bool:
     return model_input.config.values.get("contract") == ContractPolicy.ENFORCED or (
         model_input.schema_entry is not None and bool(model_input.schema_entry.type_enforcement)
     )

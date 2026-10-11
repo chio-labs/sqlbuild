@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.planner.constants import FULL_REFRESH_DISABLED_REBUILD_CODE
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import ChangeDetectionResult
 from sqlbuild.compiler.planner.types import ChangeKind
 
 
-def resolve_model_full_refresh(*, model: CompiledModel, cli_full_refresh: bool) -> bool:
+def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bool) -> bool:
     """Resolve dbt-compatible nullable model full-refresh semantics."""
 
     configured: object | None = model.config.values.get("full_refresh")
@@ -17,7 +17,7 @@ def resolve_model_full_refresh(*, model: CompiledModel, cli_full_refresh: bool) 
 
 
 def effectively_full_refreshed_model_names(
-    *, project: CompiledProject, cli_full_refresh: bool
+    *, project: CompiledProjectView, cli_full_refresh: bool
 ) -> frozenset[str]:
     """Return model names that are effectively full refreshed for this invocation."""
 
@@ -48,7 +48,7 @@ def describe_full_rebuild_cause(*, change_result: ChangeDetectionResult, full_re
 
 
 def check_full_rebuild_allowed(
-    *, model: CompiledModel, change_result: ChangeDetectionResult, full_rebuild_cause: str
+    *, model: CompiledModelView, change_result: ChangeDetectionResult, full_rebuild_cause: str
 ) -> None:
     """Refuse a full rebuild of a full_refresh false model unless its own SQL or first run asks."""
 

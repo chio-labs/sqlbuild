@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledProject
-from sqlbuild.compiler.lineage._helpers.rich_columns import (
-    build_rich_project_column_lineage,
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.lineage._helpers.native_rich_columns import (
+    build_native_rich_project_column_lineage,
 )
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
@@ -15,7 +15,7 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode
 
 def build_project_column_lineage(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     dialect: str | None = None,
     mode: ColumnLineageMode = ColumnLineageMode.RICH,
     model_names: frozenset[str] | None = None,
@@ -28,8 +28,6 @@ def build_project_column_lineage(
                 project=project, dialect=dialect, model_names=model_names
             )
         case ColumnLineageMode.RICH:
-            return build_rich_project_column_lineage(
-                project=project,
-                dialect=dialect,
-                model_names=model_names,
+            return build_native_rich_project_column_lineage(
+                project=project, dialect=dialect, model_names=model_names
             )

@@ -1,6 +1,6 @@
 """Public focused seed-plan entrypoint."""
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.command_planning.static import build_seed_command_plan_impl
 from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerScope, PlanOutput
@@ -8,7 +8,7 @@ from sqlbuild.compiler.planner.models import PlannerRelationsContext, PlannerSco
 
 def build_seed_command_plan(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
     fingerprints: dict[str, Fingerprint] | None = None,

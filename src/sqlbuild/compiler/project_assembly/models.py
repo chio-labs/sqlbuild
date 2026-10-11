@@ -4,24 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    DynamicColumnContractProof,
-)
-from sqlbuild.spec.contracts.models import SourceEntry
+from sqlbuild.compiler.analysis_session.types import ProofRow
+from sqlbuild.compiler.project_assembly.types import NamespaceRow, ObjectKeyRow
 
 
 @dataclass(frozen=True, slots=True)
 class NativeProjectResources:
     """Per-resource facts in input order, and whether each model's SQL passed syntax validation."""
 
-    model_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    model_deps: tuple[list[ObjectKeyRow], ...]
     model_syntax_valid: tuple[bool, ...]
-    source_entries: tuple[SourceEntry, ...]
-    seed_destinations: tuple[CompiledRelationLocation, ...]
-    function_deps: tuple[tuple[CompiledObjectKey, ...], ...]
-    audit_scope_deps: tuple[tuple[CompiledObjectKey, ...], ...]
+    source_namespaces: tuple[tuple[str | None, str | None] | None, ...]
+    seed_namespaces: tuple[NamespaceRow, ...]
+    function_deps: tuple[list[ObjectKeyRow], ...]
+    audit_scope_deps: tuple[list[ObjectKeyRow], ...]
     failure: NativeResourceFailure | None = None
 
 
@@ -36,10 +32,10 @@ class NativeResourceFailure:
 
 @dataclass(frozen=True, slots=True)
 class NativeModelFacts:
-    """One model's native facts."""
+    """One model's native facts; its dependencies as `(resource type, name)` rows."""
 
-    deps: tuple[CompiledObjectKey, ...]
-    dynamic_contract: DynamicColumnContractProof | None
+    deps: list[ObjectKeyRow]
+    dynamic_contract: ProofRow | None
     syntax_valid: bool = False
 
 

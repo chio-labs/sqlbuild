@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 
 
 def resolve_sqlbuild_model_selector_names(
-    *, project: CompiledProject, term: str
+    *, project: CompiledProjectView, term: str
 ) -> tuple[tuple[str, ...], str | None]:
     """Resolve one SQLBuild-owned model selector core to names and path translation."""
 
-    models_by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
+    models_by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
     if term in models_by_name:
         return (term,), None
     if term.startswith("tag:"):

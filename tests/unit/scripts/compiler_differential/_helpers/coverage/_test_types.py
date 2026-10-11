@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
 
@@ -69,7 +69,7 @@ class RenderEncodedInputsTestCase:
     """Real compile inputs, encoded by the stage capture, and the render kinds they prove."""
 
     description: str
-    inputs: CompileProjectInputs
+    inputs: CompileInputsView
     expected_kinds: frozenset[str]
 
 

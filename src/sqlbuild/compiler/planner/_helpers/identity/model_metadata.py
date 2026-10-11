@@ -5,13 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.models import EnumDeclaration
 from sqlbuild.compiler.planner.types import ContractPolicy
 from sqlbuild.spec.contracts.models import SchemaColumn, SchemaModelEntry
 
 
-def contract_output_signature(*, model: CompiledModel) -> dict[str, object] | None:
+def contract_output_signature(*, model: CompiledModelView) -> dict[str, object] | None:
     """Build required model output metadata that participates in execution identity."""
 
     schema_entry: SchemaModelEntry | None = model.schema_entry
@@ -41,7 +41,9 @@ def contract_output_signature(*, model: CompiledModel) -> dict[str, object] | No
     return signature
 
 
-def _column_output_signature(*, model: CompiledModel, column: SchemaColumn) -> dict[str, object]:
+def _column_output_signature(
+    *, model: CompiledModelView, column: SchemaColumn
+) -> dict[str, object]:
     signature: dict[str, object] = {
         "name": column.name,
         "type": column.type,
@@ -58,7 +60,7 @@ def _column_output_signature(*, model: CompiledModel, column: SchemaColumn) -> d
     return signature
 
 
-def declared_columns_hash(*, model: CompiledModel) -> str:
+def declared_columns_hash(*, model: CompiledModelView) -> str:
     """Hash the model's own declared columns, column families, and contract setting."""
 
     schema_entry: SchemaModelEntry | None = model.schema_entry

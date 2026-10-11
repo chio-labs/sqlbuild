@@ -6,6 +6,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{IntoPyObject, pyclass, pymethods};
+use sqlbuild_attachments::functions::models::KnownResources;
 use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_model_config::model_validation::main::validate_model_config::validate_model_config;
 use sqlbuild_model_config::model_validation::main::validate_model_references::validate_model_references;
@@ -33,6 +34,19 @@ type ModelFacts = (Vec<(String, String, bool)>, Option<Vec<String>>, bool, bool)
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct NativeModelValidator {
     project: ProjectValidationFacts,
+}
+
+impl NativeModelValidator {
+    /// The project's discovered resource names, which every reference resolves against.
+    pub(crate) fn known_resources(&self) -> KnownResources<'_> {
+        KnownResources {
+            models: &self.project.models,
+            seeds: &self.project.seeds,
+            sources: &self.project.sources,
+            functions: &self.project.functions,
+            table_functions: &self.project.table_functions,
+        }
+    }
 }
 
 #[pymethods]

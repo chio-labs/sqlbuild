@@ -1,8 +1,7 @@
 """Test helpers for native rules engine boundaries."""
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from operator import attrgetter
 from pathlib import Path
 from typing import Any, cast
@@ -13,22 +12,24 @@ from sqlbuild.compiler.compile.models import (
     CompiledDirectLogicSqlTestPayload,
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
-    CompiledProject,
     CompiledSqlTest,
     CompiledSqlTestResource,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.rule_engine._helpers.engine import native
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
+from sqlbuild.rule_engine._helpers.run import native_rows
 from sqlbuild.rule_engine.constants import MIN_CUSTOM_RULE_TEST_CASES
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import (
     CustomRulesOutcome,
     Finding,
+    NativeRulesEvaluation,
     Rule,
     RuleExemption,
     RuleIgnore,
@@ -42,46 +43,48 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_proj
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
 
 
-def project_with_scope(*, index: ScopeIndex) -> CompiledProject:
+def project_with_scope(*, index: ScopeIndex) -> CompiledProjectView:
     """Return a minimal compiled project carrying canonical scope facts."""
 
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="orders",
         relative_path="models/orders.sql",
         sql="SELECT 1 AS id",
         config_values={},
     )
-    return replace(project, scope_index=index)
+    return project_with(project=project, scope_index=index)
 
 
 def captured_native_request(
-    *, monkeypatch: pytest.MonkeyPatch, project: CompiledProject, project_dir: Path
+    *, monkeypatch: pytest.MonkeyPatch, project: CompiledProjectView, project_dir: Path
 ) -> dict[str, Any]:
-    """Evaluate through the Python boundary and capture the serialized request."""
+    """Evaluate through the Python boundary and capture the header and rows handed to Rust."""
 
     captured: dict[str, Any] = {}
 
-    def parse_rules_parts(
-        request_json: bytes, model_jsons: list[bytes], model_digests: list[str]
-    ) -> object:
-        captured.update(cast(dict[str, Any], json.loads(request_json)))
-        captured["models"] = [json.loads(model_json) for model_json in model_jsons]
-        return object()
+    def build_rules_request(
+        project_rows: dict[str, Any],
+        models: list[tuple[object, ...]],
+        sql_tests: list[tuple[object, ...]],
+        sql_scenarios: list[tuple[object, ...]],
+    ) -> tuple[object, tuple[int, int, int]]:
+        captured.update(cast(dict[str, Any], json.loads(project_rows["header_json"])))
+        captured.update(models=models, sql_tests=sql_tests, sql_scenarios=sql_scenarios)
+        return object(), (len(models), len(sql_tests), len(sql_scenarios))
 
-    def evaluate_parsed_rules(parsed: object) -> str:
-        return json.dumps(
-            {
-                "version": 1,
-                "faults": [],
-                "evaluated_models": 0,
-                "cache_hits": 0,
-                "cache_misses": 0,
-                "selected_codes": [],
-            }
+    def evaluate_rules_request(request: object) -> NativeRulesEvaluation:
+        return NativeRulesEvaluation(
+            findings=(),
+            selected_codes=(),
+            evaluated_models=0,
+            cache_hits=0,
+            cache_misses=0,
+            built_in_ms=0,
+            reused=False,
         )
 
-    monkeypatch.setattr(native._native, "parse_rules_parts", parse_rules_parts)
-    monkeypatch.setattr(native._native, "evaluate_parsed_rules", evaluate_parsed_rules)
+    monkeypatch.setattr(native_rows._native, "build_rules_request", build_rules_request)
+    monkeypatch.setattr(native, "evaluate_rules_request", evaluate_rules_request)
     native.evaluate_native(
         project=project,
         config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
@@ -220,7 +223,7 @@ def load_custom_rule(*, root: Path, configured_path: Path) -> Rule:
 
 def custom_rule_inputs(
     *, tmp_path: Path, test_case: CustomRuleTestCase
-) -> tuple[CompiledProject, RulesConfig]:
+) -> tuple[CompiledProjectView, RulesConfig]:
     _ = write_rule(
         root=tmp_path,
         body=test_case.body,
@@ -228,7 +231,7 @@ def custom_rule_inputs(
         project_wide=test_case.project_wide,
     )
     (tmp_path / "rules" / "input.json").write_text("{}", encoding="utf-8")
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="commerce__mart__orders",
         relative_path="models/mart/commerce__mart__orders.sql",
         sql=_MODEL_SQL,
@@ -262,26 +265,26 @@ def custom_rules_with_imports(
 
 def two_model_project(
     *, customers_sql: str, customers_config: dict[str, object]
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Return an orders and customers project with configurable customers facts."""
 
-    orders: CompiledProject = build_project(
+    orders: CompiledProjectView = build_project(
         name="orders",
         relative_path="models/orders.sql",
         sql="SELECT 1 AS order_id",
         config_values={},
     )
-    customers: CompiledProject = build_project(
+    customers: CompiledProjectView = build_project(
         name="customers",
         relative_path="models/customers.sql",
         sql=customers_sql,
         config_values=customers_config,
     )
-    return replace(orders, models=(*orders.models, *customers.models))
+    return project_with(project=orders, models=(*orders.models, *customers.models))
 
 
 def evaluate_cached_custom_rules(
-    *, project: CompiledProject, project_dir: Path, cache_enabled: bool
+    *, project: CompiledProjectView, project_dir: Path, cache_enabled: bool
 ) -> CustomRulesOutcome:
     """Evaluate the selected custom rule through the incremental read-tracking cache."""
 
@@ -304,27 +307,13 @@ def evaluate_contract_rule(
     config: RulesConfig = RulesConfig(
         select=("SQBRCONTRACT101",), cache=RulesCacheConfig(enabled=cache_enabled)
     )
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="commerce__mart__orders",
         relative_path="models/mart/commerce__mart__orders.sql",
         sql="WITH orders AS (SELECT id FROM source_orders) SELECT id FROM orders",
         config_values=config_values,
     )
     return evaluate(project=project, config=config, project_dir=project_dir)
-
-
-def record_native_evaluations(*, monkeypatch: pytest.MonkeyPatch) -> list[object]:
-    """Count every request that reaches the native built-in rules engine."""
-
-    requests: list[object] = []
-    evaluate_parsed_rules: Callable[[Any], str] = native._native.evaluate_parsed_rules
-
-    def recording(parsed: Any) -> str:
-        requests.append(parsed)
-        return evaluate_parsed_rules(parsed)
-
-    monkeypatch.setattr(native._native, "evaluate_parsed_rules", recording)
-    return requests
 
 
 @dataclass(frozen=True)
@@ -394,8 +383,8 @@ def evaluate_incremental_step(
     )
 
 
-def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledProject:
-    projects: list[CompiledProject] = [
+def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledProjectView:
+    projects: list[CompiledProjectView] = [
         build_project(
             name=model.name,
             relative_path=model.relative_path,
@@ -404,4 +393,6 @@ def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledPr
         )
         for model in models
     ]
-    return replace(projects[0], models=tuple(project.models[0] for project in projects))
+    return project_with(
+        project=projects[0], models=tuple(project.models[0] for project in projects)
+    )

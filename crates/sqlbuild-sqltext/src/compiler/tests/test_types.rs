@@ -99,3 +99,32 @@ impl InterpolationHost for MapHost {
             .collect()
     }
 }
+
+pub(super) struct EntrySpanTestCase {
+    pub(super) description: &'static str,
+    pub(super) contents: &'static str,
+    pub(super) expected_span: Result<Option<(usize, usize)>, &'static str>,
+}
+
+pub(super) struct HeaderWordTestCase {
+    pub(super) description: &'static str,
+    pub(super) word: &'static str,
+    pub(super) expected_value: crate::compiler::models::HeaderWord,
+}
+
+pub(super) struct OutputColumnsTestCase {
+    pub(super) description: &'static str,
+    pub(super) contents: &'static str,
+    pub(super) implicit_aliases: bool,
+    pub(super) expected_columns: Vec<(&'static str, [usize; 4])>,
+}
+
+pub(super) struct HeaderColumnsTestCase {
+    pub(super) description: &'static str,
+    pub(super) contents: &'static str,
+    pub(super) header_start: usize,
+    pub(super) header_end: usize,
+    pub(super) expected_body: (usize, usize),
+    pub(super) expected_entries: Vec<(&'static str, [usize; 4])>,
+    pub(super) expected_locations: Vec<(&'static str, [usize; 4])>,
+}

@@ -7,6 +7,7 @@ import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.rule_engine._helpers.engine import custom_rules, fact_replay
@@ -55,7 +56,7 @@ class OrdersReferenceResolver:
         return None
 
 
-def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProject:
+def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProjectView:
     """Write and compile one DuckDB project with an external reference resolver."""
 
     for relative_path, contents in files.items():
@@ -70,13 +71,13 @@ def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProject:
 
 
 def dropped_fields(*, before: object, after: object) -> frozenset[str]:
-    """Return dataclass fields whose values differ between two snapshots of one object."""
+    """Return the fields of `after`'s dataclass whose values differ between the two snapshots."""
 
-    names: tuple[str, ...] = tuple(field.name for field in dataclasses.fields(type(before)))
+    names: tuple[str, ...] = tuple(field.name for field in dataclasses.fields(type(after)))
     return frozenset(filter(lambda name: getattr(before, name) != getattr(after, name), names))
 
 
-def every_fact_key(project: CompiledProject) -> tuple[FactKey, ...]:
+def every_fact_key(project: CompiledProjectView) -> tuple[FactKey, ...]:
     """Return a key for every fact Rules can read, over every model of the project."""
 
     models: tuple[Model, ...] = tuple(public_model(model) for model in project.models)
@@ -94,7 +95,7 @@ def every_fact_key(project: CompiledProject) -> tuple[FactKey, ...]:
     )
 
 
-def fact_digests(*, project: CompiledProject, root: Path) -> dict[FactKey, tuple[str, str]]:
+def fact_digests(*, project: CompiledProjectView, root: Path) -> dict[FactKey, tuple[str, str]]:
     """Digest every fact as hosts observe it and as whole-project digests encode it."""
 
     views: RuleFactViews = build_rule_fact_views(
@@ -112,7 +113,7 @@ def fact_digests(*, project: CompiledProject, root: Path) -> dict[FactKey, tuple
 def record_trimmed_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> dict[type[object], set[str]]:
-    """Record which fields the host-payload trimmers replace, by dataclass type."""
+    """Record replaced fields and omitted constructor fields in the host-payload trimmers."""
 
     trimmed: dict[type[object], set[str]] = {CompiledProject: set(), CompiledModel: set()}
 
@@ -120,6 +121,13 @@ def record_trimmed_fields(
         trimmed.setdefault(type(obj), set()).update(changes)
         return dataclasses.replace(obj, **changes)
 
+    def recording_model(**values: Any) -> CompiledModel:
+        trimmed[CompiledModel].update(
+            {field.name for field in dataclasses.fields(CompiledModel)} - values.keys()
+        )
+        return CompiledModel(**values)
+
     monkeypatch.setattr(custom_rules, "replace", recording_replace)
     monkeypatch.setattr(custom_host_pool, "replace", recording_replace)
+    monkeypatch.setattr(custom_host_pool, "CompiledModel", recording_model)
     return trimmed

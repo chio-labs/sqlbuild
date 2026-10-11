@@ -11,7 +11,9 @@ from pathlib import Path
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
 )
@@ -69,7 +71,7 @@ def test_given_generated_projects_when_building_fast_lineage_then_restored_proje
     differences: list[tuple[object, object, object]] = []
     golden: list[GoldenEntry] = []
     for index in range(test_case.count):
-        project: CompiledProject = compiled_project(
+        project: CompiledProjectView = compiled_project(
             project_dir=tmp_path / f"project_{index}",
             files=generated_lineage_files(rng=rng, model_count=_MODEL_COUNT),
         )
@@ -94,7 +96,7 @@ def test_given_generated_projects_when_building_fast_lineage_then_restored_proje
                         )
                     )
                     _, restored = lineage_views(
-                        project=replace(variant, binding_catalog=None),
+                        project=project_with(project=variant, binding_catalog=None),
                         dialect=dialect,
                         model_names=model_names,
                     )
@@ -140,14 +142,18 @@ def test_given_unparsable_model_when_building_fast_lineage_then_logs_and_omits_i
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
-    project: CompiledProject = compiled_project(
+    project: CompiledProjectView = compiled_project(
         project_dir=tmp_path / "project",
         files=generated_lineage_files(rng=random.Random(11), model_count=_MODEL_COUNT),
     )
-    broken: CompiledProject = replace(
-        project,
+    broken: CompiledProjectView = project_with(
+        project=project,
         models=(
-            replace(project.models[0], query_sql=test_case.query_sql, fast_lineage_columns=None),
+            replace(
+                compiled_model_record(project.models[0]),
+                query_sql=test_case.query_sql,
+                fast_lineage_columns=None,
+            ),
             *project.models[1:],
         ),
     )
@@ -192,14 +198,14 @@ def test_given_formerly_deferred_models_when_building_fast_lineage_then_native_a
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
-    compiled: CompiledProject = without_compact_facts(
+    compiled: CompiledProjectView = without_compact_facts(
         compiled_project(
             project_dir=tmp_path / "project",
             files=generated_lineage_files(rng=random.Random(7), model_count=_MODEL_COUNT),
         )
     )
-    project: CompiledProject = replace(
-        compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
+    project: CompiledProjectView = project_with(
+        project=compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
     )
 
     _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
@@ -229,14 +235,14 @@ def test_given_unknown_dialect_when_building_fast_lineage_then_python_error_rais
     record_dir: Path = tmp_path / "records"
     monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
-    compiled: CompiledProject = without_compact_facts(
+    compiled: CompiledProjectView = without_compact_facts(
         compiled_project(
             project_dir=tmp_path / "project",
             files=generated_lineage_files(rng=random.Random(7), model_count=_MODEL_COUNT),
         )
     )
-    project: CompiledProject = replace(
-        compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
+    project: CompiledProjectView = project_with(
+        project=compiled, binding_catalog=(None, compiled.binding_catalog)[test_case.keeps_catalog]
     )
 
     with pytest.raises(ValueError, match=test_case.expected_error):
@@ -264,14 +270,18 @@ def test_given_unknown_dialect_when_building_fast_lineage_then_python_error_rais
 def test_given_parser_panic_when_building_fast_lineage_then_raises_native_compiler_error(
     test_case: ParserPanicLineageTestCase, tmp_path: Path
 ) -> None:
-    project: CompiledProject = compiled_project(
+    project: CompiledProjectView = compiled_project(
         project_dir=tmp_path / "project",
         files=generated_lineage_files(rng=random.Random(11), model_count=_MODEL_COUNT),
     )
-    broken: CompiledProject = replace(
-        project,
+    broken: CompiledProjectView = project_with(
+        project=project,
         models=(
-            replace(project.models[0], query_sql=test_case.query_sql, fast_lineage_columns=None),
+            replace(
+                compiled_model_record(project.models[0]),
+                query_sql=test_case.query_sql,
+                fast_lineage_columns=None,
+            ),
             *project.models[1:],
         ),
     )

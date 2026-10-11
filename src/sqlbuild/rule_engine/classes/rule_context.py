@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.classes.column_facts import ColumnFacts
 from sqlbuild.rule_engine.classes.contract_facts import ContractFacts
@@ -30,14 +30,15 @@ from sqlbuild.rule_engine.models import (
 
 
 def build_rule_fact_views(
-    *, project: CompiledProject, project_dir: Path, dialect: str
+    *, project: CompiledProjectView, project_dir: Path, dialect: str
 ) -> RuleFactViews:
     """Build immutable views once for one compiled project snapshot."""
 
+    project_facts: ProjectFacts = ProjectFacts(project=project, project_dir=project_dir)
     return RuleFactViews(
-        project=ProjectFacts(project=project, project_dir=project_dir),
+        project=project_facts,
         sql=SqlFacts(dialect=dialect, project=project),
-        graph=GraphFacts(project=project),
+        graph=GraphFacts(project=project, models=project_facts.models),
         columns=ColumnFacts(project=project),
         contracts=ContractFacts(project=project),
         tests=TestFacts(project=project),
@@ -52,10 +53,10 @@ class EvaluationRuleContext:
     def __init__(
         self,
         *,
-        model: CompiledModel | None,
+        model: CompiledModelView | None,
         rule: Rule,
         config: RulesConfig,
-        project: CompiledProject,
+        project: CompiledProjectView,
         project_dir: Path,
         selected_rules: tuple[Rule, ...],
         dialect: str,

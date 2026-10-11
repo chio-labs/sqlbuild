@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
+use crate::bindings::_helpers::rules::relation_keys;
 use crate::bindings::types::CompilerDetach;
 
 #[pyfunction]
@@ -100,5 +101,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_batch_json, module)?)?;
-    Ok(())
+    relation_keys::register(module)
 }

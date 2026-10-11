@@ -68,3 +68,23 @@ pub(crate) struct IgnorecaseTestCase {
     pub(crate) text: char,
     pub(crate) expected_match: bool,
 }
+
+pub(super) struct ReprTestCase {
+    pub(super) description: &'static str,
+    pub(super) unicode_version: &'static str,
+    pub(super) value: &'static str,
+    pub(super) expected_repr: &'static str,
+}
+
+pub(super) struct GlobTestCase {
+    pub(super) description: &'static str,
+    pub(super) pattern: &'static str,
+    pub(super) name: &'static str,
+    pub(super) expected_match: bool,
+}
+
+pub(super) struct SplitlinesTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_lines: &'static [&'static str],
+}

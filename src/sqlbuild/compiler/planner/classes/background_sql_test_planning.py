@@ -7,7 +7,8 @@ from concurrent.futures import Future
 from types import TracebackType
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.output.plan_output import plan_selected_sql_tests
 from sqlbuild.compiler.planner.models import PlannedSqlTests, SqlTestSelection
 
@@ -18,7 +19,7 @@ class BackgroundSqlTestPlanning:
     def __init__(
         self,
         *,
-        project: CompiledProject,
+        project: CompiledProjectView,
         adapter: BaseAdapter,
         selected_keys: frozenset[CompiledObjectKey],
         sql_test_selection: SqlTestSelection,
@@ -67,7 +68,7 @@ class BackgroundSqlTestPlanning:
 def _plan_into(
     *,
     future: Future[PlannedSqlTests],
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     selected_keys: frozenset[CompiledObjectKey],
     sql_test_selection: SqlTestSelection,

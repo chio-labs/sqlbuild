@@ -19,7 +19,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.macro_bridge.constants import VALUE_RENDERER_FIELD
 from sqlbuild.compiler.macro_bridge.exceptions import UncacheableValueError
 from sqlbuild.compiler.scopes.models import DeclarationIdentity
-from sqlbuild.python_nodes.models import SqlResourceRef
 
 _UNSTABLE_KEY_ERRORS: tuple[type[Exception], ...] = (
     UncacheableValueError,
@@ -70,30 +69,6 @@ def context_store_token(
             ]
         )
     except _UNSTABLE_KEY_ERRORS:
-        return None
-
-
-def call_class_store_text(
-    *,
-    macro_tokens: tuple[str, ...],
-    context_token: str | None,
-    prior_relations: tuple[SqlResourceRef, ...] | None,
-) -> str | None:
-    """Text of one persistent call class, or None when a relation name has no UTF-8 text."""
-
-    try:
-        return _encodable(
-            _key_text(
-                [
-                    list(macro_tokens),
-                    context_token,
-                    None
-                    if prior_relations is None
-                    else [[relation.kind.value, relation.name] for relation in prior_relations],
-                ]
-            )
-        )
-    except UnicodeEncodeError:
         return None
 
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.planner._helpers.changes.detect import detect_model_changes_in_scope
 from sqlbuild.compiler.planner._helpers.identity.direct import (
     build_direct_model_version_identities,
@@ -22,7 +22,7 @@ from sqlbuild.compiler.planner.models import (
 
 def build_planner_identity_context(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scopes: PlannerScopeResolution,
     include_stale_warning_identities: bool = True,
 ) -> PlannerIdentityContext:
@@ -53,7 +53,7 @@ def build_planner_identity_context(
 
 def detect_stale_warning_changes(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scopes: PlannerScopeResolution,
     snapshot: WarehouseSnapshot,
     identities: PlannerIdentityContext,

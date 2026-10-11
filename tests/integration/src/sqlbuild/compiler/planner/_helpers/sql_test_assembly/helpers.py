@@ -20,7 +20,11 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlTestCte,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
@@ -46,7 +50,7 @@ _STUB_TEST_BLOCK: DiscoveredSqlTestBlock = DiscoveredSqlTestBlock(
 
 def build_test_and_project(
     test_case: ExecuteChainTestCase,
-) -> tuple[CompiledSqlTest, CompiledProject]:
+) -> tuple[CompiledSqlTest, CompiledProjectView]:
     """Build a CompiledSqlTest and CompiledProject from a test case."""
 
     authored_ctes: list[CompileSqlTestCte] = []
@@ -101,7 +105,7 @@ def build_test_and_project(
         ),
     )
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     model_name: str
     query_sql: str
     for model_name, query_sql in test_case.model_queries.items():
@@ -138,7 +142,7 @@ def build_test_and_project(
             )
         )
 
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="test_run",
         effective_target_name=None,
         effective_connection={},

@@ -2,24 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from sqlbuild.compiler.compile._helpers.named_declarations.model_schemas import (
     model_schema_scope_usages,
 )
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.scopes.main._get_placement_validated_scope_index import (
     get_placement_validated_scope_index,
 )
-from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
-    DeclarationRecord,
-    ScopeIndex,
-    UsageRecord,
-)
+from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
 
 
-def scope_index_with_compile_usages(*, inputs: CompileProjectInputs) -> ScopeIndex:
+def scope_index_with_compile_usages(*, inputs: CompileInputsView) -> ScopeIndex:
     """Return compile inputs' canonical index with all usage and placement facts."""
 
     collected_usages: list[UsageRecord] = list(
@@ -43,38 +36,8 @@ def scope_index_with_compile_usages(*, inputs: CompileProjectInputs) -> ScopeInd
         collected_usages.extend(test_input.declaration_usages)
     for scenario_input in inputs.scenario_inputs:
         collected_usages.extend(scenario_input.declaration_usages)
-    usages: tuple[UsageRecord, ...] = tuple(dict.fromkeys(collected_usages))
-    dependencies: dict[DeclarationIdentity, list[DeclarationIdentity]] = {}
-    for usage in usages:
-        if isinstance(usage.consumer, DeclarationIdentity):
-            dependencies.setdefault(usage.consumer, []).append(usage.declaration)
-    declarations: tuple[DeclarationRecord, ...] = tuple(
-        replace(
-            record,
-            macro=replace(
-                record.macro,
-                dependencies=tuple(
-                    dict.fromkeys(
-                        (*record.macro.dependencies, *dependencies.get(record.identity, ()))
-                    )
-                ),
-            ),
-        )
-        if record.macro is not None
-        else record
-        for record in inputs.scope_index.declarations
-    )
-    index: ScopeIndex = replace(
-        inputs.scope_index,
-        declarations=declarations,
-        usages=tuple(dict.fromkeys((*inputs.scope_index.usages, *usages))),
-        completeness=replace(
-            inputs.scope_index.completeness,
-            runtime_usage=True,
-            promotion_impact=True,
-        ),
-    )
     return get_placement_validated_scope_index(
-        index=index,
+        index=inputs.scope_index,
         enforce_placement=inputs.project_config.scopes.enforce_placement,
+        compile_usages=tuple(collected_usages),
     )

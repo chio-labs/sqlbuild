@@ -12,7 +12,8 @@ from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProf
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
-from sqlbuild.compiler.compile.models import CompiledProject, CompilerDiagnostic
+from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
@@ -94,7 +95,7 @@ def test_given_effective_target_when_binding_quotes_then_honours_session_setting
         main(["--project-dir", str(tmp_path), "compile", "--target", "selected", "--json"])
         result: dict[str, Any] = json.loads(capsys.readouterr().out)
         assert tuple(item["code"] for item in result["diagnostics"]) == test_case.expected_codes
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path),
         adapter=SnowflakeAdapter(),
         selected_target="selected",

@@ -6,13 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
-from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
-    DirectPythonLifecycleState,
-)
 from sqlbuild.cli.commands.types import (
     DebugCheckStatus,
     FreshnessSourceStatus,
@@ -39,56 +34,57 @@ from sqlbuild.cli.output.models import (  # noqa: F401
     SkillUpdateResult,
     WrittenTarget,
 )
-from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
-from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-    ConnectionProgressReporter,
-)
-from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
-    NestedCommandProgressCallbacks,
-)
-from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts  # noqa: F401
-from sqlbuild.compiler.compile.models import (
-    CompiledObjectKey,
-    CompiledProject,
-    CompiledSqlScenario,
-    CompilerDiagnostic,
-)
-from sqlbuild.compiler.discovery.models import (
-    DiscoveredCheckFunction,
-    DiscoveredProjectInputs,
-)
-from sqlbuild.compiler.lineage.models import (
-    ColumnLineageEdge,
-    QualifiedLineageColumn,
-)
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.models import (
-    ClonePipelineResult,
-    CompilePipelineResult,
-    PythonPlanEntry,
-)
-from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
-from sqlbuild.compiler.refactoring.models import RefactorProject
 from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.cost.types import CostStatus
-from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-from sqlbuild.executor.clone.models import CloneExecutionResult
-from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
-from sqlbuild.executor.janitor.models import JanitorPlan
-from sqlbuild.executor.load.models import LoadExecutionResult
-from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
-from sqlbuild.integrations.dbt.models import DbtInitRequest
-from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.runtime.contracts.types import NodeStartCallback
 from sqlbuild.spec.contracts.models import (
     CostConfig,
     ExecutionLimitsConfig,
     SnapshotsConfig,
     SourceEntry,
 )
+
+if TYPE_CHECKING:
+    from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+    from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
+    from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
+        DirectPythonLifecycleState,
+    )
+    from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
+    from sqlbuild.cli.progress.classes.connection_progress_reporter import (
+        ConnectionProgressReporter,
+    )
+    from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
+        NestedCommandProgressCallbacks,
+    )
+    from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
+    from sqlbuild.compiler.compile.models import (
+        CompiledObjectKey,
+        CompiledSqlScenario,
+        CompilerDiagnostic,
+    )
+    from sqlbuild.compiler.compile.types import CompiledProjectView
+    from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
+    from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
+    from sqlbuild.compiler.pipeline.models import (
+        ClonePipelineResult,
+        CompilePipelineResult,
+        PythonPlanEntry,
+    )
+    from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
+    from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
+    from sqlbuild.compiler.refactoring.models import RefactorProject
+    from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+    from sqlbuild.executor.clone.models import CloneExecutionResult
+    from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
+    from sqlbuild.executor.janitor.models import JanitorPlan
+    from sqlbuild.executor.load.models import LoadExecutionResult
+    from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
+    from sqlbuild.integrations.dbt.models import DbtInitRequest
+    from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+    from sqlbuild.python_nodes.models import SqlResourceRef
+    from sqlbuild.runtime.contracts.types import NodeStartCallback
 
 
 @dataclass(frozen=True)
@@ -138,7 +134,7 @@ class BuildRunContext:
     """Resolved inputs needed to render one build execution context."""
 
     command: str
-    project: CompiledProject
+    project: CompiledProjectView
     plan: PlanOutput
     discovered_inputs: DiscoveredProjectInputs
     python_plan_entries: tuple[PythonPlanEntry, ...]
@@ -707,7 +703,7 @@ class JanitorCompileContext:
 
     adapter_name: str
     adapter: BaseAdapter
-    project: CompiledProject
+    project: CompiledProjectView
     connection_config: dict[str, object]
 
 

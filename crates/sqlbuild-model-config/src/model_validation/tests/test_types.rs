@@ -25,3 +25,13 @@ pub(super) struct TableTypeOverrideTestCase {
     pub(super) value: Option<Value>,
     pub(super) expected_override: Result<TableTypeOverride, ValidationStop>,
 }
+
+/// One model's column renames and the first error validation reports, if any.
+pub(super) struct ColumnMigrationTestCase {
+    pub(super) description: &'static str,
+    pub(super) materialized: Option<&'static str>,
+    pub(super) model_migrates: bool,
+    /// `(column, migrate_from)` per column.
+    pub(super) columns: &'static [(&'static str, Option<&'static str>)],
+    pub(super) expected_message: Option<&'static str>,
+}

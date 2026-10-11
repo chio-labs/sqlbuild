@@ -10,16 +10,16 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
 from sqlbuild.compiler.compile.classes.semantic_completion_inputs import SemanticCompletionInputs
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompiledModelSqlTestPayload,
-    CompiledProject,
-    CompiledSource,
     CompiledSqlTest,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import (
+    CompiledFunctionView,
+    CompiledModelView,
+    CompiledProjectView,
     CompiledResourceType,
+    CompiledSourceView,
     DiagnosticPhase,
     DiagnosticSeverity,
 )
@@ -28,7 +28,7 @@ from sqlbuild.compiler.semantic_checks.constants import (
     METADATA_CONFIG_KEYS,
     METADATA_FUNCTION_REFERENCE_KINDS,
 )
-from sqlbuild.spec.contracts.models import SourceLocation
+from sqlbuild.spec.contracts.models import SchemaAuditInstance, SourceLocation
 
 type _ErrorRow = tuple[str, str, int, int]
 type _NamesRow = tuple[str, list[str]]
@@ -36,7 +36,7 @@ type _NamesRow = tuple[str, list[str]]
 
 def native_metadata_diagnostics(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     profile: ExpressionInferenceProfile,
     resource_sql_analysis: bool,
     catalog: object,
@@ -54,7 +54,7 @@ def native_metadata_diagnostics(
     columns_by_sql: dict[str, tuple[str, ...]] = SemanticCompletionInputs.sql_test_columns(
         project=project, profile=profile
     )
-    functions: dict[str, CompiledFunction] = {
+    functions: dict[str, CompiledFunctionView] = {
         function.name.casefold(): function for function in project.functions
     }
     file_texts: dict[Path, str] = {}
@@ -65,6 +65,7 @@ def native_metadata_diagnostics(
     files: dict[Path, int] = {path: index for index, path in enumerate(file_texts)}
     request: Any = (
         profile.sql_analysis_dialect,
+        profile.quoted_identifiers_ignore_case,
         list(profile.function_return_types.items()),
         [_function_payload(key=key, function=function) for key, function in functions.items()],
         [(name, list(columns.items())) for name, columns in shapes.items()],
@@ -82,18 +83,13 @@ def native_metadata_diagnostics(
     for type_sql in fallback_types:
         _ = normalize_type(type_sql=type_sql, dialect=profile.sql_analysis_dialect)
     diagnostics: list[CompilerDiagnostic] = []
-    for model, (function_rows, reference_rows) in zip(project.models, model_rows, strict=True):
+    for model, (function_rows, audit_rows, reference_rows) in zip(
+        project.models, model_rows, strict=True
+    ):
         if not _checked(model):
             continue
         diagnostics.extend(_model_error(model=model, row=row) for row in function_rows)
-        shape: dict[str, str] | None = shapes.get(model.name)
-        if shape is None:
-            continue
-        diagnostics.extend(
-            SemanticCompletionInputs.audit_diagnostics(
-                model=model, project=project, shape=shape, shapes=shapes, profile=profile
-            )
-        )
+        diagnostics.extend(_audit_error(model=model, row=row) for row in audit_rows)
         diagnostics.extend(_model_error(model=model, row=row) for row in reference_rows)
     diagnostics.extend(
         _source_error(source=project.sources[index], row=row) for index, row in source_rows
@@ -111,11 +107,13 @@ def native_metadata_diagnostics(
     return tuple(diagnostics)
 
 
-def _function_payload(*, key: str, function: CompiledFunction) -> tuple[str, list[tuple[str, str]]]:
+def _function_payload(
+    *, key: str, function: CompiledFunctionView
+) -> tuple[str, list[tuple[str, str]]]:
     return (key, [(argument.name, argument.type) for argument in function.arguments])
 
 
-def _checked(model: CompiledModel) -> bool:
+def _checked(model: CompiledModelView) -> bool:
     return model.config.values.get(SQL_ANALYSIS_CONFIG_KEY) is not False and model.binding_validated
 
 
@@ -123,7 +121,7 @@ def _string(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _model_payload(model: CompiledModel) -> tuple[Any, ...]:
+def _model_payload(model: CompiledModelView) -> tuple[Any, ...]:
     values: dict[str, object] = model.config.values
     references: list[_NamesRow] = [
         (key, list(SemanticCompletionInputs.column_names(values.get(key))))
@@ -163,11 +161,54 @@ def _model_payload(model: CompiledModel) -> tuple[Any, ...]:
         upstreams,
         _string(values.get("cursor")),
         _string(values.get("cursor_type")),
+        _audit_payloads(model),
     )
 
 
+def _audit_payloads(model: CompiledModelView) -> list[tuple[object, ...]]:
+    if model.schema_entry is None:
+        return []
+    attached: list[tuple[str | None, SchemaAuditInstance]] = [
+        (None, audit) for audit in model.schema_entry.audits
+    ]
+    for schema_column in model.schema_entry.columns:
+        attached.extend((schema_column.name, audit) for audit in schema_column.audits)
+    payloads: list[tuple[object, ...]] = []
+    for column, audit in attached:
+        arguments: dict[str, object] = audit.arguments
+        expression: object = arguments.get("expression")
+        values: object = arguments.get("values")
+        payloads.append(
+            (
+                column,
+                audit.definition_name,
+                expression if isinstance(expression, str) else None,
+                str(arguments.get("to", "")),
+                str(arguments.get("field", "")),
+                [_audit_value(value) for value in values]
+                if isinstance(values, (list, tuple))
+                else None,
+            )
+        )
+    return payloads
+
+
+def _audit_value(value: object) -> tuple[str, str]:
+    """An accepted value by Python type: null, bool, number, text or other."""
+
+    if value is None:
+        return ("null", "")
+    if isinstance(value, bool):
+        return ("bool", "true" if value else "")
+    if isinstance(value, int | float):
+        return ("number", str(value))
+    if isinstance(value, str):
+        return ("text", value)
+    return ("other", "")
+
+
 def _source_payload(
-    *, source: CompiledSource, files: dict[Path, int]
+    *, source: CompiledSourceView, files: dict[Path, int]
 ) -> tuple[str, str | None, int]:
     return (
         source.name,
@@ -189,7 +230,7 @@ def _sql_test_payload(
     )
 
 
-def _model_error(*, model: CompiledModel, row: _ErrorRow) -> CompilerDiagnostic:
+def _model_error(*, model: CompiledModelView, row: _ErrorRow) -> CompilerDiagnostic:
     code, message, line, column = row
     return CompilerDiagnostic(
         phase=DiagnosticPhase.COMPILE,
@@ -204,7 +245,24 @@ def _model_error(*, model: CompiledModel, row: _ErrorRow) -> CompilerDiagnostic:
     )
 
 
-def _source_error(*, source: CompiledSource, row: _ErrorRow) -> CompilerDiagnostic:
+def _audit_error(
+    *, model: CompiledModelView, row: tuple[str, str, int, int, bool]
+) -> CompilerDiagnostic:
+    code, message, line, column, is_error = row
+    return CompilerDiagnostic(
+        phase=DiagnosticPhase.COMPILE,
+        severity=DiagnosticSeverity.ERROR if is_error else DiagnosticSeverity.WARNING,
+        code=code,
+        message=message,
+        resource_type=CompiledResourceType.MODEL,
+        resource_name=model.name,
+        path=model.relative_path,
+        line=line,
+        column=column,
+    )
+
+
+def _source_error(*, source: CompiledSourceView, row: _ErrorRow) -> CompilerDiagnostic:
     code, message, line, column = row
     return CompilerDiagnostic(
         phase=DiagnosticPhase.COMPILE,

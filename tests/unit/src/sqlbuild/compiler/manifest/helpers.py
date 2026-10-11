@@ -20,7 +20,13 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     LoadedMacro,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    CompiledSeedView,
+    CompiledSourceView,
+)
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSchemaFile,
     DiscoveredSeedFile,
@@ -101,7 +107,7 @@ def build_test_model(
     description: str | None = None,
     columns: tuple[SchemaColumn, ...] = (),
     meta: dict[str, object] | None = None,
-) -> CompiledModel:
+) -> CompiledModelView:
     """Build a minimal CompiledModel for manifest tests."""
 
     effective_alias: str = cast(str, (name, alias)[alias is not None])
@@ -145,7 +151,7 @@ def build_test_source(
     table: str | None = None,
     description: str | None = None,
     columns: tuple[SourceColumnEntry, ...] = (),
-) -> CompiledSource:
+) -> CompiledSourceView:
     """Build a minimal CompiledSource for manifest tests."""
 
     entry: SourceEntry = SourceEntry(
@@ -176,7 +182,7 @@ def build_test_seed(
     database: str | None = None,
     schema: str | None = "public",
     tags: tuple[str, ...] = (),
-) -> CompiledSeed:
+) -> CompiledSeedView:
     """Build a minimal CompiledSeed for manifest tests."""
 
     return CompiledSeed(
@@ -230,12 +236,12 @@ def build_test_plan_entry(
 
 def build_test_project(
     *,
-    models: tuple[CompiledModel, ...] = (),
-    sources: tuple[CompiledSource, ...] = (),
-    seeds: tuple[CompiledSeed, ...] = (),
+    models: tuple[CompiledModelView, ...] = (),
+    sources: tuple[CompiledSourceView, ...] = (),
+    seeds: tuple[CompiledSeedView, ...] = (),
     sql_hook_files: tuple[DiscoveredSqlHookFile, ...] = (),
     loaded_macros: dict[str, LoadedMacro] | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Build a minimal CompiledProject for manifest tests."""
 
     return CompiledProject(

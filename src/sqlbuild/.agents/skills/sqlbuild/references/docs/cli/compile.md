@@ -120,7 +120,7 @@ and when a provider's settings use sources SQLBuild cannot list exactly, such as
 `settings_customise_sources` or command-line parsing. The reason is logged at debug level.
 
 SQLBuild keeps one stored result per project and target under
-`target/cache/compiler-native-v1/project-reuse-v1/`. It is replaced atomically; a damaged or unreadable entry is
+`target/cache/compiler-native-v1/project-reuse-v2/`. It is replaced atomically; a damaged or unreadable entry is
 ignored and compile runs in full. Storing a result normally takes a fraction of a second after the
 report is ready. When it has to hash a lot of data or the project has very many files, compile
 prints `Recording compile for reuse...` and a completion line to stderr before the report.
@@ -129,7 +129,8 @@ prints `Recording compile for reuse...` and a completion line to stderr before t
 
 Any change runs the whole compile again: every model, test, and audit is rendered again, and
 contracts and semantic validation run for the whole project. No render is carried over from the
-previous compile; rendering runs natively and does not run unchanged macro calls again. A few
+previous compile; rendering runs natively and does not run unchanged macro calls again. Every
+model's SQL references are scanned again too; no reference scan is kept between compiles. A few
 caches under `target/cache/` shorten the rest:
 
 - An unchanged model takes its column analysis from `model-analyses.bin`. Entries are keyed by

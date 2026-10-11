@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine.ruleset import evaluate_project
 from sqlbuild.rule_engine.models import RulesConfig, RulesResult
 
 
 def evaluate(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     config: RulesConfig,
     project_dir: Path,
     dialect: str = "generic",

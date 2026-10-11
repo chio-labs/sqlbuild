@@ -25,3 +25,12 @@ class BareTargetRefactorTestCase:
     expected_path: str
     expected_fragment: str
     expected_missing_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeEditCountTestCase:
+    description: str
+    command: str
+    target: str
+    new_name: str | None
+    expected_native_counts: dict[str, dict[str, int]]

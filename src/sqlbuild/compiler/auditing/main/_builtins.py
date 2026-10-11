@@ -5,24 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from textwrap import dedent
 
-from sqlbuild.compiler.auditing.constants import (
-    BUILT_IN_AUDIT_NAMES,
-    BUILT_IN_AUDIT_SHADOW_CODE,
-)
-from sqlbuild.compiler.compile.models import CompilerDiagnostic
-from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import DiscoveredAuditBlock, DiscoveredAuditFile
 
 
-def build_builtin_audit_resolution(
-    project_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
-) -> tuple[
-    dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
-    tuple[CompilerDiagnostic, ...],
-]:
-    """Return built-in-aware generic audit definitions and shadow diagnostics."""
+def builtin_audit_definitions() -> tuple[DiscoveredAuditFile, ...]:
+    """Every built-in generic audit definition, which project definitions override by name."""
 
-    merged: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = {
+    definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]] = {
         "accepted_values": _build_audit_definition(
             name="accepted_values",
             sql_body=dedent(
@@ -72,35 +61,7 @@ def build_builtin_audit_resolution(
             ).strip(),
         ),
     }
-    merged.update(project_definitions)
-    return merged, _build_builtin_audit_shadow_diagnostics(project_definitions)
-
-
-def _build_builtin_audit_shadow_diagnostics(
-    project_definitions: dict[str, tuple[DiscoveredAuditFile, DiscoveredAuditBlock]],
-) -> tuple[CompilerDiagnostic, ...]:
-    """Build warnings for project generic audits that override built-ins."""
-
-    diagnostics: list[CompilerDiagnostic] = []
-    definition_name: str
-    definition: tuple[DiscoveredAuditFile, DiscoveredAuditBlock]
-    for definition_name, definition in sorted(project_definitions.items()):
-        if definition_name not in BUILT_IN_AUDIT_NAMES:
-            continue
-        diagnostics.append(
-            CompilerDiagnostic(
-                phase=DiagnosticPhase.COMPILE,
-                severity=DiagnosticSeverity.WARNING,
-                code=BUILT_IN_AUDIT_SHADOW_CODE,
-                message=(
-                    f"project audit '{definition_name}' overrides built-in audit "
-                    f"'{definition_name}'"
-                ),
-                path=definition[0].relative_path,
-                help="rename the project audit if this override is unintended",
-            )
-        )
-    return tuple(diagnostics)
+    return tuple(audit_file for audit_file, _ in definitions.values())
 
 
 def _build_audit_definition(

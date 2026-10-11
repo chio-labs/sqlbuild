@@ -11,13 +11,25 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
 from sqlbuild.compiler.model_loop.constants import DECLARATION_KIND_CODES, NO_DECLARATION_KIND
+from sqlbuild.compiler.scopes.exceptions import (
+    InvalidQualifiedIdentityError,
+    InvalidScopePathError,
+)
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationVisibilityIndex,
+    OwnershipRoot,
+    ResourceIdentity,
+    ResourceRecord,
     ScopeLookup,
     VisibilityRecord,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind, VisibilityReason
+from sqlbuild.compiler.scopes.types import (
+    DeclarationKind,
+    ResourceKind,
+    ScopeKind,
+    VisibilityReason,
+)
 
 
 def build_native_declaration_contexts(
@@ -59,11 +71,28 @@ def build_native_declaration_contexts(
             "allocate": object.__new__,
             "reasons": {reason.value: reason for reason in VisibilityReason},
         },
-        {
-            "identity_keys": identity_keys,
-            "private_positions": index.private_positions,
-            "grants_by_resource": lookup.grants_by_resource,
-        },
+        (
+            {
+                "identity_keys": identity_keys,
+                "private_positions": index.private_positions,
+                "grants_by_resource": lookup.grants_by_resource,
+            },
+            {
+                "resources_by_path": lookup.resources_by_path,
+                "resources": lookup.resources,
+                "declarations": lookup.declarations,
+                "index_declarations": lookup.index.declarations,
+                "resource_record": ResourceRecord,
+                "ownership_root": OwnershipRoot,
+                "resource_identity": ResourceIdentity,
+                "declaration_identity": DeclarationIdentity,
+                "resource_kind": ResourceKind,
+                "declaration_kind": DeclarationKind,
+                "private_scope": ScopeKind.PRIVATE,
+                "identity_error": InvalidQualifiedIdentityError,
+                "path_error": InvalidScopePathError,
+            },
+        ),
     )
 
 

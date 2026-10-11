@@ -1,4 +1,7 @@
+pub mod bytes_digest;
+pub mod compiled_code_identity;
 pub mod content_digest;
 pub mod digest_files;
 pub mod fingerprint_project_files;
 pub mod hex_digest;
+pub mod installed_code_identity;

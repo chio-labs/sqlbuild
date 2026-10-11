@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.integrations.dbt._helpers.cli.runner import build_dbt_ls_argv
 from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
 from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
@@ -720,7 +720,7 @@ def test_given_dbt_interop_inputs_when_planning_then_returns_expected_plan(
     test_case: DbtPlanOrchestrationTestCase,
 ) -> None:
     manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=test_case.manifest_data)
-    project: CompiledProject = build_compiled_project_with_model_specs(
+    project: CompiledProjectView = build_compiled_project_with_model_specs(
         sql_by_model_name=test_case.sqlbuild_model_sql_by_name,
         tags_by_model_name=test_case.sqlbuild_model_tags_by_name,
         path_by_model_name=test_case.sqlbuild_model_path_by_name,
@@ -798,7 +798,7 @@ def test_given_failing_dbt_ls_when_planning_then_raises_coded_error(
     test_case: DbtPlanOrchestrationErrorTestCase,
 ) -> None:
     manifest: DbtManifestIndex = build_dbt_manifest_index(raw_data=_MANIFEST_DATA)
-    project: CompiledProject = build_compiled_project_with_model_specs(
+    project: CompiledProjectView = build_compiled_project_with_model_specs(
         sql_by_model_name=_SQLBUILD_SQL,
         tags_by_model_name=_SQLBUILD_TAGS,
         path_by_model_name=_SQLBUILD_PATHS,

@@ -549,6 +549,7 @@ fn metadata_model(name: &str, query_sql: &str, checked: bool) -> MetadataModel {
         ],
         cursor: Some("label".to_owned()),
         cursor_type: Some("timestamp".to_owned()),
+        audits: Vec::new(),
     }
 }
 
@@ -559,6 +560,7 @@ pub(crate) fn metadata_request(test_case: &MetadataTestCase) -> MetadataRequest 
                      __udf(\"label_status\")(o.status, 1) AS label\nFROM __ref(\"stg\") AS o";
     MetadataRequest {
         dialect: Some(test_case.dialect.to_owned()),
+        quoted_ignore_case: false,
         return_types: Vec::new(),
         functions: vec![
             MetadataFunction {
@@ -654,6 +656,7 @@ pub(crate) fn expected_checked_outcome() -> MetadataOutcome {
                         10,
                     ),
                 ],
+                audits: Vec::new(),
                 references: vec![
                     metadata_finding(
                         "B300",

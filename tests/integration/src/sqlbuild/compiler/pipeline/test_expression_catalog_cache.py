@@ -1,7 +1,6 @@
 """Expression schemas are memoized only within their owning compiler catalog."""
 
 import json
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +8,8 @@ import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     ExpressionBatchCase,
@@ -118,7 +118,7 @@ def test_given_restored_project_without_catalog_when_reading_shapes_then_infers_
         f"  - name: {name}\n    description: Test source {name}.\n    expression: {expression}\n"
         for name, expression in test_case.expressions.items()
     )
-    project: CompiledProject = compiled_project(
+    project: CompiledProjectView = compiled_project(
         project_dir=tmp_path,
         files={
             "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
@@ -127,7 +127,7 @@ def test_given_restored_project_without_catalog_when_reading_shapes_then_infers_
     )
 
     restored: dict[str, dict[str, str]] = semantic_shapes(
-        project=replace(project, binding_catalog=None)
+        project=project_with(project=project, binding_catalog=None)
     )
 
     assert {name: restored.get(name) for name in test_case.expected_shapes} == (

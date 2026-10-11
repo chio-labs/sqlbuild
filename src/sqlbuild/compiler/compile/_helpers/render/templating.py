@@ -6,7 +6,7 @@ from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
-from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS, TEMPLATE_OPEN_TOKEN
+from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.model_config.constants import ENVIRONMENT_READ
 from sqlbuild.compiler.model_config.main._expand_native_config_templates import (
@@ -23,8 +23,17 @@ from sqlbuild.compiler.model_config.models import (
 def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     """Resolve merged effective vars with recursive `${name}` expansion."""
 
-    for name, value in raw_values.items():
-        _reject_lone_surrogates(name=name, value=value, path="its value")
+    site: tuple[str, str, int] | None = _native.lone_surrogate_site(raw_values)
+    if site is not None:
+        name, path, byte_offset = site
+        raise CompileInputError(
+            f"Variable '{name}' holds a lone surrogate in {path} at UTF-8 byte "
+            f"{byte_offset}, which is not valid Unicode text",
+            help=(
+                f"Set '{name}' to valid Unicode text in --vars or the [vars] table; the "
+                "value is not shown because it may be a secret"
+            ),
+        )
     outcome: tuple[object, list[tuple[str, str]]] = _native.expand_effective_vars(
         raw_values, UnicodeEnvironment()
     )
@@ -32,41 +41,6 @@ def expand_effective_vars(raw_values: dict[str, object]) -> dict[str, object]:
     if isinstance(outcome[0], _native.NativeConfigError):
         raise native_config_error(error=outcome[0])
     return cast(dict[str, object], outcome[0])
-
-
-def _reject_lone_surrogates(*, name: str, value: object, path: str) -> None:
-    if isinstance(value, dict):
-        for key, item in value.items():
-            _reject_lone_surrogates(name=name, value=key, path=f"{path} key")
-            _reject_lone_surrogates(name=name, value=item, path=f"{path}[{key!a}]")
-    elif isinstance(value, list | tuple):
-        for index, item in enumerate(value):
-            _reject_lone_surrogates(name=name, value=item, path=f"{path}[{index}]")
-    elif isinstance(value, str):
-        try:
-            _ = value.encode("utf-8")
-        except UnicodeEncodeError as error:
-            byte_offset: int = len(value[: error.start].encode("utf-8"))
-            raise CompileInputError(
-                f"Variable '{name}' holds a lone surrogate in {path} at UTF-8 byte "
-                f"{byte_offset}, which is not valid Unicode text",
-                help=(
-                    f"Set '{name}' to valid Unicode text in --vars or the [vars] table; the "
-                    "value is not shown because it may be a secret"
-                ),
-            ) from None
-
-
-def contains_template_data(value: object) -> bool:
-    """Return whether a supported nested value contains a template token."""
-
-    if isinstance(value, str):
-        return TEMPLATE_OPEN_TOKEN in value
-    if isinstance(value, dict):
-        return any(contains_template_data(item) for item in value.values())
-    if isinstance(value, list | tuple):
-        return any(contains_template_data(item) for item in value)
-    return False
 
 
 def expand_template_data(

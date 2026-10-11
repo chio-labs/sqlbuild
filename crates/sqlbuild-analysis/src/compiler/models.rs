@@ -308,3 +308,88 @@ pub enum SqlTestAssemblyFailure {
     /// An internal native failure.
     Internal(String),
 }
+
+/// One SQL test block to extract: its SQL, file label, mode and extraction stage.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlTestRequest {
+    pub sql: String,
+    pub file_label: String,
+    pub mode: String,
+    /// The test before macro and variable expansion, where macro calls are still authored.
+    #[serde(default)]
+    pub raw: bool,
+    /// Read only the CTE names and body offsets of the authored block, before any expansion.
+    #[serde(default)]
+    pub authored: bool,
+    /// The authored text is a scenario rather than a SQL test block.
+    #[serde(default)]
+    pub scenario: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SqlTestCteText(pub String, pub String);
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SqlTestClassification {
+    /// Each CTE's name, its code-point offset in the authored block and its stripped body.
+    Authored { ctes: Vec<(String, usize, String)> },
+    Model {
+        mode: String,
+        authored: Vec<SqlTestCteText>,
+        #[serde(rename = "macroMocks")]
+        macro_mocks: Vec<(String, String)>,
+        #[serde(rename = "mockModels")]
+        mock_models: Vec<String>,
+        #[serde(rename = "mockSources")]
+        mock_sources: Vec<String>,
+        #[serde(rename = "mockSeeds")]
+        mock_seeds: Vec<String>,
+        #[serde(rename = "mockDbtRefs")]
+        mock_dbt_refs: Vec<String>,
+        #[serde(rename = "mockTableFunctions")]
+        mock_table_functions: Vec<String>,
+        expected: Vec<SqlTestCteText>,
+        #[serde(rename = "expectedModels")]
+        expected_models: Vec<String>,
+        assertions: Vec<SqlTestCteText>,
+        #[serde(rename = "assertionNames")]
+        assertion_names: Vec<String>,
+    },
+    Direct {
+        mode: String,
+        helpers: Vec<SqlTestCteText>,
+        actual: SqlTestCteText,
+        expected: SqlTestCteText,
+        /// Whether a helper or the expected CTE has a malformed reference call (P012).
+        #[serde(rename = "invalidCalls")]
+        invalid_calls: bool,
+    },
+}
+
+/// Why extracting one test of a batch failed, and the authored text the author can act on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SqlTestExtractionFailure {
+    /// The failing test's position in the batch.
+    pub index: usize,
+    pub message: String,
+    pub help: Option<String>,
+    /// The offending text and its code-point offset in the test SQL.
+    pub token: Option<(String, usize)>,
+}
+
+/// One scenario's top-level CTEs, classified by role.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlScenarioCtes {
+    pub authored: Vec<(String, String)>,
+    pub expected: Vec<(String, String)>,
+    pub assertions: Vec<(String, String)>,
+    pub source_fixtures: Vec<String>,
+    pub ref_fixtures: Vec<String>,
+    pub seed_fixtures: Vec<String>,
+    pub dbt_ref_fixtures: Vec<String>,
+    pub expected_models: Vec<String>,
+    pub assertion_names: Vec<String>,
+}

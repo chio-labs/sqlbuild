@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.contracts._test_types import (
     FormerlyDeferredContractTestCase,
     GeneratedContractTestCase,
@@ -56,10 +56,10 @@ def test_given_generated_contracts_when_validating_then_every_contract_family_is
     rng: random.Random = random.Random(test_case.seed)
     record: NativeContractRecord = record_native_outcomes(monkeypatch=monkeypatch)
     project_dir: Path = tmp_path / "project"
-    base: CompiledProject = compiled_contract_project(project_dir=project_dir)
+    base: CompiledProjectView = compiled_contract_project(project_dir=project_dir)
     golden: list[GoldenEntry] = []
     for _ in range(test_case.variants):
-        project: CompiledProject = perturbed_project(project=base, rng=rng)
+        project: CompiledProjectView = perturbed_project(project=base, rng=rng)
         golden.append(
             golden_entry(
                 "contracts",
@@ -164,7 +164,7 @@ def test_given_generated_contracts_when_validating_then_every_contract_family_is
 def test_given_input_python_once_answered_when_validating_then_native_diagnostics_are_returned(
     test_case: FormerlyDeferredContractTestCase, tmp_path: Path
 ) -> None:
-    project: CompiledProject = with_declared_type(
+    project: CompiledProjectView = with_declared_type(
         project=compiled_contract_project(project_dir=tmp_path / "project"),
         declared_type=test_case.declared_type,
     )
@@ -194,7 +194,7 @@ def test_given_input_python_once_answered_when_validating_then_native_diagnostic
 def test_given_unknown_dialect_when_validating_typed_contracts_then_python_error_is_raised(
     test_case: UnknownDialectContractTestCase, tmp_path: Path
 ) -> None:
-    project: CompiledProject = compiled_contract_project(project_dir=tmp_path / "project")
+    project: CompiledProjectView = compiled_contract_project(project_dir=tmp_path / "project")
 
     with pytest.raises(ValueError, match=test_case.expected_error):
         _ = contract_diagnostics(project=project, dialect=test_case.dialect)

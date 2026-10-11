@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledModel
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
@@ -20,7 +20,7 @@ from sqlbuild.compiler.planner.models import ModelPlanEntry
 
 def build_model_node(
     *,
-    model: CompiledModel,
+    model: CompiledModelView,
     plan_entry: ModelPlanEntry | None,
     project_name: str,
     python_hook_metadata: dict[str, dict[str, object]] | None = None,
@@ -75,7 +75,7 @@ def build_model_node(
     }
 
 
-def _extract_tags(model: CompiledModel) -> list[str]:
+def _extract_tags(model: CompiledModelView) -> list[str]:
     """Extract tags from model config."""
 
     raw: object | None = model.config.values.get("tags")
@@ -86,7 +86,7 @@ def _extract_tags(model: CompiledModel) -> list[str]:
     return []
 
 
-def _extract_description(model: CompiledModel) -> str:
+def _extract_description(model: CompiledModelView) -> str:
     """Extract description from schema entry."""
 
     if model.schema_entry is not None and model.schema_entry.description is not None:
@@ -95,7 +95,7 @@ def _extract_description(model: CompiledModel) -> str:
 
 
 def _extract_meta(
-    *, model: CompiledModel, python_hook_metadata: dict[str, dict[str, object]]
+    *, model: CompiledModelView, python_hook_metadata: dict[str, dict[str, object]]
 ) -> dict[str, object]:
     """Extract meta from schema entry."""
 

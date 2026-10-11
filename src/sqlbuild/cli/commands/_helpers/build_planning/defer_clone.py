@@ -24,11 +24,13 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
-    CompiledModel,
     CompiledObjectKey,
-    CompiledProject,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone_with_options import run_clone_pipeline_with_options
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
@@ -78,10 +80,10 @@ def build_defer_clone_boundary_selectors(
     cli_vars: dict[str, object] | None,
     project_dir: Path,
     auto_load_sources: bool,
-) -> tuple[CompiledProject, tuple[str, ...], tuple[str, ...], int]:
+) -> tuple[CompiledProjectView, tuple[str, ...], tuple[str, ...], int]:
     """Resolve out-of-selection clone boundaries and the view chain to rebuild over them."""
 
-    project: CompiledProject = build_compiled_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         selected_target=selected_target,
@@ -110,7 +112,7 @@ def build_defer_clone_boundary_selectors(
 def _scope_is_recreated(*, scope: PlannerScope, key: CompiledObjectKey) -> bool:
     if key.resource_type in {CompiledResourceType.UDF, CompiledResourceType.TABLE_FN}:
         return True
-    model: CompiledModel | None = scope.models_by_name.get(key.name)
+    model: CompiledModelView | None = scope.models_by_name.get(key.name)
     if model is None:
         return False
     return (
@@ -159,7 +161,7 @@ def selected_executable_model_count(*, scope: PlannerScope) -> int:
     for key in scope.selected_keys:
         if key.resource_type != CompiledResourceType.MODEL:
             continue
-        model: CompiledModel | None = scope.models_by_name.get(key.name)
+        model: CompiledModelView | None = scope.models_by_name.get(key.name)
         if model is not None and model.config.values.get("enabled") is False:
             continue
         count += 1
@@ -185,7 +187,7 @@ def run_defer_clone_boundary_prephase(
             boundary_selectors=(),
             view_chain_selectors=(),
         )
-    cloned_project: CompiledProject
+    cloned_project: CompiledProjectView
     boundary_selectors: tuple[str, ...]
     view_chain_selectors: tuple[str, ...]
     (

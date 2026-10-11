@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine import custom_rules
 from sqlbuild.rule_engine.models import CustomRulesOutcome
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
@@ -94,8 +94,10 @@ def test_given_recorded_reads_when_one_model_changes_then_only_dependent_results
     test_case: CustomRuleReadTrackingTestCase,
 ) -> None:
     _ = write_rule(root=tmp_path, body=test_case.body, module_import=test_case.module_prelude)
-    original: CompiledProject = two_model_project(customers_sql=_CUSTOMERS_SQL, customers_config={})
-    edited: CompiledProject = two_model_project(
+    original: CompiledProjectView = two_model_project(
+        customers_sql=_CUSTOMERS_SQL, customers_config={}
+    )
+    edited: CompiledProjectView = two_model_project(
         customers_sql=test_case.edited_customers_sql,
         customers_config=test_case.edited_customers_config,
     )
@@ -146,7 +148,9 @@ def test_given_private_view_access_when_evaluating_repeatedly_then_rule_is_never
     test_case: CustomRuleUncacheableTestCase,
 ) -> None:
     _ = write_rule(root=tmp_path, body=test_case.body)
-    project: CompiledProject = two_model_project(customers_sql=_CUSTOMERS_SQL, customers_config={})
+    project: CompiledProjectView = two_model_project(
+        customers_sql=_CUSTOMERS_SQL, customers_config={}
+    )
 
     cold: CustomRulesOutcome = evaluate_cached_custom_rules(
         project=project, project_dir=tmp_path, cache_enabled=True
@@ -193,7 +197,9 @@ def test_given_untracked_rule_reading_hidden_file_when_file_changes_then_rule_re
         body=test_case.body,
         module_import=test_case.module_prelude,
     )
-    project: CompiledProject = two_model_project(customers_sql=_CUSTOMERS_SQL, customers_config={})
+    project: CompiledProjectView = two_model_project(
+        customers_sql=_CUSTOMERS_SQL, customers_config={}
+    )
 
     cold: CustomRulesOutcome = evaluate_cached_custom_rules(
         project=project, project_dir=tmp_path, cache_enabled=True
@@ -244,7 +250,9 @@ def test_given_file_edited_while_rules_run_when_rerunning_then_new_contents_are_
         body=test_case.body,
         module_import=test_case.module_prelude,
     )
-    project: CompiledProject = two_model_project(customers_sql=_CUSTOMERS_SQL, customers_config={})
+    project: CompiledProjectView = two_model_project(
+        customers_sql=_CUSTOMERS_SQL, customers_config={}
+    )
     run_host: Callable[..., object] = custom_rules.run_custom_hosts
 
     def run_host_then_edit(**kwargs: Any) -> object:
@@ -286,7 +294,9 @@ def test_given_custom_rule_cache_from_another_native_build_when_evaluating_then_
     test_case: NativeBuildIdentityTestCase,
 ) -> None:
     _ = write_rule(root=tmp_path, body=_FLAG_ORDERS.format(condition="True").strip())
-    project: CompiledProject = two_model_project(customers_sql=_CUSTOMERS_SQL, customers_config={})
+    project: CompiledProjectView = two_model_project(
+        customers_sql=_CUSTOMERS_SQL, customers_config={}
+    )
 
     cold: CustomRulesOutcome = evaluate_cached_custom_rules(
         project=project, project_dir=tmp_path, cache_enabled=True

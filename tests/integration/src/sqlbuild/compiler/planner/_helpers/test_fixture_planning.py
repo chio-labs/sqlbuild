@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
@@ -66,7 +66,7 @@ def test_given_partial_fixture_when_compiling_and_planning_then_completes_requir
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     adapter: DuckDbAdapter = DuckDbAdapter()
 
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )
@@ -135,7 +135,7 @@ def test_given_untyped_null_fixture_when_planning_then_applies_authoritative_typ
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
     adapter: DuckDbAdapter = DuckDbAdapter()
 
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )

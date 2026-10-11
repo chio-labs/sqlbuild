@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,
@@ -40,7 +41,7 @@ from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
 def resolve_static_command_scope_impl(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selection: PlannerSelection,
     auto_load_sources: bool = False,
 ) -> PlannerScope:
@@ -55,7 +56,7 @@ def resolve_static_command_scope_impl(
 
 def resolve_static_relation_context_impl(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     deferral: DeferralInputs | None = None,
@@ -80,7 +81,7 @@ def resolve_static_relation_context_impl(
 
 def build_audit_command_plan_impl(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
@@ -108,7 +109,7 @@ def build_audit_command_plan_impl(
 
 def build_test_command_plan_impl(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     adapter: BaseAdapter,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
@@ -168,7 +169,7 @@ def build_test_command_plan_impl(
 
 def build_seed_command_plan_impl(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
     fingerprints: dict[str, Fingerprint] | None = None,
@@ -212,7 +213,7 @@ def build_seed_command_plan_impl(
 
 
 def build_relation_command_plan_impl(
-    *, project: CompiledProject, scope: PlannerScope, relations: PlannerRelationsContext
+    *, project: CompiledProjectView, scope: PlannerScope, relations: PlannerRelationsContext
 ) -> PlanOutput:
     """Project only static relation data for Python checks and scenarios."""
 
@@ -221,7 +222,7 @@ def build_relation_command_plan_impl(
 
 def _base_plan_output(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     scope: PlannerScope,
     relations: PlannerRelationsContext,
     execution_order: tuple[CompiledObjectKey, ...] | None = None,

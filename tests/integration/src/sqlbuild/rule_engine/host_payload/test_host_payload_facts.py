@@ -5,6 +5,10 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import (
+    compiled_project_record,
+)
 from sqlbuild.rule_engine._helpers.engine.custom_rules import host_project
 from sqlbuild.rule_engine._helpers.host.custom_host_pool import host_payload_project
 from sqlbuild.rule_engine.classes.project_tree import public_model
@@ -108,9 +112,9 @@ from tests.integration.src.sqlbuild.rule_engine.host_payload.helpers import (
 def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostPayloadFactsTestCase
 ) -> None:
-    project: CompiledProject = compile_files(root=tmp_path, files=test_case.project_files)
+    project: CompiledProjectView = compile_files(root=tmp_path, files=test_case.project_files)
     trimmed_fields: dict[type[object], set[str]] = record_trimmed_fields(monkeypatch)
-    trimmed: CompiledProject = host_payload_project(host_project(project))
+    trimmed: CompiledProjectView = host_payload_project(host_project(project))
 
     full_digests: dict[FactKey, tuple[str, str]] = fact_digests(project=project, root=tmp_path)
     trimmed_digests: dict[FactKey, tuple[str, str]] = fact_digests(project=trimmed, root=tmp_path)
@@ -118,7 +122,7 @@ def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_un
     assert trimmed_digests == full_digests
     assert tuple(map(public_model, trimmed.models)) == tuple(map(public_model, project.models))
     assert (
-        dropped_fields(before=project, after=trimmed)
+        dropped_fields(before=compiled_project_record(project), after=trimmed)
         == trimmed_fields[CompiledProject] - test_case.expected_unpopulated_trimmed_fields
     )
     assert (

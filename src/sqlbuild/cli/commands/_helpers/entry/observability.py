@@ -21,6 +21,7 @@ from sqlbuild.cli.commands.constants import (
 from sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture import (
     configured_output_capture_scope,
 )
+from sqlbuild.cli.entry.main._withhold_launch_record import withhold_launch_record
 from sqlbuild.cli.output.classes.terminal_event_index import (
     TerminalEventIndex,
     terminal_event_index_scope,
@@ -114,6 +115,7 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
             extensions.command_output_sinks
         )
         if event_exporters or command_output_sinks:
+            withhold_launch_record()
             exporter_delivery: EventExporterDispatcher = EventExporterDispatcher(
                 shutdown_timeout_seconds=(
                     DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS

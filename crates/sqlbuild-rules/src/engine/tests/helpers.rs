@@ -2,9 +2,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
-use crate::engine::main::evaluate::evaluate_json;
-use crate::engine::main::evaluate_parsed::evaluate_parsed;
-use crate::engine::main::parse_parts::parse_parts;
+use crate::engine::_helpers::evaluation::evaluate_json;
+use crate::engine::_helpers::evaluation::evaluate_request as evaluate_parsed;
+use crate::engine::_helpers::evaluation::parse_parts;
 
 pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
     json!({

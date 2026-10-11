@@ -1,14 +1,8 @@
-use crate::errors::ConfigErrorKind;
-use crate::project::models::{LocalConfigFile, ProjectConfigFile};
+use crate::project::errors::ConfigFailure;
 
-pub(super) struct ProjectConfigTestCase {
+pub(super) struct ProjectFailureTestCase {
     pub(super) description: &'static str,
-    pub(super) files: &'static [(&'static str, &'static str)],
-    pub(super) expected_config: Result<ProjectConfigFile, ConfigErrorKind>,
-}
-
-pub(super) struct LocalConfigTestCase {
-    pub(super) description: &'static str,
-    pub(super) files: &'static [(&'static str, &'static str)],
-    pub(super) expected_config: Result<LocalConfigFile, ConfigErrorKind>,
+    pub(super) project: &'static str,
+    pub(super) local: &'static str,
+    pub(super) expected_failure: Option<ConfigFailure>,
 }

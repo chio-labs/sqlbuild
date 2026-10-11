@@ -23,4 +23,5 @@ class NativeVersionTestCase:
     workspace_version: str
     pyproject_version: str
     release_version: str
+    cli_version: str
     expected_errors: tuple[str, ...]

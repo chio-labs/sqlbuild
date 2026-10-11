@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.classes.project_tree import ProjectTree
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
@@ -24,7 +24,7 @@ def linked_project_tree(tmp_path: Path) -> ProjectTree:
     (root / "models" / "customers.sql").symlink_to(outside / "customers.sql")
     (root / "linked_models").symlink_to(root / "models", target_is_directory=True)
     (root / "outside_models").symlink_to(outside, target_is_directory=True)
-    project: CompiledProject = build_project(
+    project: CompiledProjectView = build_project(
         name="orders", relative_path="models/orders.sql", sql=ORDERS_SQL, config_values={}
     )
     return ProjectTree(project_dir=root, project=project)

@@ -28,3 +28,7 @@ pub const MACRO_TEST_LEXICAL_FILE: &str = "__macro_test__.sql";
 pub const PATH_RESOURCE_PREFIX: &str = "<path:";
 /// The suffix of the synthetic model identity a lexical path resolves as.
 pub const PATH_RESOURCE_SUFFIX: &str = ">";
+/// Python's `QUALIFIED_IDENTITY_SEPARATOR`.
+pub const IDENTITY_SEPARATOR: char = ':';
+/// The separator between a private declaration's owner and its name.
+pub const OWNER_SEPARATOR: char = '.';

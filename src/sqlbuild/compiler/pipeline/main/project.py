@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
@@ -17,7 +17,7 @@ def compile_project(
     resolved_connection: dict[str, object] | None = None,
     no_sql_validation: bool = False,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-) -> CompiledProject:
+) -> CompiledProjectView:
     """Compile discovered inputs into a target-defaulted project view."""
 
     return build_compiled_project(

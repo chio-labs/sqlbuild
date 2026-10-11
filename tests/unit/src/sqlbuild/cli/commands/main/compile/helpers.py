@@ -3,7 +3,6 @@ from __future__ import annotations
 import errno
 import os
 from collections.abc import Callable
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +23,13 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     FunctionArgument,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType, FunctionLanguage
+from sqlbuild.compiler.compile.types import (
+    CompiledModelView,
+    CompiledProjectView,
+    CompiledResourceType,
+    FunctionLanguage,
+)
+from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
@@ -47,6 +52,7 @@ from sqlbuild.spec.contracts.models import SeedCsvSettings
 from tests.unit.src.sqlbuild.cli.commands.main.dag.helpers import (
     prepare_python_dag_project,
 )
+from tests.unit.src.sqlbuild.compiler.graph.helpers import project_graph_from_indexes
 from tests.unit.src.sqlbuild.compiler.planner._helpers.sql_test_assembly._test_types import (
     PlanTestChainTestCase,
 )
@@ -278,7 +284,7 @@ def read_target_files(target_dir: Path, expected_files: dict[str, str]) -> dict[
     }
 
 
-def build_static_target_writer_project() -> CompiledProject:
+def build_static_target_writer_project() -> CompiledProjectView:
     """Build compiled project state for offline compile target writer tests."""
 
     model_key: CompiledObjectKey = CompiledObjectKey(
@@ -336,7 +342,7 @@ def build_static_target_writer_project() -> CompiledProject:
     )
 
 
-def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProject:
+def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProjectView:
     """Build a static project containing one cacheable model SQL test."""
 
     compiled_test, project = build_test_and_project(
@@ -351,14 +357,14 @@ def build_cached_target_writer_project(*, target_dir: Path) -> CompiledProject:
             expected_cte_bodies={"orders": "SELECT 2 AS order_id"},
         )
     )
-    return replace(
-        project,
+    return project_with(
+        project=project,
         compile_cache_dir=target_dir / "cache" / "compiler",
         sql_tests=(compiled_test,),
     )
 
 
-def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledProject:
+def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledProjectView:
     """Build a static cached project whose SQL test omits a required source mock."""
 
     compiled_test, project = build_test_and_project(
@@ -373,8 +379,8 @@ def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledPro
             expected_cte_bodies={"orders": "SELECT 2 AS order_id"},
         )
     )
-    return replace(
-        project,
+    return project_with(
+        project=project,
         compile_cache_dir=target_dir / "cache" / "compiler",
         sql_tests=(compiled_test,),
     )
@@ -383,7 +389,7 @@ def build_missing_mock_target_writer_project(*, target_dir: Path) -> CompiledPro
 def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
     """Build a static project graph for compile output formatter tests."""
 
-    models: list[CompiledModel] = []
+    models: list[CompiledModelView] = []
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {}
     all_keys: dict[str, CompiledObjectKey] = {}
     name: str
@@ -412,14 +418,14 @@ def build_compile_output_graph(*, model_names: tuple[str, ...]) -> ProjectGraph:
         upstream_deps[key] = ()
         all_keys[name] = key
 
-    project: CompiledProject = CompiledProject(
+    project: CompiledProjectView = CompiledProject(
         run_id="run-1",
         effective_target_name="dev",
         effective_connection={},
         effective_vars={},
         models=tuple(models),
     )
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=project,
         upstream_deps=upstream_deps,
         downstream_deps={key: () for key in upstream_deps},
@@ -439,7 +445,7 @@ def build_linear_compile_output_graph(*, model_count: int) -> ProjectGraph:
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
         model.key: () for model in graph.project.models
     }
-    first_model: CompiledModel = graph.project.models[0]
+    first_model: CompiledModelView = graph.project.models[0]
     upstream_deps[first_model.key] = ()
     for previous_model, model in zip(graph.project.models, graph.project.models[1:], strict=False):
         upstream_deps[model.key] = (previous_model.key,)
@@ -447,7 +453,7 @@ def build_linear_compile_output_graph(*, model_count: int) -> ProjectGraph:
             *downstream_deps[previous_model.key],
             model.key,
         )
-    return ProjectGraph(
+    return project_graph_from_indexes(
         project=graph.project,
         upstream_deps=upstream_deps,
         downstream_deps=downstream_deps,

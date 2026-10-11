@@ -1,174 +1,186 @@
-"""Canonical scope lookup construction implementation."""
+"""Canonical scope lookups, ordered and grouped by the native scope lookup."""
 
 from __future__ import annotations
 
-from collections import defaultdict
-from collections.abc import Callable, Hashable, Iterable
-from functools import lru_cache
+from collections.abc import Callable, Hashable, Sequence
 from types import MappingProxyType
 
-from sqlbuild.compiler.scopes._helpers.identities import format_identity
-from sqlbuild.compiler.scopes._helpers.paths import normalize_path
-from sqlbuild.compiler.scopes._helpers.visibility import build_visibility_index
+import sqlbuild._native as _native
+from sqlbuild.compiler.scopes._helpers.placement import qualified_row, root_row
+from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
+    DeclarationVisibilityIndex,
     GrantRecord,
-    InaccessibleRecord,
     ResourceIdentity,
     ResourceRecord,
     ScopeIndex,
     ScopeLookup,
     UsageRecord,
-    VisibilityRecord,
 )
+from sqlbuild.compiler.scopes.types import ResourceKind
 
-
-def group_records[Record, Key: Hashable](
-    *,
-    records: Iterable[Record],
-    key: Callable[[Record], Key],
-    sort_key: Callable[[Record], tuple[str, ...]],
-) -> MappingProxyType[Key, tuple[Record, ...]]:
-    grouped: dict[Key, list[Record]] = defaultdict(list)
-    for record in records:
-        grouped[key(record)].append(record)
-    return MappingProxyType(
-        {
-            group_key: tuple(sorted(values, key=sort_key))
-            for group_key, values in sorted(grouped.items(), key=lambda item: repr(item[0]))
-        }
-    )
+type _Groups = list[list[int]]
+type _Mappings = tuple[_Groups, _Groups, _Groups, _Groups, _Groups, _Groups, list[str]]
+type _Visibility = tuple[
+    list[int],
+    list[tuple[tuple[str, str], list[int]]],
+    list[tuple[str, list[int]]],
+    list[tuple[str, list[int]]],
+]
 
 
 def build_lookup(*, index: ScopeIndex) -> ScopeLookup:
-    resources: list[ResourceRecord] = sorted(index.resources, key=resource_sort_key)
-    declarations: list[DeclarationRecord] = sorted(index.declarations, key=declaration_sort_key)
-    resource_map: MappingProxyType[ResourceIdentity, tuple[ResourceRecord, ...]] = group_records(
-        records=resources,
-        key=lambda item: item.identity,
-        sort_key=resource_sort_key,
-    )
-    declaration_map: MappingProxyType[DeclarationIdentity, tuple[DeclarationRecord, ...]] = (
-        group_records(
-            records=declarations,
-            key=lambda item: item.identity,
-            sort_key=declaration_sort_key,
+    """The native lookup of `index`; a path the lookup rejects raises `InvalidScopePathError`."""
+
+    native: _native.NativeScopeLookup | None
+    native, (rows, error) = _native.build_native_scope_lookup(
+        (
+            [root_row(root=root) for root in index.ownership_roots],
+            [
+                (
+                    (record.identity.kind.value, record.identity.name),
+                    record.path,
+                    root_row(root=record.ownership_root),
+                )
+                for record in index.resources
+            ],
+            [
+                (
+                    qualified_row(identity=record.identity),
+                    record.path,
+                    record.line,
+                    record.column,
+                    record.scope.value,
+                    root_row(root=record.ownership_root),
+                    record.owning_path,
+                )
+                for record in index.declarations
+            ],
+            [
+                (
+                    qualified_row(identity=usage.consumer),
+                    qualified_row(identity=usage.declaration),
+                    usage.kind.value,
+                    None if usage.through is None else qualified_row(identity=usage.through),
+                )
+                for usage in index.usages
+            ],
+            [
+                (
+                    (grant.resource.kind.value, grant.resource.name),
+                    qualified_row(identity=grant.declaration),
+                    qualified_row(identity=grant.through),
+                    grant.kind.value,
+                )
+                for grant in index.grants
+            ],
+            [(item.path, item.line, item.column, item.code.value) for item in index.diagnostics],
         )
     )
-
-    paths: list[tuple[str, ResourceRecord]] = []
-    for record in resources:
-        path: str = normalize_path(path=record.path)
-        paths.append((path, record))
-    path_map: MappingProxyType[str, tuple[tuple[str, ResourceRecord], ...]] = group_records(
-        records=paths,
-        key=lambda item: item[0],
-        sort_key=lambda item: resource_sort_key(item[1]),
-    )
-
-    canonical_index: ScopeIndex = ScopeIndex(
-        ownership_roots=tuple(
-            sorted(
-                index.ownership_roots,
-                key=lambda item: (
-                    item.path,
-                    item.resource_kind.value if item.resource_kind is not None else "",
-                ),
-            )
-        ),
-        resources=tuple(resources),
-        declarations=tuple(declarations),
-        usages=tuple(sorted(index.usages, key=usage_sort_key)),
-        grants=tuple(sorted(index.grants, key=grant_sort_key)),
-        visibility=tuple(sorted(index.visibility, key=visibility_sort_key)),
-        inaccessible=tuple(sorted(index.inaccessible, key=inaccessible_sort_key)),
-        diagnostics=tuple(
-            sorted(
-                index.diagnostics,
-                key=lambda item: (
-                    item.path or "",
-                    item.line or 0,
-                    item.column or 0,
-                    item.code.value,
-                ),
-            )
-        ),
+    if rows is None:
+        raise InvalidScopePathError(error or "")
+    (roots, resources, declarations, usages, grants, diagnostics), mappings, visibility = rows
+    canonical: ScopeIndex = ScopeIndex(
+        ownership_roots=tuple(index.ownership_roots[position] for position in roots),
+        resources=tuple(index.resources[position] for position in resources),
+        declarations=tuple(index.declarations[position] for position in declarations),
+        usages=tuple(index.usages[position] for position in usages),
+        grants=tuple(index.grants[position] for position in grants),
+        visibility=index.visibility,
+        inaccessible=index.inaccessible,
+        diagnostics=tuple(index.diagnostics[position] for position in diagnostics),
         completeness=index.completeness,
     )
-    resources_by_path: dict[str, tuple[ResourceRecord, ...]] = {}
-    for path, records_for_path in path_map.items():
-        resources_by_path[path] = tuple(item[1] for item in records_for_path)
+    return project_lookup(
+        index=canonical,
+        records=(index.resources, index.declarations, index.usages, index.grants),
+        mappings=mappings,
+        visibility=visibility,
+        native=native,
+    )
+
+
+def project_lookup(
+    *,
+    index: ScopeIndex,
+    records: tuple[
+        Sequence[ResourceRecord],
+        Sequence[DeclarationRecord],
+        Sequence[UsageRecord],
+        Sequence[GrantRecord],
+    ],
+    mappings: _Mappings,
+    visibility: _Visibility,
+    native: object | None,
+) -> ScopeLookup:
+    """Project native lookup groups over `records` as a `ScopeLookup` of canonical `index`."""
+
+    resources, declarations, usages, grants = records
+    global_positions, private_positions, local_positions, inherited_positions = visibility
     return ScopeLookup(
-        index=canonical_index,
-        resources=resource_map,
-        resources_by_path=MappingProxyType(resources_by_path),
-        declarations=declaration_map,
-        usages_by_consumer=group_records(
-            records=canonical_index.usages, key=lambda item: item.consumer, sort_key=usage_sort_key
+        index=index,
+        resources=_mapping(groups=mappings[0], records=resources, key=_resource_identity),
+        resources_by_path=_path_mapping(groups=mappings[1], records=resources, paths=mappings[6]),
+        declarations=_mapping(groups=mappings[2], records=declarations, key=_declaration_identity),
+        usages_by_consumer=_mapping(groups=mappings[3], records=usages, key=_usage_consumer),
+        usages_by_declaration=_mapping(groups=mappings[4], records=usages, key=_usage_declaration),
+        grants_by_resource=_mapping(groups=mappings[5], records=grants, key=_grant_resource),
+        visibility_index=DeclarationVisibilityIndex(
+            identities=tuple(record.identity for record in index.declarations),
+            global_positions=tuple(global_positions),
+            private_positions=MappingProxyType(
+                {
+                    ResourceIdentity(ResourceKind(kind), name): tuple(positions)
+                    for (kind, name), positions in private_positions
+                }
+            ),
+            local_positions=MappingProxyType(
+                {owner: tuple(positions) for owner, positions in local_positions}
+            ),
+            inherited_positions=MappingProxyType(
+                {owner: tuple(positions) for owner, positions in inherited_positions}
+            ),
         ),
-        usages_by_declaration=group_records(
-            records=canonical_index.usages,
-            key=lambda item: item.declaration,
-            sort_key=usage_sort_key,
-        ),
-        grants_by_resource=group_records(
-            records=canonical_index.grants,
-            key=lambda item: item.resource,
-            sort_key=grant_sort_key,
-        ),
-        visibility_index=build_visibility_index(declarations=canonical_index.declarations),
+        native=native,
     )
 
 
-@lru_cache(maxsize=65_536)
-def identity_key(identity: ResourceIdentity | DeclarationIdentity) -> str:
-    return format_identity(identity=identity)
+def _resource_identity(record: ResourceRecord) -> ResourceIdentity:
+    return record.identity
 
 
-def resource_sort_key(record: ResourceRecord) -> tuple[str, ...]:
-    return (identity_key(record.identity), normalize_path(path=record.path))
+def _declaration_identity(record: DeclarationRecord) -> DeclarationIdentity:
+    return record.identity
 
 
-def declaration_sort_key(record: DeclarationRecord) -> tuple[str, ...]:
-    return (
-        identity_key(record.identity),
-        normalize_path(path=record.path),
-        str(record.line),
-        str(record.column),
-    )
+def _usage_consumer(record: UsageRecord) -> ResourceIdentity | DeclarationIdentity:
+    return record.consumer
 
 
-def usage_sort_key(record: UsageRecord) -> tuple[str, ...]:
-    return (
-        identity_key(record.consumer),
-        identity_key(record.declaration),
-        record.kind.value,
-        identity_key(record.through) if record.through else "",
-    )
+def _usage_declaration(record: UsageRecord) -> DeclarationIdentity:
+    return record.declaration
 
 
-def grant_sort_key(record: GrantRecord) -> tuple[str, ...]:
-    return (
-        identity_key(record.resource),
-        identity_key(record.declaration),
-        identity_key(record.through),
-        record.kind.value,
-    )
+def _grant_resource(record: GrantRecord) -> ResourceIdentity:
+    return record.resource
 
 
-def visibility_sort_key(record: VisibilityRecord) -> tuple[str, ...]:
-    return (
-        identity_key(record.resource),
-        identity_key(record.declaration),
-        record.reason.value,
-        identity_key(record.through) if record.through else "",
-    )
+def _path_mapping(
+    *, groups: _Groups, records: Sequence[ResourceRecord], paths: list[str]
+) -> MappingProxyType[str, tuple[ResourceRecord, ...]]:
+    items: list[tuple[str, tuple[ResourceRecord, ...]]] = []
+    for group in groups:
+        items.append((paths[group[0]], tuple(records[member] for member in group)))
+    return MappingProxyType(dict(items))
 
 
-def inaccessible_sort_key(record: InaccessibleRecord) -> tuple[str, ...]:
-    return (
-        identity_key(record.resource),
-        identity_key(record.declaration),
-        record.reason.value,
-    )
+def _mapping[Record, Key: Hashable](
+    *, groups: _Groups, records: Sequence[Record], key: Callable[[Record], Key]
+) -> MappingProxyType[Key, tuple[Record, ...]]:
+    items: list[tuple[Key, tuple[Record, ...]]] = []
+    for group in groups:
+        grouped: tuple[Record, ...] = tuple(records[member] for member in group)
+        items.append((key(grouped[0]), grouped))
+    return MappingProxyType(dict(items))

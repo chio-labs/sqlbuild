@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope
 from sqlbuild.compiler.planner.models import (
@@ -17,7 +18,7 @@ from sqlbuild.compiler.planner.models import (
 
 def resolve_planner_scopes(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     selection: PlannerSelection,
     policies: PlannerPolicies,
 ) -> PlannerScopeResolution:

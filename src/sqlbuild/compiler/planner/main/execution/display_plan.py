@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
-    CompiledProject,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
     build_execution_upstream_deps,
@@ -23,7 +23,7 @@ from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def build_display_only_sqlbuild_plan(
-    *, project: CompiledProject, selected_model_names: tuple[str, ...], full_refresh: bool
+    *, project: CompiledProjectView, selected_model_names: tuple[str, ...], full_refresh: bool
 ) -> PlanOutput:
     """Build a display-only plan when warehouse planning cannot fully resolve."""
 

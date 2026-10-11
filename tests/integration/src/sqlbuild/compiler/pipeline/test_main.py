@@ -10,7 +10,8 @@ import pytest
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
-from sqlbuild.compiler.compile.models import CompiledProject, InferredColumn
+from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import InferredNullability
@@ -98,7 +99,7 @@ def test_given_typed_cte_chain_when_compiling_contract_then_type_remains_proven(
     write_repo_files(tmp_path, test_case.project_files)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=DuckDbAdapter(),
     )
@@ -609,7 +610,7 @@ def test_given_snowflake_local_target_namespace_when_compiling_then_targets_reso
     write_repo_files(tmp_path, test_case.project_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    project: CompiledProject = compile_project(
+    project: CompiledProjectView = compile_project(
         discovered_inputs=discovered_inputs,
         adapter=SnowflakeAdapter(),
         no_sql_validation=True,

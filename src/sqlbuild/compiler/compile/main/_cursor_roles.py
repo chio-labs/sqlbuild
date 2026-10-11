@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import Any, cast
 
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
-from sqlbuild.compiler.compile.models import CompiledModel, CursorInputRoles
+from sqlbuild.compiler.compile.models import CursorInputRoles
+from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.types import CursorInputRole, MicrobatchStrategy
 
 
-def resolve_cursor_input_roles(*, model: CompiledModel) -> CursorInputRoles:
+def resolve_cursor_input_roles(*, model: CompiledModelView) -> CursorInputRoles:
     """Resolve authored cursor input fields into explicit effective roles."""
 
     authored: object | None = model.config.values.get(CURSOR_INPUTS_CONFIG_KEY)

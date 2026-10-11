@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.report_query import build_scope_report
+from sqlbuild.compiler.scopes._helpers.reports import build_scope_report
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     ResourceIdentity,

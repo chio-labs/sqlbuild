@@ -17,9 +17,9 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
     infer_native_query_columns,
 )
-from sqlbuild.compiler.analysis_session.models import NativeColumnQuery
+from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeModelAnalyses
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     FallbackColumnsTestCase,
     MissingSessionAnalysisTestCase,
@@ -56,14 +56,14 @@ _HEADER: str = "MODEL (description 'Test model.', materialized view);\n"
 def test_given_unprojectable_model_when_compiling_then_parsed_tree_columns_are_kept(
     test_case: FallbackColumnsTestCase, tmp_path: Path
 ) -> None:
-    project: CompiledProject = compiled_project(
+    project: CompiledProjectView = compiled_project(
         project_dir=tmp_path,
         files={
             "sqlbuild_project.toml": _PROJECT,
             "models/orders.sql": _HEADER + test_case.query_sql,
         },
     )
-    model: CompiledModel = project.models[0]
+    model: CompiledModelView = project.models[0]
 
     assert model.inferred_columns is not None
     assert (
@@ -131,7 +131,11 @@ def test_given_table_function_when_compiling_then_body_columns_match_declaration
 def test_given_session_without_model_analysis_when_assembling_then_raises_native_compiler_error(
     test_case: MissingSessionAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(project_assembly, "analyze_model_sql", lambda _request: ({}, None))
+    monkeypatch.setattr(
+        project_assembly,
+        "analyze_model_sql",
+        lambda _request: NativeModelAnalyses(positions={}, succeeded=frozenset(), session=None),
+    )
 
     with pytest.raises(native_module.NativeCompilerError) as raised:
         _ = compiled_project(

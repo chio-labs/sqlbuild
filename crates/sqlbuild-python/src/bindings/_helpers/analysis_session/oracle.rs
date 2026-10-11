@@ -1,7 +1,8 @@
-//! Test-only hook comparing native CTE fact recovery with Python's, function for function.
+//! Test-only hooks comparing native CTE fact recovery and set-operation search with Python's.
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::assembly::analysis_session::main::names_set_operation::names_set_operation;
 use sqlbuild_analysis::assembly::analysis_session::main::recover_cte_facts::recover_cte_facts;
 use sqlbuild_analysis::assembly::analysis_session::models::{CteFactRequest, CteFacts};
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
@@ -56,7 +57,14 @@ fn _oracle_cte_fact_recovery(py: Python<'_>, request: RecoveryRow) -> PyResult<F
     })
 }
 
+/// Whether a model's SQL names a set operation, as the analysis session reads it.
+#[pyfunction]
+fn _oracle_names_set_operation(sql: &str) -> bool {
+    names_set_operation(sql)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_oracle_cte_fact_recovery, module)?)?;
+    module.add_function(wrap_pyfunction!(_oracle_names_set_operation, module)?)?;
     Ok(())
 }

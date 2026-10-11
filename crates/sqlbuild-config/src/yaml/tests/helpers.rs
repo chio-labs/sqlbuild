@@ -1,4 +1,6 @@
-use crate::models::{ConfigDate, ConfigDateTime, ConfigTime, ConfigValue};
+use crate::errors::ConfigErrorKind;
+use crate::models::{ComposedYamlNode, ConfigDate, ConfigDateTime, ConfigTime, ConfigValue};
+use crate::yaml::main::compose_marks::compose_marks;
 
 pub(super) fn text(value: &str) -> ConfigValue {
     ConfigValue::String(value.to_owned())
@@ -69,5 +71,34 @@ pub(super) fn deep_anchor_chain(links: usize, depth: usize) -> String {
     let (open, close) = ("[".repeat(depth), "]".repeat(depth));
     (1..links).fold(format!("a0: &a0 {open}x{close}\n"), |text, link| {
         format!("{text}a{link}: &a{link} {open}*a{}{close}\n", link - 1)
+    })
+}
+
+/// `(start, end, value)` of every scalar node, sorted, or the composer's error kind.
+pub(super) fn scalar_marks(text: &str) -> Result<Vec<(usize, usize, String)>, ConfigErrorKind> {
+    compose_marks(text)
+        .map(|document| {
+            let mut found: Vec<(usize, usize, String)> =
+                document.nodes.iter().filter_map(scalar_mark).collect();
+            found.sort();
+            found
+        })
+        .map_err(|error| error.kind)
+}
+
+fn scalar_mark(node: &ComposedYamlNode) -> Option<(usize, usize, String)> {
+    node.content
+        .as_scalar()
+        .map(|value| (node.start, node.end, value.to_owned()))
+}
+
+pub(super) fn owned_marks(
+    marks: Result<&[(usize, usize, &str)], ConfigErrorKind>,
+) -> Result<Vec<(usize, usize, String)>, ConfigErrorKind> {
+    marks.map(|items| {
+        items
+            .iter()
+            .map(|(start, end, value)| (*start, *end, (*value).to_owned()))
+            .collect()
     })
 }

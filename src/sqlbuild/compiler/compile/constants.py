@@ -2,24 +2,19 @@
 
 from __future__ import annotations
 
-import re
-
 from sqlbuild.compiler.compile.classes.compile_input_read_registry import (
     CompileInputReadRegistry,
 )
 from sqlbuild.compiler.compile.types import SqlTestMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
+from sqlbuild.python_nodes.types import SqlResourceRefKind
 
 PRESERVE_TARGET_VALUE: str = "preserve"
 
-SINGULAR_AUDIT_NOT_CROSS_RESOURCE_CODE: str = "P004"
 ATTACHED_AUDIT_READS_OWN_DEPENDANT_CODE: str = "P005"
-MACRO_GENERATED_REFERENCE_CODE: str = "P006"
 HOOK_READS_OWN_DEPENDANT_CODE: str = "P007"
 HARD_CODED_PROJECT_RELATION_CODE: str = "P008"
 UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE: str = "P009"
-MISSING_DESCRIPTION_CODE: str = "P010"
-CURSOR_MODEL_WITHOUT_INPUTS_CODE: str = "P011"
 REFERENCE_CALL_SYNTAX_CODE: str = "P012"
 SQL_TEST_HELPER_REFERENCE_CODE: str = "P013"
 DESCRIPTION_REQUIRED_INPUT_KINDS: dict[str, str] = {
@@ -65,23 +60,10 @@ MIGRATE_FROM_CONFIG_KEY: str = "migrate_from"
 MIGRATE_FORCE_CONFIG_KEY: str = "migrate_force"
 COLUMN_MIGRATE_FROM_KEY: str = "migrate_from"
 MAX_MICROBATCHES_CONFIG_KEY: str = "max_microbatches"
-MODEL_HEADER_METADATA_KEYS: frozenset[str] = frozenset(
-    {
-        "description",
-        "columns",
-        "dynamic_columns",
-        "model_schema",
-        "audits",
-        "audit_factories",
-        "enums",
-        "constants",
-    }
-)
 
 SQL_OPEN_PAREN_TOKEN: str = "("
 SQL_ARGUMENT_SEPARATOR_TOKEN: str = ","
 SQL_STATEMENT_TERMINATOR_TOKEN: str = ";"
-SQL_QUOTE_TOKENS: frozenset[str] = frozenset({"'", '"', "`", "$"})
 SQL_WITH_KEYWORD: str = "WITH"
 SQL_CEREMONIAL_SELECT_VALUE: str = "1"
 OMITTED_CEREMONIAL_SELECT_SQL: str = f"\nSELECT {SQL_CEREMONIAL_SELECT_VALUE}"
@@ -92,19 +74,10 @@ TABLE_FUNCTION_RETURN_KEYS: frozenset[str] = frozenset({"table"})
 MACRO_TOKEN: str = "@"
 DECLARATION_REFERENCE_NAMES: frozenset[str] = frozenset({"enum", "const"})
 MACRO_CONTEXT_PARAMETER_NAME: str = "ctx"
-MACRO_ARGUMENT_ERROR_TAG: str = "error"
-MACRO_ARGUMENT_NESTED_CALL_TAG: str = "c"
 SQL_INTERPOLATION_TOKEN: str = "@@"
 
 TEMPLATE_OPEN_TOKEN: str = "${"
 
-MACRO_CALL_PATTERN: re.Pattern[str] = re.compile(r"@[A-Za-z_][A-Za-z0-9_]*\s*\(")
-SQL_ARGUMENT_QUOTED_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
-    r"(?<!@)@'(?P<name>[A-Za-z_][A-Za-z0-9_]*)'"
-)
-SQL_ARGUMENT_RAW_PARAMETER_PATTERN: re.Pattern[str] = re.compile(
-    r"(?<!@)@(?!')(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_])(?!\s*\()"
-)
 EXPECTED_TEST_CTE_PREFIX: str = "__expected__"
 ASSERT_TEST_CTE_PREFIX: str = "__assert__"
 REF_TEST_CTE_PREFIX: str = SqlReferenceKind.REF.fixture_cte_prefix
@@ -123,8 +96,12 @@ DEFAULT_SQL_TEST_MODE: SqlTestMode = SqlTestMode.MODEL
 COMPILE_CACHE_DISABLE_ENV_VAR: str = "SQLBUILD_DISABLE_COMPILE_CACHE"
 COMPILE_CACHE_DISABLE_VALUE: str = "1"
 COMPILE_INPUT_READS: CompileInputReadRegistry = CompileInputReadRegistry()
-SQL_TEST_SCAN_STORE_FILE_NAME: str = "sql-test-scans.bin"
 RETIRED_FACT_CACHE_DIRECTORY_NAME: str = "facts-v1"
-SQL_TEST_SCAN_STORE_VERSION: str = "sql-test-scan-store-v1"
+RETIRED_REFERENCE_CACHE_DIRECTORY_NAME: str = "references-v3"
 SQL_TEST_CTE_SCAN_ALGORITHM: str = "expanded-sql-test-ctes-v1"
 SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM: str = "sql-test-expected-models-v1"
+EXPLICIT_REFERENCE_KINDS: dict[str, SqlResourceRefKind] = {
+    SqlReferenceKind.REF.value: SqlResourceRefKind.MODEL,
+    SqlReferenceKind.SOURCE.value: SqlResourceRefKind.SOURCE,
+    SqlReferenceKind.SEED.value: SqlResourceRefKind.SEED,
+}

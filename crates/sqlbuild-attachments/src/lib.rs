@@ -6,6 +6,7 @@ pub mod audits;
 pub mod ceremonial_select;
 pub mod cursor_intrinsics;
 pub mod functions;
+pub mod reference_markers;
 pub mod seeds;
 pub mod sql_lexing;
 pub mod test_parameters;

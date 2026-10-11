@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.scopes._helpers.report_projection import build_projection
+from sqlbuild.compiler.scopes._helpers.report_rows import build_projection
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.scopes.types import JsonValue
 

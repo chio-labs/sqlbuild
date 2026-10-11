@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledProject
+from sqlbuild.compiler.compile.models import CompiledObjectKey
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.graph.scope import build_planner_scope as _build
 from sqlbuild.compiler.planner.models import PlannerScope
 
 
 def build_planner_scope(
     *,
-    project: CompiledProject,
+    project: CompiledProjectView,
     select: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
     auto_load_sources: bool = False,

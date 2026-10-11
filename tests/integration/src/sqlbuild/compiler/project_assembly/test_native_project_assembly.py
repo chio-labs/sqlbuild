@@ -13,7 +13,7 @@ import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.models import CompiledProject, CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
@@ -85,7 +85,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python_g
     calls: Counter[str] = python_resource_calls(monkeypatch=monkeypatch)
     rng: random.Random = random.Random(test_case.seed)
     project_dirs: list[Path] = [tmp_path / f"project_{index}" for index in range(test_case.count)]
-    inputs: list[CompileProjectInputs] = [
+    inputs: list[CompileInputsView] = [
         project_inputs(
             project_dir=project_dir,
             files=generated_assembly_files(rng=rng, model_count=test_case.model_count),
@@ -184,7 +184,7 @@ def test_given_model_sql_the_parser_rejects_when_assembling_then_raises_python_e
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    inputs: CompileProjectInputs = project_inputs(project_dir=tmp_path, files=test_case.files)
+    inputs: CompileInputsView = project_inputs(project_dir=tmp_path, files=test_case.files)
 
     with pytest.raises(CompileInputError) as raised:
         _ = assemble_with(inputs=inputs, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch)
@@ -208,7 +208,7 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
     test_case: WindowsEnvironmentTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(os, "environ", windows_environ(test_case.environment))
-    inputs: CompileProjectInputs = project_inputs(
+    inputs: CompileInputsView = project_inputs(
         project_dir=tmp_path,
         files={
             "sqlbuild_project.toml": _PROJECT_TOML,
@@ -217,7 +217,7 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
         },
     )
 
-    native: CompiledProject = assemble_with(
+    native: CompiledProjectView = assemble_with(
         inputs=inputs, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch
     )
 
@@ -295,7 +295,7 @@ def test_given_project_when_assembling_natively_then_request_carries_graph_facts
     test_case: GraphFactsTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     requests: list[ProjectRequestRow] = record_assembly_requests(monkeypatch=monkeypatch)
-    project: CompiledProject = assemble_with(
+    project: CompiledProjectView = assemble_with(
         inputs=project_inputs(project_dir=tmp_path / "project", files=test_case.files),
         engine=CompilerEngine.NATIVE,
         monkeypatch=monkeypatch,
@@ -344,7 +344,7 @@ def test_given_native_assembly_panics_when_assembling_then_raises_without_python
     test_case: NativePanicTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
-    inputs: CompileProjectInputs = project_inputs(
+    inputs: CompileInputsView = project_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
     calls: Counter[str] = python_resource_calls(monkeypatch=monkeypatch)

@@ -7,10 +7,9 @@ from datetime import datetime
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
-    CompiledFunction,
-    CompiledModel,
     CompileSqlReference,
 )
+from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
 from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
 from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
     aligned_timestamp_bounds,
@@ -91,9 +90,9 @@ def cap_microbatch_bounds(
 
 def validate_capped_watermark_inputs(
     *,
-    model: CompiledModel,
-    models_by_name: dict[str, CompiledModel],
-    functions_by_name: dict[str, CompiledFunction] | None = None,
+    model: CompiledModelView,
+    models_by_name: dict[str, CompiledModelView],
+    functions_by_name: dict[str, CompiledFunctionView] | None = None,
 ) -> None:
     """Reject capped producers feeding microbatch watermark inputs."""
 
@@ -110,7 +109,7 @@ def validate_capped_watermark_inputs(
             models_by_name=models_by_name,
             functions_by_name=functions_by_name or {},
         )
-        producer: CompiledModel | None = _find_capped_producer_ancestor(
+        producer: CompiledModelView | None = _find_capped_producer_ancestor(
             reference=ref,
             models_by_name=models_by_name,
             functions_by_name=functions_by_name or {},
@@ -131,9 +130,9 @@ def validate_capped_watermark_inputs(
 def _find_capped_producer_ancestor(
     *,
     reference: CompileSqlReference,
-    models_by_name: dict[str, CompiledModel],
-    functions_by_name: dict[str, CompiledFunction],
-) -> CompiledModel | None:
+    models_by_name: dict[str, CompiledModelView],
+    functions_by_name: dict[str, CompiledFunctionView],
+) -> CompiledModelView | None:
     """Return the first capped microbatch model in a reference's upstream lineage."""
 
     pending: list[CompileSqlReference] = [reference]
@@ -145,7 +144,7 @@ def _find_capped_producer_ancestor(
             continue
         visited.add(identity)
         if current.ref_kind == SqlReferenceKind.REF:
-            producer: CompiledModel | None = models_by_name.get(current.ref_name)
+            producer: CompiledModelView | None = models_by_name.get(current.ref_name)
             if producer is None:
                 continue
             action: MicrobatchLimitAction | None = _resolve_microbatch_limit_config(
@@ -174,7 +173,7 @@ def _find_capped_producer_ancestor(
             SqlReferenceKind.UDF,
             SqlReferenceKind.TABLE_FUNCTION,
         }:
-            function: CompiledFunction | None = functions_by_name.get(current.ref_name)
+            function: CompiledFunctionView | None = functions_by_name.get(current.ref_name)
             if function is not None:
                 pending.extend(function.references)
     return None

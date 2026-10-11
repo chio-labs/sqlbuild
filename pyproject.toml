@@ -19,6 +19,7 @@ dependencies = [
   "pydantic-settings>=2,<3",
   "PyYAML>=6.0.2",
   "rich>=15.0.0",
+  "sqlbuild-cli==0.155.0",  # x-release-please-version
 ]
 
 [project.optional-dependencies]
@@ -55,8 +56,7 @@ rivers = [
 ]
 
 [project.scripts]
-sqb = "sqlbuild.cli.entry.main.entry:main"
-sqlbuild = "sqlbuild.cli.entry.main.entry:main"
+sqlbuild-python = "sqlbuild.cli.entry.main.launched:main"
 
 [dependency-groups]
 dev = [
@@ -143,3 +143,6 @@ cache-keys = [
   { file = "crates/*/src/**/*.rs" },
   { file = "src/sqlbuild/_native.pyi" },
 ]
+
+[tool.uv.sources]
+sqlbuild-cli = { path = "crates/sqlbuild-cli" }

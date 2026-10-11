@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
-from sqlbuild.compiler.compile.models import CompileProjectInputs
+from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
@@ -67,7 +67,7 @@ def test_given_real_dbt_manifest_when_compiling_sqlbuild_then_preserves_dbt_ref(
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=sqlbuild_project_dir
     )
-    compile_inputs: CompileProjectInputs = build_compile_inputs(
+    compile_inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered_inputs,
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         external_sql_reference_resolver=build_external_sql_reference_resolver(

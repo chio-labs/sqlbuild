@@ -8,7 +8,7 @@
      "phase": "compile",
      "severity": "error",
      "code": "D001",
-     "message": "<project>/sqlbuild_project.toml contains invalid TOML: Invalid statement (at line 1, column 1)"
+     "message": "<project>/sqlbuild_project.toml contains invalid TOML: invalid statement: tomllib does not skip a byte order mark"
     }
    ]
   }

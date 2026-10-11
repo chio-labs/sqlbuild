@@ -115,3 +115,28 @@ pub(super) fn snapshot(extra: Vec<(&'static str, Value)>) -> Vec<(&'static str, 
     config.extend(extra);
     config
 }
+
+/// The first column-rename error message for `orders` with these columns, if any.
+pub(super) fn column_migration_message(
+    materialized: Option<&str>,
+    model_migrates: bool,
+    columns: &[(&str, Option<&str>)],
+) -> Option<String> {
+    let columns: Vec<crate::model_validation::models::ColumnMigration> = columns
+        .iter()
+        .map(
+            |(name, origin)| crate::model_validation::models::ColumnMigration {
+                name: (*name).to_owned(),
+                migrate_from: origin.map(str::to_owned),
+            },
+        )
+        .collect();
+    crate::model_validation::main::validate_column_migrations::validate_column_migrations(
+        "orders",
+        materialized,
+        model_migrates,
+        &columns,
+    )
+    .err()
+    .map(|error| error.message)
+}

@@ -2,27 +2,29 @@
 
 from __future__ import annotations
 
-import itertools
 import random
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeGuard
 
 import pytest
 
-import sqlbuild._native as native_module
+import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
+from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
-    CompiledModel,
-    CompiledProject,
     CompilerDiagnostic,
     DynamicColumnContractProof,
     DynamicColumnFamilyProof,
     InferredColumn,
 )
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
+from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
+from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -161,11 +163,10 @@ _PROMOTION_MODES: tuple[str | None, ...] = (None, "immediate", "staged", "IMMEDI
 
 type ContractView = tuple[CompilerDiagnostic, ...]
 type NativeContractRequest = tuple[str, bool, list[Any]]
-type NativeContractOutcome = list[Any]
 _EMPTY_SCHEMA_ROW: tuple[list[Any], list[Any], bool, bool] = ([], [], False, False)
 
 
-def compiled_contract_project(*, project_dir: Path) -> CompiledProject:
+def compiled_contract_project(*, project_dir: Path) -> CompiledProjectView:
     """Write and compile the base project whose models the generators perturb."""
 
     files: dict[str, str] = {
@@ -183,11 +184,12 @@ def compiled_contract_project(*, project_dir: Path) -> CompiledProject:
     ).project
 
 
-def perturbed_project(*, project: CompiledProject, rng: random.Random) -> CompiledProject:
+def perturbed_project(*, project: CompiledProjectView, rng: random.Random) -> CompiledProjectView:
     """The project with every model's contract inputs replaced by generated ones."""
 
     return replace(
-        project,
+        compiled_project_record(project),
+        native_project=None,
         settings=replace(
             project.settings,
             column_contract_mode=rng.choice(tuple(ColumnContractMode)),
@@ -197,7 +199,7 @@ def perturbed_project(*, project: CompiledProject, rng: random.Random) -> Compil
     )
 
 
-def perturbed_model(*, model: CompiledModel, rng: random.Random) -> CompiledModel:
+def perturbed_model(*, model: CompiledModelView, rng: random.Random) -> CompiledModelView:
     """One model with generated contract config, declared shape, inference and proof."""
 
     values: dict[str, object] = dict(model.config.values)
@@ -208,7 +210,7 @@ def perturbed_model(*, model: CompiledModel, rng: random.Random) -> CompiledMode
     ):
         values.update(rng.choice(({}, *({key: option} for option in options))))
     return replace(
-        model,
+        compiled_model_record(model),
         config=replace(model.config, values=values),
         schema_entry=rng.choice((None, *(_schema_entry(model=model, rng=rng),) * 9)),
         inferred_columns=rng.choice((None, *(_inferred_columns(rng=rng),) * 9)),
@@ -218,7 +220,7 @@ def perturbed_model(*, model: CompiledModel, rng: random.Random) -> CompiledMode
     )
 
 
-def _schema_entry(*, model: CompiledModel, rng: random.Random) -> SchemaModelEntry:
+def _schema_entry(*, model: CompiledModelView, rng: random.Random) -> SchemaModelEntry:
     columns: tuple[SchemaColumn, ...] = tuple(
         SchemaColumn(
             name=name,
@@ -278,7 +280,7 @@ def _dynamic_proof(*, rng: random.Random) -> DynamicColumnContractProof:
     )
 
 
-def contract_diagnostics(*, project: CompiledProject, dialect: str | None) -> ContractView:
+def contract_diagnostics(*, project: CompiledProjectView, dialect: str | None) -> ContractView:
     """The project's contract diagnostics, through the public contract entry point."""
 
     return evaluate_model_contracts(project=project, dialect=dialect).diagnostics
@@ -316,24 +318,63 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
     """Record native contract outcomes for the rest of the test."""
 
     record: NativeContractRecord = NativeContractRecord(statuses=Counter(), codes=Counter())
-    evaluate: Callable[..., list[NativeContractOutcome]] = (
-        native_module.evaluate_native_model_contracts
-    )
+    evaluate: Callable[..., ContractValidationResult] = contract_entry.native_model_contracts
 
-    def counted(request: NativeContractRequest) -> list[NativeContractOutcome]:
-        outcomes: list[NativeContractOutcome] = evaluate(request)
-        record.statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
-        rows: Iterator[Sequence[Any]] = itertools.chain.from_iterable(outcomes)
-        record.codes.update(row[0] for row in rows)
-        return outcomes
+    def counted(
+        *, project: CompiledProjectView, dialect: TypeDialect | str | None
+    ) -> ContractValidationResult:
+        result: ContractValidationResult = evaluate(project=project, dialect=dialect)
+        record.statuses.update(contract_statuses(project=project, result=result))
+        record.codes.update(diagnostic.code for diagnostic in result.diagnostics)
+        return result
 
-    monkeypatch.setattr(native_module, "evaluate_native_model_contracts", counted)
+    monkeypatch.setattr(contract_entry, "native_model_contracts", counted)
     return record
 
 
-def native_contract_statuses(
-    *, request: NativeContractRequest, outcomes: list[NativeContractOutcome]
+def contract_statuses(
+    *, project: CompiledProjectView, result: ContractValidationResult
 ) -> Counter[str]:
+    """Counts of evaluated models, typed comparisons and diagnostics for one contract run."""
+
+    request: NativeContractRequest = (
+        "",
+        project.settings.column_contract_mode == ColumnContractMode.IMPLICIT,
+        [_status_row(model) for model in project.models],
+    )
+    return native_contract_statuses(request=request, diagnostics=len(result.diagnostics))
+
+
+def _status_row(model: CompiledModelView) -> tuple[object, ...]:
+    contract: object = model.config.values.get("contract")
+    return (
+        model.name,
+        (None, contract)[isinstance(contract, str)],
+        next(map(_status_schema, filter(_present, (model.schema_entry,))), None),
+        next(map(_status_columns, filter(_present, (model.inferred_columns,))), None),
+    )
+
+
+def _present[T](value: T | None) -> TypeGuard[T]:
+    return value is not None
+
+
+def _status_columns(columns: tuple[InferredColumn, ...]) -> list[tuple[str, str | None, bool]]:
+    return [
+        (column.name, column.type, column.nullability == InferredNullability.NULLABLE)
+        for column in columns
+    ]
+
+
+def _status_schema(schema: SchemaModelEntry) -> tuple[object, ...]:
+    return (
+        [(column.name, column.type, column.nullable is False, False) for column in schema.columns],
+        [(family.name, family.type) for family in schema.dynamic_columns],
+        bool(schema.type_enforcement),
+    )
+
+
+def native_contract_statuses(*, request: NativeContractRequest, diagnostics: int) -> Counter[str]:
     """Per-request counts: `native` for evaluated models, `typed_comparisons` for those that
     compared at least one typed column, and `native_diagnostics`."""
 
@@ -346,7 +387,7 @@ def native_contract_statuses(
     statuses["typed_comparisons"] += sum(
         _compares_typed_column(model=model, implicit=implicit) for model in evaluated
     )
-    statuses["native_diagnostics"] += sum(len(diagnostics) for diagnostics in outcomes)
+    statuses["native_diagnostics"] += diagnostics
     return statuses
 
 
@@ -376,16 +417,20 @@ def _compares_typed_column(*, model: Sequence[Any], implicit: bool) -> bool:
     )
 
 
-def with_declared_type(*, project: CompiledProject, declared_type: str) -> CompiledProject:
+def with_declared_type(*, project: CompiledProjectView, declared_type: str) -> CompiledProjectView:
     """The project with its enforced staging model declaring `declared_type` for every column."""
 
-    by_name: dict[str, CompiledModel] = {model.name: model for model in project.models}
-    staging: CompiledModel = by_name[_ENFORCED_MODEL]
+    by_name: dict[str, CompiledModelView] = {model.name: model for model in project.models}
+    staging: CompiledModelView = by_name[_ENFORCED_MODEL]
     assert staging.schema_entry is not None
     columns: tuple[SchemaColumn, ...] = tuple(
         replace(column, type=declared_type) for column in staging.schema_entry.columns
     )
     by_name[_ENFORCED_MODEL] = replace(
-        staging, schema_entry=replace(staging.schema_entry, columns=columns)
+        compiled_model_record(staging), schema_entry=replace(staging.schema_entry, columns=columns)
     )
-    return replace(project, models=tuple(by_name[model.name] for model in project.models))
+    return replace(
+        compiled_project_record(project),
+        native_project=None,
+        models=tuple(by_name[model.name] for model in project.models),
+    )
