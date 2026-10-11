@@ -492,6 +492,7 @@ CONFIG_ONLY_KINDS: dict[str, str] = {
 RENDER_STAGE_CAPTURE_SUFFIX: str = "-compile_project_inputs.json"
 RENDER_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
     {
+        "native_project",
         "project_config",
         "local_config",
         "discovered_inputs",
@@ -625,6 +626,7 @@ ANALYSIS_STAGE_CAPTURE_SUFFIX: str = "-compiled_project.json"
 COMPILED_PROJECT_CAPTURE_TYPE: str = "sqlbuild.compiler.compile.models:CompiledProject"
 ANALYSIS_NON_COLLECTION_FIELDS: frozenset[str] = frozenset(
     {
+        "native_project",
         "run_id",
         "effective_target_name",
         "effective_connection",
