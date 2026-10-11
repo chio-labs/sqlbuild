@@ -560,9 +560,10 @@ def native_metadata(inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...]:
 
 def _family_counts(outcome: Any) -> Counter[str]:
     counts: Counter[str] = Counter()
-    for function_rows, reference_rows in outcome[0]:
+    for function_rows, reference_rows, schema_audit_rows in outcome[0]:
         counts.update(f"function {row[0]}" for row in function_rows)
         counts.update(f"reference {row[0]}" for row in reference_rows)
+        counts.update(f"schema_audit {row[0]}" for row in schema_audit_rows)
     counts.update(f"source {row[0]}" for _, row in outcome[1])
     counts.update(f"sql_test {row[0]}" for _, row, _ in outcome[2])
     return counts

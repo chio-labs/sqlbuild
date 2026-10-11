@@ -26,13 +26,14 @@ Dependencies point one way, from the top of this graph to the bottom:
 
 ```text
 sqlbuild-python
-  -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments -> sqlbuild-render
-  -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-discovery -> sqlbuild-config
+  -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
+  -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-render -> sqlbuild-discovery -> sqlbuild-config
   -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-core
 ```
 
 `sqlbuild-config` and `sqlbuild-model-config` do not depend on the crates below them today, and
-`sqlbuild-scopes` uses only `sqlbuild-sqltext` and `sqlbuild-core`; their place in the order fixes which crates may
+`sqlbuild-scopes` reuses the macro scanner in `sqlbuild-render`; render itself depends only on
+`sqlbuild-cache` and `sqlbuild-core`. Their place in the order fixes which crates may
 use them. The JSON emitter
 lives in `sqlbuild-core` so that any layer can produce text that must equal Python's
 `json.dumps` output.

@@ -6,7 +6,6 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as native
-
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,

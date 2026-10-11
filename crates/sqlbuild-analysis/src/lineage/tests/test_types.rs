@@ -1,6 +1,20 @@
 use crate::lineage::models::InterruptedListingPolicy;
 use sqlbuild_discovery::models::StageFailure;
 
+pub(crate) struct SchemaFilterTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) referenced: usize,
+    pub(crate) expected_tables: usize,
+}
+
+pub(crate) struct SemanticUseTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) query: &'static str,
+    pub(crate) expected_count: usize,
+    pub(crate) expected_line: u64,
+    pub(crate) expected_offset: u64,
+}
+
 pub(crate) struct ReferenceTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,

@@ -98,14 +98,14 @@ def test_given_template_or_macro_column_metadata_when_attaching_then_loop_expand
             description="shipped native stages",
             engine="native",
             expected_native_calls={
-                "expand_config_templates": 1,
+                "expand_config_templates": 0,
             },
         ),
         ModelConfigTierTestCase(
             description="native preview",
             engine="native-preview",
             expected_native_calls={
-                "expand_config_templates": 1,
+                "expand_config_templates": 0,
             },
         ),
     ],

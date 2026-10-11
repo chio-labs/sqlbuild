@@ -57,4 +57,3 @@ class NativeFallbackSite(StrEnum):
     LINT_EXPANSION = "model_loop.lint_expansion"
     MACRO_CALL_MOCKED = "macro_calls.mocked_evaluation"
     SQL_TEST_MACRO_MOCK_QUERIES = "sql_test_glue.macro_mock_queries"
-    REFACTOR_DECLARATION_MOVES = "refactoring.declaration_moves"

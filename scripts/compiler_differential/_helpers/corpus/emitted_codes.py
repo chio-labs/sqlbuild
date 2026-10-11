@@ -24,7 +24,9 @@ from scripts.compiler_differential.constants import (
     EXPECT_SUCCESS,
     LEFT_SIDE,
     NATIVE_CODE_CONSTANT_PATTERN,
+    NATIVE_CODE_TEST_DIRECTORY,
     RENDER_CODE_SCAN_EXCLUDED,
+    RENDER_NATIVE_CODE_SCAN_ROOTS,
     RENDER_RAISED_CODES,
     WARNING_SEVERITY,
 )
@@ -141,6 +143,16 @@ def inline_compile_codes(compile_root: Path) -> dict[str, tuple[str, ...]]:
             code: str | None = _code_literal(node)
             if code is not None:
                 found.setdefault(code, []).append(f"{relative}:{getattr(node, 'lineno', 0)}")
+    repo_root: Path = compile_root.parents[3]
+    for directory in RENDER_NATIVE_CODE_SCAN_ROOTS:
+        for path in sorted((repo_root / directory).rglob("*.rs")):
+            if NATIVE_CODE_TEST_DIRECTORY in path.parts:
+                continue
+            for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                for code in NATIVE_CODE_CONSTANT_PATTERN.findall(line):
+                    found.setdefault(code, []).append(
+                        f"{path.relative_to(repo_root).as_posix()}:{line_number}"
+                    )
     return {code: tuple(locations) for code, locations in found.items()}
 
 

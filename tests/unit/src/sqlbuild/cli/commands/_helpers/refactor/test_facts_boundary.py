@@ -18,7 +18,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.refactor.helpers import modul
     [
         ImportBoundaryTestCase(
             description="the native command core will return these facts instead",
-            imported_name="CompiledProject",
+            imported_name="CompiledProjectView",
             expected_modules=("facts.py",),
         ),
     ],

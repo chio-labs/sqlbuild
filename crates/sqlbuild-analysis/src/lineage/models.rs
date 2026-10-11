@@ -9,6 +9,7 @@ pub enum LineageResourceType {
 }
 
 /// A semantic column use projected onto a project resource and authored SQL.
+#[derive(Debug)]
 pub struct DirectSemanticUse {
     pub model: String,
     pub context: String,
