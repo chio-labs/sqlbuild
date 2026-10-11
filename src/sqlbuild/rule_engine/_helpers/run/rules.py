@@ -799,7 +799,12 @@ def _read_sql_rule_cache(project_dir: Path) -> dict[str, dict[str, object]]:
         payload: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return {}
-    if not isinstance(payload, dict) or payload.get("version") != _SQL_RULE_CACHE_VERSION:
+    # Old-build entries cannot hit and must not suppress speculative SQL lint.
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != _SQL_RULE_CACHE_VERSION
+        or payload.get("build_identity") != _RULES_BUILD_IDENTITY
+    ):
         return {}
     entries: object = payload.get("entries")
     if not isinstance(entries, dict):
@@ -840,7 +845,11 @@ def _write_sql_rule_cache(*, project_dir: Path, bucket: dict[str, dict[str, obje
     temporary: Path = path.with_suffix(f".tmp-{os.getpid()}")
     temporary.write_text(
         json.dumps(
-            {"version": _SQL_RULE_CACHE_VERSION, "entries": bucket},
+            {
+                "version": _SQL_RULE_CACHE_VERSION,
+                "build_identity": _RULES_BUILD_IDENTITY,
+                "entries": bucket,
+            },
             sort_keys=True,
             separators=(",", ":"),
         ),
