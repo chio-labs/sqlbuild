@@ -17,7 +17,6 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_text_runtime,
     seed_snapshot_listings,
 )
-from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_header_values
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import build_sql_scenario_file
 from sqlbuild.compiler.discovery._helpers.sql.tests import (
     build_sql_test_block,
@@ -163,7 +162,7 @@ def _test_blocks(
 ) -> tuple[DiscoveredSqlTestBlock, ...]:
     blocks: tuple[DiscoveredSqlTestBlock, ...] = tuple(
         build_sql_test_block(
-            header_values=project_native_header_values(values),
+            header_values=values,
             sql_body=sql_body,
             file_path=file_path,
             test_index=test_index,
@@ -193,7 +192,7 @@ def _scenario_file_from_payload(
         raise error
     _tag, contents, values, sql_body, sql_body_span = payload
     return build_sql_scenario_file(
-        header_values=project_native_header_values(cast(dict[str, object], values)),
+        header_values=cast(dict[str, object], values),
         sql_body=str(sql_body),
         sql_body_span=cast(tuple[int, int], sql_body_span),
         contents=str(contents),

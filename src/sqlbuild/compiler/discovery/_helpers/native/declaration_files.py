@@ -20,7 +20,6 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     seed_snapshot_listings,
 )
 from sqlbuild.compiler.discovery._helpers.sql.declarations import typed_constant_declaration
-from sqlbuild.compiler.discovery._helpers.sql.model_files import project_native_header_values
 from sqlbuild.compiler.discovery._helpers.sql.schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
@@ -287,7 +286,7 @@ def _optional_path(text: str | None) -> Path | None:
 
 def _audit_block(block: tuple[object, ...]) -> DiscoveredAuditBlock:
     audit_index, values, sql_body, name, mode, measure_sql, evidence_sql = block
-    header_values: dict[str, object] = project_native_header_values(cast(dict[str, object], values))
+    header_values: dict[str, object] = cast(dict[str, object], values)
     evaluation_mode: AuditEvaluationMode = AuditEvaluationMode(str(mode))
     return DiscoveredAuditBlock(
         audit_index=cast(int, audit_index),
@@ -331,7 +330,7 @@ def _enum_file(
 
 def _enum_declaration(*, relative_path: Path, declaration: _EnumPayload) -> EnumDeclaration:
     name, members, scalar_type = declaration
-    projected: dict[str, object] = project_native_header_values(members)
+    projected: dict[str, object] = members
     return EnumDeclaration(
         name=name,
         members=tuple(
@@ -374,7 +373,7 @@ def _constant_declaration(
     name, value, explicit_type, render_as = declaration
     return typed_constant_declaration(
         name=name,
-        value=project_native_header_values(value)["value"],
+        value=value["value"],
         explicit_type=explicit_type,
         render_as_text=render_as,
         file_path=file_path,
@@ -417,7 +416,7 @@ def _schema_declaration(
         description=description,
         extends=extends,
         columns=parse_schema_columns(
-            raw_columns=project_native_header_values(columns).get("columns"),
+            raw_columns=columns.get("columns"),
             file_path=file_path,
             label=f"schema '{name}'",
             error_class=DeclarationParseError,
@@ -441,7 +440,7 @@ def _function_file(
         file_path=project_dir / relative_path,
         relative_path=relative_path,
         contents=str(contents),
-        header_values=project_native_header_values(cast(dict[str, object], header_values)),
+        header_values=cast(dict[str, object], header_values),
         body_sql=str(body_sql),
     )
 
@@ -458,7 +457,7 @@ def _hook_file(
         file_path=project_dir / relative_path,
         relative_path=relative_path,
         contents=str(contents),
-        header_values=project_native_header_values(cast(dict[str, object], header_values)),
+        header_values=cast(dict[str, object], header_values),
         sql_body=str(sql_body),
         name=str(name),
         description=cast(str | None, description),

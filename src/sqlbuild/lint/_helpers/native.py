@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import textwrap
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,8 +14,6 @@ from sqlbuild.compiler.compile.classes.model_description_resolution import (
 from sqlbuild.compiler.discovery._helpers.sql.model_files import (
     parse_header_values,  # noqa: FFL102 - the compiler owns the canonical native header grammar
     prepare_model_header_tokens,
-    source_line_starts,
-    source_position,
 )
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ModelSqlParseError
 from sqlbuild.lint.constants import (
@@ -848,3 +847,21 @@ def drop_resolved_description_faults(
         if violation.code != RULE_DESCRIPTION_PRESENT
         or violation.file_path.resolve() not in described
     ]
+
+
+def source_line_starts(contents: str) -> tuple[int, ...]:
+    """Return the offset where each line of contents starts."""
+
+    starts: list[int] = [0]
+    index: int = contents.find("\n")
+    while index != -1:
+        starts.append(index + 1)
+        index = contents.find("\n", index + 1)
+    return tuple(starts)
+
+
+def source_position(*, offset: int, line_starts: tuple[int, ...]) -> tuple[int, int]:
+    """Map a zero-based offset to a one-based line and column."""
+
+    line_index: int = bisect_right(line_starts, offset) - 1
+    return line_index + 1, offset - line_starts[line_index] + 1

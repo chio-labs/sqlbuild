@@ -261,3 +261,23 @@ pub(crate) fn interpolation_facts(
         |result| (result.spans, result.reads),
     )
 }
+
+/// Named locations from `[line, column, end_line, end_column]` rows.
+pub(crate) fn locations(
+    columns: Vec<(&str, [usize; 4])>,
+) -> Vec<(String, crate::compiler::models::TextLocation)> {
+    columns
+        .into_iter()
+        .map(|(name, [line, column, end_line, end_column])| {
+            (
+                name.to_owned(),
+                crate::compiler::models::TextLocation {
+                    line,
+                    column,
+                    end_line,
+                    end_column,
+                },
+            )
+        })
+        .collect()
+}
