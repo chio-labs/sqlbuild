@@ -1,5 +1,7 @@
 """Audit facts for custom rules."""
 
+from functools import cached_property
+
 from sqlbuild.compiler.compile.models import CompiledAudit
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.compiled_audit_record import compiled_audit_record
@@ -11,13 +13,14 @@ class AuditFacts:
 
     def __init__(self, *, project: CompiledProjectView) -> None:
         self._audits: tuple[CompiledAudit, ...] = tuple(map(compiled_audit_record, project.audits))
+
+    @cached_property
+    def _by_model(self) -> dict[str, tuple[CompiledAudit, ...]]:
         by_model: dict[str, list[CompiledAudit]] = {}
         for audit in self._audits:
             if audit.attached_target_name is not None:
                 by_model.setdefault(audit.attached_target_name, []).append(audit)
-        self._by_model: dict[str, tuple[CompiledAudit, ...]] = {
-            name: tuple(audits) for name, audits in by_model.items()
-        }
+        return {name: tuple(audits) for name, audits in by_model.items()}
 
     def all(self) -> tuple[CompiledAudit, ...]:
         return self._audits

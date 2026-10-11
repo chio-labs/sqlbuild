@@ -88,12 +88,14 @@ def with_target_defaults_impl(
     return model.with_target_defaults(defaults, render_qualified_name)
 
 
-def compiled_project_record_impl(project: CompiledProjectView) -> CompiledProject:
+def compiled_project_record_impl(
+    *, project: CompiledProjectView, include_sql_expansions: bool = True
+) -> CompiledProject:
     """The project as a `CompiledProject`, projected from its owner when it is a native view."""
 
     if isinstance(project, CompiledProject):
-        return project
-    fields: dict[str, Any] = cast(_native.NativeProjectView, project).fields()
+        return project if include_sql_expansions else replace(project, sql_expansions={})
+    fields: dict[str, Any] = cast(_native.NativeProjectView, project).fields(include_sql_expansions)
     fields["seeds"] = tuple(map(compiled_seed_record_impl, fields["seeds"]))
     fields["sources"] = tuple(map(compiled_source_record_impl, fields["sources"]))
     fields["functions"] = tuple(map(compiled_function_record_impl, fields["functions"]))

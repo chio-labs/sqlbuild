@@ -1,5 +1,7 @@
 """SQL facts indexed by custom-rule model subjects."""
 
+from functools import cached_property
+
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.sql_document import SqlDocument
 from sqlbuild.rule_engine.exceptions import RuleUsageError
@@ -11,10 +13,12 @@ class SqlFacts:
 
     def __init__(self, *, dialect: str, project: CompiledProjectView) -> None:
         self._dialect: str = dialect
-        self._models: dict[object, CompiledModelView] = {
-            model.relative_path: model for model in project.models
-        }
+        self._project: CompiledProjectView = project
         self._documents: dict[object, ModelSql] = {}
+
+    @cached_property
+    def _models(self) -> dict[object, CompiledModelView]:
+        return {model.relative_path: model for model in self._project.models}
 
     def for_model(self, model: Model) -> ModelSql:
         cached: ModelSql | None = self._documents.get(model.path)

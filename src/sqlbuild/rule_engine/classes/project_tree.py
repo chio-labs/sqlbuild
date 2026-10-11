@@ -20,12 +20,21 @@ _TRACKED_TEXT_SUFFIXES: frozenset[str] = frozenset({".py", ".sql", ".toml", ".ya
 class ProjectTree:
     """Deterministic compiler-owned view of supported project paths."""
 
-    def __init__(self, *, project_dir: Path, project: CompiledProjectView) -> None:
+    def __init__(
+        self,
+        *,
+        project_dir: Path,
+        project: CompiledProjectView,
+        models: tuple[Model, ...] | None = None,
+    ) -> None:
         self._root: Path = project_dir.resolve()
         self._discovered: tuple[ProjectPath, ...] | None = None
         self._directories: dict[Path, Path | None] = {}
+        model_views: tuple[Model, ...] = (
+            tuple(public_model(item) for item in project.models) if models is None else models
+        )
         self._resource_paths: dict[str, Model] = {
-            item.relative_path.as_posix(): public_model(item) for item in project.models
+            item.path.as_posix(): item for item in model_views
         }
 
     @property

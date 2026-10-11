@@ -156,3 +156,10 @@ class HandBuiltAnalysisTestCase:
     description: str
     models: dict[str, str]
     expected_models: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SharedInferredColumnsTestCase:
+    description: str
+    model_count: int
+    expected_columns_per_model: int

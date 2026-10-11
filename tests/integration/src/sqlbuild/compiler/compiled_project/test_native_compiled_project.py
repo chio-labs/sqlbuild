@@ -1,14 +1,20 @@
 """The rules request reads model facts the compile-input stage retained natively."""
 
 import json
+import pickle
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
+from sqlbuild.compiler.compile.models import InferredColumn
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.scopes.exceptions import InvalidQualifiedIdentityError
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     ImmediateSyntaxErrorTestCase,
@@ -16,6 +22,7 @@ from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import
     ModelLoopParityTestCase,
     ModelPathScopeErrorTestCase,
     RetainedRulesRowsTestCase,
+    SharedInferredColumnsTestCase,
     UnretainedRulesRowsTestCase,
     ZeroMaterializationTestCase,
 )
@@ -40,6 +47,47 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     skip_model_retention,
 )
 from tests.integration.src.sqlbuild.compiler.graph.helpers import ORDERS_PROJECT_FILES, write_files
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [SharedInferredColumnsTestCase("repeated output schemas share pickle entries", 24, 3)],
+    ids=lambda case: case.description,
+)
+def test_given_repeated_output_schemas_when_serializing_then_columns_share_immutable_values(
+    test_case: SharedInferredColumnsTestCase,
+    tmp_path: Path,
+) -> None:
+    write_files(
+        project_dir=tmp_path,
+        files={
+            "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
+            **{
+                f"models/orders_{index}.sql": (
+                    'MODEL (description "Order identifiers");\n'
+                    "SELECT CAST(1 AS INT) AS order_id, CAST(NULL AS INT) AS missing_id, "
+                    "CAST('ready' AS VARCHAR) AS status"
+                )
+                for index in range(test_case.model_count)
+            },
+        },
+    )
+    project: CompiledProjectView = compile_project(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter=DuckDbAdapter(),
+        resolved_connection={"database": "warehouse", "schema": "main"},
+    )
+    schemas: tuple[tuple[InferredColumn, ...] | None, ...] = tuple(
+        model.inferred_columns for model in project.models
+    )
+    restored: tuple[tuple[InferredColumn, ...] | None, ...] = pickle.loads(pickle.dumps(schemas))
+    assert restored == schemas
+    columns: list[InferredColumn] = []
+    for schema in restored:
+        columns.extend(schema or ())
+    assert len(columns) == test_case.model_count * test_case.expected_columns_per_model
+    assert len(set(columns)) == test_case.expected_columns_per_model
+    assert len({id(column) for column in columns}) == test_case.expected_columns_per_model
 
 
 @pytest.mark.parametrize(

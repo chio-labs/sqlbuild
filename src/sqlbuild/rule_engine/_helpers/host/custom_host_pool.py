@@ -17,9 +17,8 @@ from typing import Any, cast
 import orjson
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.models import CompiledProject
+from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
 from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
 from sqlbuild.rule_engine._helpers.host.host_capacity import available_cores
 from sqlbuild.rule_engine.constants import (
@@ -129,16 +128,25 @@ def host_payload_project(project: CompiledProjectView) -> CompiledProject:
 def _payload_model(model: CompiledModelView) -> CompiledModelView:
     """Drop model state no Rule fact reads, so hosts decode less of every model."""
 
-    return replace(
-        compiled_model_record(model),
-        references=(),
-        fast_lineage_columns=None,
-        authored_query_sql="",
-        output_column_locations={},
-        macro_deps=(),
-        enum_columns={},
-        binding_diagnostics=(),
-        unchecked_output_columns=frozenset(),
+    return CompiledModel(
+        key=model.key,
+        deps=model.deps,
+        name=model.name,
+        relative_path=model.relative_path,
+        query_sql=model.query_sql,
+        config=model.config,
+        destination=model.destination,
+        schema_entry=model.schema_entry,
+        inferred_columns=model.inferred_columns,
+        fast_lineage_has_star=model.fast_lineage_has_star,
+        fast_lineage_star_resolved=model.fast_lineage_star_resolved,
+        authored_sql=model.authored_sql,
+        extract_implicit_alias_columns=model.extract_implicit_alias_columns,
+        enum_declarations=model.enum_declarations,
+        constant_declarations=model.constant_declarations,
+        binding_validated=model.binding_validated,
+        dynamic_column_contract=model.dynamic_column_contract,
+        rejected_sql_analysis_opt_out=model.rejected_sql_analysis_opt_out,
     )
 
 

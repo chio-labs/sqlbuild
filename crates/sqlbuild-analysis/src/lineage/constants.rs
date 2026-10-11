@@ -37,6 +37,8 @@ pub(crate) const RICH_LINEAGE_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) const FINGERPRINT_SUFFIXES: &[&str] = &[".csv", ".py", ".sql", ".toml", ".yaml", ".yml"];
 /// File names hashed wherever they appear, whatever their suffix.
 pub(crate) const FINGERPRINT_ROOT_FILES: &[&str] = &[".gitignore", ".sqlbuildignore"];
+/// Bound retained file contents while preserving parallel reads and ordered hashing.
+pub(crate) const FINGERPRINT_SCAN_BATCH_SIZE: usize = 64;
 /// Top-level entries the fingerprint never reads.
 pub(crate) const FINGERPRINT_EXCLUDED_ROOTS: &[&str] = &[
     ".git",

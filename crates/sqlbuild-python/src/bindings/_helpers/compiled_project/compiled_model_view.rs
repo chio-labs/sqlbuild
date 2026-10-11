@@ -313,13 +313,13 @@ fn compiled_of(record: &ModelInputRecord) -> PyResult<&CompiledRecord> {
 impl NativeCompiledModel {
     #[getter]
     fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, py| {
             let compiled: &CompiledRecord = compiled_of(record)?;
             compiled
                 .projections
                 .key
                 .get_or_try_init(py, || {
+                    let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
                     object_key(&classes.compiled, MODEL_RESOURCE, &model_name(record, py)?)
                 })
                 .map(|key| key.clone_ref(py))
@@ -328,12 +328,12 @@ impl NativeCompiledModel {
 
     #[getter]
     fn deps(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.compiled(py, |compiled, py| {
             compiled
                 .projections
                 .deps
                 .get_or_try_init(py, || {
+                    let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
                     let mut keys: Vec<Py<PyAny>> = Vec::with_capacity(compiled.deps.len());
                     for (kind, name) in &compiled.deps {
                         keys.push(object_key(&classes.compiled, kind, name)?);
@@ -366,11 +366,11 @@ impl NativeCompiledModel {
 
     #[getter]
     fn destination(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.compiled(py, |compiled, py| {
             self.projections
                 .destination
                 .get_or_try_init(py, || {
+                    let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
                     let destination: &DestinationFact = self
                         .overlay
                         .destination
@@ -499,7 +499,6 @@ impl NativeCompiledModel {
 
     #[getter]
     fn inferred_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.compiled(py, |compiled, py| {
             self.projections
                 .inferred_columns
@@ -507,17 +506,21 @@ impl NativeCompiledModel {
                     let Some(rows) = &compiled.analysis.inferred else {
                         return Ok::<_, pyo3::PyErr>(py.None());
                     };
+                    let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
                     let mut columns: Vec<Bound<'_, PyAny>> = Vec::with_capacity(rows.len());
-                    for (name, column_type, nullability) in rows {
-                        let poisoned: bool = self.overlay.poisoned.contains(name);
-                        let fields: Bound<'_, PyDict> = PyDict::new(py);
-                        fields.set_item("name", name)?;
-                        fields.set_item("type", column_type.as_ref().filter(|_| !poisoned))?;
-                        fields.set_item(
-                            "nullability",
-                            classes.compiled.nullability.call1((nullability,))?,
-                        )?;
-                        columns.push(classes.compiled.inferred_column.call((), Some(&fields))?);
+                    for row in rows {
+                        let poisoned_row: InferredRow;
+                        let row = if self.overlay.poisoned.contains(&row.0) {
+                            poisoned_row = (row.0.clone(), None, row.2.clone());
+                            &poisoned_row
+                        } else {
+                            row
+                        };
+                        columns.push(self.owner.bind(py).borrow().inferred_column(
+                            py,
+                            &classes.compiled,
+                            row,
+                        )?);
                     }
                     Ok(PyTuple::new(py, columns)?.into_any().unbind())
                 })

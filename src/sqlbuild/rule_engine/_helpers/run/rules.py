@@ -794,12 +794,13 @@ def _sql_rule_cache_path(project_dir: Path) -> Path:
 
 
 def _read_sql_rule_cache(project_dir: Path) -> dict[str, dict[str, object]]:
+    """Return usable entries so incompatible builds cannot suppress early lint."""
+
     path: Path = _sql_rule_cache_path(project_dir)
     try:
         payload: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         return {}
-    # Old-build entries cannot hit and must not suppress speculative SQL lint.
     if (
         not isinstance(payload, dict)
         or payload.get("version") != _SQL_RULE_CACHE_VERSION

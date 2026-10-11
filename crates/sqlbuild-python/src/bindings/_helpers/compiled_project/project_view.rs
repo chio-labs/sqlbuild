@@ -273,9 +273,21 @@ impl NativeProjectView {
     }
 
     /// Every field by name, for an explicit `CompiledProject` projection.
-    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    #[pyo3(signature = (include_sql_expansions = true))]
+    fn fields<'py>(
+        &self,
+        py: Python<'py>,
+        include_sql_expansions: bool,
+    ) -> PyResult<Bound<'py, PyDict>> {
         let fields: Bound<'py, PyDict> = self.fields.as_fields(py)?;
-        fields.set_item("sql_expansions", self.sql_expansions(py)?)?;
+        fields.set_item(
+            "sql_expansions",
+            if include_sql_expansions {
+                self.sql_expansions(py)?
+            } else {
+                PyDict::new(py).unbind()
+            },
+        )?;
         fields.set_item("native_project", self.owner.bind(py))?;
         Ok(fields)
     }

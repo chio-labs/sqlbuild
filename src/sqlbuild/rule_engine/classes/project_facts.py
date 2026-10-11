@@ -26,4 +26,6 @@ class ProjectFacts:
         self.functions: tuple[object, ...] = tuple(map(compiled_function_record, project.functions))
         self.tests: tuple[object, ...] = project.sql_tests
         self.audits: tuple[object, ...] = tuple(map(compiled_audit_record, project.audits))
-        self.tree: ProjectTree = ProjectTree(project_dir=project_dir, project=project)
+        self.tree: ProjectTree = ProjectTree(
+            project_dir=project_dir, project=project, models=self.models
+        )

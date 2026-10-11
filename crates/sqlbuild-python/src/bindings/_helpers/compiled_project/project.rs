@@ -1,6 +1,7 @@
 //! The compile's natively owned project, which producers record into and consumers read.
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Mutex;
 
 use crate::bindings::_helpers::compiled_project::resource_diagnostics::{
     DiagnosticSettings, ResourceDiagnostics, resource_diagnostics,
@@ -25,14 +26,16 @@ use sqlbuild_analysis::compiled_project::models::{
     ModelAnalysisFact, ModelConfigFacts, ModelReferenceFact, ModelSchemaFact, SchemaColumnFact,
 };
 
-use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_guard};
 use crate::bindings::_helpers::compiled_project::audit_loop::{
     AttachmentOwner, AuditFileRow, AuditSettings, model_owner, resource_owner,
 };
 use crate::bindings::_helpers::compiled_project::audit_views::{
     AuditRecord, NativeAuditInput, NativeCompiledAudit,
 };
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+    CompiledViewClasses, InferredRow, NativeCompiledModel,
+};
 use crate::bindings::_helpers::compiled_project::function_loop::{FunctionRow, FunctionSettings};
 use crate::bindings::_helpers::compiled_project::function_views::{
     AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, ObjectKeyRow,
@@ -118,6 +121,8 @@ pub(crate) struct NativeCompiledProject {
     inputs: Vec<ModelInputRecord>,
     /// The Python classes model input views project their attributes with.
     input_classes: Option<Py<PyAny>>,
+    /// Shared immutable column projections, allocated only when Python consumers request them.
+    inferred_column_projections: Mutex<HashMap<InferredRow, Py<PyAny>>>,
     /// Lineage graphs its project views built.
     graph_builds: usize,
     /// Each attached seed, in attachment order.
@@ -291,6 +296,33 @@ impl NativeCompiledProject {
             .as_ref()
             .map(|classes| classes.bind(py).clone())
             .ok_or_else(|| PyIndexError::new_err(INPUT_CLASSES_UNSET))
+    }
+
+    pub(crate) fn inferred_column<'py>(
+        &self,
+        py: Python<'py>,
+        classes: &CompiledViewClasses<'py>,
+        row: &InferredRow,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let (name, column_type, nullability) = row;
+        if let Some(column) = self
+            .inferred_column_projections
+            .lock()
+            .map_err(|error| NativeCompilerError::new_err(error.to_string()))?
+            .get(row)
+        {
+            return Ok(column.bind(py).clone());
+        }
+        let fields = PyDict::new(py);
+        fields.set_item("name", name)?;
+        fields.set_item("type", column_type.as_deref())?;
+        fields.set_item("nullability", classes.nullability.call1((nullability,))?)?;
+        let column = classes.inferred_column.call((), Some(&fields))?;
+        self.inferred_column_projections
+            .lock()
+            .map_err(|error| NativeCompilerError::new_err(error.to_string()))?
+            .insert(row.clone(), column.clone().unbind());
+        Ok(column)
     }
 }
 

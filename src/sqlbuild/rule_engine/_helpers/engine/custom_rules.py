@@ -211,12 +211,18 @@ def _subjects(
             identity=_digest([len(project.models), project.effective_target_name]),
         ),
     )
-    model_subjects: tuple[_Subject, ...] = tuple(
-        _Subject(
-            key=model.relative_path.as_posix(),
-            identity=_digest([model.name, model.relative_path.as_posix(), _materialization(model)]),
+    model_subjects: tuple[_Subject, ...] = (
+        tuple(
+            _Subject(
+                key=model.relative_path.as_posix(),
+                identity=_digest(
+                    [model.name, model.relative_path.as_posix(), _materialization(model)]
+                ),
+            )
+            for model in sorted(project.models, key=lambda item: item.relative_path.as_posix())
         )
-        for model in sorted(project.models, key=lambda item: item.relative_path.as_posix())
+        if any(rule.subject is not RuleSubject.PROJECT for rule in rules)
+        else ()
     )
     return {
         rule.code: project_subject if rule.subject is RuleSubject.PROJECT else model_subjects
@@ -280,7 +286,7 @@ def host_project(project: CompiledProjectView) -> CompiledProject:
     """Drop project state no Rule fact reads, before digests and host payloads use it."""
 
     return replace(
-        compiled_project_record(project),
+        compiled_project_record(project, include_sql_expansions=False),
         binding_catalog=None,
         sql_expansions={},
         loaded_macros={},

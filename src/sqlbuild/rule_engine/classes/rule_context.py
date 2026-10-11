@@ -34,10 +34,11 @@ def build_rule_fact_views(
 ) -> RuleFactViews:
     """Build immutable views once for one compiled project snapshot."""
 
+    project_facts: ProjectFacts = ProjectFacts(project=project, project_dir=project_dir)
     return RuleFactViews(
-        project=ProjectFacts(project=project, project_dir=project_dir),
+        project=project_facts,
         sql=SqlFacts(dialect=dialect, project=project),
-        graph=GraphFacts(project=project),
+        graph=GraphFacts(project=project, models=project_facts.models),
         columns=ColumnFacts(project=project),
         contracts=ContractFacts(project=project),
         tests=TestFacts(project=project),

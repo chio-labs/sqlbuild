@@ -977,7 +977,20 @@ def test_given_variable_and_macro_models_when_compiling_then_early_lint_findings
     ) == (test_case.expected_compile_expansions, test_case.expected_python_expansions)
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EarlyLintInputsTestCase(
+            description="old build entries leave early lint enabled",
+            expected_findings=_EARLY_LINT_FINDINGS,
+            expected_compile_expansions=2,
+            expected_python_expansions=0,
+        )
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_same_findings(
+    test_case: EarlyLintInputsTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -985,14 +998,18 @@ def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_
     write_project_files(project_dir=tmp_path, files=EARLY_LINT_PROJECT_FILES)
     with monkeypatch.context() as previous_build:
         previous_build.setattr(rules_module, "_RULES_BUILD_IDENTITY", "previous-build")
-        previous_findings = compile_findings(project_dir=tmp_path, capsys=capsys)
+        previous_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
+            project_dir=tmp_path, capsys=capsys
+        )
     counts: Counter[str] = record_early_lint_expansions(monkeypatch=monkeypatch)
 
-    upgraded_findings = compile_findings(project_dir=tmp_path, capsys=capsys)
+    upgraded_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
+        project_dir=tmp_path, capsys=capsys
+    )
 
-    assert previous_findings == upgraded_findings == _EARLY_LINT_FINDINGS
-    assert counts["compile_lint_inputs:lint_expansions"] == 2
-    assert counts["model_loop.lint_expansion:deferred"] == 0
+    assert previous_findings == upgraded_findings == test_case.expected_findings
+    assert counts["compile_lint_inputs:lint_expansions"] == test_case.expected_compile_expansions
+    assert counts["model_loop.lint_expansion:deferred"] == test_case.expected_python_expansions
     counts.clear()
     assert compile_findings(project_dir=tmp_path, capsys=capsys) == upgraded_findings
     assert counts["compile_lint_inputs:lint_expansions"] == 0

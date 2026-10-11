@@ -5,7 +5,11 @@ from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.compiled_project._helpers.model_updates import compiled_project_record_impl
 
 
-def compiled_project_record(project: CompiledProjectView) -> CompiledProject:
+def compiled_project_record(
+    project: CompiledProjectView, *, include_sql_expansions: bool = True
+) -> CompiledProject:
     """The project as a `CompiledProject`, projected from its owner when it is a native view."""
 
-    return compiled_project_record_impl(project)
+    return compiled_project_record_impl(
+        project=project, include_sql_expansions=include_sql_expansions
+    )

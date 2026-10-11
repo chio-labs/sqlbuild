@@ -42,11 +42,15 @@ _REFERENCE_KIND: str = "sqlbuild.compiler.references.types:SqlReferenceKind"
 
 
 def empty_render_capture(**overrides: object) -> dict[str, object]:
-    """Return a capture with every `CompileProjectInputs` field, in order, then overrides."""
+    """Return every captured `CompileProjectInputs` field, in order, then overrides."""
 
+    type_name: str = "sqlbuild.compiler.compile.models:CompileProjectInputs"
+    names: list[str] = [field.name for field in dataclasses.fields(CompileProjectInputs)]
     return {
-        "__type__": "sqlbuild.compiler.compile.models:CompileProjectInputs",
-        **{field.name: [] for field in dataclasses.fields(CompileProjectInputs)},
+        "__type__": type_name,
+        **dict.fromkeys(
+            filterfalse(STAGE_CAPTURE_OMITTED_ATTRIBUTES[type_name].__contains__, names), []
+        ),
         **overrides,
     }
 

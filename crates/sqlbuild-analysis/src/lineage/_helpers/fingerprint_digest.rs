@@ -10,7 +10,8 @@ use sqlbuild_discovery::models::StageFailure;
 use crate::lineage::_helpers::authored_files::{AuthoredFile, AuthoredFiles};
 use crate::lineage::_helpers::environment_markers::environment_names;
 use crate::lineage::constants::{
-    DYNAMIC_CONTEXT_MARKER, DYNAMIC_CONTEXT_SUFFIXES, MISSING_ENVIRONMENT_VALUE,
+    DYNAMIC_CONTEXT_MARKER, DYNAMIC_CONTEXT_SUFFIXES, FINGERPRINT_SCAN_BATCH_SIZE,
+    MISSING_ENVIRONMENT_VALUE,
 };
 use crate::lineage::models::{InterruptedListingPolicy, RelationFingerprint};
 
@@ -45,17 +46,19 @@ pub(crate) fn fingerprint_outcome(
 
 /// The hex digest, or `None` where Python returns `None`.
 fn fingerprint_digest(files: &[AuthoredFile], prefix: &[u8]) -> Option<String> {
-    let scanned: Vec<Option<ScannedFile>> = files.par_iter().map(scanned_file).collect();
     let mut digest = Sha256::new();
     digest.update(prefix);
     let mut environment: BTreeSet<String> = BTreeSet::new();
-    for (file, scanned) in files.iter().zip(scanned) {
-        let scanned = scanned?;
-        environment.extend(scanned.environment);
-        digest.update((file.relative_path.chars().count() as u64).to_be_bytes());
-        digest.update(file.relative_path.as_bytes());
-        digest.update((scanned.contents.len() as u64).to_be_bytes());
-        digest.update(&scanned.contents);
+    for batch in files.chunks(FINGERPRINT_SCAN_BATCH_SIZE) {
+        let scanned: Vec<Option<ScannedFile>> = batch.par_iter().map(scanned_file).collect();
+        for (file, scanned) in batch.iter().zip(scanned) {
+            let scanned = scanned?;
+            environment.extend(scanned.environment);
+            digest.update((file.relative_path.chars().count() as u64).to_be_bytes());
+            digest.update(file.relative_path.as_bytes());
+            digest.update((scanned.contents.len() as u64).to_be_bytes());
+            digest.update(&scanned.contents);
+        }
     }
     for name in &environment {
         digest.update(name.as_bytes());

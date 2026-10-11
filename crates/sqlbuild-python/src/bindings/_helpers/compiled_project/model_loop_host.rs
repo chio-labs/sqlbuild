@@ -181,8 +181,6 @@ pub(crate) fn finished_record<'py>(
         type_enforcement: schema.type_enforcement,
         model_schema: schema.model_schema.clone(),
     });
-    // Keep each immutable spelling once for Python-facing views, including the discovered
-    // query when an expansion leaves it unchanged. Projections borrow these same strings.
     let discovered_query: Py<PyString> = model_file
         .bind(py)
         .getattr("query_sql")?

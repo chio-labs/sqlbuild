@@ -113,7 +113,7 @@ def fact_digests(*, project: CompiledProjectView, root: Path) -> dict[FactKey, t
 def record_trimmed_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> dict[type[object], set[str]]:
-    """Record which fields the host-payload trimmers replace, by dataclass type."""
+    """Record replaced fields and omitted constructor fields in the host-payload trimmers."""
 
     trimmed: dict[type[object], set[str]] = {CompiledProject: set(), CompiledModel: set()}
 
@@ -121,6 +121,13 @@ def record_trimmed_fields(
         trimmed.setdefault(type(obj), set()).update(changes)
         return dataclasses.replace(obj, **changes)
 
+    def recording_model(**values: Any) -> CompiledModel:
+        trimmed[CompiledModel].update(
+            {field.name for field in dataclasses.fields(CompiledModel)} - values.keys()
+        )
+        return CompiledModel(**values)
+
     monkeypatch.setattr(custom_rules, "replace", recording_replace)
     monkeypatch.setattr(custom_host_pool, "replace", recording_replace)
+    monkeypatch.setattr(custom_host_pool, "CompiledModel", recording_model)
     return trimmed
