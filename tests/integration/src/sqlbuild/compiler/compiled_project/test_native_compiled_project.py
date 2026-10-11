@@ -229,6 +229,14 @@ def test_given_project_when_running_native_model_loop_then_inputs_and_facts_matc
             expected_code="P001",
         ),
         ModelLoopErrorTestCase(
+            description="unknown project variable",
+            model_sql="MODEL ();\nSELECT '@@missing_var' AS label\n",
+            expected_message=(
+                "unknown project variable '@@missing_var' in '{model_path}'. Available vars: none"
+            ),
+            expected_code="P001",
+        ),
+        ModelLoopErrorTestCase(
             description="unknown enum member",
             model_sql='MODEL ();\nSELECT @enum("order_status").LOST AS status\n',
             expected_message=(

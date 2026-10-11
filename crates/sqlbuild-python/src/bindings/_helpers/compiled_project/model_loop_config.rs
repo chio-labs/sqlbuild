@@ -40,7 +40,7 @@ pub(crate) struct ConfigClasses<'py> {
     table_type: Bound<'py, PyAny>,
     table_type_source: Bound<'py, PyAny>,
     /// `record_template_reads`, the compile-reuse sink of template reads.
-    record_template_reads: Bound<'py, PyAny>,
+    pub(crate) record_template_reads: Bound<'py, PyAny>,
 }
 
 /// What a path default's models inherit, and whether a model may reuse another's config.

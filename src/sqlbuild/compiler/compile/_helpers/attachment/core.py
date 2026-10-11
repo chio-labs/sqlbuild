@@ -255,10 +255,6 @@ class _ModelLoopHost:
     python_hooks: dict[int, tuple[UsageRecord, ...]] = field(default_factory=dict)
     hooks: dict[int, HookExpansionResult] = field(default_factory=dict)
 
-    def interpolate(self, *, index: int) -> str:
-        model_file: DiscoveredSqlModelFile = self.loop.discovered_inputs.model_files[index]
-        return applied_interpolation(self.interpolations[model_file.file_path])
-
     def constant_text(self, *, declaration: ConstantDeclaration, file_path: Path) -> str:
         return render_constant_declaration(
             declaration=declaration,
@@ -592,6 +588,7 @@ def _run_native_model_loop(
                 model_file.query_sql,
                 model_file.contents,
                 loop.native_declaration_references.get(model_file.file_path),
+                _interpolation_row(interpolations[model_file.file_path]),
             )
             for model_file in files
         ],
@@ -604,6 +601,12 @@ def _run_native_model_loop(
         stage=NativeStage.MODEL_LOOP, kind="native_model_inputs", units=finished_natively
     )
     return list(inputs)
+
+
+def _interpolation_row(
+    interpolation: SqlInterpolation,
+) -> tuple[str, list[tuple[str, str]], str | None]:
+    return interpolation.sql, list(interpolation.reads), interpolation.error
 
 
 def _expansion_spans(rows: list[SpanRow]) -> tuple[ExpansionSpan, ...]:

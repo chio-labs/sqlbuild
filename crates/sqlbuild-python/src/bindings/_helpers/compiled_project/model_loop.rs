@@ -3,7 +3,7 @@
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRefMut, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
 use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
@@ -64,7 +64,6 @@ const CONFIG_ARGUMENT: &str = "config";
 const VISIBLE_ARGUMENT: &str = "visible";
 const FILE_PATH_ARGUMENT: &str = "file_path";
 const CHECK_HOOKS_CALLBACK: &str = "check_hooks";
-const INTERPOLATE_CALLBACK: &str = "interpolate";
 const EXPAND_MACROS_CALLBACK: &str = "expand_macros";
 const CONSTANT_TEXT_CALLBACK: &str = "constant_text";
 const INDEX_ARGUMENT: &str = "index";
@@ -224,7 +223,7 @@ impl NativeModelLoop {
         let configs: ModelConfigs<'py> = ModelConfigs::default();
         let visibility: ModelVisibility<'py> = ModelVisibility::default();
         for (index, row) in models.into_iter().enumerate() {
-            let ModelLoopRow((name, _, relative_path, file_path), header, _, _, _) = &row;
+            let ModelLoopRow((name, _, relative_path, file_path), header, _, _, _, _) = &row;
             let (_, header_values, enums, constants) = header;
             let visible: VisibleDeclarations<'py> = visibility.for_model(
                 &context,
@@ -284,6 +283,7 @@ impl NativeModelLoop {
             authored_query,
             contents,
             scan,
+            interpolation,
         ) = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
@@ -300,8 +300,7 @@ impl NativeModelLoop {
             }
             None => Vec::new(),
         };
-        let interpolated: String =
-            callback(context.host, INTERPOLATE_CALLBACK, &arguments[..1])?.extract()?;
+        let interpolated: String = applied_interpolation(context, interpolation)?;
         let (references, stop) = scan.clone().unwrap_or_default();
         let file_keyword: Bound<'py, PyDict> = PyDict::new(py);
         file_keyword.set_item(
@@ -556,6 +555,26 @@ pub(crate) fn validation_outcome(
         return Err(error);
     }
     Err(config_error(context.classes, outcome, Some(values)))
+}
+
+/// `applied_interpolation`: record the interpolation's template reads, then its SQL or error.
+fn applied_interpolation(
+    context: &LoopContext<'_, '_>,
+    interpolation: &(String, Vec<(String, String)>, Option<String>),
+) -> PyResult<String> {
+    let (sql, reads, error) = interpolation;
+    if !reads.is_empty() {
+        let py: Python<'_> = context.host.py();
+        context
+            .classes
+            .config
+            .record_template_reads
+            .call1((PyTuple::new(py, reads)?,))?;
+    }
+    match error {
+        Some(message) => Err(compile_error(context.classes, message, None)),
+        None => Ok(sql.clone()),
+    }
 }
 
 /// `CompileInputError(message, code=...)`, raised as the attachment raises it.

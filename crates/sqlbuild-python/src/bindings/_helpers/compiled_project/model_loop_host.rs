@@ -44,6 +44,8 @@ pub(crate) struct ModelLoopRow(
     pub(crate) String,
     pub(crate) String,
     pub(crate) Option<(Vec<ScannedReference>, Option<u8>)>,
+    /// The `@@`-interpolated query, the template reads it made, or the error that stopped it.
+    pub(crate) (String, Vec<(String, String)>, Option<String>),
 );
 /// `(kind, name, package, call argument count)`.
 pub(crate) type ReferenceRow = (String, String, Option<String>, Option<usize>);
@@ -90,7 +92,7 @@ pub(crate) fn plain_input<'py>(
     finished: FinishedModel<'py>,
 ) -> PyResult<(Bound<'py, PyAny>, CompiledModelFacts)> {
     let py: Python<'py> = host.py();
-    let ModelLoopRow((name, relative_path, _, _), _, authored_query_sql, authored_sql, _) = row;
+    let ModelLoopRow((name, relative_path, _, _), _, authored_query_sql, authored_sql, _, _) = row;
     let stripped: Bound<'py, PyDict> = stripped_values(py, &finished.values)?;
     let mut usages: Vec<Bound<'py, PyAny>> = finished.declarations.usages;
     if let Some(schema) = &finished.header.schema {
