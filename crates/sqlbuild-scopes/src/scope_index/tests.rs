@@ -10,7 +10,7 @@ mod parse_identity;
 mod path_visible;
 #[path = "tests/test_relationship_grants.rs"]
 mod relationship_grants;
-#[path = "tests/test_scope_lookup.rs"]
-mod scope_lookup;
+#[path = "tests/test_report_lookup.rs"]
+mod report_lookup;
 #[path = "tests/test_types.rs"]
 mod test_types;

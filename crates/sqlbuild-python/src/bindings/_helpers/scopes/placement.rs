@@ -18,14 +18,14 @@ use sqlbuild_scopes::scope_index::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
 
-type IdentityRow = (String, String);
+pub(crate) type IdentityRow = (String, String);
 /// A declaration's kind, name and private owner; a resource's kind and name with no owner.
-type QualifiedRow = (String, String, Option<IdentityRow>);
+pub(crate) type QualifiedRow = (String, String, Option<IdentityRow>);
 /// An ownership root's path, kind and resource kind.
-type RootRow = (String, String, Option<String>);
-type ResourceRow = (IdentityRow, String, RootRow);
+pub(crate) type RootRow = (String, String, Option<String>);
+pub(crate) type ResourceRow = (IdentityRow, String, RootRow);
 /// Identity, path, line, column, scope, ownership root and owning path.
-type DeclarationRow = (
+pub(crate) type DeclarationRow = (
     QualifiedRow,
     String,
     i64,
@@ -46,14 +46,16 @@ fn invalid(what: &str) -> pyo3::PyErr {
     PyValueError::new_err(format!("invalid scope placement {what}"))
 }
 
-fn resource_identity((kind, name): IdentityRow) -> PyResult<ResourceIdentity> {
+pub(crate) fn resource_identity((kind, name): IdentityRow) -> PyResult<ResourceIdentity> {
     Ok(ResourceIdentity {
         kind: ResourceKind::parse(&kind).ok_or_else(|| invalid("resource kind"))?,
         name,
     })
 }
 
-fn declaration_identity((kind, name, owner): QualifiedRow) -> PyResult<DeclarationIdentity> {
+pub(crate) fn declaration_identity(
+    (kind, name, owner): QualifiedRow,
+) -> PyResult<DeclarationIdentity> {
     Ok(DeclarationIdentity {
         kind: DeclarationKind::parse(&kind).ok_or_else(|| invalid("declaration kind"))?,
         name,
@@ -62,7 +64,7 @@ fn declaration_identity((kind, name, owner): QualifiedRow) -> PyResult<Declarati
 }
 
 /// Resource and declaration kinds share no values, so the kind tells the identities apart.
-fn qualified_identity(row: QualifiedRow) -> PyResult<QualifiedIdentity> {
+pub(crate) fn qualified_identity(row: QualifiedRow) -> PyResult<QualifiedIdentity> {
     if row.2.is_none()
         && let Some(kind) = ResourceKind::parse(&row.0)
     {
@@ -74,7 +76,7 @@ fn qualified_identity(row: QualifiedRow) -> PyResult<QualifiedIdentity> {
     Ok(QualifiedIdentity::Declaration(declaration_identity(row)?))
 }
 
-fn ownership_root((path, kind, resource_kind): RootRow) -> PyResult<OwnershipRoot> {
+pub(crate) fn ownership_root((path, kind, resource_kind): RootRow) -> PyResult<OwnershipRoot> {
     Ok(OwnershipRoot {
         path,
         kind: OwnershipRootKind::parse(&kind).ok_or_else(|| invalid("root kind"))?,
@@ -102,30 +104,41 @@ fn relocation_row(item: Relocation) -> RelocationRow {
     )
 }
 
-fn scope_kind(value: &str) -> PyResult<ScopeKind> {
+pub(crate) fn scope_kind(value: &str) -> PyResult<ScopeKind> {
     ScopeKind::parse(value).ok_or_else(|| invalid("scope"))
+}
+
+/// A resource row as its record.
+pub(crate) fn resource_record((identity, path, root): ResourceRow) -> PyResult<ResourceRecord> {
+    Ok(ResourceRecord {
+        identity: resource_identity(identity)?,
+        path,
+        ownership_root: ownership_root(root)?,
+    })
+}
+
+/// A declaration row as its record, without macro dependencies.
+pub(crate) fn declaration_record(row: DeclarationRow) -> PyResult<DeclarationRecord> {
+    let (identity, path, line, column, scope, root, owning_path) = row;
+    Ok(DeclarationRecord {
+        identity: declaration_identity(identity)?,
+        path,
+        line,
+        column,
+        scope: scope_kind(&scope)?,
+        ownership_root: ownership_root(root)?,
+        owning_path,
+        dependencies: Vec::new(),
+    })
 }
 
 fn placement_index((resources, declarations, usages): IndexRows) -> PyResult<PlacementIndex> {
     let mut index: PlacementIndex = PlacementIndex::default();
-    for (identity, path, root) in resources {
-        index.resources.push(ResourceRecord {
-            identity: resource_identity(identity)?,
-            path,
-            ownership_root: ownership_root(root)?,
-        });
+    for row in resources {
+        index.resources.push(resource_record(row)?);
     }
-    for (identity, path, line, column, scope, root, owning_path) in declarations {
-        index.declarations.push(DeclarationRecord {
-            identity: declaration_identity(identity)?,
-            path,
-            line,
-            column,
-            scope: scope_kind(&scope)?,
-            ownership_root: ownership_root(root)?,
-            owning_path,
-            dependencies: Vec::new(),
-        });
+    for row in declarations {
+        index.declarations.push(declaration_record(row)?);
     }
     for (consumer, declaration, through) in usages {
         index.usages.push(PlacementUsage {

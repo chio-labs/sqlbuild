@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Hashable, Sequence
 from dataclasses import replace
 from pathlib import Path
-from types import MappingProxyType
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
+from sqlbuild.compiler.scopes._helpers.lookup import build_lookup
 from sqlbuild.compiler.scopes.classes.native_scope_rows import NativeScopeRows
 from sqlbuild.compiler.scopes.exceptions import UnindexableScopeError
 from sqlbuild.compiler.scopes.models import (
     DeclarationRecord,
-    DeclarationVisibilityIndex,
     GrantRecord,
     NativeDeclarationValues,
     OwnershipRoot,
@@ -34,7 +32,6 @@ from sqlbuild.compiler.scopes.types import (
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 
-type _Groups = tuple[list[list[int]], bool]
 type _IndexRows = tuple[
     list[str],
     list[tuple[str, str, str, str | None, str | None]],
@@ -45,20 +42,6 @@ type _IndexRows = tuple[
     bool,
 ]
 type _GrantRows = list[tuple[str, str, int, str | int, str]]
-type _LookupRows = tuple[
-    list[int],
-    list[int],
-    list[int],
-    list[int],
-    tuple[_Groups, _Groups, _Groups, _Groups, _Groups, _Groups],
-    tuple[
-        list[int],
-        list[tuple[tuple[str, str], list[int]]],
-        list[tuple[str, list[int]]],
-        list[tuple[str, list[int]]],
-    ],
-]
-
 _RESOURCE_ROOTS: dict[ResourceKind, str] = {
     ResourceKind.MODEL: "models",
     ResourceKind.TEST: "tests/unit",
@@ -187,83 +170,9 @@ class NativeScopeIndex:
         )
 
     def lookup(self, *, index: ScopeIndex) -> ScopeLookup:
-        """Return Python's `build_lookup(index)` for `index_with_relationships()`."""
+        """The native scope lookup of `index_with_relationships()`."""
 
-        rows: _LookupRows | None = self._native.lookup()
-        if rows is None:
-            raise UnindexableScopeError
-        resource_positions, declaration_positions, usage_positions, grant_positions = rows[:4]
-        groups: tuple[_Groups, _Groups, _Groups, _Groups, _Groups, _Groups] = rows[4]
-        global_positions, private_positions, local_positions, inherited_positions = rows[5]
-        declarations: tuple[DeclarationRecord, ...] = tuple(
-            self._declarations[position] for position in declaration_positions
-        )
-        canonical_index: ScopeIndex = ScopeIndex(
-            ownership_roots=tuple(
-                sorted(
-                    index.ownership_roots,
-                    key=lambda item: (
-                        item.path,
-                        item.resource_kind.value if item.resource_kind is not None else "",
-                    ),
-                )
-            ),
-            resources=tuple(self._resources[position] for position in resource_positions),
-            declarations=declarations,
-            usages=tuple(self._usages[position] for position in usage_positions),
-            grants=tuple(self._grants[position] for position in grant_positions),
-            visibility=(),
-            inaccessible=(),
-            diagnostics=tuple(
-                sorted(
-                    index.diagnostics,
-                    key=lambda item: (
-                        item.path or "",
-                        item.line or 0,
-                        item.column or 0,
-                        item.code.value,
-                    ),
-                )
-            ),
-            completeness=index.completeness,
-        )
-        return ScopeLookup(
-            index=canonical_index,
-            resources=_mapping(
-                groups=groups[0], records=self._resources, key=lambda item: item.identity
-            ),
-            resources_by_path=_mapping(
-                groups=groups[1], records=self._resources, key=lambda item: item.path
-            ),
-            declarations=_mapping(
-                groups=groups[2], records=self._declarations, key=lambda item: item.identity
-            ),
-            usages_by_consumer=_mapping(
-                groups=groups[3], records=self._usages, key=lambda item: item.consumer
-            ),
-            usages_by_declaration=_mapping(
-                groups=groups[4], records=self._usages, key=lambda item: item.declaration
-            ),
-            grants_by_resource=_mapping(
-                groups=groups[5], records=self._grants, key=lambda item: item.resource
-            ),
-            visibility_index=DeclarationVisibilityIndex(
-                identities=tuple(declaration.identity for declaration in declarations),
-                global_positions=tuple(global_positions),
-                private_positions=MappingProxyType(
-                    {
-                        ResourceIdentity(ResourceKind(kind), name): tuple(positions)
-                        for (kind, name), positions in private_positions
-                    }
-                ),
-                local_positions=MappingProxyType(
-                    {owner: tuple(positions) for owner, positions in local_positions}
-                ),
-                inherited_positions=MappingProxyType(
-                    {owner: tuple(positions) for owner, positions in inherited_positions}
-                ),
-            ),
-        )
+        return build_lookup(index=index)
 
 
 def _test_file_row(
@@ -303,16 +212,3 @@ def _declaration_record(
         enum=values.enum,
         constant=values.constant,
     )
-
-
-def _mapping[Record, Key: Hashable](
-    *, groups: _Groups, records: Sequence[Record], key: Callable[[Record], Key]
-) -> MappingProxyType[Key, tuple[Record, ...]]:
-    members, repr_ordered = groups
-    items: list[tuple[Key, tuple[Record, ...]]] = []
-    for group in members:
-        grouped: tuple[Record, ...] = tuple(records[member] for member in group)
-        items.append((key(grouped[0]), grouped))
-    if not repr_ordered:
-        items.sort(key=lambda item: repr(item[0]))
-    return MappingProxyType(dict(items))

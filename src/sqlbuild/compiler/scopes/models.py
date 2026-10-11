@@ -244,6 +244,7 @@ class ScopeLookup:
     usages_by_declaration: Mapping[DeclarationIdentity, tuple[UsageRecord, ...]]
     grants_by_resource: Mapping[ResourceIdentity, tuple[GrantRecord, ...]]
     visibility_index: DeclarationVisibilityIndex
+    native: object | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

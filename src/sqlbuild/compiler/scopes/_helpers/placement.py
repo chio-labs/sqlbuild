@@ -66,8 +66,8 @@ def _dependency_row(
         None if record.macro is None else record.macro.dependencies
     )
     return (
-        _qualified_row(identity=record.identity),
-        None if dependencies is None else [_qualified_row(identity=item) for item in dependencies],
+        qualified_row(identity=record.identity),
+        None if dependencies is None else [qualified_row(identity=item) for item in dependencies],
     )
 
 
@@ -94,10 +94,10 @@ def _with_dependencies(
 
 def _usage_row(*, usage: UsageRecord) -> NativeUsageKeyRow:
     return (
-        _qualified_row(identity=usage.consumer),
-        _qualified_row(identity=usage.declaration),
+        qualified_row(identity=usage.consumer),
+        qualified_row(identity=usage.declaration),
         usage.kind.value,
-        None if usage.through is None else _qualified_row(identity=usage.through),
+        None if usage.through is None else qualified_row(identity=usage.through),
         usage.enum_member,
     )
 
@@ -147,7 +147,7 @@ def resolve_required_placement(
     if not index.completeness.runtime_usage:
         return None
     required: tuple[str, str | None, list[str]] | None = _native.scope_required_placement(
-        _rows(index=index), _qualified_row(identity=declaration)
+        _rows(index=index), qualified_row(identity=declaration)
     )
     if required is None:
         return None
@@ -199,34 +199,34 @@ def _rows(*, index: ScopeIndex) -> NativePlacementRows:
             (
                 (record.identity.kind.value, record.identity.name),
                 record.path,
-                _root_row(root=record.ownership_root),
+                root_row(root=record.ownership_root),
             )
             for record in index.resources
         ],
         [
             (
-                _qualified_row(identity=record.identity),
+                qualified_row(identity=record.identity),
                 record.path,
                 record.line,
                 record.column,
                 record.scope.value,
-                _root_row(root=record.ownership_root),
+                root_row(root=record.ownership_root),
                 record.owning_path,
             )
             for record in index.declarations
         ],
         [
             (
-                _qualified_row(identity=usage.consumer),
-                _qualified_row(identity=usage.declaration),
-                None if usage.through is None else _qualified_row(identity=usage.through),
+                qualified_row(identity=usage.consumer),
+                qualified_row(identity=usage.declaration),
+                None if usage.through is None else qualified_row(identity=usage.through),
             )
             for usage in index.usages
         ],
     )
 
 
-def _qualified_row(*, identity: ResourceIdentity | DeclarationIdentity) -> NativeQualifiedRow:
+def qualified_row(*, identity: ResourceIdentity | DeclarationIdentity) -> NativeQualifiedRow:
     if isinstance(identity, ResourceIdentity) or identity.owner is None:
         return identity.kind.value, identity.name, None
     return (
@@ -236,7 +236,7 @@ def _qualified_row(*, identity: ResourceIdentity | DeclarationIdentity) -> Nativ
     )
 
 
-def _root_row(*, root: OwnershipRoot) -> NativeRootRow:
+def root_row(*, root: OwnershipRoot) -> NativeRootRow:
     return (
         root.path,
         root.kind.value,

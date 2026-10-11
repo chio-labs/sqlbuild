@@ -9,8 +9,8 @@ from sqlbuild.compiler.scopes._helpers.identities import format_identity, parse_
 from sqlbuild.compiler.scopes._helpers.paths import is_equal_or_descendant, normalize_path
 from sqlbuild.compiler.scopes._helpers.report_projection import declaration_report, safe_scope_path
 from sqlbuild.compiler.scopes._helpers.visibility import (
-    _inaccessible_reason,
-    _visibility_reason,
+    classify_resource,
+    explain_standing,
     query_target,
 )
 from sqlbuild.compiler.scopes.constants import (
@@ -32,7 +32,6 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     DeclarationRecord,
     DeclarationReport,
-    GrantRecord,
     OwnershipRoot,
     ResourceIdentity,
     ResourceRecord,
@@ -48,11 +47,9 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityProvenance,
 )
 from sqlbuild.compiler.scopes.types import (
-    GrantKind,
     ResourceKind,
     ScopeDiagnosticCode,
     ScopeKind,
-    VisibilityReason,
 )
 
 
@@ -288,29 +285,9 @@ def explain_declaration(
     visibility: VisibilityProvenance | None = None
     inaccessible: str | None = None
     if at is not None:
-        reason: VisibilityReason | None = _visibility_reason(resource=at, declaration=record)
-        if reason is None:
-            matching_grants: tuple[GrantRecord, ...] = tuple(
-                grant
-                for grant in lookup.grants_by_resource.get(at.identity, ())
-                if grant.declaration == record.identity
-            )
-            if matching_grants:
-                grant_reason: VisibilityReason = (
-                    VisibilityReason.TESTED_MACRO
-                    if all(grant.kind is GrantKind.TESTED_MACRO for grant in matching_grants)
-                    else VisibilityReason.EXPECTED_MODEL
-                )
-                visibility = VisibilityProvenance(
-                    grant_reason.value,
-                    ",".join(
-                        sorted(format_identity(identity=grant.through) for grant in matching_grants)
-                    ),
-                )
-            else:
-                inaccessible = _inaccessible_reason(resource=at, declaration=record).value
-        else:
-            visibility = VisibilityProvenance(reason.value)
+        visibility, inaccessible = explain_standing(
+            lookup=lookup, resource=at, declaration=record.identity
+        )
     return (
         DeclarationExplanation(
             declaration_report(
@@ -423,53 +400,7 @@ def _classify(
     tuple[tuple[DeclarationRecord, VisibilityProvenance], ...],
     tuple[tuple[DeclarationRecord, str], ...],
 ]:
-    grants: tuple[GrantRecord, ...] = lookup.grants_by_resource.get(resource.identity, ())
-    granted: dict[DeclarationIdentity, tuple[GrantRecord, ...]] = {}
-    for grant in grants:
-        granted.setdefault(grant.declaration, ())
-        granted[grant.declaration] += (grant,)
-    direct: list[tuple[DeclarationRecord, VisibilityProvenance]] = []
-    relationships: list[tuple[DeclarationRecord, VisibilityProvenance]] = []
-    unavailable: list[tuple[DeclarationRecord, str]] = []
-    for declaration in lookup.index.declarations:
-        reason: VisibilityReason | None = _visibility_reason(
-            resource=resource, declaration=declaration
-        )
-        if reason is not None:
-            direct.append((declaration, VisibilityProvenance(reason.value)))
-        if declaration.identity in granted and declaration.scope is not ScopeKind.PRIVATE:
-            declaration_grants: tuple[GrantRecord, ...] = granted[declaration.identity]
-            grant_reason: VisibilityReason = (
-                VisibilityReason.TESTED_MACRO
-                if all(grant.kind is GrantKind.TESTED_MACRO for grant in declaration_grants)
-                else VisibilityReason.EXPECTED_MODEL
-            )
-            relationships.append(
-                (
-                    declaration,
-                    VisibilityProvenance(
-                        grant_reason.value,
-                        ",".join(
-                            sorted(
-                                format_identity(identity=grant.through)
-                                for grant in declaration_grants
-                            )
-                        ),
-                    ),
-                )
-            )
-        elif reason is None:
-            unavailable.append(
-                (
-                    declaration,
-                    _inaccessible_reason(resource=resource, declaration=declaration).value,
-                )
-            )
-    return (
-        tuple(sorted(direct, key=_declaration_pair_key)),
-        tuple(sorted(relationships, key=_declaration_pair_key)),
-        tuple(sorted(unavailable, key=_declaration_pair_key)),
-    )
+    return classify_resource(lookup=lookup, resource=resource)
 
 
 def _filter_visible(

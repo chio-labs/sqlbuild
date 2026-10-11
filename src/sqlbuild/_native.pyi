@@ -894,31 +894,6 @@ class NativeScopeIndex:
         scenarios: list[tuple[str, str, str]],
         settings: dict[str, object],
     ) -> tuple[list[tuple[str, str, int, str | int, str]] | None, list[tuple[str, str]]]: ...
-    def lookup(
-        self,
-    ) -> (
-        tuple[
-            list[int],
-            list[int],
-            list[int],
-            list[int],
-            tuple[
-                tuple[list[list[int]], bool],
-                tuple[list[list[int]], bool],
-                tuple[list[list[int]], bool],
-                tuple[list[list[int]], bool],
-                tuple[list[list[int]], bool],
-                tuple[list[list[int]], bool],
-            ],
-            tuple[
-                list[int],
-                list[tuple[tuple[str, str], list[int]]],
-                list[tuple[str, list[int]]],
-                list[tuple[str, list[int]]],
-            ],
-        ]
-        | None
-    ): ...
 
 def scope_placement_diagnostics(
     rows: tuple[list[Any], list[Any], list[Any]],
@@ -933,6 +908,63 @@ def scope_relocations(
     destination: str,
 ) -> list[tuple[int, str, str, tuple[str, str, str | None], str | None]] | None: ...
 def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str: ...
+
+type _ScopeQualified = tuple[str, str, tuple[str, str] | None]
+type _ScopeRoot = tuple[str, str, str | None]
+type _ScopeResource = tuple[tuple[str, str], str, _ScopeRoot]
+type _ScopeGroups = tuple[list[list[int]], bool]
+
+class NativeScopeLookup:
+    def target(
+        self, identity: _ScopeQualified | None, text: str, /
+    ) -> tuple[bool, list[int], str | None, str | None]: ...
+    def resolve(
+        self, resource: _ScopeResource, /
+    ) -> tuple[list[tuple[int, str, int | None]], list[tuple[int, str]], str | None]: ...
+    def explain(
+        self, resource: _ScopeResource, position: int, /
+    ) -> tuple[str | None, str | None, str | None, str | None, str | None]: ...
+    def classify(
+        self, resource: _ScopeResource, /
+    ) -> tuple[
+        list[tuple[int, str]], list[tuple[int, str, str]], list[tuple[int, str]], str | None
+    ]: ...
+
+def build_native_scope_lookup(
+    rows: tuple[
+        list[_ScopeRoot],
+        list[_ScopeResource],
+        list[tuple[_ScopeQualified, str, int, int, str, _ScopeRoot, str | None]],
+        list[tuple[_ScopeQualified, _ScopeQualified, str, _ScopeQualified | None]],
+        list[tuple[tuple[str, str], _ScopeQualified, _ScopeQualified, str]],
+        list[tuple[str | None, int | None, int | None, str]],
+    ],
+    /,
+) -> tuple[
+    NativeScopeLookup | None,
+    tuple[
+        tuple[
+            tuple[list[int], list[int], list[int], list[int], list[int], list[int]],
+            tuple[
+                _ScopeGroups,
+                _ScopeGroups,
+                _ScopeGroups,
+                _ScopeGroups,
+                _ScopeGroups,
+                _ScopeGroups,
+                list[str],
+            ],
+            tuple[
+                list[int],
+                list[tuple[tuple[str, str], list[int]]],
+                list[tuple[str, list[int]]],
+                list[tuple[str, list[int]]],
+            ],
+        ]
+        | None,
+        str | None,
+    ],
+]: ...
 def scope_schema_usages(
     schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
     records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],

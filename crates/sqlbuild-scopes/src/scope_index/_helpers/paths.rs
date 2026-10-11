@@ -3,7 +3,7 @@
 use crate::scope_index::constants::{
     CURRENT_PATH_COMPONENT, PARENT_PATH_COMPONENT, PATH_SEPARATOR,
 };
-use crate::scope_index::models::{ScopeDeferral, ScopePathFailure};
+use crate::scope_index::models::{RejectedPath, ScopeDeferral, ScopePathFailure};
 
 /// Python's `normalize_path`; a path Python rejects defers the stage so Python raises its error.
 pub(crate) fn normalize_path(display_path: &str) -> Result<String, ScopeDeferral> {
@@ -76,4 +76,12 @@ fn deferral(display_path: &str) -> ScopeDeferral {
     ScopeDeferral {
         reason: format!("scope path Python rejects: {display_path}"),
     }
+}
+
+/// Python's `normalize_path`, or the path it rejects with why.
+pub(crate) fn checked_path(display_path: &str) -> Result<String, RejectedPath> {
+    normalized_path(display_path).map_err(|failure| RejectedPath {
+        failure,
+        path: display_path.to_owned(),
+    })
 }

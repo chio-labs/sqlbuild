@@ -1,8 +1,6 @@
 //! Qualified identity text (`format_identity`) and the `repr` text Python orders lookup keys by.
 
-use crate::scope_index::models::{
-    DeclarationIdentity, GrantRecord, GrantThrough, ResourceIdentity, ScopeIndex,
-};
+use crate::scope_index::models::{DeclarationIdentity, QualifiedIdentity, ResourceIdentity};
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 /// Python's `format_identity` for a resource.
@@ -21,16 +19,6 @@ pub(crate) fn declaration_text(identity: &DeclarationIdentity) -> String {
             owner.name,
             identity.name
         ),
-    }
-}
-
-/// Python's `format_identity` of what a grant came through.
-pub(crate) fn grant_through_text(index: &ScopeIndex, grant: &GrantRecord) -> String {
-    match &grant.through {
-        GrantThrough::Model(name) => format!("model:{name}"),
-        GrantThrough::Declaration(declaration) => {
-            declaration_text(&index.declarations[*declaration].identity)
-        }
     }
 }
 
@@ -56,4 +44,34 @@ pub(crate) fn declaration_repr(identity: &DeclarationIdentity) -> Option<String>
         identity.kind.as_str(),
         python_str_repr(&identity.name)?
     ))
+}
+
+/// Python's `format_identity` of a resource or declaration.
+pub(crate) fn qualified_text(identity: &QualifiedIdentity) -> String {
+    match identity {
+        QualifiedIdentity::Resource(identity) => resource_text(identity),
+        QualifiedIdentity::Declaration(identity) => declaration_text(identity),
+    }
+}
+
+/// Python's dataclass `repr` of a resource or declaration identity.
+pub(crate) fn qualified_repr(identity: &QualifiedIdentity) -> Option<String> {
+    match identity {
+        QualifiedIdentity::Resource(identity) => resource_repr(identity),
+        QualifiedIdentity::Declaration(identity) => declaration_repr(identity),
+    }
+}
+
+/// Python's `format_identity` of what a static index grant came through.
+#[cfg(test)]
+pub(crate) fn grant_through_text(
+    index: &crate::scope_index::models::ScopeIndex,
+    grant: &crate::scope_index::models::GrantRecord,
+) -> String {
+    match &grant.through {
+        crate::scope_index::models::GrantThrough::Model(name) => format!("model:{name}"),
+        crate::scope_index::models::GrantThrough::Declaration(declaration) => {
+            declaration_text(&index.declarations[*declaration].identity)
+        }
+    }
 }

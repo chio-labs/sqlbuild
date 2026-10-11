@@ -34,7 +34,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.frontier.types import CompilerEngine
-from sqlbuild.compiler.scopes._helpers.visibility import path_visibility_reason
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
@@ -788,6 +787,13 @@ def _resource_visibility(
     )
 
 
+_PATH_VISIBLE_REASONS: dict[ScopeKind, VisibilityReason] = {
+    ScopeKind.GLOBAL: VisibilityReason.GLOBAL,
+    ScopeKind.LOCAL: VisibilityReason.LOCAL_OWNER,
+    ScopeKind.INHERITED: VisibilityReason.INHERITED_ANCESTOR,
+}
+
+
 def _path_visibility(
     *, resolver: DeclarationScopeResolver, resolution: DeclarationVisibility, target_path: Path
 ) -> _Visibility:
@@ -809,8 +815,7 @@ def _path_visibility(
         ResourceKind.MODEL, f"<path:{lexical_path.as_posix()}>"
     )
     reasons: Iterator[tuple[DeclarationRecord, VisibilityReason | None]] = (
-        (record, path_visibility_reason(declaration=record, path=lexical_path))
-        for record in visible
+        (record, _PATH_VISIBLE_REASONS[record.scope]) for record in visible
     )
     return (
         visible,

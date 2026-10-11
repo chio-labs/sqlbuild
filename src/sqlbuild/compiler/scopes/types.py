@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlbuild.compiler.scopes.models import DeclarationRecord
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type JsonObject = dict[str, object]
@@ -26,6 +30,11 @@ type NativeUsageKeyRow = tuple[
     NativeQualifiedRow, NativeQualifiedRow, str, NativeQualifiedRow | None, str | None
 ]
 type NativeRootRow = tuple[str, str, str | None]
+type NativeResourceRecordRow = tuple[NativeIdentityRow, str, NativeRootRow]
+type ScopeDeclarationPairs[Value] = tuple[tuple[DeclarationRecord, Value], ...]
+type NativeResolvedRows = tuple[
+    list[tuple[int, str, int | None]], list[tuple[int, str]], str | None
+]
 type NativePlacementRows = tuple[
     list[tuple[NativeIdentityRow, str, NativeRootRow]],
     list[tuple[NativeQualifiedRow, str, int, int, str, NativeRootRow, str | None]],
