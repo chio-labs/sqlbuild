@@ -60,8 +60,15 @@ class NativeCompiledProject:
     def record_model_analysis(
         self,
         name: str,
-        inferred_columns: list[tuple[str, str | None]],
-        dynamic_proof: tuple[bool, bool, list[tuple[str, str | None]]] | None,
+        columns: tuple[bool, list[tuple[str, str | None]], list[bool], bool, list[str]],
+        dynamic_proof: tuple[
+            bool,
+            bool,
+            list[tuple[str, str | None]],
+            str | None,
+            list[tuple[str, str | None]],
+        ]
+        | None,
     ) -> bool: ...
     def model_names(self) -> list[str]: ...
     def __eq__(self, other: object) -> bool: ...
@@ -721,36 +728,18 @@ def complete_semantic_checks(
 ]: ...
 
 # Native analysis: contracts.
-def evaluate_native_model_contracts(
-    request: tuple[
-        str,
-        bool,
-        list[
-            tuple[
-                str,
-                str | None,
-                tuple[list[tuple[str, str | None, bool, bool]], list[tuple[str, str]], bool, bool]
-                | None,
-                list[tuple[str, str | None, bool]] | None,
-                bool,
-                tuple[bool, str | None, list[tuple[str, str | None]]] | None,
-                list[str],
-            ]
-        ],
-    ],
-    /,
+type _ContractDiagnosticRow = tuple[
+    str, bool, str, str | None, int | None, str | None, tuple[str, str] | None, str
+]
+
+def evaluate_project_model_contracts(
+    settings: tuple[str, bool], project: NativeCompiledProject
 ) -> list[
-    list[
-        tuple[
-            str,
-            bool,
-            str,
-            str | None,
-            int | None,
-            str | None,
-            tuple[str, str] | None,
-            str,
-        ]
+    tuple[
+        str,
+        list[
+            tuple[str, bool, str, str | None, int | None, str | None, tuple[str, str] | None, str]
+        ],
     ]
 ]: ...
 def native_promotion_conflicts(

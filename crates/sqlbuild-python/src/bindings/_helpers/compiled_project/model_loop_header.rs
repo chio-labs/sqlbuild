@@ -153,8 +153,15 @@ pub(crate) fn header_schema<'py>(
     };
     let resolved: EnumColumns<'py> =
         enum_columns(context, (&enums, source.visible), source.values, &columns)?;
-    let fact: ModelSchemaFact =
-        schema_fact(schema_row(&resolved.columns, audits.len(), &families)?);
+    let fact: ModelSchemaFact = schema_fact(schema_row(
+        &resolved.columns,
+        (
+            audits.len(),
+            &context.classes.path_class.call1((source.relative_path,))?,
+        ),
+        &families,
+        (type_enforcement, source.schema.is_some()),
+    )?);
     Ok(AttachedHeader {
         description,
         schema: Some(HeaderSchema {

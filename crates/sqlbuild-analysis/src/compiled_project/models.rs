@@ -40,6 +40,8 @@ pub struct ModelConfigFacts {
     pub encoding_error: Option<String>,
     pub header_keys: Vec<String>,
     pub layer_schema: Option<String>,
+    /// The `contract` value when it is text.
+    pub contract: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -56,6 +58,10 @@ pub struct ModelSchemaFact {
     pub audit_count: u32,
     pub columns: Vec<SchemaColumnFact>,
     pub dynamic_columns: Vec<DynamicFamilyFact>,
+    /// Whether a column or family declares a type, so the contract checks types.
+    pub type_enforcement: bool,
+    /// Whether the entry comes from a reusable named schema.
+    pub named_schema: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -64,6 +70,8 @@ pub struct SchemaColumnFact {
     pub data_type: Option<String>,
     pub nullable: Option<bool>,
     pub audit_count: u32,
+    /// Whether the column is declared outside the model file, in a named schema.
+    pub declared_outside_model: bool,
 }
 
 /// One declared dynamic-column family; `key` is its name casefolded.
@@ -95,6 +103,12 @@ pub struct ModelAnalysisFact {
     /// Each inferred output column's name and type, in output order.
     pub inferred_columns: Vec<(String, Option<String>)>,
     pub dynamic_proof: Option<DynamicProofFact>,
+    /// Whether analysis inferred output columns at all.
+    pub inferred: bool,
+    /// Whether each inferred output column may be null, in output order.
+    pub nullable_columns: Vec<bool>,
+    pub fast_lineage_has_star: bool,
+    pub unchecked_output_columns: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -103,6 +117,9 @@ pub struct DynamicProofFact {
     pub bare_dynamic_pivot: bool,
     /// `(family key, inferred type)` per declared family.
     pub families: Vec<(String, Option<String>)>,
+    pub failure_reason: Option<String>,
+    /// `(family name, inferred type)` per declared family, as authored.
+    pub named_families: Vec<(String, Option<String>)>,
 }
 
 /// The project-wide switches the model loop reads.

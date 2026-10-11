@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import itertools
 import random
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import pytest
 
-import sqlbuild._native as native_module
+import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
+from sqlbuild.adapter.contract.types import TypeDialect
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
@@ -23,6 +23,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
 )
 from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
+from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
@@ -161,7 +162,6 @@ _PROMOTION_MODES: tuple[str | None, ...] = (None, "immediate", "staged", "IMMEDI
 
 type ContractView = tuple[CompilerDiagnostic, ...]
 type NativeContractRequest = tuple[str, bool, list[Any]]
-type NativeContractOutcome = list[Any]
 _EMPTY_SCHEMA_ROW: tuple[list[Any], list[Any], bool, bool] = ([], [], False, False)
 
 
@@ -188,6 +188,7 @@ def perturbed_project(*, project: CompiledProject, rng: random.Random) -> Compil
 
     return replace(
         project,
+        native_project=None,
         settings=replace(
             project.settings,
             column_contract_mode=rng.choice(tuple(ColumnContractMode)),
@@ -316,24 +317,57 @@ def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> NativeContract
     """Record native contract outcomes for the rest of the test."""
 
     record: NativeContractRecord = NativeContractRecord(statuses=Counter(), codes=Counter())
-    evaluate: Callable[..., list[NativeContractOutcome]] = (
-        native_module.evaluate_native_model_contracts
-    )
+    evaluate: Callable[..., ContractValidationResult] = contract_entry.native_model_contracts
 
-    def counted(request: NativeContractRequest) -> list[NativeContractOutcome]:
-        outcomes: list[NativeContractOutcome] = evaluate(request)
-        record.statuses.update(native_contract_statuses(request=request, outcomes=outcomes))
-        rows: Iterator[Sequence[Any]] = itertools.chain.from_iterable(outcomes)
-        record.codes.update(row[0] for row in rows)
-        return outcomes
+    def counted(
+        *, project: CompiledProject, dialect: TypeDialect | str | None
+    ) -> ContractValidationResult:
+        result: ContractValidationResult = evaluate(project=project, dialect=dialect)
+        request: NativeContractRequest = (
+            "",
+            project.settings.column_contract_mode == ColumnContractMode.IMPLICIT,
+            [_status_row(model) for model in project.models],
+        )
+        record.statuses.update(
+            native_contract_statuses(request=request, diagnostics=len(result.diagnostics))
+        )
+        record.codes.update(diagnostic.code for diagnostic in result.diagnostics)
+        return result
 
-    monkeypatch.setattr(native_module, "evaluate_native_model_contracts", counted)
+    monkeypatch.setattr(contract_entry, "native_model_contracts", counted)
     return record
 
 
-def native_contract_statuses(
-    *, request: NativeContractRequest, outcomes: list[NativeContractOutcome]
-) -> Counter[str]:
+def _status_row(model: CompiledModel) -> tuple[object, ...]:
+    contract: object = model.config.values.get("contract")
+    return (
+        model.name,
+        (None, contract)[isinstance(contract, str)],
+        next(map(_status_schema, filter(None, (model.schema_entry,))), None),
+        next(map(_status_columns, filter(_present, (model.inferred_columns,))), None),
+    )
+
+
+def _present(value: object) -> bool:
+    return value is not None
+
+
+def _status_columns(columns: tuple[InferredColumn, ...]) -> list[tuple[str, str | None, bool]]:
+    return [
+        (column.name, column.type, column.nullability == InferredNullability.NULLABLE)
+        for column in columns
+    ]
+
+
+def _status_schema(schema: SchemaModelEntry) -> tuple[object, ...]:
+    return (
+        [(column.name, column.type, column.nullable is False, False) for column in schema.columns],
+        [(family.name, family.type) for family in schema.dynamic_columns],
+        bool(schema.type_enforcement),
+    )
+
+
+def native_contract_statuses(*, request: NativeContractRequest, diagnostics: int) -> Counter[str]:
     """Per-request counts: `native` for evaluated models, `typed_comparisons` for those that
     compared at least one typed column, and `native_diagnostics`."""
 
@@ -346,7 +380,7 @@ def native_contract_statuses(
     statuses["typed_comparisons"] += sum(
         _compares_typed_column(model=model, implicit=implicit) for model in evaluated
     )
-    statuses["native_diagnostics"] += sum(len(diagnostics) for diagnostics in outcomes)
+    statuses["native_diagnostics"] += diagnostics
     return statuses
 
 
@@ -388,4 +422,8 @@ def with_declared_type(*, project: CompiledProject, declared_type: str) -> Compi
     by_name[_ENFORCED_MODEL] = replace(
         staging, schema_entry=replace(staging.schema_entry, columns=columns)
     )
-    return replace(project, models=tuple(by_name[model.name] for model in project.models))
+    return replace(
+        project,
+        native_project=None,
+        models=tuple(by_name[model.name] for model in project.models),
+    )

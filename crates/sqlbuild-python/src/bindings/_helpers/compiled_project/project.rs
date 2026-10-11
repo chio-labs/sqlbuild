@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use pyo3::prelude::{Bound, PyAny, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::PyDict;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{FromPyObject, pyclass, pymethods};
 use serde_json::Value;
 use sqlbuild_analysis::compiled_project::main::project_models::project_models;
@@ -19,8 +19,8 @@ use crate::bindings::_helpers::compiled_project::values::{object_value, plain_va
 
 /// `(name, type)`.
 type NamedType = (String, Option<String>);
-/// `(name, type, nullable, audit count)`.
-pub(crate) type SchemaColumnPy = (String, Option<String>, Option<bool>, u32);
+/// `(name, type, nullable, audit count, declared outside the model)`.
+pub(crate) type SchemaColumnPy = (String, Option<String>, Option<bool>, u32, bool);
 /// `(key, name, pivot column, value column, aggregate, type, name pattern)`.
 pub(crate) type DynamicFamilyPy = (
     String,
@@ -31,10 +31,12 @@ pub(crate) type DynamicFamilyPy = (
     String,
     Option<String>,
 );
-/// `(entry audit count, columns, dynamic families)`.
-pub(crate) type SchemaPy = (u32, Vec<SchemaColumnPy>, Vec<DynamicFamilyPy>);
-/// `(output proven, bare dynamic pivot, (family key, inferred type))`.
-type ProofPy = (bool, bool, Vec<NamedType>);
+/// `(entry audit count, columns, dynamic families, (type enforcement, named schema))`.
+pub(crate) type SchemaPy = (u32, Vec<SchemaColumnPy>, Vec<DynamicFamilyPy>, (bool, bool));
+/// `(output proven, bare dynamic pivot, (family key, inferred type), failure, (family, type))`.
+type ProofPy = (bool, bool, Vec<NamedType>, Option<String>, Vec<NamedType>);
+/// `(inferred, (name, type), nullable per column, has star, unchecked output columns)`.
+type AnalysisPy = (bool, Vec<NamedType>, Vec<bool>, bool, Vec<String>);
 
 /// Encoded config values and the encoder's error, if any.
 pub(crate) type ConfigValues = (BTreeMap<String, Value>, Option<String>);
@@ -100,18 +102,28 @@ impl NativeCompiledProject {
     fn record_model_analysis(
         &mut self,
         name: &str,
-        inferred_columns: Vec<NamedType>,
+        columns: AnalysisPy,
         dynamic_proof: Option<ProofPy>,
     ) -> bool {
+        let (inferred, inferred_columns, nullable_columns, fast_lineage_has_star, unchecked) =
+            columns;
         let analysis: ModelAnalysisFact = ModelAnalysisFact {
             inferred_columns,
-            dynamic_proof: dynamic_proof.map(|(output_proven, bare_dynamic_pivot, families)| {
-                DynamicProofFact {
-                    output_proven,
-                    bare_dynamic_pivot,
-                    families,
-                }
-            }),
+            dynamic_proof: dynamic_proof.map(
+                |(output_proven, bare_dynamic_pivot, families, failure_reason, named_families)| {
+                    DynamicProofFact {
+                        output_proven,
+                        bare_dynamic_pivot,
+                        families,
+                        failure_reason,
+                        named_families,
+                    }
+                },
+            ),
+            inferred,
+            nullable_columns,
+            fast_lineage_has_star,
+            unchecked_output_columns: unchecked,
         };
         record_model_analysis(&mut self.facts, name, analysis)
     }
@@ -151,6 +163,7 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
             encoding_error: config_values.1,
             header_keys,
             layer_schema,
+            contract: contract_policy(&values)?,
         },
         references: references
             .into_iter()
@@ -177,21 +190,36 @@ pub(crate) fn config_values(values: &Bound<'_, PyDict>) -> ConfigValues {
     }
 }
 
-pub(crate) fn schema_fact((audit_count, columns, dynamic_columns): SchemaPy) -> ModelSchemaFact {
+/// The model's `contract` config value when it is text.
+pub(crate) fn contract_policy(values: &Bound<'_, PyDict>) -> PyResult<Option<String>> {
+    match values.get_item("contract")? {
+        Some(value) if value.is_instance_of::<PyString>() => Ok(Some(value.extract()?)),
+        _ => Ok(None),
+    }
+}
+
+pub(crate) fn schema_fact(
+    (audit_count, columns, dynamic_columns, (type_enforcement, named_schema)): SchemaPy,
+) -> ModelSchemaFact {
     ModelSchemaFact {
         audit_count,
         columns: columns
             .into_iter()
             .map(
-                |(name, data_type, nullable, audit_count)| SchemaColumnFact {
-                    name,
-                    data_type,
-                    nullable,
-                    audit_count,
+                |(name, data_type, nullable, audit_count, declared_outside_model)| {
+                    SchemaColumnFact {
+                        name,
+                        data_type,
+                        nullable,
+                        audit_count,
+                        declared_outside_model,
+                    }
                 },
             )
             .collect(),
         dynamic_columns: dynamic_columns.into_iter().map(family_fact).collect(),
+        type_enforcement,
+        named_schema,
     }
 }
 

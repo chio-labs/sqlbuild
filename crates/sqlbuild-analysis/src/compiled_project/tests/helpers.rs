@@ -12,6 +12,7 @@ pub(super) fn analysis(column: &str) -> ModelAnalysisFact {
     ModelAnalysisFact {
         inferred_columns: vec![(column.to_owned(), Some("INTEGER".to_owned()))],
         dynamic_proof: None,
+        ..ModelAnalysisFact::default()
     }
 }
 

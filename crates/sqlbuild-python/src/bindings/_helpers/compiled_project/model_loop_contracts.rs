@@ -224,16 +224,21 @@ pub(crate) fn enum_columns<'py>(
 /// The schema row the retained facts are read from, as `_schema_row` builds it.
 pub(crate) fn schema_row(
     columns: &Bound<'_, PyTuple>,
-    audit_count: usize,
+    (audit_count, model_path): (usize, &Bound<'_, PyAny>),
     families: &[Bound<'_, PyAny>],
+    switches: (bool, bool),
 ) -> PyResult<SchemaPy> {
     let mut column_rows: Vec<SchemaColumnPy> = Vec::with_capacity(columns.len());
     for column in columns.iter() {
+        let location: Bound<'_, PyAny> = column.getattr(LOCATION_FIELD)?;
+        let declared_outside: bool =
+            !location.is_none() && location.getattr(PATH_FIELD)?.ne(model_path)?;
         column_rows.push((
             column.getattr(NAME_FIELD)?.extract()?,
             column.getattr(TYPE_FIELD)?.extract()?,
             column.getattr(NULLABLE_FIELD)?.extract()?,
             u32::try_from(column.getattr(AUDITS_FIELD)?.len()?).unwrap_or(u32::MAX),
+            declared_outside,
         ));
     }
     let mut family_rows: Vec<DynamicFamilyPy> = Vec::with_capacity(families.len());
@@ -253,6 +258,7 @@ pub(crate) fn schema_row(
         u32::try_from(audit_count).unwrap_or(u32::MAX),
         column_rows,
         family_rows,
+        switches,
     ))
 }
 

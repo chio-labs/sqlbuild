@@ -1,7 +1,11 @@
 //! Model column contracts and promotion conflicts for the preview compiler engine.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::compiled_project::main::project_models::project_models;
+use sqlbuild_analysis::compiled_project::models::{
+    CompiledModelFacts, DynamicProofFact, ModelAnalysisFact, ModelSchemaFact,
+};
 use sqlbuild_analysis::contracts::main::evaluate_model_contracts::evaluate_model_contracts;
 use sqlbuild_analysis::contracts::main::promotion_conflicts::promotion_conflicts;
 use sqlbuild_analysis::contracts::models::{
@@ -13,25 +17,10 @@ use sqlbuild_analysis::contracts::models::{
 use sqlbuild_analysis::type_system::errors::TypeNormalizationError;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::type_system::normalization::normalization_error;
 use crate::bindings::types::CompilerDetach;
 
-/// `(name, type, not_null, declared_in_named_schema)`.
-type DeclaredRow = (String, Option<String>, bool, bool);
-/// `(columns, dynamic_columns, type_enforcement, named_schema)`.
-type SchemaRow = (Vec<DeclaredRow>, Vec<(String, String)>, bool, bool);
-/// `(output_proven, failure_reason, [(family, inferred_type)])`.
-type ProofRow = (bool, Option<String>, Vec<(String, Option<String>)>);
-/// `(name, contract, schema, inferred_columns, fast_lineage_has_star, proof, unchecked)`.
-type ModelRow = (
-    String,
-    Option<String>,
-    Option<SchemaRow>,
-    Option<Vec<(String, Option<String>, bool)>>,
-    bool,
-    Option<ProofRow>,
-    Vec<String>,
-);
 /// `(code, is_error, message, column, declared_index, output_column, related, help)`.
 type DiagnosticRow = (
     &'static str,
@@ -46,26 +35,106 @@ type DiagnosticRow = (
 /// `(name, contract, materialized, incremental_mode)`.
 type PromotionModelRow = (String, Option<String>, Option<String>, Option<String>);
 
-/// Evaluate every model's column contract, raising Python's type normalization error.
+/// Evaluate the column contract of every model the compile's owner recorded, in its order.
 #[pyfunction]
-fn evaluate_native_model_contracts(
+fn evaluate_project_model_contracts(
     py: Python<'_>,
-    request: (String, bool, Vec<ModelRow>),
-) -> PyResult<Vec<Vec<DiagnosticRow>>> {
-    let (dialect, implicit_column_contracts, models) = request;
+    settings: (String, bool),
+    project: PyRef<'_, NativeCompiledProject>,
+) -> PyResult<Vec<(String, Vec<DiagnosticRow>)>> {
+    let (dialect, implicit_column_contracts) = settings;
+    let models: &[CompiledModelFacts] = project_models(project.facts());
     let request = ContractRequest {
         dialect,
         implicit_column_contracts,
-        models: models.into_iter().map(contract_model).collect(),
+        models: models.iter().map(fact_contract_model).collect(),
     };
     let outcomes: Result<Vec<Vec<ContractDiagnostic>>, TypeNormalizationError> = py
         .compiler_detach(|| Ok(evaluate_model_contracts(&request)))
         .map_err(compiler_error)?;
-    Ok(outcomes
-        .map_err(|error| normalization_error(py, &error))?
-        .into_iter()
-        .map(|diagnostics| diagnostics.into_iter().map(diagnostic_row).collect())
+    let outcomes: Vec<Vec<ContractDiagnostic>> =
+        outcomes.map_err(|error| normalization_error(py, &error))?;
+    Ok(models
+        .iter()
+        .zip(outcomes)
+        .map(|(model, diagnostics)| {
+            (
+                model.name.clone(),
+                diagnostics.into_iter().map(diagnostic_row).collect(),
+            )
+        })
         .collect())
+}
+
+/// One model's contract inputs, read from its retained facts.
+fn fact_contract_model(model: &CompiledModelFacts) -> ContractModel {
+    let analysis: Option<&ModelAnalysisFact> = model.analysis.as_ref();
+    ContractModel {
+        name: model.name.clone(),
+        contract: model.config.contract.clone(),
+        schema: model.schema.as_ref().map(fact_contract_schema),
+        inferred_columns: analysis
+            .filter(|analysis| analysis.inferred)
+            .map(fact_inferred_columns),
+        fast_lineage_has_star: analysis.is_some_and(|analysis| analysis.fast_lineage_has_star),
+        dynamic_proof: analysis
+            .and_then(|analysis| analysis.dynamic_proof.as_ref())
+            .map(fact_dynamic_proof),
+        unchecked_output_columns: analysis
+            .map(|analysis| analysis.unchecked_output_columns.clone())
+            .unwrap_or_default(),
+    }
+}
+
+fn fact_contract_schema(schema: &ModelSchemaFact) -> ContractSchema {
+    let mut columns: Vec<DeclaredColumn> = Vec::with_capacity(schema.columns.len());
+    for column in &schema.columns {
+        columns.push(DeclaredColumn {
+            name: column.name.clone(),
+            declared_type: column.data_type.clone(),
+            not_null: column.nullable == Some(false),
+            declared_in_named_schema: schema.named_schema && column.declared_outside_model,
+        });
+    }
+    let mut dynamic_columns: Vec<DeclaredColumnFamily> =
+        Vec::with_capacity(schema.dynamic_columns.len());
+    for family in &schema.dynamic_columns {
+        dynamic_columns.push(DeclaredColumnFamily {
+            name: family.name.clone(),
+            declared_type: family.data_type.clone(),
+        });
+    }
+    ContractSchema {
+        columns,
+        dynamic_columns,
+        type_enforcement: schema.type_enforcement,
+        named_schema: schema.named_schema,
+    }
+}
+
+fn fact_inferred_columns(analysis: &ModelAnalysisFact) -> Vec<InferredOutputColumn> {
+    let mut columns: Vec<InferredOutputColumn> =
+        Vec::with_capacity(analysis.inferred_columns.len());
+    for (index, (name, inferred_type)) in analysis.inferred_columns.iter().enumerate() {
+        columns.push(InferredOutputColumn {
+            name: name.clone(),
+            inferred_type: inferred_type.clone(),
+            nullable: analysis
+                .nullable_columns
+                .get(index)
+                .copied()
+                .unwrap_or(false),
+        });
+    }
+    columns
+}
+
+fn fact_dynamic_proof(proof: &DynamicProofFact) -> DynamicContractProof {
+    DynamicContractProof {
+        output_proven: proof.output_proven,
+        failure_reason: proof.failure_reason.clone(),
+        families: proof.named_families.clone(),
+    }
 }
 
 /// The K011 conflicts of enforced contracts under immediate table promotion.
@@ -107,64 +176,6 @@ fn native_promotion_conflicts(
         .collect())
 }
 
-fn contract_model(
-    (name, contract, schema, inferred, has_star, proof, unchecked): ModelRow,
-) -> ContractModel {
-    ContractModel {
-        name,
-        contract,
-        schema: schema.map(contract_schema),
-        inferred_columns: inferred.map(inferred_columns),
-        fast_lineage_has_star: has_star,
-        dynamic_proof: proof.map(|(output_proven, failure_reason, families)| {
-            DynamicContractProof {
-                output_proven,
-                failure_reason,
-                families,
-            }
-        }),
-        unchecked_output_columns: unchecked,
-    }
-}
-
-fn inferred_columns(columns: Vec<(String, Option<String>, bool)>) -> Vec<InferredOutputColumn> {
-    columns
-        .into_iter()
-        .map(|(name, inferred_type, nullable)| InferredOutputColumn {
-            name,
-            inferred_type,
-            nullable,
-        })
-        .collect()
-}
-
-fn contract_schema(
-    (columns, dynamic_columns, type_enforcement, named_schema): SchemaRow,
-) -> ContractSchema {
-    ContractSchema {
-        columns: columns
-            .into_iter()
-            .map(
-                |(name, declared_type, not_null, declared_in_named_schema)| DeclaredColumn {
-                    name,
-                    declared_type,
-                    not_null,
-                    declared_in_named_schema,
-                },
-            )
-            .collect(),
-        dynamic_columns: dynamic_columns
-            .into_iter()
-            .map(|(name, declared_type)| DeclaredColumnFamily {
-                name,
-                declared_type,
-            })
-            .collect(),
-        type_enforcement,
-        named_schema,
-    }
-}
-
 fn diagnostic_row(diagnostic: ContractDiagnostic) -> DiagnosticRow {
     let (declared_index, output_column) = diagnostic.location.into_parts();
     (
@@ -182,7 +193,7 @@ fn diagnostic_row(diagnostic: ContractDiagnostic) -> DiagnosticRow {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(evaluate_native_model_contracts, module)?)?;
+    module.add_function(wrap_pyfunction!(evaluate_project_model_contracts, module)?)?;
     module.add_function(wrap_pyfunction!(native_promotion_conflicts, module)?)?;
     Ok(())
 }

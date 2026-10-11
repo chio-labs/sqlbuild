@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
@@ -13,8 +14,10 @@ from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
     DynamicColumnContractProof,
+    InferredColumn,
 )
 from sqlbuild.compiler.discovery.models import ConstantDeclaration, EnumDeclaration
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.spec.contracts.models import SchemaModelEntry
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
@@ -35,15 +38,24 @@ def record_model_analyses_impl(
     transferred: int = 0
     for model in models:
         proof: DynamicColumnContractProof | None = model.dynamic_column_contract
+        columns: tuple[InferredColumn, ...] = model.inferred_columns or ()
         transferred += project.record_model_analysis(
             model.name,
-            [(column.name, column.type) for column in (model.inferred_columns or ())],
+            (
+                model.inferred_columns is not None,
+                [(column.name, column.type) for column in columns],
+                [column.nullability == InferredNullability.NULLABLE for column in columns],
+                bool(model.fast_lineage_has_star),
+                list(model.unchecked_output_columns),
+            ),
             None
             if proof is None
             else (
                 proof.output_proven,
                 proof.bare_dynamic_pivot,
                 [(family.name.casefold(), family.inferred_type) for family in proof.families],
+                proof.failure_reason,
+                [(family.name, family.inferred_type) for family in proof.families],
             ),
         )
     return transferred
@@ -66,6 +78,7 @@ def hand_built_project_impl(project: CompiledProject) -> _native.NativeCompiledP
                 config=model.config,
                 references=model.references,
                 schema_entry=model.schema_entry,
+                relative_path=model.relative_path,
                 declarations=_ModelDeclarations(
                     enum_columns=tuple(model.enum_columns),
                     enums=model.enum_declarations,
@@ -130,6 +143,7 @@ def _model_row(
     config: CompileModelConfig,
     references: tuple[CompileSqlReference, ...],
     schema_entry: SchemaModelEntry | None,
+    relative_path: Path,
     declarations: _ModelDeclarations,
 ) -> tuple[object, ...]:
     return (
@@ -139,7 +153,7 @@ def _model_row(
             (str(reference.ref_kind), reference.ref_name, reference.ref_package)
             for reference in references
         ],
-        _schema_row(schema_entry),
+        _schema_row(entry=schema_entry, relative_path=relative_path),
         list(declarations.enum_columns),
         (
             [enum_row(declaration) for declaration in declarations.enums],
@@ -148,13 +162,19 @@ def _model_row(
     )
 
 
-def _schema_row(entry: SchemaModelEntry | None) -> object:
+def _schema_row(*, entry: SchemaModelEntry | None, relative_path: Path) -> object:
     if entry is None:
         return None
     return (
         len(entry.audits),
         [
-            (column.name, column.type, column.nullable, len(column.audits))
+            (
+                column.name,
+                column.type,
+                column.nullable,
+                len(column.audits),
+                column.location is not None and column.location.path != relative_path,
+            )
             for column in entry.columns
         ],
         [
@@ -169,4 +189,5 @@ def _schema_row(entry: SchemaModelEntry | None) -> object:
             )
             for family in entry.dynamic_columns
         ],
+        (bool(entry.type_enforcement), entry.model_schema is not None),
     )
