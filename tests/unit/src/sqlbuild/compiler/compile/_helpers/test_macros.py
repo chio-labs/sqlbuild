@@ -368,6 +368,42 @@ def test_given_inaccessible_scoped_macro_import_when_loading_then_rejects_before
             macro_files={"macros/orders.py": "class Formatter:\n    pass\n"},
             expected_error_fragment="declaration 'Formatter' must be underscore-private",
         ),
+        LoadProjectMacrosErrorTestCase(
+            description="reports an earlier module's declaration before a later syntax error",
+            macro_files={
+                "macros/a_orders.py": "DEFAULT_LIMIT = 10\n",
+                "macros/b_customers.py": "def customers(:\n",
+            },
+            expected_error_fragment=(
+                "^Macro module 'macros/a_orders.py' declaration 'DEFAULT_LIMIT' must be "
+                "underscore-private$"
+            ),
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="reports a later module's syntax error after earlier modules pass",
+            macro_files={
+                "macros/a_orders.py": "def orders() -> str:\n    return 'orders'\n",
+                "macros/b_customers.py": "def customers(:\n",
+            },
+            expected_error_fragment="^Failed to parse macros from '.*b_customers.py': ",
+        ),
+        LoadProjectMacrosErrorTestCase(
+            description="names the shallowest module-level use of an imported macro",
+            macro_files={
+                "macros/shared.py": (
+                    "def first() -> str:\n    return 'first'\n\n"
+                    "def second() -> str:\n    return 'second'\n"
+                ),
+                "macros/consumer.py": (
+                    "from macros.shared import first, second\n\n"
+                    "_PAIRS = [[first], second]\n\n"
+                    "def consumer() -> str:\n    return 'consumer'\n"
+                ),
+            },
+            expected_error_fragment=(
+                "uses imported macro 'second' outside an ordinary function body"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )

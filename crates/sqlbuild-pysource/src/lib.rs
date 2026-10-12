@@ -2,4 +2,5 @@
 
 #![forbid(unsafe_code)]
 
+pub mod macro_modules;
 pub mod module_parse;

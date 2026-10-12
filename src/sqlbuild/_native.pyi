@@ -1332,6 +1332,16 @@ def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
 def macro_call_names(sql: str, nested: bool, /) -> tuple[list[str] | None, str | None]: ...
+def inventory_macro_modules(
+    sources: list[
+        tuple[str, str, list[str], list[str] | None, list[str] | None, str, str, str | None]
+    ],
+    /,
+) -> tuple[
+    list[tuple[str, int, list[str], int, str, list[str]]],
+    list[tuple[int, str]],
+    list[tuple[int, str, list[str]]] | None,
+]: ...
 def splice_macro_calls(
     sql: str, sites: list[tuple[int, int]], outputs: list[str]
 ) -> tuple[str, list[tuple[int, int, int, int]]]: ...
