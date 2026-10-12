@@ -18,7 +18,7 @@ DOTTED_SETTING_INSTRUCTION_PATTERN: re.Pattern[str] = re.compile(
 YAML_FILE_TEXT_MODULES: frozenset[str] = frozenset(
     {
         "src/sqlbuild/cli/commands/_helpers/playground/copy.py",
-        "src/sqlbuild/compiler/discovery/_helpers/yml/sources.py",
+        "crates/sqlbuild-discovery/src/yaml_entries/_helpers/sources.rs",
     }
 )
 RUST_TEST_PATH_MARKER: str = "/tests/"

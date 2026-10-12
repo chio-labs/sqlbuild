@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compiled_project::project::{
 use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::render::declaration_expansion::{
     ExpandedDeclarations, ScannedReference, span_rows,
 };
@@ -35,21 +36,59 @@ const CONSTANTS_ARGUMENT: &str = "constants";
 const LOCAL_ENUMS_ATTRIBUTE: &str = "local_enums";
 const LOCAL_CONSTANTS_ATTRIBUTE: &str = "local_constants";
 const NAME_ATTRIBUTE: &str = "name";
+const STEM_ATTRIBUTE: &str = "stem";
+const AS_POSIX_METHOD: &str = "as_posix";
 
-/// `((name, POSIX path, relative path, file path), column locations, query, contents, scan)`.
-#[derive(FromPyObject)]
-pub(crate) struct ModelLoopRow(
-    pub(crate) (String, String, String, String),
-    /// Header column locations, header values, and the model's own enums and constants.
-    pub(crate) (Py<PyDict>, Py<PyDict>, Py<PyAny>, Py<PyAny>),
-    pub(crate) String,
-    pub(crate) String,
-    pub(crate) Option<(Vec<ScannedReference>, Option<u8>)>,
-    /// The `@@`-interpolated query, its template reads, its error, and its substitution spans.
-    pub(crate) InterpolationRow,
-    /// The discovered model file, owned by the discovery inputs.
-    pub(crate) Py<PyAny>,
+/// What the host hands the loop for one model: its file, declaration scan and interpolation.
+pub(crate) type ModelLoopInput = (
+    Py<NativeModelFile>,
+    Option<DeclarationScan>,
+    InterpolationRow,
 );
+/// A model's scanned declaration references and the scan's stop marker.
+pub(crate) type DeclarationScan = (Vec<ScannedReference>, Option<u8>);
+
+/// The names a model's file is known by.
+pub(crate) struct ModelPaths {
+    pub(crate) name: String,
+    pub(crate) posix_path: String,
+    pub(crate) relative_path: String,
+    pub(crate) file_path: String,
+}
+
+/// One model the loop builds: its discovered file and what the host prepared for it.
+pub(crate) struct ModelLoopRow {
+    pub(crate) paths: ModelPaths,
+    pub(crate) authored_query: String,
+    pub(crate) contents: String,
+    pub(crate) scan: Option<DeclarationScan>,
+    /// The `@@`-interpolated query, its template reads, its error, and its substitution spans.
+    pub(crate) interpolation: InterpolationRow,
+    /// The discovered model file, owned by the discovery inputs.
+    pub(crate) model_file: Py<NativeModelFile>,
+}
+
+impl ModelLoopRow {
+    pub(crate) fn new(py: Python<'_>, input: ModelLoopInput) -> PyResult<Self> {
+        let (model_file, scan, interpolation) = input;
+        let record: &NativeModelFile = model_file.get();
+        let (file_path, relative_path) = record.paths(py);
+        let (query_sql, contents) = record.texts(py);
+        Ok(Self {
+            paths: ModelPaths {
+                name: file_path.getattr(STEM_ATTRIBUTE)?.extract()?,
+                posix_path: relative_path.call_method0(AS_POSIX_METHOD)?.extract()?,
+                relative_path: relative_path.str()?.to_str()?.to_owned(),
+                file_path: file_path.str()?.to_str()?.to_owned(),
+            },
+            authored_query: query_sql.to_str()?.to_owned(),
+            contents: contents.to_str()?.to_owned(),
+            scan,
+            interpolation,
+            model_file,
+        })
+    }
+}
 /// `(interpolated query, template reads, error, substitution spans)`.
 pub(crate) type InterpolationRow = (String, Vec<(String, String)>, Option<String>, Vec<SpanRow>);
 /// `(kind, name, package, call argument count)`.
@@ -96,15 +135,19 @@ pub(crate) fn finished_record<'py>(
     finished: FinishedModel<'py>,
 ) -> PyResult<(ModelInputRecord, CompiledModelFacts)> {
     let py: Python<'py> = inputs.visible.py();
-    let ModelLoopRow(
-        (name, relative_path, _, _),
-        _,
-        authored_query_sql,
-        authored_sql,
-        _,
-        (interpolated_sql, _, _, interpolation_spans),
+    let ModelLoopRow {
+        paths:
+            ModelPaths {
+                name,
+                posix_path: relative_path,
+                ..
+            },
+        authored_query: authored_query_sql,
+        contents: authored_sql,
+        interpolation: (interpolated_sql, _, _, interpolation_spans),
         model_file,
-    ) = row;
+        ..
+    } = row;
     let stripped: Bound<'py, PyDict> = stripped_values(py, &finished.values)?;
     let mut usages: Vec<Bound<'py, PyAny>> = finished.declarations.usages;
     if let Some(schema) = &finished.header.schema {
@@ -180,11 +223,7 @@ pub(crate) fn finished_record<'py>(
         type_enforcement: schema.type_enforcement,
         model_schema: schema.model_schema.clone(),
     });
-    let discovered_query: Py<PyString> = model_file
-        .bind(py)
-        .getattr("query_sql")?
-        .downcast_into::<PyString>()?
-        .unbind();
+    let discovered_query: Py<PyString> = model_file.get().texts(py).0.clone().unbind();
     let authored: Py<PyString> = shared_sql(py, &authored_query_sql, &[&discovered_query])?;
     let macro_source: Py<PyString> =
         shared_sql(py, &finished.declarations.spliced.sql, &[&authored])?;
@@ -195,7 +234,7 @@ pub(crate) fn finished_record<'py>(
         &[&authored, &macro_source, &expanded],
     )?;
     let record: ModelInputRecord = ModelInputRecord {
-        model_file: model_file.clone_ref(py),
+        model_file: model_file.clone_ref(py).into_any(),
         config: config.unbind(),
         query_sql: query,
         macro_source_sql: macro_source,

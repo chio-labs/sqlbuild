@@ -114,7 +114,7 @@ pub(crate) fn windows_errno(code: i32) -> i32 {
 }
 
 /// CPython's UTF-8 decoder error: the range and reason it reports for the first bad sequence.
-fn decode_failure(bytes: Vec<u8>, error: TextDecodeError) -> ReadFailure {
+pub(crate) fn decode_failure(bytes: Vec<u8>, error: TextDecodeError) -> ReadFailure {
     let start: usize = error.valid_up_to;
     let (end, reason): (usize, &'static str) = match error.error_len {
         None => (bytes.len(), "unexpected end of data"),

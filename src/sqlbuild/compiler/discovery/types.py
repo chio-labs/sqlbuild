@@ -16,6 +16,7 @@ type ProjectProvider = Provider
 type NativeLocation = tuple[str, int, int, int, int]
 type NativeListing = tuple[str, list[tuple[str, bool, bool]]]
 type NativeFiles = list[tuple[str, tuple[object, ...]]]
+type NativeModelFiles = list[tuple[Path, object]]
 type NativeFileScope = tuple[str, str, str | None, str | None, str | None]
 
 

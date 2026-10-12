@@ -1,4 +1,4 @@
-"""SQL model files discovered by the native engine, materialised as Python discovery records."""
+"""SQL model files discovered by the native engine as native records."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
     materialise_native_files,
     native_collection,
-    native_locations,
     native_payload_error,
     native_project_tree,
     native_request,
@@ -21,13 +20,10 @@ from sqlbuild.compiler.discovery.constants import (
     REMOVED_SQL_MODEL_HEADER_KEYS,
     SQL_MODEL_HEADER_KEYS,
 )
-from sqlbuild.compiler.discovery.models import (
-    ConstantDeclaration,
-    DiscoveredSqlModelFile,
-    DiscoveryFileFault,
-    EnumDeclaration,
-)
-from sqlbuild.compiler.discovery.types import NativeFiles, NativeLocation
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile, DiscoveryFileFault
+from sqlbuild.compiler.discovery.types import NativeModelFiles
+
+_RAISED_TAG: str = "raised"
 
 
 def discover_native_model_files(
@@ -42,7 +38,7 @@ def discover_native_model_files(
 
     with DirectorySnapshot.scope(project_dir=project_dir):
         tree: _native.NativeProjectTree = native_project_tree(project_dir)
-        files: NativeFiles = native_collection(
+        files: NativeModelFiles = native_collection(
             result=_native.discover_model_files(
                 native_request(
                     project_dir=project_dir,
@@ -54,6 +50,7 @@ def discover_native_model_files(
                     },
                 ),
                 tree,
+                project_dir,
             ),
             project_dir=project_dir,
         )
@@ -61,54 +58,24 @@ def discover_native_model_files(
     return materialise_native_files(
         project_dir=project_dir,
         files=(
-            (Path(relative_path), payload)
-            for relative_path, payload in files
-            if selected_model_names is None or Path(relative_path).stem in selected_model_names
+            (relative_path, item)
+            for relative_path, item in files
+            if selected_model_names is None or relative_path.stem in selected_model_names
         ),
-        build=lambda relative_path, payload: _model_file(
-            project_dir=project_dir,
-            relative_path=relative_path,
-            payload=payload,
-            extract_implicit_alias_columns=extract_implicit_alias_columns,
+        build=lambda relative_path, item: _model_file(
+            project_dir=project_dir, relative_path=relative_path, item=item
         ),
         on_fault=on_fault,
     )
 
 
-def _model_file(
-    *,
-    project_dir: Path,
-    relative_path: Path,
-    payload: tuple[object, ...],
-    extract_implicit_alias_columns: bool,
-) -> DiscoveredSqlModelFile:
-    file_path: Path = project_dir / relative_path
-    error: Exception | None = native_payload_error(payload=payload, file_path=file_path)
-    if error is not None:
-        raise error
-    _tag, contents, values, header_locations, output_locations, query_sql = payload
-    header_values: dict[str, object] = cast(dict[str, object], values)
-    enum_declarations, constant_declarations = cast(
-        tuple[tuple[EnumDeclaration, ...], tuple[ConstantDeclaration, ...]],
-        _native.model_header_declarations(
-            (header_values.get("enums"), header_values.get("constants")),
-            file_path.stem,
-            relative_path,
-        ),
+def _model_file(*, project_dir: Path, relative_path: Path, item: object) -> DiscoveredSqlModelFile:
+    if isinstance(item, DiscoveredSqlModelFile):
+        return item
+    payload: tuple[object, ...] = cast(tuple[object, ...], item)
+    if payload[0] == _RAISED_TAG:
+        raise cast(Exception, payload[1])
+    error: Exception | None = native_payload_error(
+        payload=payload, file_path=project_dir / relative_path
     )
-    return DiscoveredSqlModelFile(
-        file_path=file_path,
-        relative_path=relative_path,
-        contents=str(contents),
-        header_values=header_values,
-        header_column_locations=native_locations(
-            locations=cast(list[NativeLocation], header_locations), relative_path=relative_path
-        ),
-        output_column_locations=native_locations(
-            locations=cast(list[NativeLocation], output_locations), relative_path=relative_path
-        ),
-        query_sql=str(query_sql),
-        enum_declarations=enum_declarations,
-        constant_declarations=constant_declarations,
-        extract_implicit_alias_columns=extract_implicit_alias_columns,
-    )
+    raise error if error is not None else ValueError(payload)

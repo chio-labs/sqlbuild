@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from sqlbuild._native import NativeDiscoverySession
+from sqlbuild._native import DiscoveredSqlModelFile, NativeDiscoverySession
 from sqlbuild.compiler.auditing.models import MeasurementContract
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode
 from sqlbuild.compiler.compile.constants import DEFAULT_SQL_TEST_MODE
@@ -33,7 +33,6 @@ from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
-    SourceLocation,
 )
 from sqlbuild.spec.contracts.types import EventExportSeverity, SourceWriteStrategy
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue
@@ -67,22 +66,6 @@ class PythonHookEntry:
 
     name: str
     kwargs: dict[str, object]
-
-
-@dataclass(frozen=True)
-class DiscoveredSqlModelFile:
-    """A discovered SQL model file and its raw contents."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    header_values: dict[str, object]
-    header_column_locations: dict[str, SourceLocation]
-    output_column_locations: dict[str, SourceLocation]
-    query_sql: str
-    enum_declarations: tuple[EnumDeclaration, ...] = field(default_factory=tuple)
-    constant_declarations: tuple[ConstantDeclaration, ...] = field(default_factory=tuple)
-    extract_implicit_alias_columns: bool = True
 
 
 @dataclass(frozen=True)

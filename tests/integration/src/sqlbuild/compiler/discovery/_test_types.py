@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 
 
 @dataclass(frozen=True)
@@ -224,3 +227,31 @@ class DeepHeaderValuesTestCase:
     header: str
     stack_frames: int
     expected_max_depth: int
+
+
+@dataclass(frozen=True)
+class ProjectValidationTestCase:
+    """A project whose files conflict across discovery, with the error discovery raises."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_error_type: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class CsvDialectTestCase:
+    """Seed CSV settings; discovery fails as `csv.reader` does for `expected_reader_settings`."""
+
+    description: str
+    settings: bytes
+    expected_reader_settings: dict[str, str]
+
+
+@dataclass(frozen=True)
+class RecordCopyTestCase:
+    """One way Python copies a model file record, which must keep every field."""
+
+    description: str
+    copy_record: Callable[[DiscoveredSqlModelFile], DiscoveredSqlModelFile]
+    expected_query_sql: str

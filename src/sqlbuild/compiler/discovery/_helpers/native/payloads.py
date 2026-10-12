@@ -16,10 +16,12 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
+    DiscoveryConflictError,
     DiscoveryError,
     ModelSqlParseError,
     ProjectPathError,
     SchemaParseError,
+    SeedDiscoveryError,
     SourceParseError,
     SqlAuditParseError,
     SqlHookParseError,
@@ -58,6 +60,8 @@ _FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {
     "sql_hook": SqlHookParseError,
     "sql_audit": SqlAuditParseError,
     "resource_identity": ResourceIdentityError,
+    "conflict": DiscoveryConflictError,
+    "seed": SeedDiscoveryError,
 }
 
 
@@ -119,11 +123,11 @@ def native_collection[ResultT](
     raise native_failure(payload)
 
 
-def materialise_native_files[RecordT](
+def materialise_native_files[ItemT, RecordT](
     *,
     project_dir: Path,
-    files: Iterable[tuple[Path, tuple[object, ...]]],
-    build: Callable[[Path, tuple[object, ...]], RecordT],
+    files: Iterable[tuple[Path, ItemT]],
+    build: Callable[[Path, ItemT], RecordT],
     on_fault: Callable[[DiscoveryFileFault], None] | None,
 ) -> tuple[RecordT, ...]:
     """Build each native file payload, reporting and skipping a failing file when asked."""

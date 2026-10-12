@@ -32,7 +32,7 @@ def rust_findings(repository_root: Path) -> list[str]:
     findings: list[str] = []
     for path in sorted((repository_root / "crates").rglob("src/**/*.rs")):
         relative: str = path.relative_to(repository_root).as_posix()
-        if RUST_TEST_PATH_MARKER in relative:
+        if RUST_TEST_PATH_MARKER in relative or relative in YAML_FILE_TEXT_MODULES:
             continue
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             if RUST_STRING_DELIMITER in line and names_setting_without_snippet(line):

@@ -393,10 +393,17 @@ def _model_file(
         name: SourceLocation(path=base.relative_path, line=line + 2, column=3)
         for line, name in enumerate(names[: len(names) * (index % 2)])
     }
-    return replace(
-        base,
+    return DiscoveredSqlModelFile(
+        file_path=base.file_path,
+        relative_path=base.relative_path,
+        contents=base.contents,
         header_values={**base.header_values, "columns": columns, "audits": audits},
         header_column_locations=locations,
+        output_column_locations=base.output_column_locations,
+        query_sql=base.query_sql,
+        enum_declarations=base.enum_declarations,
+        constant_declarations=base.constant_declarations,
+        extract_implicit_alias_columns=base.extract_implicit_alias_columns,
     )
 
 
