@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::assembly::analysis_session::models::{DeferredCleaning, ModelOutcome};
-use crate::semantic_validation::_helpers::normalization::normalize_analysis_sql;
+use crate::semantic_validation::main::normalize::normalize_analysis_sql;
+use crate::semantic_validation::models::NormalizationInput;
 
 /// The outcome's cleaned SQL, normalizing a cache hit's deferred input when it has one.
 pub fn resolved_cleaned_sql(outcome: &ModelOutcome) -> Result<Cow<'_, str>, String> {
@@ -18,9 +19,11 @@ pub fn resolved_cleaned_sql(outcome: &ModelOutcome) -> Result<Cow<'_, str>, Stri
     else {
         return Ok(Cow::Borrowed(&outcome.cleaned_sql));
     };
-    let placeholders: HashMap<String, String> = placeholders.iter().cloned().collect();
-    catch_compiler_panic(|| {
-        normalize_analysis_sql(query_sql, dialect, HashMap::new(), placeholders)
-    })
-    .map(Cow::Owned)
+    let request: NormalizationInput = NormalizationInput {
+        sql: query_sql.clone(),
+        dialect: dialect.clone(),
+        stubs: HashMap::new(),
+        placeholders: placeholders.iter().cloned().collect(),
+    };
+    catch_compiler_panic(|| normalize_analysis_sql(request)).map(Cow::Owned)
 }
