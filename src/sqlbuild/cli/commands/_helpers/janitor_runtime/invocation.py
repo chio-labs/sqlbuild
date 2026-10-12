@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.cli.commands._helpers.runtime.preview_target import validate_preview_target
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
@@ -11,7 +12,6 @@ from sqlbuild.cli.commands.models import (
     JanitorInvocation,
     JanitorSettings,
 )
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.executor.janitor.main.resolve_retention_days import resolve_janitor_retention_days
 from sqlbuild.presentation.main.supports_color import supports_color

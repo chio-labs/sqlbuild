@@ -10,8 +10,8 @@ import pytest
 
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
 import sqlbuild.compiler.planner._helpers.sql_tests.fixture_formatting as fixture_formatting_module
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.unit.src.sqlbuild.lint._test_types import PassedAdapterSyntaxTestCase

@@ -5,31 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
-    discover_command_output_sink_functions,
-)
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
-    discover_adapter_file,
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
-    discover_event_exporter_functions,
-    discover_hook_functions,
     discover_macro_files,
-    discover_materialization_files,
     discover_model_schema_files,
-    discover_provider_classes,
-    discover_python_function_files,
-    discover_python_node_functions,
-    discover_seed_files,
     discover_sql_function_files,
     discover_sql_hook_files,
-)
-from sqlbuild.compiler.discovery._helpers.integrations.loaders import (
-    build_integration_loader_functions,
-)
-from sqlbuild.compiler.discovery._helpers.native.declaration_files import (
-    retained_discovery_session,
 )
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
@@ -39,194 +22,22 @@ from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     discover_native_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.native.yaml_files import (
-    discover_native_schema_files,
     discover_native_source_files,
 )
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredAssetFunction,
-    DiscoveredAuditFactory,
-    DiscoveredCheckFunction,
-    DiscoveredCommandOutputSink,
     DiscoveredConstantFile,
-    DiscoveredDeclarationFiles,
     DiscoveredEnumFile,
-    DiscoveredEventExporter,
-    DiscoveredHookFunction,
-    DiscoveredLoaderFunction,
     DiscoveredMacroFile,
-    DiscoveredMaterializationFile,
     DiscoveredProjectInputs,
-    DiscoveredProvider,
-    DiscoveredPythonNodeFunctions,
-    DiscoveredSourceFile,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestFile,
-    DiscoveredTaskFunction,
     DiscoveryFileFault,
     TolerantScopeDiscovery,
 )
-from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
-
-
-def build_discovered_project_inputs(
-    *,
-    project_dir: Path,
-    project_config: ProjectConfig,
-    local_config: LocalConfig,
-    sql_analysis_enabled: bool,
-    extract_output_column_locations: bool = True,
-) -> DiscoveredProjectInputs:
-    """Discover all project files and functions into one inputs bundle."""
-
-    with OperationLifecycle(
-        operation_kind="project", operation_name="discovery_declaration_parse"
-    ) as declaration_lifecycle:
-        declarations: DiscoveredDeclarationFiles = _discover_declaration_files(
-            project_dir=project_dir,
-            sql_analysis_enabled=sql_analysis_enabled,
-            extract_output_column_locations=extract_output_column_locations,
-        )
-        declaration_lifecycle.completed(
-            metadata={
-                "item_count": sum(
-                    len(files)
-                    for files in (
-                        declarations.source_files,
-                        declarations.model_files,
-                        declarations.enum_files,
-                        declarations.constant_files,
-                        declarations.model_schema_files,
-                        declarations.sql_function_files,
-                        declarations.sql_hook_files,
-                        declarations.python_function_files,
-                        declarations.schema_files,
-                        declarations.seed_files,
-                        declarations.test_files,
-                        declarations.scenario_files,
-                        declarations.audit_files,
-                        declarations.macro_files,
-                    )
-                )
-                + int(declarations.adapter_file is not None)
-            }
-        )
-    with OperationLifecycle(
-        operation_kind="project", operation_name="discovery_python_import"
-    ) as python_lifecycle:
-        providers: tuple[DiscoveredProvider, ...] = discover_provider_classes(
-            project_dir=project_dir
-        )
-        python_nodes: DiscoveredPythonNodeFunctions = discover_python_node_functions(
-            project_dir=project_dir,
-            providers=providers,
-        )
-        materialization_files: tuple[DiscoveredMaterializationFile, ...] = (
-            discover_materialization_files(
-                project_dir=project_dir,
-                providers=providers,
-            )
-        )
-        hook_functions: tuple[DiscoveredHookFunction, ...] = discover_hook_functions(
-            project_dir=project_dir,
-            providers=providers,
-        )
-        event_exporters: tuple[DiscoveredEventExporter, ...] = discover_event_exporter_functions(
-            project_dir=project_dir, providers=providers
-        )
-        command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = (
-            discover_command_output_sink_functions(
-                project_dir=project_dir,
-                providers=providers,
-            )
-        )
-        python_paths: set[Path] = {provider.relative_path for provider in providers}
-        python_paths.update(node.relative_path for node in python_nodes.loaders)
-        python_paths.update(node.relative_path for node in python_nodes.tasks)
-        python_paths.update(node.relative_path for node in python_nodes.assets)
-        python_paths.update(node.relative_path for node in python_nodes.checks)
-        python_paths.update(factory.relative_path for factory in python_nodes.audit_factories)
-        python_paths.update(file.relative_path for file in materialization_files)
-        python_paths.update(function.relative_path for function in hook_functions)
-        python_paths.update(exporter.relative_path for exporter in event_exporters)
-        python_paths.update(sink.relative_path for sink in command_output_sinks)
-        python_lifecycle.completed(metadata={"item_count": len(python_paths)})
-    loader_functions: tuple[DiscoveredLoaderFunction, ...] = tuple(
-        python_nodes.loaders
-    ) + build_integration_loader_functions(declarations.source_files)
-    task_functions: tuple[DiscoveredTaskFunction, ...] = tuple(python_nodes.tasks)
-    asset_functions: tuple[DiscoveredAssetFunction, ...] = tuple(python_nodes.assets)
-    check_functions: tuple[DiscoveredCheckFunction, ...] = tuple(python_nodes.checks)
-    audit_factories: tuple[DiscoveredAuditFactory, ...] = tuple(python_nodes.audit_factories)
-    return DiscoveredProjectInputs(
-        project_config=project_config,
-        local_config=local_config,
-        project_dir=project_dir,
-        model_files=declarations.model_files,
-        enum_files=declarations.enum_files,
-        constant_files=declarations.constant_files,
-        model_schema_files=declarations.model_schema_files,
-        sql_function_files=declarations.sql_function_files,
-        sql_hook_files=declarations.sql_hook_files,
-        python_function_files=declarations.python_function_files,
-        schema_files=declarations.schema_files,
-        source_files=declarations.source_files,
-        seed_files=declarations.seed_files,
-        test_files=declarations.test_files,
-        scenario_files=declarations.scenario_files,
-        audit_files=declarations.audit_files,
-        macro_files=declarations.macro_files,
-        materialization_files=materialization_files,
-        loader_functions=loader_functions,
-        task_functions=task_functions,
-        asset_functions=asset_functions,
-        check_functions=check_functions,
-        audit_factories=audit_factories,
-        hook_functions=hook_functions,
-        event_exporters=event_exporters,
-        command_output_sinks=command_output_sinks,
-        providers=providers,
-        adapter_file=declarations.adapter_file,
-        native_session=declarations.native_session,
-    )
-
-
-def _discover_declaration_files(
-    *,
-    project_dir: Path,
-    sql_analysis_enabled: bool,
-    extract_output_column_locations: bool,
-) -> DiscoveredDeclarationFiles:
-    with DirectorySnapshot.scope(project_dir=project_dir):
-        source_files: tuple[DiscoveredSourceFile, ...] = discover_native_source_files(
-            project_dir=project_dir
-        )
-        model_files: tuple[DiscoveredSqlModelFile, ...] = discover_native_model_files(
-            project_dir=project_dir,
-            extract_implicit_alias_columns=sql_analysis_enabled,
-            extract_output_column_locations=extract_output_column_locations,
-        )
-        return DiscoveredDeclarationFiles(
-            source_files=source_files,
-            model_files=model_files,
-            enum_files=discover_enum_files(project_dir=project_dir),
-            constant_files=discover_constant_files(project_dir=project_dir),
-            model_schema_files=discover_model_schema_files(project_dir=project_dir),
-            sql_function_files=discover_sql_function_files(project_dir=project_dir),
-            sql_hook_files=discover_sql_hook_files(project_dir=project_dir),
-            python_function_files=discover_python_function_files(project_dir=project_dir),
-            schema_files=discover_native_schema_files(project_dir=project_dir),
-            seed_files=discover_seed_files(project_dir=project_dir),
-            test_files=discover_native_test_files(project_dir=project_dir),
-            scenario_files=discover_native_scenario_files(project_dir=project_dir),
-            audit_files=discover_audit_files(project_dir=project_dir),
-            macro_files=discover_macro_files(project_dir=project_dir),
-            adapter_file=discover_adapter_file(project_dir=project_dir),
-            native_session=retained_discovery_session(project_dir=project_dir),
-        )
 
 
 def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:

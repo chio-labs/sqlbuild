@@ -972,6 +972,20 @@ def build_project_graph(
     on_progress: Callable[[str], None] | None = None,
     no_cache: bool = False,
 ) -> ProjectGraph: ...
+def discover_project_inputs(
+    *,
+    project_dir: Path,
+    sql_analysis_enabled_override: bool | None = None,
+    extract_output_column_locations: bool = True,
+) -> DiscoveredProjectInputs: ...
+def build_discovered_project_inputs(
+    *,
+    project_dir: Path,
+    project_config: ProjectConfig,
+    local_config: LocalConfig,
+    sql_analysis_enabled: bool,
+    extract_output_column_locations: bool = True,
+) -> DiscoveredProjectInputs: ...
 def build_compile_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,

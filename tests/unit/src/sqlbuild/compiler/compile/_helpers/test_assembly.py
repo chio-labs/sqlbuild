@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import build_compile_inputs
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.models import (
@@ -19,7 +19,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledSeedView,
     CompileInputsView,
 )
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, SqlHookEntry
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     AssembleCompiledProjectEffectiveTargetTestCase,

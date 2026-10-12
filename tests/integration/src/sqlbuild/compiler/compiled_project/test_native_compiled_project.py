@@ -8,12 +8,12 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.scopes.exceptions import InvalidQualifiedIdentityError
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (

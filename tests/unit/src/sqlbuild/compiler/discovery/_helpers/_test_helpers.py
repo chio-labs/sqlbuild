@@ -10,7 +10,7 @@ from itertools import compress
 from pathlib import Path
 from typing import cast
 
-from sqlbuild.compiler.discovery._helpers.filesystem import aggregation
+import sqlbuild._native as _native
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_audit_files,
     discover_constant_files,
@@ -168,7 +168,7 @@ def write_scoped_project(*, root: Path) -> None:
 def isolated_discovery_mismatches(*, project_dir: Path) -> tuple[str, ...]:
     """Return categories where one shared-snapshot pass differs from isolated discovery."""
 
-    inputs: DiscoveredProjectInputs = aggregation.build_discovered_project_inputs(
+    inputs: DiscoveredProjectInputs = _native.build_discovered_project_inputs(
         project_dir=project_dir,
         project_config=load_project_config(project_dir=project_dir),
         local_config=load_local_config(project_dir=project_dir),

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild import _native
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
     build_tolerant_scope_discovery,
 )
@@ -45,7 +46,6 @@ from sqlbuild.compiler.discovery.constants import (
 from sqlbuild.compiler.discovery.main._model_description_inputs import (
     discover_model_description_inputs,
 )
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,

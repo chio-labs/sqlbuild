@@ -16,7 +16,7 @@ import pytest
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.assembly.project as project_assembly
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
-from sqlbuild._native import build_compile_inputs
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
@@ -62,7 +62,6 @@ from sqlbuild.compiler.compile.models import (
     ModelSqlAnalysis,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompileInputsView, ModelInput
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 from sqlbuild.sql_values.types import CollectionRendering

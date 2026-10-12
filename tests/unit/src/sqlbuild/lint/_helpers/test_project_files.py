@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint._helpers.project_files import collect_project_files
 from sqlbuild.lint.main.run_lint import run_lint

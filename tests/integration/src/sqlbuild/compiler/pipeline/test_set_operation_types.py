@@ -9,12 +9,12 @@ import duckdb
 import pytest
 from duckdb import sqltypes
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
 )
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     SetOperationLineageIntegrationTestCase,

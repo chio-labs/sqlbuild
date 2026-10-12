@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import build_compile_inputs
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
@@ -36,7 +36,6 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
 )
 from sqlbuild.compiler.compiled_project.main import compiled_project_facts as facts_module
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax

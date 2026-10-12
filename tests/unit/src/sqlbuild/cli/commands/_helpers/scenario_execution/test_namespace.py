@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.cli.commands._helpers.scenario_execution.namespace import resolve_scenario_namespace
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.exceptions import SpecConfigError
 from sqlbuild.spec.contracts.main.parse_scenario_run_namespace import parse_scenario_run_namespace

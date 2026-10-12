@@ -6,14 +6,13 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import build_compile_inputs
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.compiler.compile.models import CompileAdapterContext
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import SqlHookEntry
 from sqlbuild.sql_values.types import CollectionRendering
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (

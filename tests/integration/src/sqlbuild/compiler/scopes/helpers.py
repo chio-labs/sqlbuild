@@ -13,6 +13,7 @@ from typing import cast
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.attachment import declaration_scope
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import build_declaration_scope
@@ -26,7 +27,6 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,

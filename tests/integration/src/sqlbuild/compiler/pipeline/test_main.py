@@ -7,13 +7,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import build_project_graph
+from sqlbuild._native import build_project_graph, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
 from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.pipeline.main import compile as compile_pipeline

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import build_compile_inputs
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
 )
 from sqlbuild.compiler.compile.types import AuditInput, CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline

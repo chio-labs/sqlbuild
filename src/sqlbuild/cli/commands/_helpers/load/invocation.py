@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.cli.commands._helpers.load.selection import (
     select_load_entries,
@@ -15,7 +16,6 @@ from sqlbuild.cli.commands._helpers.load.selection import (
 from sqlbuild.cli.commands.models import LoadCommandRequest, LoadInvocation
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.presentation.main.supports_color import supports_color

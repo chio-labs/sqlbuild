@@ -8,6 +8,7 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.lint.runs import (
     prepare_lint_run,
@@ -16,7 +17,6 @@ from sqlbuild.cli.commands._helpers.lint.runs import (
 )
 from sqlbuild.cli.commands._helpers.lint.selection import resolve_lint_inputs
 from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.main.has_fixture_typed_null_candidates import (
     has_fixture_typed_null_candidates,

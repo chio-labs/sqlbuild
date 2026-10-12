@@ -106,9 +106,8 @@ def _prepare_graph(
         )
         if cached is not None:
             return cached, None, parsed_depth
-    from sqlbuild._native import build_project_graph
+    from sqlbuild._native import build_project_graph, discover_project_inputs
     from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-    from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,
@@ -216,7 +215,7 @@ def _render_lineage(
             if error.code == UNKNOWN_SELECTOR_ERROR_CODE and isinstance(
                 graph, RelationLineageIndex
             ):
-                from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
+                from sqlbuild._native import discover_project_inputs
 
                 reject_unit_test_selectors(
                     select=request.select,

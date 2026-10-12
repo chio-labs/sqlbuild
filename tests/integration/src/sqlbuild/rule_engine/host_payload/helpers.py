@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledModel, CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.rule_engine._helpers.engine import custom_rules, fact_replay
 from sqlbuild.rule_engine._helpers.engine.fact_replay import (

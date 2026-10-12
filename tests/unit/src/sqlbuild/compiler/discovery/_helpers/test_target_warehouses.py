@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
 )
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import TargetWarehousesConfig
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (

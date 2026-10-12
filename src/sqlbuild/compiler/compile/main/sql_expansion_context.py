@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
     build_declaration_scope,
@@ -24,7 +25,6 @@ from sqlbuild.compiler.compile.models import (
     SqlExpansionContext,
 )
 from sqlbuild.compiler.compile.types import TypedSqlValueRenderer
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (

@@ -277,7 +277,6 @@ EVENT_EXPORTER_INTEGRATION_PATHS: frozenset[str] = frozenset(
         "src/sqlbuild/compiler/discovery/_helpers/filesystem/core.py",
         "src/sqlbuild/compiler/discovery/_helpers/filesystem/command_output_sinks.py",
         "src/sqlbuild/compiler/discovery/_helpers/yml/project.py",
-        "src/sqlbuild/compiler/discovery/main/discover.py",
         "src/sqlbuild/compiler/discovery/main/runtime_extensions.py",
         "src/sqlbuild/compiler/discovery/models.py",
         "src/sqlbuild/provider/_helpers/session.py",

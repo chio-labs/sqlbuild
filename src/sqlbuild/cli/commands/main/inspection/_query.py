@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import QueryResult
@@ -14,7 +15,6 @@ from sqlbuild.cli.commands._helpers.runtime.connection import (
     resolve_project_connection_config,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError, QueryExecutionError
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,

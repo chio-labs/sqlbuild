@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffIncompleteError
 from sqlbuild.cli.commands.models import DiffCommandRequest, DiffInvocation
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.main.discover_configuration import (
     discover_project_configuration,
 )

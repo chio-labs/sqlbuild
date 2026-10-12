@@ -10,11 +10,11 @@ from unittest.mock import Mock
 import duckdb
 import pytest
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
     _list_source_candidates,

@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import build_compile_inputs
+from sqlbuild._native import build_compile_inputs, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly import project as project_module
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
@@ -23,7 +23,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.sql_values.types import CollectionRendering
 

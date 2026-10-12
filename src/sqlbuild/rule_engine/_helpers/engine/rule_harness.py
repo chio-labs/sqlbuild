@@ -6,9 +6,9 @@ import inspect
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from sqlbuild._native import discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.rule_engine._helpers.engine.config import load_rules_config
