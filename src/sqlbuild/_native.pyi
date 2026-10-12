@@ -5,6 +5,7 @@ from pathlib import Path, PurePath
 from typing import Any, Literal, TypedDict, overload
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
@@ -975,6 +976,15 @@ def build_compiled_project(
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
     resolved_connection: dict[str, object] | None = None,
     analysis_selection: CompileAnalysisSelection | None = None,
+) -> CompiledProjectView: ...
+def assemble_project(
+    *,
+    inputs: CompileInputsView,
+    inference_profile: ExpressionInferenceProfile | None = None,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    analysis_cache_dir: Path | None = None,
+    analysis_model_names: frozenset[str] | None = None,
 ) -> CompiledProjectView: ...
 def build_project_graph_with_analysis_selection(
     *,

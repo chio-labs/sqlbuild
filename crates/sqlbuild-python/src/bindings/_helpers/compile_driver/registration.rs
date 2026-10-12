@@ -3,11 +3,12 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::compile_driver::{
-    analysis, command, discovery, inputs, pipeline, project,
+    analysis, assembly, command, discovery, inputs, pipeline, project,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     analysis::register(module)?;
+    assembly::register(module)?;
     command::register(module)?;
     project::register(module)?;
     inputs::register(module)?;

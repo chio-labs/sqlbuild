@@ -6,9 +6,8 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
@@ -518,7 +517,7 @@ def test_given_compile_inputs_when_assembling_compiled_project_then_returns_expe
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         run_id="test_run_id",
     )
-    compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
+    compiled: CompiledProjectView = assemble_project(inputs=compile_inputs)
 
     assert tuple(m.name for m in compiled.models) == test_case.expected_model_names
     assert tuple(m.deps for m in compiled.models) == test_case.expected_model_deps
@@ -623,7 +622,7 @@ SELECT * FROM @relation WHERE NOT (@expression)
         run_id="test_run_id",
     )
 
-    compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
+    compiled: CompiledProjectView = assemble_project(inputs=compile_inputs)
 
     assert tuple(audit.name for audit in compiled.audits) == test_case.expected_names
 
@@ -696,7 +695,7 @@ seeds:
     )
 
     seeds: dict[str, CompiledSeedView] = {
-        seed.name: seed for seed in assemble_compiled_project(inputs=compile_inputs).seeds
+        seed.name: seed for seed in assemble_project(inputs=compile_inputs).seeds
     }
 
     assert (
@@ -719,9 +718,7 @@ seeds:
         adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
         selected_target="physical",
     )
-    physical_seeds: tuple[CompiledSeedView, ...] = assemble_compiled_project(
-        inputs=physical_inputs
-    ).seeds
+    physical_seeds: tuple[CompiledSeedView, ...] = assemble_project(inputs=physical_inputs).seeds
     assert {(seed.destination.database, seed.destination.schema) for seed in physical_seeds} == {
         test_case.expected_literal_target_location
     }
@@ -798,7 +795,7 @@ def test_given_connection_location_when_assembling_project_then_sets_effective_t
         run_id="test_run_id",
     )
 
-    compiled: CompiledProjectView = assemble_compiled_project(inputs=compile_inputs)
+    compiled: CompiledProjectView = assemble_project(inputs=compile_inputs)
 
     assert compiled.effective_target_database == test_case.expected_effective_target_database
     assert compiled.effective_target_schema == test_case.expected_effective_target_schema
@@ -860,7 +857,7 @@ def test_given_sql_hooks_when_assembling_then_applies_adapter_aware_validation(
         run_id="test_run_id",
     )
 
-    compiled: CompiledProjectView = assemble_compiled_project(
+    compiled: CompiledProjectView = assemble_project(
         inputs=compile_inputs,
         inference_profile=ExpressionInferenceProfile(
             sql_analysis_dialect=test_case.dialect,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.models import (
     CompileAnalysisSelection,
     CompiledObjectKey,
@@ -113,7 +113,7 @@ def resolve_analysis_model_names(
 
     if selection is None or (not selection.select and not selection.exclude):
         return None
-    structural_project: CompiledProjectView = assemble_project(
+    structural_project: CompiledProjectView = _native.assemble_project(
         inputs=compile_inputs,
         inference_profile=inference_profile,
         skip_column_inference=True,

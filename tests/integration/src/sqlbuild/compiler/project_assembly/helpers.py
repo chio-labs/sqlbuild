@@ -13,10 +13,8 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile._helpers.assembly import project as project_module
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -159,7 +157,7 @@ def assemble_with(
 ) -> CompiledProjectView:
     """Assemble `inputs`."""
 
-    return assemble_compiled_project(inputs=inputs)
+    return assemble_project(inputs=inputs)
 
 
 def recorded_assembly(
@@ -233,9 +231,9 @@ def python_resource_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     calls: Counter[str] = Counter()
     _ = [
         monkeypatch.setattr(
-            project_module._native,
+            _native,
             name,
-            _counted(name=name, function=getattr(project_module._native, name), calls=calls),
+            _counted(name=name, function=getattr(_native, name), calls=calls),
         )
         for name in _PYTHON_RESOURCE_FUNCTIONS
     ]

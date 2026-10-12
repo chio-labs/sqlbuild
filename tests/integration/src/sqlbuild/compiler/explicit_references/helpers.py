@@ -7,9 +7,8 @@ from operator import attrgetter
 from pathlib import Path
 from typing import Any, cast
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompilerDiagnostic,

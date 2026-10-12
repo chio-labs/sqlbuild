@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import assemble_project
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
@@ -18,7 +19,6 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
     analyze_native_model_sql,
 )
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
-from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
@@ -399,7 +399,7 @@ def test_given_internal_native_failure_when_assembling_then_raises_without_pytho
     duplicate_analysed_model_names(monkeypatch=monkeypatch)
 
     with pytest.raises(native_module.NativeCompilerError) as raised:
-        _ = assemble_compiled_project(
+        _ = assemble_project(
             inputs=inputs,
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
         )
@@ -443,7 +443,7 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     )
     recorded: NativePivotProofs = native_pivot_proofs(monkeypatch=monkeypatch)
 
-    project: CompiledProjectView = assemble_compiled_project(
+    project: CompiledProjectView = assemble_project(
         inputs=inputs,
         inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
         analysis_model_names=test_case.analysed_models,

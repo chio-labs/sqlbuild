@@ -13,7 +13,7 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild.compiler.compile._helpers.assembly.project as assembly_project
+import sqlbuild.compiler.compile._helpers.diagnostics.recovery as semantic_recovery
 import sqlbuild.compiler.semantic_checks._helpers.stage as semantic_stage
 from sqlbuild._native import build_project_graph, discover_project_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -208,7 +208,7 @@ def captured_semantic_inputs(
         return complete_semantic_diagnostics(**arguments)
 
     with monkeypatch.context() as patch:
-        patch.setattr(assembly_project, "complete_semantic_diagnostics", capture)
+        patch.setattr(semantic_recovery, "complete_semantic_diagnostics", capture)
         _ = build_project_graph(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),
             adapter=DuckDbAdapter(),

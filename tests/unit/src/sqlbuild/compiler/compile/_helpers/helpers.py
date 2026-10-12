@@ -5,7 +5,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -24,7 +24,6 @@ from sqlbuild.compiler.compile._helpers.render.macros import (
     expand_sql_macros,
     load_project_macros,
 )
-from sqlbuild.compiler.compile.main._assemble_project import assemble_project
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompiledDirectLogicSqlTestPayload,

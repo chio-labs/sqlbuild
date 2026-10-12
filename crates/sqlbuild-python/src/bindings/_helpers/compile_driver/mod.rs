@@ -1,4 +1,9 @@
 pub(crate) mod analysis;
+pub(crate) mod assembly;
+pub(crate) mod assembly_analysis;
+pub(crate) mod assembly_checks;
+pub(crate) mod assembly_models;
+pub(crate) mod assembly_project;
 pub(crate) mod command;
 pub(crate) mod discovery;
 pub(crate) mod inputs;
