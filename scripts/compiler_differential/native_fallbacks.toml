@@ -32,7 +32,7 @@ engine = "native"
 stage = "compile_outputs"
 site = "compile_outputs.native"
 kind = "json_reports"
-counts = { example = 9, failure = 349, fixture = 9, seed = 40 }
+counts = { example = 9, failure = 348, fixture = 9, seed = 40 }
 
 [[entry]]
 engine = "native"
@@ -179,7 +179,7 @@ engine = "native-preview"
 stage = "compile_outputs"
 site = "compile_outputs.native"
 kind = "json_reports"
-counts = { example = 9, failure = 349, fixture = 9, seed = 40 }
+counts = { example = 9, failure = 348, fixture = 9, seed = 40 }
 
 [[entry]]
 engine = "native-preview"
