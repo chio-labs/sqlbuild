@@ -1050,6 +1050,15 @@ class DeepProjectConnectionTestCase:
 
 
 @dataclass(frozen=True)
+class TooDeepProjectConnectionTestCase:
+    """Test case for project TOML nested past the parser's limit, and the error it raises."""
+
+    description: str
+    depth: int
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class OversizedDurationTestCase:
     """Test case for a duration with more digits than Python's int() converts."""
 

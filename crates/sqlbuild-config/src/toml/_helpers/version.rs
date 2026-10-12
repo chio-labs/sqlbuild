@@ -1,15 +1,11 @@
-//! Find TOML 1.1 syntax, which the parser accepts and Python's TOML 1.0 `tomllib` rejects.
+//! Reject TOML 1.1 syntax, which the parser accepts but the Python commands' TOML 1.0 reader rejects.
 
-use crate::errors::{ConfigError, ConfigErrorKind};
-use crate::models::ConfigValue;
-use crate::toml::_helpers::integers::{Placeholder, large_integer};
-use crate::toml::constants::{MAX_CONTAINER_DEPTH, SPLIT_CONTAINER_DEPTH};
+use crate::errors::ConfigError;
+use crate::toml::_helpers::conversion::syntax_error;
+use crate::toml::constants::MAX_CONTAINER_DEPTH;
 use toml_parser::decoder::Encoding;
 use toml_parser::parser::{EventReceiver, RecursionGuard, parse_document};
 use toml_parser::{ErrorSink, ParseError, Source, Span};
-
-/// Large integers, and the byte ranges of containers nested at the split depth.
-pub(crate) type NativeSplits = (Vec<Placeholder>, Vec<(usize, usize)>);
 
 /// The most dotted key segments read natively, which bounds the table nesting of a document.
 const MAX_KEY_SEGMENTS: usize = 128;
@@ -28,9 +24,6 @@ struct VersionReceiver<'text> {
     after_comma: bool,
     key_segments: usize,
     found: Option<(usize, &'static str)>,
-    large_integers: Vec<Placeholder>,
-    deep_values: Vec<(usize, usize)>,
-    deep_start: usize,
 }
 
 impl VersionReceiver<'_> {
@@ -57,29 +50,11 @@ impl VersionReceiver<'_> {
         }
     }
 
-    fn record_large_integer(&mut self, span: Span) {
-        let raw = self
-            .source
-            .get(span)
-            .map(|raw| raw.as_str())
-            .unwrap_or_default();
-        if let Some(digits) = large_integer(raw) {
-            self.large_integers
-                .push((span.start(), span.end(), ConfigValue::BigInteger(digits)));
-        }
-    }
-
-    fn open_container(&mut self, span: Span, container: Container) {
+    fn open_container(&mut self, container: Container) {
         self.containers.push(container);
-        if self.containers.len() == SPLIT_CONTAINER_DEPTH {
-            self.deep_start = span.start();
-        }
     }
 
-    fn close_container(&mut self, span: Span) {
-        if self.containers.len() == SPLIT_CONTAINER_DEPTH {
-            self.deep_values.push((self.deep_start, span.end()));
-        }
+    fn close_container(&mut self) {
         self.containers.pop();
     }
 
@@ -115,9 +90,9 @@ impl EventReceiver for VersionReceiver<'_> {
         self.end_key();
     }
 
-    fn inline_table_open(&mut self, span: Span, _error: &mut dyn ErrorSink) -> bool {
+    fn inline_table_open(&mut self, _span: Span, _error: &mut dyn ErrorSink) -> bool {
         self.end_key();
-        self.open_container(span, Container::InlineTable);
+        self.open_container(Container::InlineTable);
         true
     }
 
@@ -126,18 +101,18 @@ impl EventReceiver for VersionReceiver<'_> {
             self.record(span, "a trailing comma in an inline table");
         }
         self.token();
-        self.close_container(span);
+        self.close_container();
     }
 
-    fn array_open(&mut self, span: Span, _error: &mut dyn ErrorSink) -> bool {
+    fn array_open(&mut self, _span: Span, _error: &mut dyn ErrorSink) -> bool {
         self.token();
-        self.open_container(span, Container::Array);
+        self.open_container(Container::Array);
         true
     }
 
-    fn array_close(&mut self, span: Span, _error: &mut dyn ErrorSink) {
+    fn array_close(&mut self, _span: Span, _error: &mut dyn ErrorSink) {
         self.token();
-        self.close_container(span);
+        self.close_container();
     }
 
     fn simple_key(&mut self, span: Span, encoding: Option<Encoding>, _error: &mut dyn ErrorSink) {
@@ -160,9 +135,6 @@ impl EventReceiver for VersionReceiver<'_> {
     fn scalar(&mut self, span: Span, encoding: Option<Encoding>, _error: &mut dyn ErrorSink) {
         self.token();
         self.check_escapes(span, encoding);
-        if encoding.is_none() {
-            self.record_large_integer(span);
-        }
     }
 
     fn value_sep(&mut self, _span: Span, _error: &mut dyn ErrorSink) {
@@ -180,8 +152,8 @@ impl EventReceiver for VersionReceiver<'_> {
     }
 }
 
-/// Reject TOML 1.1 and syntax errors; return large integers and values nested past the parser.
-pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<NativeSplits, ConfigError> {
+/// Reject TOML 1.1 syntax, syntax errors and nesting past the supported depth.
+pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<(), ConfigError> {
     let source = Source::new(text);
     let tokens = source.lex().into_vec();
     let mut receiver = VersionReceiver {
@@ -190,9 +162,6 @@ pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<NativeSplits, ConfigE
         after_comma: false,
         key_segments: 0,
         found: None,
-        large_integers: Vec::new(),
-        deep_values: Vec::new(),
-        deep_start: 0,
     };
     let mut errors: Vec<ParseError> = Vec::new();
     parse_document(
@@ -202,20 +171,14 @@ pub(crate) fn reject_toml_1_1_syntax(text: &str) -> Result<NativeSplits, ConfigE
     );
     if let Some(error) = errors.first() {
         let offset = error.unexpected().map_or(0, |span| span.start());
-        return Err(ConfigError {
-            kind: ConfigErrorKind::Syntax,
-            message: error.description().to_owned(),
-            line: Some(text.get(..offset).unwrap_or(text).matches('\n').count() + 1),
-            column: None,
-        });
+        return Err(syntax_error(text, offset, error.description().to_owned()));
     }
     match receiver.found {
-        None => Ok((receiver.large_integers, receiver.deep_values)),
-        Some((offset, construct)) => Err(ConfigError {
-            kind: ConfigErrorKind::Syntax,
-            message: format!("{construct} is TOML 1.1 syntax, which tomllib rejects"),
-            line: Some(text.get(..offset).unwrap_or(text).matches('\n').count() + 1),
-            column: None,
-        }),
+        None => Ok(()),
+        Some((offset, construct)) => Err(syntax_error(
+            text,
+            offset,
+            format!("{construct} is TOML 1.1 syntax; sqlbuild config files use TOML 1.0"),
+        )),
     }
 }

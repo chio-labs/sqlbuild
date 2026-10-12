@@ -1,26 +1,10 @@
-//! Load a TOML document the way Python's `tomllib.loads` does.
+//! Load a TOML 1.0 document natively.
 
-use crate::errors::{ConfigError, ConfigErrorKind};
+use crate::errors::ConfigError;
 use crate::models::ConfigValue;
-use crate::toml::_helpers::reading::{bracket_depth, load_document};
-use crate::toml::constants::{DEEP_DOCUMENT_BRACKETS, DEEP_DOCUMENT_STACK_BYTES};
+use crate::toml::_helpers::reading::load_document;
 
-/// The table `tomllib.loads(text)` returns, rejecting TOML 1.1 syntax as `tomllib` does.
+/// The document's root table, rejecting TOML 1.1 syntax and nesting past the supported depth.
 pub fn load_toml(text: &str) -> Result<ConfigValue, ConfigError> {
-    if bracket_depth(text) <= DEEP_DOCUMENT_BRACKETS {
-        return load_document(text);
-    }
-    std::thread::scope(|scope| {
-        std::thread::Builder::new()
-            .stack_size(DEEP_DOCUMENT_STACK_BYTES)
-            .spawn_scoped(scope, || load_document(text))
-            .map_err(|error| ConfigError::new(ConfigErrorKind::Unsupported, error.to_string()))?
-            .join()
-            .unwrap_or_else(|_| {
-                Err(ConfigError::new(
-                    ConfigErrorKind::Unsupported,
-                    "the deep TOML reader stopped unexpectedly",
-                ))
-            })
-    })
+    load_document(text)
 }

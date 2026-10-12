@@ -49,6 +49,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     OversizedDurationTestCase,
     StartCursorConfigTestCase,
     TargetExecutionLimitsConfigTestCase,
+    TooDeepProjectConnectionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
@@ -2086,12 +2087,12 @@ def test_given_invalid_column_contract_mode_when_loading_project_then_error_is_r
     "test_case",
     [
         DeepProjectConnectionTestCase(
-            description="arrays nested three hundred deep", depth=300, expected_depth=300
+            description="arrays nested fifty deep", depth=50, expected_depth=50
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_deeply_nested_connection_when_loading_project_then_tomllib_nesting_is_kept(
+def test_given_nested_connection_within_the_limit_when_loading_project_then_nesting_is_kept(
     test_case: DeepProjectConnectionTestCase,
     tmp_path: Path,
 ) -> None:
@@ -2109,6 +2110,33 @@ def test_given_deeply_nested_connection_when_loading_project_then_tomllib_nestin
         nested = nested[0]
         depth += 1
     assert depth == test_case.expected_depth
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TooDeepProjectConnectionTestCase(
+            description="arrays nested three hundred deep",
+            depth=300,
+            expected_error_fragment="max recursion depth",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_connection_nested_past_the_limit_when_loading_project_then_error_is_raised(
+    test_case: TooDeepProjectConnectionTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "demo"\nadapter = "duckdb"\n[connection]\n'
+        f"nested = {'[' * test_case.depth}1{']' * test_case.depth}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProjectConfigError) as raised:
+        load_project_config(project_dir=tmp_path)
+
+    assert test_case.expected_error_fragment in str(raised.value)
 
 
 @pytest.mark.parametrize(

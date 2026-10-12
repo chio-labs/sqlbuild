@@ -116,8 +116,7 @@ def load_project_skill_settings(*, project_dir: Path) -> SkillSettings:
         return SkillSettings(targets=(), auto_update=False, configured=False)
 
     try:
-        with config_path.open("rb") as config_file:
-            payload: object = tomllib.load(config_file)
+        payload: object = tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
     except tomllib.TOMLDecodeError as error:
         raise CliUserError(
             f"{config_path} contains invalid TOML: {error}",
