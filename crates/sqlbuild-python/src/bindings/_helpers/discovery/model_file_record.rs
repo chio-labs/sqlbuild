@@ -1,9 +1,10 @@
 //! A discovered SQL model file as a native record whose Python attributes are built on demand.
 
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
-use pyo3::{IntoPyObjectExt, pyclass, pymethods};
+use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_discovery::models::LineColumnSpan;
 
 const SOURCE_LOCATION_MODULE: &str = "sqlbuild.spec.contracts.models";
@@ -32,6 +33,18 @@ impl Locations {
         Self {
             rows,
             projected: PyOnceLock::new(),
+        }
+    }
+
+    /// These locations for another record: the rows, and the dict once Python has read it.
+    fn shared(&self, py: Python<'_>) -> Self {
+        let projected: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+        if let Some(dict) = self.projected.get(py) {
+            let _ = projected.set(py, dict.clone_ref(py));
+        }
+        Self {
+            rows: self.rows.clone(),
+            projected,
         }
     }
 
@@ -96,6 +109,25 @@ pub(crate) struct ModelFileParts {
     pub(crate) query_sql: Py<PyString>,
     pub(crate) declarations: (Py<PyTuple>, Py<PyTuple>),
     pub(crate) extract_implicit_alias_columns: bool,
+}
+
+/// The keyword fields Python constructs a model file record with.
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+struct ModelFileFields {
+    file_path: Py<PyAny>,
+    relative_path: Py<PyAny>,
+    contents: Py<PyString>,
+    header_values: Py<PyDict>,
+    header_column_locations: Py<PyDict>,
+    output_column_locations: Py<PyDict>,
+    query_sql: Py<PyString>,
+    #[pyo3(default)]
+    enum_declarations: Option<Py<PyTuple>>,
+    #[pyo3(default)]
+    constant_declarations: Option<Py<PyTuple>>,
+    #[pyo3(default)]
+    extract_implicit_alias_columns: Option<bool>,
 }
 
 impl NativeModelFile {
@@ -167,44 +199,47 @@ impl NativeModelFile {
 #[pymethods]
 impl NativeModelFile {
     #[new]
-    #[pyo3(signature = (
-        file_path,
-        relative_path,
-        contents,
-        header_values,
-        header_column_locations,
-        output_column_locations,
-        query_sql,
-        enum_declarations = None,
-        constant_declarations = None,
-        extract_implicit_alias_columns = true,
-    ))]
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        py: Python<'_>,
-        file_path: Py<PyAny>,
-        relative_path: Py<PyAny>,
-        contents: Py<PyString>,
-        header_values: Py<PyDict>,
-        header_column_locations: Py<PyDict>,
-        output_column_locations: Py<PyDict>,
-        query_sql: Py<PyString>,
-        enum_declarations: Option<Py<PyTuple>>,
-        constant_declarations: Option<Py<PyTuple>>,
-        extract_implicit_alias_columns: bool,
-    ) -> Self {
-        Self {
-            file_path,
-            relative_path,
-            contents,
-            header_values,
-            header_column_locations: Locations::from_dict(py, header_column_locations),
-            output_column_locations: Locations::from_dict(py, output_column_locations),
-            query_sql,
-            enum_declarations: enum_declarations.unwrap_or_else(|| PyTuple::empty(py).unbind()),
-            constant_declarations: constant_declarations
+    #[pyo3(signature = (**fields))]
+    fn new(py: Python<'_>, fields: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+        let fields: ModelFileFields = match fields {
+            Some(fields) => fields.extract()?,
+            None => {
+                return Err(PyTypeError::new_err(
+                    "DiscoveredSqlModelFile requires its fields",
+                ));
+            }
+        };
+        Ok(Self {
+            file_path: fields.file_path,
+            relative_path: fields.relative_path,
+            contents: fields.contents,
+            header_values: fields.header_values,
+            header_column_locations: Locations::from_dict(py, fields.header_column_locations),
+            output_column_locations: Locations::from_dict(py, fields.output_column_locations),
+            query_sql: fields.query_sql,
+            enum_declarations: fields
+                .enum_declarations
                 .unwrap_or_else(|| PyTuple::empty(py).unbind()),
-            extract_implicit_alias_columns,
+            constant_declarations: fields
+                .constant_declarations
+                .unwrap_or_else(|| PyTuple::empty(py).unbind()),
+            extract_implicit_alias_columns: fields.extract_implicit_alias_columns.unwrap_or(true),
+        })
+    }
+
+    /// This file with edited contents and query, as `dataclasses.replace` would make it.
+    fn with_text(&self, py: Python<'_>, contents: Py<PyString>, query_sql: Py<PyString>) -> Self {
+        Self {
+            file_path: self.file_path.clone_ref(py),
+            relative_path: self.relative_path.clone_ref(py),
+            contents,
+            header_values: self.header_values.clone_ref(py),
+            header_column_locations: self.header_column_locations.shared(py),
+            output_column_locations: self.output_column_locations.shared(py),
+            query_sql,
+            enum_declarations: self.enum_declarations.clone_ref(py),
+            constant_declarations: self.constant_declarations.clone_ref(py),
+            extract_implicit_alias_columns: self.extract_implicit_alias_columns,
         }
     }
 

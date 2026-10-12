@@ -1,10 +1,12 @@
 //! Declarative integration loaders: a source's `ingestr` block and top-level `dlt_sources`.
 
+use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
 
 use crate::yaml_entries::_helpers::fields::{
     Site, get, optional_mapping, optional_text, reject_unknown_keys, required_text,
+    stripped_strings,
 };
 use crate::yaml_entries::models::{
     ParsedDltResource, ParsedDltSource, ParsedIngestrConfig, ParsedIntegrationLoader,
@@ -128,26 +130,7 @@ fn ingestr_strings<N: AuthoredNode>(
     let Some(value) = get(config, key).filter(|value| value.kind() != NodeKind::Null) else {
         return Ok(Vec::new());
     };
-    match value.kind() {
-        NodeKind::Str => {
-            let stripped: String = value.text().unwrap_or_default().trim().to_owned();
-            if stripped.is_empty() {
-                return Err(error("must be non-empty"));
-            }
-            Ok(vec![stripped])
-        }
-        NodeKind::List => value
-            .items()
-            .iter()
-            .map(|item| {
-                item.text()
-                    .map(|text| text.trim().to_owned())
-                    .filter(|text| !text.is_empty())
-                    .ok_or_else(|| error("must contain only non-empty strings"))
-            })
-            .collect(),
-        _ => Err(error("must be a string or list")),
-    }
+    stripped_strings(value, error)
 }
 
 /// `parse_dlt_sources`: one managed source per resource of each `dlt_sources` group.
@@ -330,11 +313,7 @@ fn dlt_resource<N: AuthoredNode>(
     } else {
         resource
             .iter()
-            .filter(|(key, _)| {
-                !RAW_CONFIG_EXCLUDED
-                    .iter()
-                    .any(|excluded| key.is_text(excluded))
-            })
+            .filter(|(key, _)| !excluded_from_raw_config(key))
             .cloned()
             .collect()
     };
@@ -390,7 +369,7 @@ fn dlt_resource_name<N: AuthoredNode>(
             };
             if let Some(name) = get(&endpoint, "name")
                 && name
-                    .with_text(|text| !text.trim().is_empty())
+                    .with_text(|text| !python_strip(text).is_empty())
                     .unwrap_or(false)
             {
                 return Ok(name.clone());
@@ -399,4 +378,11 @@ fn dlt_resource_name<N: AuthoredNode>(
         }
         _ => required_text(resource, "name", site("dlt filesystem resource")),
     }
+}
+
+/// Whether `key` is a resource setting SQLBuild reads itself rather than passing to dlt.
+fn excluded_from_raw_config<N: AuthoredNode>(key: &N) -> bool {
+    RAW_CONFIG_EXCLUDED
+        .iter()
+        .any(|excluded| key.is_text(excluded))
 }

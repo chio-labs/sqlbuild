@@ -6,7 +6,6 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.discovery._helpers.yml.yaml_classes import yaml_entry_classes
-from sqlbuild.compiler.discovery.constants import SEEDS_DIRECTORY_NAME
 from sqlbuild.spec.contracts.models import SchemaModelEntry, SchemaSeedEntry
 
 
@@ -15,6 +14,4 @@ def parse_loaded_schema_yml(
 ) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
     """Parse the document one schema.yml file loads to into raw model and seed metadata."""
 
-    return (), _native.parse_schema_document(
-        loaded, str(file_path), SEEDS_DIRECTORY_NAME in file_path.parts, yaml_entry_classes()
-    )
+    return (), _native.parse_schema_document(loaded, str(file_path), yaml_entry_classes())

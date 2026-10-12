@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::project_validation::main::validate_project_inputs::conflict;
+use crate::project_validation::_helpers::conflicts::conflict;
 use crate::project_validation::models::{DependencyFact, NodeFact, NodeKind, ValidationFailure};
 
 /// `_python_node_dependency_key`: a decorated object's name, else the object itself.
@@ -172,35 +172,46 @@ fn find_cycle(
     next: impl Fn(usize) -> Vec<usize>,
     label: &str,
 ) -> Result<(), ValidationFailure> {
-    let mut visited: HashSet<&str> = HashSet::new();
+    let mut search: CycleSearch<'_, _> = CycleSearch {
+        nodes,
+        next,
+        label,
+        path: Vec::new(),
+        visited: HashSet::new(),
+    };
     for root in roots {
-        let mut visiting: Vec<&str> = Vec::new();
-        visit(nodes, *root, &next, &mut visiting, &mut visited, label)?;
+        search.path.clear();
+        search.visit(*root)?;
     }
     Ok(())
 }
 
-fn visit<'a>(
+/// One depth-first cycle search: the nodes on the current path and those already cleared.
+struct CycleSearch<'a, F> {
     nodes: &'a [NodeFact],
-    index: usize,
-    next: &impl Fn(usize) -> Vec<usize>,
-    path: &mut Vec<&'a str>,
-    visited: &mut HashSet<&'a str>,
-    label: &str,
-) -> Result<(), ValidationFailure> {
-    let name: &str = &nodes[index].name;
-    if visited.contains(name) {
-        return Ok(());
+    next: F,
+    label: &'a str,
+    path: Vec<&'a str>,
+    visited: HashSet<&'a str>,
+}
+
+impl<'a, F: Fn(usize) -> Vec<usize>> CycleSearch<'a, F> {
+    fn visit(&mut self, index: usize) -> Result<(), ValidationFailure> {
+        let name: &'a str = &self.nodes[index].name;
+        if self.visited.contains(name) {
+            return Ok(());
+        }
+        if self.path.contains(&name) {
+            let mut cycle: Vec<&str> = self.path.clone();
+            cycle.push(name);
+            return Err(conflict(format!("{}: {}", self.label, cycle.join(" -> "))));
+        }
+        self.path.push(name);
+        for dependency in (self.next)(index) {
+            self.visit(dependency)?;
+        }
+        self.path.pop();
+        self.visited.insert(name);
+        Ok(())
     }
-    if path.contains(&name) {
-        let cycle: Vec<&str> = path.iter().copied().chain(std::iter::once(name)).collect();
-        return Err(conflict(format!("{label}: {}", cycle.join(" -> "))));
-    }
-    path.push(name);
-    for dependency in next(index) {
-        visit(nodes, dependency, next, path, visited, label)?;
-    }
-    path.pop();
-    visited.insert(name);
-    Ok(())
 }

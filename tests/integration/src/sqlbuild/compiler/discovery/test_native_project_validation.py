@@ -6,30 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
+    CsvDialectTestCase,
     ProjectValidationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
+    VALIDATION_MODEL,
+    csv_reader_error,
+    discovery_error,
+    seed_project_files,
     stage_outcome,
     write_project,
 )
-
-_MODEL: tuple[str, bytes] = ("models/orders.sql", b"MODEL ();\nSELECT 1 AS order_id")
-
-
-def _seed_files(*, header: bytes, settings: bytes = b"") -> tuple[tuple[str, bytes], ...]:
-    return (
-        _MODEL,
-        ("seeds/countries.csv", header + b"\nGB,United Kingdom\n"),
-        (
-            "seeds/countries.yml",
-            b"seeds:\n  - name: countries\n"
-            + settings
-            + b"    columns:\n      - name: code\n        type: VARCHAR\n"
-            b"      - name: label\n        type: VARCHAR\n",
-        ),
-    )
 
 
 @pytest.mark.parametrize(
@@ -37,7 +25,7 @@ def _seed_files(*, header: bytes, settings: bytes = b"") -> tuple[tuple[str, byt
     [
         ProjectValidationTestCase(
             description="a seed header that differs from its declared columns",
-            files=_seed_files(header=b"code,name"),
+            files=seed_project_files(header=b"code,name"),
             expected_error_type="SeedDiscoveryError",
             expected_message=(
                 "seeds/countries.csv header ('code', 'name') does not match declared seed "
@@ -46,7 +34,7 @@ def _seed_files(*, header: bytes, settings: bytes = b"") -> tuple[tuple[str, byt
         ),
         ProjectValidationTestCase(
             description="a quoted seed header honours the declared quotechar",
-            files=_seed_files(
+            files=seed_project_files(
                 header=b'"code";"label";"extra"',
                 settings=b"    csv_settings:\n      delimiter: ';'\n      quotechar: '\"'\n",
             ),
@@ -58,7 +46,7 @@ def _seed_files(*, header: bytes, settings: bytes = b"") -> tuple[tuple[str, byt
         ),
         ProjectValidationTestCase(
             description="a seed CSV without a declaration",
-            files=(_MODEL, ("seeds/regions.csv", b"code\nEU\n")),
+            files=(VALIDATION_MODEL, ("seeds/regions.csv", b"code\nEU\n")),
             expected_error_type="SeedDiscoveryError",
             expected_message=(
                 "Seed CSV seeds/regions.csv has no matching declaration for seed 'regions' under "
@@ -67,7 +55,10 @@ def _seed_files(*, header: bytes, settings: bytes = b"") -> tuple[tuple[str, byt
         ),
         ProjectValidationTestCase(
             description="two model files with one name",
-            files=(_MODEL, ("models/marts/orders.sql", b"MODEL ();\nSELECT 2 AS order_id")),
+            files=(
+                VALIDATION_MODEL,
+                ("models/marts/orders.sql", b"MODEL ();\nSELECT 2 AS order_id"),
+            ),
             expected_error_type="DiscoveryConflictError",
             expected_message=(
                 "Duplicate model file name found for 'orders' in models/marts/orders.sql and "
@@ -95,15 +86,30 @@ def test_given_conflicting_project_files_when_discovering_then_raises_the_discov
     assert outcome[1:] == (test_case.expected_error_type, test_case.expected_message)
 
 
-def test_given_an_empty_seed_quotechar_when_discovering_then_raises_the_csv_type_error(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CsvDialectTestCase(
+            description="an empty quotechar",
+            settings=b"    csv_settings:\n      quotechar: ''\n",
+            expected_reader_settings={"quotechar": ""},
+        ),
+        CsvDialectTestCase(
+            description="a delimiter equal to its quotechar",
+            settings=b"    csv_settings:\n      delimiter: ','\n      quotechar: ','\n",
+            expected_reader_settings={"quotechar": ","},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_seed_csv_settings_when_discovering_then_matches_this_pythons_csv_reader(
+    test_case: CsvDialectTestCase, tmp_path: Path
 ) -> None:
     write_project(
         project_dir=tmp_path,
-        files=_seed_files(
-            header=b"code,label", settings=b"    csv_settings:\n      quotechar: ''\n"
-        ),
+        files=seed_project_files(header=b"code,label", settings=test_case.settings),
     )
 
-    with pytest.raises(TypeError, match='"quotechar" must be a 1-character string'):
-        discover_project_inputs(project_dir=tmp_path)
+    outcome: tuple[str, str] | None = discovery_error(project_dir=tmp_path)
+
+    assert outcome == csv_reader_error(test_case.expected_reader_settings)

@@ -45,3 +45,17 @@ pub(super) struct GlobTestCase {
     pub(super) name: &'static str,
     pub(super) expected_match: bool,
 }
+
+pub(super) struct CasefoldTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_folded: &'static str,
+}
+
+pub(super) struct CharacterClassTestCase {
+    pub(super) description: &'static str,
+    pub(super) character: char,
+    pub(super) expected_alnum: bool,
+    pub(super) expected_digit: bool,
+    pub(super) expected_space: bool,
+}

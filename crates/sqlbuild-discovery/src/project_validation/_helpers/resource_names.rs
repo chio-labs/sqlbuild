@@ -2,7 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::project_validation::main::validate_project_inputs::{conflict, schema_seeds};
+use crate::project_validation::_helpers::conflicts::{conflict, schema_seeds};
+use crate::project_validation::_helpers::identities::block_or_file_name;
 use crate::project_validation::models::{NodeKind, ProjectFacts, ValidationFailure};
 
 /// Reject the first resource name declared twice across models, sources, seeds and the rest.
@@ -61,7 +62,7 @@ pub(crate) fn validate_unique_project_resource_names(
     let mut test_names: HashSet<&str> = HashSet::new();
     for test in &facts.tests {
         for block in &test.blocks {
-            let name: &str = block.name.as_deref().unwrap_or(&test.file.name);
+            let name: &str = block_or_file_name(block.name.as_deref(), &test.file.name);
             if !test_names.insert(name) {
                 continue;
             }

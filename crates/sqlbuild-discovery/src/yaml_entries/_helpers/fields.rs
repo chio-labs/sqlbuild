@@ -1,5 +1,8 @@
 //! Python's authored-value field readers, with the errors their YAML callers raise.
 
+use std::num::FpCategory;
+
+use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
 
@@ -34,7 +37,7 @@ fn present<'a, N: AuthoredNode>(entries: &'a [(N, N)], key: &str) -> Option<&'a 
 }
 
 fn non_blank<N: AuthoredNode>(node: &N) -> bool {
-    node.with_text(|text| !text.trim().is_empty())
+    node.with_text(|text| !python_strip(text).is_empty())
         .unwrap_or(false)
 }
 
@@ -130,10 +133,43 @@ pub(crate) fn truthy<N: AuthoredNode>(node: &N) -> bool {
     match node.kind() {
         NodeKind::Null => false,
         NodeKind::Bool(value) => value,
-        NodeKind::Int { .. } => node.python_str() != "0",
+        NodeKind::Int { .. } => node.integer().is_none_or(|value| value != 0),
         NodeKind::Str => node.with_text(|text| !text.is_empty()).unwrap_or(true),
         NodeKind::List | NodeKind::Tuple => !node.items().is_empty(),
         NodeKind::Map => !node.entries().is_empty(),
-        NodeKind::Other => node.number().is_none_or(|number| number != 0.0),
+        NodeKind::Other => node
+            .number()
+            .is_none_or(|number| number.classify() != FpCategory::Zero),
+    }
+}
+
+/// A string or list of strings, each `strip()`ped and non-empty; `error` words the failure.
+pub(crate) fn stripped_strings<N: AuthoredNode>(
+    value: &N,
+    error: impl Fn(&str) -> ConfigError,
+) -> Result<Vec<String>, ConfigError> {
+    match value.kind() {
+        NodeKind::Str => {
+            let stripped: String = python_strip(&value.text().unwrap_or_default()).to_owned();
+            if stripped.is_empty() {
+                return Err(error("must be non-empty"));
+            }
+            Ok(vec![stripped])
+        }
+        NodeKind::List => {
+            let mut strings: Vec<String> = Vec::new();
+            for item in value.items() {
+                let stripped: String = item
+                    .text()
+                    .map(|text| python_strip(&text).to_owned())
+                    .unwrap_or_default();
+                if stripped.is_empty() {
+                    return Err(error("must contain only non-empty strings"));
+                }
+                strings.push(stripped);
+            }
+            Ok(strings)
+        }
+        _ => Err(error("must be a string or list")),
     }
 }

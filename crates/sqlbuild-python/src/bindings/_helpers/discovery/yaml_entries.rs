@@ -19,6 +19,8 @@ use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, 
 const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
 const IDENTITY_ERRORS_MODULE: &str = "sqlbuild.compiler.resource_names.exceptions";
 const IDENTITY_ERROR: &str = "ResourceIdentityError";
+/// The directory whose schema YAML files may declare seeds.
+const SEEDS_DIRECTORY: &str = "seeds";
 const SCHEMA_PARSE_ERROR: &str = "SchemaParseError";
 const SOURCE_PARSE_ERROR: &str = "SourceParseError";
 
@@ -159,9 +161,11 @@ fn parse_schema_document<'py>(
     py: Python<'py>,
     loaded: Bound<'py, PyAny>,
     path: &str,
-    in_seeds_directory: bool,
     classes: YamlClasses<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
+    let in_seeds_directory: bool = std::path::Path::new(path)
+        .components()
+        .any(|component| component.as_os_str() == SEEDS_DIRECTORY);
     let seeds: Vec<ParsedSeedEntry<PyNode<'py>>> =
         parse_schema(&PyNode(loaded), path, in_seeds_directory).map_err(|error| {
             parse_error(py, error, SCHEMA_PARSE_ERROR).unwrap_or_else(|error| error)

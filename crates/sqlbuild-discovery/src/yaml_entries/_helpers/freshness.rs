@@ -1,6 +1,12 @@
 //! Source freshness: strategy inference, value kinds from declared types, and duration checks.
 
+use sqlbuild_core::text::main::decimal_digit_value::decimal_digit_value;
 use sqlbuild_core::text::main::is_decimal_digit::is_decimal_digit;
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_core::text::main::python_isalnum::python_isalnum;
+use sqlbuild_core::text::main::python_isdigit::python_isdigit;
+use sqlbuild_core::text::main::python_isspace::python_isspace;
+use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
 
@@ -240,14 +246,14 @@ fn find_column<'a, N: AuthoredNode>(
     if let Some(exact) = columns.iter().find(|column| column.name.is_text(name)) {
         return Some(exact);
     }
-    let folded: String = casefold(name);
+    let folded: String = python_casefold(name);
     let matches: Vec<&ParsedYamlColumn<N>> = columns
         .iter()
         .filter(|column| {
             column
                 .name
                 .text()
-                .is_some_and(|text| casefold(&text) == folded)
+                .is_some_and(|text| python_casefold(&text) == folded)
         })
         .collect();
     match matches.as_slice() {
@@ -256,19 +262,15 @@ fn find_column<'a, N: AuthoredNode>(
     }
 }
 
-/// Python's `str.casefold` for identifier text.
-fn casefold(text: &str) -> String {
-    text.to_lowercase().replace('ß', "ss")
-}
-
 /// `_freshness_value_kind_for_type`.
 fn type_value_kind(type_sql: &str) -> Option<&'static str> {
-    let normalized: String = type_sql
-        .to_uppercase()
-        .split_whitespace()
+    let upper: String = type_sql.to_uppercase();
+    let normalized: String = upper
+        .split(python_isspace)
+        .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
-    let base: &str = normalized.split('(').next().unwrap_or_default().trim();
+    let base: &str = python_strip(normalized.split('(').next().unwrap_or_default());
     if TIMESTAMP_TYPES.contains(&base)
         || TIMESTAMP_ZONE_PREFIXES
             .iter()
@@ -370,11 +372,8 @@ fn validate<N: AuthoredNode>(config: &ParsedFreshness<N>, path: &str) -> Result<
 /// `column.replace("_", "").isalnum() and not column[0].isdigit()`.
 fn plain_column_name(column: &str) -> bool {
     let rest: String = column.replace('_', "");
-    let alphanumeric: bool = !rest.is_empty() && rest.chars().all(char::is_alphanumeric);
-    let leading_digit: bool = column
-        .chars()
-        .next()
-        .is_some_and(|first| is_decimal_digit(first) || "²³¹⁰⁴⁵⁶⁷⁸⁹".contains(first));
+    let alphanumeric: bool = !rest.is_empty() && rest.chars().all(python_isalnum);
+    let leading_digit: bool = column.chars().next().is_some_and(python_isdigit);
     alphanumeric && !leading_digit
 }
 
@@ -413,19 +412,7 @@ pub(crate) fn freshness_minutes(text: &str) -> Option<u128> {
 /// The value of Unicode decimal digits, saturating far beyond any real duration.
 fn decimal_value(digits: &str) -> u128 {
     digits.chars().fold(0_u128, |value, character| {
-        let digit: u128 = character
-            .to_digit(10)
-            .map_or_else(|| unicode_digit_value(character), u128::from);
+        let digit: u128 = decimal_digit_value(character).map_or(0, u128::from);
         value.saturating_mul(10).saturating_add(digit)
     })
-}
-
-/// The value of a non-ASCII decimal digit: Unicode lays digits out in aligned runs of ten.
-fn unicode_digit_value(character: char) -> u128 {
-    let code: u32 = u32::from(character);
-    let mut start: u32 = code;
-    while start > 0 && char::from_u32(start - 1).is_some_and(is_decimal_digit) {
-        start -= 1;
-    }
-    u128::from((code - start) % 10)
 }

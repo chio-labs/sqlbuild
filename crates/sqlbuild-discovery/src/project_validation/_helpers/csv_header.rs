@@ -1,7 +1,7 @@
 //! The first record Python's `csv.reader` returns for a seed file opened with `newline=""`.
 
 use crate::_helpers::reading::decode_failure;
-use crate::models::ReadFailure;
+use crate::project_validation::errors::HeaderError;
 use crate::project_validation::models::CsvSettings;
 use sqlbuild_core::text::main::decode_text::decode_text;
 
@@ -11,8 +11,12 @@ const UNQUOTED_NEWLINE: &str =
     "new-line character seen in unquoted field - do you need to open the file with newline=''?";
 
 /// The header row, `None` for an empty file, or the error Python raises reading it.
-pub(crate) fn csv_header(bytes: &[u8], settings: &CsvSettings) -> Result<Vec<String>, HeaderError> {
-    let dialect: Dialect = Dialect::new(settings)?;
+pub(crate) fn csv_header(
+    bytes: &[u8],
+    settings: &CsvSettings,
+    field_limit: usize,
+) -> Result<Vec<String>, HeaderError> {
+    let dialect: Dialect = Dialect::new(settings, field_limit);
     let settings: &Dialect = &dialect;
     let mut end: usize = bytes.len().min(DECODE_CHUNK);
     loop {
@@ -26,54 +30,33 @@ pub(crate) fn csv_header(bytes: &[u8], settings: &CsvSettings) -> Result<Vec<Str
     }
 }
 
-/// Why the header could not be read.
-#[derive(Debug)]
-pub(crate) enum HeaderError {
-    Read(ReadFailure),
-    /// `_csv.Error` with its message.
-    Csv(String),
-    /// The `TypeError` `csv.reader` raises for a setting that is not one character.
-    Setting(String),
-}
-
-/// The reader's settings as `csv.reader` receives them from the facade.
+/// The reader's settings as `csv.reader` receives them; Python has already accepted them.
 pub(crate) struct Dialect {
     delimiter: char,
     quotechar: Option<char>,
     escapechar: Option<char>,
     doublequote: bool,
     skipinitialspace: bool,
+    field_limit: usize,
 }
 
 impl Dialect {
-    fn new(settings: &CsvSettings) -> Result<Self, HeaderError> {
-        let delimiter: char = match settings.delimiter.as_deref() {
-            None | Some("") => ',',
-            Some(text) => one_character("delimiter", text)?,
+    fn new(settings: &CsvSettings, field_limit: usize) -> Self {
+        let single = |value: &Option<String>| -> Option<char> {
+            let mut characters = value.as_deref()?.chars();
+            match (characters.next(), characters.next()) {
+                (Some(character), None) => Some(character),
+                _ => None,
+            }
         };
-        let optional = |name: &str, value: &Option<String>| -> Result<Option<char>, HeaderError> {
-            value
-                .as_deref()
-                .map(|text| one_character(name, text))
-                .transpose()
-        };
-        Ok(Self {
-            delimiter,
-            quotechar: optional("quotechar", &settings.quotechar)?,
-            escapechar: optional("escapechar", &settings.escapechar)?,
+        Self {
+            delimiter: single(&settings.delimiter).unwrap_or(','),
+            quotechar: single(&settings.quotechar),
+            escapechar: single(&settings.escapechar),
             doublequote: settings.doublequote.unwrap_or(true),
             skipinitialspace: settings.skipinitialspace.unwrap_or(false),
-        })
-    }
-}
-
-fn one_character(name: &str, text: &str) -> Result<char, HeaderError> {
-    let mut characters = text.chars();
-    match (characters.next(), characters.next()) {
-        (Some(character), None) => Ok(character),
-        _ => Err(HeaderError::Setting(format!(
-            "\"{name}\" must be a 1-character string"
-        ))),
+            field_limit,
+        }
     }
 }
 
@@ -124,9 +107,16 @@ impl Parser<'_> {
         self.field_len = 0;
     }
 
-    fn add(&mut self, character: char) {
+    fn add(&mut self, character: char) -> Result<(), HeaderError> {
+        if self.field_len >= self.settings.field_limit {
+            return Err(HeaderError::Csv(format!(
+                "field larger than field limit ({})",
+                self.settings.field_limit
+            )));
+        }
         self.field.push(character);
         self.field_len += 1;
+        Ok(())
     }
 
     fn is_quote(&self, character: char) -> bool {
@@ -177,7 +167,7 @@ impl Parser<'_> {
                             self.save_field();
                         }
                         Input::Char(character) => {
-                            self.add(character);
+                            self.add(character)?;
                             self.state = State::InField;
                         }
                     }
@@ -186,15 +176,15 @@ impl Parser<'_> {
                 State::EscapedChar => {
                     match input {
                         Input::Char(character @ ('\n' | '\r')) => {
-                            self.add(character);
+                            self.add(character)?;
                             self.state = State::AfterEscapedCrnl;
                         }
                         Input::Eol => {
-                            self.add('\n');
+                            self.add('\n')?;
                             self.state = State::InField;
                         }
                         Input::Char(character) => {
-                            self.add(character);
+                            self.add(character)?;
                             self.state = State::InField;
                         }
                     }
@@ -223,7 +213,7 @@ impl Parser<'_> {
                             self.save_field();
                             self.state = State::StartField;
                         }
-                        Input::Char(character) => self.add(character),
+                        Input::Char(character) => self.add(character)?,
                     }
                     return Ok(());
                 }
@@ -240,7 +230,7 @@ impl Parser<'_> {
                                 State::InField
                             };
                         }
-                        Input::Char(character) => self.add(character),
+                        Input::Char(character) => self.add(character)?,
                     }
                     return Ok(());
                 }
@@ -248,14 +238,14 @@ impl Parser<'_> {
                     self.add(match input {
                         Input::Eol => '\n',
                         Input::Char(character) => character,
-                    });
+                    })?;
                     self.state = State::InQuotedField;
                     return Ok(());
                 }
                 State::QuoteInQuotedField => {
                     match input {
                         Input::Char(character) if self.is_quote(character) => {
-                            self.add(character);
+                            self.add(character)?;
                             self.state = State::InQuotedField;
                         }
                         Input::Char(character) if character == self.delimiter() => {
@@ -271,7 +261,7 @@ impl Parser<'_> {
                             self.state = State::EatCrnl;
                         }
                         Input::Char(character) => {
-                            self.add(character);
+                            self.add(character)?;
                             self.state = State::InField;
                         }
                     }

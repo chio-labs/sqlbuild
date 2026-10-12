@@ -1,7 +1,9 @@
 //! Python's `validate_discovered_resource_identities`: canonical identities, in discovery order.
 
 use crate::models::{DiscoveryFailure, FailureKind};
-use crate::project_validation::models::{NamedPath, ProjectFacts, ValidationFailure};
+use crate::project_validation::models::{
+    AuditFileFact, NamedPath, NodeKind, ProjectFacts, ValidationFailure,
+};
 use sqlbuild_model_config::resource_identities::main::resource_identity_failure::resource_identity_failure;
 
 /// One identity to check: its name, the kind the error names, its path and whether it is private.
@@ -12,19 +14,54 @@ struct Candidate<'a> {
     private: bool,
 }
 
-fn public<'a>(name: &'a str, kind: &'a str, path: &'a str) -> Candidate<'a> {
-    Candidate {
-        name,
-        kind,
-        path,
-        private: false,
-    }
+/// The identities to check, in the order Python's `validate_discovered_resource_identities` lists them.
+struct Candidates<'a> {
+    list: Vec<Candidate<'a>>,
 }
 
-fn named<'a>(entries: &'a [NamedPath], kind: &'a str) -> impl Iterator<Item = Candidate<'a>> {
-    entries
-        .iter()
-        .map(move |entry| public(&entry.name, kind, &entry.path))
+impl<'a> Candidates<'a> {
+    fn push(&mut self, name: &'a str, kind: &'a str, path: &'a str) {
+        self.list.push(Candidate {
+            name,
+            kind,
+            path,
+            private: false,
+        });
+    }
+
+    fn push_named(&mut self, entries: &'a [NamedPath], kind: &'a str) {
+        for entry in entries {
+            self.push(&entry.name, kind, &entry.path);
+        }
+    }
+
+    /// A generic audit is named by its stem, each block naming an instance; others by the block.
+    fn push_audit(&mut self, audit: &'a AuditFileFact, block_name: Option<&'a str>) {
+        let path: &str = &audit.file.path;
+        if audit.generic {
+            self.push(&audit.file.name, "audit", path);
+            if let Some(instance) = block_name {
+                self.push(instance, "generic audit instance", path);
+            }
+        } else {
+            self.push(
+                block_or_file_name(block_name, &audit.file.name),
+                "audit",
+                path,
+            );
+        }
+    }
+
+    fn push_declarations(&mut self, declarations: &'a [NamedPath], kind: &'a str, private: bool) {
+        for declaration in declarations {
+            self.list.push(Candidate {
+                name: &declaration.name,
+                kind,
+                path: &declaration.path,
+                private,
+            });
+        }
+    }
 }
 
 /// Reject the first identity that is not canonical lowercase snake_case.
@@ -46,98 +83,73 @@ pub(crate) fn validate_identities(facts: &ProjectFacts) -> Result<(), Validation
     Ok(())
 }
 
-fn candidates(facts: &ProjectFacts) -> impl Iterator<Item = Candidate<'_>> {
-    let models = facts.models.iter().flat_map(|model| {
-        std::iter::once(public(&model.file.name, "model", &model.file.path)).chain(
-            model
-                .local_declarations
-                .iter()
-                .map(|declaration| Candidate {
-                    name: &declaration.name,
-                    kind: "model-local declaration",
-                    path: &declaration.path,
-                    private: true,
-                }),
-        )
-    });
-    let functions =
-        named(&facts.sql_functions, "function").chain(named(&facts.python_functions, "function"));
-    let seeds = facts
-        .seeds
-        .iter()
-        .map(|seed| public(&seed.file.name, "seed", &seed.file.path));
-    let schemas = facts.schemas.iter().flat_map(|schema| {
-        let models = schema
-            .model_names
-            .iter()
-            .map(move |name| public(name, "schema model", &schema.path));
-        let seeds = schema
-            .seeds
-            .iter()
-            .map(move |seed| public(&seed.name, "schema seed", &schema.path));
-        models.chain(seeds)
-    });
-    let sources = facts.sources.iter().flat_map(|file| {
-        file.entries
-            .iter()
-            .map(move |entry| public(&entry.name, "source", &file.path))
-    });
-    let tests = facts.tests.iter().flat_map(|test| {
-        test.blocks.iter().flat_map(move |block| {
-            let name: &str = block.name.as_deref().unwrap_or(&test.file.name);
-            std::iter::once(public(name, "SQL test", &test.file.path)).chain(
-                block
-                    .cases
-                    .iter()
-                    .map(move |case| public(case, "SQL test case", &test.file.path)),
-            )
-        })
-    });
-    let audits = facts.audits.iter().flat_map(|audit| {
-        audit.block_names.iter().flat_map(move |block_name| {
-            let name: &str = if audit.generic {
-                &audit.file.name
-            } else {
-                block_name.as_deref().unwrap_or(&audit.file.name)
-            };
-            let instance = block_name
-                .as_deref()
-                .filter(|_| audit.generic)
-                .map(|instance| public(instance, "generic audit instance", &audit.file.path));
-            std::iter::once(public(name, "audit", &audit.file.path)).chain(instance)
-        })
-    });
-    let declarations = facts.declaration_files.iter().flat_map(|file| {
-        file.declarations.iter().map(move |declaration| Candidate {
-            name: &declaration.name,
-            kind: "declaration",
-            path: &declaration.path,
-            private: file.private,
-        })
-    });
-    let nodes = ["loader", "task", "asset", "check"]
-        .into_iter()
-        .flat_map(move |label| {
-            facts
-                .nodes
-                .iter()
-                .filter(move |node| node.kind.label() == label)
-                .map(move |node| public(&node.name, label, &node.path))
-        });
-    models
-        .chain(functions)
-        .chain(named(&facts.sql_hooks, "SQL hook"))
-        .chain(seeds)
-        .chain(schemas)
-        .chain(sources)
-        .chain(tests)
-        .chain(named(&facts.scenarios, "scenario"))
-        .chain(audits)
-        .chain(declarations)
-        .chain(named(&facts.model_schemas, "model schema"))
-        .chain(named(&facts.materializations, "materialization"))
-        .chain(nodes)
-        .chain(named(&facts.hook_functions, "Python hook"))
-        .chain(named(&facts.event_exporters, "event exporter"))
-        .chain(named(&facts.providers, "provider"))
+fn candidates(facts: &ProjectFacts) -> Vec<Candidate<'_>> {
+    let mut candidates: Candidates<'_> = Candidates { list: Vec::new() };
+    for model in &facts.models {
+        candidates.push(&model.file.name, "model", &model.file.path);
+        candidates.push_declarations(&model.local_declarations, "model-local declaration", true);
+    }
+    candidates.push_named(&facts.sql_functions, "function");
+    candidates.push_named(&facts.python_functions, "function");
+    candidates.push_named(&facts.sql_hooks, "SQL hook");
+    for seed in &facts.seeds {
+        candidates.push(&seed.file.name, "seed", &seed.file.path);
+    }
+    for schema in &facts.schemas {
+        for name in &schema.model_names {
+            candidates.push(name, "schema model", &schema.path);
+        }
+        for seed in &schema.seeds {
+            candidates.push(&seed.name, "schema seed", &schema.path);
+        }
+    }
+    for file in &facts.sources {
+        for entry in &file.entries {
+            candidates.push(&entry.name, "source", &file.path);
+        }
+    }
+    for test in &facts.tests {
+        for block in &test.blocks {
+            candidates.push(
+                block_or_file_name(block.name.as_deref(), &test.file.name),
+                "SQL test",
+                &test.file.path,
+            );
+            for case in &block.cases {
+                candidates.push(case, "SQL test case", &test.file.path);
+            }
+        }
+    }
+    candidates.push_named(&facts.scenarios, "scenario");
+    for audit in &facts.audits {
+        for block_name in &audit.block_names {
+            candidates.push_audit(audit, block_name.as_deref());
+        }
+    }
+    for file in &facts.declaration_files {
+        candidates.push_declarations(&file.declarations, "declaration", file.private);
+    }
+    candidates.push_named(&facts.model_schemas, "model schema");
+    candidates.push_named(&facts.materializations, "materialization");
+    for kind in [
+        NodeKind::Loader,
+        NodeKind::Task,
+        NodeKind::Asset,
+        NodeKind::Check,
+    ] {
+        for node in facts.nodes.iter().filter(|node| node.kind == kind) {
+            candidates.push(&node.name, kind.label(), &node.path);
+        }
+    }
+    candidates.push_named(&facts.hook_functions, "Python hook");
+    candidates.push_named(&facts.event_exporters, "event exporter");
+    candidates.push_named(&facts.providers, "provider");
+    candidates.list
+}
+
+/// Python's `block.name or stem`.
+pub(crate) fn block_or_file_name<'a>(block_name: Option<&'a str>, file_name: &'a str) -> &'a str {
+    block_name
+        .filter(|name| !name.is_empty())
+        .unwrap_or(file_name)
 }

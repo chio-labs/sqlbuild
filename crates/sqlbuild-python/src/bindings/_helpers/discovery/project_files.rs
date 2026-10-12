@@ -311,8 +311,7 @@ impl NativeProjectTree {
     }
 }
 
-/// Discover the model files: `(relative path, record or failure payload)` per file, or the
-/// collection's failure payload.
+/// Each model file's `(relative path, record or failure payload)`, or the collection's failure.
 #[pyfunction]
 fn discover_model_files(
     py: Python<'_>,

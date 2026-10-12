@@ -234,3 +234,12 @@ class ProjectValidationTestCase:
     files: tuple[tuple[str, bytes], ...]
     expected_error_type: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class CsvDialectTestCase:
+    """Seed CSV settings; discovery fails as `csv.reader` does for `expected_reader_settings`."""
+
+    description: str
+    settings: bytes
+    expected_reader_settings: dict[str, str]

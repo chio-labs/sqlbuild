@@ -6,10 +6,14 @@ use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 use crate::_helpers::reading::read_failure;
 use crate::models::{DiscoveryFailure, FailureKind};
-use crate::project_validation::_helpers::csv_header::{HeaderError, csv_header};
+use crate::project_validation::_helpers::csv_header::csv_header;
+use crate::project_validation::errors::HeaderError;
 use crate::project_validation::models::{
     ProjectFacts, SeedEntryFact, SeedFileFact, ValidationFailure,
 };
+
+/// `csv.field_size_limit()` before any project changes it.
+const DEFAULT_FIELD_LIMIT: usize = 131_072;
 
 fn seed_error(message: String) -> ValidationFailure {
     DiscoveryFailure::new(FailureKind::Seed, message).into()
@@ -17,6 +21,7 @@ fn seed_error(message: String) -> ValidationFailure {
 
 /// Reject undeclared, duplicate or mismatched seed CSVs in Python's order.
 pub(crate) fn validate_declared_seed_files(facts: &ProjectFacts) -> Result<(), ValidationFailure> {
+    let field_limit: usize = facts.csv_field_limit.unwrap_or(DEFAULT_FIELD_LIMIT);
     unique_seed_csv_names(&facts.seeds)?;
     let mut by_name: HashMap<&str, Vec<&SeedFileFact>> = HashMap::new();
     for seed in &facts.seeds {
@@ -35,7 +40,7 @@ pub(crate) fn validate_declared_seed_files(facts: &ProjectFacts) -> Result<(), V
                         entry.name, schema.path
                     )));
                 }
-                [seed] => seed_csv_header(entry, seed)?,
+                [seed] => seed_csv_header(entry, seed, field_limit)?,
                 _ => {
                     let paths: Vec<&str> = matching
                         .iter()
@@ -76,18 +81,24 @@ fn unique_seed_csv_names(seeds: &[SeedFileFact]) -> Result<(), ValidationFailure
     Ok(())
 }
 
-fn seed_csv_header(entry: &SeedEntryFact, seed: &SeedFileFact) -> Result<(), ValidationFailure> {
+fn seed_csv_header(
+    entry: &SeedEntryFact,
+    seed: &SeedFileFact,
+    field_limit: usize,
+) -> Result<(), ValidationFailure> {
     let unreadable = |failure| ValidationFailure::Unreadable {
         absolute_path: seed.absolute_path.clone(),
         failure,
     };
     let bytes: Vec<u8> =
         std::fs::read(&seed.absolute_path).map_err(|error| unreadable(read_failure(&error)))?;
-    let header: Vec<String> = match csv_header(&bytes, &entry.csv) {
+    if let Some(error) = &entry.csv.dialect_error {
+        return Err(ValidationFailure::CsvDialect(error.clone()));
+    }
+    let header: Vec<String> = match csv_header(&bytes, &entry.csv, field_limit) {
         Ok(header) => header,
         Err(HeaderError::Read(failure)) => return Err(unreadable(failure)),
         Err(HeaderError::Csv(message)) => return Err(ValidationFailure::Csv(message)),
-        Err(HeaderError::Setting(message)) => return Err(ValidationFailure::CsvSetting(message)),
     };
     let path: &str = &seed.file.path;
     if header.is_empty() {

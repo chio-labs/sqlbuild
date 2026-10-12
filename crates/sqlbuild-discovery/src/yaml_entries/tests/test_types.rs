@@ -11,19 +11,6 @@ pub(crate) enum Node {
     Map(Vec<(Node, Node)>),
 }
 
-pub(crate) fn text(value: &str) -> Node {
-    Node::Str(value.to_owned())
-}
-
-pub(crate) fn map(entries: Vec<(&str, Node)>) -> Node {
-    Node::Map(
-        entries
-            .into_iter()
-            .map(|(key, value)| (text(key), value))
-            .collect(),
-    )
-}
-
 impl AuthoredNode for Node {
     fn kind(&self) -> NodeKind {
         match self {
@@ -99,4 +86,36 @@ impl AuthoredNode for Node {
             _ => Vec::new(),
         }
     }
+}
+
+/// One loaded schema document and its seeds or the first parse error.
+pub(super) struct SchemaDocumentTestCase {
+    pub(super) description: &'static str,
+    pub(super) document: Node,
+    pub(super) in_seeds_directory: bool,
+    pub(super) expected_seeds: Result<Vec<String>, String>,
+}
+
+/// One loaded sources document and its sources or the first parse error.
+pub(super) struct SourcesDocumentTestCase {
+    pub(super) description: &'static str,
+    pub(super) document: Node,
+    pub(super) expected_sources: Result<Vec<String>, String>,
+}
+
+/// One freshness duration and its whole minutes, `None` when Python rejects it.
+pub(super) struct FreshnessDurationTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_minutes: Option<u128>,
+}
+
+/// The summary lines a parse returns.
+pub(super) fn lines(lines: &[&str]) -> Result<Vec<String>, String> {
+    Ok(lines.iter().map(|line| (*line).to_owned()).collect())
+}
+
+/// The parse error message.
+pub(super) fn parse_error(message: &str) -> Result<Vec<String>, String> {
+    Err(message.to_owned())
 }

@@ -429,10 +429,9 @@ def _updated_inputs(
     return replace(
         inputs,
         model_files=tuple(
-            replace(
-                model,
-                contents=files[model.file_path],
-                query_sql=files[model.file_path][model.contents.index(model.query_sql) :].strip(),
+            model.with_text(
+                files[model.file_path],
+                files[model.file_path][model.contents.index(model.query_sql) :].strip(),
             )
             if model.file_path in files and files[model.file_path] != model.contents
             else model

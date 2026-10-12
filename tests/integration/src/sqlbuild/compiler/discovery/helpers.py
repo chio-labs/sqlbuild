@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import dataclasses
 import datetime
 import functools
@@ -1045,3 +1046,42 @@ def native_yaml_tags_and_values(
     )
     loaded: list[tuple[object, ...]] = list(compress(rows, [row[0] == "ok" for row in rows]))
     return [row[0] for row in rows], [row[2] for row in loaded]
+
+
+VALIDATION_MODEL: tuple[str, bytes] = ("models/orders.sql", b"MODEL ();\nSELECT 1 AS order_id")
+
+
+def seed_project_files(*, header: bytes, settings: bytes = b"") -> tuple[tuple[str, bytes], ...]:
+    """A model and a `countries` seed declaring `code` and `label` with optional CSV settings."""
+
+    return (
+        VALIDATION_MODEL,
+        ("seeds/countries.csv", header + b"\nGB,United Kingdom\n"),
+        (
+            "seeds/countries.yml",
+            b"seeds:\n  - name: countries\n"
+            + settings
+            + b"    columns:\n      - name: code\n        type: VARCHAR\n"
+            b"      - name: label\n        type: VARCHAR\n",
+        ),
+    )
+
+
+def csv_reader_error(settings: dict[str, str]) -> tuple[str, str] | None:
+    """The error this Python's `csv.reader` raises for the settings, if any."""
+
+    try:
+        csv.reader((), **cast(dict[str, Any], settings))
+    except (TypeError, ValueError) as error:
+        return type(error).__name__, str(error)
+    return None
+
+
+def discovery_error(*, project_dir: Path) -> tuple[str, str] | None:
+    """The exception discovery raises for the project, if any."""
+
+    try:
+        discover_project_inputs(project_dir=project_dir)
+    except Exception as error:
+        return type(error).__name__, str(error)
+    return None

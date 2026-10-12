@@ -1,6 +1,7 @@
 //! The facts cross-file discovery validation reads, in each collection's discovery order.
 
 use crate::models::{DiscoveryFailure, ReadFailure};
+use crate::project_validation::errors::CsvDialectError;
 
 /// A resource name and the project-relative path that declares it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -93,6 +94,8 @@ pub struct CsvSettings {
     pub escapechar: Option<String>,
     pub doublequote: Option<bool>,
     pub skipinitialspace: Option<bool>,
+    /// The error the running Python's `csv.reader` raises for these settings, if any.
+    pub dialect_error: Option<CsvDialectError>,
 }
 
 /// One seed entry of a schema YAML file.
@@ -171,6 +174,8 @@ pub struct ProjectFacts {
     pub event_exporters: Vec<NamedPath>,
     pub providers: Vec<NamedPath>,
     pub path_default_keys: Vec<String>,
+    /// Python's `csv.field_size_limit()`, or `None` for its default.
+    pub csv_field_limit: Option<usize>,
 }
 
 /// Why discovered inputs are rejected: a discovery error, or a seed CSV Python cannot read.
@@ -183,12 +188,28 @@ pub enum ValidationFailure {
     },
     /// Python's `csv.Error` reading a seed header, with its message.
     Csv(String),
-    /// Python's `TypeError` for a CSV setting that is not one character, with its message.
-    CsvSetting(String),
+    /// The settings error the running Python's `csv.reader` raises.
+    CsvDialect(CsvDialectError),
 }
 
 impl From<DiscoveryFailure> for ValidationFailure {
     fn from(failure: DiscoveryFailure) -> Self {
         Self::Discovery(failure)
+    }
+}
+
+impl std::fmt::Display for ValidationFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Discovery(failure) => {
+                write!(formatter, "{:?}: {}", failure.kind, failure.message)
+            }
+            Self::Unreadable {
+                absolute_path,
+                failure,
+            } => write!(formatter, "unreadable {absolute_path}: {failure:?}"),
+            Self::Csv(message) => write!(formatter, "csv: {message}"),
+            Self::CsvDialect(error) => write!(formatter, "{}: {}", error.class, error.message),
+        }
     }
 }

@@ -151,7 +151,6 @@ DBT_DEFER_CLONE_CONFIG_KEY: str = "defer_clone_from"
 DBT_REPLAY_ON_CHANGE_CONFIG_KEY: str = "replay_on_change"
 
 MODELS_DIRECTORY_NAME: str = "models"
-SEEDS_DIRECTORY_NAME: str = "seeds"
 SQL_TESTS_OWNERSHIP_ROOT: str = "tests/unit"
 SQL_SCENARIOS_OWNERSHIP_ROOT: str = "tests/scenarios"
 
