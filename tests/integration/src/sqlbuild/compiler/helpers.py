@@ -331,12 +331,6 @@ def _substitute(*, rng: random.Random, word: list[str], position: int) -> None:
 MUTATIONS: tuple[Callable[..., None], ...] = (_insert, _delete, _substitute)
 
 
-def cleandoc_text(*, rng: random.Random) -> str:
-    """Return a body mixing indentation, tabs, Unicode spaces and blank lines."""
-
-    return "".join(rng.choices(CLEANDOC_FRAGMENTS, k=rng.randint(0, 24)))
-
-
 def mutated_word(*, rng: random.Random, candidates: list[str]) -> str:
     """Return a candidate with a few random insertions, deletions and substitutions."""
 

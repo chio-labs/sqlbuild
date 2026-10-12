@@ -37,7 +37,6 @@ pub(crate) fn parse_sql_test_file(
         statement: TEST_STATEMENT,
         file_path,
         supported_keys: &options.test_keys,
-        python: options.python,
     };
     let mut blocks: Vec<SqlTestBlock> = Vec::with_capacity(matches.len());
     let mut failure: Option<DiscoveryFailure> = None;
@@ -55,7 +54,7 @@ pub(crate) fn parse_sql_test_file(
                 let span_start: usize = contents[..body_start].chars().count();
                 blocks.push(SqlTestBlock {
                     header_values,
-                    sql_body: python_cleandoc(options.python, authored),
+                    sql_body: python_cleandoc(authored),
                     body_span: (span_start, span_start + authored.chars().count()),
                 });
             }

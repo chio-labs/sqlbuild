@@ -1,17 +1,13 @@
 //! Python's `repr` of a `str`.
 
-use crate::text::_helpers::code_point_ranges::in_ranges;
-use crate::text::models::PythonText;
-
-/// Python's `repr` of a string under one Python's Unicode tables.
+/// Python's `repr` of a string; non-ASCII characters print unless they are control or separator characters.
 #[must_use]
-pub fn python_str_repr(python: PythonText, value: &str) -> String {
+pub fn python_str_repr(value: &str) -> String {
     let quote: char = if value.contains('\'') && !value.contains('"') {
         '"'
     } else {
         '\''
     };
-    let printable: &[(u32, u32)] = python.printable_ranges;
     let mut text: String = String::with_capacity(value.len() + 2);
     text.push(quote);
     for character in value.chars() {
@@ -26,7 +22,7 @@ pub fn python_str_repr(python: PythonText, value: &str) -> String {
                 text.push(character);
             }
             '\0'..='\x1f' | '\x7f' => text.push_str(&format!("\\x{code:02x}")),
-            _ if character.is_ascii() || in_ranges(printable, character) => text.push(character),
+            _ if character.is_ascii() || is_printable(character) => text.push(character),
             '\u{80}'..='\u{ff}' => text.push_str(&format!("\\x{code:02x}")),
             '\u{100}'..='\u{ffff}' => text.push_str(&format!("\\u{code:04x}")),
             _ => text.push_str(&format!("\\U{code:08x}")),
@@ -34,4 +30,8 @@ pub fn python_str_repr(python: PythonText, value: &str) -> String {
     }
     text.push(quote);
     text
+}
+
+fn is_printable(character: char) -> bool {
+    !character.is_control() && !character.is_whitespace()
 }

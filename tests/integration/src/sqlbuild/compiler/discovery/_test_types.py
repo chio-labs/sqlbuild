@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import sys
-import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -56,10 +54,6 @@ class NativeRuntimeTestCase:
     expected_models: int
     expected_error: str = "NoneType"
     expected_message: str = "None"
-    unidata_version: str = field(default_factory=lambda: unicodedata.unidata_version)
-    python_version: tuple[int, int] = field(
-        default_factory=lambda: (sys.version_info[0], sys.version_info[1])
-    )
 
 
 @dataclass(frozen=True)
@@ -123,16 +117,6 @@ class UndecodablePathToleranceTestCase:
     expected_models: tuple[str, ...]
     expected_sources: tuple[str, ...]
     expected_faults: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True)
-class UnsupportedPythonCommandTestCase:
-    """A command run on a Python this release does not support."""
-
-    description: str
-    command: tuple[str, ...]
-    expected_exit_code: int
-    expected_error: str
 
 
 @dataclass(frozen=True)

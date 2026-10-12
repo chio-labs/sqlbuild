@@ -160,7 +160,7 @@ pub(crate) fn projection(index: &ProjectionIndex) -> JsonValue {
         (
             root.path.clone(),
             root.resource_kind
-                .map(|kind| kind.as_str())
+                .map(crate::scope_index::models::ResourceKind::as_str)
                 .unwrap_or_default(),
         )
     })
@@ -171,7 +171,10 @@ pub(crate) fn projection(index: &ProjectionIndex) -> JsonValue {
             ("path", text(&safe_scope_path(&root.path))),
             (
                 "resource_kind",
-                optional_text(root.resource_kind.map(|kind| kind.as_str())),
+                optional_text(
+                    root.resource_kind
+                        .map(crate::scope_index::models::ResourceKind::as_str),
+                ),
             ),
         ])
     })
@@ -198,7 +201,7 @@ pub(crate) fn projection(index: &ProjectionIndex) -> JsonValue {
                     record
                         .ownership_root
                         .resource_kind
-                        .map(|kind| kind.as_str()),
+                        .map(crate::scope_index::models::ResourceKind::as_str),
                 ),
             ),
         ])

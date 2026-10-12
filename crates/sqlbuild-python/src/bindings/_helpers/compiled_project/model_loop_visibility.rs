@@ -175,7 +175,7 @@ impl<'py> ModelVisibility<'py> {
         ] {
             let inherited: Bound<'py, PyDict> = fields.get_item(field)?.map_or_else(
                 || Ok(PyDict::new(py)),
-                |value| value.downcast_into::<PyDict>(),
+                pyo3::types::PyAnyMethods::downcast_into::<PyDict>,
             )?;
             let visibility: Bound<'py, PyDict> = inherited.copy()?;
             for name in local.keys() {

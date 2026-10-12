@@ -8,21 +8,16 @@ use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::declaration_headers::declaration_headers;
 use crate::declaration_files::models::{EnumDeclaration, EnumFile};
 use crate::models::FailureKind;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const ENUM_KEYS: [&str; 2] = ["name", "members"];
 const VARCHAR_TYPE: &str = "VARCHAR";
 const INTEGER_TYPE: &str = "INTEGER";
 
-pub(crate) fn parse_enum_file(
-    file_path: &str,
-    contents: String,
-    python: PythonText,
-) -> Result<EnumFile, ParseStop> {
+pub(crate) fn parse_enum_file(file_path: &str, contents: String) -> Result<EnumFile, ParseStop> {
     let declarations: Vec<EnumDeclaration> = declaration_headers(&contents, file_path, "ENUM")?
         .into_iter()
-        .map(|header| parse_enum(&header.values, file_path, python))
+        .map(|header| parse_enum(&header.values, file_path))
         .collect::<Result<_, _>>()?;
     Ok(EnumFile {
         contents,
@@ -37,7 +32,6 @@ fn declaration(message: String) -> ParseStop {
 fn parse_enum(
     values: &[(String, AuthoredValue)],
     file_path: &str,
-    python: PythonText,
 ) -> Result<EnumDeclaration, ParseStop> {
     let unknown: Vec<String> = unknown_keys(values, &ENUM_KEYS);
     if !unknown.is_empty() {
@@ -46,10 +40,10 @@ fn parse_enum(
             unknown.join(", ")
         )));
     }
-    let name: String = declaration_name(get(values, "name"), file_path, "enum", python)?;
+    let name: String = declaration_name(get(values, "name"), file_path, "enum")?;
     let members: Vec<(String, AuthoredValue)> = match get(values, "members") {
-        Some(AuthoredValue::List(items)) => shorthand_members(items, file_path, &name, python)?,
-        Some(AuthoredValue::Map(items)) => explicit_members(items, file_path, &name, python)?,
+        Some(AuthoredValue::List(items)) => shorthand_members(items, file_path, &name)?,
+        Some(AuthoredValue::Map(items)) => explicit_members(items, file_path, &name)?,
         _ => {
             return Err(declaration(format!(
                 "{file_path} enum '{name}' members must use [...] or (...)"
@@ -71,7 +65,7 @@ fn parse_enum(
     }
     let mut types: Vec<PythonType> = Vec::with_capacity(members.len());
     for (_, value) in &members {
-        types.push(python_type(value, WordRules { python, file_path })?);
+        types.push(python_type(value, WordRules { file_path })?);
     }
     if types.iter().any(|value_type| *value_type != types[0]) {
         return Err(declaration(format!(
@@ -94,10 +88,9 @@ pub(crate) fn declaration_name(
     raw_name: Option<&AuthoredValue>,
     file_path: &str,
     kind: &str,
-    python: PythonText,
 ) -> Result<String, ParseStop> {
     let name: Option<&str> = match raw_name {
-        Some(value) => python_str(value, WordRules { python, file_path })?,
+        Some(value) => python_str(value, WordRules { file_path })?,
         None => None,
     };
     let Some(name) = name.filter(|name| is_identifier(name)) else {
@@ -113,12 +106,11 @@ fn shorthand_members(
     items: &[AuthoredValue],
     file_path: &str,
     enum_name: &str,
-    python: PythonText,
 ) -> Result<Vec<(String, AuthoredValue)>, ParseStop> {
     let mut members: Vec<(String, AuthoredValue)> = Vec::with_capacity(items.len());
     for item in items {
-        let Some(member) = python_str(item, WordRules { python, file_path })?
-            .filter(|member| is_identifier(member))
+        let Some(member) =
+            python_str(item, WordRules { file_path })?.filter(|member| is_identifier(member))
         else {
             return Err(declaration(format!(
                 "{file_path} enum '{enum_name}' shorthand members must be identifiers"
@@ -138,7 +130,6 @@ fn explicit_members(
     items: &[(String, AuthoredValue)],
     file_path: &str,
     enum_name: &str,
-    python: PythonText,
 ) -> Result<Vec<(String, AuthoredValue)>, ParseStop> {
     let mut members: Vec<(String, AuthoredValue)> = Vec::with_capacity(items.len());
     for (member, value) in items {
@@ -148,7 +139,7 @@ fn explicit_members(
             )));
         }
         if !matches!(
-            python_type(value, WordRules { python, file_path })?,
+            python_type(value, WordRules { file_path })?,
             PythonType::Str | PythonType::Int
         ) {
             return Err(declaration(format!(

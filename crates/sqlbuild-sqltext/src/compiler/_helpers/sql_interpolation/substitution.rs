@@ -6,7 +6,6 @@ use crate::sql_scan::main::non_code_end::non_code_end;
 use crate::sql_scan::models::{QuotePolicy, Unclosed};
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
-use sqlbuild_core::text::models::PythonText;
 
 const CONTEXT: &str = "SQL interpolation";
 const TOKEN: &str = "@@";
@@ -17,7 +16,6 @@ const CONTEXT_PREFIX: &str = "CTX:";
 type ByteSpan = (usize, usize, usize, usize);
 
 struct Interpolation<'run, H: InterpolationHost> {
-    python: PythonText,
     host: &'run H,
     file_path: &'run str,
     output: String,
@@ -27,13 +25,11 @@ struct Interpolation<'run, H: InterpolationHost> {
 
 /// Interpolate `sql` as Python's `substitute_sql_vars_with_spans` did, or return its error.
 pub(crate) fn interpolate<H: InterpolationHost>(
-    python: PythonText,
     host: &H,
     sql: &str,
     file_path: &str,
 ) -> Result<InterpolatedSql, InterpolationFailure> {
     let mut run = Interpolation {
-        python,
         host,
         file_path,
         output: String::new(),
@@ -204,7 +200,7 @@ impl<H: InterpolationHost> Interpolation<'_, H> {
         sql[at..]
             .chars()
             .next()
-            .is_some_and(|character| character == '_' || is_python_alpha(self.python, character))
+            .is_some_and(|character| character == '_' || is_python_alpha(character))
     }
 
     /// The end of the identifier starting at `start`, whose first character already matched.
@@ -217,9 +213,7 @@ impl<H: InterpolationHost> Interpolation<'_, H> {
     fn name_end(&self, sql: &str, start: usize, extra: &[char]) -> usize {
         sql[start..]
             .char_indices()
-            .find(|(_, character)| {
-                !(extra.contains(character) || is_python_alnum(self.python, *character))
-            })
+            .find(|(_, character)| !(extra.contains(character) || is_python_alnum(*character)))
             .map_or(sql.len(), |(offset, _)| start + offset)
     }
 

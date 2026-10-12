@@ -49,23 +49,3 @@ class CloseMatchesOracleTestCase:
     count: int
     cutoff: float
     expected_mismatches: tuple[tuple[object, object, object], ...] = ()
-
-
-@dataclass(frozen=True)
-class CleandocOracleTestCase:
-    """Seeded SQL bodies compared between the native port and `inspect.cleandoc`."""
-
-    description: str
-    seed: int
-    case_count: int
-    expected_mismatches: tuple[tuple[object, object, object], ...] = ()
-
-
-@dataclass(frozen=True)
-class CharacterClassOracleTestCase:
-    """A code point range classified natively and by Python's `str` methods."""
-
-    description: str
-    first: int
-    last: int
-    expected_mismatches: tuple[tuple[object, object, object], ...] = ()

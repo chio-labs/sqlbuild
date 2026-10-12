@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 
 use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::models::PythonText;
 
 /// A finite decimal: its sign, its digits without leading zeros, and its exponent.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,11 +28,11 @@ pub(crate) enum DecimalText {
 const SPECIAL_NAMES: [&str; 4] = ["inf", "infinity", "nan", "snan"];
 
 /// Read `text` as `Decimal(text)`: Python whitespace around it and every `_` are ignored.
-pub(crate) fn decimal_text(python: PythonText, text: &str) -> DecimalText {
+pub(crate) fn decimal_text(text: &str) -> DecimalText {
     let trimmed: &str = text.trim_matches(is_python_space);
     if trimmed
         .chars()
-        .any(|character| !character.is_ascii() && is_python_decimal(python, character))
+        .any(|character| !character.is_ascii() && is_python_decimal(character))
     {
         return DecimalText::NonAsciiDigit;
     }

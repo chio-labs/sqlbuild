@@ -1,7 +1,6 @@
 //! Bare MODEL header words read as booleans, null, integers or floats.
 
 use crate::compiler::models::HeaderWord;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_decimal_value::python_decimal_value;
 
 pub(crate) const TRUE_WORD: &str = "true";
@@ -13,10 +12,9 @@ const ZERO_DIGITS: &str = "0";
 
 /// The ASCII form of a run of Python decimal digits, or `None` if any character is not one.
 fn ascii_digits(text: &str) -> Option<String> {
-    let python = active_python_text();
     text.chars()
         .map(|character| {
-            python_decimal_value(python, character).and_then(|value| char::from_digit(value, 10))
+            python_decimal_value(character).and_then(|value| char::from_digit(value, 10))
         })
         .collect()
 }

@@ -56,7 +56,7 @@ fn files<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Files<'py>> {
         .collect::<PyResult<Vec<_>>>()?;
     let native: Vec<PathBuf> = python
         .iter()
-        .map(|path| path.extract::<PathBuf>())
+        .map(pyo3::types::PyAnyMethods::extract::<PathBuf>)
         .collect::<PyResult<_>>()?;
     let [project, legacy_project, local, legacy_local]: [PathBuf; 4] = native
         .try_into()

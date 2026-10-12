@@ -1,6 +1,5 @@
 //! Contract adoption's MODEL header edit, as Python's `edit_model` plans it.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::name_patterns::main::compile_name_pattern::compile_name_pattern;
@@ -73,15 +72,14 @@ pub(crate) fn fixed_physical_columns(
     if request.dynamic_patterns.is_empty() {
         return Ok(request.physical_columns.clone());
     }
-    let python = active_python_text();
     let fixed: Vec<String> = request
         .columns
         .iter()
-        .map(|column| python_casefold(python, &column.name))
+        .map(|column| python_casefold(&column.name))
         .collect();
     let mut kept: Vec<PhysicalColumn> = Vec::new();
     for column in &request.physical_columns {
-        if fixed.contains(&python_casefold(python, &column.0))
+        if fixed.contains(&python_casefold(&column.0))
             || !family_member(&request.dynamic_patterns, &column.0)?
         {
             kept.push(column.clone());
@@ -131,7 +129,6 @@ fn declared_column_edit(
     let Some(physical_type) = physical_type else {
         return Ok(overwrite.then(|| edit(text, (span.entry_start, span.entry_end), String::new())));
     };
-    let python = active_python_text();
     match &column.declared_type {
         None => {
             let metadata = slice(text, span.metadata_start, span.metadata_end);
@@ -147,8 +144,7 @@ fn declared_column_edit(
             )))
         }
         Some(declared)
-            if overwrite
-                && python_casefold(python, declared) != python_casefold(python, physical_type) =>
+            if overwrite && python_casefold(declared) != python_casefold(physical_type) =>
         {
             declared_type_span(text, (span.metadata_start, span.metadata_end), declared)
                 .map(|replacement| Some(edit(text, replacement, render_model_type(physical_type))))
@@ -170,17 +166,16 @@ fn declared_edits(
     columns: &HeaderColumns,
     physical: &[PhysicalColumn],
 ) -> Result<Vec<TextEdit>, String> {
-    let python = active_python_text();
     let declared = python_dict(
         request
             .columns
             .iter()
-            .map(|column| (python_casefold(python, &column.name), column)),
+            .map(|column| (python_casefold(&column.name), column)),
     );
     let physical_by_name = python_dict(
         physical
             .iter()
-            .map(|column| (python_casefold(python, &column.0), column)),
+            .map(|column| (python_casefold(&column.0), column)),
     );
     let mut edits: Vec<TextEdit> = Vec::new();
     for (name, column) in &declared {
@@ -216,16 +211,15 @@ fn additions(
     request: &ContractModelRequest,
     physical: &[PhysicalColumn],
 ) -> String {
-    let python = active_python_text();
     let declared: Vec<String> = request
         .columns
         .iter()
-        .map(|column| python_casefold(python, &column.name))
+        .map(|column| python_casefold(&column.name))
         .collect();
     let indentation = column_indentation(text, columns.body_start);
     let mut rendered = String::new();
     for (name, column_type) in physical {
-        if !declared.contains(&python_casefold(python, name)) {
+        if !declared.contains(&python_casefold(name)) {
             rendered.push_str(&format!(
                 "\n{indentation}{name} (type {})",
                 render_model_type(column_type)

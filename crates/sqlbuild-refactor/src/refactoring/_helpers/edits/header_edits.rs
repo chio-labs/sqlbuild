@@ -2,7 +2,6 @@
 
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::main::model_header_matching::match_batch;
 use sqlbuild_sqltext::compiler::main::model_header_tokenizing::tokenize_one;
 use sqlbuild_sqltext::compiler::main::statement_header_matching::match_statement_header;
@@ -550,13 +549,13 @@ fn line_indent(text: &[char], offset: usize) -> String {
 }
 
 /// Code-point spans of every `SCHEMA (...)` header body, as `SCHEMA_STATEMENT_PATTERN.finditer`.
-fn schema_header_spans(contents: &str, text: &[char], python: PythonText) -> Vec<(usize, usize)> {
+fn schema_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
     let mut byte_offsets: Vec<usize> = contents.char_indices().map(|(offset, _)| offset).collect();
     byte_offsets.push(contents.len());
     let mut spans: Vec<(usize, usize)> = Vec::new();
     let mut index = 0;
     while index < text.len() {
-        let bounded = index == 0 || !is_python_word(python, text[index - 1]);
+        let bounded = index == 0 || !is_python_word(text[index - 1]);
         if bounded
             && starts_with(text, index, SCHEMA_KEYWORD)
             && let Some((start, end, _)) =
@@ -591,10 +590,9 @@ pub(crate) fn schema_model_name_edits(
     contents: &str,
     text: &[char],
     names: (&str, &str),
-    python: PythonText,
 ) -> Result<Vec<TextEdit>, RefactorError> {
     let mut edits: Vec<TextEdit> = Vec::new();
-    for span in schema_header_spans(contents, text, python) {
+    for span in schema_header_spans(contents, text) {
         edits.extend(model_name_token_edits(
             text,
             &span_tokens(text, span)?,
@@ -610,11 +608,10 @@ pub(crate) fn schema_column_edits(
     contents: &str,
     text: &[char],
     column: (&str, (&str, &str)),
-    python: PythonText,
 ) -> Result<Vec<TextEdit>, RefactorError> {
     let (upstream, names) = column;
     let mut edits: Vec<TextEdit> = Vec::new();
-    for span in schema_header_spans(contents, text, python) {
+    for span in schema_header_spans(contents, text) {
         edits.extend(column_token_edits(
             text,
             &span_tokens(text, span)?,

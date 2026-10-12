@@ -39,10 +39,14 @@ pub(crate) fn prepare(
         return Ok(None);
     }
     let policy = QuotePolicy::SQL_LINT.with_backtick_identifiers(backtick_identifiers(dialect));
-    let site_pattern = SITE_START.as_ref().map_err(|error| error.to_string())?;
-    let cte_pattern = CTES.as_ref().map_err(|error| error.to_string())?;
-    let word_pattern = WORDS.as_ref().map_err(|error| error.to_string())?;
-    let opaque_pattern = OPAQUE_CTE.as_ref().map_err(|error| error.to_string())?;
+    let site_pattern = SITE_START
+        .as_ref()
+        .map_err(std::string::ToString::to_string)?;
+    let cte_pattern = CTES.as_ref().map_err(std::string::ToString::to_string)?;
+    let word_pattern = WORDS.as_ref().map_err(std::string::ToString::to_string)?;
+    let opaque_pattern = OPAQUE_CTE
+        .as_ref()
+        .map_err(std::string::ToString::to_string)?;
     let mut text = String::with_capacity(expanded.len());
     let mut sites: Vec<InterpolationSite> = Vec::new();
     let mut copied_to = 0;

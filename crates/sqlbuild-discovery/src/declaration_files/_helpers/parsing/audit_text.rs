@@ -2,14 +2,12 @@
 
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::models::PythonText;
 
 const SQL_QUOTES: [char; 3] = ['\'', '"', '`'];
 
 /// Audit text as code points, with the Python semantics its keyword checks use.
 pub(crate) struct AuditText<'a> {
     pub(crate) chars: &'a [char],
-    pub(crate) python: PythonText,
 }
 
 impl AuditText<'_> {
@@ -108,9 +106,7 @@ impl AuditText<'_> {
         let word = |index: Option<usize>| {
             index
                 .and_then(|index| self.chars.get(index))
-                .is_some_and(|character| {
-                    *character == '_' || is_python_alnum(self.python, *character)
-                })
+                .is_some_and(|character| *character == '_' || is_python_alnum(*character))
         };
         !word(position.checked_sub(1)) && !word(Some(end))
     }

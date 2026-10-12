@@ -4,8 +4,6 @@ use crate::posix_path::main::posix_parent::posix_parent;
 use crate::posix_path::main::posix_parts::posix_parts;
 use crate::posix_path::main::posix_suffix::posix_suffix;
 use crate::posix_path::tests::test_types::PosixPathTestCase;
-use crate::text::main::python_text::python_text;
-use crate::text::models::PythonText;
 
 #[test]
 fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
@@ -16,7 +14,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["models", "a.sql"],
             expected_parent: "models",
             expected_name: "a.sql",
-            expected_suffixes: (".sql", ".sql"),
+            expected_suffix: ".sql",
         },
         PosixPathTestCase {
             description: "current, empty and trailing components are dropped",
@@ -24,7 +22,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["a", "b"],
             expected_parent: "a",
             expected_name: "b",
-            expected_suffixes: ("", ""),
+            expected_suffix: "",
         },
         PosixPathTestCase {
             description: "an absolute path keeps its root",
@@ -32,7 +30,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["/", "abs", "x.yml"],
             expected_parent: "/abs",
             expected_name: "x.yml",
-            expected_suffixes: (".yml", ".yml"),
+            expected_suffix: ".yml",
         },
         PosixPathTestCase {
             description: "exactly two leading slashes are their own root",
@@ -40,7 +38,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["//", "net", "x"],
             expected_parent: "//net",
             expected_name: "x",
-            expected_suffixes: ("", ""),
+            expected_suffix: "",
         },
         PosixPathTestCase {
             description: "three leading slashes collapse to one root",
@@ -48,7 +46,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["/", "three", "x"],
             expected_parent: "/three",
             expected_name: "x",
-            expected_suffixes: ("", ""),
+            expected_suffix: "",
         },
         PosixPathTestCase {
             description: "the current directory has no parts",
@@ -56,7 +54,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &[],
             expected_parent: ".",
             expected_name: "",
-            expected_suffixes: ("", ""),
+            expected_suffix: "",
         },
         PosixPathTestCase {
             description: "empty text is the current directory",
@@ -64,7 +62,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &[],
             expected_parent: ".",
             expected_name: "",
-            expected_suffixes: ("", ""),
+            expected_suffix: "",
         },
         PosixPathTestCase {
             description: "a parent component is kept",
@@ -72,7 +70,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["a", ".."],
             expected_parent: "a",
             expected_name: "..",
-            expected_suffixes: ("", ""),
+            expected_suffix: "",
         },
         PosixPathTestCase {
             description: "a leading-dot name has a suffix only before Python 3.14",
@@ -80,7 +78,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["..a"],
             expected_parent: ".",
             expected_name: "..a",
-            expected_suffixes: (".a", ""),
+            expected_suffix: "",
         },
         PosixPathTestCase {
             description: "a trailing dot is a suffix only from Python 3.14",
@@ -88,7 +86,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["d", "a."],
             expected_parent: "d",
             expected_name: "a.",
-            expected_suffixes: ("", "."),
+            expected_suffix: ".",
         },
         PosixPathTestCase {
             description: "the last dot starts the suffix",
@@ -96,7 +94,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["d", "...b.c"],
             expected_parent: "d",
             expected_name: "...b.c",
-            expected_suffixes: (".c", ".c"),
+            expected_suffix: ".c",
         },
         PosixPathTestCase {
             description: "non-ASCII components are whole parts",
@@ -104,7 +102,7 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["caf\u{e9}", "\u{1F600}.sql"],
             expected_parent: "caf\u{e9}",
             expected_name: "\u{1F600}.sql",
-            expected_suffixes: (".sql", ".sql"),
+            expected_suffix: ".sql",
         },
         PosixPathTestCase {
             description: "a bare root is its own parent",
@@ -112,11 +110,9 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
             expected_parts: &["/"],
             expected_parent: "/",
             expected_name: "",
-            expected_suffixes: ("", ""),
+            expected_suffix: "",
         },
     ];
-    let python_312: PythonText = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
-    let python_314: PythonText = python_text((3, 14), "16.0.0").expect("Python 3.14 is supported");
     for test_case in test_cases {
         let parts: Vec<&str> = posix_parts(test_case.path);
 
@@ -125,16 +121,13 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
                 parts.as_slice(),
                 posix_parent(test_case.path),
                 posix_name(test_case.path),
-                (
-                    posix_suffix(python_312, test_case.path),
-                    posix_suffix(python_314, test_case.path)
-                ),
+                posix_suffix(test_case.path),
             ),
             (
                 test_case.expected_parts,
                 test_case.expected_parent.to_owned(),
                 test_case.expected_name,
-                test_case.expected_suffixes,
+                test_case.expected_suffix,
             ),
             "{}",
             test_case.description

@@ -5,7 +5,6 @@ use crate::sql_values::constants::{
 };
 use crate::sql_values::errors::SqlValueFailure;
 use crate::sql_values::models::{DecimalNumber, DecimalSpecial};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_decimal_value::python_decimal_value;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
@@ -18,7 +17,6 @@ const DECIMAL_MIN_EXPONENT: i128 = -1_999_999_999_999_999_997;
 
 /// The text with whitespace stripped, underscores dropped and Unicode digits made ASCII.
 fn ascii_text(text: &str) -> Option<String> {
-    let python = active_python_text();
     python_strip(text)
         .chars()
         .filter(|character| *character != '_')
@@ -26,7 +24,7 @@ fn ascii_text(text: &str) -> Option<String> {
             if character.is_ascii() {
                 return Some(character.to_ascii_lowercase());
             }
-            python_decimal_value(python, character).and_then(|value| char::from_digit(value, 10))
+            python_decimal_value(character).and_then(|value| char::from_digit(value, 10))
         })
         .collect()
 }

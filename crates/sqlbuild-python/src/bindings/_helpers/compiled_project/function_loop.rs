@@ -183,15 +183,10 @@ fn sql_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<Att
         .resource_identity
         .call1((&scope.function_kind, &name))?;
     let declarations: Bound<'_, PyAny> = scoped_declarations(context, &file_path, &consumer)?;
-    let expansion: AuthoredExpansion<'_> = expanded_authored_sql(
-        scope.model_loop,
-        context,
-        (&body, &file_path),
-        &declarations,
-    )?;
+    let expansion: AuthoredExpansion<'_> =
+        expanded_authored_sql(context, (&body, &file_path), &declarations)?;
     let sql: &str = &expansion.sql;
     if let IntrinsicCheck::Rejected(message) = intrinsic_free(
-        scope.model_loop.python,
         sql,
         &scope.model_loop.reserved_markers,
         &format!("SQL function '{name}'"),

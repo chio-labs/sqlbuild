@@ -1,17 +1,16 @@
 //! Python string operations, with offsets in code points as Python's string indexes count them.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 use sqlbuild_core::text::main::python_upper::python_upper;
 
 /// Python's `str.casefold`.
 pub(crate) fn casefold(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    python_casefold(text)
 }
 
 /// Python's `str.upper`.
 pub(crate) fn upper(text: &str) -> String {
-    python_upper(active_python_text(), text)
+    python_upper(text)
 }
 
 /// The line boundaries Python's `str.splitlines` splits on.

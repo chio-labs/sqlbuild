@@ -101,7 +101,7 @@ fn skip_space(text: &[char], mut index: usize) -> usize {
 
 /// Resource calls outside comments and strings, with their name spans.
 pub(crate) fn resource_sites(text: &[char], context: &ScanContext) -> Vec<ResourceSite> {
-    interpolation_sites(text, context.backtick_identifiers, context.python)
+    interpolation_sites(text, context.backtick_identifiers)
         .into_iter()
         .filter_map(|site| {
             let (kind, name, name_start, name_end) = resource_call(&chars(&site.text))?;
@@ -187,7 +187,7 @@ pub(crate) fn analysis_sql(text: &[char], context: &ScanContext) -> AnalysisSql 
     let mut sql = String::new();
     let mut tables: Vec<((String, String), BTreeSet<String>)> = Vec::new();
     let mut copied_to = 0;
-    for (index, site) in interpolation_sites(text, context.backtick_identifiers, context.python)
+    for (index, site) in interpolation_sites(text, context.backtick_identifiers)
         .into_iter()
         .enumerate()
     {

@@ -3,7 +3,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 
 use crate::semantic_checks::_helpers::explanation::opt_outs::unneeded_opt_out;
 use crate::semantic_checks::_helpers::resource_sql::help::{HelpContext, resource_sql_help};
@@ -43,10 +42,9 @@ fn semantic(failure: SemanticFailure) -> ResourceSqlFailure {
 
 /// Python's `normalize_analysis_sql(cursor_intrinsics_analysis_sql(sql))`.
 fn cleaned_sql(sql: &str, dialect: Option<&str>) -> Result<String, ResourceSqlFailure> {
-    let (analysis_sql, _) = replace_intrinsics(active_python_text(), sql, CURSOR_CONTEXT, |_| {
-        ANALYSIS_CURSOR_LITERAL.to_owned()
-    })
-    .map_err(ResourceSqlFailure::CursorIntrinsic)?;
+    let (analysis_sql, _) =
+        replace_intrinsics(sql, CURSOR_CONTEXT, |_| ANALYSIS_CURSOR_LITERAL.to_owned())
+            .map_err(ResourceSqlFailure::CursorIntrinsic)?;
     normalize_analysis_sql(NormalizationInput {
         sql: analysis_sql,
         dialect: dialect.unwrap_or(GENERIC_DIALECT).to_owned(),

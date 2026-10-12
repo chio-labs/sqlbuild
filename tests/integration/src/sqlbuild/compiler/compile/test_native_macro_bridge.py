@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import random
-import sys
-import unicodedata
 from pathlib import Path
 
 import pytest
@@ -208,10 +206,7 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     texts: list[str] = [random_macro_sql(rng=rng) for _ in range(test_case.samples)]
-    bridge: MacroBridge = MacroBridge(
-        python_version=(sys.version_info[0], sys.version_info[1]),
-        unicode_version=unicodedata.unidata_version,
-    )
+    bridge: MacroBridge = MacroBridge()
     unbridged: list[tuple[object, ...]] = [expansion_outcome(sql=sql, bridge=None) for sql in texts]
     bridged: list[tuple[object, ...]] = [expansion_outcome(sql=sql, bridge=bridge) for sql in texts]
     expected: list[GoldenEntry] = read_golden(golden_name("macro_expansion", test_case.description))
@@ -257,10 +252,7 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
 def test_given_nested_macro_arguments_when_expanding_then_matches_python_golden(
     test_case: MacroExpansionEdgeTestCase,
 ) -> None:
-    bridge: MacroBridge = MacroBridge(
-        python_version=(sys.version_info[0], sys.version_info[1]),
-        unicode_version=unicodedata.unidata_version,
-    )
+    bridge: MacroBridge = MacroBridge()
     unbridged: list[tuple[object, ...]] = [
         expansion_outcome(sql=sql, bridge=None) for sql in test_case.texts
     ]

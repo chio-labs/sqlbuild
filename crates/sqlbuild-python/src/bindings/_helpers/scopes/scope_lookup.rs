@@ -2,7 +2,6 @@
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::report_lookup::report_lookup;
@@ -164,7 +163,7 @@ pub(crate) fn path_message(rejected: &RejectedPath) -> String {
 
 /// Python's `InvalidQualifiedIdentityError` message for a rejected identity.
 pub(crate) fn identity_message(failure: &IdentityFailure, value: &str) -> String {
-    let shown = |text: &str| -> String { python_str_repr(active_python_text(), text) };
+    let shown = |text: &str| -> String { python_str_repr(text) };
     match failure {
         IdentityFailure::NoName => format!("Qualified identity has no name: {}", shown(value)),
         IdentityFailure::UnknownKind(kind) => {

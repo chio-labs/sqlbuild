@@ -65,7 +65,7 @@ pub(crate) fn attached_sources<'py>(
         let (expression, usages) = match entry.getattr("expression")?.extract::<Option<String>>()? {
             Some(sql) => {
                 let expansion: AuthoredExpansion<'py> =
-                    expanded_authored_sql(model_loop, context, (&sql, &file_path), &declarations)?;
+                    expanded_authored_sql(context, (&sql, &file_path), &declarations)?;
                 (Some(expansion.sql), expansion.usages)
             }
             None => (None, PyTuple::empty(py)),
@@ -96,7 +96,7 @@ pub(crate) fn attached_sources<'py>(
         if let Some(sql) = &expression {
             let label: String = format!("Source expression '{name}'");
             if let IntrinsicCheck::Rejected(message) =
-                intrinsic_free(model_loop.python, sql, &model_loop.reserved_markers, &label)
+                intrinsic_free(sql, &model_loop.reserved_markers, &label)
             {
                 return Err(compile_error(context.classes, &message, None));
             }
@@ -194,7 +194,6 @@ pub(crate) fn file_declarations<'py>(
 
 /// `expand_authored_sql_result`: interpolate, splice declarations and expand macros.
 pub(crate) fn expanded_authored_sql<'py>(
-    model_loop: &NativeModelLoop,
     context: &LoopContext<'_, 'py>,
     authored: (&str, &str),
     declarations: &Bound<'py, PyAny>,
@@ -203,7 +202,6 @@ pub(crate) fn expanded_authored_sql<'py>(
     let py: Python<'py> = declarations.py();
     let hooks = &context.classes.sql_hooks;
     let (interpolated_sql, reads, error) = interpolated(
-        model_loop.python,
         InterpolationSources(
             hooks.effective_vars.clone(),
             hooks.environment.clone(),
@@ -223,7 +221,7 @@ pub(crate) fn expanded_authored_sql<'py>(
     }
     let interpolated_sql: String = interpolated_sql.unwrap_or_else(|| sql.to_owned());
     let consumer: Bound<'py, PyAny> = declarations.getattr("consumer")?;
-    let (references, stop) = declaration_scan(model_loop.python, &interpolated_sql);
+    let (references, stop) = declaration_scan(&interpolated_sql);
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut argument_references: Vec<ReferenceRow> = Vec::new();
     let mut expanded_sql: String = interpolated_sql.clone();

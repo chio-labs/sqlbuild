@@ -3,7 +3,6 @@ use crate::sql_tests::main::parse_scenario_text::parse_scenario_text;
 use crate::sql_tests::main::parse_sql_test_text::parse_sql_test_text;
 use crate::sql_tests::models::{SqlTestBlock, SqlTestFileOptions};
 use crate::sql_tests::tests::test_types::StatementFileTestCase;
-use sqlbuild_core::text::main::python_text::python_text;
 
 pub(super) type BlockRow = (Vec<String>, String);
 pub(super) const FILE_PATH: &str = "project/tests/unit/orders.sql";
@@ -16,7 +15,6 @@ fn options() -> SqlTestFileOptions {
     SqlTestFileOptions {
         test_keys: keys(&["name", "mode", "parameters", "cases"]),
         scenario_keys: keys(&["description", "tags"]),
-        python: python_text((3, 12), "15.0.0").expect("Python 3.12 is supported"),
     }
 }
 

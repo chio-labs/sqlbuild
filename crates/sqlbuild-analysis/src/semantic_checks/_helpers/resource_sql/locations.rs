@@ -1,6 +1,5 @@
 //! Python's `_location` and the authored text a resource SQL finding quotes.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_ignorecase_key::python_ignorecase_key;
 use sqlbuild_core::text::main::python_splitlines::python_splitlines;
 
@@ -58,8 +57,7 @@ fn quoted_names(message: &str) -> Vec<&str> {
 
 /// `(?<!\w)identifier(?!\w)`, ignoring case, in `text[start..]`: its code-point offset.
 fn word_offset(text: &[char], start: usize, identifier: &[char]) -> Option<usize> {
-    let python = active_python_text();
-    let key = |character: &char| python_ignorecase_key(python, *character);
+    let key = |character: &char| python_ignorecase_key(*character);
     let keys: Vec<char> = identifier.iter().map(key).collect();
     let last = text.len().checked_sub(identifier.len())?;
     (start..=last).find(|position| {

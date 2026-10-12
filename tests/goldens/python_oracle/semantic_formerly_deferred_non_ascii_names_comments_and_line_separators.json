@@ -11,19 +11,19 @@
 [
 "completion",
 {
-"bigquery": "eb3b9bf0df6905ad935dadba",
-"duckdb": "2bb0db315a6b4bd580d0f1da",
-"postgres": "2bb0db315a6b4bd580d0f1da",
-"snowflake": "2bb0db315a6b4bd580d0f1da"
+"bigquery": "7d5a411462788707c4da7580",
+"duckdb": "3ad5fe2bfbe3a8f4b7b64dd4",
+"postgres": "3ad5fe2bfbe3a8f4b7b64dd4",
+"snowflake": "3ad5fe2bfbe3a8f4b7b64dd4"
 }
 ],
 [
 "completion",
 {
-"bigquery": "167cc5c4a5563a44e435d35a",
-"duckdb": "167cc5c4a5563a44e435d35a",
-"postgres": "167cc5c4a5563a44e435d35a",
-"snowflake": "167cc5c4a5563a44e435d35a"
+"bigquery": "9b492712f0e56e73653903b4",
+"duckdb": "9b492712f0e56e73653903b4",
+"postgres": "9b492712f0e56e73653903b4",
+"snowflake": "9b492712f0e56e73653903b4"
 }
 ],
 [

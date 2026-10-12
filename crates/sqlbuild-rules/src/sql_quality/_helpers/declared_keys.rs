@@ -1,7 +1,6 @@
 //! Unique keys one relation declares through its incremental config and column audits.
 
 use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::models::PythonText;
 
 use crate::sql_quality::constants::{
     INCREMENTAL_MATERIALIZATION, KEY_PRESERVING_STRATEGIES, KEYED_DELETE_INSERT_STRATEGY,
@@ -23,10 +22,7 @@ pub(crate) fn trusted_unique_key(relation: &DeclaredRelation) -> Vec<Vec<String>
 }
 
 /// Columns with a `unique` audit that are also non-null by audit or `nullable false`.
-pub(crate) fn non_null_unique_columns(
-    python: PythonText,
-    relation: &DeclaredRelation,
-) -> Vec<String> {
+pub(crate) fn non_null_unique_columns(relation: &DeclaredRelation) -> Vec<String> {
     let mut unique: Vec<String> = Vec::new();
     let mut not_null: Vec<String> = Vec::new();
     for column in &relation.columns {
@@ -34,7 +30,7 @@ pub(crate) fn non_null_unique_columns(
             unique.push(column.name.clone());
         }
         if has_audit(column, NOT_NULL_AUDIT) || column.not_nullable {
-            not_null.push(python_casefold(python, &column.name));
+            not_null.push(python_casefold(&column.name));
         }
     }
     for (definition, argument) in &relation.audits {
@@ -42,12 +38,12 @@ pub(crate) fn non_null_unique_columns(
             continue;
         };
         if definition == NOT_NULL_AUDIT {
-            not_null.push(python_casefold(python, argument));
+            not_null.push(python_casefold(argument));
         } else if definition == UNIQUE_AUDIT {
             unique.push(argument.clone());
         }
     }
-    unique.retain(|column| not_null.contains(&python_casefold(python, column)));
+    unique.retain(|column| not_null.contains(&python_casefold(column)));
     unique
 }
 

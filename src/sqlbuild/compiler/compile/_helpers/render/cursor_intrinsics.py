@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-import unicodedata
-
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.planner.constants import (
@@ -14,10 +11,6 @@ from sqlbuild.compiler.planner.constants import (
 from sqlbuild.compiler.planner.types import CursorType
 
 _RESERVED_MARKERS: list[str] = [MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL]
-_PYTHON: tuple[tuple[int, int], str] = (
-    (sys.version_info[0], sys.version_info[1]),
-    unicodedata.unidata_version,
-)
 _CURSOR_START_CALL: str = "__cursor_start()"
 _CURSOR_END_CALL: str = "__cursor_end()"
 
@@ -31,7 +24,6 @@ def get_validated_model_cursor_intrinsics(
         sql,
         _RESERVED_MARKERS,
         (model_name, config_values.get("materialized"), config_values.get("cursor")),
-        _PYTHON,
     )
     if error is not None:
         raise CompileInputError(error)
@@ -66,15 +58,13 @@ def has_cursor_intrinsics(sql: str) -> bool:
 
 
 def _replaced(*, sql: str, context: str, start_sql: str, end_sql: str) -> tuple[str, bool]:
-    replaced, found, error = _native.replace_cursor_intrinsics(
-        sql, context, (start_sql, end_sql), _PYTHON
-    )
+    replaced, found, error = _native.replace_cursor_intrinsics(sql, context, (start_sql, end_sql))
     if error is not None:
         raise CompileInputError(error)
     return replaced, found
 
 
-def cursor_intrinsic_semantics() -> tuple[list[str], tuple[tuple[int, int], str]]:
-    """The reserved markers and Python release native cursor-intrinsic validation reads."""
+def cursor_intrinsic_semantics() -> list[str]:
+    """The reserved markers native cursor-intrinsic validation reads."""
 
-    return list(_RESERVED_MARKERS), _PYTHON
+    return list(_RESERVED_MARKERS)

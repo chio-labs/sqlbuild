@@ -19,7 +19,7 @@ pub fn validate_model_config<N: AuthoredNode>(
     project: &ProjectValidationFacts,
     facts: &ModelValidationFacts<'_>,
 ) -> Result<(), ValidationStop> {
-    let config = ConfigView::new(entries, facts.model_name, project.python);
+    let config = ConfigView::new(entries, facts.model_name);
     check_references(facts, project)?;
     check_incremental(&config, facts)?;
     check_project_capability(&config, project)?;

@@ -71,15 +71,12 @@ pub(crate) fn parse_model_file(
             header_line,
             keys: &unsupported,
             supported_keys: &options.supported_keys,
-            python: options.python,
         }));
     }
     for (_, value) in &header_values {
-        bare_number_failure(value, options.python, file_path).map_err(|failure| {
-            DiscoveryFailure {
-                kind: FailureKind::ModelSql,
-                ..failure
-            }
+        bare_number_failure(value, file_path).map_err(|failure| DiscoveryFailure {
+            kind: FailureKind::ModelSql,
+            ..failure
         })?;
     }
     let query_sql: String = python_strip(&contents[sql_start..]).to_owned();
@@ -91,12 +88,7 @@ pub(crate) fn parse_model_file(
     let header_column_locations =
         header_column_locations(&contents, (header_start, header_end), &column_offsets);
     let output_column_locations = if options.extract_output_column_locations {
-        output_column_locations(
-            options.python,
-            &contents,
-            sql_start,
-            options.extract_implicit_alias_columns,
-        )
+        output_column_locations(&contents, sql_start, options.extract_implicit_alias_columns)
     } else {
         Vec::new()
     };

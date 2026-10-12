@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -184,8 +182,6 @@ def interpolate_sql_batch(
     rows: list[_InterpolationRow] = _native.interpolate_sql_batch(
         [(sql, str(file_path)) for sql, file_path in sqls],
         (effective_vars, UnicodeEnvironment(), context_values, render_project_var_text),
-        (sys.version_info[0], sys.version_info[1]),
-        unicodedata.unidata_version,
     )
     return tuple(
         _interpolation(sql=sql, row=row) for (sql, _file_path), row in zip(sqls, rows, strict=True)

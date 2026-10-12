@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::explicit_references::_helpers::relations::{
@@ -126,9 +125,7 @@ impl OwnerScan<'_> {
         if joined(relation, "").contains(&self.request.placeholder) {
             return None;
         }
-        if relation.schema.is_none()
-            && temporary.contains(&python_casefold(active_python_text(), &relation.name))
-        {
+        if relation.schema.is_none() && temporary.contains(&python_casefold(&relation.name)) {
             return None;
         }
         let Some(found) = matched(self.index, relation) else {

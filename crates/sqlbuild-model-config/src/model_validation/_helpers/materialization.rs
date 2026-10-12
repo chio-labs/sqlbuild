@@ -4,7 +4,6 @@ use std::collections::{BTreeSet, HashMap};
 
 use sqlbuild_core::text::main::is_python_word::is_python_word;
 use sqlbuild_core::text::main::python_strip::python_strip;
-use sqlbuild_core::text::models::PythonText;
 
 use crate::errors::ConfigError;
 use crate::model_validation::_helpers::config::python_lower;
@@ -230,7 +229,7 @@ pub(crate) fn check_placeholders<N: AuthoredNode>(
     let custom = materialized
         .as_ref()
         .is_some_and(|value| project.custom_materializations.contains(value));
-    let used = placeholder_names(project.python, facts.query_sql);
+    let used = placeholder_names(facts.query_sql);
     let declared = config.get("placeholders");
     if !custom && !used.is_empty() {
         return Err(config.error("@@@placeholders are only allowed on custom materializations"));
@@ -273,14 +272,14 @@ pub(crate) fn check_placeholders<N: AuthoredNode>(
 }
 
 /// Return the names `re.findall(r"@@@(\w+)", sql)` finds; `\w` is Python's word class.
-fn placeholder_names(python: PythonText, sql: &str) -> BTreeSet<String> {
+fn placeholder_names(sql: &str) -> BTreeSet<String> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     let mut rest = sql;
     while let Some(start) = rest.find(PLACEHOLDER_SIGIL) {
         let after = &rest[start + PLACEHOLDER_SIGIL.len()..];
         let length: usize = after
             .char_indices()
-            .find(|(_, character)| !is_python_word(python, *character))
+            .find(|(_, character)| !is_python_word(*character))
             .map_or(after.len(), |(at, _)| at);
         if length == 0 {
             rest = &rest[start + 1..];

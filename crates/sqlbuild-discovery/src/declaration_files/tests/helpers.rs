@@ -7,7 +7,6 @@ use crate::declaration_files::models::{
 };
 use crate::models::ProjectRoot;
 use crate::tree::models::ProjectTree;
-use sqlbuild_core::text::main::python_text::python_text;
 use std::fs;
 use std::sync::Arc;
 
@@ -32,7 +31,6 @@ fn options() -> DeclarationFileOptions {
         function_keys: owned(&FUNCTION_KEYS),
         audit_keys: owned(&AUDIT_KEYS),
         hook_keys: owned(&["description"]),
-        python: python_text((3, 12), "15.0.0").expect("Python 3.12 is supported"),
     }
 }
 

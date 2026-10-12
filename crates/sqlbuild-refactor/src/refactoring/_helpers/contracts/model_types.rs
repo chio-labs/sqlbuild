@@ -1,6 +1,5 @@
 //! MODEL header column types: rendering, matching and the authored span of a declared type.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
@@ -95,20 +94,17 @@ fn without_space(value: &str) -> String {
 
 /// Python's `_model_types_match`.
 fn model_types_match(authored: &str, parsed: &str) -> bool {
-    let python = active_python_text();
-    if python_casefold(python, authored) == python_casefold(python, parsed) {
+    if python_casefold(authored) == python_casefold(parsed) {
         return true;
     }
     if !(is_unquoted_type(authored) && is_unquoted_type(parsed)) {
         return false;
     }
-    python_casefold(python, &without_space(authored))
-        == python_casefold(python, &without_space(parsed))
+    python_casefold(&without_space(authored)) == python_casefold(&without_space(parsed))
 }
 
 fn is_header_word_character(character: char) -> bool {
-    is_python_alnum(active_python_text(), character)
-        || CONTRACT_HEADER_WORD_EXTRA.contains(&character)
+    is_python_alnum(character) || CONTRACT_HEADER_WORD_EXTRA.contains(&character)
 }
 
 fn quoted_value_end(text: &[char], start: usize, end: usize) -> usize {
@@ -167,7 +163,6 @@ pub(crate) fn declared_type_span(
     declared: &str,
 ) -> Option<(usize, usize)> {
     let (metadata_start, metadata_end) = metadata;
-    let python = active_python_text();
     let key_length = CONTRACT_TYPE_KEY.chars().count();
     let mut index = metadata_start;
     let mut depth = 0_usize;
@@ -188,7 +183,7 @@ pub(crate) fn declared_type_span(
             continue;
         }
         if depth > 0
-            || python_casefold(python, &slice(text, index, index + key_length)) != CONTRACT_TYPE_KEY
+            || python_casefold(&slice(text, index, index + key_length)) != CONTRACT_TYPE_KEY
         {
             index += 1;
             continue;

@@ -2,7 +2,6 @@
 
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 use crate::sql_lexing::main::python_non_code_end::python_non_code_end;
@@ -33,7 +32,7 @@ pub(crate) enum CallScan {
 }
 
 /// The scan at `index`, a character boundary of `sql`.
-pub(crate) fn step(python: PythonText, sql: &str, index: usize) -> ScanStep {
+pub(crate) fn step(sql: &str, index: usize) -> ScanStep {
     let bytes: &[u8] = sql.as_bytes();
     match python_non_code_end(bytes, index) {
         NonCode::End(end) => return ScanStep::Next(end),
@@ -43,8 +42,8 @@ pub(crate) fn step(python: PythonText, sql: &str, index: usize) -> ScanStep {
     for name in INTRINSIC_NAMES {
         if bytes[index..].starts_with(name.as_bytes()) {
             let end: usize = index + name.len();
-            let bounded: bool = !continues_identifier(python, sql[..index].chars().next_back())
-                && !continues_identifier(python, sql[end..].chars().next());
+            let bounded: bool = !continues_identifier(sql[..index].chars().next_back())
+                && !continues_identifier(sql[end..].chars().next());
             return if bounded {
                 ScanStep::Intrinsic { name, end }
             } else {
@@ -99,8 +98,8 @@ pub(crate) fn call_scan(sql: &str, name_end: usize) -> CallScan {
 }
 
 /// Python's `isalnum() or _` for a neighbouring character; the SQL edge continues nothing.
-fn continues_identifier(python: PythonText, character: Option<char>) -> bool {
-    character.is_some_and(|character| character == '_' || is_python_alnum(python, character))
+fn continues_identifier(character: Option<char>) -> bool {
+    character.is_some_and(|character| character == '_' || is_python_alnum(character))
 }
 
 /// Python's `any(name in sql for name in _INTRINSIC_NAMES)`.

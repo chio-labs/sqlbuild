@@ -1,4 +1,3 @@
-pub mod active_python_text;
 pub mod close_matches;
 pub mod decode_python_text;
 pub mod is_python_alnum;
@@ -15,6 +14,4 @@ pub mod python_ignorecase_key;
 pub mod python_splitlines;
 pub mod python_str_repr;
 pub mod python_strip;
-pub mod python_text;
 pub mod python_upper;
-pub mod set_active_python_text;

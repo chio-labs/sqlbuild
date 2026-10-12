@@ -30,7 +30,6 @@ use sqlbuild_attachments::functions::main::table_function_arity_error::table_fun
 use sqlbuild_attachments::test_parameters::main::parameter_references::parameter_references;
 use sqlbuild_attachments::test_targets::main::unknown_test_target::unknown_test_target;
 use sqlbuild_attachments::test_targets::models::{TargetCatalog, TestTargets};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names;
 use sqlbuild_sqltext::compiler::models::DeclarationReferenceStop;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
@@ -210,7 +209,6 @@ impl<'py> TestScope<'_, 'py> {
             declarations.clone()
         };
         let expansion: AuthoredExpansion<'py> = expanded_authored_sql(
-            self.model_loop,
             self.context,
             (&parameter_sql, file_path),
             &expansion_declarations,
@@ -521,7 +519,6 @@ impl<'py> TestScope<'_, 'py> {
         let unique: Bound<'py, PyDict> = PyDict::new(py);
         let scans =
             sqlbuild_sqltext::compiler::main::declaration_references::scan_declaration_references(
-                self.model_loop.python,
                 &[sql.to_owned()],
                 true,
             );
@@ -996,8 +993,8 @@ fn test_visibility<'py>(records: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, 
 
 /// `find_macro_call_names`: top-level macro call names, declaration calls excluded.
 fn top_level_macro_names(sql: &str) -> Result<Vec<String>, &'static str> {
-    Ok(macro_call_names(active_python_text(), sql, false)
-        .map_err(|error| error.message())?
+    Ok(macro_call_names(sql, false)
+        .map_err(sqlbuild_render::macro_calls::errors::ScanError::message)?
         .into_iter()
         .filter(|name| !DECLARATION_CALLS.contains(&name.as_str()))
         .collect())
@@ -1018,12 +1015,7 @@ pub(crate) fn checked_body(
         }
         OmittedSelect::Absent => sql.to_owned(),
     };
-    match intrinsic_free(
-        model_loop.python,
-        &completed,
-        &model_loop.reserved_markers,
-        label,
-    ) {
+    match intrinsic_free(&completed, &model_loop.reserved_markers, label) {
         IntrinsicCheck::Free => Ok(completed),
         IntrinsicCheck::Rejected(message) => Err(compile_error(context.classes, &message, None)),
     }

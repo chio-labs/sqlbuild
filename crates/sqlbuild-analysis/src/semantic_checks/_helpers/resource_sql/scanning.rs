@@ -1,6 +1,5 @@
 //! Python `re` building blocks over code points: `\s`, `\w`, `\b` and ignore-case words.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::is_python_word::is_python_word;
 
@@ -10,7 +9,7 @@ use crate::semantic_checks::_helpers::sql_text::python_regex::ignorecase_equal;
 pub(crate) fn word_at(text: &[char], index: Option<usize>) -> bool {
     index
         .and_then(|index| text.get(index))
-        .is_some_and(|character| is_python_word(active_python_text(), *character))
+        .is_some_and(|character| is_python_word(*character))
 }
 
 /// Python's `\b` before `index`, where the next character is a word character.

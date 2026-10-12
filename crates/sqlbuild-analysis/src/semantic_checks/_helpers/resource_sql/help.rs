@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::is_python_word::is_python_word;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
@@ -156,9 +155,10 @@ fn set_operation_operand(
     if let Some(captures) = pattern(&CAST)?.captures(&expression) {
         expression = python_strip(&captures["inner"]).to_owned();
     }
-    let preceding_is_word = preceding.chars().next().is_some_and(|character| {
-        character == '$' || is_python_word(active_python_text(), character)
-    });
+    let preceding_is_word = preceding
+        .chars()
+        .next()
+        .is_some_and(|character| character == '$' || is_python_word(character));
     if !preceding_is_word
         && pattern(&SINGLE_OPERAND)?.is_match(&expression)
         && !SET_OPERATION_KEYWORDS.contains(&upper(&expression).as_str())

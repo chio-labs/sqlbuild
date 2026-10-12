@@ -8,9 +8,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTuple};
 use pyo3::{FromPyObject, pyclass, pymethods};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
 use sqlbuild_render::macro_calls::models::{
@@ -91,7 +89,6 @@ pub(crate) struct NativeMacroExpansion {
     pub(crate) consumer: Py<PyAny>,
     enforce_explicit: bool,
     classes: Py<PyDict>,
-    pub(crate) python: PythonText,
     pub(crate) facts: RefCell<ExpansionFacts>,
 }
 
@@ -118,7 +115,6 @@ impl NativeMacroExpansion {
             consumer,
             enforce_explicit,
             classes,
-            python: active_python_text(),
             facts: RefCell::new(ExpansionFacts::default()),
         })
     }
@@ -582,7 +578,7 @@ impl NativeMacroExpansion {
             let digits_start: usize = start + RELATION_PREFIX.len();
             let digits_end: usize = sql[digits_start..]
                 .char_indices()
-                .find(|(_, character)| !is_python_decimal(self.python, *character))
+                .find(|(_, character)| !is_python_decimal(*character))
                 .map_or(sql.len(), |(offset, _)| digits_start + offset);
             if digits_end == digits_start || !sql[digits_end..].starts_with(RELATION_SUFFIX) {
                 search = start + 1;
@@ -630,7 +626,7 @@ pub(crate) fn expanded<'py>(
         classes: &classes,
     };
     let text: CallText<'_> = CallText::new(sql);
-    let scan: MacroCallScan = scan_sites(this.python, text.text);
+    let scan: MacroCallScan = scan_sites(text.text);
     let memo: Option<Bound<'py, MacroCallMemo>> = if bridge.is_none() {
         None
     } else {

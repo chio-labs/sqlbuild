@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sys
-import unicodedata
 from typing import cast
 
 import sqlbuild._native as _native
@@ -51,7 +49,6 @@ _TABLE_BACKED_MATERIALIZATIONS: tuple[str, ...] = (
     MaterializationType.INCREMENTAL,
     MaterializationType.SNAPSHOT,
 )
-_PYTHON_VERSION: tuple[int, int] = (sys.version_info[0], sys.version_info[1])
 type _BuiltNamespace = tuple[str | None, bool, str | None]
 type _StorageOverrides = tuple[tuple[int | None, bool] | None, str | None]
 type _BuiltConfig = tuple[
@@ -347,13 +344,11 @@ def native_model_config_session(
                 (inputs.effective_target_name, inputs.run_id),
                 None if target is None else (target.database, target.schema),
             ),
-            (_PYTHON_VERSION, unicodedata.unidata_version),
         ),
         validator=_native.NativeModelValidator(
             (names.models, names.seeds, names.sources, names.functions, names.table_functions),
             set(names.custom_materializations),
             inputs.microbatch_concurrency,
-            (_PYTHON_VERSION, unicodedata.unidata_version),
         ),
         inherited_storage={
             materialized: (

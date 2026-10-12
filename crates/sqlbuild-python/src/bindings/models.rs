@@ -108,8 +108,6 @@ pub(crate) struct ModelDiscoveryRequest {
     pub(crate) removed_keys: Vec<String>,
     pub(crate) extract_implicit_alias_columns: bool,
     pub(crate) extract_output_column_locations: bool,
-    pub(crate) python_version: (u8, u8),
-    pub(crate) unicode_version: String,
 }
 
 /// One native SQL test or scenario discovery request from the Python discovery facade.
@@ -120,8 +118,6 @@ pub(crate) struct SqlTestDiscoveryRequest {
     pub(crate) display_prefix: String,
     pub(crate) test_keys: Vec<String>,
     pub(crate) scenario_keys: Vec<String>,
-    pub(crate) python_version: (u8, u8),
-    pub(crate) unicode_version: String,
 }
 
 /// One in-memory SQL test or scenario parse request; `file_path` is the path messages name.
@@ -131,8 +127,6 @@ pub(crate) struct SqlTestTextRequest {
     pub(crate) file_path: String,
     pub(crate) test_keys: Vec<String>,
     pub(crate) scenario_keys: Vec<String>,
-    pub(crate) python_version: (u8, u8),
-    pub(crate) unicode_version: String,
 }
 
 /// One native YAML file discovery request; `kind` is `source` or `schema`.
@@ -153,8 +147,6 @@ pub(crate) struct ModelTextRequest {
     pub(crate) removed_keys: Vec<String>,
     pub(crate) extract_implicit_alias_columns: bool,
     pub(crate) extract_output_column_locations: bool,
-    pub(crate) python_version: (u8, u8),
-    pub(crate) unicode_version: String,
 }
 
 /// The declaration collections one Python discovery pass read natively, kept for later stages.
@@ -173,8 +165,6 @@ pub(crate) struct DeclarationDiscoveryRequest {
     pub(crate) function_keys: Vec<String>,
     pub(crate) audit_keys: Vec<String>,
     pub(crate) hook_keys: Vec<String>,
-    pub(crate) python_version: (u8, u8),
-    pub(crate) unicode_version: String,
 }
 
 /// One in-memory declaration file parse request; `kind` names the collection it belongs to.
@@ -185,6 +175,4 @@ pub(crate) struct DeclarationTextRequest {
     pub(crate) function_keys: Vec<String>,
     pub(crate) audit_keys: Vec<String>,
     pub(crate) hook_keys: Vec<String>,
-    pub(crate) python_version: (u8, u8),
-    pub(crate) unicode_version: String,
 }

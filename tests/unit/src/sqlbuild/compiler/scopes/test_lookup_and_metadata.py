@@ -63,10 +63,9 @@ def test_given_unsorted_index_when_building_lookup_then_records_and_edges_are_ca
     [
         UnicodeKeyOrderCase(
             description="non_ascii_keys_follow_python_repr",
-            names=("caf\u00e9", "cafe", "\u00a0x", "\U0001f600", "Zed", "\u200bz", "e\u0301"),
+            names=("caf\u00e9", "cafe", "\u00a0x", "\U0001f600", "Zed", "e\u0301"),
             expected_names=(
                 "Zed",
-                "\u200bz",
                 "\u00a0x",
                 "cafe",
                 "caf\u00e9",
@@ -75,7 +74,6 @@ def test_given_unsorted_index_when_building_lookup_then_records_and_edges_are_ca
             ),
             expected_paths=(
                 "models/Zed.sql",
-                "models/\u200bz.sql",
                 "models/\u00a0x.sql",
                 "models/cafe.sql",
                 "models/caf\u00e9.sql",

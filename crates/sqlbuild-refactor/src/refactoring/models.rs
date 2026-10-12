@@ -277,10 +277,6 @@ pub struct RefactorFacts {
     pub project_dir: String,
     /// The SQL analysis dialect, or `generic`.
     pub dialect: String,
-    /// The `(major, minor)` Python version whose string semantics apply.
-    pub python_version: (u8, u8),
-    /// Python's `unicodedata.unidata_version`.
-    pub unicode_version: String,
     pub models: Vec<ModelFacts>,
     pub sources: Vec<ResourceColumnsFacts>,
     pub seeds: Vec<ResourceColumnsFacts>,

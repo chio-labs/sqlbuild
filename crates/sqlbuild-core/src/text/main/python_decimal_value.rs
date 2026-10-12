@@ -1,19 +1,8 @@
-//! Python's `unicodedata.decimal` for the characters `str.isdecimal()` accepts.
+//! The value of one decimal digit in any script.
 
-use crate::text::models::PythonText;
+use crate::text::_helpers::decimal_digits::decimal_digit;
 
-/// The digit value Python's `int()` reads from one character, if `str.isdecimal()` is true.
-pub fn python_decimal_value(python: PythonText, character: char) -> Option<u32> {
-    if character.is_ascii() {
-        return character.to_digit(10);
-    }
-    let code_point: u32 = u32::from(character);
-    let index: usize = python
-        .decimal_ranges
-        .partition_point(|(_, end)| *end < code_point);
-    let (start, _) = python
-        .decimal_ranges
-        .get(index)
-        .filter(|(start, _)| *start <= code_point)?;
-    Some((code_point - start) % 10)
+/// The value of a Unicode decimal digit, as `unicodedata.decimal` reads it.
+pub fn python_decimal_value(character: char) -> Option<u32> {
+    decimal_digit(character)
 }

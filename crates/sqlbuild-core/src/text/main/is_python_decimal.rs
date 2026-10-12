@@ -1,12 +1,8 @@
-//! Python's `str.isdecimal()`, the regex `\d` of `str` patterns, from a generated table.
+//! Whether one character is a decimal digit in any script.
 
-use crate::text::_helpers::code_point_ranges::in_ranges;
-use crate::text::models::PythonText;
+use crate::text::_helpers::decimal_digits::decimal_digit;
 
-/// Whether Python's `str.isdecimal()` is true for one character.
-pub fn is_python_decimal(python: PythonText, character: char) -> bool {
-    if character.is_ascii() {
-        return character.is_ascii_digit();
-    }
-    in_ranges(python.decimal_ranges, character)
+/// Whether `character` is a Unicode decimal digit (`Nd`), as `str.isdecimal()` reads it.
+pub fn is_python_decimal(character: char) -> bool {
+    decimal_digit(character).is_some()
 }

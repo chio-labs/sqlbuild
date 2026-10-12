@@ -358,7 +358,7 @@ pub(crate) fn optional_retention_policy(
     if text == ZERO_DAY_DURATION {
         return Ok(retention(Some("0")));
     }
-    match parse_duration(text)?.filter(|duration| duration.is_whole_days()) {
+    match parse_duration(text)?.filter(super::durations::Duration::is_whole_days) {
         Some(duration) => Ok(retention(Some(&duration.days()))),
         None => Err(ConfigFailure::at(
             file,

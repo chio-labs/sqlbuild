@@ -4,7 +4,7 @@ use crate::refactoring::_helpers::scanning::sql_sites::{
     authored_offset, authored_span, embedded_ref_spans,
 };
 use crate::refactoring::tests::helpers::{
-    analysis_lines, context, expansion_body, python, resource_site_lines, span_texts,
+    analysis_lines, context, expansion_body, resource_site_lines, span_texts,
 };
 use crate::refactoring::tests::test_types::{
     AnalysisSqlTestCase, AuthoredOffsetTestCase, AuthoredSpanTestCase, EmbeddedRefsTestCase,
@@ -66,7 +66,7 @@ fn given_sql_when_scanning_interpolation_then_sites_outside_comments_and_strings
     for test_case in test_cases {
         let scan = context(test_case.dialect);
         let sites: Vec<String> =
-            interpolation_sites(&chars(test_case.sql), scan.backtick_identifiers, python())
+            interpolation_sites(&chars(test_case.sql), scan.backtick_identifiers)
                 .into_iter()
                 .map(|site| site.text)
                 .collect();

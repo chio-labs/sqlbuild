@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::contracts::_helpers::type_comparison::{TypeComparer, TypeComparison};
@@ -100,7 +99,7 @@ fn families_by_casefold(
 
 /// Python's `str.casefold`.
 fn casefold(name: &str) -> String {
-    python_casefold(active_python_text(), name)
+    python_casefold(name)
 }
 
 fn family_diagnostic(

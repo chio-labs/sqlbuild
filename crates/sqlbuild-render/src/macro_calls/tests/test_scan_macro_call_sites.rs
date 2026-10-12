@@ -1,6 +1,5 @@
 use crate::macro_calls::errors::ScanError;
 use crate::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites;
-use crate::macro_calls::tests::helpers::python_312;
 use std::time::Instant;
 
 use crate::macro_calls::tests::test_types::{
@@ -137,7 +136,7 @@ fn given_authored_sql_when_scanning_macro_calls_then_sites_match_python_expansio
     ];
 
     for test_case in test_cases {
-        let scan = scan_macro_call_sites(python_312(), test_case.sql);
+        let scan = scan_macro_call_sites(test_case.sql);
         let actual: Vec<ExpectedSite> = scan
             .sites
             .into_iter()
@@ -205,7 +204,7 @@ fn given_deeply_nested_calls_when_scanning_then_time_is_linear_and_nothing_overf
         );
         let started = Instant::now();
 
-        let scan = scan_macro_call_sites(python_312(), &sql);
+        let scan = scan_macro_call_sites(&sql);
 
         assert!(
             started.elapsed().as_secs_f64() < test_case.expected_max_seconds,
@@ -265,7 +264,7 @@ fn given_calls_when_scanning_then_argument_starts_and_failing_call_names_match_p
         },
     ];
     for test_case in test_cases {
-        let scan = scan_macro_call_sites(python_312(), test_case.sql);
+        let scan = scan_macro_call_sites(test_case.sql);
 
         assert_eq!(
             (

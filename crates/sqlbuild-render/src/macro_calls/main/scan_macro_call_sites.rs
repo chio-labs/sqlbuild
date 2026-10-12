@@ -1,7 +1,5 @@
 //! Top-level macro call sites of one authored SQL string, as Python's expansion loop visits them.
 
-use sqlbuild_core::text::models::PythonText;
-
 use crate::macro_calls::_helpers::offsets::char_offsets;
 use crate::macro_calls::_helpers::scanner::{
     call_name, mentions_typed_reference, nested_names, top_level_calls,
@@ -9,8 +7,8 @@ use crate::macro_calls::_helpers::scanner::{
 use crate::macro_calls::models::{MacroCallScan, MacroCallSite, MacroScanFailure};
 
 /// Every complete top-level call site in order, and where Python's scan raises, if it does.
-pub fn scan_macro_call_sites(python: PythonText, sql: &str) -> MacroCallScan {
-    let (calls, failure) = top_level_calls(python, sql);
+pub fn scan_macro_call_sites(sql: &str) -> MacroCallScan {
+    let (calls, failure) = top_level_calls(sql);
     let mut boundaries: Vec<usize> = calls
         .iter()
         .flat_map(|call| [call.start, call.open + 1, call.close + 1])
@@ -23,7 +21,7 @@ pub fn scan_macro_call_sites(python: PythonText, sql: &str) -> MacroCallScan {
         .zip(offsets.as_chunks::<3>().0)
         .map(|(call, offsets)| {
             let args = &sql[call.open + 1..call.close];
-            let tree_names: Option<Vec<String>> = call_tree_names(python, &call.name, args);
+            let tree_names: Option<Vec<String>> = call_tree_names(&call.name, args);
             MacroCallSite {
                 start: offsets[0],
                 args_start: offsets[1],
@@ -36,20 +34,20 @@ pub fn scan_macro_call_sites(python: PythonText, sql: &str) -> MacroCallScan {
         .collect();
     let failure: Option<MacroScanFailure> = failure.map(|failure| MacroScanFailure {
         call_start: failure.call_start.and(offsets.last().copied()),
-        call_name: failed_call_name(python, sql, failure.call_start),
+        call_name: failed_call_name(sql, failure.call_start),
         error: failure.error,
     });
     MacroCallScan { sites, failure }
 }
 
 /// The name of the call at byte `start` that Python's evaluation raises in, if any.
-fn failed_call_name(python: PythonText, sql: &str, start: Option<usize>) -> Option<String> {
-    Some(call_name(python, sql, start?))
+fn failed_call_name(sql: &str, start: Option<usize>) -> Option<String> {
+    Some(call_name(sql, start?))
 }
 
 /// The call's name, then each nested call's once; None where a nested scan raises.
-fn call_tree_names(python: PythonText, name: &str, args: &str) -> Option<Vec<String>> {
-    let nested: Vec<String> = match nested_names(python, args) {
+fn call_tree_names(name: &str, args: &str) -> Option<Vec<String>> {
+    let nested: Vec<String> = match nested_names(args) {
         Ok(nested) => nested,
         Err(_scan_error) => return None,
     };

@@ -2,12 +2,10 @@
 
 use std::collections::HashSet;
 
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{IntoPyObject, pyclass, pymethods};
 use sqlbuild_attachments::functions::models::KnownResources;
-use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_model_config::model_validation::main::validate_model_config::validate_model_config;
 use sqlbuild_model_config::model_validation::main::validate_model_references::validate_model_references;
 use sqlbuild_model_config::model_validation::models::{
@@ -56,19 +54,10 @@ impl NativeModelValidator {
         names: ResourceNames,
         custom_materializations: HashSet<String>,
         microbatch_concurrency: bool,
-        python: ((u8, u8), String),
     ) -> PyResult<Self> {
-        let (python, unicode_version) = python;
         let (models, seeds, sources, functions, table_functions) = names;
-        let python = python_text(python, &unicode_version).ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "no Python string semantics for Python {}.{} with Unicode {unicode_version}",
-                python.0, python.1
-            ))
-        })?;
         Ok(Self {
             project: ProjectValidationFacts {
-                python,
                 custom_materializations,
                 microbatch_concurrency,
                 models,

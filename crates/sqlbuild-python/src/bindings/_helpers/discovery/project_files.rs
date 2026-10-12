@@ -4,8 +4,6 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBytes, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, pymethods, wrap_pyfunction};
-use sqlbuild_core::text::main::python_text::python_text;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_discovery::declarations::main::declaration_layout::declaration_layout;
 use sqlbuild_discovery::declarations::models::{
     DeclarationFileFact, DeclarationGroup, DeclarationKind, DeclarationLayout,
@@ -58,19 +56,6 @@ pub(crate) fn tuple_object<'py>(py: Python<'py>, items: Vec<PyObject>) -> PyResu
 
 pub(crate) fn object<'py, T: IntoPyObject<'py>>(py: Python<'py>, value: T) -> PyResult<PyObject> {
     value.into_py_any(py)
-}
-
-/// The Python semantics native parsing reproduces; an unknown Python is rejected by the facade.
-pub(crate) fn python_semantics(
-    python_version: (u8, u8),
-    unicode_version: &str,
-) -> PyResult<PythonText> {
-    python_text(python_version, unicode_version).ok_or_else(|| {
-        PyValueError::new_err(format!(
-            "native discovery does not support Python {}.{} with Unicode {unicode_version}",
-            python_version.0, python_version.1
-        ))
-    })
 }
 
 pub(crate) fn failure_object(py: Python<'_>, failure: DiscoveryFailure) -> PyResult<PyObject> {
@@ -320,7 +305,6 @@ fn discover_model_files(
     request: ModelDiscoveryRequest,
     tree: &NativeProjectTree,
 ) -> PyResult<PyObject> {
-    let python: PythonText = python_semantics(request.python_version, &request.unicode_version)?;
     let root = ProjectRoot {
         directory: PathBuf::from(request.project_dir),
         display_prefix: request.display_prefix,
@@ -330,7 +314,6 @@ fn discover_model_files(
         removed_keys: request.removed_keys,
         extract_implicit_alias_columns: request.extract_implicit_alias_columns,
         extract_output_column_locations: request.extract_output_column_locations,
-        python,
     };
     let discovered = py
         .compiler_detach(|| Ok(discover_models(&root, &tree.inner, &options)))
@@ -350,7 +333,6 @@ fn parse_model_contents(
         removed_keys: request.removed_keys,
         extract_implicit_alias_columns: request.extract_implicit_alias_columns,
         extract_output_column_locations: request.extract_output_column_locations,
-        python: python_semantics(request.python_version, &request.unicode_version)?,
     };
     let parsed = py
         .compiler_detach(|| Ok(parse_model_text(&request.file_path, contents, &options)))
@@ -434,7 +416,6 @@ fn scenario_object(py: Python<'_>, file: DiscoveredScenarioFile) -> PyResult<PyO
 fn sql_test_inputs(
     request: SqlTestDiscoveryRequest,
 ) -> PyResult<(ProjectRoot, SqlTestFileOptions)> {
-    let python: PythonText = python_semantics(request.python_version, &request.unicode_version)?;
     Ok((
         ProjectRoot {
             directory: PathBuf::from(request.project_dir),
@@ -443,7 +424,6 @@ fn sql_test_inputs(
         SqlTestFileOptions {
             test_keys: request.test_keys,
             scenario_keys: request.scenario_keys,
-            python,
         },
     ))
 }
@@ -481,7 +461,6 @@ fn text_options(request: &SqlTestTextRequest) -> PyResult<SqlTestFileOptions> {
     Ok(SqlTestFileOptions {
         test_keys: request.test_keys.clone(),
         scenario_keys: request.scenario_keys.clone(),
-        python: python_semantics(request.python_version, &request.unicode_version)?,
     })
 }
 
@@ -589,13 +568,7 @@ fn load_yaml_document(
 }
 
 /// Whether native discovery reproduces the string semantics of this Python and Unicode version.
-#[pyfunction]
-fn native_text_supported(python_version: (u8, u8), unicode_version: &str) -> bool {
-    python_text(python_version, unicode_version).is_some()
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(native_text_supported, module)?)?;
     module.add_function(wrap_pyfunction!(load_yaml_files, module)?)?;
     module.add_function(wrap_pyfunction!(load_yaml_document, module)?)?;
     module.add_function(wrap_pyfunction!(discover_sql_test_files, module)?)?;

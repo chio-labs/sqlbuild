@@ -1,6 +1,5 @@
 //! The relationship facts of every SQL test block and scenario, and the faults of the rest.
 
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::relationship_names::_helpers::cte_scan::{ScanText, expected_names};
@@ -16,7 +15,6 @@ pub fn relationship_facts(
     files: &[TestFileInput<'_>],
     scenarios: &[ScenarioInput<'_>],
     syntax: &LexicalSyntax,
-    python: PythonText,
 ) -> RelationshipScan {
     let mut scan: RelationshipScan = RelationshipScan::default();
     for (position, file) in files.iter().enumerate() {
@@ -29,7 +27,7 @@ pub fn relationship_facts(
             scan.scanned_files.push((position, complete));
         }
         for (block, names) in file.blocks.iter().zip(names) {
-            match block_fact(block, names, file.relative_path, (syntax, python)) {
+            match block_fact(block, names, file.relative_path, syntax) {
                 Ok(fact) => scan.facts.push(fact),
                 Err(message) => scan.faults.push((file.relative_path.to_owned(), message)),
             }

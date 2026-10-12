@@ -1,9 +1,8 @@
-//! A character of Python's `\w` for `str` patterns.
+//! A word character: a letter, a number or `_`.
 
 use crate::text::main::is_python_alnum::is_python_alnum;
-use crate::text::models::PythonText;
 
-/// Whether one character matches Python's `\w`: `str.isalnum()` or `_`.
-pub fn is_python_word(python: PythonText, character: char) -> bool {
-    character == '_' || is_python_alnum(python, character)
+/// Whether `character` is `_` or alphanumeric.
+pub fn is_python_word(character: char) -> bool {
+    character == '_' || is_python_alnum(character)
 }

@@ -6,7 +6,6 @@ use std::rc::Rc;
 use polyglot_sql::Expression;
 use polyglot_sql::traversal::ExpressionWalk;
 use serde_json::{Map, Value};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 use sqlbuild_core::text::main::python_upper::python_upper;
 
@@ -1537,12 +1536,12 @@ fn cast_target_type(target: &Map<String, Value>) -> Option<String> {
 
 /// Python's `str.casefold`.
 fn casefold(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    python_casefold(text)
 }
 
 /// Python's `str.upper`.
 fn upper(text: &str) -> String {
-    python_upper(active_python_text(), text)
+    python_upper(text)
 }
 
 fn dict_get<'a, V>(dict: &'a [(String, V)], key: &str) -> Option<&'a V> {

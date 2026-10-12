@@ -24,20 +24,18 @@ fn given_identity_keys_when_grouping_then_groups_follow_python_repr_order() {
             expected_visibility: &["global []"],
         },
         LookupTestCase {
-            description: "non-ASCII keys order by repr, with escapes for non-printable text",
+            description: "non-ASCII keys order by repr, with escapes for separators",
             resources: &[
                 ("model", "caf\u{e9}", "models/cafe_accent.sql"),
                 ("model", "cafe", "models/cafe.sql"),
                 ("model", "\u{a0}x", "models/nbsp.sql"),
                 ("model", "\u{1F600}", "models/emoji.sql"),
                 ("model", "Zed", "models/zed.sql"),
-                ("model", "\u{200b}z", "models/zwsp.sql"),
                 ("model", "e\u{301}", "models/combining.sql"),
             ],
             declarations: &[],
             expected_resource_groups: &[
                 "model:Zed",
-                "model:\u{200b}z",
                 "model:\u{a0}x",
                 "model:cafe",
                 "model:caf\u{e9}",

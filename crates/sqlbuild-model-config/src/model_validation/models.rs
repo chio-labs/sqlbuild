@@ -2,15 +2,11 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::models::PythonText;
-
 use crate::errors::ConfigError;
 
 /// Project-wide facts every model's validation reads.
 #[derive(Clone, Debug)]
 pub struct ProjectValidationFacts {
-    /// The Python string and library semantics the validators follow.
-    pub python: PythonText,
     /// Discovered custom materialization names.
     pub custom_materializations: HashSet<String>,
     /// Whether the project enables concurrent microbatches.

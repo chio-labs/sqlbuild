@@ -9,7 +9,6 @@ use crate::relationship_names::tests::helpers::{fact_summary, generic_syntax, ow
 use crate::relationship_names::tests::test_types::{
     RelationshipFactsTestCase, ScanMessageTestCase, StoredNamesTestCase,
 };
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 
 #[test]
 fn given_tests_and_scenarios_when_reading_relationship_facts_then_python_order_and_faults_hold() {
@@ -133,8 +132,7 @@ fn given_tests_and_scenarios_when_reading_relationship_facts_then_python_order_a
             })
             .collect();
 
-        let scan: RelationshipScan =
-            relationship_facts(&files, &scenarios, &syntax, active_python_text());
+        let scan: RelationshipScan = relationship_facts(&files, &scenarios, &syntax);
 
         assert_eq!(
             (

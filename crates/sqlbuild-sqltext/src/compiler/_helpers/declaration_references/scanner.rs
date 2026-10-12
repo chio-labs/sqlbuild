@@ -7,7 +7,6 @@ use crate::compiler::models::{
     DeclarationReference, DeclarationReferenceKind, DeclarationReferenceScan,
     DeclarationReferenceStop,
 };
-use sqlbuild_core::text::models::PythonText;
 
 const SPECIAL_BYTES: &[u8] = b"'\"`$@/-";
 const ENUM_KEYWORD: &str = "@enum";
@@ -23,17 +22,13 @@ enum NextStart<'sql> {
 }
 
 /// Python's references in `sql` (code points) and stop; `skip_malformed` resumes past malformed.
-pub(crate) fn scan_references(
-    python: PythonText,
-    sql: &str,
-    skip_malformed: bool,
-) -> DeclarationReferenceScan {
+pub(crate) fn scan_references(sql: &str, skip_malformed: bool) -> DeclarationReferenceScan {
     let mut references: Vec<DeclarationReference> = Vec::new();
     let mut offsets: CharOffsets = CharOffsets::default();
     let mut cursor: usize = 0;
     let mut stop: Option<DeclarationReferenceStop> = None;
     while cursor < sql.len() {
-        let (start, matched) = match next_reference_start(python, sql, cursor) {
+        let (start, matched) = match next_reference_start(sql, cursor) {
             NextStart::Reference(start, matched) => (start, matched),
             NextStart::End => break,
             NextStart::Malformed(_, keyword_end) if skip_malformed => {
@@ -64,7 +59,7 @@ pub(crate) fn scan_references(
 }
 
 /// The next reference start at or after `start`, as Python's walk finds it.
-fn next_reference_start(python: PythonText, sql: &str, start: usize) -> NextStart<'_> {
+fn next_reference_start(sql: &str, start: usize) -> NextStart<'_> {
     let rest: &str = &sql[start..];
     if !rest.contains("@enum") && !rest.contains("@const") {
         return NextStart::End;
@@ -90,7 +85,7 @@ fn next_reference_start(python: PythonText, sql: &str, start: usize) -> NextStar
                 Some(close) => Some(index + 2 + close + 2),
                 None => return NextStart::Stop(DeclarationReferenceStop::UnclosedBlockComment),
             },
-            b'@' => match match_reference(python, sql, index) {
+            b'@' => match match_reference(sql, index) {
                 ReferenceSyntax::NotReference => Some(index + 1),
                 ReferenceSyntax::Matched(matched) => return NextStart::Reference(index, matched),
                 ReferenceSyntax::Malformed(kind) => {

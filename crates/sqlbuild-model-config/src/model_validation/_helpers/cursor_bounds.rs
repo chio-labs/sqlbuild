@@ -16,6 +16,8 @@ use crate::model_validation::types::Check;
 use crate::types::{AuthoredNode, NodeKind};
 
 const MICROS_PER_SECOND: i64 = 1_000_000;
+/// The Python planner parses bounds again; Python 3.12 accepts the fewest ISO forms.
+const ISOFORMAT_PYTHON_MINOR: u8 = 12;
 
 /// A bound's `_cursor_contract_key`, or the overflow Python reports while shifting it to UTC.
 pub(crate) enum BoundKey {
@@ -48,7 +50,7 @@ fn check_timestamp_bound<N: AuthoredNode>(config: &ConfigView<'_, N>, bound: &N)
         return Err(config
             .error("cursor_start for cursor_type=timestamp must be a string or date-like value"));
     };
-    match datetime_fromisoformat(&text, config.python.minor_version()) {
+    match datetime_fromisoformat(&text, ISOFORMAT_PYTHON_MINOR) {
         Ok(_) => Ok(()),
         Err(error) => {
             let reason: String = match error {
@@ -77,7 +79,7 @@ fn check_integer_bound<N: AuthoredNode>(config: &ConfigView<'_, N>, bound: &N) -
         NodeKind::Int { .. } => Ok(()),
         NodeKind::Str => {
             let text: String = bound.text().unwrap_or_default();
-            match decimal_text(config.python, &text) {
+            match decimal_text(&text) {
                 DecimalText::Finite(decimal) if decimal.is_integral() => Ok(()),
                 DecimalText::Finite(_) => {
                     Err(config.error(format!("cursor_start value '{text}' is not a whole number")))
@@ -102,16 +104,12 @@ fn check_integer_bound<N: AuthoredNode>(config: &ConfigView<'_, N>, bound: &N) -
 }
 
 /// Return the `_cursor_contract_key` of a bound that passed its checks.
-pub(crate) fn bound_key<N: AuthoredNode>(
-    config: &ConfigView<'_, N>,
-    value: &N,
-    cursor_type: &str,
-) -> Option<BoundKey> {
+pub(crate) fn bound_key<N: AuthoredNode>(value: &N, cursor_type: &str) -> Option<BoundKey> {
     if cursor_type == INTEGER_CURSOR {
         if let Some(number) = value.integer() {
             return Some(BoundKey::Integer(FiniteDecimal::integer(number)));
         }
-        return match decimal_text(config.python, &value.text()?) {
+        return match decimal_text(&value.text()?) {
             DecimalText::Finite(decimal) => Some(BoundKey::Integer(decimal)),
             _ => None,
         };
@@ -121,7 +119,7 @@ pub(crate) fn bound_key<N: AuthoredNode>(
     } else {
         value.text()?
     };
-    match datetime_fromisoformat(&text, config.python.minor_version()) {
+    match datetime_fromisoformat(&text, ISOFORMAT_PYTHON_MINOR) {
         Ok(parsed) => Some(timestamp_key(&parsed)),
         Err(IsoError::InvalidString | IsoError::Message(_)) => None,
     }

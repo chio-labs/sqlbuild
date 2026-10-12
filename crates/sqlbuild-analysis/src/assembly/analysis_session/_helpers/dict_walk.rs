@@ -4,10 +4,8 @@ use polyglot_sql::expressions::Cte;
 use polyglot_sql::traversal::ExpressionWalk;
 use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions, ast_json};
 use serde_json::{Map, Value, json};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 use sqlbuild_core::text::main::python_upper::python_upper;
-use sqlbuild_core::text::models::PythonText;
 
 use crate::assembly::analysis_session::models::ProjectionFacts;
 
@@ -165,12 +163,12 @@ pub(crate) fn python_int(value: Option<&Value>) -> Option<String> {
 
 /// Python's `str.casefold`.
 pub(crate) fn casefold(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    python_casefold(text)
 }
 
 /// Python's `str.upper`.
 pub(crate) fn upper(text: &str) -> String {
-    python_upper(active_python_text(), text)
+    python_upper(text)
 }
 
 /// A value the wheel hands Python for one payload key: an expression, a list of them, or data.
@@ -465,7 +463,6 @@ fn first_select(payload: &Value) -> Option<&Map<String, Value>> {
 }
 
 fn collected_facts(select: &Map<String, Value>) -> ProjectionFacts {
-    let python = active_python_text();
     let mut facts: ProjectionFacts = ProjectionFacts::default();
     let mut quoted: Vec<String> = Vec::new();
     let mut nulls: Vec<String> = Vec::new();
@@ -485,7 +482,7 @@ fn collected_facts(select: &Map<String, Value>) -> ProjectionFacts {
         let Some(Value::String(name)) = alias.get("name") else {
             continue;
         };
-        let folded: String = python_casefold(python, name);
+        let folded: String = python_casefold(name);
         if alias.get("quoted") == Some(&Value::Bool(true)) {
             quoted.push(folded.clone());
         }
@@ -523,10 +520,7 @@ fn simple_type(kind: &str, payload: &Value) -> Option<&'static str> {
             .get("name")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        return lookup(
-            &FUNCTION_FIXTURE_TYPES,
-            &python_upper(active_python_text(), name),
-        );
+        return lookup(&FUNCTION_FIXTURE_TYPES, &python_upper(name));
     }
     None
 }
@@ -553,15 +547,14 @@ pub(crate) fn helper_parsed_reads(
     sql: &str,
     keys: &[String],
 ) -> Result<Option<Vec<String>>, String> {
-    let python: PythonText = active_python_text();
-    let folded: String = python_casefold(python, sql);
+    let folded: String = python_casefold(sql);
     if !keys.iter().any(|key| folded.contains(key.as_str())) {
         return Ok(Some(Vec::new()));
     }
     let Some(parsed) = parse_one(sql, HELPER_READS_DIALECT)? else {
         return Ok(None);
     };
-    let nested: Vec<String> = defined_cte_keys(python, &to_dict(&parsed)?);
+    let nested: Vec<String> = defined_cte_keys(&to_dict(&parsed)?);
     let mut reads: Vec<String> = Vec::new();
     for table in find_all(&parsed, TABLE_AST_KIND) {
         if arg(Some(table), SCHEMA_TABLE_ARG)?.is_some()
@@ -569,7 +562,7 @@ pub(crate) fn helper_parsed_reads(
         {
             continue;
         }
-        let key: String = python_casefold(python, name(Some(table)));
+        let key: String = python_casefold(name(Some(table)));
         if keys.contains(&key) && !nested.contains(&key) && !reads.contains(&key) {
             reads.push(key);
         }
@@ -578,7 +571,7 @@ pub(crate) fn helper_parsed_reads(
 }
 
 /// Python's `_defined_cte_keys`: every CTE alias at any depth, casefolded.
-fn defined_cte_keys(python: PythonText, tree: &Value) -> Vec<String> {
+fn defined_cte_keys(tree: &Value) -> Vec<String> {
     let mut keys: Vec<String> = Vec::new();
     let mut pending: Vec<&Value> = vec![tree];
     while let Some(value) = pending.pop() {
@@ -589,7 +582,6 @@ fn defined_cte_keys(python: PythonText, tree: &Value) -> Vec<String> {
                     keys.extend(ctes.iter().filter_map(|cte| {
                         let alias: &Value = cte.as_object()?.get(CTE_ALIAS_PAYLOAD_KEY)?;
                         Some(python_casefold(
-                            python,
                             alias.as_object()?.get(NAME_PAYLOAD_KEY)?.as_str()?,
                         ))
                     }));

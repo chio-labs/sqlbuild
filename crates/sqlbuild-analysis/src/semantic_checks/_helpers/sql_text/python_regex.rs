@@ -1,18 +1,14 @@
 //! Regexes matching as Python's `re` does, spelling out classes the `regex` crate reads otherwise.
 
-use std::fmt::Write;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::models::PythonText;
 
 /// `(template token, class)`: Python's `\w`, `\d`, `\s` and an ignore-case identifier start.
 static CLASSES: LazyLock<[(&'static str, String); 4]> = LazyLock::new(|| {
-    let python: PythonText = active_python_text();
     [
-        ("{W}", ranges_class("_", python.alnum_ranges())),
-        ("{D}", ranges_class("", python.decimal_ranges())),
+        ("{W}", String::from(r"[_\p{Alphabetic}\p{N}]")),
+        ("{D}", String::from("[0-9]")),
         (
             "{S}",
             String::from(
@@ -25,15 +21,6 @@ static CLASSES: LazyLock<[(&'static str, String); 4]> = LazyLock::new(|| {
         ),
     ]
 });
-
-fn ranges_class(extra: &str, ranges: &[(u32, u32)]) -> String {
-    let mut class: String = format!("[{extra}");
-    for (start, end) in ranges {
-        let _ = write!(class, r"\x{{{start:x}}}-\x{{{end:x}}}");
-    }
-    class.push(']');
-    class
-}
 
 /// The characters `re.IGNORECASE` matches to one ASCII letter, as a class.
 fn ignorecase_letter(letter: char) -> String {

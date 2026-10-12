@@ -36,7 +36,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 )
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_payload_error,
-    native_text_runtime,
 )
 from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
     SelectedContractInputDiscoverer,
@@ -822,7 +821,6 @@ def native_declaration_tag(*, file_path: Path, kind: str) -> str:
             "function_keys": sorted(SQL_FUNCTION_HEADER_KEYS),
             "audit_keys": sorted(SQL_AUDIT_HEADER_KEYS),
             "hook_keys": sorted(SQL_HOOK_HEADER_KEYS),
-            **native_text_runtime(),
         },
         (str(file_path), file_path.stem),
         file_path.read_text(encoding="utf-8"),

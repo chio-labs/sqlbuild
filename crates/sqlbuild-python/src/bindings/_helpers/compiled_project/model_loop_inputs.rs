@@ -36,11 +36,13 @@ pub(crate) fn analysis_override(values: &Bound<'_, PyDict>) -> PyResult<Analysis
         (Some(value), None) | (None, Some(value)) => Some(value),
         (None, None) => None,
     };
-    Ok(match chosen.map(|value| value.downcast_into::<PyBool>()) {
-        Some(Ok(flag)) if flag.is_true() => AnalysisOverride::Enabled,
-        Some(Ok(_)) => AnalysisOverride::Disabled,
-        Some(Err(_)) | None => AnalysisOverride::Inherit,
-    })
+    Ok(
+        match chosen.map(pyo3::types::PyAnyMethods::downcast_into::<PyBool>) {
+            Some(Ok(flag)) if flag.is_true() => AnalysisOverride::Enabled,
+            Some(Ok(_)) => AnalysisOverride::Disabled,
+            Some(Err(_)) | None => AnalysisOverride::Inherit,
+        },
+    )
 }
 
 /// The value under `key`, treating an explicit `None` as absent.

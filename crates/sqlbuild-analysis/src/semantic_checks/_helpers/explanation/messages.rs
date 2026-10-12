@@ -3,7 +3,6 @@
 use std::sync::LazyLock;
 
 use regex::Regex;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::is_python_word::is_python_word;
 
 use crate::semantic_checks::_helpers::sql_text::python_regex::ignorecase_equal;
@@ -103,11 +102,10 @@ fn type_word_end(
 
 /// Python's `re.finditer(_TYPE_WORDS, text, re.IGNORECASE)` spans, in code points.
 fn type_word_spans(characters: &[char]) -> Vec<(usize, usize)> {
-    let python = active_python_text();
     let word = |index: usize| {
         characters
             .get(index)
-            .is_some_and(|character| is_python_word(python, *character))
+            .is_some_and(|character| is_python_word(*character))
     };
     let boundary = |index: usize| (index > 0 && word(index - 1)) != word(index);
     let mut spans: Vec<(usize, usize)> = Vec::new();

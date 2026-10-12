@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
@@ -63,7 +62,7 @@ pub(crate) fn matched<'a>(
 }
 
 fn folded(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    python_casefold(text)
 }
 
 /// `_parts_compatible`: either part missing, or equal casefolded.

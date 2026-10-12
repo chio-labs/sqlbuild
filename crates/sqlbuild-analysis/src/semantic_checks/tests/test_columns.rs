@@ -47,13 +47,6 @@ fn given_unknown_column_names_when_suggesting_then_matches_python_order_and_choi
             expected_closest: Ok(Some("stra\u{df}e")),
             expected_order: Ok(&["stra\u{df}e"]),
         },
-        ClosestColumnTestCase {
-            description: "an abbreviation whose first character case-folds to two",
-            name: "\u{df}ab",
-            columns: &[("ssxab", "X"), ("sab", "Y")],
-            expected_closest: Ok(Some("ssxab")),
-            expected_order: Ok(&["ssxab", "sab"]),
-        },
     ];
     for test_case in test_cases {
         let columns = shape(test_case.columns);

@@ -2,7 +2,6 @@
 
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyResult, Python};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_scopes::relationship_names::main::relationship_facts::relationship_facts;
 use sqlbuild_scopes::relationship_names::main::stored_expected_names::stored_expected_names;
 use sqlbuild_scopes::relationship_names::models::{
@@ -85,16 +84,8 @@ pub(crate) fn scanned_relationships(
         })
         .collect();
     let syntax: LexicalSyntax = settings.syntax.clone().into();
-    let python = active_python_text();
     let scan: RelationshipScan = py
-        .compiler_detach(|| {
-            Ok(relationship_facts(
-                &inputs,
-                &scenario_inputs,
-                &syntax,
-                python,
-            ))
-        })
+        .compiler_detach(|| Ok(relationship_facts(&inputs, &scenario_inputs, &syntax)))
         .map_err(compiler_error)?;
     if let Some(store) = &store {
         for (position, names) in &scan.scanned_files {

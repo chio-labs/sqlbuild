@@ -281,7 +281,7 @@ fn ordering_key<N: AuthoredNode>(
     cursor_type: &str,
     key: &str,
 ) -> Result<Option<BoundKey>, ValidationStop> {
-    match bound_key(config, bound, cursor_type) {
+    match bound_key(bound, cursor_type) {
         Some(BoundKey::Overflow(utc_value)) => {
             let text = bound.python_str();
             let help = model_header_help(

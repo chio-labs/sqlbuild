@@ -31,12 +31,14 @@ fn parse_text(
 ) -> Option<FileOutcome<ParsedDeclarationText>> {
     let parsed: Result<ParsedDeclarationText, ParseStop> = match kind {
         CollectionKind::Enums => {
-            parse_enum_file(file_path, contents, options.python).map(ParsedDeclarationText::Enum)
+            parse_enum_file(file_path, contents).map(ParsedDeclarationText::Enum)
         }
-        CollectionKind::Constants => parse_constant_file(file_path, contents, options.python)
-            .map(ParsedDeclarationText::Constant),
-        CollectionKind::ModelSchemas => parse_schema_file(file_path, contents, options.python)
-            .map(ParsedDeclarationText::ModelSchema),
+        CollectionKind::Constants => {
+            parse_constant_file(file_path, contents).map(ParsedDeclarationText::Constant)
+        }
+        CollectionKind::ModelSchemas => {
+            parse_schema_file(file_path, contents).map(ParsedDeclarationText::ModelSchema)
+        }
         CollectionKind::SqlFunctions => parse_function_file(file_path, contents, options)
             .map(ParsedDeclarationText::SqlFunction),
         CollectionKind::SqlHooks => parse_hook_file(file_path, hook_name, contents, options)

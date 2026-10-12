@@ -1,7 +1,6 @@
 //! Qualified identity text (`format_identity`) and the `repr` text Python orders lookup keys by.
 
 use crate::scope_index::models::{DeclarationIdentity, QualifiedIdentity, ResourceIdentity};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 /// Python's `format_identity` for a resource.
@@ -29,7 +28,7 @@ pub(crate) fn resource_repr(identity: &ResourceIdentity) -> String {
         "ResourceIdentity(kind=<ResourceKind.{}: '{}'>, name={})",
         identity.kind.member_name(),
         identity.kind.as_str(),
-        python_str_repr(active_python_text(), &identity.name)
+        python_str_repr(&identity.name)
     )
 }
 
@@ -43,7 +42,7 @@ pub(crate) fn declaration_repr(identity: &DeclarationIdentity) -> String {
         "DeclarationIdentity(kind=<DeclarationKind.{}: '{}'>, name={}, owner={owner})",
         identity.kind.member_name(),
         identity.kind.as_str(),
-        python_str_repr(active_python_text(), &identity.name)
+        python_str_repr(&identity.name)
     )
 }
 

@@ -191,11 +191,11 @@ fn given_model_contracts_when_evaluating_then_diagnostics_follow_python_order() 
             ],
         },
         ContractTestCase {
-            description: "a family name outside ASCII matches under Python's casefold",
+            description: "a family name outside ASCII matches case-insensitively",
             implicit: true,
             model: dynamic_model(
-                &[("straße_*", "DOUBLE")],
-                Some(proof(true, None, &[("strasse_*", Some("DOUBLE"))])),
+                &[("Straße_*", "DOUBLE")],
+                Some(proof(true, None, &[("straße_*", Some("DOUBLE"))])),
             ),
             expected_lines: &[],
         },

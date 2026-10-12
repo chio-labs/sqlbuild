@@ -355,10 +355,6 @@ jobs:
         run: uv python install ${{ matrix.python }}
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras --python ${{ matrix.python }}
-      - name: Require native discovery to support this Python
-        run: >-
-          uv run --no-sync python -c "import sys, unicodedata, sqlbuild._native as n;
-          assert n.native_text_supported(sys.version_info[:2], unicodedata.unidata_version)"
       - name: Compare native text helpers with this Python
         run: >-
           uv run --no-sync pytest

@@ -376,7 +376,6 @@ impl<'py> HookRun<'_, '_, 'py> {
         let py: Python<'py> = scope.consumer.py();
         let hooks: &SqlHookClasses<'py> = self.classes();
         let (interpolated_sql, reads, error) = interpolated(
-            self.model_loop.python,
             InterpolationSources(
                 hooks.effective_vars.clone(),
                 hooks.environment.clone(),
@@ -473,7 +472,7 @@ impl<'py> HookRun<'_, '_, 'py> {
         scope: &Scope<'_, 'py>,
     ) -> PyResult<ExpandedDeclarations<'py>> {
         let py: Python<'py> = scope.consumer.py();
-        let (references, stop) = declaration_scan(self.model_loop.python, sql);
+        let (references, stop) = declaration_scan(sql);
         let file_keyword: Bound<'py, PyDict> = PyDict::new(py);
         file_keyword.set_item(
             FILE_PATH_ARGUMENT,
@@ -577,12 +576,9 @@ fn reject_hook_intrinsics(
             }
             statements += 1;
             let statement: String = entry.getattr(STATEMENT_ATTRIBUTE)?.extract()?;
-            if let IntrinsicCheck::Rejected(message) = intrinsic_free(
-                model_loop.python,
-                &statement,
-                &model_loop.reserved_markers,
-                &hook_context,
-            ) {
+            if let IntrinsicCheck::Rejected(message) =
+                intrinsic_free(&statement, &model_loop.reserved_markers, &hook_context)
+            {
                 return Err(compile_error(context.classes, &message, None));
             }
         }

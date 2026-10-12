@@ -47,7 +47,7 @@ pub(crate) fn model_reference_edits(
         if item.role == SqlFileRole::Schema {
             edits.extend(path_edits(
                 &item.path,
-                schema_model_name_edits(&item.contents, &item.text, names, context.python)?,
+                schema_model_name_edits(&item.contents, &item.text, names)?,
             ));
         }
     }

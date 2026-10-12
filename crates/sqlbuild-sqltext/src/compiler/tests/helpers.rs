@@ -10,7 +10,6 @@ use crate::compiler::models::{
 };
 use crate::compiler::tests::test_types::{HeaderNestingTestCase, MapHost};
 use crate::compiler::types::CharSpan;
-use sqlbuild_core::text::main::python_text::python_text;
 use std::collections::BTreeMap;
 use std::thread;
 
@@ -149,9 +148,8 @@ pub(crate) fn scanned_usages(sql: &str) -> Option<String> {
 }
 
 fn spelled_scan(sql: &str, skip_malformed: bool) -> Option<String> {
-    let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
     let scan: DeclarationReferenceScan =
-        scan_declaration_references(python, &[sql.to_owned()], skip_malformed).pop()?;
+        scan_declaration_references(&[sql.to_owned()], skip_malformed).pop()?;
     let references: String = scan
         .references
         .iter()
@@ -244,8 +242,7 @@ pub(crate) fn interpolation_host(context: bool) -> MapHost {
 
 /// Interpolate `sql` as `models/orders.sql`: the rendered SQL or the error message.
 pub(crate) fn interpolated(host: &MapHost, sql: &str) -> Result<String, String> {
-    let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
-    interpolate_sql(python, host, sql, "models/orders.sql")
+    interpolate_sql(host, sql, "models/orders.sql")
         .map(|result| result.sql.unwrap_or_else(|| sql.to_owned()))
         .map_err(|failure| failure.message)
 }
@@ -255,8 +252,7 @@ pub(crate) fn interpolation_facts(
     host: &MapHost,
     sql: &str,
 ) -> (Vec<CharSpan>, Vec<InterpolationRead>) {
-    let python = python_text((3, 12), "15.0.0").expect("Python 3.12 is supported");
-    interpolate_sql(python, host, sql, "models/orders.sql").map_or_else(
+    interpolate_sql(host, sql, "models/orders.sql").map_or_else(
         |failure| (Vec::new(), failure.reads),
         |result| (result.spans, result.reads),
     )

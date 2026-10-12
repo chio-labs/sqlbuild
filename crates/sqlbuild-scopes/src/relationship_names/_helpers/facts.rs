@@ -1,6 +1,5 @@
 //! Each test block's expected models, called macros and tested macros.
 
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
@@ -40,11 +39,10 @@ pub(crate) fn block_fact(
     block: &TestBlockInput<'_>,
     names: Result<Vec<String>, String>,
     relative_path: &str,
-    rules: (&LexicalSyntax, PythonText),
+    syntax: &LexicalSyntax,
 ) -> Result<RelationshipFact, String> {
-    let (syntax, python) = rules;
     let expected_models: Vec<String> = names?;
-    let called_macros: Vec<String> = call_names(python, block.sql, true)?;
+    let called_macros: Vec<String> = call_names(block.sql, true)?;
     let tested_macros: Vec<String> = if block.mode == MACRO_MODE {
         let ctes: Vec<(String, String)> =
             match scan_top_level_ctes(block.sql, relative_path, RelationshipSource::Test, syntax) {
@@ -52,7 +50,7 @@ pub(crate) fn block_fact(
                 TopLevelCtes::Failed(message) => return Err(message),
             };
         match ctes.iter().find(|(name, _)| name == MACRO_ACTUAL_CTE) {
-            Some((_, body)) => call_names(python, body, false)?,
+            Some((_, body)) => call_names(body, false)?,
             None => Vec::new(),
         }
     } else {
@@ -70,9 +68,9 @@ pub(crate) fn block_fact(
 }
 
 /// `find_macro_call_names` or `find_nested_macro_call_names`, or the scan's message.
-fn call_names(python: PythonText, sql: &str, nested: bool) -> Result<Vec<String>, String> {
+fn call_names(sql: &str, nested: bool) -> Result<Vec<String>, String> {
     let names: Vec<String> =
-        macro_call_names(python, sql, nested).map_err(|error| error.message().to_owned())?;
+        macro_call_names(sql, nested).map_err(|error| error.message().to_owned())?;
     Ok(names
         .into_iter()
         .filter(|name| !DECLARATION_CALLS.contains(&name.as_str()))

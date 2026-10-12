@@ -6,7 +6,6 @@ from sqlbuild.compiler.discovery._helpers.native.model_files import discover_nat
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_locations,
     native_payload_error,
-    native_text_runtime,
 )
 from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     parse_native_sql_test_contents,
@@ -84,7 +83,6 @@ def _parsed_model(*, contents: str, file_path: Path) -> tuple[object, ...]:
             "removed_keys": sorted(REMOVED_SQL_MODEL_HEADER_KEYS),
             "extract_implicit_alias_columns": True,
             "extract_output_column_locations": False,
-            **native_text_runtime(),
         },
         contents,
     )
@@ -108,7 +106,6 @@ def parse_sql_scenario_file(
             "file_path": str(file_path),
             "test_keys": sorted(SQL_TEST_HEADER_KEYS),
             "scenario_keys": sorted(SQL_SCENARIO_HEADER_KEYS),
-            **native_text_runtime(),
         },
         contents,
     )

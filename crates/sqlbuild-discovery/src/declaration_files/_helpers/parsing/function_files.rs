@@ -32,7 +32,6 @@ pub(crate) fn parse_function_file(
             statement: "FUNCTION()",
             file_path,
             supported_keys: &options.function_keys,
-            python: options.python,
         },
         &contents[header_start..header_end],
         contents[..header_start].matches('\n').count() + 1,

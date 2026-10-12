@@ -1,6 +1,5 @@
 //! The top-level SELECT list of a model's SQL and the output name of each simple item.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
 use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_upper::python_upper;
@@ -31,12 +30,12 @@ fn is_special(character: char) -> bool {
 fn keyword_at(sql: &[char], keyword: &str, index: usize) -> bool {
     let end = index + keyword.chars().count();
     let slice: String = sql[index..end.min(sql.len())].iter().collect();
-    if python_upper(active_python_text(), &slice) != keyword {
+    if python_upper(&slice) != keyword {
         return false;
     }
     let word = |character: Option<&char>| {
         character.is_some_and(|character| {
-            is_python_alnum(active_python_text(), *character) || *character == IDENTIFIER_SEPARATOR
+            is_python_alnum(*character) || *character == IDENTIFIER_SEPARATOR
         })
     };
     let before = index.checked_sub(1).and_then(|position| sql.get(position));

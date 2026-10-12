@@ -2,12 +2,10 @@
 
 use std::cell::RefCell;
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyString, PyStringMethods};
 use pyo3::{FromPyObject, PyErr, pyfunction, wrap_pyfunction};
-use sqlbuild_core::text::main::python_text::python_text;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::main::sql_interpolation::interpolate_sql;
 use sqlbuild_sqltext::compiler::models::InterpolationRead;
 use sqlbuild_sqltext::compiler::types::InterpolationHost;
@@ -133,7 +131,7 @@ impl InterpolationHost for PythonInterpolationHost<'_> {
         self.sources
             .2
             .iter()
-            .flat_map(|context| context.keys())
+            .flat_map(pyo3::types::PyDictMethods::keys)
             .map(|key| key_text(&key))
             .collect()
     }
@@ -149,19 +147,14 @@ fn key_text(key: &Bound<'_, PyAny>) -> String {
 fn interpolate_sql_batch<'py>(
     sqls: Vec<(String, String)>,
     sources: InterpolationSources<'py>,
-    python_version: (u8, u8),
-    unicode_version: &str,
 ) -> PyResult<Vec<InterpolationRow>> {
-    let python = python_text(python_version, unicode_version).ok_or_else(|| {
-        PyRuntimeError::new_err("SQL interpolation needs a supported Python (see D017)")
-    })?;
     let host = PythonInterpolationHost {
         sources,
         raised: RefCell::new(None),
     };
     let mut rows = Vec::with_capacity(sqls.len());
     for (sql, file_path) in &sqls {
-        let row = match interpolate_sql(python, &host, sql, file_path) {
+        let row = match interpolate_sql(&host, sql, file_path) {
             Ok(result) => (result.sql, result.spans, read_rows(result.reads), None),
             Err(failure) => (
                 None,
@@ -183,7 +176,6 @@ pub(crate) type InterpolatedRow = (Option<String>, Vec<(&'static str, String)>, 
 
 /// One SQL text interpolated: the SQL (`None` when unchanged), its reads, and its error.
 pub(crate) fn interpolated(
-    python: PythonText,
     sources: InterpolationSources<'_>,
     sql: &str,
     file_path: &str,
@@ -192,7 +184,7 @@ pub(crate) fn interpolated(
         sources,
         raised: RefCell::new(None),
     };
-    let row = match interpolate_sql(python, &host, sql, file_path) {
+    let row = match interpolate_sql(&host, sql, file_path) {
         Ok(result) => (result.sql, read_rows(result.reads), None),
         Err(failure) => (None, read_rows(failure.reads), Some(failure.message)),
     };

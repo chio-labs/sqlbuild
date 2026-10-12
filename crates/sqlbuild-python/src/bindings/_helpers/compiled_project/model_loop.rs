@@ -54,7 +54,6 @@ use crate::bindings::_helpers::compiled_project::source_views::{
 use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     AttachedSqlTests, SqlTestSettings, TestFileRow, TestScope,
 };
-use crate::bindings::_helpers::discovery::project_files::python_semantics;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::render::declaration_expansion::{
@@ -80,7 +79,6 @@ use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::v
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 use sqlbuild_attachments::functions::models::KnownResources;
 use sqlbuild_attachments::test_targets::models::TargetCatalog;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
@@ -174,7 +172,6 @@ pub(crate) struct NativeModelLoop {
     pub(crate) validator: Py<PyAny>,
     pub(crate) syntax: LexicalSyntax,
     pub(crate) reserved_markers: Vec<String>,
-    pub(crate) python: PythonText,
     pub(crate) settings: ModelLoopSettings,
     pub(crate) project_config_path: String,
     legacy_schema_files: Vec<LegacySchemaFile>,
@@ -210,11 +207,10 @@ impl NativeModelLoop {
     fn new(
         checks: LoopChecks,
         syntax: LexicalSyntaxInput,
-        cursor: (Vec<String>, ((u8, u8), String)),
+        reserved_markers: Vec<String>,
         settings: LoopSettingsInput,
     ) -> PyResult<Self> {
         let (validator, contract_classes, loop_classes) = checks;
-        let (reserved_markers, (python_version, unicode_version)) = cursor;
         let (
             (sql_analysis, no_sql_validation, defer_sql_validation, require_sql_analysis),
             (project_config_path, legacy_schema_files),
@@ -223,7 +219,6 @@ impl NativeModelLoop {
             validator,
             syntax: syntax.into(),
             reserved_markers,
-            python: python_semantics(python_version, &unicode_version)?,
             settings: ModelLoopSettings {
                 sql_analysis,
                 no_sql_validation,
@@ -691,7 +686,7 @@ impl NativeModelLoop {
                 },
             };
         if analysed && !self.settings.defer_sql_validation {
-            reject_unparseable_query(self, context, model)?;
+            reject_unparseable_query(context, model)?;
         }
         Ok((analysed, rejected))
     }
@@ -721,7 +716,6 @@ impl NativeModelLoop {
             cursor: cursor.as_deref(),
         };
         Ok(validated_model_intrinsics(
-            self.python,
             sql,
             &self.reserved_markers,
             &model,

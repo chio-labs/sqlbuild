@@ -1,7 +1,5 @@
 """Helpers for model configuration reuse and native validation tests."""
 
-import sys
-import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -106,7 +104,6 @@ def validate_natively(  # noqa: PLR0913
         (set(names), set(), set(), set(), set()),
         set(custom_materialization_names),
         microbatch_concurrency,
-        ((sys.version_info[0], sys.version_info[1]), unicodedata.unidata_version),
     )
     outcome: int | _native.NativeConfigError | None = validator.validate(
         config.values,

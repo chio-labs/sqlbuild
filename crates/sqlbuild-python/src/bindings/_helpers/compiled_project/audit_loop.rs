@@ -4,9 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{
-    PyBool, PyBoolMethods, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods,
-};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_attachments::audits::main::attached_model_reference_error::attached_model_reference_error;
 use sqlbuild_attachments::audits::main::audit_reference_error::audit_reference_error;
@@ -268,7 +266,9 @@ impl<'py> AuditScope<'_, 'py> {
         let severity: Option<String> = header_text(header, SEVERITY_KEY)?;
         let run_scope: Option<String> = header_text(header, RUN_SCOPE_KEY)?;
         let always_run: bool = match header.get_item(ALWAYS_RUN_KEY)? {
-            Some(value) => value.downcast::<PyBool>().is_ok_and(|flag| flag.is_true()),
+            Some(value) => value
+                .downcast::<PyBool>()
+                .is_ok_and(pyo3::types::PyBoolMethods::is_true),
             None => false,
         };
         let (thresholds, minimum_samples) = self.measurement_policy(header, relative_path)?;
@@ -486,21 +486,12 @@ impl<'py> AuditScope<'_, 'py> {
     ) -> PyResult<ExpandedAudit<'py>> {
         let (file_path, relative_path, _, _, _, contents, _) = file;
         let declarations: Bound<'py, PyAny> = file_declarations(self.context, file_path, identity)?;
-        let body: AuthoredExpansion<'py> = expanded_authored_sql(
-            self.model_loop,
-            self.context,
-            (sql.0, file_path),
-            &declarations,
-        )?;
+        let body: AuthoredExpansion<'py> =
+            expanded_authored_sql(self.context, (sql.0, file_path), &declarations)?;
         let evidence: Option<AuthoredExpansion<'py>> = sql
             .1
             .map(|evidence| {
-                expanded_authored_sql(
-                    self.model_loop,
-                    self.context,
-                    (evidence, file_path),
-                    &declarations,
-                )
+                expanded_authored_sql(self.context, (evidence, file_path), &declarations)
             })
             .transpose()?;
         self.intrinsic_free(&body.sql, label)?;
@@ -529,12 +520,7 @@ impl<'py> AuditScope<'_, 'py> {
     }
 
     fn intrinsic_free(&self, sql: &str, label: &str) -> PyResult<()> {
-        match intrinsic_free(
-            self.model_loop.python,
-            sql,
-            &self.model_loop.reserved_markers,
-            label,
-        ) {
+        match intrinsic_free(sql, &self.model_loop.reserved_markers, label) {
             IntrinsicCheck::Free => Ok(()),
             IntrinsicCheck::Rejected(message) => {
                 Err(compile_error(self.context.classes, &message, None))

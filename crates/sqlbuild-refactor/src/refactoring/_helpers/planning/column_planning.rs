@@ -161,12 +161,7 @@ fn schema_edits(
     {
         edits.extend(path_edits(
             &file.path,
-            schema_column_edits(
-                &file.contents,
-                &file.text,
-                (&model.name, context.names()),
-                context.scan.python,
-            )?,
+            schema_column_edits(&file.contents, &file.text, (&model.name, context.names()))?,
         ));
     }
     Ok(edits)

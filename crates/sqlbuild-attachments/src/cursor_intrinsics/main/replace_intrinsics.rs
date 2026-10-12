@@ -1,7 +1,5 @@
 //! `_transform_cursor_intrinsics`: replace every intrinsic call, or raise its error.
 
-use sqlbuild_core::text::models::PythonText;
-
 use crate::cursor_intrinsics::_helpers::scan::{
     CallScan, ScanStep, call_scan, contains_intrinsic_name, step,
 };
@@ -9,7 +7,6 @@ use crate::sql_lexing::main::unclosed_message::unclosed_message;
 
 /// `sql` with each cursor intrinsic call replaced and whether any was, or the malformed-call error.
 pub fn replace_intrinsics(
-    python: PythonText,
     sql: &str,
     context: &str,
     replacement: impl Fn(&str) -> String,
@@ -22,7 +19,7 @@ pub fn replace_intrinsics(
     let mut found: bool = false;
     let mut index: usize = 0;
     while index < sql.len() {
-        let (name, end): (&str, usize) = match step(python, sql, index) {
+        let (name, end): (&str, usize) = match step(sql, index) {
             ScanStep::Next(next) => {
                 index = next;
                 continue;

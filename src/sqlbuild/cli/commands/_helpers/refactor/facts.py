@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
-import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 
@@ -58,8 +56,6 @@ def refactor_facts_json(*, project: RefactorProject, request: RefactorRequest) -
         {
             "project_dir": str(project.project_dir),
             "dialect": compiled.sql_analysis_dialect or GENERIC_DIALECT,
-            "python_version": list(sys.version_info[:2]),
-            "unicode_version": unicodedata.unidata_version,
             "models": model_facts(project=compiled, project_dir=project.project_dir),
             "sources": [
                 _columns(name=source.name, columns=source.source_entry.columns)

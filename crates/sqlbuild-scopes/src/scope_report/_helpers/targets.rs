@@ -22,7 +22,6 @@ use crate::scope_report::models::{
     DeclarationTarget, DiagnosticFacts, Explanation, Provenance, QueryTarget, ReportFailure,
     ResourceReport,
 };
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 /// A diagnostic the query raises, with only a code, message and optional path.
@@ -41,7 +40,7 @@ pub(crate) fn diagnostic(code: &str, message: String, path: Option<String>) -> D
 
 /// `_diagnostic`: `{label} {value!r} is not valid for this scope query`.
 pub(crate) fn raised(code: &str, label: &str, value: &str) -> DiagnosticFacts {
-    let shown: String = python_str_repr(active_python_text(), value);
+    let shown: String = python_str_repr(value);
     diagnostic(
         code,
         format!("{label} {shown} is not valid for this scope query"),
@@ -51,7 +50,7 @@ pub(crate) fn raised(code: &str, label: &str, value: &str) -> DiagnosticFacts {
 
 /// `{value!r}` of Python text.
 pub(crate) fn shown(value: &str) -> String {
-    python_str_repr(active_python_text(), value)
+    python_str_repr(value)
 }
 
 /// `str(target)`: identity targets print their dataclass `repr`.
