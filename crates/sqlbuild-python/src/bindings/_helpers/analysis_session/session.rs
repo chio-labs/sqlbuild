@@ -11,6 +11,7 @@ use sqlbuild_analysis::assembly::analysis_session::main::model_reference_facts::
 use sqlbuild_analysis::assembly::analysis_session::main::names_set_operation::names_set_operation;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_dynamic_contracts::prove_dynamic_contracts;
 use sqlbuild_analysis::assembly::analysis_session::main::prove_finished_dynamic_contracts::prove_finished_dynamic_contracts;
+use sqlbuild_analysis::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use sqlbuild_analysis::assembly::analysis_session::main::run_analysis_session::run_analysis_session;
 use sqlbuild_analysis::assembly::analysis_session::main::session_sharing::session_sharing;
 use sqlbuild_analysis::assembly::analysis_session::main::start_analysis_session::start_analysis_session;
@@ -224,7 +225,13 @@ impl NativeModelAnalysisSession {
     /// The model at `index`'s outcome and proof rows, for hand-built model inputs only.
     fn outcome_rows(&self, index: usize) -> PyResult<(OutcomeRow, ContractRow)> {
         let (outcome, contract) = self.outcome(index)?;
-        Ok((outcome_row(outcome.clone()), contract_row(contract.clone())))
+        let cleaned: String = resolved_cleaned_sql(outcome)
+            .map_err(compiler_error)?
+            .into_owned();
+        Ok((
+            outcome_row(outcome.clone(), cleaned),
+            contract_row(contract.clone()),
+        ))
     }
 
     /// The analysis cache's `(hits, misses, stored, failure)`; None without a cache.
@@ -452,7 +459,7 @@ fn contract_row(outcome: PivotOutcome) -> ContractRow {
     }
 }
 
-fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
+fn outcome_row(outcome: ModelOutcome, cleaned_sql: String) -> OutcomeRow {
     let analysis = outcome.analysis;
     let (source, lineage) = match analysis.lineage {
         LineageFacts::Native(rows) => ("native", lineage_items(rows)),
@@ -469,7 +476,7 @@ fn outcome_row(outcome: ModelOutcome) -> OutcomeRow {
         analysis.star_resolved,
         analysis.binding_diagnostics,
         analysis.binding_validated,
-        outcome.cleaned_sql,
+        cleaned_sql,
     )
 }
 

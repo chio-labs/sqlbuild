@@ -10,6 +10,7 @@ pub mod prove_dynamic_contracts;
 pub mod prove_finished_dynamic_contracts;
 pub mod query_columns;
 pub mod recover_cte_facts;
+pub mod resolved_cleaned_sql;
 pub mod run_analysis_session;
 pub mod session_sharing;
 pub mod sql_test_helper_reads;

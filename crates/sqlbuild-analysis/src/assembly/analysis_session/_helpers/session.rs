@@ -31,9 +31,9 @@ use crate::assembly::analysis_session::_helpers::mappings::{
 use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
 use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_TYPE};
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, ColumnFact, ContractProof, FinishedSession, LineageFacts, LineageRow,
-    ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables, SessionModelFacts,
-    SessionOutcome, SessionRequest, SessionStep,
+    AnalysisSession, ColumnFact, ContractProof, DeferredCleaning, FinishedSession, LineageFacts,
+    LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables,
+    SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -107,27 +107,32 @@ impl AnalysisSession {
     }
 
     /// Every model's outcome and the binding catalog changes Python records.
-    pub(crate) fn finish(mut self) -> Result<(SessionOutcome, FinishedSession), String> {
+    pub(crate) fn finish(self) -> Result<(SessionOutcome, FinishedSession), String> {
         if !matches!(self.phase, Phase::Done) {
             return Err("the session has not finished".to_owned());
         }
-        let located: Vec<usize> = (0..self.outcomes.len())
-            .filter(|model| {
-                self.outcomes[*model]
-                    .as_ref()
-                    .is_some_and(|outcome| !outcome.analysis.binding_diagnostics.is_empty())
-            })
-            .collect();
-        self.ensure_cleaned(&located)?;
         let dynamic_contracts: Vec<PivotOutcome> = self.dynamic_contracts()?;
         let pool: Result<Arc<ThreadPool>, String> = self.catalog.native.analysis_pool();
-        let models: Vec<ModelOutcome> = self
+        let mut models: Vec<ModelOutcome> = self
             .outcomes
             .into_iter()
             .collect::<Option<_>>()
             .ok_or("the session left a model unanalysed")?;
         let (schema_additions, analysis_names) = self.catalog.into_changes();
-        let request: SessionRequest = self.request;
+        let mut request: SessionRequest = self.request;
+        for ((outcome, model), pending) in models
+            .iter_mut()
+            .zip(request.models.iter_mut())
+            .zip(self.pending_cleaned)
+        {
+            if pending {
+                outcome.deferred_cleaning = Some(DeferredCleaning {
+                    dialect: request.dialect.clone(),
+                    query_sql: std::mem::take(&mut model.query_sql),
+                    placeholders: std::mem::take(&mut model.placeholders),
+                });
+            }
+        }
         let mut model_facts: HashMap<String, SessionModelFacts> = HashMap::new();
         let mut dynamic_proofs: HashMap<String, ContractProof> = HashMap::new();
         for ((model, outcome), proof) in request.models.iter().zip(&models).zip(&dynamic_contracts)
@@ -256,6 +261,7 @@ impl AnalysisSession {
             self.outcomes[*model] = Some(ModelOutcome {
                 analysis,
                 cleaned_sql: result.cleaned_sql,
+                deferred_cleaning: None,
                 validated_schema: schema,
                 fused_binding_validated: true,
             });
