@@ -41,8 +41,7 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
     allow_suppressions: bool = True
     config_file: Path = project_dir / PROJECT_CONFIG_FILENAME_KEY
     if config_file.is_file():
-        with config_file.open("rb") as handle:
-            payload: dict[str, object] = tomllib.load(handle)
+        payload: dict[str, object] = tomllib.loads(config_file.read_text(encoding="utf-8-sig"))
         thresholds = _rule_thresholds(payload)
         allow_suppressions = load_rules_config(project_dir=project_dir).allow_exceptions
         format_section: object = payload.get(FORMAT_SECTION_KEY)
@@ -62,8 +61,9 @@ def resolve_lint_config(*, project_dir: Path) -> LintConfig:
             )
     local_config_file: Path = project_dir / LOCAL_CONFIG_FILENAME
     if local_config_file.is_file():
-        with local_config_file.open("rb") as handle:
-            local_payload: dict[str, object] = tomllib.load(handle)
+        local_payload: dict[str, object] = tomllib.loads(
+            local_config_file.read_text(encoding="utf-8-sig")
+        )
         local_adapter: object = local_payload.get(ADAPTER_CONFIG_KEY)
         if isinstance(local_adapter, str):
             dialect = ADAPTER_DIALECT_TRANSLATIONS.get(local_adapter, local_adapter)

@@ -156,16 +156,30 @@ fn table(entries: &Table, depth: usize) -> Result<Positioned, ConfigError> {
     Ok(ordered_map(converted))
 }
 
+/// The one-based line and character column of byte `offset` in `text`.
+pub(crate) fn line_and_column(text: &str, offset: usize) -> (usize, usize) {
+    let before = text.get(..offset).unwrap_or(text);
+    let line_start = before.rfind('\n').map_or(0, |index| index + 1);
+    (
+        before.matches('\n').count() + 1,
+        before[line_start..].chars().count() + 1,
+    )
+}
+
+/// A syntax error located at byte `offset` of `text`.
+pub(crate) fn syntax_error(text: &str, offset: usize, message: impl Into<String>) -> ConfigError {
+    let (line, column) = line_and_column(text, offset);
+    ConfigError::new(ConfigErrorKind::Syntax, message).at(line, column)
+}
+
 /// Parse `text` and convert its root table.
 pub(crate) fn parse_document(text: &str) -> Result<ConfigValue, ConfigError> {
     let document = Document::parse(text).map_err(|error| {
-        let offset = error.span().map_or(0, |span| span.start);
-        ConfigError {
-            kind: ConfigErrorKind::Syntax,
-            message: error.message().to_owned(),
-            line: Some(text.get(..offset).unwrap_or(text).matches('\n').count() + 1),
-            column: None,
-        }
+        syntax_error(
+            text,
+            error.span().map_or(0, |span| span.start),
+            error.message(),
+        )
     })?;
     table(document.as_table(), 0).map(|(converted, _)| converted)
 }

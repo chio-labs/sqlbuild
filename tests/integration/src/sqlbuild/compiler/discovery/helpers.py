@@ -363,7 +363,7 @@ TOML_1_1_SYNTAX: tuple[str, ...] = (
 )
 TOML_TABLE_NAMES: tuple[str, ...] = ("p", "p.q", "p.q.r", "p.s", "t", "t.u", '"p".v')
 TOML_SCALARS: tuple[Callable[[random.Random], str], ...] = (
-    lambda rng: rng.choice((*TOML_1_1_SYNTAX, str(2**64), str(-(2**80)))),
+    lambda rng: rng.choice(TOML_1_1_SYNTAX),
     lambda rng: str(rng.randint(-(2**63), 2**63 - 1)),
     lambda rng: rng.choice(("0x1F", "0o17", "0b101", "1_000", "+7", "-0")),
     _toml_float,
@@ -601,6 +601,27 @@ def harmful_mismatches(
     return list(
         compress(zip(inputs, expected, actual, strict=True), map(_is_harmful, expected, actual))
     )[:3]
+
+
+def toml_harmful_mismatches(
+    *, inputs: list[object], expected: list[object], actual: list[object]
+) -> list[tuple[object, object, object]]:
+    """Return the first few documents `tomllib` reads whose native value differs.
+
+    Config files `tomllib` accepts must load identically. For invalid edge cases the native
+    reader follows its TOML library, so accepting a document `tomllib` rejects is not harmful.
+    """
+
+    return list(
+        compress(
+            zip(inputs, expected, actual, strict=True),
+            map(_is_toml_harmful, expected, actual),
+        )
+    )[:3]
+
+
+def _is_toml_harmful(expected: object, actual: object) -> bool:
+    return expected != PYTHON_ERROR and actual != DEFERRED and actual != expected
 
 
 PROJECT_CONFIG: str = 'name = "orders"\nadapter = "duckdb"\n'

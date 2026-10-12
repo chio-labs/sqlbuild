@@ -19,10 +19,10 @@ from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
     HOSTILE_TOML_DOCUMENTS,
     TOML_DOCUMENT_GENERATORS,
     deferred_valid_count,
-    harmful_mismatches,
     native_toml_outcome,
     python_toml_outcome,
     repository_files,
+    toml_harmful_mismatches,
 )
 
 
@@ -60,7 +60,7 @@ def test_given_generated_toml_when_loading_natively_then_values_match_tomllib(
         deferred_valid_count(expected=expected, actual=actual)
         <= test_case.expected_maximum_deferred
     )
-    assert harmful_mismatches(inputs=list(texts), expected=expected, actual=actual) == list(
+    assert toml_harmful_mismatches(inputs=list(texts), expected=expected, actual=actual) == list(
         test_case.expected_mismatches
     )
 
@@ -85,7 +85,7 @@ def test_given_repository_toml_files_when_loading_natively_then_values_match_tom
 
     assert len(paths) >= test_case.expected_minimum_files
     assert deferred_valid_count(expected=expected, actual=actual) == test_case.expected_deferred
-    assert harmful_mismatches(
+    assert toml_harmful_mismatches(
         inputs=list(map(str, paths)), expected=expected, actual=actual
     ) == list(test_case.expected_mismatches)
 

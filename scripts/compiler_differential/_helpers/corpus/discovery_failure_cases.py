@@ -7,11 +7,9 @@ from scripts.compiler_differential._helpers.corpus.case_builder import (
     failure_case,
 )
 from scripts.compiler_differential.constants import (
-    FAILURE_BASE_CONFIG,
     FAILURE_BASE_FILES,
     FAILURE_BASE_MART,
     FAILURE_BASE_STAGING,
-    FAILURE_CONFIG_PATH,
     FAILURE_MART_PATH,
     FAILURE_SOURCES_PATH,
     FAILURE_STAGING_PATH,
@@ -58,11 +56,6 @@ def discovery_failure_cases() -> tuple[FailureCase, ...]:
 
 def _config_cases() -> tuple[FailureCase, ...]:
     return (
-        failure_case(
-            name="config-bom",
-            expected_code="D001",
-            files={FAILURE_CONFIG_PATH: GENERATOR_BOM + FAILURE_BASE_CONFIG},
-        ),
         failure_case(
             name="local-config-unknown-key",
             expected_code="D001",

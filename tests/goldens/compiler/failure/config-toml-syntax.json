@@ -8,7 +8,7 @@
      "phase": "compile",
      "severity": "error",
      "code": "D001",
-     "message": "<project>/sqlbuild_project.toml contains invalid TOML: unclosed table (at line 6)"
+     "message": "<project>/sqlbuild_project.toml contains invalid TOML: unclosed table (at line 6, column 10)"
     }
    ]
   }
