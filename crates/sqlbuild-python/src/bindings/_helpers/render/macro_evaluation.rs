@@ -8,7 +8,6 @@ use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString, PyTuple, PyTupleMethods,
     PyTypeMethods,
 };
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_render::macro_arguments::errors::ArgumentError;
 use sqlbuild_render::macro_arguments::models::{ArgumentValue, MacroArguments};
 use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names as scan_names;
@@ -253,7 +252,7 @@ fn call_arguments<'py>(
     args_source: &str,
 ) -> PyResult<(Bound<'py, PyTuple>, Bound<'py, PyDict>)> {
     let py: Python<'py> = run.handle.py();
-    if python_strip(args_source).is_empty() {
+    if str::trim(args_source).is_empty() {
         return Ok((PyTuple::empty(py), PyDict::new(py)));
     }
     let text: CallText<'_> = CallText::new(args_source);

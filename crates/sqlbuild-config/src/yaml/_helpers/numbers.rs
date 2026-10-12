@@ -52,5 +52,9 @@ pub(crate) fn construct_float(text: &str) -> Result<ConfigValue, ConfigError> {
             .parse::<f64>()
             .map_err(|_| construct_error(format!("{text:?} is not a float")))?
     };
-    Ok(ConfigValue::Float(if negative { -magnitude } else { magnitude }))
+    Ok(ConfigValue::Float(if negative {
+        -magnitude
+    } else {
+        magnitude
+    }))
 }

@@ -10,7 +10,6 @@ import pytest
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_helpers import (
-    header_match_mismatches,
     isolated_discovery_mismatches,
     model_paths,
     snapshot_glob_mismatches,
@@ -19,7 +18,6 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_helpers import (
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoveryPassRefreshTestCase,
-    NativeHeaderMatchTestCase,
     SharedSnapshotDiscoveryTestCase,
     SnapshotGlobTestCase,
     SnapshotScopeReuseTestCase,
@@ -121,26 +119,6 @@ def test_given_nested_scope_for_same_project_when_entering_then_reuses_active_sn
 
     assert nested_reuse is test_case.expected_nested_reuse
     assert later_reuse is test_case.expected_later_reuse
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        NativeHeaderMatchTestCase("seed_1", seed=1, count=2000),
-        NativeHeaderMatchTestCase("seed_2", seed=2, count=2000),
-        NativeHeaderMatchTestCase("seed_3", seed=3, count=2000),
-        NativeHeaderMatchTestCase("seed_4", seed=4, count=2000),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_randomized_model_files_when_matching_natively_then_matches_python_pattern(
-    test_case: NativeHeaderMatchTestCase,
-) -> None:
-    mismatches: tuple[str, ...] = header_match_mismatches(
-        seed=test_case.seed, count=test_case.count
-    )
-
-    assert mismatches == test_case.expected_mismatches
 
 
 if __name__ == "__main__":

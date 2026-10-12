@@ -14,11 +14,11 @@ use sha2::{Digest, Sha256};
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::{ShapeTable, native_dialect};
 use crate::assembly::analysis_session::constants::{
-    BATCH_CHUNK_MEMBERS, BINDING_SEVERITIES, COMPACT_WORKERS, CONFIDENCE_CODES,
+    ASCII_SPACES, BATCH_CHUNK_MEMBERS, BINDING_SEVERITIES, COMPACT_WORKERS, CONFIDENCE_CODES,
     DEFAULT_BINDING_MESSAGE, FACT_LENGTH, INVALID_NATIVE_RESPONSE, LEGACY_FALLBACK,
-    LEGACY_RESPONSE_LENGTH, MIN_SHARED_MEMBERS, NULLABILITY_BY_CODE, PYTHON_ASCII_SPACES,
-    QUALIFIED_SCAN_TOKENS, REFERENCE_MARKER_PATTERN, RELATION_STUB_PREFIX, RESPONSE_LENGTH,
-    SOURCE_LENGTH, TRANSFORM_CODES, UNSTUBBED_REFERENCE_KIND,
+    LEGACY_RESPONSE_LENGTH, MIN_SHARED_MEMBERS, NULLABILITY_BY_CODE, QUALIFIED_SCAN_TOKENS,
+    REFERENCE_MARKER_PATTERN, RELATION_STUB_PREFIX, RESPONSE_LENGTH, SOURCE_LENGTH,
+    TRANSFORM_CODES, UNSTUBBED_REFERENCE_KIND,
 };
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
@@ -1004,7 +1004,7 @@ fn is_qualifier(folded_sql: &str, name: &str) -> bool {
         let mut end: usize = start + name.len();
         let bounded: bool = (start == 0 || !identifier(bytes[start - 1]))
             && (end == bytes.len() || !identifier(bytes[end]));
-        while bounded && end < bytes.len() && PYTHON_ASCII_SPACES.as_bytes().contains(&bytes[end]) {
+        while bounded && end < bytes.len() && ASCII_SPACES.as_bytes().contains(&bytes[end]) {
             end += 1;
         }
         bounded && bytes.get(end) == Some(&b'.')

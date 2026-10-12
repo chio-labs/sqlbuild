@@ -331,15 +331,6 @@ def _substitute(*, rng: random.Random, word: list[str], position: int) -> None:
 MUTATIONS: tuple[Callable[..., None], ...] = (_insert, _delete, _substitute)
 
 
-def mutated_word(*, rng: random.Random, candidates: list[str]) -> str:
-    """Return a candidate with a few random insertions, deletions and substitutions."""
-
-    word: list[str] = list(rng.choice(candidates))
-    for _ in range(rng.randint(0, 4)):
-        rng.choice(MUTATIONS)(rng=rng, word=word, position=rng.randint(0, len(word)))
-    return "".join(word)
-
-
 GOLDEN_DIR: Path = Path(__file__).resolve().parents[4] / "goldens" / "python_oracle"
 
 type GoldenEntry = list[object]

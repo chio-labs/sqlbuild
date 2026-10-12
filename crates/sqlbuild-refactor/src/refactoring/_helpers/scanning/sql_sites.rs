@@ -2,8 +2,6 @@
 
 use std::collections::BTreeSet;
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::refactoring::_helpers::scanning::chars::{chars, rfind, slice, starts_with};
 use crate::refactoring::_helpers::scanning::interpolation::interpolation_sites;
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
@@ -93,7 +91,7 @@ fn resource_call(text: &[char]) -> Option<(String, String, usize, usize)> {
 }
 
 fn skip_space(text: &[char], mut index: usize) -> usize {
-    while text.get(index).copied().is_some_and(is_python_space) {
+    while text.get(index).copied().is_some_and(char::is_whitespace) {
         index += 1;
     }
     index

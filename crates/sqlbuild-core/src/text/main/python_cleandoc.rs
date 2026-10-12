@@ -1,11 +1,10 @@
 //! Python's `inspect.cleandoc`, which SQL test and scenario bodies go through.
 
 use crate::text::_helpers::cleandoc::{expand_tabs, skip_chars};
-use crate::text::main::is_python_space::is_python_space;
 
 /// `inspect.cleandoc(text)`: expand tabs, dedent later lines and drop outer empty lines.
 pub fn python_cleandoc(text: &str) -> String {
-    let is_margin: fn(char) -> bool = is_python_space;
+    let is_margin: fn(char) -> bool = char::is_whitespace;
     let expanded: String = expand_tabs(text);
     let mut lines: Vec<&str> = expanded.split('\n').collect();
     let margin: Option<usize> = lines[1..]

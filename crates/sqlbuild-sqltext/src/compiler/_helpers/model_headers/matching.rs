@@ -1,7 +1,5 @@
 //! Exact native equivalent of the possessive Python `MODEL(...)` header regular expression.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 /// Offsets of one matched header: header start, header end, and SQL start.
 pub(crate) type HeaderMatchOffsets = (usize, usize, usize);
 
@@ -116,7 +114,7 @@ fn escape_end(text: &str, backslash: usize) -> Option<usize> {
 fn skip_whitespace(text: &str, start: usize) -> usize {
     let mut index = start;
     for character in text[start..].chars() {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         index += character.len_utf8();

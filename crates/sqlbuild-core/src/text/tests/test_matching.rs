@@ -1,10 +1,7 @@
 use crate::text::main::close_matches::close_matches;
+use crate::text::main::glob_match::glob_match;
 use crate::text::main::python_cleandoc::python_cleandoc;
-use crate::text::main::python_fnmatchcase::python_fnmatchcase;
-use crate::text::main::python_splitlines::python_splitlines;
-use crate::text::tests::test_types::{
-    CleandocTestCase, CloseMatchesTestCase, GlobTestCase, SplitlinesTestCase,
-};
+use crate::text::tests::test_types::{CleandocTestCase, CloseMatchesTestCase, GlobTestCase};
 
 const KEYS: &[&str] = &[
     "audits",
@@ -18,7 +15,7 @@ const KEYS: &[&str] = &[
 ];
 
 #[test]
-fn given_words_when_finding_close_matches_then_results_match_difflib() {
+fn given_words_when_finding_close_matches_then_the_most_similar_rank_first() {
     let test_cases = [
         CloseMatchesTestCase {
             description: "one near key",
@@ -29,12 +26,12 @@ fn given_words_when_finding_close_matches_then_results_match_difflib() {
             expected_matches: &["tags"],
         },
         CloseMatchesTestCase {
-            description: "ranked with a low cutoff",
+            description: "a low cutoff still drops unrelated keys",
             word: "materialised",
             possibilities: KEYS,
             count: 3,
             cutoff: 0.3,
-            expected_matches: &["materialized", "tags", "description"],
+            expected_matches: &["materialized"],
         },
         CloseMatchesTestCase {
             description: "ranked after a deletion",
@@ -45,6 +42,14 @@ fn given_words_when_finding_close_matches_then_results_match_difflib() {
             expected_matches: &["columns", "enums", "constants"],
         },
         CloseMatchesTestCase {
+            description: "an adjacent swap counts as one edit",
+            word: "tgas",
+            possibilities: KEYS,
+            count: 1,
+            cutoff: 0.6,
+            expected_matches: &["tags"],
+        },
+        CloseMatchesTestCase {
             description: "no candidate reaches the cutoff",
             word: "zzz",
             possibilities: KEYS,
@@ -53,20 +58,20 @@ fn given_words_when_finding_close_matches_then_results_match_difflib() {
             expected_matches: &[],
         },
         CloseMatchesTestCase {
-            description: "equal scores prefer the larger candidate",
+            description: "an exact match ranks before one substitution and a swap",
             word: "ab",
             possibilities: &["ba", "ab", "aB"],
             count: 3,
             cutoff: 0.0,
-            expected_matches: &["ab", "ba", "aB"],
+            expected_matches: &["ab", "aB", "ba"],
         },
         CloseMatchesTestCase {
-            description: "rotations score by their longest blocks",
+            description: "equal scores rank alphabetically",
             word: "abc",
             possibilities: &["xyz", "cab", "bca"],
             count: 3,
             cutoff: 0.0,
-            expected_matches: &["cab", "bca", "xyz"],
+            expected_matches: &["bca", "cab", "xyz"],
         },
     ];
     for test_case in test_cases {
@@ -109,7 +114,7 @@ fn given_docstring_bodies_when_cleaning_then_common_indent_and_outer_blank_lines
 }
 
 #[test]
-fn given_glob_patterns_when_matching_then_results_match_fnmatchcase() {
+fn given_glob_patterns_when_matching_then_shell_wildcards_match() {
     let test_cases = [
         GlobTestCase {
             description: "ord* against orders",
@@ -223,47 +228,8 @@ fn given_glob_patterns_when_matching_then_results_match_fnmatchcase() {
 
     for test_case in test_cases {
         assert_eq!(
-            python_fnmatchcase(test_case.name, test_case.pattern),
+            glob_match(test_case.name, test_case.pattern),
             test_case.expected_match,
-            "{}",
-            test_case.description
-        );
-    }
-}
-
-#[test]
-fn given_text_when_splitting_lines_then_it_matches_str_splitlines() {
-    let test_cases = [
-        SplitlinesTestCase {
-            description: "a newline separates two lines",
-            text: "a\nb",
-            expected_lines: &["a", "b"],
-        },
-        SplitlinesTestCase {
-            description: "CRLF is one break and a trailing break adds no line",
-            text: "a\r\nb\r",
-            expected_lines: &["a", "b"],
-        },
-        SplitlinesTestCase {
-            description: "Unicode separators, NEL and vertical tab break lines",
-            text: "a\u{2028}b\u{85}c\u{b}d",
-            expected_lines: &["a", "b", "c", "d"],
-        },
-        SplitlinesTestCase {
-            description: "leading breaks give empty lines",
-            text: "\n\nx",
-            expected_lines: &["", "", "x"],
-        },
-        SplitlinesTestCase {
-            description: "empty text has no lines",
-            text: "",
-            expected_lines: &[],
-        },
-    ];
-    for test_case in test_cases {
-        assert_eq!(
-            python_splitlines(test_case.text),
-            test_case.expected_lines,
             "{}",
             test_case.description
         );

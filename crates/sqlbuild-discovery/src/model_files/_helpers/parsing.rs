@@ -7,7 +7,6 @@ use crate::declaration_files::main::bare_number_failure::bare_number_failure;
 use crate::model_files::_helpers::output_columns::output_column_locations;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use crate::models::{DiscoveryFailure, FailureKind};
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_sqltext::compiler::main::model_header_byte_matching::match_one_bytes;
 use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
@@ -79,7 +78,7 @@ pub(crate) fn parse_model_file(
             ..failure
         })?;
     }
-    let query_sql: String = python_strip(&contents[sql_start..]).to_owned();
+    let query_sql: String = str::trim(&contents[sql_start..]).to_owned();
     if query_sql.is_empty() {
         return Err(failure(format!(
             "SQL model '{file_path}' must contain SQL after MODEL(...)"

@@ -1,7 +1,5 @@
 //! The general reference scan of Python `extract_sql_references`, reproduced exactly.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::sql_references::constants::{
     DBT_REFERENCE_KIND, NAME_QUOTE_BYTES, NON_CODE_START_BYTES, PLACEHOLDER_NAMES, QUOTE_BYTES,
     QUOTED_NAME_MINIMUM_BYTES, REFERENCE_CONTEXT, REFERENCE_PREFIXES, TABLE_FUNCTION_CALL_CONTEXT,
@@ -175,7 +173,7 @@ fn invalid_arguments(
     };
     let call: String = text[start..=close].to_owned();
     let words: Vec<&str> = call
-        .split(is_python_space)
+        .split(char::is_whitespace)
         .filter(|word| !word.is_empty())
         .collect();
     let prefix = function_name(kind);
@@ -325,7 +323,7 @@ fn split_arguments(
         current.push(character);
         index += character.len_utf8();
     }
-    let argument: &str = current.trim_matches(is_python_space);
+    let argument: &str = current.trim_matches(char::is_whitespace);
     if !argument.is_empty() {
         arguments.push(argument.to_owned());
     } else if saw_separator {
@@ -336,7 +334,7 @@ fn split_arguments(
 
 /// Python `str.strip()` of one argument, which must not be empty.
 fn stripped_argument(argument: &str) -> Scan<String> {
-    let stripped: &str = argument.trim_matches(is_python_space);
+    let stripped: &str = argument.trim_matches(char::is_whitespace);
     if stripped.is_empty() {
         return Err(empty_argument());
     }
@@ -351,7 +349,7 @@ fn empty_argument() -> String {
 fn python_whitespace_end(text: &str, start: usize) -> usize {
     text[start..]
         .char_indices()
-        .find(|(_, character)| !is_python_space(*character))
+        .find(|(_, character)| !char::is_whitespace(*character))
         .map_or(text.len(), |(offset, _)| start + offset)
 }
 

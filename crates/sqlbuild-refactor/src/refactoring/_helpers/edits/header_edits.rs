@@ -1,7 +1,6 @@
 //! Token-exact MODEL and SCHEMA header edits, as `header_edits.py` and `schema_edits.py` make.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 use sqlbuild_sqltext::compiler::main::model_header_matching::match_batch;
 use sqlbuild_sqltext::compiler::main::model_header_tokenizing::tokenize_one;
 use sqlbuild_sqltext::compiler::main::statement_header_matching::match_statement_header;
@@ -362,7 +361,7 @@ pub(crate) fn insert_header_entry_edit(
         };
         let indent_length = first_line
             .iter()
-            .take_while(|character| is_python_space(**character))
+            .take_while(|character| char::is_whitespace(**character))
             .count();
         let indentation: String = if indent_length == 0 {
             HEADER_INDENT.to_owned()
@@ -370,7 +369,10 @@ pub(crate) fn insert_header_entry_edit(
             first_line[..indent_length].iter().collect()
         };
         format!("\n{indentation}{entry},")
-    } else if body.iter().any(|character| !is_python_space(*character)) {
+    } else if body
+        .iter()
+        .any(|character| !char::is_whitespace(*character))
+    {
         format!("{entry}, ")
     } else {
         format!("\n{HEADER_INDENT}{entry},\n")
@@ -541,7 +543,10 @@ fn column_migration_edit(
 fn line_indent(text: &[char], offset: usize) -> String {
     let line_start = rfind(text, "\n", 0, offset).map_or(0, |index| index + 1);
     let prefix: Vec<char> = text[line_start..offset].to_vec();
-    if prefix.iter().all(|character| is_python_space(*character)) {
+    if prefix
+        .iter()
+        .all(|character| char::is_whitespace(*character))
+    {
         prefix.into_iter().collect()
     } else {
         HEADER_INDENT.to_owned()
@@ -555,7 +560,7 @@ fn schema_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
     let mut spans: Vec<(usize, usize)> = Vec::new();
     let mut index = 0;
     while index < text.len() {
-        let bounded = index == 0 || !is_python_word(text[index - 1]);
+        let bounded = index == 0 || !is_word_char(text[index - 1]);
         if bounded
             && starts_with(text, index, SCHEMA_KEYWORD)
             && let Some((start, end, _)) =
@@ -575,7 +580,7 @@ fn schema_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
 /// The end of `\)\s*;` after a header body ending at `end`.
 fn statement_end(text: &[char], end: usize) -> usize {
     let mut index = end + 1;
-    while text.get(index).copied().is_some_and(is_python_space) {
+    while text.get(index).copied().is_some_and(char::is_whitespace) {
         index += 1;
     }
     index + 1

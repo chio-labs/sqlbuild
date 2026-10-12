@@ -1,6 +1,6 @@
-use crate::text::main::decode_python_text::decode_python_text;
-use crate::text::main::is_python_decimal::is_python_decimal;
-use crate::text::main::python_decimal_value::python_decimal_value;
+use crate::text::main::decimal_digit_value::decimal_digit_value;
+use crate::text::main::decode_text::decode_text;
+use crate::text::main::is_decimal_digit::is_decimal_digit;
 use crate::text::models::LineIndex;
 use crate::text::tests::test_types::{
     DecimalDigitTestCase, DecodeTestCase, PositionTestCase, SpanTestCase,
@@ -128,7 +128,7 @@ fn given_authored_bytes_when_decoding_then_text_matches_python_read_text() {
         },
     ];
     for test_case in test_cases {
-        let actual = decode_python_text(test_case.bytes).map_err(|error| error.valid_up_to);
+        let actual = decode_text(test_case.bytes).map_err(|error| error.valid_up_to);
         assert_eq!(
             actual.as_deref().map_err(|offset| *offset),
             test_case.expected_text,
@@ -180,8 +180,8 @@ fn given_characters_when_reading_decimal_digits_then_only_unicode_nd_has_a_value
     for test_case in test_cases {
         assert_eq!(
             (
-                python_decimal_value(test_case.character),
-                is_python_decimal(test_case.character)
+                decimal_digit_value(test_case.character),
+                is_decimal_digit(test_case.character)
             ),
             (test_case.expected_value, test_case.expected_value.is_some()),
             "{}",

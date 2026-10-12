@@ -17,8 +17,12 @@ fn is_digits(text: &str, radix: u32) -> bool {
 /// `[-+]?[0-9]+`, `0o[0-7]+` or `0x[0-9a-fA-F]+`.
 pub(crate) fn is_int(text: &str) -> bool {
     is_digits(unsigned(text), 10)
-        || text.strip_prefix("0o").is_some_and(|digits| is_digits(digits, 8))
-        || text.strip_prefix("0x").is_some_and(|digits| is_digits(digits, 16))
+        || text
+            .strip_prefix("0o")
+            .is_some_and(|digits| is_digits(digits, 8))
+        || text
+            .strip_prefix("0x")
+            .is_some_and(|digits| is_digits(digits, 16))
 }
 
 /// `[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?`, `[-+]?.inf` or `.nan`.

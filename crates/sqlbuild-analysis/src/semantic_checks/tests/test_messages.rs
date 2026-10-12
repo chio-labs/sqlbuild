@@ -3,7 +3,7 @@ use crate::semantic_checks::tests::helpers::{missing_parts, owned_missing, sente
 use crate::semantic_checks::tests::test_types::{ComparisonHelpTestCase, SentenceMessageTestCase};
 
 #[test]
-fn given_binding_messages_when_rewriting_then_matches_python_sentences() {
+fn given_binding_messages_when_rewriting_then_sentences_read_clearly() {
     let test_cases = [
         SentenceMessageTestCase {
             description: "a context suffix and unquoted type words",
@@ -42,14 +42,14 @@ fn given_binding_messages_when_rewriting_then_matches_python_sentences() {
             expected_missing: Ok(Some(("a", None))),
         },
         SentenceMessageTestCase {
-            description: "type words Python's ignore-case matches beyond ASCII, before a final newline",
-            message: "Cannot compare \u{130}nteger with \u{131}nterval (context: x)\n",
-            expected_sentence: Ok("Cannot compare \u{130}NTEGER with INTERVAL\n"),
+            description: "mixed-case type words before a final newline",
+            message: "Cannot compare Integer with interval (context: x)\n",
+            expected_sentence: Ok("Cannot compare INTEGER with INTERVAL\n"),
             expected_missing: Ok(None),
         },
         SentenceMessageTestCase {
             description: "word boundaries next to non-ASCII word characters",
-            message: "\u{e9}integer integer\u{e9} \u{17f}tring va\u{212a}lue 'integer' DATE",
+            message: "\u{e9}integer integer\u{e9} string va\u{212a}lue 'integer' DATE",
             expected_sentence: Ok(
                 "\u{e9}integer integer\u{e9} STRING va\u{212a}lue 'integer' DATE",
             ),

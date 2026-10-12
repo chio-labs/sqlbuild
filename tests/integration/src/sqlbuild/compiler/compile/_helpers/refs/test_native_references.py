@@ -79,7 +79,7 @@ _REJECTED_AFTER_MANY: str = _MANY_REFERENCES + " JOIN __ref(orders, customers)"
             description="every_kind_in_authored_order",
             sql=(
                 'SELECT * FROM __ref("orders") JOIN __source("raw_orders") '
-                'JOIN __seed("regions") JOIN __dbt_ref("shop" ,\x1c"customers") '
+                'JOIN __seed("regions") JOIN __dbt_ref("shop" ,\u3000"customers") '
                 'WHERE __udf("clean")(x) > 0 OR __dbt_ref("orders") IS NULL'
             ),
         ),

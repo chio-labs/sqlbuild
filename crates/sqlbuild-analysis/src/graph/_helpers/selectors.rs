@@ -3,7 +3,6 @@
 use std::collections::BTreeSet;
 
 use crate::assembly::project::types::ObjectKey;
-use crate::graph::_helpers::close_matches::close_matches;
 use crate::graph::constants::{
     EMPTY_SELECTOR_CODE, EMPTY_VALUE_CODE, EXPANSION_MARKER, FOLDER_SEPARATOR,
     INTERSECTION_SEPARATOR, KIND_SEPARATOR, MISPLACED_MARKER_CODE, MISSING_NAME_CODE,
@@ -18,7 +17,8 @@ use crate::graph::errors::SelectorError;
 use crate::graph::models::{
     BuildResources, EdgeDirection as Direction, ParsedSelector, ProjectGraph,
 };
-use sqlbuild_core::text::main::python_fnmatchcase::python_fnmatchcase;
+use sqlbuild_core::text::main::close_matches::close_matches;
+use sqlbuild_core::text::main::glob_match::glob_match;
 
 pub(crate) type Keys = BTreeSet<ObjectKey>;
 type Resolved = Result<Keys, SelectorError>;
@@ -91,7 +91,7 @@ pub(crate) fn tokens(graph: &ProjectGraph, selectors: &[String]) -> Resolved {
     let mut resolved: Keys = Keys::new();
     for selector in selectors {
         for token in selector
-            .split(python_space)
+            .split(char::is_whitespace)
             .filter(|token| !token.is_empty())
         {
             resolved.extend(intersection(graph, token)?);
@@ -168,7 +168,7 @@ fn named(graph: &ProjectGraph, name: &str) -> Result<ObjectKey, SelectorError> {
 }
 
 pub(crate) fn parse(raw: &str) -> Result<ParsedSelector, SelectorError> {
-    let stripped: &str = raw.trim_matches(python_space);
+    let stripped: &str = raw.trim_matches(char::is_whitespace);
     if stripped.is_empty() {
         return Err(error(EMPTY_SELECTOR_CODE, "empty selector".to_owned()));
     }
@@ -191,8 +191,8 @@ pub(crate) fn parse(raw: &str) -> Result<ParsedSelector, SelectorError> {
     }
     if let Some((start, end)) = core.split_once(PATH_SEPARATOR) {
         let (start, end) = (
-            start.trim_matches(python_space),
-            end.trim_matches(python_space),
+            start.trim_matches(char::is_whitespace),
+            end.trim_matches(char::is_whitespace),
         );
         if start.is_empty() || end.is_empty() {
             return Err(error(
@@ -357,11 +357,6 @@ fn folder(graph: &ProjectGraph, value: &str) -> Resolved {
     Ok(keys)
 }
 
-/// Python's `str.isspace`, which also counts the information separators U+001C..U+001F.
-fn python_space(character: char) -> bool {
-    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
-}
-
 pub(crate) fn is_pattern(value: &str) -> bool {
     value.contains(PATTERN_CHARACTERS)
 }
@@ -384,5 +379,5 @@ impl ProjectGraph {
 
 /// Python's `fnmatch.fnmatchcase`: `*`, `?`, `[seq]` and `[!seq]` over characters.
 fn glob_matches(pattern: &str, name: &str) -> bool {
-    python_fnmatchcase(name, pattern)
+    glob_match(name, pattern)
 }

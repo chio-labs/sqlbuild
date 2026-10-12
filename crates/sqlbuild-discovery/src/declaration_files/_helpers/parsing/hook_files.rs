@@ -7,7 +7,6 @@ use crate::declaration_files::_helpers::checks::python_values::{
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::models::{DeclarationFileOptions, HookFile};
 use crate::models::FailureKind;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
@@ -138,6 +137,6 @@ fn next_char_len(contents: &str, index: usize) -> usize {
 fn skip_whitespace(contents: &str, start: usize) -> usize {
     contents[start..]
         .char_indices()
-        .find(|(_, character)| !is_python_space(*character))
+        .find(|(_, character)| !char::is_whitespace(*character))
         .map_or(contents.len(), |(offset, _)| start + offset)
 }

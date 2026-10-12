@@ -6,7 +6,8 @@ use crate::yaml::_helpers::keys::{is_hashable, key_identity};
 use crate::yaml::_helpers::numbers::{construct_float, construct_int};
 use crate::yaml::constants::{
     BASE_EXPANSION_BUDGET, BOOL_TAG, BOOL_WORDS, EXPANSION_BUDGET_PER_CHARACTER, FLOAT_TAG,
-    INT_TAG, MAP_TAG, MAX_CONSTRUCTION_DEPTH, MERGE_TAG, NULL_TAG, SEQ_TAG, STANDARD_TAG_PREFIX, STR_TAG,
+    INT_TAG, MAP_TAG, MAX_CONSTRUCTION_DEPTH, MERGE_TAG, NULL_TAG, SEQ_TAG, STANDARD_TAG_PREFIX,
+    STR_TAG,
 };
 use crate::yaml::models::{ComposedDocument, Node, NodeContent};
 use std::collections::HashMap;

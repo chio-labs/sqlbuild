@@ -3,9 +3,8 @@
 use std::sync::LazyLock;
 
 use regex::Regex;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
-use crate::semantic_checks::_helpers::sql_text::python_regex::ignorecase_equal;
 use crate::semantic_checks::_helpers::sql_text::text::upper;
 use crate::semantic_checks::constants::{
     BIGQUERY_DIALECT, COMPARISON_CODE, CONTEXT_SUFFIX_PATTERN, DATE_TYPE, MISSING_PATTERN,
@@ -91,7 +90,7 @@ fn type_word_end(
             && slice
                 .iter()
                 .zip(candidate.chars())
-                .all(|(character, letter)| ignorecase_equal(*character, letter))
+                .all(|(character, letter)| character.eq_ignore_ascii_case(&letter))
             && boundary(end)
         {
             return Some(end);
@@ -105,7 +104,7 @@ fn type_word_spans(characters: &[char]) -> Vec<(usize, usize)> {
     let word = |index: usize| {
         characters
             .get(index)
-            .is_some_and(|character| is_python_word(*character))
+            .is_some_and(|character| is_word_char(*character))
     };
     let boundary = |index: usize| (index > 0 && word(index - 1)) != word(index);
     let mut spans: Vec<(usize, usize)> = Vec::new();

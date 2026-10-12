@@ -1,8 +1,5 @@
 //! Line-based YAML source declaration reads, as contract adoption's `edit_source` makes them.
 
-use sqlbuild_core::text::main::python_splitlines::python_splitlines;
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::refactoring::constants::{
     CONTRACT_QUOTES, CONTRACT_YAML_COMMENT, CONTRACT_YAML_LIST_NAME,
 };
@@ -26,18 +23,18 @@ fn unquote(value: &str) -> &str {
 
 /// Python's `_yaml_list_name`: the unquoted name of a `- name:` line.
 pub(crate) fn list_name(line: &str) -> Option<&str> {
-    python_strip(line)
+    str::trim(line)
         .strip_prefix(CONTRACT_YAML_LIST_NAME)
-        .map(|rest| unquote(python_strip(rest)))
+        .map(|rest| unquote(str::trim(rest)))
 }
 
 /// Python's `_yaml_key`: the key of a `key: value` line.
 pub(crate) fn key(line: &str) -> Option<&str> {
-    let stripped = python_strip(line);
+    let stripped = str::trim(line);
     if stripped.is_empty() || stripped.starts_with(['#', '-']) {
         return None;
     }
-    stripped.split_once(':').map(|(key, _)| python_strip(key))
+    stripped.split_once(':').map(|(key, _)| str::trim(key))
 }
 
 /// Python's `_yaml_named_block`: the one shallowest `- name: <name>` block.
@@ -64,7 +61,7 @@ pub(crate) fn named_block(lines: &[&str], name: &str) -> Option<(usize, usize, u
 }
 
 fn is_blank_or_comment(line: &str) -> bool {
-    let stripped = python_strip(line);
+    let stripped = str::trim(line);
     stripped.is_empty() || stripped.starts_with('#')
 }
 
@@ -117,18 +114,7 @@ pub(crate) fn column_lines(name: &str, column_type: &str, indent: usize) -> Vec<
     ]
 }
 
-/// Python's `str.splitlines(keepends=True)`: the lines of `text` with their breaks.
+/// The lines of `text` with their line breaks.
 pub(crate) fn lines_with_breaks(text: &str) -> Vec<String> {
-    let base = text.as_ptr() as usize;
-    let starts: Vec<usize> = python_splitlines(text)
-        .iter()
-        .map(|line| line.as_ptr() as usize - base)
-        .collect();
-    starts
-        .iter()
-        .enumerate()
-        .map(|(index, start)| {
-            text[*start..starts.get(index + 1).copied().unwrap_or(text.len())].to_owned()
-        })
-        .collect()
+    text.split_inclusive('\n').map(str::to_owned).collect()
 }

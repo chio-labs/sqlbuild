@@ -1,8 +1,5 @@
 //! The code-point scanning helpers Python's audit parser uses: comments, quotes and keywords.
 
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 const SQL_QUOTES: [char; 3] = ['\'', '"', '`'];
 
 /// Audit text as code points, with the Python semantics its keyword checks use.
@@ -71,7 +68,7 @@ impl AuditText<'_> {
         let length: usize = self.len();
         let mut position: usize = start;
         while position < length {
-            if is_python_space(self.chars[position]) {
+            if char::is_whitespace(self.chars[position]) {
                 position += 1;
             } else if self.starts_with(position, &['-', '-']) {
                 position = self
@@ -106,7 +103,7 @@ impl AuditText<'_> {
         let word = |index: Option<usize>| {
             index
                 .and_then(|index| self.chars.get(index))
-                .is_some_and(|character| *character == '_' || is_python_alnum(*character))
+                .is_some_and(|character| *character == '_' || char::is_alphanumeric(*character))
         };
         !word(position.checked_sub(1)) && !word(Some(end))
     }

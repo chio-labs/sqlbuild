@@ -1,7 +1,5 @@
 //! `get_validated_model_cursor_intrinsics`: check and canonicalize one model query's intrinsics.
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
 use crate::cursor_intrinsics::models::IntrinsicModel;
 
@@ -31,7 +29,7 @@ pub fn validated_model_intrinsics(
     }
     if model
         .cursor
-        .is_none_or(|cursor| python_strip(cursor).is_empty())
+        .is_none_or(|cursor| str::trim(cursor).is_empty())
     {
         return Err(format!(
             "{context} uses cursor intrinsics but does not declare a cursor"

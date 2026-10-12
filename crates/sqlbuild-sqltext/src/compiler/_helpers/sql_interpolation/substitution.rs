@@ -4,8 +4,7 @@ use crate::compiler::models::{InterpolatedSql, InterpolationFailure, Interpolati
 use crate::compiler::types::{CharSpan, InterpolationHost};
 use crate::sql_scan::main::non_code_end::non_code_end;
 use crate::sql_scan::models::{QuotePolicy, Unclosed};
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
+use sqlbuild_core::text::main::is_letter::is_letter;
 
 const CONTEXT: &str = "SQL interpolation";
 const TOKEN: &str = "@@";
@@ -200,7 +199,7 @@ impl<H: InterpolationHost> Interpolation<'_, H> {
         sql[at..]
             .chars()
             .next()
-            .is_some_and(|character| character == '_' || is_python_alpha(character))
+            .is_some_and(|character| character == '_' || is_letter(character))
     }
 
     /// The end of the identifier starting at `start`, whose first character already matched.
@@ -213,7 +212,9 @@ impl<H: InterpolationHost> Interpolation<'_, H> {
     fn name_end(&self, sql: &str, start: usize, extra: &[char]) -> usize {
         sql[start..]
             .char_indices()
-            .find(|(_, character)| !(extra.contains(character) || is_python_alnum(*character)))
+            .find(|(_, character)| {
+                !(extra.contains(character) || char::is_alphanumeric(*character))
+            })
             .map_or(sql.len(), |(offset, _)| start + offset)
     }
 

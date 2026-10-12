@@ -8,7 +8,6 @@ use crate::project::constants::{
     REPLAY_ON_CHANGE_VALUES, SETTING_SNIPPET_INDENT,
 };
 use crate::project::errors::ConfigFailure;
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 /// A setting value as TOML shows it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,7 +74,7 @@ fn replay_problem(key: &str, value: &str) -> Result<Option<String>, ConfigFailur
     let Some(bounded) = value.strip_prefix(BOUNDED_REPLAY_PREFIX) else {
         return Ok(None);
     };
-    let duration = python_strip(bounded);
+    let duration = str::trim(bounded);
     if parse_duration(duration)?.is_some() {
         return Ok(None);
     }

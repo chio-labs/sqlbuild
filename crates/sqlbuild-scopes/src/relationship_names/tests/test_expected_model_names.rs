@@ -57,8 +57,8 @@ fn given_sql_test_when_scanning_expected_models_then_names_and_errors_match_pyth
             expected_outcome: scanned(&["a"]),
         },
         ExpectedNamesTestCase {
-            description: "Python separators count as whitespace",
-            sql: "WITH\u{1f}__expected__a AS (SELECT 1)\u{b}SELECT 1",
+            description: "Unicode whitespace separates words",
+            sql: "WITH\u{3000}__expected__a AS (SELECT 1)\u{b}SELECT 1",
             expected_outcome: scanned(&["a"]),
         },
         ExpectedNamesTestCase {

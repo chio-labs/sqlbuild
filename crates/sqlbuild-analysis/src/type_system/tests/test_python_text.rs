@@ -7,7 +7,7 @@ fn given_parameter_text_when_parsing_as_python_int_then_python_result_is_returne
     let test_cases = [
         PythonIntTestCase {
             description: "padded digits",
-            text: " \t42\x1c",
+            text: " \t42\u{3000}",
             expected_value: Some(42),
         },
         PythonIntTestCase {

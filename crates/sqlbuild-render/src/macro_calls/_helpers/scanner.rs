@@ -1,8 +1,6 @@
 //! Byte offset port of the Python macro call scanner, with the errors Python's scan raises.
 
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
+use sqlbuild_core::text::main::is_letter::is_letter;
 
 use crate::macro_calls::errors::ScanError;
 
@@ -167,7 +165,7 @@ fn macro_call_starts_at(text: &str, at: usize) -> bool {
     let Some(first) = char_at(text, at + 1) else {
         return false;
     };
-    if !(first == '_' || is_python_alpha(first)) {
+    if !(first == '_' || is_letter(first)) {
         return false;
     }
     let mut cursor = at + 1 + first.len_utf8();
@@ -192,13 +190,13 @@ fn identifier_end(text: &str, from: usize) -> usize {
 }
 
 fn is_identifier_continue(character: char) -> bool {
-    character == '_' || is_python_alnum(character)
+    character == '_' || char::is_alphanumeric(character)
 }
 
 fn skip_whitespace(text: &str, from: usize) -> usize {
     let mut cursor = from;
     while let Some(character) = char_at(text, cursor) {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         cursor += character.len_utf8();

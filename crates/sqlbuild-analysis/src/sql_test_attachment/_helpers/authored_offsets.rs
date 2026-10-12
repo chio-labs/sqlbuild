@@ -1,7 +1,5 @@
 //! `authored_file_offset`: an offset in a cleaned SQL-test body mapped back to the file.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::sql_test_attachment::constants::TAB_SIZE;
 
 /// One kept line of the cleaned body: its file offset, raw text and removed indent columns.
@@ -41,12 +39,12 @@ fn has_content(line: &[char]) -> bool {
 }
 
 fn is_not_space(character: char) -> bool {
-    !is_python_space(character)
+    !char::is_whitespace(character)
 }
 
 fn indent(line: &[char]) -> usize {
     line.iter()
-        .take_while(|character| is_python_space(**character))
+        .take_while(|character| char::is_whitespace(**character))
         .count()
 }
 

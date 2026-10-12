@@ -6,7 +6,6 @@ use crate::sql_tests::constants::{
     MODE_KEY, MODEL_MODE, NAME_KEY, SQL_ANALYSIS_KEY, SQL_TEST_MODES,
 };
 use crate::sql_values::models::{RawKey, RawSqlValue};
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 pub(crate) fn cursor_bound(
     header: &[(RawKey, RawSqlValue)],
@@ -17,8 +16,8 @@ pub(crate) fn cursor_bound(
         None | Some(RawSqlValue::Null) => Ok(None),
         Some(RawSqlValue::Int(number)) => Ok(Some(number.to_string())),
         Some(RawSqlValue::BigInt(digits)) => Ok(Some(digits.clone())),
-        Some(RawSqlValue::Str(text)) if !python_strip(text).is_empty() => {
-            Ok(Some(python_strip(text).to_owned()))
+        Some(RawSqlValue::Str(text)) if !str::trim(text).is_empty() => {
+            Ok(Some(str::trim(text).to_owned()))
         }
         Some(_) => Err(format!(
             "TEST() {key} in '{file_path}' must be a non-empty string or an integer"
@@ -31,7 +30,7 @@ pub(crate) fn header_checks(
     file_path: &str,
 ) -> Result<(), String> {
     if let Some(name) = entry(header, NAME_KEY)
-        && !matches!(name, RawSqlValue::Str(text) if !python_strip(text).is_empty())
+        && !matches!(name, RawSqlValue::Str(text) if !str::trim(text).is_empty())
     {
         return Err(format!(
             "TEST() name in '{file_path}' must be a non-empty string"

@@ -4,7 +4,6 @@ use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
 use crate::declaration_files::_helpers::checks::python_values::failure;
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::models::FailureKind;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
@@ -146,6 +145,6 @@ fn next_char_len(contents: &str, index: usize) -> usize {
 fn skip_whitespace(contents: &str, start: usize) -> usize {
     contents[start..]
         .char_indices()
-        .find(|(_, character)| !is_python_space(*character))
+        .find(|(_, character)| !char::is_whitespace(*character))
         .map_or(contents.len(), |(offset, _)| start + offset)
 }

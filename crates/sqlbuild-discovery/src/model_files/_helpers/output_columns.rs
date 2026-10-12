@@ -2,8 +2,7 @@
 
 use crate::_helpers::locations::{absolute_span, line_starts};
 use crate::models::LineColumnSpan;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 const SELECT_KEYWORD: &str = "SELECT";
 const UNION_KEYWORD: &str = "UNION";
@@ -31,11 +30,11 @@ pub(crate) fn output_column_locations(
             continue;
         };
         let mut start = item_start;
-        while start < item_end && is_python_space(sql[start]) {
+        while start < item_end && char::is_whitespace(sql[start]) {
             start += 1;
         }
         let mut end = item_end;
-        while end > start && is_python_space(sql[end - 1]) {
+        while end > start && char::is_whitespace(sql[end - 1]) {
             end -= 1;
         }
         if start >= end {
@@ -168,7 +167,7 @@ fn keyword_at(sql: &[char], keyword: &str, index: usize) -> bool {
     }
     let before = index.checked_sub(1).map_or(' ', |previous| sql[previous]);
     let after = sql.get(end).copied().unwrap_or(' ');
-    !is_python_word(before) && !is_python_word(after)
+    !is_word_char(before) && !is_word_char(after)
 }
 
 fn split_top_level_items(sql: &[char], start: usize, end: usize) -> Vec<(usize, usize)> {
@@ -257,12 +256,12 @@ fn name_end(item: &[char], start: usize, ignore_case: bool) -> Option<usize> {
 fn rest_is_space(item: &[char], start: usize) -> bool {
     item[start..]
         .iter()
-        .all(|character| is_python_space(*character))
+        .all(|character| char::is_whitespace(*character))
 }
 
 fn space_run_end(item: &[char], start: usize) -> usize {
     let mut end = start;
-    while end < item.len() && is_python_space(item[end]) {
+    while end < item.len() && char::is_whitespace(item[end]) {
         end += 1;
     }
     end
@@ -279,7 +278,8 @@ fn captured_name(item: &[char], start: usize, end: usize) -> String {
 /// `re.search(r"\s+AS\s+NAME\s*\Z", item, re.IGNORECASE)`.
 fn explicit_alias(item: &[char]) -> Option<String> {
     for start in 0..item.len() {
-        if !is_python_space(item[start]) || (start > 0 && is_python_space(item[start - 1])) {
+        if !char::is_whitespace(item[start]) || (start > 0 && char::is_whitespace(item[start - 1]))
+        {
             continue;
         }
         let keyword = space_run_end(item, start);

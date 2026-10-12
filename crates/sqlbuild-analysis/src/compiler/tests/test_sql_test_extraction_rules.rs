@@ -76,11 +76,11 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             ),
         },
         ExtractionRuleTestCase {
-            description: "Python whitespace separates tokens and is stripped from bodies",
+            description: "Unicode whitespace separates tokens and is stripped from bodies",
             mode: "udf",
             raw: true,
             syntax: "generic",
-            sql: "WITH __udf_actual__\u{1c}AS (SELECT __udf(\"f\")(1) AS a\u{1c}), __udf_expected__\u{a0}AS (SELECT 1 AS a)",
+            sql: "WITH __udf_actual__\u{2003}AS (SELECT __udf(\"f\")(1) AS a\u{3000}), __udf_expected__\u{a0}AS (SELECT 1 AS a)",
             expected_outcome: accepted_outcome(false),
         },
         ExtractionRuleTestCase {

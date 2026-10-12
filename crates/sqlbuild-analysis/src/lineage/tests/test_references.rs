@@ -2,7 +2,7 @@ use crate::lineage::_helpers::references::{normalized_sql, physical_resources};
 use crate::lineage::tests::test_types::ReferenceTestCase;
 
 #[test]
-fn given_reference_calls_when_normalizing_then_matches_python_patterns() {
+fn given_reference_calls_when_normalizing_then_resources_are_named() {
     let test_cases = [
         ReferenceTestCase {
             description: "each resource kind, spaced quotes and an underscore run",
@@ -23,8 +23,8 @@ fn given_reference_calls_when_normalizing_then_matches_python_patterns() {
             expected_normalized: "SELECT my__fn(x), __ref('a\") , __ref(''), __sqlbuild_model______b\t)",
         },
         ReferenceTestCase {
-            description: "Python whitespace beyond ASCII and an unknown call",
-            sql: "SELECT __ref('orders'\u{1c}) FROM x __unknown('a') __ref(\"q\")",
+            description: "Unicode whitespace and an unknown call",
+            sql: "SELECT __ref('orders'\u{3000}) FROM x __unknown('a') __ref(\"q\")",
             expected_resources: &[
                 ("model", "orders", "__sqlbuild_model__orders"),
                 ("model", "q", "__sqlbuild_model__q"),

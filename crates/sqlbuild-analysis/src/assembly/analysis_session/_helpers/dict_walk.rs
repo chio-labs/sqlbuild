@@ -4,8 +4,6 @@ use polyglot_sql::expressions::Cte;
 use polyglot_sql::traversal::ExpressionWalk;
 use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions, ast_json};
 use serde_json::{Map, Value, json};
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_upper::python_upper;
 
 use crate::assembly::analysis_session::models::ProjectionFacts;
 
@@ -163,12 +161,12 @@ pub(crate) fn python_int(value: Option<&Value>) -> Option<String> {
 
 /// Python's `str.casefold`.
 pub(crate) fn casefold(text: &str) -> String {
-    python_casefold(text)
+    str::to_lowercase(text)
 }
 
 /// Python's `str.upper`.
 pub(crate) fn upper(text: &str) -> String {
-    python_upper(text)
+    str::to_uppercase(text)
 }
 
 /// A value the wheel hands Python for one payload key: an expression, a list of them, or data.
@@ -482,7 +480,7 @@ fn collected_facts(select: &Map<String, Value>) -> ProjectionFacts {
         let Some(Value::String(name)) = alias.get("name") else {
             continue;
         };
-        let folded: String = python_casefold(name);
+        let folded: String = str::to_lowercase(name);
         if alias.get("quoted") == Some(&Value::Bool(true)) {
             quoted.push(folded.clone());
         }
@@ -520,7 +518,7 @@ fn simple_type(kind: &str, payload: &Value) -> Option<&'static str> {
             .get("name")
             .and_then(Value::as_str)
             .unwrap_or_default();
-        return lookup(&FUNCTION_FIXTURE_TYPES, &python_upper(name));
+        return lookup(&FUNCTION_FIXTURE_TYPES, &str::to_uppercase(name));
     }
     None
 }
@@ -547,7 +545,7 @@ pub(crate) fn helper_parsed_reads(
     sql: &str,
     keys: &[String],
 ) -> Result<Option<Vec<String>>, String> {
-    let folded: String = python_casefold(sql);
+    let folded: String = str::to_lowercase(sql);
     if !keys.iter().any(|key| folded.contains(key.as_str())) {
         return Ok(Some(Vec::new()));
     }
@@ -562,7 +560,7 @@ pub(crate) fn helper_parsed_reads(
         {
             continue;
         }
-        let key: String = python_casefold(name(Some(table)));
+        let key: String = str::to_lowercase(name(Some(table)));
         if keys.contains(&key) && !nested.contains(&key) && !reads.contains(&key) {
             reads.push(key);
         }
@@ -581,7 +579,7 @@ fn defined_cte_keys(tree: &Value) -> Vec<String> {
                 if let Some(Value::Array(ctes)) = map.get(CTE_LIST_PAYLOAD_KEY) {
                     keys.extend(ctes.iter().filter_map(|cte| {
                         let alias: &Value = cte.as_object()?.get(CTE_ALIAS_PAYLOAD_KEY)?;
-                        Some(python_casefold(
+                        Some(str::to_lowercase(
                             alias.as_object()?.get(NAME_PAYLOAD_KEY)?.as_str()?,
                         ))
                     }));

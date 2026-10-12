@@ -6,7 +6,6 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTuple
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use sqlbuild_analysis::compiled_project::models::{DynamicProofFact, ModelAnalysisFact};
-use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::compiled_project::compiled_model_analysis::{
     AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
@@ -291,7 +290,7 @@ impl NativeCompiledModel {
 fn casefolded_families(families: &[(String, Option<String>)]) -> Vec<(String, Option<String>)> {
     families
         .iter()
-        .map(|(name, kind)| (python_casefold(name), kind.clone()))
+        .map(|(name, kind)| (str::to_lowercase(name), kind.clone()))
         .collect()
 }
 

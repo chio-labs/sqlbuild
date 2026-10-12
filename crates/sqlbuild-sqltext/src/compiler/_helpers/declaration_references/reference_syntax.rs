@@ -1,8 +1,5 @@
 //! Python's `@enum("name").MEMBER` and `@const("name")` patterns at one reference start.
 
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::compiler::models::DeclarationReferenceKind;
 
 /// One matched reference: kind, name, member and the byte offset after it.
@@ -35,7 +32,7 @@ pub(crate) fn match_reference(sql: &str, start: usize) -> ReferenceSyntax<'_> {
     if sql[keyword_end..]
         .chars()
         .next()
-        .is_some_and(|next| next == '_' || is_python_alnum(next))
+        .is_some_and(|next| next == '_' || char::is_alphanumeric(next))
     {
         return ReferenceSyntax::NotReference;
     }
@@ -76,7 +73,7 @@ fn match_arguments(
 /// Python's `\s*`: every character `str.isspace()` accepts.
 fn skip_whitespace(sql: &str, mut index: usize) -> usize {
     while let Some(character) = sql[index..].chars().next() {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         index += character.len_utf8();

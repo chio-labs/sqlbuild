@@ -1,7 +1,5 @@
 //! Python's raw and quoted SQL argument patterns and argument value rendering.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::audits::models::ArgumentValue;
 
 /// One `@name` or `@'name'` occurrence, in byte offsets.
@@ -100,7 +98,7 @@ fn identifier_end(bytes: &[u8], start: usize) -> Option<usize> {
 fn opens_call(sql: &str, end: usize) -> bool {
     sql[end..]
         .chars()
-        .find(|character| !is_python_space(*character))
+        .find(|character| !char::is_whitespace(*character))
         == Some('(')
 }
 

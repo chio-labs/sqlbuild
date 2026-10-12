@@ -40,7 +40,5 @@ pub(crate) const PATH_ROOT_ERROR: &str =
 pub(crate) const UNIT_TEST_ONLY_TEST_AND_BUILD: &str =
     "only `sqb test` and `sqb build` accept unit-test selectors";
 /// `difflib.SequenceMatcher` treats an element as popular only in sequences this long.
-pub(crate) const AUTOJUNK_MIN_LENGTH: usize = 200;
-pub(crate) const AUTOJUNK_DIVISOR: usize = 100;
 pub(crate) const NAME_KIND: &str = "name";
 pub(crate) const DEFAULT_UNIQUE_ID_PREFIX: &str = "model";

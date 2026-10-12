@@ -8,9 +8,7 @@ use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::audit_text::{AuditText, chars, text};
 use crate::declaration_files::models::{AuditBlock, AuditFile, DeclarationFileOptions};
 use crate::models::FailureKind;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const AUDIT_KEYWORD: &str = "AUDIT";
@@ -58,7 +56,7 @@ pub(crate) fn parse_audit_file(
     let leading: String = starts
         .first()
         .map_or_else(String::new, |first| text(&content_chars[..*first]));
-    if starts.is_empty() || !python_strip(&leading).is_empty() {
+    if starts.is_empty() || !str::trim(&leading).is_empty() {
         return Err(audit_failure(format!(
             "SQL audit '{file_path}' must start with an AUDIT() header as the first \
              non-whitespace content"
@@ -70,7 +68,7 @@ pub(crate) fn parse_audit_file(
             .get(offset + 1)
             .copied()
             .unwrap_or(content_chars.len());
-        let raw_block: String = python_strip(&text(&content_chars[*start..end])).to_owned();
+        let raw_block: String = str::trim(&text(&content_chars[*start..end])).to_owned();
         let block_line: usize = content_chars[..*start]
             .iter()
             .filter(|character| **character == '\n')
@@ -305,7 +303,7 @@ impl AuditParse<'_> {
             && (semicolons.len() > 1
                 || query_chars[first + 1..]
                     .iter()
-                    .any(|character| !is_python_space(*character)))
+                    .any(|character| !char::is_whitespace(*character)))
         {
             return Err(audit_failure(format!(
                 "{label}(...) in '{file_path}' must contain exactly one query"

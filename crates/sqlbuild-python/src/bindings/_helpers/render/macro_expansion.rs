@@ -8,7 +8,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTuple};
 use pyo3::{FromPyObject, pyclass, pymethods};
-use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
+use sqlbuild_core::text::main::is_decimal_digit::is_decimal_digit;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
 use sqlbuild_render::macro_calls::models::{
@@ -575,7 +575,7 @@ impl NativeMacroExpansion {
             let digits_start: usize = start + RELATION_PREFIX.len();
             let digits_end: usize = sql[digits_start..]
                 .char_indices()
-                .find(|(_, character)| !is_python_decimal(*character))
+                .find(|(_, character)| !is_decimal_digit(*character))
                 .map_or(sql.len(), |(offset, _)| digits_start + offset);
             if digits_end == digits_start || !sql[digits_end..].starts_with(RELATION_SUFFIX) {
                 search = start + 1;

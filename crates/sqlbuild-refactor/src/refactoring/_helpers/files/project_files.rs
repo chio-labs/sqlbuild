@@ -2,8 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::refactoring::_helpers::scanning::chars::{chars, find};
 use crate::refactoring::models::{DiscoveredFile, RefactorFacts, SqlFileRole};
 
@@ -73,7 +71,7 @@ pub(crate) fn authored_bodies(facts: &RefactorFacts) -> Vec<AuthoredBody> {
         let contents = chars(&file.contents);
         let mut cursor = 0;
         for body in &file.texts {
-            if python_strip(body).is_empty() {
+            if str::trim(body).is_empty() {
                 continue;
             }
             let Some(start) = find(&contents, body, cursor) else {

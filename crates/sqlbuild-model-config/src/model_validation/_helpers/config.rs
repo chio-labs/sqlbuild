@@ -3,8 +3,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::errors::ConfigError;
 use crate::model_validation::_helpers::durations::{Duration, parse_duration};
 use crate::model_validation::constants::SETTING_SNIPPET_INDENT;
@@ -177,7 +175,7 @@ pub(crate) fn has_config_value<N: AuthoredNode>(value: Option<&N>) -> bool {
 
 /// Check that a value is a string whose Python `strip()` is non-empty.
 pub(crate) fn non_blank_string_check<N: AuthoredNode>(value: &N) -> bool {
-    text_if_string(value).is_some_and(|text| !python_strip(&text).is_empty())
+    text_if_string(value).is_some_and(|text| !str::trim(&text).is_empty())
 }
 
 /// Return whether two names are equal under Python's `str.lower()`.

@@ -1,7 +1,5 @@
 //! Python's `_normalize_sqlbuild_refs`, matching its backreferencing patterns exactly.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::lineage::constants::{
     PHYSICAL_NAME_REPLACEMENT, PHYSICAL_RESOURCE_PREFIX, REFERENCE_PREFIX, UDF_CALL,
 };
@@ -144,6 +142,6 @@ fn quoted_argument(text: &str, start: usize) -> Option<(usize, &str)> {
 fn skip_spaces(text: &str, start: usize) -> usize {
     text[start..]
         .char_indices()
-        .find(|(_, character)| !is_python_space(*character))
+        .find(|(_, character)| !char::is_whitespace(*character))
         .map_or(text.len(), |(offset, _)| start + offset)
 }

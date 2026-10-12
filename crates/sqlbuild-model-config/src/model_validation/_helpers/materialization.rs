@@ -2,8 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 use crate::errors::ConfigError;
 use crate::model_validation::_helpers::config::python_lower;
@@ -181,7 +180,7 @@ pub(crate) fn check_migration<N: AuthoredNode>(
         return Err(config.error("migrate_force requires migrate_from"));
     };
     let origin: String = text_if_string(migrate_from)
-        .map(|text| python_strip(&text).to_owned())
+        .map(|text| str::trim(&text).to_owned())
         .unwrap_or_default();
     if origin.is_empty() {
         return Err(config.error("migrate_from must be a model name or a qualified relation"));
@@ -204,7 +203,7 @@ fn check_old_name_view<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
     }
     if let Some(text) = text_if_string(value)
         && config
-            .duration(OLD_NAME_VIEW_KEY, python_strip(&text))?
+            .duration(OLD_NAME_VIEW_KEY, str::trim(&text))?
             .is_some()
     {
         return Ok(());
@@ -279,7 +278,7 @@ fn placeholder_names(sql: &str) -> BTreeSet<String> {
         let after = &rest[start + PLACEHOLDER_SIGIL.len()..];
         let length: usize = after
             .char_indices()
-            .find(|(_, character)| !is_python_word(*character))
+            .find(|(_, character)| !is_word_char(*character))
             .map_or(after.len(), |(at, _)| at);
         if length == 0 {
             rest = &rest[start + 1..];
@@ -321,7 +320,7 @@ pub(crate) fn origin_problem(
 ) -> Result<(), ConfigError> {
     let mut sources: HashMap<String, &str> = HashMap::new();
     for &(name, origin) in declared {
-        let origin: &str = python_strip(origin);
+        let origin: &str = str::trim(origin);
         if origin.is_empty() || origin.contains(QUALIFIED_NAME_SEPARATOR) {
             return Err(ConfigError::compile(format!(
                 "model '{model_name}': column '{name}' migrate_from must name one column of the \
@@ -356,7 +355,7 @@ pub(crate) fn chained_problem(
         .map(|&(name, _)| (python_lower(name), name))
         .collect();
     for &(name, origin) in declared {
-        if destinations.contains_key(&python_lower(python_strip(origin))) {
+        if destinations.contains_key(&python_lower(str::trim(origin))) {
             return Err(ConfigError::compile(format!(
                 "model '{model_name}': column '{name}' migrates from '{origin}', which itself \
                  declares migrate_from; chained or swapped column renames are not supported"

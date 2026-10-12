@@ -2,10 +2,8 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_ignorecase_key::python_ignorecase_key;
+use sqlbuild_core::text::main::ignorecase_key::ignorecase_key;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 const DOLLAR: char = '$';
 const QUOTE_CHARACTERS: [char; 2] = ['"', '`'];
@@ -14,7 +12,7 @@ const OPEN_PAREN: char = '(';
 
 /// One character of `[\w$]`.
 fn identifier_character(character: char) -> bool {
-    character == DOLLAR || is_python_word(character)
+    character == DOLLAR || is_word_char(character)
 }
 
 /// The start of `[A-Za-z_]`.
@@ -39,7 +37,7 @@ pub(crate) fn identifier_tokens(sql: &str) -> Vec<String> {
             index += 1;
         }
         let token: String = characters[start..index].iter().collect();
-        let folded: String = python_casefold(&token);
+        let folded: String = str::to_lowercase(&token);
         if seen.insert(folded.clone()) {
             tokens.push(folded);
         }
@@ -53,7 +51,7 @@ fn ignorecase_at(text: &[char], at: usize, literal: &[char]) -> bool {
         && text[at..at + literal.len()]
             .iter()
             .zip(literal)
-            .all(|(left, right)| python_ignorecase_key(*left) == python_ignorecase_key(*right))
+            .all(|(left, right)| ignorecase_key(*left) == ignorecase_key(*right))
 }
 
 /// Whether no `[\w$]` character precedes `at`.
@@ -90,14 +88,14 @@ fn cte_header_end(text: &[char], at: usize) -> Option<usize> {
         index += 1;
     }
     let spaces: usize = index;
-    while index < text.len() && is_python_space(text[index]) {
+    while index < text.len() && char::is_whitespace(text[index]) {
         index += 1;
     }
     if index == spaces || !ignorecase_at(text, index, &AS_KEYWORD) {
         return None;
     }
     index += AS_KEYWORD.len();
-    while index < text.len() && is_python_space(text[index]) {
+    while index < text.len() && char::is_whitespace(text[index]) {
         index += 1;
     }
     (text.get(index) == Some(&OPEN_PAREN)).then_some(index + 1)

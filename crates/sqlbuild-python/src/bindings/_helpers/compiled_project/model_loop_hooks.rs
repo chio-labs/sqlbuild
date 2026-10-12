@@ -15,7 +15,6 @@ use sqlbuild_attachments::audits::main::render_parameterized_sql::render_paramet
 use sqlbuild_attachments::audits::models::ParameterRenderStop;
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 
@@ -524,7 +523,7 @@ impl<'py> HookRun<'_, '_, 'py> {
 
 /// Whether Python's `str.strip()` leaves nothing.
 fn blank(statement: &str) -> bool {
-    statement.chars().all(is_python_space)
+    statement.chars().all(char::is_whitespace)
 }
 
 /// `\$\{[^}]+\}`: a `${` followed by at least one character before its closing `}`.

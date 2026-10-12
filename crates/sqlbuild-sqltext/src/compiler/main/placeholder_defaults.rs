@@ -1,6 +1,6 @@
 //! Python's `substitute_placeholder_defaults`.
 
-use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 use crate::constants::PLACEHOLDER_PREFIX;
 
@@ -38,5 +38,5 @@ pub fn placeholder_defaults(sql: &str, placeholders: &[(String, String)]) -> Str
 
 /// A character Python's `\w` matches.
 fn is_word(character: char) -> bool {
-    is_python_word(character)
+    is_word_char(character)
 }

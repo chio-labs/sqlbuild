@@ -1,7 +1,5 @@
 //! Unique keys one relation declares through its incremental config and column audits.
 
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-
 use crate::sql_quality::constants::{
     INCREMENTAL_MATERIALIZATION, KEY_PRESERVING_STRATEGIES, KEYED_DELETE_INSERT_STRATEGY,
     MICROBATCH_MODE, NOT_NULL_AUDIT, UNIQUE_AUDIT,
@@ -30,7 +28,7 @@ pub(crate) fn non_null_unique_columns(relation: &DeclaredRelation) -> Vec<String
             unique.push(column.name.clone());
         }
         if has_audit(column, NOT_NULL_AUDIT) || column.not_nullable {
-            not_null.push(python_casefold(&column.name));
+            not_null.push(str::to_lowercase(&column.name));
         }
     }
     for (definition, argument) in &relation.audits {
@@ -38,12 +36,12 @@ pub(crate) fn non_null_unique_columns(relation: &DeclaredRelation) -> Vec<String
             continue;
         };
         if definition == NOT_NULL_AUDIT {
-            not_null.push(python_casefold(argument));
+            not_null.push(str::to_lowercase(argument));
         } else if definition == UNIQUE_AUDIT {
             unique.push(argument.clone());
         }
     }
-    unique.retain(|column| not_null.contains(&python_casefold(column)));
+    unique.retain(|column| not_null.contains(&str::to_lowercase(column)));
     unique
 }
 

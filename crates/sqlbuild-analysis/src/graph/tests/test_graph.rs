@@ -1,8 +1,8 @@
-use crate::graph::_helpers::close_matches::close_matches;
 use crate::graph::tests::helpers::{failure, keys, resolved};
 use crate::graph::tests::test_types::{
     CloseMatchTestCase, SelectorErrorTestCase, SelectorTestCase,
 };
+use sqlbuild_core::text::main::close_matches::close_matches;
 
 #[test]
 fn given_selectors_when_resolving_then_keys_match_python() {

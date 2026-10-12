@@ -1,7 +1,5 @@
 //! Where a SQL-authored file's statement header starts.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::resource_diagnostics::constants::{
     BLOCK_COMMENT_END, BLOCK_COMMENT_START, LINE_COMMENT_START, UNCLOSED_BLOCK_COMMENT,
 };
@@ -10,7 +8,7 @@ use crate::resource_diagnostics::constants::{
 pub fn header_code_offset(contents: &str) -> Result<usize, &'static str> {
     let mut rest: &str = contents;
     loop {
-        rest = rest.trim_start_matches(is_python_space);
+        rest = rest.trim_start_matches(char::is_whitespace);
         if let Some(comment) = rest.strip_prefix(LINE_COMMENT_START) {
             rest = comment.find('\n').map_or("", |end| &comment[end + 1..]);
         } else if rest.starts_with(BLOCK_COMMENT_START) {

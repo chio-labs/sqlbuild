@@ -34,7 +34,7 @@ _TEXTS: tuple[object, ...] = (
     "   ",
     "\u00a0",
     "mail@example.com",
-    "\x1c",
+    "\u3000",
     1,
     True,
     None,

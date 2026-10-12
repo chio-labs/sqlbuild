@@ -2,8 +2,7 @@
 
 use crate::_helpers::suggestions::unsupported_keys_help;
 use crate::models::{DiscoveryFailure, FailureKind};
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 /// The facts of one header that declares keys outside its supported set.
 pub(crate) struct UnsupportedKeys<'a> {
@@ -84,7 +83,7 @@ fn skip_then_key(
     let KeySearch { header, key } = *search;
     let length = header.len();
     if position < length {
-        if is_python_space(header[position])
+        if char::is_whitespace(header[position])
             && let Some(offset) = found[position + 1]
         {
             return Some(offset);
@@ -123,9 +122,9 @@ fn word_boundary(text: &[char], position: usize) -> bool {
     let before = position
         .checked_sub(1)
         .and_then(|index| text.get(index))
-        .is_some_and(|character| is_python_word(*character));
+        .is_some_and(|character| is_word_char(*character));
     let after = text
         .get(position)
-        .is_some_and(|character| is_python_word(*character));
+        .is_some_and(|character| is_word_char(*character));
     before != after
 }

@@ -2,7 +2,6 @@
 
 use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions};
 use serde_json::{Map, Value, json};
-use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::relation_names::constants::{
     CATALOG_KEY, CREATE_TABLE_KEY, CTE_ALIAS_KEY, CTE_LIST_KEY, GENERIC_DIALECT,
@@ -34,7 +33,7 @@ pub(crate) fn extracted_relations(
         let relations = nodes.iter().filter_map(|node| table_name(node));
         for relation in relations {
             let unqualified: bool = relation.schema.is_none() && relation.database.is_none();
-            if unqualified && cte_names.contains(&python_casefold(&relation.name)) {
+            if unqualified && cte_names.contains(&str::to_lowercase(&relation.name)) {
                 continue;
             }
             if !extracted.relations.contains(&relation) {
@@ -120,7 +119,7 @@ fn cte_names(node: &Map<String, Value>) -> Vec<String> {
     };
     ctes.iter()
         .filter_map(|cte| identifier(cte.as_object()?.get(CTE_ALIAS_KEY)))
-        .map(python_casefold)
+        .map(str::to_lowercase)
         .collect()
 }
 
@@ -131,5 +130,5 @@ fn temporary_name(node: &Map<String, Value>) -> Option<String> {
         return None;
     }
     let table: &Map<String, Value> = create.get(NAME_KEY)?.as_object()?;
-    identifier(table.get(NAME_KEY)).map(python_casefold)
+    identifier(table.get(NAME_KEY)).map(str::to_lowercase)
 }

@@ -9,7 +9,7 @@ use crate::semantic_checks::_helpers::explanation::columns::{closest_column, ord
 use crate::semantic_checks::_helpers::explanation::messages::{
     comparison_help, missing_column, pattern, semantic_help, sentence_message, type_words,
 };
-use crate::semantic_checks::_helpers::sql_text::python_regex::{ignorecase_word, python_regex};
+use crate::semantic_checks::_helpers::sql_text::patterns::{compile_pattern, ignorecase_word};
 use crate::semantic_checks::_helpers::sql_text::text::{
     LineIndex, byte_offset, code_point_offset, last_newline_before, newlines_before, prefix, upper,
 };
@@ -23,23 +23,23 @@ use crate::semantic_checks::models::{CompletedDiagnostic, SemanticFailure, Seman
 const OUTSIDE_AUTHORED_LINES: &str = "a diagnostic line outside the model's authored SQL";
 
 static QUALIFIER: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| python_regex(QUALIFIER_PATTERN));
+    LazyLock::new(|| compile_pattern(QUALIFIER_PATTERN));
 static BINARY: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     let operand: String = operand_template();
-    python_regex(&format!(
+    compile_pattern(&format!(
         r"(?P<left>{operand}){{S}}*(?:>=|<=|<>|!=|=|>|<|\+|\*|/|-){{S}}*(?P<right>{operand})"
     ))
 });
 static OPERAND_AT: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| python_regex(&format!(r"\A{}", operand_template())));
+    LazyLock::new(|| compile_pattern(&format!(r"\A{}", operand_template())));
 static TEMPORAL_OPERAND: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| python_regex(&temporal_words(TEMPORAL_OPERAND_PATTERN)));
+    LazyLock::new(|| compile_pattern(&temporal_words(TEMPORAL_OPERAND_PATTERN)));
 static INTEGER_OPERAND: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| python_regex(INTEGER_OPERAND_PATTERN));
+    LazyLock::new(|| compile_pattern(INTEGER_OPERAND_PATTERN));
 static DECIMAL_OPERAND: LazyLock<Result<Regex, String>> =
-    LazyLock::new(|| python_regex(DECIMAL_OPERAND_PATTERN));
+    LazyLock::new(|| compile_pattern(DECIMAL_OPERAND_PATTERN));
 
-/// `TIMESTAMP` and `DATE` in a template, as Python's `re.IGNORECASE` matches them.
+/// `TIMESTAMP` and `DATE` in a template, matched case-insensitively.
 fn temporal_words(template: &str) -> String {
     template
         .replace("{TIMESTAMP}", &ignorecase_word("TIMESTAMP"))

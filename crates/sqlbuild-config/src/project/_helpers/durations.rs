@@ -3,7 +3,7 @@
 use crate::models::Natural;
 use crate::project::constants::PYTHON_INT_MAX_STR_DIGITS;
 use crate::project::errors::ConfigFailure;
-use sqlbuild_core::text::main::python_decimal_value::python_decimal_value;
+use sqlbuild_core::text::main::decimal_digit_value::decimal_digit_value;
 
 const UNITS: [&str; 6] = ["y", "mo", "d", "h", "m", "s"];
 const DAY_INDEX: usize = 2;
@@ -51,7 +51,7 @@ fn leading_digits(text: &str) -> (Natural, usize, usize) {
     let mut values: Vec<u32> = Vec::new();
     let mut length = 0;
     for character in text.chars() {
-        let Some(value) = python_decimal_value(character) else {
+        let Some(value) = decimal_digit_value(character) else {
             break;
         };
         values.push(value);

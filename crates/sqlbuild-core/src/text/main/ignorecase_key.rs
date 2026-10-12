@@ -1,7 +1,7 @@
 //! The key two characters share when matched case-insensitively.
 
 /// `character` lowercased, when that is a single character.
-pub fn python_ignorecase_key(character: char) -> char {
+pub fn ignorecase_key(character: char) -> char {
     if character.is_ascii() {
         return character.to_ascii_lowercase();
     }

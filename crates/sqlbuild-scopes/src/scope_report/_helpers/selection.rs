@@ -16,7 +16,7 @@ use crate::scope_report::models::{
     DeclarationReport, DiagnosticFacts, Provenance, ReportFilters, ScopeChainEntry, ScopeSection,
 };
 use sqlbuild_core::posix_path::main::posix_parent::posix_parent;
-use sqlbuild_core::text::main::python_fnmatchcase::python_fnmatchcase;
+use sqlbuild_core::text::main::glob_match::glob_match;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Declarations at input positions with what each carries: a provenance or a hidden reason.
@@ -73,8 +73,7 @@ fn defined_beneath<T>(
 
 /// Whether the glob matches the declaration's name or qualified identity.
 pub(crate) fn glob_matches(record: &DeclarationRecord, glob: &str) -> bool {
-    python_fnmatchcase(&record.identity.name, glob)
-        || python_fnmatchcase(&declaration_text(record), glob)
+    glob_match(&record.identity.name, glob) || glob_match(&declaration_text(record), glob)
 }
 
 /// `(format_identity, path)`: the order reports list declarations in.

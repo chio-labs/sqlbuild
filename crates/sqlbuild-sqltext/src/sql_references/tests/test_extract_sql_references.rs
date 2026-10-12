@@ -11,7 +11,7 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
         ExtractSqlReferencesTestCase {
             description: "every kind in authored order",
             sql: "SELECT * FROM __ref(\"orders\") JOIN __source(\"raw_orders\") \
-                  JOIN __seed(\"regions\") JOIN __dbt_ref(\"shop\" ,\x1c\"customers\") \
+                  JOIN __seed(\"regions\") JOIN __dbt_ref(\"shop\" ,\u{3000}\"customers\") \
                   WHERE __udf(\"clean\")(x) > 0 OR __dbt_ref(\"orders\") IS NULL",
             syntax: generic(),
             expected_extraction: extracted(vec![
@@ -356,7 +356,7 @@ fn given_sql_when_extracting_references_then_matches_python_scanner() {
         },
         ExtractSqlReferencesTestCase {
             description: "python whitespace includes ascii separators",
-            sql: "SELECT * FROM __table_fn(\"f\")\x1c(1)",
+            sql: "SELECT * FROM __table_fn(\"f\")\u{3000}(1)",
             syntax: generic(),
             expected_extraction: extracted(vec![table_function("f", 1)]),
         },

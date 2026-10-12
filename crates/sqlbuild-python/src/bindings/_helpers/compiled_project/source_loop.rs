@@ -5,7 +5,6 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::compiled_project::model_loop::{
@@ -471,8 +470,8 @@ pub(crate) fn parse_checked(
 
 /// `_render_source_expression_relation`: the expression as a table factor.
 fn expression_relation(expression: &str) -> String {
-    let trimmed: &str = python_strip(expression);
-    let stripped: &str = python_strip(trimmed.strip_suffix(';').unwrap_or(trimmed));
+    let trimmed: &str = str::trim(expression);
+    let stripped: &str = str::trim(trimmed.strip_suffix(';').unwrap_or(trimmed));
     if stripped.starts_with('(') {
         return stripped.to_owned();
     }

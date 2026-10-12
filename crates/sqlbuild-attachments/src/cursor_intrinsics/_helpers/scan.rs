@@ -1,7 +1,5 @@
 //! The cursor intrinsic scan over quotes, comments, identifier boundaries and calls.
 
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 use crate::sql_lexing::main::python_non_code_end::python_non_code_end;
@@ -58,7 +56,7 @@ pub(crate) fn step(sql: &str, index: usize) -> ScanStep {
 pub(crate) fn call_scan(sql: &str, name_end: usize) -> CallScan {
     let mut open: usize = name_end;
     while let Some(character) = sql[open..].chars().next() {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         open += character.len_utf8();
@@ -83,7 +81,7 @@ pub(crate) fn call_scan(sql: &str, name_end: usize) -> CallScan {
             b')' => {
                 depth -= 1;
                 if depth == 0 {
-                    return if sql[open + 1..index].chars().all(is_python_space) {
+                    return if sql[open + 1..index].chars().all(char::is_whitespace) {
                         CallScan::Called(index)
                     } else {
                         CallScan::Arguments
@@ -99,7 +97,7 @@ pub(crate) fn call_scan(sql: &str, name_end: usize) -> CallScan {
 
 /// Python's `isalnum() or _` for a neighbouring character; the SQL edge continues nothing.
 fn continues_identifier(character: Option<char>) -> bool {
-    character.is_some_and(|character| character == '_' || is_python_alnum(character))
+    character.is_some_and(|character| character == '_' || char::is_alphanumeric(character))
 }
 
 /// Python's `any(name in sql for name in _INTRINSIC_NAMES)`.

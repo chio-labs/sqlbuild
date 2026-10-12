@@ -1,7 +1,5 @@
 //! Contract adoption's MODEL header edit, as Python's `edit_model` plans it.
 
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::name_patterns::main::compile_name_pattern::compile_name_pattern;
 use sqlbuild_sqltext::compiler::models::{HeaderColumnSpan, HeaderColumns};
 
@@ -75,11 +73,11 @@ pub(crate) fn fixed_physical_columns(
     let fixed: Vec<String> = request
         .columns
         .iter()
-        .map(|column| python_casefold(&column.name))
+        .map(|column| str::to_lowercase(&column.name))
         .collect();
     let mut kept: Vec<PhysicalColumn> = Vec::new();
     for column in &request.physical_columns {
-        if fixed.contains(&python_casefold(&column.0))
+        if fixed.contains(&str::to_lowercase(&column.0))
             || !family_member(&request.dynamic_patterns, &column.0)?
         {
             kept.push(column.clone());
@@ -132,7 +130,7 @@ fn declared_column_edit(
     match &column.declared_type {
         None => {
             let metadata = slice(text, span.metadata_start, span.metadata_end);
-            let separator = if python_strip(&metadata).is_empty() {
+            let separator = if str::trim(&metadata).is_empty() {
                 ""
             } else {
                 ", "
@@ -144,7 +142,7 @@ fn declared_column_edit(
             )))
         }
         Some(declared)
-            if overwrite && python_casefold(declared) != python_casefold(physical_type) =>
+            if overwrite && str::to_lowercase(declared) != str::to_lowercase(physical_type) =>
         {
             declared_type_span(text, (span.metadata_start, span.metadata_end), declared)
                 .map(|replacement| Some(edit(text, replacement, render_model_type(physical_type))))
@@ -170,12 +168,12 @@ fn declared_edits(
         request
             .columns
             .iter()
-            .map(|column| (python_casefold(&column.name), column)),
+            .map(|column| (str::to_lowercase(&column.name), column)),
     );
     let physical_by_name = python_dict(
         physical
             .iter()
-            .map(|column| (python_casefold(&column.0), column)),
+            .map(|column| (str::to_lowercase(&column.0), column)),
     );
     let mut edits: Vec<TextEdit> = Vec::new();
     for (name, column) in &declared {
@@ -214,12 +212,12 @@ fn additions(
     let declared: Vec<String> = request
         .columns
         .iter()
-        .map(|column| python_casefold(&column.name))
+        .map(|column| str::to_lowercase(&column.name))
         .collect();
     let indentation = column_indentation(text, columns.body_start);
     let mut rendered = String::new();
     for (name, column_type) in physical {
-        if !declared.contains(&python_casefold(name)) {
+        if !declared.contains(&str::to_lowercase(name)) {
             rendered.push_str(&format!(
                 "\n{indentation}{name} (type {})",
                 render_model_type(column_type)
