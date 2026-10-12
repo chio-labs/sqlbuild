@@ -57,7 +57,7 @@ def _order_label(header: str) -> dict[str, str]:
     return {_ORDER_LABEL_PATH: f"FUNCTION (\n{header});\n\nUPPER(p_status)\n"}
 
 
-def _schema(name: str, extends: str | None, column: str) -> str:
+def _schema(*, name: str, extends: str | None, column: str) -> str:
     parent: str = "" if extends is None else f"extends {extends}, "
     return f"SCHEMA (name {name}, {parent}columns ({column} (type INTEGER)));\n"
 
@@ -72,15 +72,15 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
             expected_message=(
                 "Schema 'order_row' in schemas/orders.sql extends unknown schema 'base_row'"
             ),
-            files={_SCHEMA_PATH: _schema("order_row", "base_row", "id")},
+            files={_SCHEMA_PATH: _schema(name="order_row", extends="base_row", column="id")},
         ),
         failure_case(
             name="model-schema-inheritance-cycle",
             expected_code="P001",
             expected_message="Model schema inheritance cycle: order_row -> base_row -> order_row",
             files={
-                _SCHEMA_PATH: _schema("order_row", "base_row", "id")
-                + _schema("base_row", "order_row", "amount")
+                _SCHEMA_PATH: _schema(name="order_row", extends="base_row", column="id")
+                + _schema(name="base_row", extends="order_row", column="amount")
             },
         ),
         failure_case(
@@ -91,8 +91,8 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
                 "schemas/orders.sql:1; column overrides are not supported"
             ),
             files={
-                _SCHEMA_PATH: _schema("base_row", None, "id")
-                + _schema("order_row", "base_row", "ID")
+                _SCHEMA_PATH: _schema(name="base_row", extends=None, column="id")
+                + _schema(name="order_row", extends="base_row", column="ID")
             },
         ),
         failure_case(
