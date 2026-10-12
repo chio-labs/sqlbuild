@@ -1817,6 +1817,12 @@ def assemble_project_resource_facts(
     tuple[str, int, str, str, str | None, int | None] | None,
 ]: ...
 def check_native_explicit_references(request_json: str, /) -> str: ...
+def native_execution_gate_edges(
+    request_json: str, /
+) -> tuple[
+    list[tuple[str, tuple[str, str], tuple[str, str], tuple[str, str]]],
+    list[tuple[str, tuple[str, str], tuple[str, str], str, str | None]],
+]: ...
 def schema_validation_rows(
     catalog: Any,
     dialect: str,

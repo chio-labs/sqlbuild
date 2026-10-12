@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.graph._helpers.audit_gates import attached_audit_gate_edges_impl
+from sqlbuild.compiler.graph._helpers.execution_gates import attached_audit_gate_edges_impl
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge
 
 
