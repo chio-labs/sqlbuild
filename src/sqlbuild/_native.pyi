@@ -68,6 +68,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.spec.contracts.models import (
+    DefaultsConfig,
     LocalConfig,
     ProjectConfig,
     ScenarioConfig,
@@ -880,6 +881,9 @@ def parse_schema_document(
 def parse_sources_document(
     loaded: object, path: str, classes: dict[str, object]
 ) -> tuple[SourceEntry, ...]: ...
+def externally_described_models(
+    inputs: DiscoveredProjectInputs, model_schemas: dict[str, ModelSchemaDeclaration]
+) -> list[Path]: ...
 def resolve_required_columns(
     query_sql: str, references: list[tuple[str, str]], dialect: str | None
 ) -> list[tuple[str, str, str]]: ...
@@ -1182,7 +1186,7 @@ def expand_effective_vars(
 class NativeModelConfigBuilder:
     def __init__(
         self,
-        layers: tuple[dict[str, object], dict[str, dict[str, object]], tuple[type, ...]],
+        layers: tuple[DefaultsConfig, dict[str, dict[str, object]], tuple[type, ...]],
         sources: tuple[dict[str, object], object],
         target: tuple[tuple[str | None, str], tuple[str | None, str | None] | None],
     ) -> None: ...

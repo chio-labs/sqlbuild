@@ -27,6 +27,7 @@ use crate::bindings::_helpers::model_config::config_templates::{
     PythonHost, Stop, TemplateSources, expanded, template_error,
 };
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
+use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
 
 const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 /// Hook keys in the sorted order `validate_model_hook_config` checks them.
@@ -35,6 +36,8 @@ const MODEL_CONFIG_LABEL: &str = "model config";
 const ENVIRONMENT_DATABASE_LABEL: &str = "environment database";
 const ENVIRONMENT_SCHEMA_LABEL: &str = "environment schema";
 const TAGS_KEY: &str = "tags";
+const NATIVE_CONFIG_ERROR_MODULE: &str = "sqlbuild.compiler.model_config.main._native_config_error";
+const NATIVE_CONFIG_ERROR_FUNCTION: &str = "native_config_error";
 const ROW_DIFF_EXCLUDE_COLUMNS_KEY: &str = "row_diff_exclude_columns";
 const ROW_DIFF_TOLERANCES_KEY: &str = "row_diff_tolerances";
 const AUDIT_OVERRIDE_SECTIONS: [&str; 2] = ["by_type", "by_column"];
@@ -125,12 +128,13 @@ type TargetInputs<'py> = (
 impl NativeModelConfigBuilder {
     #[new]
     fn new(
-        layers: (Bound<'_, PyDict>, Bound<'_, PyDict>, Bound<'_, PyTuple>),
+        layers: (Bound<'_, PyAny>, Bound<'_, PyDict>, Bound<'_, PyTuple>),
         sources: (Bound<'_, PyDict>, Bound<'_, PyAny>),
         target: TargetInputs<'_>,
     ) -> PyResult<Self> {
         let (run, target_namespace) = target;
         let (defaults, path_defaults, hook_entry_types) = layers;
+        let defaults: Bound<'_, PyDict> = project_defaults_mapping(&defaults)?;
         let path_keys = path_defaults
             .keys()
             .iter()
@@ -568,6 +572,33 @@ impl<'py> Expansion<'_, 'py> {
         }
         Ok(overridden)
     }
+}
+
+/// `merged_layer`, with a config error raised as the Python stage raises it.
+pub(crate) fn layered_values<'py>(
+    py: Python<'py>,
+    base: &Bound<'py, PyDict>,
+    overlay: &Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyDict>> {
+    merged_layer(py, base, overlay).map_err(|halt| match halt {
+        Halt::Error(error) => error,
+        Halt::Config(error) => raised_config_error(py, error),
+    })
+}
+
+/// The Python exception `native_config_error` makes of a native config error.
+pub(crate) fn raised_config_error(py: Python<'_>, error: ConfigError) -> PyErr {
+    let raised = || -> PyResult<PyErr> {
+        let error: Py<NativeConfigError> = native_config_error(py, error)?;
+        let arguments: Bound<'_, PyDict> = PyDict::new(py);
+        arguments.set_item("error", error)?;
+        let exception: Bound<'_, PyAny> = py
+            .import(NATIVE_CONFIG_ERROR_MODULE)?
+            .getattr(NATIVE_CONFIG_ERROR_FUNCTION)?
+            .call((), Some(&arguments))?;
+        Ok(PyErr::from_value(exception))
+    };
+    raised().unwrap_or_else(|error| error)
 }
 
 /// Merge `overlay` over a copy of `base` as `_merged_with_tag_union` does.

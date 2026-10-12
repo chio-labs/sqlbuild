@@ -5,9 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile._helpers.attachment.model_config import (
-    has_resolved_model_description,
-)
 from sqlbuild.compiler.discovery.main._model_description_inputs import (
     discover_model_description_inputs,
 )
@@ -27,13 +24,4 @@ class ModelDescriptionResolution:
         model_schemas: dict[str, ModelSchemaDeclaration] = _native.public_model_schema_index(
             discovered_inputs
         )
-        return frozenset(
-            model_file.file_path
-            for model_file in discovered_inputs.model_files
-            if has_resolved_model_description(
-                model_file=model_file,
-                defaults=discovered_inputs.project_config.defaults,
-                path_defaults=discovered_inputs.project_config.path_defaults,
-                model_schemas=model_schemas,
-            )
-        )
+        return frozenset(_native.externally_described_models(discovered_inputs, model_schemas))
