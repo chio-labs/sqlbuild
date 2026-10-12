@@ -23,7 +23,11 @@ pub(crate) fn construct_int(text: &str) -> Result<ConfigValue, ConfigError> {
         return Ok(ConfigValue::Integer(value));
     }
     let negative = text.starts_with('-');
-    let digits = text.trim_start_matches(['+', '-']).trim_start_matches('0');
+    let unsigned = text.strip_prefix(['+', '-']).unwrap_or(text);
+    if unsigned.is_empty() || !unsigned.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(construct_error(format!("{text:?} is not an integer")));
+    }
+    let digits = unsigned.trim_start_matches('0');
     if digits.len() > MAX_INTEGER_DIGITS {
         return Err(ConfigError::new(
             ConfigErrorKind::Unsupported,

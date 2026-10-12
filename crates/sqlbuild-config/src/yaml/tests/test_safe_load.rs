@@ -239,6 +239,16 @@ fn given_yaml_documents_when_loading_then_values_follow_the_core_schema() {
             expected_value: Err(ConfigErrorKind::Construct),
         },
         SafeLoadTestCase {
+            description: "an explicit integer tag on text that is not a number is rejected",
+            text: "a: !!int abc",
+            expected_value: Err(ConfigErrorKind::Construct),
+        },
+        SafeLoadTestCase {
+            description: "an explicit integer tag on a lone sign is rejected",
+            text: "a: !!int '-'",
+            expected_value: Err(ConfigErrorKind::Construct),
+        },
+        SafeLoadTestCase {
             description: "unknown tags are unsupported",
             text: "a: !custom 1",
             expected_value: Err(ConfigErrorKind::Unsupported),
