@@ -226,7 +226,7 @@ def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_ma
         repeated_validation: Mock = Mock(
             side_effect=AssertionError("cold compile repeated fused validation")
         )
-        patch.setattr(native, "validate_sql_with_schemas_json", repeated_validation)
+        patch.setattr(native, "schema_validation_rows", repeated_validation)
         assert main(args) == 0
         repeated_validation.assert_not_called()
     capsys.readouterr()
@@ -234,7 +234,7 @@ def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_ma
         forbidden: Mock = Mock(
             side_effect=AssertionError("warm compile repeated native semantic work")
         )
-        patch.setattr(native, "validate_sql_with_schemas_json", forbidden)
+        patch.setattr(native, "schema_validation_rows", forbidden)
         patch.setattr(native, "analyze_project_queries_compact_json", forbidden)
         assert main(args) == 0
         forbidden.assert_not_called()

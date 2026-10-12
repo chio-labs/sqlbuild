@@ -24,6 +24,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 const ANALYSIS_WORKERS: usize = 4;
 const ANALYSIS_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+const DEFAULT_BINDING_MESSAGE: &str = "SQL binding failed";
 
 impl ProjectCatalog {
     /// Map inferred column types onto the binding names the query projects, in column order.
@@ -198,6 +199,32 @@ impl ProjectCatalog {
                 "options": self.options, "quoted_ignore_case": self.quoted_ignore_case}));
         }
         serde_json::to_string(&payloads).map_err(|error| error.to_string())
+    }
+
+    /// Validate each request on its own schema, as `validations_json` does, as diagnostic rows.
+    pub fn schema_validation_rows(
+        &self,
+        dialect: &str,
+        requests: Vec<BindingRequest>,
+    ) -> Result<Vec<Vec<DiagnosticRow>>, String> {
+        let sqls: Vec<String> = requests.iter().map(|request| request.0.clone()).collect();
+        let payload: String = self.validation_payload(requests)?;
+        let results: Vec<ValidationResult> =
+            serde_json::from_str(&validation::validations_json(&payload)?)
+                .map_err(|error| error.to_string())?;
+        if results.len() != sqls.len() {
+            return Err(
+                "native SQL schema validation returned an invalid batch response".to_owned(),
+            );
+        }
+        sqls.iter()
+            .zip(results)
+            .map(|(sql, result)| {
+                let rows: Vec<DiagnosticRow> =
+                    result.errors.into_iter().map(messaged_row).collect();
+                diagnostics::binding_diagnostics(sql, dialect, rows)
+            })
+            .collect()
     }
 
     /// Resolve a compact batch now; the job runs later while the catalog keeps changing.
@@ -584,6 +611,15 @@ impl ProjectCatalog {
             .any(|error| error.severity == polyglot_sql::ValidationSeverity::Error);
         Ok(result)
     }
+}
+
+/// The diagnostic row of `error`, naming the failure when the parser gives no message.
+fn messaged_row(error: ValidationError) -> DiagnosticRow {
+    let mut row: DiagnosticRow = diagnostic_row(error);
+    if row.1.is_empty() {
+        DEFAULT_BINDING_MESSAGE.clone_into(&mut row.1);
+    }
+    row
 }
 
 pub(super) fn diagnostic_row(error: ValidationError) -> DiagnosticRow {

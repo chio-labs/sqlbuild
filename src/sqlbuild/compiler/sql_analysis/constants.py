@@ -21,7 +21,6 @@ BINDING_UNKNOWN_TABLE_INTERNAL_CODE: str = "B000"
 TYPE_CHECKED_DIALECTS: frozenset[str] = frozenset({"duckdb", "snowflake", "postgresql", "bigquery"})
 SQL_QUOTED_IDENTIFIER_DELIMITER: str = '"'
 CASE_SENSITIVE_BINDING_DIALECTS: frozenset[str] = frozenset({"snowflake", "postgresql"})
-BINDING_SEVERITIES: frozenset[str] = frozenset({"error", "warning"})
 NATIVE_DIALECT_ALIASES: dict[str, str] = {
     "postgres": "postgresql",
     "motherduck": "duckdb",
