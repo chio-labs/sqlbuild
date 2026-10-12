@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     CENTS_MACRO,
     CUSTOMER_DECLARATIONS,
+    ORDER_AMOUNT_CHECK,
     ORDER_EXPORT,
     ORDER_SHAPE,
     ORDERS_MACRO,
@@ -165,6 +166,14 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             expected_status="refused",
             expected_reason="would take macro:to_dollars along, which must stay in",
             expected_paths=("models/staging/_sqlbuild/_macros/cents.py",),
+        ),
+        RefusedRefactorE2ETestCase(
+            description="column named in Python SQL text needs a manual check",
+            command=("rename", "column:stg_orders.amount", "revenue"),
+            extra_files=ORDER_AMOUNT_CHECK,
+            expected_status="refused",
+            expected_reason="Python SQL may read column amount of stg_orders",
+            expected_paths=("python/checks/order_amounts.py",),
         ),
         RefusedRefactorE2ETestCase(
             description="rename onto an existing model",

@@ -1227,6 +1227,9 @@ def contract_model_edit(
 def contract_source_edit(
     row: tuple[str, str, str, list[tuple[str, str | None]], list[tuple[str, str]], bool], /
 ) -> tuple[str | None, str | None, str | None]: ...
+def python_string_locations(
+    contents: str, names: list[str], context: str | None
+) -> list[tuple[int, int]]: ...
 def resource_identity_suggestion(
     name: str, private_identity: bool, /
 ) -> tuple[str, str] | None: ...

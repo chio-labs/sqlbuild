@@ -1,13 +1,11 @@
-"""Python `ast` scan for strings that name a renamed model or column."""
+"""Project Python files and the strings in them that name a renamed model or column."""
 
 from __future__ import annotations
 
-import ast
-import re
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.refactoring.constants import IDENTIFIER_CHARACTERS, SQL_LIKE_PATTERN
 from sqlbuild.compiler.refactoring.models import ManualLocation
 
 
@@ -37,38 +35,10 @@ def string_locations(
     """Return the string constants of one Python file that name a renamed model or column."""
 
     try:
-        tree: ast.Module = ast.parse((project_dir / relative_path).read_text(encoding="utf-8"))
-    except (OSError, SyntaxError, UnicodeError):
+        contents: str = (project_dir / relative_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
         return ()
-    locations: list[ManualLocation] = []
-    node: ast.AST
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
-            continue
-        if _flags(value=node.value, names=names, context=context):
-            locations.append(
-                ManualLocation(
-                    path=relative_path.as_posix(),
-                    line=node.lineno,
-                    column=node.col_offset + 1,
-                    reason=reason,
-                )
-            )
-    return tuple(locations)
-
-
-def _flags(*, value: str, names: tuple[str, ...], context: str | None) -> bool:
-    sql_like: bool = bool(SQL_LIKE_PATTERN.search(value))
-    if context is not None and not (sql_like and _has_word(text=value, word=context)):
-        return False
-    return any(
-        value.strip().lower() == name.lower() or (sql_like and _has_word(text=value, word=name))
-        for name in names
+    return tuple(
+        ManualLocation(path=relative_path.as_posix(), line=line, column=column, reason=reason)
+        for line, column in _native.python_string_locations(contents, list(names), context)
     )
-
-
-def _has_word(*, text: str, word: str) -> bool:
-    pattern: re.Pattern[str] = re.compile(
-        rf"(?<![{IDENTIFIER_CHARACTERS}]){re.escape(word)}(?![{IDENTIFIER_CHARACTERS}])", re.I
-    )
-    return pattern.search(text) is not None

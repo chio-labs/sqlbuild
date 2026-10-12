@@ -139,6 +139,16 @@ ORDER_EXPORT: dict[str, str] = {
         '\n  materialized view,\n);\n\nSELECT *\nFROM __ref("fact_orders")\n'
     ),
 }
+ORDER_AMOUNT_CHECK: dict[str, str] = {
+    "python/checks/order_amounts.py": (
+        "from sqlbuild.checks import check\n"
+        "from sqlbuild.refs import model\n\n\n"
+        '@check(depends_on=model("stg_orders"))\n'
+        "def order_amounts_present(ctx):\n"
+        '    """Compare with: select amount from stg_orders."""\n'
+        "    return ctx.pass_()\n"
+    ),
+}
 CUSTOMER_DECLARATIONS: dict[str, str] = {
     "seeds/customers.csv": "customer_id,customer_name\n10,Ada\n11,Bo\n",
     "seeds/customers.yml": (

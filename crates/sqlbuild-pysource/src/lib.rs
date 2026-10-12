@@ -7,3 +7,4 @@ pub mod definition_locations;
 pub mod literal_sql;
 pub mod macro_modules;
 pub mod module_parse;
+pub mod string_literals;
