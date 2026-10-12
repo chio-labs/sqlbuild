@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 144838
+remaining_lines = 146314
 
 [[stays]]
 path = "executor"
@@ -103,16 +103,6 @@ note = "Loader runtime that runs inside user loaders."
 path = "integrations/ingestr"
 reason = "user-code"
 note = "Loader runtime that runs inside the executor load phase."
-
-[[stays]]
-path = "compiler/fingerprints"
-reason = "executor"
-note = "Fingerprint state-table reads and writes the executor and adapters use."
-
-[[stays]]
-path = "compiler/migrations/_helpers"
-reason = "executor"
-note = "Migration state-table SQL and decoding used by the executor."
 
 [[stays]]
 path = "compiler/python_nodes/_helpers/identity.py"
@@ -225,3 +215,7 @@ note = "A context without a stable key is not stored; no Python implementation r
 [[handled_native_errors]]
 location = "lint/_helpers/native_sql.py::_native_responses"
 note = "A native lint failure is reported as a lint error result, not recomputed in Python."
+
+[[handled_native_errors]]
+location = "rule_engine/_helpers/run/rules.py::_cached_sql_findings"
+note = "An undecodable cached finding is a cache miss; the rules run again natively."

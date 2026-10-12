@@ -206,6 +206,7 @@
 - Rust is moving to host compile, planning and non-warehouse CLI work. Python stays only for the modules listed in `python-boundary.toml`: user Python code, adapters, the executor and public Python APIs.
 - A migration change deletes the Python it replaces in the same pull request and lowers `remaining_lines`. Never keep a parallel Python implementation, and never fall back to Python after a native failure; surface the failure as an error.
 - Adding a `stays` or `handled_native_errors` entry, or raising `remaining_lines`, requires a stated reason in the pull request and explicit user approval. Difficulty or a small measured speed gain is not a reason.
+- Moving code into a path listed in `stays`, or behind a reviewed handler, is not migration progress; only code that now runs in Rust lowers `remaining_lines`.
 
 ## Bounded Review Process
 

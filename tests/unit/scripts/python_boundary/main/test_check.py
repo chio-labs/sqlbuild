@@ -26,6 +26,30 @@ RERAISED: str = (
     "    except ValueError as error:\n"
     "        raise RuntimeError(text) from error\n"
 )
+CONDITIONAL: str = (
+    "from sqlbuild._native import content_digest\n"
+    "\n"
+    "\n"
+    "def digest(text, strict):\n"
+    "    try:\n"
+    "        return content_digest([text])\n"
+    "    except ValueError:\n"
+    "        if strict:\n"
+    "            raise\n"
+    "        return None\n"
+)
+SUPPRESSED: str = (
+    "import contextlib\n"
+    "\n"
+    "from sqlbuild.compiler.graph.main._native_project_graph import native_project_graph\n"
+    "\n"
+    "\n"
+    "class Graph:\n"
+    "    def build(self, project):\n"
+    "        with contextlib.suppress(ValueError):\n"
+    "            return native_project_graph(project)\n"
+    "        return None\n"
+)
 STAYS: str = '[[stays]]\npath = "executor"\nreason = "executor"\nnote = "Runs plans."\n'
 REVIEWED: str = (
     '[[handled_native_errors]]\nlocation = "compiler/keys.py::digest"\nnote = "No key."\n'
@@ -86,6 +110,32 @@ def test_given_policy_matching_source_when_checking_then_passes(
             source_files={"compiler/keys.py": SWALLOWED},
             policy="remaining_lines = 8\n",
             expected_messages=("src/sqlbuild/compiler/keys.py:7 swallows a native failure",),
+        ),
+        PythonBoundaryTestCase(
+            description="a handler that raises only conditionally",
+            source_files={"compiler/keys.py": CONDITIONAL},
+            policy="remaining_lines = 10\n",
+            expected_messages=("src/sqlbuild/compiler/keys.py:7 swallows a native failure",),
+        ),
+        PythonBoundaryTestCase(
+            description="a native wrapper call inside suppress in a method",
+            source_files={"compiler/graph.py": SUPPRESSED},
+            policy=(
+                "remaining_lines = 10\n"
+                '[[handled_native_errors]]\nlocation = "compiler/graph.py::build"\nnote = "Old."\n'
+            ),
+            expected_messages=(
+                "src/sqlbuild/compiler/graph.py:8 swallows a native failure",
+                "'compiler/graph.py::build' no longer matches any handler",
+            ),
+        ),
+        PythonBoundaryTestCase(
+            description="a staying path escapes the source root",
+            source_files={"compiler/plan.py": "a = 1\n"},
+            policy=(
+                'remaining_lines = 0\n[[stays]]\npath = ".."\nreason = "executor"\nnote = "No."\n'
+            ),
+            expected_messages=("stays entry '..' must name a module under src/sqlbuild.",),
         ),
         PythonBoundaryTestCase(
             description="a reviewed handler no longer exists",

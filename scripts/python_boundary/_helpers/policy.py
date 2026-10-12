@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from scripts.python_boundary.constants import SOURCE_ROOT, STAY_REASONS
+from scripts.python_boundary.constants import ESCAPING_PATH_PARTS, SOURCE_ROOT, STAY_REASONS
 from scripts.python_boundary.models import BoundaryPolicy, ReviewedNativeHandler, StayEntry
 
 
@@ -44,7 +44,10 @@ def get_policy_errors(*, root: Path, policy: BoundaryPolicy) -> tuple[str, ...]:
         if entry.path in seen:
             errors.append(f"stays lists {entry.path!r} more than once.")
         seen.add(entry.path)
-        if not (source / entry.path).exists():
+        parts: tuple[str, ...] = Path(entry.path).parts
+        if not parts or Path(entry.path).is_absolute() or set(parts) & ESCAPING_PATH_PARTS:
+            errors.append(f"stays entry {entry.path!r} must name a module under {SOURCE_ROOT}.")
+        elif not (source / entry.path).exists():
             errors.append(f"stays entry {entry.path!r} does not exist under {SOURCE_ROOT}.")
         if entry.reason not in STAY_REASONS:
             errors.append(
