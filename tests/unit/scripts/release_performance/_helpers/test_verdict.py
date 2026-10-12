@@ -289,11 +289,7 @@ def test_given_configured_command_when_judging_time_then_its_own_limit_applies(
         ConfiguredRssLimitTestCase(
             description=f"{command.name} enforces its RSS allowance and time limits",
             command=command,
-            expected_rss_ratio={
-                "lineage hub downstream": 1.75,
-                "lineage rollup upstream": 1.75,
-                "dense compile (warm cache)": 1.45,
-            }.get(command.name, 1.25),
+            expected_rss_ratio=1.25,
         )
         for command in BENCHMARK_COMMANDS
     ],

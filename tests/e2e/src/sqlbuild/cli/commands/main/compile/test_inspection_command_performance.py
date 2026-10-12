@@ -37,8 +37,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 _MIB: int = 1024 * 1024
 _MODEL_COUNT: int = INSPECTION_BENCHMARK_MODEL_COUNT
-# Temporary 0.156.0 release memory exception (was 128 MiB); restore it after the release.
-_MODEL_LINEAGE_MAX_RSS_BYTES: int = 160 * _MIB
+_MODEL_LINEAGE_MAX_RSS_BYTES: int = 128 * _MIB
 
 
 @pytest.mark.performance
