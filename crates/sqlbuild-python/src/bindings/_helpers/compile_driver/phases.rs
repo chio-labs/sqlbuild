@@ -6,7 +6,7 @@ use pyo3::types::{PyBool, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with, imported};
 
-const MANIFEST_MODULE: &str = "sqlbuild.compiler.manifest.main.build_graph_manifest";
+const MANIFEST_MODULE: &str = "sqlbuild.compiler.manifest.main._build_graph_manifest";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const DAG_MODULE: &str = "sqlbuild.compiler.dag.main.build";
 const PYTHON_NODES_MODULE: &str = "sqlbuild.compiler.python_nodes.main.graph";

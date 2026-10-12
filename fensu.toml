@@ -248,16 +248,6 @@ symbols = ["ObservedConnection.execute", "ObservedConnection.executemany"]
 reason = "This proxy preserves DuckDB's positional connection execution protocol."
 
 [[targets.python.rule_exceptions]]
-rule = "FFL105"
-path = "src/sqlbuild/compiler/manifest/main/build_graph_manifest.py"
-reason = "The native compile driver imports this entry by module path; it has no Python importer."
-
-[[targets.python.rule_exceptions]]
-rule = "FFL105"
-path = "src/sqlbuild/compiler/profiling/main/collect.py"
-reason = "The native compile driver imports this entry by module path; it has no Python importer."
-
-[[targets.python.rule_exceptions]]
 rule = "FFL102"
 path = "src/sqlbuild/lint/_helpers/native.py"
 reason = "The lint layer reuses the compiler's MODEL() header parser; the compiler exposes no public facade for it."
