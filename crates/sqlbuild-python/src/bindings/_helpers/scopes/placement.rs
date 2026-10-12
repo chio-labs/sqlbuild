@@ -4,7 +4,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::PyResult;
 use sqlbuild_scopes::scope_index::models::{
     DeclarationIdentity, DeclarationKind, DeclarationRecord, OwnershipRoot, OwnershipRootKind,
-    QualifiedIdentity, ResourceIdentity, ResourceKind, ResourceRecord, ScopeKind,
+    QualifiedIdentity, ResourceIdentity, ResourceKind, ScopeKind,
 };
 
 pub(crate) type IdentityRow = (String, String);
@@ -12,7 +12,6 @@ pub(crate) type IdentityRow = (String, String);
 pub(crate) type QualifiedRow = (String, String, Option<IdentityRow>);
 /// An ownership root's path, kind and resource kind.
 pub(crate) type RootRow = (String, String, Option<String>);
-pub(crate) type ResourceRow = (IdentityRow, String, RootRow);
 /// Identity, path, line, column, scope, ownership root and owning path.
 pub(crate) type DeclarationRow = (
     QualifiedRow,
@@ -70,15 +69,6 @@ pub(crate) fn ownership_root((path, kind, resource_kind): RootRow) -> PyResult<O
 
 pub(crate) fn scope_kind(value: &str) -> PyResult<ScopeKind> {
     ScopeKind::parse(value).ok_or_else(|| invalid("scope"))
-}
-
-/// A resource row as its record.
-pub(crate) fn resource_record((identity, path, root): ResourceRow) -> PyResult<ResourceRecord> {
-    Ok(ResourceRecord {
-        identity: resource_identity(identity)?,
-        path,
-        ownership_root: ownership_root(root)?,
-    })
 }
 
 /// A declaration row as its record, without macro dependencies.

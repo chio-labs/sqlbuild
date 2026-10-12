@@ -4,7 +4,7 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
-use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use pyo3::{pyclass, pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::report_lookup::report_lookup;
@@ -12,14 +12,12 @@ use sqlbuild_scopes::scope_index::main::report_target::report_target;
 use sqlbuild_scopes::scope_index::main::resolve_report_visibility::resolve_report_visibility;
 use sqlbuild_scopes::scope_index::models::{
     GrantKind, IdentityFailure, KeyedGroups, RejectedPath, ReportLookup, ReportRecords,
-    ReportTarget, ResolvedVisibility, ResolvedVisible, ScopePathFailure, TargetFailure,
-    TargetMatch, VisibilityGroups,
+    ReportTarget, ResolvedVisibility, ResolvedVisible, ResourceRecord, ScopePathFailure,
+    TargetFailure, TargetMatch, VisibilityGroups,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::scopes::placement::{
-    QualifiedRow, ResourceRow, qualified_identity, resource_record,
-};
+use crate::bindings::_helpers::scopes::placement::{QualifiedRow, qualified_identity};
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, read_index, report_records, resource_identity_object, tuple_attribute,
 };
@@ -29,9 +27,9 @@ const TYPES_MODULE: &str = "types";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
 
 /// `(declarations, canonical positions)` matched, else identity and path error messages.
-type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);
+pub(crate) type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);
 /// Visible `(position, reason, grant)`, inaccessible `(position, reason)`, else the path error.
-type ResolvedRows = (
+pub(crate) type ResolvedRows = (
     Vec<(usize, &'static str, Option<usize>)>,
     Vec<(usize, &'static str)>,
     Option<String>,
@@ -107,10 +105,13 @@ fn canonical(order: &[usize], positions: Vec<usize>) -> Vec<usize> {
         .collect()
 }
 
-#[pymethods]
 impl NativeScopeLookup {
     /// The records `target` names: an identity row, else qualified identity or path text.
-    fn target(&self, identity: Option<QualifiedRow>, text: &str) -> PyResult<TargetRows> {
+    pub(crate) fn target(
+        &self,
+        identity: Option<QualifiedRow>,
+        text: &str,
+    ) -> PyResult<TargetRows> {
         let target: ReportTarget = match identity {
             Some(row) => ReportTarget::Identity(qualified_identity(row)?),
             None => ReportTarget::Text(text.to_owned()),
@@ -141,11 +142,14 @@ impl NativeScopeLookup {
     }
 
     /// Python's `_classify_resource` of one resource, with inaccessible reasons.
-    fn resolve(&self, py: Python<'_>, resource: ResourceRow) -> PyResult<ResolvedRows> {
-        let resource = resource_record(resource)?;
+    pub(crate) fn resolve(
+        &self,
+        py: Python<'_>,
+        resource: &ResourceRecord,
+    ) -> PyResult<ResolvedRows> {
         let (records, lookup) = (&self.records, &self.lookup);
         let resolved = py
-            .compiler_detach(|| Ok(resolve_report_visibility(records, lookup, &resource)))
+            .compiler_detach(|| Ok(resolve_report_visibility(records, lookup, resource)))
             .map_err(compiler_error)?;
         Ok(match resolved {
             Ok(resolved) => resolved_rows(resolved, &self.canonical.grants),
@@ -255,7 +259,7 @@ fn visibility_index<'py>(
     ))
 }
 
-fn scope_path_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
+pub(crate) fn scope_path_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
         py.import(EXCEPTIONS_MODULE)?
             .getattr("InvalidScopePathError")?

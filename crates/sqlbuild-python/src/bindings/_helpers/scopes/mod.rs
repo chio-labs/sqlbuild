@@ -12,3 +12,4 @@ pub(crate) mod scope_objects;
 pub(crate) mod scope_report_objects;
 pub(crate) mod scope_reports;
 pub(crate) mod scope_validation;
+pub(crate) mod scope_visibility;

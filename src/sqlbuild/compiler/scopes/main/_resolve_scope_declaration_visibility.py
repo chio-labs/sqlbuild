@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.visibility import resolve_declaration_visibility
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import DeclarationVisibility, ResourceIdentity, ScopeLookup
 
 
@@ -13,4 +13,4 @@ def resolve_scope_declaration_visibility(
 ) -> DeclarationVisibility:
     """Return visible facts and inaccessible declaration identities for one target."""
 
-    return resolve_declaration_visibility(lookup=lookup, target=target)
+    return _native.scope_resolve_visibility(lookup, target, False)

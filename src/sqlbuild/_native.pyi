@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path, PurePath
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict, overload
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
@@ -75,6 +75,7 @@ from sqlbuild.compiler.scopes.models import (
     DeclarationExplanation,
     DeclarationIdentity,
     DeclarationRecord,
+    DeclarationVisibility,
     MovePreview,
     ResourceIdentity,
     ScopeBrowseResult,
@@ -84,7 +85,9 @@ from sqlbuild.compiler.scopes.models import (
     ScopeLookup,
     ScopeReport,
     ScopeReportFilters,
+    ScopeTargetQuery,
     UsageRecord,
+    VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -1080,18 +1083,20 @@ def scope_relocated_declarations(
     index: ScopeIndex, resource: ResourceIdentity, destination: str
 ) -> tuple[DeclarationRecord, ...] | None: ...
 
-type _ScopeQualified = tuple[str, str, tuple[str, str] | None]
-type _ScopeRoot = tuple[str, str, str | None]
-type _ScopeResource = tuple[tuple[str, str], str, _ScopeRoot]
+class NativeScopeLookup: ...
 
-class NativeScopeLookup:
-    def target(
-        self, identity: _ScopeQualified | None, text: str, /
-    ) -> tuple[bool, list[int], str | None, str | None]: ...
-    def resolve(
-        self, resource: _ScopeResource, /
-    ) -> tuple[list[tuple[int, str, int | None]], list[tuple[int, str]], str | None]: ...
-
+def scope_query_target(lookup: ScopeLookup, target: ScopeQueryTarget, /) -> ScopeTargetQuery: ...
+@overload
+def scope_resolve_visibility(
+    lookup: ScopeLookup, target: ScopeQueryTarget, with_reasons: Literal[True], /
+) -> VisibilityResolution: ...
+@overload
+def scope_resolve_visibility(
+    lookup: ScopeLookup, target: ScopeQueryTarget, with_reasons: Literal[False], /
+) -> DeclarationVisibility: ...
+def scope_resolve_path_visibility(
+    lookup: ScopeLookup, path: str | PurePath, /
+) -> tuple[tuple[DeclarationRecord, ...], tuple[DeclarationRecord, ...]]: ...
 def build_scope_lookup(index: ScopeIndex) -> ScopeLookup: ...
 def scope_report(
     lookup: ScopeLookup,

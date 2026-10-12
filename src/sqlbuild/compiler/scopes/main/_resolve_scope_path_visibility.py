@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.visibility import resolve_path_visibility
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import DeclarationRecord, ScopeLookup
 
 
@@ -13,4 +13,4 @@ def resolve_scope_path_visibility(
 ) -> tuple[tuple[DeclarationRecord, ...], tuple[DeclarationRecord, ...]]:
     """Return visible and inaccessible declarations for an authored path."""
 
-    return resolve_path_visibility(lookup=lookup, path=path)
+    return _native.scope_resolve_path_visibility(lookup, path)

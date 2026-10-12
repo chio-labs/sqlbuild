@@ -9,7 +9,7 @@ from itertools import compress
 from pathlib import PurePath
 
 from sqlbuild.compiler.scopes._helpers.paths import normalize_path
-from sqlbuild.compiler.scopes._helpers.visibility import query_target
+from sqlbuild.compiler.scopes.main._query_scope_target import query_scope_target
 from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
     resolve_scope_declaration_visibility,
 )
@@ -207,7 +207,7 @@ def _reference_resolution(
 ) -> VisibilityResolution:
     """Classify every declaration against every matched resource, as before indexing."""
 
-    query: ScopeTargetQuery = query_target(lookup=lookup, target=target)
+    query: ScopeTargetQuery = query_scope_target(lookup=lookup, target=target)
     visible: list[VisibilityRecord] = []
     inaccessible: list[InaccessibleRecord] = []
     for resource in query.matches:
