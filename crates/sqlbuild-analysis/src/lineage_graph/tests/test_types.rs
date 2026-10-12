@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::lineage_graph::models::AnalysisDialect;
 
 /// `(resource, column)`.
@@ -15,4 +17,18 @@ pub(crate) struct AnalysisDialectTestCase {
     pub(crate) description: &'static str,
     pub(crate) normalized: &'static str,
     pub(crate) expected_dialect: AnalysisDialect<'static>,
+}
+
+pub(crate) struct TreeLinesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) children: &'static [(&'static str, &'static [&'static str])],
+    pub(crate) roots: &'static [&'static str],
+    pub(crate) seen: &'static [&'static str],
+    pub(crate) expected_lines: &'static [&'static str],
+}
+
+/// A string tree whose lines render as `prefix + branch + node`, repeats marked `(shown)`.
+pub(crate) struct StringTree {
+    pub(crate) children: HashMap<&'static str, Vec<&'static str>>,
+    pub(crate) lines: Vec<String>,
 }

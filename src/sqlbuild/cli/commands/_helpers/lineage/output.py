@@ -4,6 +4,13 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild._native import (
+    render_column_trace_limit_note,
+    render_column_trace_tree,
+    render_dependency_tree,
+    serialize_column,
+    serialize_column_edge,
+)
 from sqlbuild.cli.commands.constants import (
     BOTH_DIRECTIONS,
     DOWNSTREAM_DIRECTION,
@@ -16,13 +23,6 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.lineage.main.render_column_trace_limit_note import (
-    render_column_trace_limit_note,
-)
-from sqlbuild.compiler.lineage.main.render_column_trace_tree import render_column_trace_tree
-from sqlbuild.compiler.lineage.main.render_dependency_tree import render_dependency_tree
-from sqlbuild.compiler.lineage.main.serialize_column import serialize_column
-from sqlbuild.compiler.lineage.main.serialize_column_edge import serialize_column_edge
 from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
 from sqlbuild.compiler.lineage.types import ColumnTransformKind
 from sqlbuild.presentation.classes.cli_style import CliStyle

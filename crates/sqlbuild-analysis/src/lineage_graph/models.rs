@@ -30,3 +30,12 @@ pub enum AnalysisDialect<'a> {
     /// Not an alias: the name itself must be a Polyglot dialect value.
     Named(&'a str),
 }
+
+/// One tree line: its node, indent, branch, and whether the node was already shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TreeLine<'a, N> {
+    pub node: &'a N,
+    pub prefix: &'a str,
+    pub branch: &'static str,
+    pub repeated: bool,
+}

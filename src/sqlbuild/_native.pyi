@@ -1,8 +1,10 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Mapping, Sequence, Set
+from collections.abc import Callable, Hashable, Mapping, Sequence, Set
 from pathlib import Path, PurePath
 from typing import Any, Literal, TypedDict, overload
+
+from _typeshed import SupportsRichComparison
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -84,6 +86,7 @@ from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
     DirectSemanticColumnUse,
     ModelColumnLineage,
+    QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.pipeline.models import (
@@ -1784,6 +1787,42 @@ def build_direct_semantic_uses(
     model_names: frozenset[str],
     /,
 ) -> tuple[DirectSemanticColumnUse, ...]: ...
+def render_dependency_tree[Node: Hashable](
+    *,
+    focus: Node,
+    deps: dict[Node, list[Node]],
+    seen: set[Node],
+    format_node: Callable[[Node], str],
+    sort_key: Callable[[Node], SupportsRichComparison],
+    branch_style: Callable[[str], str],
+    already_shown: Callable[[], str],
+) -> list[str]: ...
+def render_column_trace_tree[Column, Edge](
+    *,
+    target: Column,
+    deps: dict[str, list[Edge]],
+    total: int,
+    limit: int,
+    column_id: Callable[[Column], str],
+    related_column: Callable[[Edge], Column],
+    format_related: Callable[[Edge], str],
+    branch_style: Callable[[str], str],
+    already_shown: Callable[[], str],
+    note_style: Callable[[str], str],
+) -> list[str]: ...
+def render_column_trace_limit_note(
+    *, total: int, limit: int, note_style: Callable[[str], str]
+) -> list[str]: ...
+def serialize_column(
+    *,
+    column: QualifiedLineageColumn,
+    render_resource_type: Callable[[QualifiedLineageColumn], str],
+) -> dict[str, object]: ...
+def serialize_column_edge(
+    *,
+    edge: ColumnLineageEdge,
+    render_resource_type: Callable[[QualifiedLineageColumn], str],
+) -> dict[str, object]: ...
 
 class ProjectColumnLineage:
     """Project-level column lineage graph with lazily materialized public views."""
