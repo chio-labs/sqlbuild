@@ -6,7 +6,7 @@ use pyo3::exceptions::{PyUnicodeDecodeError, PyValueError};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDateTime, PyDict, PyString};
+use pyo3::types::{PyBytes, PyDateTime, PyDict, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::fingerprint_storage::errors::StorageDecodeError;
 use sqlbuild_analysis::fingerprint_storage::main::decode_storage::decode_storage;
@@ -18,6 +18,7 @@ const MODELS_MODULE: &str = "sqlbuild.compiler.fingerprints.models";
 const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.fingerprints.exceptions";
 const DATETIME_MODULE: &str = "datetime";
 const BINASCII_MODULE: &str = "binascii";
+const BASE64_MODULE: &str = "base64";
 const TIMESTAMP_COLUMN: usize = 11;
 
 /// `FingerprintInputError(message)`.
@@ -197,7 +198,7 @@ fn decoded(
         Ok(decoded) => return Ok(decoded),
         Err(failure) => failure,
     };
-    let cause: PyErr = decode_error(py, failure)?;
+    let cause: PyErr = decode_error(storage, failure)?;
     let name: String = node_name.extract()?;
     let raised: PyErr = fingerprint_input_error(
         py,
@@ -212,19 +213,35 @@ fn decoded(
     Err(raised)
 }
 
-fn decode_error(py: Python<'_>, failure: StorageDecodeError) -> PyResult<PyErr> {
+/// The interpreter's own decoder error, whose message varies by Python version, else ours.
+fn decode_error(storage: &Bound<'_, PyString>, failure: StorageDecodeError) -> PyResult<PyErr> {
+    let py: Python<'_> = storage.py();
     match failure {
-        StorageDecodeError::Base64(message) => Ok(PyErr::from_value(
-            py.import(BINASCII_MODULE)?
-                .getattr("Error")?
-                .call1((message,))?,
-        )),
+        StorageDecodeError::Base64(message) => {
+            let kwargs: Bound<'_, PyDict> = PyDict::new(py);
+            kwargs.set_item("validate", true)?;
+            let decoded = py.import(BASE64_MODULE)?.getattr("b64decode")?.call(
+                (storage.call_method1("encode", ("ascii",))?,),
+                Some(&kwargs),
+            );
+            match decoded {
+                Err(error) => Ok(error),
+                Ok(_) => Ok(PyErr::from_value(
+                    py.import(BINASCII_MODULE)?
+                        .getattr("Error")?
+                        .call1((message,))?,
+                )),
+            }
+        }
         StorageDecodeError::Utf8 {
             bytes,
             start,
             end,
             reason,
         } => {
+            if let Err(error) = PyBytes::new(py, &bytes).call_method1("decode", ("utf-8",)) {
+                return Ok(error);
+            }
             let reason: CString =
                 CString::new(reason).map_err(|error| PyValueError::new_err(error.to_string()))?;
             Ok(PyErr::from_value(
