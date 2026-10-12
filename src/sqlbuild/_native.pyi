@@ -80,6 +80,11 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.lineage.models import (
+    ColumnLineageEdge,
+    DirectSemanticColumnUse,
+    ModelColumnLineage,
+)
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.pipeline.models import (
     CompiledProjectPhaseResult,
@@ -1766,26 +1771,50 @@ def evaluate_project_model_contracts(
 def project_promotion_conflicts(
     settings: tuple[str | None, str, str], project: NativeCompiledProject
 ) -> list[tuple[str, str, str, str, str]]: ...
-def build_fast_column_lineage(
-    catalog: object | None,
-    request: tuple[str | None, list[tuple[str, str, list[str]]], list[tuple[bool, str, list[str]]]],
+def build_project_column_lineage(
+    project: CompiledProjectView,
+    dialect: str | None,
+    mode: ColumnLineageMode,
+    model_names: frozenset[str] | None,
     /,
-) -> list[tuple[str, list[tuple[str, str, str, list[tuple[str, str, str]]]], bool, str | None]]: ...
+) -> ProjectColumnLineage | None: ...
 def build_direct_semantic_uses(
-    schema: list[tuple[str, str, list[tuple[str, str | None]], list[tuple[str, str | None]]]],
-    models: list[tuple[str, str, str]],
-    dialect: str,
-) -> list[tuple[str, str, str, str, str, str, str, int | None, int | None]]: ...
-def build_rich_column_lineage(
-    request: tuple[
-        str,
-        list[tuple[str, str, list[tuple[str, str | None]], list[tuple[str, str | None]]]],
-        list[str],
-    ],
+    project: CompiledProjectView,
+    dialect: str | None,
+    model_names: frozenset[str],
     /,
-) -> list[
-    tuple[str, list[tuple[str, str, str, str, list[tuple[str, str, str]]]], bool, str | None]
-]: ...
+) -> tuple[DirectSemanticColumnUse, ...]: ...
+
+class ProjectColumnLineage:
+    """Project-level column lineage graph with lazily materialized public views."""
+
+    def __init__(
+        self,
+        *,
+        models: dict[str, ModelColumnLineage],
+        edges: tuple[ColumnLineageEdge, ...],
+    ) -> None: ...
+    @classmethod
+    def from_fast_facts(
+        cls,
+        *,
+        models: dict[str, ModelColumnLineage],
+        compact_models: dict[str, tuple[Sequence[CompiledLineageColumnFact], bool]],
+        model_order: tuple[str, ...],
+    ) -> ProjectColumnLineage: ...
+    @property
+    def models(self) -> dict[str, ModelColumnLineage]: ...
+    @property
+    def edges(self) -> tuple[ColumnLineageEdge, ...]: ...
+    def has_model(self, model_name: str, /) -> bool: ...
+    def model_has_star(self, model_name: str, /) -> bool: ...
+    def edge_count_targeting(self, model_name: str, /) -> int: ...
+    def edges_targeting(self, model_name: str, /) -> tuple[ColumnLineageEdge, ...]: ...
+    def edges_sourced_from(self, resource_name: str, /) -> tuple[ColumnLineageEdge, ...]: ...
+    def column_consumers(
+        self, *, resource_name: str, column_name: str
+    ) -> tuple[ColumnLineageEdge, ...]: ...
+
 def relation_lineage_fingerprint(
     project_dir: Path, prefix: bytes, interrupted_listing_uncacheable: bool, /
 ) -> str | None: ...

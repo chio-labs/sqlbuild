@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-type NativeSemanticUseRow = tuple[str, str, str, str, str, str, str, int | None, int | None]
-
 
 class ColumnTransformKind(StrEnum):
     """High-level transform classification for one output column."""

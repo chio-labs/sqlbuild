@@ -4,6 +4,8 @@ from typing import cast
 
 import pytest
 
+import sqlbuild._native as native_module
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.cli.commands._helpers.lineage.selection import (
     normalize_lineage_target,
     select_column_target_lineage,
@@ -16,7 +18,6 @@ from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
-    ProjectColumnLineage,
     QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -136,10 +137,12 @@ def test_given_column_target_when_selecting_then_returns_column_trace(
     received_model_names: list[frozenset[str]] = []
     received_modes: list[ColumnLineageMode] = []
 
-    def build_column_lineage_spy(*args: object, **kwargs: object) -> ProjectColumnLineage:
-        del args
-        received_model_names.append(cast(frozenset[str], kwargs["model_names"]))
-        received_modes.append(cast(ColumnLineageMode, kwargs["mode"]))
+    def build_column_lineage_spy(
+        project: object, dialect: object, mode: object, model_names: object
+    ) -> ProjectColumnLineage:
+        del project, dialect
+        received_model_names.append(cast(frozenset[str], model_names))
+        received_modes.append(cast(ColumnLineageMode, mode))
         return ProjectColumnLineage(
             models={},
             edges=(
@@ -170,10 +173,7 @@ def test_given_column_target_when_selecting_then_returns_column_trace(
             ),
         )
 
-    monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.lineage.selection.build_project_column_lineage",
-        build_column_lineage_spy,
-    )
+    monkeypatch.setattr(native_module, "build_project_column_lineage", build_column_lineage_spy)
 
     result: ColumnLineageTrace | None = select_column_target_lineage(
         graph=graph,

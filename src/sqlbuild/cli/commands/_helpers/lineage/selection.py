@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+import sqlbuild._native as _native
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.cli.commands.constants import (
     BOTH_DIRECTIONS,
     COLUMN_TARGET_KIND,
@@ -31,10 +33,8 @@ from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourc
 from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
-from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
-    ProjectColumnLineage,
     QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
@@ -225,10 +225,8 @@ def select_column_target_lineage(
             and len(candidate_selection.model_names) >= RICH_LINEAGE_STATUS_MODEL_THRESHOLD
         ),
     ):
-        column_lineage: ProjectColumnLineage | None = build_project_column_lineage(
-            project=graph.project,
-            mode=mode,
-            model_names=candidate_selection.model_names,
+        column_lineage: ProjectColumnLineage | None = _native.build_project_column_lineage(
+            graph.project, None, mode, candidate_selection.model_names
         )
     if column_lineage is None:
         raise CliUserError(

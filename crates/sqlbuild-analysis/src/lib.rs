@@ -14,6 +14,7 @@ pub mod explicit_references;
 pub mod fingerprint_storage;
 pub mod graph;
 pub mod lineage;
+pub mod lineage_graph;
 pub mod manifest;
 pub mod python_values;
 pub mod query_analysis;

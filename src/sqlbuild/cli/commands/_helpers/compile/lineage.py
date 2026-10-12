@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import sqlbuild._native as _native
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.cli.commands.types import CompileLineageMode
-from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
-from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 
@@ -19,16 +19,12 @@ def build_compile_lineage(
         case CompileLineageMode.NONE:
             return None
         case CompileLineageMode.FAST:
-            return build_project_column_lineage(
-                project=graph.project,
-                dialect=dialect,
-                mode=ColumnLineageMode.FAST,
+            return _native.build_project_column_lineage(
+                graph.project, dialect, ColumnLineageMode.FAST, None
             )
         case CompileLineageMode.RICH:
-            return build_project_column_lineage(
-                project=graph.project,
-                dialect=dialect,
-                mode=ColumnLineageMode.RICH,
+            return _native.build_project_column_lineage(
+                graph.project, dialect, ColumnLineageMode.RICH, None
             )
 
 

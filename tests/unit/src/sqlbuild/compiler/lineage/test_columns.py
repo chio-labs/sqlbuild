@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
 
 import pytest
 
-import sqlbuild._native as native
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.compiler.compile.models import (
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
@@ -16,9 +15,7 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
 )
 from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.lineage._helpers import native_rich_columns
-from sqlbuild.compiler.lineage.main.columns import build_project_column_lineage
-from sqlbuild.compiler.lineage.models import ColumnLineage, ModelColumnLineage, ProjectColumnLineage
+from sqlbuild.compiler.lineage.models import ColumnLineage, ModelColumnLineage
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnLineageMode,
@@ -37,6 +34,7 @@ from tests.unit.src.sqlbuild.compiler.lineage.helpers import (
     make_compiled_model,
     make_compiled_project,
     make_compiled_seed,
+    project_column_lineage,
 )
 
 
@@ -177,7 +175,7 @@ def test_given_compiled_project_when_building_column_lineage_then_infers_expecte
         ),
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
+    result: ProjectColumnLineage | None = project_column_lineage(project=project)
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
@@ -309,7 +307,7 @@ def test_given_compiled_project_when_building_fast_column_lineage_then_infers_ex
         ),
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(
+    result: ProjectColumnLineage | None = project_column_lineage(
         project=project,
         mode=ColumnLineageMode.FAST,
     )
@@ -366,7 +364,7 @@ def test_given_select_star_when_building_column_lineage_then_expands_known_schem
         )
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
+    result: ProjectColumnLineage | None = project_column_lineage(project=project)
 
     assert result is not None
     model_lineage: ModelColumnLineage = result.models[test_case.model_name]
@@ -405,7 +403,7 @@ def test_given_linear_project_when_listing_column_consumers_then_returns_expecte
         )
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
+    result: ProjectColumnLineage | None = project_column_lineage(project=project)
 
     assert result is not None
     consumers: tuple[str, ...] = tuple(
@@ -457,7 +455,7 @@ def test_given_compact_analysis_facts_when_building_fast_lineage_then_preserves_
         ),
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(
+    result: ProjectColumnLineage | None = project_column_lineage(
         project=make_compiled_project(models=(upstream, target)),
         mode=ColumnLineageMode.FAST,
     )
@@ -553,7 +551,7 @@ def test_given_cte_sourced_column_when_building_rich_column_lineage_then_resolve
         models=upstream_models + (target_model,),
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(
+    result: ProjectColumnLineage | None = project_column_lineage(
         project=project,
         mode=ColumnLineageMode.RICH,
     )
@@ -612,7 +610,7 @@ def test_given_postgres_dialect_when_building_rich_column_lineage_then_uses_poly
     )
     project: CompiledProjectView = make_compiled_project(models=upstream_models + (target_model,))
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(
+    result: ProjectColumnLineage | None = project_column_lineage(
         project=project,
         dialect="postgres",
         mode=ColumnLineageMode.RICH,
@@ -660,7 +658,7 @@ def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_n
         sql_analysis_enabled=test_case.sql_analysis_enabled,
     )
 
-    result: ProjectColumnLineage | None = build_project_column_lineage(project=project)
+    result: ProjectColumnLineage | None = project_column_lineage(project=project)
 
     assert (result is None) is test_case.expected_result_is_none
 
@@ -669,41 +667,22 @@ def test_given_sql_analysis_disabled_when_building_column_lineage_then_returns_n
     "test_case",
     [
         RichLineageAnalysisScalingTestCase(
-            description="builds the schema once and analyses each traced model against its refs",
+            description="analyses only the traced models, whatever else the project holds",
             chain_length=4,
             unrelated_model_counts=(0, 250),
-            expected_schema_builds=1,
-            expected_analysis_calls=4,
+            expected_model_names=("orders_0", "orders_1", "orders_2", "orders_3"),
         )
     ],
     ids=lambda case: case.description,
 )
 def test_given_unrelated_models_when_tracing_rich_lineage_then_analysis_work_stays_linear(
     test_case: RichLineageAnalysisScalingTestCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    build_lineage: Any = native.build_rich_column_lineage
-    schema_resources: Any = native_rich_columns._schema_resources
-    schema_builds: list[CompiledProjectView] = []
-    analysed_queries: list[str] = []
-
-    def counting_schema_mapping(project: CompiledProjectView) -> Any:
-        schema_builds.append(project)
-        return schema_resources(project)
-
-    def recording_native_lineage(request: Any) -> Any:
-        analysed_queries.extend(request[2])
-        return build_lineage(request)
-
-    monkeypatch.setattr(native_rich_columns, "_schema_resources", counting_schema_mapping)
-    monkeypatch.setattr(native, "build_rich_column_lineage", recording_native_lineage)
     chain_names: frozenset[str] = frozenset(
         f"orders_{index}" for index in range(test_case.chain_length)
     )
     edges_by_project_size: list[tuple[str, ...]] = []
     for unrelated_model_count in test_case.unrelated_model_counts:
-        schema_builds.clear()
-        analysed_queries.clear()
         project: CompiledProjectView = make_compiled_project(
             models=make_chain_models(
                 chain_length=test_case.chain_length,
@@ -711,13 +690,12 @@ def test_given_unrelated_models_when_tracing_rich_lineage_then_analysis_work_sta
             )
         )
 
-        result: ProjectColumnLineage | None = build_project_column_lineage(
+        result: ProjectColumnLineage | None = project_column_lineage(
             project=project, model_names=chain_names
         )
 
         assert result is not None
-        assert len(schema_builds) == test_case.expected_schema_builds
-        assert len(analysed_queries) == test_case.expected_analysis_calls
+        assert tuple(result.models) == test_case.expected_model_names, test_case.description
         edges_by_project_size.append(
             tuple(
                 edge_label(

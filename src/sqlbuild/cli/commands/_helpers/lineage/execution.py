@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.lineage.cache import (
     read_relation_lineage_cache,
@@ -158,17 +159,15 @@ def _semantic_uses(
 ) -> tuple[DirectSemanticColumnUse, ...]:
     if not request.include_uses:
         return ()
-    from sqlbuild.compiler.lineage.main.build_semantic_uses import build_direct_semantic_uses
-
     if not isinstance(graph, ProjectGraph) or adapter is None:
         raise CliUserError(
             "semantic uses require a compiled project graph",
             code="C307",
         )
-    return build_direct_semantic_uses(
-        project=graph.project,
-        dialect=adapter.sql_analysis_dialect(),
-        model_names=_semantic_use_model_names(request=request, graph=graph),
+    return _native.build_direct_semantic_uses(
+        graph.project,
+        adapter.sql_analysis_dialect(),
+        _semantic_use_model_names(request=request, graph=graph),
     )
 
 

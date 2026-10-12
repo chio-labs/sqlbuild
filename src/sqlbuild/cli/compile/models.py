@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.output.models import WrittenTarget
 from sqlbuild.compiler.compile.models import (
@@ -13,7 +14,6 @@ from sqlbuild.compiler.compile.models import (
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 

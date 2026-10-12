@@ -1,0 +1,112 @@
+//! Project resources and their columns, read from a compiled project view for lineage.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
+use sqlbuild_analysis::lineage::models::{
+    LineageResourceType, LineageSchemaResource, RichSchemaResource,
+};
+
+type TypedColumns = Vec<(String, Option<String>)>;
+
+/// The project's models, then sources, then seeds, each with its typed and schema columns.
+struct ProjectColumns {
+    resource_type: LineageResourceType,
+    name: String,
+    typed: TypedColumns,
+    schema: TypedColumns,
+}
+
+/// Fast lineage's schema: model inferred then schema column names; source and seed columns.
+pub(crate) fn fast_schema(project: &Bound<'_, PyAny>) -> PyResult<Vec<LineageSchemaResource>> {
+    let mut schema: Vec<LineageSchemaResource> = Vec::new();
+    for resource in project_columns(project)? {
+        let mut columns: Vec<String> = Vec::with_capacity(resource.typed.len());
+        for (name, _) in resource.typed.into_iter().chain(resource.schema) {
+            columns.push(name);
+        }
+        schema.push(LineageSchemaResource {
+            resource_type: resource.resource_type,
+            name: resource.name,
+            columns,
+        });
+    }
+    Ok(schema)
+}
+
+/// Rich lineage's typed schema: inferred or declared types, then model schema columns.
+pub(crate) fn rich_schema(project: &Bound<'_, PyAny>) -> PyResult<Vec<RichSchemaResource>> {
+    Ok(project_columns(project)?
+        .into_iter()
+        .map(|resource| RichSchemaResource {
+            resource_type: resource.resource_type,
+            name: resource.name,
+            assigned: resource.typed,
+            defaulted: resource.schema,
+        })
+        .collect())
+}
+
+/// `[name for name, _, _ in model.inferred_rows or ()]`.
+pub(crate) fn inferred_names(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    Ok(inferred_columns(model)?
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect())
+}
+
+fn project_columns(project: &Bound<'_, PyAny>) -> PyResult<Vec<ProjectColumns>> {
+    let mut resources: Vec<ProjectColumns> = Vec::new();
+    for model in project.getattr("models")?.try_iter()? {
+        let model: Bound<'_, PyAny> = model?;
+        resources.push(ProjectColumns {
+            resource_type: LineageResourceType::Model,
+            name: model.getattr("name")?.extract()?,
+            typed: inferred_columns(&model)?,
+            schema: schema_columns(&model)?,
+        });
+    }
+    for (attribute, entry, resource_type) in [
+        ("sources", "source_entry", LineageResourceType::Source),
+        ("seeds", "schema_entry", LineageResourceType::Seed),
+    ] {
+        for resource in project.getattr(attribute)?.try_iter()? {
+            let resource: Bound<'_, PyAny> = resource?;
+            let mut typed: TypedColumns = Vec::new();
+            for column in resource.getattr(entry)?.getattr("columns")?.try_iter()? {
+                let column: Bound<'_, PyAny> = column?;
+                typed.push((
+                    column.getattr("name")?.extract()?,
+                    column.getattr("type")?.extract()?,
+                ));
+            }
+            resources.push(ProjectColumns {
+                resource_type,
+                name: resource.getattr("name")?.extract()?,
+                typed,
+                schema: Vec::new(),
+            });
+        }
+    }
+    Ok(resources)
+}
+
+fn inferred_columns(model: &Bound<'_, PyAny>) -> PyResult<TypedColumns> {
+    let rows: Bound<'_, PyAny> = model.getattr("inferred_rows")?;
+    if !rows.is_truthy()? {
+        return Ok(Vec::new());
+    }
+    rows.try_iter()?
+        .map(|row| {
+            let (name, column_type, _nullability): (String, Option<String>, Bound<'_, PyAny>) =
+                row?.extract()?;
+            Ok((name, column_type))
+        })
+        .collect()
+}
+
+fn schema_columns(model: &Bound<'_, PyAny>) -> PyResult<TypedColumns> {
+    let rows: Bound<'_, PyAny> = model.getattr("schema_column_rows")?;
+    if !rows.is_truthy()? {
+        return Ok(Vec::new());
+    }
+    rows.try_iter()?.map(|row| row?.extract()).collect()
+}

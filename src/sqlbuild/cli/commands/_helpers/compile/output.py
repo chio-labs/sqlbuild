@@ -7,6 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import sqlbuild._native as _native
+from sqlbuild._native import ProjectColumnLineage
 from sqlbuild.cli.commands._helpers.compile.semantic_notice import (
     selected_semantic_coverage,
     semantic_coverage_notice,
@@ -36,7 +37,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
-from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
 from sqlbuild.compiler.python_nodes.models import PythonNodeIdentity

@@ -110,11 +110,11 @@ _RICH_PANIC_INJECTION: str = f"""
 import sqlbuild._native as native
 
 
-def _panicked(request):
+def _panicked(*arguments):
     raise native.NativeCompilerError({_NATIVE_PANIC_ERROR!r})
 
 
-native.build_rich_column_lineage = _panicked
+native.build_project_column_lineage = _panicked
 """
 _RICH_COMPILE: tuple[str, ...] = (
     "compile",
