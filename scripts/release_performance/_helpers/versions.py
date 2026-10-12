@@ -196,7 +196,8 @@ def install_wheel(*, wheel: Path, venv_dir: Path, python: str) -> Path:
 
     _create_venv(venv_dir=venv_dir, python=python)
     completed: subprocess.CompletedProcess[str] = _uv_pip_install(
-        venv_dir=venv_dir, requirements=(str(wheel.resolve()),)
+        venv_dir=venv_dir,
+        requirements=("--find-links", str(wheel.resolve().parent), str(wheel.resolve())),
     )
     if completed.returncode != 0:
         raise ReleasePerformanceError(f"Installing {wheel} failed: {_tail(completed.stderr)}")
