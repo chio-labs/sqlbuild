@@ -37,6 +37,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompileInputsView,
     FunctionLanguage,
 )
 from sqlbuild.compiler.discovery.models import (
@@ -56,6 +57,7 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
+from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
@@ -881,6 +883,13 @@ def parse_schema_document(
 def parse_sources_document(
     loaded: object, path: str, classes: dict[str, object]
 ) -> tuple[SourceEntry, ...]: ...
+def declared_relations(
+    inputs: CompileInputsView,
+) -> tuple[
+    dict[str, dict[str, str]],
+    dict[str, dict[str, InferredNullability]],
+    dict[str, dict[str, str]],
+]: ...
 def externally_described_models(
     inputs: DiscoveredProjectInputs, model_schemas: dict[str, ModelSchemaDeclaration]
 ) -> list[Path]: ...

@@ -35,13 +35,6 @@ from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
     known_declared_types,
     known_function_names,
 )
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    build_column_nullability_by_table,
-    build_complete_binding_schemas,
-)
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    build_declared_column_types as _build_column_types_by_table,
-)
 from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_semantic_diagnostics
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
 from sqlbuild.compiler.compile._helpers.native_stages.assembly import (
@@ -141,10 +134,12 @@ def assemble_compiled_project(
     sql_analysis_enabled: bool = (
         inputs.effective_settings.sql_analysis and not skip_column_inference
     )
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]] = (
-        build_column_nullability_by_table(inputs)
+    column_types_by_table: dict[str, dict[str, str]]
+    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
+    complete_binding_schemas: dict[str, dict[str, str]]
+    column_types_by_table, column_nullability_by_table, complete_binding_schemas = (
+        _native.declared_relations(inputs)
     )
-    column_types_by_table: dict[str, dict[str, str]] = _build_column_types_by_table(inputs)
     dynamic_families_by_table: dict[str, tuple[SchemaDynamicColumnFamily, ...]] = (
         _build_dynamic_families_by_table(inputs)
     )
@@ -170,7 +165,6 @@ def assemble_compiled_project(
             },
         },
     )
-    complete_binding_schemas: dict[str, dict[str, str]] = build_complete_binding_schemas(inputs)
     binding_catalog: Any = create_binding_catalog(
         dialect=profile.sql_analysis_dialect or "generic",
         quoted_ignore_case=profile.quoted_identifiers_ignore_case,

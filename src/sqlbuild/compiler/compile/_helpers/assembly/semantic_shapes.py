@@ -10,17 +10,14 @@ from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_sha
     infer_native_expression_source_shapes,
 )
 from sqlbuild.compiler.compile._helpers.analysis.reference_names import table_function_analysis_name
-from sqlbuild.compiler.compile.constants import NOT_NULL_AUDIT_NAME
 from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompileInputsView,
     ModelInput,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.planner.constants import (
     SNAPSHOT_DEFAULT_VALID_FROM_COLUMN,
     SNAPSHOT_DEFAULT_VALID_TO_COLUMN,
@@ -33,9 +30,6 @@ from sqlbuild.compiler.sql_analysis.constants import (
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
 from sqlbuild.spec.contracts.models import (
-    SchemaAuditInstance,
-    SchemaColumn,
-    SourceColumnEntry,
     SourceEntry,
 )
 
@@ -120,120 +114,6 @@ def inferred_binding_shape(
     )
 
 
-def build_declared_column_types(inputs: CompileInputsView) -> dict[str, dict[str, str]]:
-    """Collect declared type hints independently of closed-schema authority."""
-    facts: dict[str, dict[str, str]] = {}
-    for model_input in inputs.model_inputs:
-        if model_input.schema_entry is not None:
-            facts[model_input.schema_entry.name] = {
-                column.name: column.type or "UNKNOWN" for column in model_input.schema_entry.columns
-            }
-    for seed_input in inputs.seed_inputs:
-        facts[seed_input.schema_entry.name] = {
-            column.name: column.type or "UNKNOWN" for column in seed_input.schema_entry.columns
-        }
-    for source_input in inputs.source_inputs:
-        facts[source_input.source_entry.name] = {
-            column.name: column.type or "UNKNOWN" for column in source_input.source_entry.columns
-        }
-    for function_input in inputs.sql_function_inputs:
-        if function_input.return_columns:
-            facts[table_function_analysis_name(function_input.name)] = {
-                column.name: column.type for column in function_input.return_columns
-            }
-    return facts
-
-
-def build_column_nullability_by_table(
-    inputs: CompileInputsView,
-) -> dict[str, dict[str, InferredNullability]]:
-    """Return what each model, seed, source and table function declares about column nulls."""
-
-    facts: dict[str, dict[str, InferredNullability]] = {}
-    for model_input in inputs.model_inputs:
-        if model_input.schema_entry is None:
-            continue
-        facts[model_input.schema_entry.name] = _schema_column_nullability(
-            model_input.schema_entry.columns
-        )
-    for seed_input in inputs.seed_inputs:
-        facts[seed_input.schema_entry.name] = _schema_column_nullability(
-            seed_input.schema_entry.columns
-        )
-    for source_input in inputs.source_inputs:
-        facts[source_input.source_entry.name] = _source_column_nullability(
-            source_input.source_entry.columns
-        )
-    for function_input in inputs.sql_function_inputs:
-        if not function_input.return_columns:
-            continue
-        facts[table_function_analysis_name(function_input.name)] = {
-            column.name: InferredNullability.UNKNOWN for column in function_input.return_columns
-        }
-    return facts
-
-
-def _schema_column_nullability(
-    columns: tuple[SchemaColumn, ...],
-) -> dict[str, InferredNullability]:
-    return {
-        column.name: _declared_column_nullability(nullable=column.nullable, audits=column.audits)
-        for column in columns
-    }
-
-
-def _source_column_nullability(
-    columns: tuple[SourceColumnEntry, ...],
-) -> dict[str, InferredNullability]:
-    return {
-        column.name: _declared_column_nullability(nullable=column.nullable, audits=column.audits)
-        for column in columns
-    }
-
-
-def _declared_column_nullability(
-    *,
-    nullable: bool | None,
-    audits: tuple[SchemaAuditInstance, ...],
-) -> InferredNullability:
-    if nullable is False:
-        return InferredNullability.NON_NULL
-    if any(audit.definition_name == NOT_NULL_AUDIT_NAME for audit in audits):
-        return InferredNullability.NON_NULL
-    return InferredNullability.UNKNOWN
-
-
-def build_complete_binding_schemas(inputs: CompileInputsView) -> dict[str, dict[str, str]]:
-    """Collect authoritative declared interfaces before SQL inference."""
-    schemas: dict[str, dict[str, str]] = {}
-    for model in inputs.model_inputs:
-        if (
-            model.config.values.get("contract") == ContractPolicy.ENFORCED
-            and model.schema_entry is not None
-            and model.schema_entry.columns
-            and not model.schema_entry.dynamic_columns
-        ):
-            schemas[model.model_file.file_path.stem] = {
-                column.name: column.type or "UNKNOWN" for column in model.schema_entry.columns
-            }
-    for source in inputs.source_inputs:
-        if source.source_entry.contract == ContractPolicy.ENFORCED and source.source_entry.columns:
-            schemas[source.source_entry.name] = {
-                column.name: column.type or "UNKNOWN" for column in source.source_entry.columns
-            }
-    for seed in inputs.seed_inputs:
-        if seed.schema_entry.columns:
-            schemas[seed.schema_entry.name] = {
-                column.name: column.type or "UNKNOWN" for column in seed.schema_entry.columns
-            }
-    for function in inputs.sql_function_inputs:
-        if function.return_columns:
-            schemas[table_function_analysis_name(function.name)] = {
-                column.name: column.type for column in function.return_columns
-            }
-    return schemas
-
-
 def semantic_shapes(
     *,
     project: CompiledProjectView,
@@ -305,18 +185,3 @@ def semantic_shapes(
             break
         pending = remaining
     return shapes
-
-
-def referenced_model_names(
-    *, model_input: ModelInput, available_names: frozenset[str] | None = None
-) -> tuple[str, ...]:
-    return tuple(
-        sorted(
-            {
-                reference.ref_name
-                for reference in model_input.references
-                if reference.ref_kind == SqlReferenceKind.REF
-                and (available_names is None or reference.ref_name in available_names)
-            }
-        )
-    )
