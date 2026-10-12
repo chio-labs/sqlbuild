@@ -33,6 +33,18 @@ STAGE_CAPTURE_UNORDERED_ATTRIBUTES: dict[str, frozenset[str]] = {
     )
 }
 STAGE_CAPTURE_PROJECTED_ATTRIBUTES: dict[str, tuple[str, ...]] = {
+    "sqlbuild._native:DiscoveredSqlModelFile": (
+        "file_path",
+        "relative_path",
+        "contents",
+        "header_values",
+        "header_column_locations",
+        "output_column_locations",
+        "query_sql",
+        "enum_declarations",
+        "constant_declarations",
+        "extract_implicit_alias_columns",
+    ),
     "sqlbuild._native:NativeAuditInput": (
         "audit_file",
         "audit_block",
@@ -271,6 +283,9 @@ STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]] = {
     ),
 }
 STAGE_CAPTURE_CANONICAL_TYPES: dict[str, str] = {
+    "sqlbuild._native:DiscoveredSqlModelFile": (
+        "sqlbuild.compiler.discovery.models:DiscoveredSqlModelFile"
+    ),
     "sqlbuild._native:NativeInputsView": "sqlbuild.compiler.compile.models:CompileProjectInputs",
     "sqlbuild._native:NativeProjectView": "sqlbuild.compiler.compile.models:CompiledProject",
     "sqlbuild._native:NativeModelInput": "sqlbuild.compiler.compile.models:CompileModelInput",

@@ -357,23 +357,9 @@ def _run_native_model_loop(
         host,
         [
             (
-                (
-                    model_file.file_path.stem,
-                    model_file.relative_path.as_posix(),
-                    str(model_file.relative_path),
-                    str(model_file.file_path),
-                ),
-                (
-                    model_file.header_column_locations,
-                    model_file.header_values,
-                    model_file.enum_declarations,
-                    model_file.constant_declarations,
-                ),
-                model_file.query_sql,
-                model_file.contents,
+                model_file,
                 loop.native_declaration_references.get(model_file.file_path),
                 _interpolation_row(interpolations[model_file.file_path]),
-                model_file,
             )
             for model_file in files
         ],

@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_schema::{
     ModelSchema, merged_columns, schema_enums,
 };
 use crate::bindings::_helpers::compiled_project::project::schema_fact;
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
@@ -41,7 +42,7 @@ const ENUMS_FIELD: &str = "enums";
 pub(crate) struct HeaderSource<'a, 'py> {
     pub(crate) name: &'a str,
     pub(crate) values: &'a Bound<'py, PyDict>,
-    pub(crate) locations: &'a Bound<'py, PyDict>,
+    pub(crate) model_file: &'a NativeModelFile,
     pub(crate) relative_path: &'a str,
     /// The model's visible declarations and the identity its usages are recorded for.
     pub(crate) visible: (&'a Bound<'py, PyAny>, &'a Bound<'py, PyAny>),
@@ -99,8 +100,12 @@ pub(crate) fn header_schema<'py>(
     let parsed_columns = metadata
         .columns
         .map_err(|error| raised_config_error(py, context, error))?;
-    let local_columns: Bound<'py, PyTuple> =
-        column_tuple(py, context.contracts, &parsed_columns, source.locations)?;
+    let local_columns: Bound<'py, PyTuple> = column_tuple(
+        py,
+        context.contracts,
+        &parsed_columns,
+        &source.model_file.header_locations(py)?,
+    )?;
     let columns: Bound<'py, PyTuple> = match source.schema {
         Some(schema) => merged_columns(context, schema, &local_columns, model)?,
         None => local_columns,

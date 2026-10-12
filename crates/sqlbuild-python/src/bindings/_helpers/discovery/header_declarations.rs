@@ -114,11 +114,11 @@ fn optional_raw(
         .transpose()
 }
 
-type HeaderDeclarations<'py> = (Bound<'py, PyTuple>, Bound<'py, PyTuple>);
+pub(crate) type HeaderDeclarations<'py> = (Bound<'py, PyTuple>, Bound<'py, PyTuple>);
 
 /// `parse_model_enum_declarations` then `parse_model_constant_declarations` for one model.
 #[pyfunction]
-fn model_header_declarations<'py>(
+pub(crate) fn model_header_declarations<'py>(
     py: Python<'py>,
     header: (Option<Bound<'py, PyAny>>, Option<Bound<'py, PyAny>>),
     model_name: String,

@@ -19,8 +19,8 @@ use crate::bindings::_helpers::compiled_project::model_loop_hooks::{
     ExpandedHooks, HookModel, SqlHookClasses, expanded_hooks,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
-    FinishedModel, InterpolationRow, ModelLoopRow, RecordClasses, RecordInputs, ReferenceRow,
-    finished_record,
+    FinishedModel, InterpolationRow, ModelLoopInput, ModelLoopRow, ModelPaths, RecordClasses,
+    RecordInputs, ReferenceRow, finished_record,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     analysis_override, hook_presence, reference_row,
@@ -54,6 +54,7 @@ use crate::bindings::_helpers::compiled_project::source_views::{
 use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     AttachedSqlTests, SqlTestSettings, TestFileRow, TestScope,
 };
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::render::declaration_expansion::{
@@ -241,9 +242,13 @@ impl NativeModelLoop {
         slf: &Bound<'py, Self>,
         project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
-        models: Vec<ModelLoopRow>,
+        models: Vec<ModelLoopInput>,
     ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let py: Python<'py> = slf.py();
+        let models: Vec<ModelLoopRow> = models
+            .into_iter()
+            .map(|input| ModelLoopRow::new(py, input))
+            .collect::<PyResult<_>>()?;
         project
             .borrow_mut()
             .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
@@ -274,18 +279,27 @@ impl NativeModelLoop {
         let visibility: ModelVisibility<'py> = ModelVisibility::default();
         let signatures: HookSignatures = HookSignatures::default();
         for row in models {
-            let ModelLoopRow((name, _, relative_path, file_path), header, _, _, _, _, _) = &row;
-            let (_, header_values, enums, constants) = header;
+            let ModelPaths {
+                name,
+                relative_path,
+                file_path,
+                ..
+            } = &row.paths;
+            let record: &NativeModelFile = row.model_file.get();
+            let (enums, constants) = record.declaration_tuples(py);
             let visible: VisibleDeclarations<'py> = visibility.for_model(
                 &context,
                 &VisibilityModel {
                     name,
                     file_path,
-                    local: (enums.bind(py), constants.bind(py)),
+                    local: (enums.as_any(), constants.as_any()),
                 },
             )?;
-            let config: Bound<'py, PyAny> =
-                configs.effective(&context, header_values.bind(py), (name, relative_path))?;
+            let config: Bound<'py, PyAny> = configs.effective(
+                &context,
+                record.header_value_dict(py),
+                (name, relative_path),
+            )?;
             let model: LoopModel<'_, 'py> = LoopModel {
                 row: &row,
                 config,
@@ -454,15 +468,20 @@ impl NativeModelLoop {
             signatures,
             visibility,
         } = model;
-        let ModelLoopRow(
-            (name, posix_path, relative_path, file_path),
-            (locations, _, _, _),
+        let ModelLoopRow {
+            paths:
+                ModelPaths {
+                    name,
+                    posix_path,
+                    relative_path,
+                    file_path,
+                },
             authored_query,
             contents,
             scan,
             interpolation,
-            _,
-        ) = row;
+            model_file,
+        } = row;
         let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
         let hooked: bool = hook_presence(&values)?;
@@ -620,7 +639,7 @@ impl NativeModelLoop {
         let source: HeaderSource<'_, 'py> = HeaderSource {
             name,
             values: &values,
-            locations: locations.bind(py),
+            model_file: model_file.get(),
             relative_path,
             visible: (&visible.declarations, &visible.consumer),
             schema: schema.as_ref(),

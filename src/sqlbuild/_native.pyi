@@ -53,7 +53,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
-    DiscoveredSqlModelFile,
     EnumDeclaration,
 )
 from sqlbuild.compiler.references.models import LiteralSqlRelation
@@ -836,9 +835,46 @@ class NativeProjectTree:
     def __init__(self, project_dir: str) -> None: ...
     def listings(self) -> list[tuple[str, list[tuple[str, bool, bool]]]]: ...
 
+class DiscoveredSqlModelFile:
+    """A discovered SQL model file and its raw contents."""
+
+    def __init__(
+        self,
+        file_path: Path,
+        relative_path: Path,
+        contents: str,
+        header_values: dict[str, object],
+        header_column_locations: dict[str, SourceLocation],
+        output_column_locations: dict[str, SourceLocation],
+        query_sql: str,
+        enum_declarations: tuple[EnumDeclaration, ...] = (),
+        constant_declarations: tuple[ConstantDeclaration, ...] = (),
+        extract_implicit_alias_columns: bool = True,
+    ) -> None: ...
+    @property
+    def file_path(self) -> Path: ...
+    @property
+    def relative_path(self) -> Path: ...
+    @property
+    def contents(self) -> str: ...
+    @property
+    def header_values(self) -> dict[str, object]: ...
+    @property
+    def header_column_locations(self) -> dict[str, SourceLocation]: ...
+    @property
+    def output_column_locations(self) -> dict[str, SourceLocation]: ...
+    @property
+    def query_sql(self) -> str: ...
+    @property
+    def enum_declarations(self) -> tuple[EnumDeclaration, ...]: ...
+    @property
+    def constant_declarations(self) -> tuple[ConstantDeclaration, ...]: ...
+    @property
+    def extract_implicit_alias_columns(self) -> bool: ...
+
 def discover_model_files(
-    request: dict[str, object], tree: NativeProjectTree
-) -> list[tuple[str, tuple[object, ...]]] | tuple[object, ...]: ...
+    request: dict[str, object], tree: NativeProjectTree, project_dir: Path
+) -> list[tuple[Path, object]] | tuple[object, ...]: ...
 def discover_sql_test_files(
     request: dict[str, object], tree: NativeProjectTree
 ) -> list[tuple[str, tuple[object, ...]]] | tuple[object, ...]: ...

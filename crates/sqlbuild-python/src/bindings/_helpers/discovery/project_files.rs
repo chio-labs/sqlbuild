@@ -1,8 +1,10 @@
 //! Native discovery results as the plain data the Python discovery facade materialises.
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
-use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBytes, PyTuple};
+use pyo3::prelude::{
+    Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_discovery::declarations::main::declaration_layout::declaration_layout;
 use sqlbuild_discovery::declarations::models::{
@@ -32,6 +34,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
+use crate::bindings::_helpers::discovery::header_declarations::{
+    HeaderDeclarations, model_header_declarations,
+};
+use crate::bindings::_helpers::discovery::model_file_record::{ModelFileParts, NativeModelFile};
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{
     ModelDiscoveryRequest, ModelTextRequest, NativeProjectTree, SqlTestDiscoveryRequest,
@@ -40,6 +46,13 @@ use crate::bindings::models::{
 use crate::bindings::types::CompilerDetach;
 
 pub(crate) type PyObject = Py<PyAny>;
+
+const PATHLIB_MODULE: &str = "pathlib";
+const PATH_CLASS: &str = "Path";
+const STEM_ATTRIBUTE: &str = "stem";
+const ENUMS_KEY: &str = "enums";
+const CONSTANTS_KEY: &str = "constants";
+const RAISED_TAG: &str = "raised";
 type Located = (String, usize, usize, usize, usize);
 type Listing = (PyObject, Vec<(PyObject, bool, bool)>);
 
@@ -298,12 +311,14 @@ impl NativeProjectTree {
     }
 }
 
-/// Discover the model files: one payload per file, or the collection's failure payload.
+/// Discover the model files: `(relative path, record or failure payload)` per file, or the
+/// collection's failure payload.
 #[pyfunction]
 fn discover_model_files(
     py: Python<'_>,
     request: ModelDiscoveryRequest,
     tree: &NativeProjectTree,
+    project_dir: Bound<'_, PyAny>,
 ) -> PyResult<PyObject> {
     let root = ProjectRoot {
         directory: PathBuf::from(request.project_dir),
@@ -315,10 +330,78 @@ fn discover_model_files(
         extract_implicit_alias_columns: request.extract_implicit_alias_columns,
         extract_output_column_locations: request.extract_output_column_locations,
     };
+    let extract_implicit_alias_columns: bool = options.extract_implicit_alias_columns;
     let discovered = py
         .compiler_detach(|| Ok(discover_models(&root, &tree.inner, &options)))
         .map_err(crate::bindings::_helpers::boundary::panics::compiler_error)?;
-    files_object(py, &tree.inner, discovered, model_object)
+    let files: Vec<DiscoveredFile<DiscoveredModelFile>> = match discovered {
+        Ok(files) => files,
+        Err(failure) => return stage_failure_object(py, &tree.inner, failure),
+    };
+    let path_class: Bound<'_, PyAny> = py.import(PATHLIB_MODULE)?.getattr(PATH_CLASS)?;
+    files
+        .into_iter()
+        .map(|file| {
+            let relative_path: Bound<'_, PyAny> =
+                path_class.call1((path_object(py, &tree.inner, file.relative_path)?,))?;
+            let item: PyObject = match file.outcome {
+                FileOutcome::Parsed(model) => model_record(
+                    py,
+                    model,
+                    (project_dir.div(&relative_path)?, relative_path.clone()),
+                    extract_implicit_alias_columns,
+                )?,
+                FileOutcome::Unreadable(failure) => read_object(py, failure)?,
+                FileOutcome::Failed(failure) => failure_object(py, failure)?,
+            };
+            Ok((relative_path.unbind(), item))
+        })
+        .collect::<PyResult<Vec<(PyObject, PyObject)>>>()?
+        .into_py_any(py)
+}
+
+/// One parsed model file as its native record, or `("raised", error)` for invalid declarations.
+fn model_record<'py>(
+    py: Python<'py>,
+    model: DiscoveredModelFile,
+    paths: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    extract_implicit_alias_columns: bool,
+) -> PyResult<PyObject> {
+    let (file_path, relative_path) = paths;
+    let header_values: Bound<'py, PyDict> = map_to_python(py, model.header_values)?
+        .into_bound(py)
+        .downcast_into::<PyDict>()?;
+    let model_name: String = file_path.getattr(STEM_ATTRIBUTE)?.extract()?;
+    let declarations: HeaderDeclarations<'py> = match model_header_declarations(
+        py,
+        (
+            header_values.get_item(ENUMS_KEY)?,
+            header_values.get_item(CONSTANTS_KEY)?,
+        ),
+        model_name,
+        relative_path.clone(),
+    ) {
+        Ok(declarations) => declarations,
+        Err(error) => {
+            return tuple_object(
+                py,
+                vec![object(py, RAISED_TAG)?, error.into_value(py).into_any()],
+            );
+        }
+    };
+    let (enum_declarations, constant_declarations) = declarations;
+    let record: NativeModelFile = NativeModelFile::discovered(ModelFileParts {
+        file_path: file_path.unbind(),
+        relative_path: relative_path.unbind(),
+        contents: PyString::new(py, &model.contents).unbind(),
+        header_values: header_values.unbind(),
+        header_column_locations: model.header_column_locations,
+        output_column_locations: model.output_column_locations,
+        query_sql: PyString::new(py, &model.query_sql).unbind(),
+        declarations: (enum_declarations.unbind(), constant_declarations.unbind()),
+        extract_implicit_alias_columns,
+    });
+    record.into_py_any(py)
 }
 
 /// Parse in-memory SQL model contents into the payload model discovery returns for a file.
@@ -576,6 +659,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_sql_test_contents, module)?)?;
     module.add_function(wrap_pyfunction!(parse_scenario_contents, module)?)?;
     module.add_class::<NativeProjectTree>()?;
+    module.add_class::<NativeModelFile>()?;
     module.add_function(wrap_pyfunction!(discover_model_files, module)?)?;
     module.add_function(wrap_pyfunction!(parse_model_contents, module)?)?;
     module.add_function(wrap_pyfunction!(discover_declaration_layout, module)?)?;

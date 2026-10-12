@@ -1,0 +1,292 @@
+//! A discovered SQL model file as a native record whose Python attributes are built on demand.
+
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::{pyclass, pymethods};
+use sqlbuild_discovery::models::LineColumnSpan;
+
+const SOURCE_LOCATION_MODULE: &str = "sqlbuild.spec.contracts.models";
+const SOURCE_LOCATION_CLASS: &str = "SourceLocation";
+const FIELD_NAMES: [&str; 10] = [
+    "file_path",
+    "relative_path",
+    "contents",
+    "header_values",
+    "header_column_locations",
+    "output_column_locations",
+    "query_sql",
+    "enum_declarations",
+    "constant_declarations",
+    "extract_implicit_alias_columns",
+];
+
+/// Authored locations: native rows until Python reads them, then a cached dict.
+struct Locations {
+    rows: Vec<(String, LineColumnSpan)>,
+    projected: PyOnceLock<Py<PyDict>>,
+}
+
+impl Locations {
+    fn from_rows(rows: Vec<(String, LineColumnSpan)>) -> Self {
+        Self {
+            rows,
+            projected: PyOnceLock::new(),
+        }
+    }
+
+    fn from_dict(py: Python<'_>, dict: Py<PyDict>) -> Self {
+        let projected: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+        let _ = projected.set(py, dict);
+        Self {
+            rows: Vec::new(),
+            projected,
+        }
+    }
+
+    /// Python's `{name: SourceLocation(...)}`: a repeated name keeps its first position and last value.
+    fn dict<'py>(&self, py: Python<'py>, path: &Py<PyAny>) -> PyResult<Bound<'py, PyDict>> {
+        Ok(self
+            .projected
+            .get_or_try_init(py, || {
+                let class: Bound<'py, PyAny> = py
+                    .import(SOURCE_LOCATION_MODULE)?
+                    .getattr(SOURCE_LOCATION_CLASS)?;
+                let dict: Bound<'py, PyDict> = PyDict::new(py);
+                for (name, span) in &self.rows {
+                    let location: Bound<'py, PyAny> = class.call1((
+                        path.bind(py),
+                        span.line,
+                        span.column,
+                        span.end_line,
+                        span.end_column,
+                    ))?;
+                    dict.set_item(name, location)?;
+                }
+                Ok::<_, pyo3::PyErr>(dict.unbind())
+            })?
+            .bind(py)
+            .clone())
+    }
+}
+
+/// A discovered SQL model file and its raw contents.
+#[pyclass(module = "sqlbuild._native", name = "DiscoveredSqlModelFile", frozen)]
+pub(crate) struct NativeModelFile {
+    file_path: Py<PyAny>,
+    relative_path: Py<PyAny>,
+    contents: Py<PyString>,
+    header_values: Py<PyDict>,
+    header_column_locations: Locations,
+    output_column_locations: Locations,
+    query_sql: Py<PyString>,
+    enum_declarations: Py<PyTuple>,
+    constant_declarations: Py<PyTuple>,
+    extract_implicit_alias_columns: bool,
+}
+
+/// What native discovery read for one model file, before its locations are projected.
+pub(crate) struct ModelFileParts {
+    pub(crate) file_path: Py<PyAny>,
+    pub(crate) relative_path: Py<PyAny>,
+    pub(crate) contents: Py<PyString>,
+    pub(crate) header_values: Py<PyDict>,
+    pub(crate) header_column_locations: Vec<(String, LineColumnSpan)>,
+    pub(crate) output_column_locations: Vec<(String, LineColumnSpan)>,
+    pub(crate) query_sql: Py<PyString>,
+    pub(crate) declarations: (Py<PyTuple>, Py<PyTuple>),
+    pub(crate) extract_implicit_alias_columns: bool,
+}
+
+impl NativeModelFile {
+    pub(crate) fn discovered(parts: ModelFileParts) -> Self {
+        let (enum_declarations, constant_declarations) = parts.declarations;
+        Self {
+            file_path: parts.file_path,
+            relative_path: parts.relative_path,
+            contents: parts.contents,
+            header_values: parts.header_values,
+            header_column_locations: Locations::from_rows(parts.header_column_locations),
+            output_column_locations: Locations::from_rows(parts.output_column_locations),
+            query_sql: parts.query_sql,
+            enum_declarations,
+            constant_declarations,
+            extract_implicit_alias_columns: parts.extract_implicit_alias_columns,
+        }
+    }
+
+    pub(crate) fn header_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.header_column_locations.dict(py, &self.relative_path)
+    }
+
+    pub(crate) fn header_value_dict<'py>(&self, py: Python<'py>) -> &Bound<'py, PyDict> {
+        self.header_values.bind(py)
+    }
+
+    pub(crate) fn declaration_tuples<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> (&Bound<'py, PyTuple>, &Bound<'py, PyTuple>) {
+        (
+            self.enum_declarations.bind(py),
+            self.constant_declarations.bind(py),
+        )
+    }
+
+    pub(crate) fn paths<'py>(&self, py: Python<'py>) -> (&Bound<'py, PyAny>, &Bound<'py, PyAny>) {
+        (self.file_path.bind(py), self.relative_path.bind(py))
+    }
+
+    pub(crate) fn texts<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> (&Bound<'py, PyString>, &Bound<'py, PyString>) {
+        (self.query_sql.bind(py), self.contents.bind(py))
+    }
+
+    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        Ok(vec![
+            self.file_path.bind(py).clone(),
+            self.relative_path.bind(py).clone(),
+            self.contents.bind(py).clone().into_any(),
+            self.header_values.bind(py).clone().into_any(),
+            self.header_locations(py)?.into_any(),
+            self.output_column_locations
+                .dict(py, &self.relative_path)?
+                .into_any(),
+            self.query_sql.bind(py).clone().into_any(),
+            self.enum_declarations.bind(py).clone().into_any(),
+            self.constant_declarations.bind(py).clone().into_any(),
+            pyo3::types::PyBool::new(py, self.extract_implicit_alias_columns)
+                .to_owned()
+                .into_any(),
+        ])
+    }
+}
+
+#[pymethods]
+impl NativeModelFile {
+    #[new]
+    #[pyo3(signature = (
+        file_path,
+        relative_path,
+        contents,
+        header_values,
+        header_column_locations,
+        output_column_locations,
+        query_sql,
+        enum_declarations = None,
+        constant_declarations = None,
+        extract_implicit_alias_columns = true,
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        py: Python<'_>,
+        file_path: Py<PyAny>,
+        relative_path: Py<PyAny>,
+        contents: Py<PyString>,
+        header_values: Py<PyDict>,
+        header_column_locations: Py<PyDict>,
+        output_column_locations: Py<PyDict>,
+        query_sql: Py<PyString>,
+        enum_declarations: Option<Py<PyTuple>>,
+        constant_declarations: Option<Py<PyTuple>>,
+        extract_implicit_alias_columns: bool,
+    ) -> Self {
+        Self {
+            file_path,
+            relative_path,
+            contents,
+            header_values,
+            header_column_locations: Locations::from_dict(py, header_column_locations),
+            output_column_locations: Locations::from_dict(py, output_column_locations),
+            query_sql,
+            enum_declarations: enum_declarations.unwrap_or_else(|| PyTuple::empty(py).unbind()),
+            constant_declarations: constant_declarations
+                .unwrap_or_else(|| PyTuple::empty(py).unbind()),
+            extract_implicit_alias_columns,
+        }
+    }
+
+    #[getter]
+    fn file_path(&self, py: Python<'_>) -> Py<PyAny> {
+        self.file_path.clone_ref(py)
+    }
+
+    #[getter]
+    fn relative_path(&self, py: Python<'_>) -> Py<PyAny> {
+        self.relative_path.clone_ref(py)
+    }
+
+    #[getter]
+    fn contents(&self, py: Python<'_>) -> Py<PyString> {
+        self.contents.clone_ref(py)
+    }
+
+    #[getter]
+    fn header_values(&self, py: Python<'_>) -> Py<PyDict> {
+        self.header_values.clone_ref(py)
+    }
+
+    #[getter]
+    fn header_column_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.header_locations(py)
+    }
+
+    #[getter]
+    fn output_column_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        self.output_column_locations.dict(py, &self.relative_path)
+    }
+
+    #[getter]
+    fn query_sql(&self, py: Python<'_>) -> Py<PyString> {
+        self.query_sql.clone_ref(py)
+    }
+
+    #[getter]
+    fn enum_declarations(&self, py: Python<'_>) -> Py<PyTuple> {
+        self.enum_declarations.clone_ref(py)
+    }
+
+    #[getter]
+    fn constant_declarations(&self, py: Python<'_>) -> Py<PyTuple> {
+        self.constant_declarations.clone_ref(py)
+    }
+
+    #[getter]
+    fn extract_implicit_alias_columns(&self) -> bool {
+        self.extract_implicit_alias_columns
+    }
+
+    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let Ok(other) = other.downcast::<NativeModelFile>() else {
+            return Ok(false);
+        };
+        let other: &NativeModelFile = other.get();
+        for (left, right) in self.fields(py)?.iter().zip(other.fields(py)?) {
+            if !left.eq(right)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let fields: Vec<String> = FIELD_NAMES
+            .iter()
+            .zip(self.fields(py)?)
+            .map(|(name, value)| Ok(format!("{name}={}", value.repr()?)))
+            .collect::<PyResult<_>>()?;
+        Ok(format!("DiscoveredSqlModelFile({})", fields.join(", ")))
+    }
+
+    fn __reduce__<'py>(
+        slf: &Bound<'py, Self>,
+    ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyTuple>)> {
+        let py: Python<'py> = slf.py();
+        Ok((
+            slf.get_type().into_any(),
+            PyTuple::new(py, slf.get().fields(py)?)?,
+        ))
+    }
+}
