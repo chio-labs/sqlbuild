@@ -40,7 +40,7 @@ def _native_names(tree: ast.Module) -> frozenset[str]:
             names.update(
                 alias.asname or alias.name
                 for alias in node.names
-                if native_module or NATIVE_MARKER in alias.name
+                if native_module or _names_native(alias.name)
             )
         elif isinstance(node, ast.Import):
             names.update(
@@ -53,7 +53,11 @@ def _native_names(tree: ast.Module) -> frozenset[str]:
 
 def _is_native_module(module: str) -> bool:
     parts: list[str] = module.split(".")
-    return parts[0] == NATIVE_PACKAGE and any(NATIVE_MARKER in part for part in parts[1:])
+    return parts[0] == NATIVE_PACKAGE and any(_names_native(part) for part in parts[1:])
+
+
+def _names_native(name: str) -> bool:
+    return NATIVE_MARKER in name.split("_")
 
 
 def _guarded_blocks(tree: ast.Module) -> list[tuple[str, ast.stmt]]:
@@ -89,7 +93,17 @@ def _swallowing_lines(*, node: ast.stmt, native: frozenset[str]) -> list[int]:
 
 
 def _always_raises(handler: ast.ExceptHandler) -> bool:
-    return any(isinstance(statement, ast.Raise) for statement in handler.body)
+    return isinstance(handler.body[-1], ast.Raise) and not any(
+        _exits_early(statement) for statement in handler.body
+    )
+
+
+def _exits_early(node: ast.AST) -> bool:
+    if isinstance(node, ast.Return | ast.Break | ast.Continue):
+        return True
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda | ast.ClassDef):
+        return False
+    return any(_exits_early(child) for child in ast.iter_child_nodes(node))
 
 
 def _is_suppress(expression: ast.expr) -> bool:

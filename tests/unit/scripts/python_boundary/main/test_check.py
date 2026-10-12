@@ -34,9 +34,9 @@ CONDITIONAL: str = (
     "    try:\n"
     "        return content_digest([text])\n"
     "    except ValueError:\n"
-    "        if strict:\n"
-    "            raise\n"
-    "        return None\n"
+    "        if not strict:\n"
+    "            return None\n"
+    "        raise\n"
 )
 SUPPRESSED: str = (
     "import contextlib\n"
@@ -64,6 +64,23 @@ REVIEWED: str = (
             source_files={"compiler/plan.py": "a = 1\nb = 2\n", "executor/run.py": "c = 3\n"},
             policy="remaining_lines = 2\n" + STAYS,
             expected_messages=("2 movable Python lines remain",),
+        ),
+        PythonBoundaryTestCase(
+            description="names that only contain the letters native are not native calls",
+            source_files={
+                "compiler/plan.py": (
+                    "from sqlbuild.compiler.alternatives import alternative_plan\n"
+                    "\n"
+                    "\n"
+                    "def plan():\n"
+                    "    try:\n"
+                    "        return alternative_plan()\n"
+                    "    except ValueError:\n"
+                    "        return None\n"
+                )
+            },
+            policy="remaining_lines = 8\n",
+            expected_messages=("8 movable Python lines remain",),
         ),
         PythonBoundaryTestCase(
             description="re-raised native failures are allowed",
