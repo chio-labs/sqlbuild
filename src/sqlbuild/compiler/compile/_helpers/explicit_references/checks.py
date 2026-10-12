@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import ast
 import inspect
 import textwrap
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
@@ -47,9 +46,6 @@ from sqlbuild.spec.contracts.models import SourceEntry, SourceLocation
 _MODEL_HOOK_KEYS: tuple[str, ...] = ("pre_hooks", "post_hooks")
 _RAISE_KEY: str = "raise"
 _REPORT_KEY: str = "report"
-_SQL_METHOD_NAMES: frozenset[str] = frozenset({"query", "execute_sql"})
-_SQL_PARAMETER_NAME: str = "sql"
-_CONTEXT_PARAMETER_NAMES: frozenset[str] = frozenset({"ctx", "context", "_ctx", "hook_context"})
 _VALUE_PLACEHOLDER: str = "__sqlbuild_python_value_"
 
 
@@ -82,7 +78,7 @@ def explicit_reference_report(
         _owners(project=project, discovered_inputs=discovered_inputs) if enforce_explicit else ()
     )
     literals: tuple[tuple[_LiteralSql, ...], ...] = tuple(
-        tuple(_literal_sql_calls(owner.function)) for owner in owners
+        _literal_sql_calls(owner.function) for owner in owners
     )
     paths: list[Path] = sorted({owner.relative_path for owner in owners})
     path_order: dict[Path, int] = {path: index for index, path in enumerate(paths)}
@@ -373,68 +369,16 @@ def _loader_owners(
     return tuple(owners)
 
 
-def _literal_sql_calls(function: Callable[..., object]) -> Iterator[_LiteralSql]:
+def _literal_sql_calls(function: Callable[..., object]) -> tuple[_LiteralSql, ...]:
     try:
         lines: list[str]
         start_line: int
         lines, start_line = inspect.getsourcelines(function)
-        tree: ast.Module = ast.parse(textwrap.dedent("".join(lines)))
-    except (OSError, TypeError, SyntaxError):
-        return
-    definition: ast.stmt | None = tree.body[0] if tree.body else None
-    if not isinstance(definition, ast.FunctionDef | ast.AsyncFunctionDef):
-        return
-    parameters: list[str] = [
-        argument.arg
-        for argument in (
-            *definition.args.posonlyargs,
-            *definition.args.args,
-            *definition.args.kwonlyargs,
+    except (OSError, TypeError):
+        return ()
+    return tuple(
+        _LiteralSql(method=method, sql=sql, line=line)
+        for method, sql, line in _native.python_literal_sql_calls(
+            textwrap.dedent("".join(lines)), start_line, _VALUE_PLACEHOLDER
         )
-    ]
-    context_name: str | None = next(
-        (name for name in parameters if name in _CONTEXT_PARAMETER_NAMES),
-        parameters[0] if parameters else None,
     )
-    if context_name is None:
-        return
-    for node in ast.walk(definition):
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in _SQL_METHOD_NAMES
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == context_name
-        ):
-            continue
-        argument: ast.expr | None = _sql_argument(node)
-        sql: str | None = _literal_text(argument) if argument is not None else None
-        if sql is not None:
-            yield _LiteralSql(method=node.func.attr, sql=sql, line=start_line + node.lineno - 1)
-
-
-def _sql_argument(call: ast.Call) -> ast.expr | None:
-    if call.args:
-        return call.args[0]
-    for keyword in call.keywords:
-        if keyword.arg == _SQL_PARAMETER_NAME:
-            return keyword.value
-        if keyword.arg is None and isinstance(keyword.value, ast.Dict):
-            for key, value in zip(keyword.value.keys, keyword.value.values, strict=True):
-                if isinstance(key, ast.Constant) and key.value == _SQL_PARAMETER_NAME:
-                    return value
-    return None
-
-
-def _literal_text(node: ast.expr) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if not isinstance(node, ast.JoinedStr):
-        return None
-    parts: list[str] = []
-    for index, value in enumerate(node.values):
-        if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            parts.append(value.value)
-        else:
-            parts.append(f"{_VALUE_PLACEHOLDER}{index}")
-    return "".join(parts)

@@ -7,6 +7,8 @@ use sqlbuild_analysis::explicit_references::errors::ReferenceFailure;
 use sqlbuild_analysis::explicit_references::main::check_explicit_references::check_explicit_references;
 use sqlbuild_analysis::explicit_references::models::{ReferenceReport, ReferenceRequest};
 use sqlbuild_core::panics::main::native_failure::native_failure;
+use sqlbuild_pysource::literal_sql::main::literal_sql_calls::literal_sql_calls;
+use sqlbuild_pysource::literal_sql::models::FunctionSource;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
@@ -44,6 +46,26 @@ fn check_native_explicit_references(py: Python<'_>, request_json: &str) -> PyRes
     })
 }
 
+/// `(method, sql, line)` for each literal SQL call to the context in a dedented function source.
+#[pyfunction]
+fn python_literal_sql_calls(
+    py: Python<'_>,
+    source: &str,
+    start_line: usize,
+    placeholder: &str,
+) -> Vec<(String, String, usize)> {
+    let version = py.version_info();
+    literal_sql_calls(&FunctionSource {
+        text: source,
+        start_line,
+        placeholder,
+        python_version: (version.major, version.minor),
+    })
+    .into_iter()
+    .map(|call| (call.method, call.sql, call.line))
+    .collect()
+}
+
 fn report_value(report: &ReferenceReport) -> PyResult<Value> {
     serde_json::to_value(report).map_err(|error| {
         compiler_error(native_failure(
@@ -55,5 +77,6 @@ fn report_value(report: &ReferenceReport) -> PyResult<Value> {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(check_native_explicit_references, module)?)?;
+    module.add_function(wrap_pyfunction!(python_literal_sql_calls, module)?)?;
     Ok(())
 }
