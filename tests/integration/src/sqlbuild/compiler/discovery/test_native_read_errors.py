@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.native.payloads import native_read_error
+import sqlbuild._native as _native
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     NativeOsErrorTestCase,
     ReadErrorOracleTestCase,
@@ -128,29 +128,29 @@ def test_given_unreadable_file_when_discovering_then_python_read_error_is_raised
     [
         NativeOsErrorTestCase(
             description="a refused read is Python's errno error naming the file",
-            payload=("read", "os", 13, "Permission denied (os error 13)", None),
+            payload=(13, None, "Permission denied (os error 13)"),
             expected_type="PermissionError",
             expected_fields=(13, "Permission denied", "orders.sql"),
         ),
         NativeOsErrorTestCase(
             description="a Windows listing error carries its Win32 code for Python to map",
-            payload=("read", "os", None, "Access is denied", 5),
+            payload=(None, 5, "Access is denied"),
             expected_type="OSError",
             expected_fields=(None, "Access is denied", "orders.sql"),
         ),
         NativeOsErrorTestCase(
             description="an error without a code keeps the operating system message",
-            payload=("read", "os", None, "stream did not contain valid UTF-8", None),
+            payload=(None, None, "stream did not contain valid UTF-8"),
             expected_type="OSError",
             expected_fields=(None, None, None),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_os_read_payload_when_building_error_then_python_error_matches_platform(
+def test_given_os_read_failure_when_building_error_then_python_error_matches_platform(
     test_case: NativeOsErrorTestCase,
 ) -> None:
-    error: Exception = native_read_error(payload=test_case.payload, file_path=Path("orders.sql"))
+    error: Exception = _native._oracle_read_error(*test_case.payload, file_path=Path("orders.sql"))
 
     assert (
         type(error).__name__,

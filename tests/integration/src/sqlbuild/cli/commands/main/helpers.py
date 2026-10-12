@@ -13,7 +13,6 @@ from typing import Any, cast
 import duckdb
 import pytest
 
-from sqlbuild._native import NativeProjectTree
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
@@ -29,9 +28,8 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.compiler.analysis_session.models import NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
-from sqlbuild.compiler.discovery._helpers.native import (
-    model_files as native_model_files_module,
-)
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_SUFFIX
+from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
@@ -649,18 +647,23 @@ def record_source_rebinding_analyses(monkeypatch: pytest.MonkeyPatch) -> list[st
     return analysed
 
 
-def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
-    """Record every native model discovery request that locates output columns eagerly."""
+def eager_output_column_scans(*, capture_dir: Path) -> tuple[int, int]:
+    """Count the captured model files, and those discovery located output columns for eagerly."""
 
-    eager: list[dict[str, object]] = []
-    original: Callable[..., object] = native_model_files_module._native.discover_model_files
+    located: list[bool] = []
 
-    def recording(request: dict[str, object], tree: NativeProjectTree, project_dir: Path) -> object:
-        eager.extend(filter(lambda item: item["extract_output_column_locations"], (request,)))
-        return original(request, tree, project_dir)
+    def record(item: dict[str, object]) -> dict[str, object]:
+        located.extend(map(bool, map(item.get, filter(item.__contains__, _OUTPUT_LOCATIONS))))
+        return item
 
-    monkeypatch.setattr(native_model_files_module._native, "discover_model_files", recording)
-    return eager
+    for capture in sorted(
+        capture_dir.glob(f"*-{CompilerStage.DISCOVERED_PROJECT_INPUTS.value}{STAGE_CAPTURE_SUFFIX}")
+    ):
+        _ = json.loads(capture.read_text(encoding="utf-8"), object_hook=record)
+    return len(located), sum(located)
+
+
+_OUTPUT_LOCATIONS: tuple[str, ...] = ("output_column_locations",)
 
 
 def write_repeated_json_parse_project(

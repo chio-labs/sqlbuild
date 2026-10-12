@@ -5,24 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
     discover_macro_files,
+    discover_model_files,
     discover_model_schema_files,
+    discover_scenario_files,
+    discover_source_files,
     discover_sql_function_files,
     discover_sql_hook_files,
-)
-from sqlbuild.compiler.discovery._helpers.native.model_files import (
-    discover_native_model_files,
-)
-from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
-    discover_native_scenario_files,
-    discover_native_test_files,
-)
-from sqlbuild.compiler.discovery._helpers.native.yaml_files import (
-    discover_native_source_files,
+    discover_test_files,
 )
 from sqlbuild.compiler.discovery._helpers.yml.project import load_local_config, load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
@@ -59,7 +53,7 @@ def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscov
         function=discover_sql_hook_files, project_dir=project_dir
     )
     sources, source_faults = _discover_category(
-        function=discover_native_source_files, project_dir=project_dir
+        function=discover_source_files, project_dir=project_dir
     )
     audits, audit_faults = _discover_category(
         function=discover_audit_files, project_dir=project_dir
@@ -129,7 +123,7 @@ def _discover_models(
     *, project_dir: Path
 ) -> tuple[tuple[DiscoveredSqlModelFile, ...], tuple[DiscoveryFileFault, ...]]:
     faults: list[DiscoveryFileFault] = []
-    models: tuple[DiscoveredSqlModelFile, ...] = discover_native_model_files(
+    models: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
         project_dir=project_dir,
         extract_implicit_alias_columns=False,
         extract_output_column_locations=False,
@@ -191,10 +185,10 @@ def _discover_relationships(
     tuple[DiscoveryFileFault, ...],
 ]:
     faults: list[DiscoveryFileFault] = []
-    tests: tuple[DiscoveredSqlTestFile, ...] = discover_native_test_files(
+    tests: tuple[DiscoveredSqlTestFile, ...] = discover_test_files(
         project_dir=project_dir, on_fault=faults.append
     )
-    scenarios: tuple[DiscoveredSqlScenarioFile, ...] = discover_native_scenario_files(
+    scenarios: tuple[DiscoveredSqlScenarioFile, ...] = discover_scenario_files(
         project_dir=project_dir, on_fault=faults.append
     )
     return tests, scenarios, tuple(faults)

@@ -1,30 +1,16 @@
 from pathlib import Path
-from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
-from sqlbuild.compiler.discovery._helpers.native.payloads import (
-    native_locations,
-    native_payload_error,
-)
-from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
-    parse_native_sql_test_contents,
-)
-from sqlbuild.compiler.discovery._helpers.sql.scenarios import build_sql_scenario_file
-from sqlbuild.compiler.discovery._helpers.yml.schema import parse_loaded_schema_yml
-from sqlbuild.compiler.discovery._helpers.yml.sources import parse_loaded_sources_yml
+from sqlbuild.compiler.discovery._helpers.yml.yaml_classes import yaml_entry_classes
 from sqlbuild.compiler.discovery.constants import (
     REMOVED_SQL_MODEL_HEADER_KEYS,
     SQL_MODEL_HEADER_KEYS,
-    SQL_SCENARIO_HEADER_KEYS,
-    SQL_TEST_HEADER_KEYS,
 )
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
 )
-from sqlbuild.compiler.discovery.types import NativeLocation
 from sqlbuild.spec.contracts.models import (
     SchemaModelEntry,
     SchemaSeedEntry,
@@ -47,10 +33,10 @@ def write_lifecycle_event_sink_project(*, project_dir: Path, exporter_config: st
     )
 
 
-def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, ...]:
+def discover_all_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, ...]:
     """Discover every model file with the column extraction full compilation uses."""
 
-    return discover_native_model_files(
+    return _native.discover_model_files(
         project_dir=project_dir,
         extract_implicit_alias_columns=True,
         extract_output_column_locations=True,
@@ -60,8 +46,8 @@ def discover_model_files(*, project_dir: Path) -> tuple[DiscoveredSqlModelFile, 
 def parse_model_sql(*, contents: str, file_path: Path) -> tuple[dict[str, object], str]:
     """Parse model contents as model discovery does, returning header values and query SQL."""
 
-    payload: tuple[object, ...] = _parsed_model(contents=contents, file_path=file_path)
-    return cast(dict[str, object], payload[2]), str(payload[5])
+    header_values, query_sql, _ = _parsed_model(contents=contents, file_path=file_path)
+    return header_values, query_sql
 
 
 def model_header_column_locations(
@@ -69,14 +55,13 @@ def model_header_column_locations(
 ) -> dict[str, SourceLocation]:
     """Return the authored MODEL(columns) locations model discovery records."""
 
-    payload: tuple[object, ...] = _parsed_model(contents=contents, file_path=relative_path)
-    return native_locations(
-        locations=cast(list[NativeLocation], payload[3]), relative_path=relative_path
-    )
+    return _parsed_model(contents=contents, file_path=relative_path)[2]
 
 
-def _parsed_model(*, contents: str, file_path: Path) -> tuple[object, ...]:
-    payload: tuple[object, ...] = _native.parse_model_contents(
+def _parsed_model(
+    *, contents: str, file_path: Path
+) -> tuple[dict[str, object], str, dict[str, SourceLocation]]:
+    return _native.parse_model_contents(
         {
             "file_path": str(file_path),
             "supported_keys": sorted(SQL_MODEL_HEADER_KEYS),
@@ -86,14 +71,12 @@ def _parsed_model(*, contents: str, file_path: Path) -> tuple[object, ...]:
         },
         contents,
     )
-    _raise_payload_error(payload=payload, file_path=file_path)
-    return payload
 
 
 def parse_sql_test_file(*, contents: str, file_path: Path) -> tuple[DiscoveredSqlTestBlock, ...]:
     """Parse SQL test contents as test discovery does."""
 
-    return parse_native_sql_test_contents(contents=contents, file_path=file_path)
+    return _native.parse_sql_test_file(contents=contents, file_path=file_path)
 
 
 def parse_sql_scenario_file(
@@ -101,31 +84,18 @@ def parse_sql_scenario_file(
 ) -> DiscoveredSqlScenarioFile:
     """Parse scenario contents as scenario discovery does."""
 
-    payload: tuple[object, ...] = _native.parse_scenario_contents(
-        {
-            "file_path": str(file_path),
-            "test_keys": sorted(SQL_TEST_HEADER_KEYS),
-            "scenario_keys": sorted(SQL_SCENARIO_HEADER_KEYS),
-        },
-        contents,
-    )
-    _raise_payload_error(payload=payload, file_path=file_path)
-    return build_sql_scenario_file(
-        header_values=cast(dict[str, object], payload[2]),
-        sql_body=str(payload[3]),
-        contents=str(payload[1]),
-        file_path=file_path,
-        relative_path=relative_path,
-        sql_body_span=cast(tuple[int, int], payload[4]),
+    return _native.parse_sql_scenario_file(
+        contents=contents, file_path=file_path, relative_path=relative_path
     )
 
 
 def parse_sources_yml(*, contents: str, file_path: Path) -> tuple[SourceEntry, ...]:
     """Load and parse sources YAML contents as source discovery does."""
 
-    return parse_loaded_sources_yml(
-        loaded=_loaded_yaml(contents=contents, file_path=file_path, kind="source"),
-        file_path=file_path,
+    return _native.parse_sources_document(
+        _native.load_yaml_document(str(file_path), contents, "source"),
+        str(file_path),
+        yaml_entry_classes(),
     )
 
 
@@ -134,18 +104,8 @@ def parse_schema_yml(
 ) -> tuple[tuple[SchemaModelEntry, ...], tuple[SchemaSeedEntry, ...]]:
     """Load and parse schema or seed YAML contents as schema discovery does."""
 
-    return parse_loaded_schema_yml(
-        loaded=_loaded_yaml(contents=contents, file_path=file_path, kind="schema"),
-        file_path=file_path,
+    return (), _native.parse_schema_document(
+        _native.load_yaml_document(str(file_path), contents, "schema"),
+        str(file_path),
+        yaml_entry_classes(),
     )
-
-
-def _loaded_yaml(*, contents: str, file_path: Path, kind: str) -> object:
-    payload: tuple[object, ...] = _native.load_yaml_document(str(file_path), contents, kind)
-    _raise_payload_error(payload=payload, file_path=file_path)
-    return payload[2]
-
-
-def _raise_payload_error(*, payload: tuple[object, ...], file_path: Path) -> None:
-    for error in filter(None, (native_payload_error(payload=payload, file_path=file_path),)):
-        raise error

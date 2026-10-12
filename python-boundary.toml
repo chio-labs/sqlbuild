@@ -205,6 +205,14 @@ reason = "public-api"
 note = "Public facade."
 
 [[handled_native_errors]]
+location = "compiler/discovery/_helpers/filesystem/aggregation.py::_discover_declarations"
+note = "Tolerant scope discovery records a failing declaration category as a fault; no Python implementation runs."
+
+[[handled_native_errors]]
+location = "compiler/planner/_helpers/sql_tests/fixture_formatting.py::format_redundant_fixture_nulls"
+note = "A test file that no longer parses is left unformatted, as before; no Python implementation runs."
+
+[[handled_native_errors]]
 location = "compiler/macro_bridge/_helpers/store_keys.py::macro_store_token"
 note = "A macro without a stable key is not stored; no Python implementation runs."
 
@@ -239,3 +247,11 @@ note = "A baseline that does not compile yields no relation keys, as before the 
 [[handled_native_errors]]
 location = "lint/_helpers/fixes.py::_FixSession._verdict"
 note = "A candidate fix whose project fails to compile is unverified and not applied, as before the compile entry became native; no Python implementation runs instead."
+
+[[handled_native_errors]]
+location = "compiler/discovery/_helpers/filesystem/aggregation.py::_discover_declarations"
+note = "Tolerant scope discovery records a failing declaration category as a fault; no Python implementation runs."
+
+[[handled_native_errors]]
+location = "compiler/planner/_helpers/sql_tests/fixture_formatting.py::format_redundant_fixture_nulls"
+note = "A test file that no longer parses is left unformatted, as before; no Python implementation runs."

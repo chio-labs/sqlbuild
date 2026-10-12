@@ -6,3 +6,5 @@ mod load_yaml_files;
 mod test_types;
 #[path = "tests/test_yaml_entry_lines.rs"]
 mod yaml_entry_lines;
+#[path = "tests/test_yaml_paths.rs"]
+mod yaml_paths;

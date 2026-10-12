@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_model_schema_files
-from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
+from sqlbuild._native import discover_model_files, discover_model_schema_files
 from sqlbuild.compiler.discovery._helpers.yml.project import load_project_config
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryFileFault
@@ -20,7 +19,7 @@ def discover_model_description_inputs(*, project_dir: Path) -> DiscoveredProject
         return DiscoveredProjectInputs(
             project_config=project_config,
             local_config=LocalConfig(),
-            model_files=discover_native_model_files(
+            model_files=discover_model_files(
                 project_dir=project_dir,
                 extract_implicit_alias_columns=False,
                 extract_output_column_locations=False,

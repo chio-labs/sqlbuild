@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
+from sqlbuild._native import (
+    discover_model_files,
+)
 from sqlbuild.compiler.discovery._helpers.sql import model_files as model_file_helpers
 from sqlbuild.compiler.discovery._helpers.sql.model_files import model_output_column_locations
 from sqlbuild.compiler.discovery.models import (
@@ -27,7 +29,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ParseModelSqlHeaderTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery.helpers import (
-    discover_model_files,
+    discover_all_model_files,
     model_header_column_locations,
     parse_model_sql,
 )
@@ -53,7 +55,7 @@ def test_given_unique_model_headers_when_discovering_then_header_values_and_loca
         f"MODEL ({second_header});\nSELECT 2 AS total\n", encoding="utf-8"
     )
 
-    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(project_dir=tmp_path)
+    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_all_model_files(project_dir=tmp_path)
 
     assert len(discovered) == test_case.expected_count
     assert [model.header_values for model in discovered] == [
@@ -126,7 +128,7 @@ def test_given_multiple_invalid_model_headers_when_discovering_then_fault_order_
     (models_dir / "second.sql").write_text("MODEL (schema ${MISSING); SELECT 2", encoding="utf-8")
     faults: list[DiscoveryFileFault] = []
 
-    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_native_model_files(
+    discovered: tuple[DiscoveredSqlModelFile, ...] = discover_model_files(
         project_dir=tmp_path,
         extract_implicit_alias_columns=True,
         extract_output_column_locations=True,
@@ -164,7 +166,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
         encoding="utf-8",
     )
 
-    model_file: DiscoveredSqlModelFile = discover_native_model_files(
+    model_file: DiscoveredSqlModelFile = discover_model_files(
         project_dir=tmp_path,
         extract_implicit_alias_columns=(test_case.expected_extract_implicit_alias_columns),
         extract_output_column_locations=False,

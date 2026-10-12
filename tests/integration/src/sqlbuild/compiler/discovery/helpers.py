@@ -20,20 +20,17 @@ from pathlib import Path
 from typing import Any, cast
 
 from sqlbuild import _native
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
-    build_tolerant_scope_discovery,
-)
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
     discover_model_schema_files,
+    discover_project_inputs,
     discover_sql_function_files,
     discover_sql_hook_files,
 )
-from sqlbuild.compiler.discovery._helpers.native.payloads import (
-    native_payload_error,
+from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
+    build_tolerant_scope_discovery,
 )
 from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
     SelectedContractInputDiscoverer,
@@ -464,24 +461,25 @@ def random_undecodable_bytes(*, rng: random.Random) -> bytes:
 def native_read_outcomes(*, project_dir: Path, relative_paths: list[str]) -> list[object]:
     """Return the type and text of the read error native reading reports for each file, if any."""
 
-    payloads: list[tuple[object, ...]] = cast(
-        list[tuple[object, ...]],
+    return [
+        {True: (type(row).__name__, str(row)), False: ("NoneType", "None")}[
+            isinstance(row, UnicodeError | OSError)
+        ]
+        for row in _native_yaml_rows(project_dir=project_dir, relative_paths=relative_paths)
+    ]
+
+
+def _native_yaml_rows(*, project_dir: Path, relative_paths: list[str]) -> list[object]:
+    """Each file's `(contents, loaded)`, or the error native source YAML loading raises for it."""
+
+    return cast(
+        list[object],
         _native.load_yaml_files(
             {"project_dir": str(project_dir), "display_prefix": "", "kind": "source"},
             relative_paths,
             _native.NativeProjectTree(str(project_dir)),
         ),
     )
-    errors: list[Exception | None] = [
-        native_payload_error(payload=payload, file_path=project_dir / path)
-        for payload, path in zip(payloads, relative_paths, strict=True)
-    ]
-    return [
-        {True: (type(error).__name__, str(error)), False: ("NoneType", "None")}[
-            isinstance(error, UnicodeError | OSError)
-        ]
-        for error in errors
-    ]
 
 
 def python_read_outcomes(*, project_dir: Path, relative_paths: list[str]) -> list[object]:
@@ -581,7 +579,7 @@ def declaration_files_outcome(*, project_dir: Path, kind: str) -> tuple[object, 
 def native_declaration_tag(*, file_path: Path, kind: str) -> str:
     """Return whether native parsing parses, fails or defers one file's contents."""
 
-    payload: tuple[object, ...] = _native.parse_declaration_contents(
+    return _native.parse_declaration_contents(
         {
             "kind": kind,
             "function_keys": sorted(SQL_FUNCTION_HEADER_KEYS),
@@ -591,7 +589,6 @@ def native_declaration_tag(*, file_path: Path, kind: str) -> str:
         (str(file_path), file_path.stem),
         file_path.read_text(encoding="utf-8"),
     )
-    return str(payload[0])
 
 
 def tolerant_declaration_outcome(
@@ -1035,18 +1032,14 @@ def deep_model_header_values(*, project_dir: Path, frames: int) -> dict[str, obj
 def native_yaml_tags_and_values(
     *, project_dir: Path, relative_paths: list[str]
 ) -> tuple[list[object], list[object]]:
-    """Return each file's native tag and the values of the files that loaded."""
+    """Return whether each file loaded (`ok`) or failed (`error`), and the loaded values."""
 
-    rows: list[tuple[object, ...]] = cast(
-        list[tuple[object, ...]],
-        _native.load_yaml_files(
-            {"project_dir": str(project_dir), "display_prefix": "", "kind": "source"},
-            relative_paths,
-            _native.NativeProjectTree(str(project_dir)),
-        ),
+    rows: list[object] = _native_yaml_rows(project_dir=project_dir, relative_paths=relative_paths)
+    failed: list[bool] = [isinstance(row, Exception) for row in rows]
+    loaded: list[tuple[str, object]] = cast(
+        list[tuple[str, object]], list(compress(rows, [not failure for failure in failed]))
     )
-    loaded: list[tuple[object, ...]] = list(compress(rows, [row[0] == "ok" for row in rows]))
-    return [row[0] for row in rows], [row[2] for row in loaded]
+    return [{True: "error", False: "ok"}[failure] for failure in failed], [row[1] for row in loaded]
 
 
 VALIDATION_MODEL: tuple[str, bytes] = ("models/orders.sql", b"MODEL ();\nSELECT 1 AS order_id")

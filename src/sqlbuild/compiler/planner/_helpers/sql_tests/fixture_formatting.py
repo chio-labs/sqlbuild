@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.classes.sql_test_cte_extractor import SqlTestCteExtractor
 from sqlbuild.compiler.compile.constants import (
     REF_TEST_CTE_PREFIX,
@@ -15,7 +16,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlTestCte
 from sqlbuild.compiler.compile.types import CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
-from sqlbuild.compiler.discovery.main._parse_sql_test_file import parse_sql_test_file
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
@@ -90,7 +90,7 @@ def format_redundant_fixture_nulls(
         if contents is None:
             continue
         try:
-            current_blocks: tuple[DiscoveredSqlTestBlock, ...] = parse_sql_test_file(
+            current_blocks: tuple[DiscoveredSqlTestBlock, ...] = _native.parse_sql_test_file(
                 contents=contents,
                 file_path=file_path,
             )

@@ -1,59 +1,74 @@
 //! Cross-file validation of one discovery's inputs.
 
-use pyo3::prelude::{Bound, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::exceptions::PyKeyError;
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_discovery::project_validation::main::validate_project_inputs::validate_project_inputs;
 use sqlbuild_discovery::project_validation::models::{ProjectFacts, ValidationFailure};
 
 use crate::bindings::_helpers::discovery::project_facts::{NodeRow, project_facts};
-use crate::bindings::_helpers::discovery::project_files::{
-    PyObject, failure_object, object, read_object, tuple_object,
-};
+use crate::bindings::_helpers::discovery::raised::{failure_error, read_error};
 
-const CSV_ERROR_TAG: &str = "csv";
-const CSV_DIALECT_TAG: &str = "csv_dialect";
-const UNREADABLE_TAG: &str = "unreadable";
+const CSV_MODULE: &str = "csv";
+const BUILTINS_MODULE: &str = "builtins";
+const PATHLIB_MODULE: &str = "pathlib";
+/// The exceptions a CSV dialect may raise, by class name.
+const CSV_DIALECT_ERRORS: [&str; 2] = ["TypeError", "ValueError"];
 
-/// `None` when the inputs are consistent, else the payload of the first error Python raises.
+fn raised(result: PyResult<Bound<'_, PyAny>>) -> PyErr {
+    match result {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+/// Raise the first cross-file conflict across the discovered inputs, as Python raises it.
 #[pyfunction]
-fn discovered_inputs_failure(
+fn validate_discovered_project_inputs(
     py: Python<'_>,
     inputs: Bound<'_, PyAny>,
     nodes: Vec<NodeRow>,
-) -> PyResult<Option<PyObject>> {
+) -> Result<(), PyErr> {
     let facts: ProjectFacts = project_facts(py, &inputs, nodes)?;
-    let failure: ValidationFailure = match validate_project_inputs(&facts) {
-        Ok(()) => return Ok(None),
-        Err(failure) => failure,
+    let Err(failure) = validate_project_inputs(&facts) else {
+        return Ok(());
     };
-    let payload: PyObject = match failure {
-        ValidationFailure::Discovery(failure) => failure_object(py, failure)?,
+    Err(match failure {
+        ValidationFailure::Discovery(failure) => failure_error(py, failure),
         ValidationFailure::Unreadable {
             absolute_path,
             failure,
-        } => tuple_object(
-            py,
-            vec![
-                object(py, UNREADABLE_TAG)?,
-                object(py, absolute_path)?,
-                read_object(py, failure)?,
-            ],
-        )?,
-        ValidationFailure::Csv(message) => {
-            tuple_object(py, vec![object(py, CSV_ERROR_TAG)?, object(py, message)?])?
+        } => match py
+            .import(PATHLIB_MODULE)
+            .and_then(|module| module.getattr("Path"))
+            .and_then(|path| path.call1((absolute_path,)))
+        {
+            Ok(file_path) => read_error(failure, &file_path),
+            Err(error) => error,
+        },
+        ValidationFailure::Csv(message) => raised(
+            py.import(CSV_MODULE)
+                .and_then(|module| module.getattr("Error"))
+                .and_then(|class| class.call1((message,))),
+        ),
+        ValidationFailure::CsvDialect(error) => {
+            if !CSV_DIALECT_ERRORS.contains(&error.class.as_str()) {
+                return Err(PyKeyError::new_err(error.class.to_string()));
+            }
+            raised(
+                py.import(BUILTINS_MODULE)
+                    .and_then(|module| module.getattr(error.class.as_str()))
+                    .and_then(|class| class.call1((error.message,))),
+            )
         }
-        ValidationFailure::CsvDialect(error) => tuple_object(
-            py,
-            vec![
-                object(py, CSV_DIALECT_TAG)?,
-                object(py, error.class)?,
-                object(py, error.message)?,
-            ],
-        )?,
-    };
-    Ok(Some(payload))
+    })
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(discovered_inputs_failure, module)?)
+    module.add_function(wrap_pyfunction!(
+        validate_discovered_project_inputs,
+        module
+    )?)
 }

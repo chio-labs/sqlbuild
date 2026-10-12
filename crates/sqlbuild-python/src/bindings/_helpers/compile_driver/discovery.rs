@@ -1,11 +1,25 @@
 //! Project discovery: configuration, declaration files and imported project Python, validated.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyCFunction, PyDict, PySet, PySetMethods, PyTuple};
+use pyo3::types::{PyCFunction, PyDict, PySet, PySetMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
+};
+use crate::bindings::_helpers::discovery::declaration_records::{
+    discover_adapter_file, discover_audit_files, discover_constant_files, discover_enum_files,
+    discover_macro_files, discover_model_schema_files, discover_seed_files,
+    discover_sql_function_files, discover_sql_hook_files, retained_discovery_session,
+};
+use crate::bindings::_helpers::discovery::model_records::{
+    ModelFileSelection, discovered_model_files,
+};
+use crate::bindings::_helpers::discovery::sql_test_records::{
+    discover_scenario_files, discover_test_files,
+};
+use crate::bindings::_helpers::discovery::yaml_records::{
+    discover_schema_files, discover_source_files,
 };
 
 const FRONTIER_MODULE: &str = "sqlbuild.compiler.frontier.main._compile_frontier";
@@ -22,11 +36,6 @@ const EVENT_EXPORTERS_MODULE: &str =
 const FILESYSTEM_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.core";
 const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
 const LOADERS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.integrations.loaders";
-const DECLARATION_FILES_MODULE: &str =
-    "sqlbuild.compiler.discovery._helpers.native.declaration_files";
-const MODEL_FILES_MODULE: &str = "sqlbuild.compiler.discovery._helpers.native.model_files";
-const SQL_TEST_FILES_MODULE: &str = "sqlbuild.compiler.discovery._helpers.native.sql_test_files";
-const YAML_FILES_MODULE: &str = "sqlbuild.compiler.discovery._helpers.native.yaml_files";
 const SNAPSHOT_MODULE: &str = "sqlbuild.compiler.discovery.classes.directory_snapshot";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 
@@ -48,62 +57,58 @@ const DECLARATION_COLLECTIONS: [&str; 14] = [
     "macro_files",
 ];
 
-/// Discoverers of the declaration files that take only `project_dir`, with their result fields.
-const FILE_DISCOVERERS: [(&str, &str, &str); 8] = [
-    ("enum_files", FILESYSTEM_MODULE, "discover_enum_files"),
+/// A native discoverer that takes only `project_dir`.
+type FileDiscoverer = for<'py> fn(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>;
+
+/// Early discoverers by result field; `None` is the Python function-file discoverer (uses `ast`).
+const FILE_DISCOVERERS: [(&str, Option<FileDiscoverer>); 8] = [
+    (
+        "enum_files",
+        Some(|dir| Ok(discover_enum_files(dir, None, false)?.into_any())),
+    ),
     (
         "constant_files",
-        FILESYSTEM_MODULE,
-        "discover_constant_files",
+        Some(|dir| Ok(discover_constant_files(dir, None, false)?.into_any())),
     ),
     (
         "model_schema_files",
-        FILESYSTEM_MODULE,
-        "discover_model_schema_files",
+        Some(|dir| Ok(discover_model_schema_files(dir, None)?.into_any())),
     ),
     (
         "sql_function_files",
-        FILESYSTEM_MODULE,
-        "discover_sql_function_files",
+        Some(|dir| Ok(discover_sql_function_files(dir, None)?.into_any())),
     ),
     (
         "sql_hook_files",
-        FILESYSTEM_MODULE,
-        "discover_sql_hook_files",
+        Some(|dir| Ok(discover_sql_hook_files(dir, None)?.into_any())),
     ),
-    (
-        "python_function_files",
-        FILESYSTEM_MODULE,
-        "discover_python_function_files",
-    ),
+    ("python_function_files", None),
     (
         "schema_files",
-        YAML_FILES_MODULE,
-        "discover_native_schema_files",
+        Some(|dir| Ok(discover_schema_files(dir)?.into_any())),
     ),
-    ("seed_files", FILESYSTEM_MODULE, "discover_seed_files"),
+    (
+        "seed_files",
+        Some(|dir| Ok(discover_seed_files(dir)?.into_any())),
+    ),
 ];
 
 /// Discoverers that run after the schema files, in their original order.
-const LATE_FILE_DISCOVERERS: [(&str, &str, &str); 6] = [
-    (
-        "test_files",
-        SQL_TEST_FILES_MODULE,
-        "discover_native_test_files",
-    ),
-    (
-        "scenario_files",
-        SQL_TEST_FILES_MODULE,
-        "discover_native_scenario_files",
-    ),
-    ("audit_files", FILESYSTEM_MODULE, "discover_audit_files"),
-    ("macro_files", FILESYSTEM_MODULE, "discover_macro_files"),
-    ("adapter_file", FILESYSTEM_MODULE, "discover_adapter_file"),
-    (
-        "native_session",
-        DECLARATION_FILES_MODULE,
-        "retained_discovery_session",
-    ),
+const LATE_FILE_DISCOVERERS: [(&str, FileDiscoverer); 6] = [
+    ("test_files", |dir| {
+        Ok(discover_test_files(dir, None, None)?.into_any())
+    }),
+    ("scenario_files", |dir| {
+        Ok(discover_scenario_files(dir, None)?.into_any())
+    }),
+    ("audit_files", |dir| {
+        Ok(discover_audit_files(dir, None)?.into_any())
+    }),
+    ("macro_files", |dir| {
+        Ok(discover_macro_files(dir, false)?.into_any())
+    }),
+    ("adapter_file", discover_adapter_file),
+    ("native_session", retained_discovery_session),
 ];
 
 /// Discoverers of imported project Python that take `project_dir` and `providers`.
@@ -375,34 +380,30 @@ fn declaration_files<'py>(
     )?;
     within(&snapshot, |_| {
         let files: Bound<'py, PyDict> = PyDict::new(py);
-        files.set_item(
-            "source_files",
-            call_with(
-                &imported(py, YAML_FILES_MODULE, "discover_native_source_files")?,
-                &directory,
-            )?,
-        )?;
+        files.set_item("source_files", discover_source_files(project_dir, None)?)?;
         files.set_item(
             "model_files",
-            call_with(
-                &imported(py, MODEL_FILES_MODULE, "discover_native_model_files")?,
-                &[
-                    ("project_dir", project_dir.clone()),
-                    (
-                        "extract_implicit_alias_columns",
-                        PyBool::new(py, sql_analysis_enabled).to_owned().into_any(),
-                    ),
-                    (
-                        "extract_output_column_locations",
-                        PyBool::new(py, extract_output_column_locations)
-                            .to_owned()
-                            .into_any(),
-                    ),
-                ],
+            discovered_model_files(
+                project_dir,
+                (sql_analysis_enabled, extract_output_column_locations),
+                ModelFileSelection {
+                    selected_model_names: None,
+                    on_fault: None,
+                },
             )?,
         )?;
-        for (field, module, name) in FILE_DISCOVERERS.iter().chain(LATE_FILE_DISCOVERERS.iter()) {
-            files.set_item(*field, call_with(&imported(py, module, name)?, &directory)?)?;
+        for (field, discover) in FILE_DISCOVERERS {
+            let discovered: Bound<'py, PyAny> = match discover {
+                Some(discover) => discover(project_dir)?,
+                None => call_with(
+                    &imported(py, FILESYSTEM_MODULE, "discover_python_function_files")?,
+                    &directory,
+                )?,
+            };
+            files.set_item(field, discovered)?;
+        }
+        for (field, discover) in LATE_FILE_DISCOVERERS {
+            files.set_item(field, discover(project_dir)?)?;
         }
         Ok(files)
     })

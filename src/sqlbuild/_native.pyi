@@ -1,6 +1,6 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence, Set
 from pathlib import Path, PurePath
 from typing import Any, Literal, TypedDict, overload
 
@@ -53,11 +53,16 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
+    DiscoveredAdapterFile,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredConstantFile,
+    DiscoveredEnumFile,
     DiscoveredHookFunction,
     DiscoveredLoaderFunction,
+    DiscoveredMacroFile,
     DiscoveredMaterializationFile,
+    DiscoveredModelSchemaFile,
     DiscoveredProjectInputs,
     DiscoveredPythonFunctionFile,
     DiscoveredSchemaFile,
@@ -66,7 +71,9 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
     DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
+    DiscoveryFileFault,
     EnumDeclaration,
     ModelSchemaDeclaration,
     TolerantScopeDiscovery,
@@ -899,7 +906,6 @@ def model_header_failure(
 
 class NativeProjectTree:
     def __init__(self, project_dir: str) -> None: ...
-    def listings(self) -> list[tuple[str, list[tuple[str, bool, bool]]]]: ...
 
 class DiscoveredSqlModelFile:
     """A discovered SQL model file and its raw contents."""
@@ -1076,45 +1082,83 @@ def public_declaration_indexes(
 def public_model_schema_index(
     inputs: DiscoveredProjectInputs,
 ) -> dict[str, ModelSchemaDeclaration]: ...
-def discovered_inputs_failure(
-    inputs: DiscoveredProjectInputs, nodes: list[dict[str, object]]
-) -> tuple[object, ...] | None: ...
+def validate_discovered_project_inputs(
+    inputs: DiscoveredProjectInputs, nodes: list[dict[str, object]], /
+) -> None: ...
 def discover_model_files(
-    request: dict[str, object], tree: NativeProjectTree, project_dir: Path
-) -> list[tuple[Path, object]] | tuple[object, ...]: ...
-def discover_sql_test_files(
-    request: dict[str, object], tree: NativeProjectTree
-) -> list[tuple[str, tuple[object, ...]]] | tuple[object, ...]: ...
+    *,
+    project_dir: Path,
+    extract_implicit_alias_columns: bool,
+    extract_output_column_locations: bool,
+    selected_model_names: Set[str] | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+) -> tuple[DiscoveredSqlModelFile, ...]: ...
+def discover_test_files(
+    *,
+    project_dir: Path,
+    selected_paths: Set[Path] | None = None,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+) -> tuple[DiscoveredSqlTestFile, ...]: ...
 def discover_scenario_files(
-    request: dict[str, object], tree: NativeProjectTree
-) -> list[tuple[str, tuple[object, ...]]] | tuple[object, ...]: ...
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlScenarioFile, ...]: ...
+def parse_sql_test_file(
+    *, contents: str, file_path: Path
+) -> tuple[DiscoveredSqlTestBlock, ...]: ...
+def parse_sql_scenario_file(
+    *, contents: str, file_path: Path, relative_path: Path
+) -> DiscoveredSqlScenarioFile: ...
+def discover_source_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSourceFile, ...]: ...
+def discover_schema_files(*, project_dir: Path) -> tuple[DiscoveredSchemaFile, ...]: ...
 def load_yaml_files(
     request: dict[str, object], relative_paths: list[str], tree: NativeProjectTree
-) -> list[tuple[object, ...]] | tuple[object, ...]: ...
-def load_yaml_document(file_path: str, text: str, kind: str) -> tuple[object, ...]: ...
+) -> list[tuple[str, object] | Exception]: ...
+def load_yaml_document(file_path: str, text: str, kind: str) -> object: ...
+def _oracle_read_error(
+    errno: int | None, winerror: int | None, message: str, *, file_path: Path
+) -> Exception: ...
+def discover_enum_files(
+    *,
+    project_dir: Path,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    isolate_declaration_kind: bool = False,
+) -> tuple[DiscoveredEnumFile, ...]: ...
+def discover_constant_files(
+    *,
+    project_dir: Path,
+    on_fault: Callable[[DiscoveryFileFault], None] | None = None,
+    isolate_declaration_kind: bool = False,
+) -> tuple[DiscoveredConstantFile, ...]: ...
+def discover_model_schema_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredModelSchemaFile, ...]: ...
+def discover_sql_function_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlFunctionFile, ...]: ...
+def discover_sql_hook_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredSqlHookFile, ...]: ...
+def discover_audit_files(
+    *, project_dir: Path, on_fault: Callable[[DiscoveryFileFault], None] | None = None
+) -> tuple[DiscoveredAuditFile, ...]: ...
+def discover_macro_files(
+    *, project_dir: Path, isolate_declaration_kind: bool = False
+) -> tuple[DiscoveredMacroFile, ...]: ...
+def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]: ...
+def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None: ...
+def retained_discovery_session(*, project_dir: Path) -> NativeDiscoverySession | None: ...
+def declaration_groups(*, project_dir: Path) -> list[tuple[str, str]]: ...
 
-class NativeDiscoverySession:
-    def __init__(self, request: dict[str, object]) -> None: ...
-    def collection(
-        self, kind: str, tree: NativeProjectTree, isolate_kind: bool = False
-    ) -> (
-        list[
-            tuple[
-                str, tuple[str, str, str | None, str | None, str | None] | None, tuple[object, ...]
-            ]
-        ]
-        | tuple[object, ...]
-    ): ...
+class NativeDiscoverySession: ...
 
 def parse_declaration_contents(
     request: dict[str, object], names: tuple[str, str], contents: str
-) -> tuple[object, ...]: ...
-def discover_declaration_layout(
-    tree: NativeProjectTree, kind: str | None = None
-) -> tuple[tuple[object, ...], tuple[object, ...]] | tuple[object, ...]: ...
-def parse_model_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
-def parse_sql_test_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
-def parse_scenario_contents(request: dict[str, object], contents: str) -> tuple[object, ...]: ...
+) -> str: ...
+def parse_model_contents(
+    request: dict[str, object], contents: str
+) -> tuple[dict[str, object], str, dict[str, SourceLocation]]: ...
 
 class NativeDeclarationContexts:
     def __init__(
@@ -1235,21 +1279,9 @@ def unresolved_reference_marker_kind(
 def normalize_typed_sql_value(
     raw_value: object, typing: tuple[str, str | None], limits: tuple[int, int, int], /
 ) -> object: ...
-def sql_test_blocks(
-    file_path: str, blocks: list[tuple[dict[str, object], str, tuple[int, int]]], /
-) -> list[object]: ...
-def validate_sql_test_block_names(
-    file_path: str, blocks: list[tuple[int, str | None]], /
-) -> None: ...
 def model_header_declarations(
     header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
 ) -> tuple[tuple[object, ...], tuple[object, ...]]: ...
-def typed_constant_record(
-    constant: tuple[str, object],
-    options: tuple[str | None, str | None],
-    paths: tuple[Path, Path],
-    /,
-) -> object: ...
 def deferred_target_segments(
     template: str, logical: str, context_keys: list[str], variables: list[str], /
 ) -> list[tuple[bool, str]]: ...

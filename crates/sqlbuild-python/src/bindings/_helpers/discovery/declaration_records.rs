@@ -1,0 +1,700 @@
+//! Declaration file collections discovered natively and built as Python discovery records.
+
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_discovery::declaration_files::main::discover_declaration_collection::discover_declaration_collection;
+use sqlbuild_discovery::declaration_files::main::retained_collection::retained_collection;
+use sqlbuild_discovery::declaration_files::models::{
+    AuditBlock, AuditFile, CollectionFailure, CollectionKind, CollectionRequest, ConstantFile,
+    DeclarationCollection, DeclarationFileOptions, DiscoverySession, EnumFile, FileScope,
+    FunctionFile, HookFile, MacroFile, SchemaFile, ScopedFile,
+};
+use sqlbuild_discovery::declaration_files::types::Collection;
+use sqlbuild_discovery::models::{FileOutcome, LineColumnSpan};
+use sqlbuild_discovery::tree::models::ProjectTree;
+use sqlbuild_sqltext::compiler::models::AuthoredValue;
+use std::sync::Arc;
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
+use crate::bindings::_helpers::discovery::header_declarations::typed_constant_record;
+use crate::bindings::_helpers::discovery::project_files::path_object;
+use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
+use crate::bindings::_helpers::discovery::snapshot::{
+    in_snapshot, project_root, project_tree, seed_listings, snapshot_memo,
+};
+use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
+use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
+use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
+
+const MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
+const SCOPE_TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const AUDITING_MODELS_MODULE: &str = "sqlbuild.compiler.auditing.models";
+const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
+const SCHEMA_COLUMNS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.sql.schema_columns";
+const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
+const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
+const PATHLIB_MODULE: &str = "pathlib";
+const SESSION_MEMO_KEY: &str = "native_discovery_session";
+const MEASUREMENT_MODE: &str = "MEASUREMENT";
+
+/// One declaration file being built: its paths and the scope native discovery listed it in.
+struct FileContext<'a, 'py> {
+    tree: &'a ProjectTree,
+    relative_path: Bound<'py, PyAny>,
+    file_path: Bound<'py, PyAny>,
+    scope: Option<&'a FileScope>,
+}
+
+impl<'py> FileContext<'_, 'py> {
+    fn py(&self) -> Python<'py> {
+        self.relative_path.py()
+    }
+
+    /// The fields every declaration file record starts with.
+    fn fields(&self, contents: &str) -> PyResult<Bound<'py, PyDict>> {
+        keywords(
+            self.py(),
+            &[
+                ("file_path", self.file_path.clone()),
+                ("relative_path", self.relative_path.clone()),
+                ("contents", contents.into_bound_py_any(self.py())?),
+            ],
+        )
+    }
+
+    /// Add the scope fields of a file native discovery listed in a role.
+    fn add_scope(&self, fields: &Bound<'py, PyDict>) -> PyResult<()> {
+        let Some(scope) = self.scope else {
+            return Ok(());
+        };
+        let py: Python<'py> = self.py();
+        fields.set_item(
+            "scope_kind",
+            imported(py, SCOPE_TYPES_MODULE, "ScopeKind")?.call1((scope.scope_kind,))?,
+        )?;
+        for (name, path) in [
+            ("ownership_root", &scope.ownership_root),
+            ("owning_path", &scope.owning_path),
+            ("declaration_root", &scope.declaration_root),
+        ] {
+            let value: Bound<'py, PyAny> = match path {
+                Some(path) => {
+                    path_class(py)?.call1((path_object(py, self.tree, path.clone())?,))?
+                }
+                None => py.None().into_bound(py),
+            };
+            fields.set_item(name, value)?;
+        }
+        Ok(())
+    }
+
+    fn record(&self, class: &str, fields: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
+        imported(self.py(), MODELS_MODULE, class)?.call((), Some(fields))
+    }
+}
+
+fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    imported(py, PATHLIB_MODULE, "Path")
+}
+
+fn authored<'py>(
+    py: Python<'py>,
+    values: &[(String, AuthoredValue)],
+) -> PyResult<Bound<'py, PyDict>> {
+    Ok(map_to_python(py, values.to_vec())?
+        .into_bound(py)
+        .downcast_into::<PyDict>()?)
+}
+
+/// `{key: value}` or `{}`, read back as Python reads the projected value.
+fn single_value<'py>(
+    py: Python<'py>,
+    key: &str,
+    value: Option<&AuthoredValue>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let values: Vec<(String, AuthoredValue)> = value
+        .map(|value| vec![(key.to_owned(), value.clone())])
+        .unwrap_or_default();
+    authored(py, &values)?.get_item(key)
+}
+
+fn enum_file<'py>(context: &FileContext<'_, 'py>, file: &EnumFile) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = context.py();
+    let member_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "EnumMember")?;
+    let declaration_class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "EnumDeclaration")?;
+    let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
+    for declaration in &file.declarations {
+        let members: Vec<Bound<'py, PyAny>> = authored(py, &declaration.members)?
+            .iter()
+            .map(|(name, value)| call_with(&member_class, &[("name", name), ("value", value)]))
+            .collect::<PyResult<_>>()?;
+        declarations.push(call_with(
+            &declaration_class,
+            &[
+                ("name", declaration.name.as_str().into_bound_py_any(py)?),
+                ("members", PyTuple::new(py, members)?.into_any()),
+                (
+                    "scalar_type",
+                    declaration.scalar_type.into_bound_py_any(py)?,
+                ),
+                ("relative_path", context.relative_path.clone()),
+            ],
+        )?);
+    }
+    let fields: Bound<'py, PyDict> = context.fields(&file.contents)?;
+    fields.set_item("declarations", PyTuple::new(py, declarations)?)?;
+    context.add_scope(&fields)?;
+    context.record("DiscoveredEnumFile", &fields)
+}
+
+fn constant_file<'py>(
+    context: &FileContext<'_, 'py>,
+    file: &ConstantFile,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = context.py();
+    let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
+    for declaration in &file.declarations {
+        let value: Bound<'py, PyAny> = single_value(py, "value", Some(&declaration.value))?
+            .unwrap_or_else(|| py.None().into_bound(py));
+        declarations.push(typed_constant_record(
+            py,
+            (declaration.name.clone(), value),
+            (
+                declaration.explicit_type.clone(),
+                declaration.render_as.clone(),
+            ),
+            (context.file_path.clone(), context.relative_path.clone()),
+        )?);
+    }
+    if let Some(failure) = &file.failure {
+        return Err(failure_error(py, failure.clone()));
+    }
+    let fields: Bound<'py, PyDict> = context.fields(&file.contents)?;
+    fields.set_item("declarations", PyTuple::new(py, declarations)?)?;
+    context.add_scope(&fields)?;
+    context.record("DiscoveredConstantFile", &fields)
+}
+
+/// Python's `native_locations`: a repeated name keeps its first position and last value.
+pub(crate) fn source_locations<'py>(
+    py: Python<'py>,
+    relative_path: &Bound<'py, PyAny>,
+    rows: &[(String, LineColumnSpan)],
+) -> PyResult<Bound<'py, PyDict>> {
+    let class: Bound<'py, PyAny> = imported(py, CONTRACT_MODELS_MODULE, "SourceLocation")?;
+    let located: Bound<'py, PyDict> = PyDict::new(py);
+    for (name, span) in rows {
+        located.set_item(
+            name,
+            call_with(
+                &class,
+                &[
+                    ("path", relative_path.clone()),
+                    ("line", span.line.into_bound_py_any(py)?),
+                    ("column", span.column.into_bound_py_any(py)?),
+                    ("end_line", span.end_line.into_bound_py_any(py)?),
+                    ("end_column", span.end_column.into_bound_py_any(py)?),
+                ],
+            )?,
+        )?;
+    }
+    Ok(located)
+}
+
+fn schema_file<'py>(
+    context: &FileContext<'_, 'py>,
+    file: &SchemaFile,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = context.py();
+    let parse_columns: Bound<'py, PyAny> =
+        imported(py, SCHEMA_COLUMNS_MODULE, "parse_schema_columns")?;
+    let declaration_class: Bound<'py, PyAny> =
+        imported(py, MODELS_MODULE, "ModelSchemaDeclaration")?;
+    let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
+    for declaration in &file.declarations {
+        let raw_columns: Bound<'py, PyAny> =
+            single_value(py, "columns", declaration.columns.as_ref())?
+                .unwrap_or_else(|| py.None().into_bound(py));
+        let columns: Bound<'py, PyAny> = call_with(
+            &parse_columns,
+            &[
+                ("raw_columns", raw_columns),
+                ("file_path", context.file_path.clone()),
+                (
+                    "label",
+                    format!("schema '{}'", declaration.name).into_bound_py_any(py)?,
+                ),
+                (
+                    "error_class",
+                    imported(py, DISCOVERY_ERRORS_MODULE, "DeclarationParseError")?,
+                ),
+                (
+                    "column_locations",
+                    source_locations(py, &context.relative_path, &declaration.column_locations)?
+                        .into_any(),
+                ),
+                ("require_columns", true.into_bound_py_any(py)?),
+            ],
+        )?;
+        declarations.push(call_with(
+            &declaration_class,
+            &[
+                ("name", declaration.name.as_str().into_bound_py_any(py)?),
+                (
+                    "description",
+                    declaration.description.as_deref().into_bound_py_any(py)?,
+                ),
+                (
+                    "extends",
+                    declaration.extends.as_deref().into_bound_py_any(py)?,
+                ),
+                ("columns", columns),
+                ("relative_path", context.relative_path.clone()),
+            ],
+        )?);
+    }
+    if let Some(failure) = &file.failure {
+        return Err(failure_error(py, failure.clone()));
+    }
+    let fields: Bound<'py, PyDict> = context.fields(&file.contents)?;
+    fields.set_item("declarations", PyTuple::new(py, declarations)?)?;
+    context.add_scope(&fields)?;
+    context.record("DiscoveredModelSchemaFile", &fields)
+}
+
+fn function_file<'py>(
+    context: &FileContext<'_, 'py>,
+    file: &FunctionFile,
+) -> PyResult<Bound<'py, PyAny>> {
+    let fields: Bound<'py, PyDict> = context.fields(&file.contents)?;
+    fields.set_item(
+        "header_values",
+        authored(context.py(), &file.header_values)?,
+    )?;
+    fields.set_item("body_sql", &file.body_sql)?;
+    context.record("DiscoveredSqlFunctionFile", &fields)
+}
+
+fn hook_file<'py>(context: &FileContext<'_, 'py>, file: &HookFile) -> PyResult<Bound<'py, PyAny>> {
+    let fields: Bound<'py, PyDict> = context.fields(&file.contents)?;
+    fields.set_item(
+        "header_values",
+        authored(context.py(), &file.header_values)?,
+    )?;
+    fields.set_item("sql_body", &file.sql_body)?;
+    fields.set_item("name", &file.name)?;
+    fields.set_item("description", &file.description)?;
+    context.add_scope(&fields)?;
+    context.record("DiscoveredSqlHookFile", &fields)
+}
+
+fn audit_block<'py>(py: Python<'py>, block: &AuditBlock) -> PyResult<Bound<'py, PyAny>> {
+    let header_values: Bound<'py, PyDict> = authored(py, &block.header_values)?;
+    let mode: Bound<'py, PyAny> = imported(py, AUDITING_TYPES_MODULE, "AuditEvaluationMode")?
+        .call1((block.evaluation_mode,))?;
+    let measurement: Bound<'py, PyAny> =
+        if mode.is(&imported(py, AUDITING_TYPES_MODULE, "AuditEvaluationMode")?
+            .getattr(MEASUREMENT_MODE)?)
+        {
+            call_with(
+                &imported(py, AUDITING_MODELS_MODULE, "MeasurementContract")?,
+                &[
+                    ("value_column", header_values.as_any().get_item("value")?),
+                    (
+                        "sample_count_column",
+                        header_values
+                            .as_any()
+                            .call_method1("get", ("sample_count",))?,
+                    ),
+                    (
+                        "sample_unit",
+                        header_values
+                            .as_any()
+                            .call_method1("get", ("sample_unit",))?,
+                    ),
+                ],
+            )?
+        } else {
+            py.None().into_bound(py)
+        };
+    call_with(
+        &imported(py, MODELS_MODULE, "DiscoveredAuditBlock")?,
+        &[
+            ("audit_index", block.audit_index.into_bound_py_any(py)?),
+            ("header_values", header_values.into_any()),
+            ("sql_body", block.sql_body.as_str().into_bound_py_any(py)?),
+            ("name", block.name.as_deref().into_bound_py_any(py)?),
+            ("evaluation_mode", mode),
+            ("measurement_contract", measurement),
+            (
+                "measure_sql",
+                block.measure_sql.as_deref().into_bound_py_any(py)?,
+            ),
+            (
+                "evidence_sql",
+                block.evidence_sql.as_deref().into_bound_py_any(py)?,
+            ),
+        ],
+    )
+}
+
+fn audit_file<'py>(
+    context: &FileContext<'_, 'py>,
+    file: &AuditFile,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = context.py();
+    let blocks: Vec<Bound<'py, PyAny>> = file
+        .blocks
+        .iter()
+        .map(|block| audit_block(py, block))
+        .collect::<PyResult<_>>()?;
+    let fields: Bound<'py, PyDict> = context.fields(&file.contents)?;
+    fields.set_item("blocks", PyTuple::new(py, blocks)?)?;
+    let declaration_kind: &str = context.scope.map_or("", |scope| scope.declaration_kind);
+    fields.set_item(
+        "declaration_kind",
+        imported(py, SCOPE_TYPES_MODULE, "DeclarationKind")?.call1((declaration_kind,))?,
+    )?;
+    context.add_scope(&fields)?;
+    context.record("DiscoveredAuditFile", &fields)
+}
+
+fn macro_file<'py>(
+    context: &FileContext<'_, 'py>,
+    file: &MacroFile,
+) -> PyResult<Bound<'py, PyAny>> {
+    let fields: Bound<'py, PyDict> = context.fields(&file.contents)?;
+    context.add_scope(&fields)?;
+    context.record("DiscoveredMacroFile", &fields)
+}
+
+/// The session of this pass, created and memoised by the first declaration collection.
+fn discovery_session<'py>(
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, NativeDiscoverySession>> {
+    let py: Python<'py> = project_dir.py();
+    let memo: Bound<'py, PyDict> = snapshot_memo(project_dir)?;
+    if let Some(session) = memo.get_item(SESSION_MEMO_KEY)?
+        && let Ok(session) = session.downcast_into::<NativeDiscoverySession>()
+    {
+        return Ok(session);
+    }
+    let created: Bound<'py, NativeDiscoverySession> = Bound::new(
+        py,
+        NativeDiscoverySession {
+            inner: DiscoverySession::new(
+                project_root(project_dir)?,
+                DeclarationFileOptions {
+                    function_keys: sorted_keys(py, "SQL_FUNCTION_HEADER_KEYS")?,
+                    audit_keys: sorted_keys(py, "SQL_AUDIT_HEADER_KEYS")?,
+                    hook_keys: sorted_keys(py, "SQL_HOOK_HEADER_KEYS")?,
+                },
+            ),
+        },
+    )?;
+    memo.set_item(SESSION_MEMO_KEY, &created)?;
+    Ok(created)
+}
+
+/// The session this discovery pass read its declaration files with, if any.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir))]
+pub(crate) fn retained_discovery_session<'py>(
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = project_dir.py();
+    Ok(snapshot_memo(project_dir)?
+        .get_item(SESSION_MEMO_KEY)?
+        .filter(|session| session.is_instance_of::<NativeDiscoverySession>())
+        .unwrap_or_else(|| py.None().into_bound(py)))
+}
+
+/// One collection read in the pass's snapshot, with the tree it was read from.
+fn collection<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    request: CollectionRequest,
+) -> PyResult<(Bound<'py, NativeProjectTree>, Arc<DeclarationCollection>)> {
+    in_snapshot(project_dir, || {
+        let py: Python<'py> = project_dir.py();
+        let tree: Bound<'py, NativeProjectTree> = project_tree(project_dir)?;
+        let session: Bound<'py, NativeDiscoverySession> = discovery_session(project_dir)?;
+        let collection: Arc<DeclarationCollection> = {
+            let session: &DiscoverySession = &session.get().inner;
+            let inner: &ProjectTree = &tree.get().inner;
+            py.detach(|| {
+                retained_collection(session, request, || {
+                    discover_declaration_collection(session, inner, request)
+                })
+            })
+        };
+        if let Some(failure) = collection_failure(&collection) {
+            return Err(match failure {
+                CollectionFailure::Stage(failure) => {
+                    stage_error(&tree.get().inner, project_dir, failure.clone())
+                }
+                CollectionFailure::Layout(failure) => failure_error(py, failure.clone()),
+            });
+        }
+        seed_listings(project_dir, &tree)?;
+        Ok((tree, collection))
+    })
+}
+
+/// The files of a collection whose failure was already raised.
+fn files_of<T>(collection: &Collection<T>) -> &[ScopedFile<T>] {
+    collection.as_ref().map(Vec::as_slice).unwrap_or_default()
+}
+
+fn failure_of<T>(collection: &Collection<T>) -> Option<&CollectionFailure> {
+    collection.as_ref().err()
+}
+
+fn collection_failure(collection: &DeclarationCollection) -> Option<&CollectionFailure> {
+    match collection {
+        DeclarationCollection::Enums(files) => failure_of(files),
+        DeclarationCollection::Constants(files) => failure_of(files),
+        DeclarationCollection::ModelSchemas(files) => failure_of(files),
+        DeclarationCollection::SqlFunctions(files) => failure_of(files),
+        DeclarationCollection::SqlHooks(files) => failure_of(files),
+        DeclarationCollection::Audits(files) => failure_of(files),
+        DeclarationCollection::Seeds(files) => failure_of(files),
+        DeclarationCollection::Macros(files) => failure_of(files),
+    }
+}
+
+/// Build each parsed file of a collection, raising or reporting each failing one.
+fn records<'py, T>(
+    faults: &FileFaults<'py>,
+    tree: &ProjectTree,
+    files: &[ScopedFile<T>],
+    build: fn(&FileContext<'_, 'py>, &T) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = faults.project_dir.py();
+    let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(files.len());
+    for scoped in files {
+        let relative_path: Bound<'py, PyAny> =
+            path_class(py)?.call1((path_object(py, tree, scoped.file.relative_path.clone())?,))?;
+        let file_path: Bound<'py, PyAny> = faults.project_dir.div(&relative_path)?;
+        let record: PyResult<Bound<'py, PyAny>> = match &scoped.file.outcome {
+            FileOutcome::Parsed(file) => build(
+                &FileContext {
+                    tree,
+                    relative_path: relative_path.clone(),
+                    file_path,
+                    scope: scoped.scope.as_ref(),
+                },
+                file,
+            ),
+            FileOutcome::Failed(failure) => Err(failure_error(py, failure.clone())),
+            FileOutcome::Unreadable(failure) => Err(read_error(failure.clone(), &file_path)),
+        };
+        built.extend(faults.kept(&relative_path, record)?);
+    }
+    record_tuple(py, built)
+}
+
+fn discovered<'py>(
+    faults: &FileFaults<'py>,
+    kind: CollectionKind,
+    isolate_kind: bool,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let (tree, collection) = collection(
+        &faults.project_dir,
+        CollectionRequest { kind, isolate_kind },
+    )?;
+    let tree: &ProjectTree = &tree.get().inner;
+    match collection.as_ref() {
+        DeclarationCollection::Enums(files) => records(faults, tree, files_of(files), enum_file),
+        DeclarationCollection::Constants(files) => {
+            records(faults, tree, files_of(files), constant_file)
+        }
+        DeclarationCollection::ModelSchemas(files) => {
+            records(faults, tree, files_of(files), schema_file)
+        }
+        DeclarationCollection::SqlFunctions(files) => {
+            records(faults, tree, files_of(files), function_file)
+        }
+        DeclarationCollection::SqlHooks(files) => records(faults, tree, files_of(files), hook_file),
+        DeclarationCollection::Audits(files) => records(faults, tree, files_of(files), audit_file),
+        DeclarationCollection::Macros(files) => records(faults, tree, files_of(files), macro_file),
+        DeclarationCollection::Seeds(files) => seed_records(faults, tree, files_of(files)),
+    }
+}
+
+fn seed_records<'py, T>(
+    faults: &FileFaults<'py>,
+    tree: &ProjectTree,
+    files: &[ScopedFile<T>],
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = faults.project_dir.py();
+    let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "DiscoveredSeedFile")?;
+    let seeds: Vec<Bound<'py, PyAny>> = files
+        .iter()
+        .map(|scoped| {
+            let relative: Py<PyAny> = path_object(py, tree, scoped.file.relative_path.clone())?;
+            call_with(
+                &class,
+                &[
+                    ("file_path", faults.project_dir.div(relative.bind(py))?),
+                    ("relative_path", path_class(py)?.call1((relative,))?),
+                ],
+            )
+        })
+        .collect::<PyResult<_>>()?;
+    record_tuple(py, seeds)
+}
+
+fn faults<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    on_fault: Option<Bound<'py, PyAny>>,
+) -> FileFaults<'py> {
+    FileFaults {
+        project_dir: project_dir.clone(),
+        on_fault: on_fault.filter(|on_fault| !on_fault.is_none()),
+    }
+}
+
+/// Discover global and scoped enum declaration files.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, on_fault=None, isolate_declaration_kind=false))]
+pub(crate) fn discover_enum_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    on_fault: Option<Bound<'py, PyAny>>,
+    isolate_declaration_kind: bool,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(
+        &faults(project_dir, on_fault),
+        CollectionKind::Enums,
+        isolate_declaration_kind,
+    )
+}
+
+/// Discover global and scoped constant declaration files.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, on_fault=None, isolate_declaration_kind=false))]
+pub(crate) fn discover_constant_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    on_fault: Option<Bound<'py, PyAny>>,
+    isolate_declaration_kind: bool,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(
+        &faults(project_dir, on_fault),
+        CollectionKind::Constants,
+        isolate_declaration_kind,
+    )
+}
+
+/// Discover project-wide and scoped reusable model schemas.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, on_fault=None))]
+pub(crate) fn discover_model_schema_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    on_fault: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(
+        &faults(project_dir, on_fault),
+        CollectionKind::ModelSchemas,
+        false,
+    )
+}
+
+/// Discover SQL function files under functions/sql/.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, on_fault=None))]
+pub(crate) fn discover_sql_function_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    on_fault: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(
+        &faults(project_dir, on_fault),
+        CollectionKind::SqlFunctions,
+        false,
+    )
+}
+
+/// Discover named SQL lifecycle hooks in their project-wide and scoped roles.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, on_fault=None))]
+pub(crate) fn discover_sql_hook_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    on_fault: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(
+        &faults(project_dir, on_fault),
+        CollectionKind::SqlHooks,
+        false,
+    )
+}
+
+/// Discover generic and singular audit SQL files in their project-wide and scoped roles.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, on_fault=None))]
+pub(crate) fn discover_audit_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    on_fault: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(
+        &faults(project_dir, on_fault),
+        CollectionKind::Audits,
+        false,
+    )
+}
+
+/// Discover global and scoped project macro Python files.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, isolate_declaration_kind=false))]
+pub(crate) fn discover_macro_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    isolate_declaration_kind: bool,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(
+        &faults(project_dir, None),
+        CollectionKind::Macros,
+        isolate_declaration_kind,
+    )
+}
+
+/// Discover seed CSV files under seeds/.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir))]
+pub(crate) fn discover_seed_files<'py>(
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    discovered(&faults(project_dir, None), CollectionKind::Seeds, false)
+}
+
+/// Detect a project-level adapter.py without importing it.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir))]
+pub(crate) fn discover_adapter_file<'py>(
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = project_dir.py();
+    let file_path: Bound<'py, PyAny> = project_dir.div("adapter.py")?;
+    if !file_path.call_method0("is_file")?.is_truthy()? {
+        return Ok(py.None().into_bound(py));
+    }
+    call_with(
+        &imported(py, MODELS_MODULE, "DiscoveredAdapterFile")?,
+        &[
+            ("file_path", file_path),
+            ("relative_path", path_class(py)?.call1(("adapter.py",))?),
+        ],
+    )
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(discover_enum_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_constant_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_model_schema_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_sql_function_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_sql_hook_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_audit_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_macro_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_seed_files, module)?)?;
+    module.add_function(wrap_pyfunction!(discover_adapter_file, module)?)?;
+    module.add_function(wrap_pyfunction!(retained_discovery_session, module)?)?;
+    Ok(())
+}

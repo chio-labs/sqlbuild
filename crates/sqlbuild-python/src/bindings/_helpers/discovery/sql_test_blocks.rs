@@ -1,10 +1,8 @@
 //! SQL `TEST(...)` blocks validated natively and built as discovery records.
 
-use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
-};
+use pyo3::IntoPyObjectExt;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::sql_tests::main::sql_test_block::sql_test_block;
 use sqlbuild_model_config::sql_tests::main::sql_test_names_failure::sql_test_names_failure;
 use sqlbuild_model_config::sql_tests::models::{SqlTestBlock, SqlTestCase};
@@ -17,7 +15,7 @@ const ERRORS_MODULE: &str = "sqlbuild.compiler.discovery.exceptions";
 const TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const SQL_VALUE_TYPES_MODULE: &str = "sqlbuild.sql_values.types";
 
-type NativeBlock<'py> = (Bound<'py, PyDict>, String, Bound<'py, PyAny>);
+pub(crate) type NativeBlock<'py> = (Bound<'py, PyDict>, String, Bound<'py, PyAny>);
 
 fn parse_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
@@ -101,8 +99,7 @@ fn block_record<'py>(
 }
 
 /// Each `(header, sql_body, span)` block of a SQL test file as a `DiscoveredSqlTestBlock`.
-#[pyfunction]
-fn sql_test_blocks<'py>(
+pub(crate) fn sql_test_block_records<'py>(
     py: Python<'py>,
     file_path: &str,
     blocks: Vec<NativeBlock<'py>>,
@@ -120,19 +117,13 @@ fn sql_test_blocks<'py>(
 }
 
 /// `validate_sql_test_names` over each block's `(test_index, name)`.
-#[pyfunction]
-fn validate_sql_test_block_names(
+pub(crate) fn validate_block_names(
     py: Python<'_>,
     file_path: &str,
-    blocks: Vec<(usize, Option<String>)>,
+    blocks: &[(usize, Option<String>)],
 ) -> Result<(), PyErr> {
-    match sql_test_names_failure(file_path, &blocks) {
+    match sql_test_names_failure(file_path, blocks) {
         None => Ok(()),
         Some(message) => Err(parse_error(py, message)?),
     }
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(sql_test_blocks, module)?)?;
-    module.add_function(wrap_pyfunction!(validate_sql_test_block_names, module)?)
 }

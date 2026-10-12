@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.filesystem.core import discover_macro_files
+from sqlbuild._native import (
+    discover_macro_files,
+)
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DiscoverMacroFilesTestCase,

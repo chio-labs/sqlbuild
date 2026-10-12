@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import Field
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, Protocol, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, Protocol
 
 from sqlbuild.compiler.scopes.types import ScopeKind
 
@@ -13,11 +13,6 @@ if TYPE_CHECKING:
     from sqlbuild.provider.classes.provider import Provider
 
 type ProjectProvider = Provider
-type NativeLocation = tuple[str, int, int, int, int]
-type NativeListing = tuple[str, list[tuple[str, bool, bool]]]
-type NativeFiles = list[tuple[str, tuple[object, ...]]]
-type NativeModelFiles = list[tuple[Path, object]]
-type NativeFileScope = tuple[str, str, str | None, str | None, str | None]
 
 
 class LoaderConnectionMode(StrEnum):
@@ -31,15 +26,6 @@ class ScopedDeclarationFile(Protocol):
     """A discovered declaration file carrying the scope facts of the role that contains it."""
 
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
-    scope_kind: ScopeKind
-    ownership_root: Path | None
-    owning_path: Path | None
-    declaration_root: Path | None
-
-
-class NativeScopeFields(TypedDict, total=False):
-    """The scope fields of a declaration file record that native discovery listed in a role."""
-
     scope_kind: ScopeKind
     ownership_root: Path | None
     owning_path: Path | None

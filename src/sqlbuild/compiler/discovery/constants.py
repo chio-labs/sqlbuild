@@ -7,7 +7,6 @@ LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.toml"
 LEGACY_PROJECT_CONFIG_FILENAME: str = "sqlbuild_project.yml"
 LEGACY_LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.yml"
 TOML_FILE_SUFFIX: str = ".toml"
-SCHEMA_FILE_NAME: str = "schema.yml"
 YAML_FILE_SUFFIXES: frozenset[str] = frozenset({".yml", ".yaml"})
 
 PYTHON_INIT_MODULE_STEM: str = "__init__"
@@ -173,11 +172,3 @@ SQL_HOOK_OUTPUT_FIELDS: tuple[str, ...] = (
     "description",
 )
 SQL_HOOK_IDENTITY_FIELDS: tuple[str, ...] = ("statement", "name", "definition_sql", "kwargs")
-
-NATIVE_FAILED_TAG: str = "error"
-NATIVE_UNREADABLE_TAG: str = "read"
-NATIVE_UNLISTABLE_TAG: str = "unlistable"
-NATIVE_PARSED_TAG: str = "ok"
-NATIVE_SOURCE_YAML_KIND: str = "source"
-NATIVE_SCHEMA_YAML_KIND: str = "schema"
-NATIVE_YAML_BATCH_BYTES: int = 4 * 1024 * 1024

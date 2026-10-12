@@ -98,37 +98,6 @@ pub(crate) struct NativeProjectTree {
     pub(crate) exported: Mutex<std::collections::HashSet<String>>,
 }
 
-/// One native model discovery request from the Python discovery facade.
-#[derive(FromPyObject, Debug)]
-#[pyo3(from_item_all)]
-pub(crate) struct ModelDiscoveryRequest {
-    pub(crate) project_dir: String,
-    pub(crate) display_prefix: String,
-    pub(crate) supported_keys: Vec<String>,
-    pub(crate) removed_keys: Vec<String>,
-    pub(crate) extract_implicit_alias_columns: bool,
-    pub(crate) extract_output_column_locations: bool,
-}
-
-/// One native SQL test or scenario discovery request from the Python discovery facade.
-#[derive(FromPyObject, Debug)]
-#[pyo3(from_item_all)]
-pub(crate) struct SqlTestDiscoveryRequest {
-    pub(crate) project_dir: String,
-    pub(crate) display_prefix: String,
-    pub(crate) test_keys: Vec<String>,
-    pub(crate) scenario_keys: Vec<String>,
-}
-
-/// One in-memory SQL test or scenario parse request; `file_path` is the path messages name.
-#[derive(FromPyObject, Debug)]
-#[pyo3(from_item_all)]
-pub(crate) struct SqlTestTextRequest {
-    pub(crate) file_path: String,
-    pub(crate) test_keys: Vec<String>,
-    pub(crate) scenario_keys: Vec<String>,
-}
-
 /// One native YAML file discovery request; `kind` is `source` or `schema`.
 #[derive(FromPyObject, Debug)]
 #[pyo3(from_item_all)]
@@ -154,17 +123,6 @@ pub(crate) struct ModelTextRequest {
 #[derive(Debug)]
 pub(crate) struct NativeDiscoverySession {
     pub(crate) inner: sqlbuild_discovery::declaration_files::models::DiscoverySession,
-}
-
-/// One native declaration discovery session request from the Python discovery facade.
-#[derive(FromPyObject, Debug)]
-#[pyo3(from_item_all)]
-pub(crate) struct DeclarationDiscoveryRequest {
-    pub(crate) project_dir: String,
-    pub(crate) display_prefix: String,
-    pub(crate) function_keys: Vec<String>,
-    pub(crate) audit_keys: Vec<String>,
-    pub(crate) hook_keys: Vec<String>,
 }
 
 /// One in-memory declaration file parse request; `kind` names the collection it belongs to.

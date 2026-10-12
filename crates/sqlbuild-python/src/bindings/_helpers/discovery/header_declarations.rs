@@ -160,8 +160,7 @@ pub(crate) fn model_header_declarations<'py>(
 }
 
 /// `typed_constant_declaration` for a public constant file entry.
-#[pyfunction]
-fn typed_constant_record<'py>(
+pub(crate) fn typed_constant_record<'py>(
     py: Python<'py>,
     constant: (String, Bound<'py, PyAny>),
     options: (Option<String>, Option<String>),
@@ -193,6 +192,5 @@ fn typed_constant_record<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(model_header_declarations, module)?)?;
-    module.add_function(wrap_pyfunction!(typed_constant_record, module)?)
+    module.add_function(wrap_pyfunction!(model_header_declarations, module)?)
 }

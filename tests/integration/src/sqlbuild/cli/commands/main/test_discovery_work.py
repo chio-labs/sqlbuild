@@ -7,10 +7,11 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import DiscoveryWorkTestCase
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    eager_output_column_scans,
     execute_duckdb_sql,
-    record_eager_output_column_scans,
     write_expression_source_project,
 )
 
@@ -57,14 +58,19 @@ def test_given_project_when_running_command_then_discovery_skips_eager_column_lo
             'SELECT o.order_id, o.status FROM __source("typed_orders") AS o\n'
         ),
     )
-    scanned: list[dict[str, object]] = record_eager_output_column_scans(monkeypatch)
+    capture_dir: Path = tmp_path / "captures"
+    monkeypatch.setenv(STAGE_CAPTURE_DIR_ENV_VAR, str(capture_dir))
     _ = capsys.readouterr()
 
     exit_code: int = main(["--project-dir", str(tmp_path), "--no-color", *test_case.command])
 
     output: str = "".join(capsys.readouterr())
-    assert exit_code == test_case.expected_exit_code, output
-    assert len(scanned) == test_case.expected_eager_output_column_scans
+    model_files, eager_scans = eager_output_column_scans(capture_dir=capture_dir)
+    assert (exit_code, model_files > 0, eager_scans) == (
+        test_case.expected_exit_code,
+        True,
+        test_case.expected_eager_output_column_scans,
+    ), output
 
 
 if __name__ == "__main__":

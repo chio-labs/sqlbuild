@@ -27,7 +27,7 @@ const SOURCE_PARSE_ERROR: &str = "SourceParseError";
 /// The Python classes parsed YAML entries become.
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
-struct YamlClasses<'py> {
+pub(crate) struct YamlClasses<'py> {
     contracts: ContractClasses<'py>,
     schema_seed_entry: Bound<'py, PyAny>,
     seed_csv_settings: Bound<'py, PyAny>,
@@ -157,7 +157,7 @@ fn seed_entry<'py>(
 
 /// The seed entries of one loaded schema YAML document, or the parse error Python raises.
 #[pyfunction]
-fn parse_schema_document<'py>(
+pub(crate) fn parse_schema_document<'py>(
     py: Python<'py>,
     loaded: Bound<'py, PyAny>,
     path: &str,
@@ -339,7 +339,7 @@ fn source_entry<'py>(
 
 /// The source entries of one loaded sources YAML document, or the parse error Python raises.
 #[pyfunction]
-fn parse_sources_document<'py>(
+pub(crate) fn parse_sources_document<'py>(
     py: Python<'py>,
     loaded: Bound<'py, PyAny>,
     path: &str,

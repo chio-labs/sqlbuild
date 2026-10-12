@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.native.sql_test_files import discover_native_test_files
+from sqlbuild._native import (
+    discover_test_files,
+)
 from sqlbuild.compiler.discovery.exceptions import SqlTestParseError
 from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
     omitted_ceremonial_select_offset,
@@ -96,7 +98,7 @@ def test_given_invalid_test_file_when_discovering_tolerantly_then_reports_file_f
     (tests_dir / "b_valid.sql").write_text('TEST (name "valid_order");\nSELECT 1', encoding="utf-8")
     faults: list[DiscoveryFileFault] = []
 
-    discovered: tuple[DiscoveredSqlTestFile, ...] = discover_native_test_files(
+    discovered: tuple[DiscoveredSqlTestFile, ...] = discover_test_files(
         project_dir=tmp_path,
         on_fault=faults.append,
     )

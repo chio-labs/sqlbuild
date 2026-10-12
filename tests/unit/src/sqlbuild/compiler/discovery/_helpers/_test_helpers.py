@@ -11,19 +11,19 @@ from pathlib import Path
 from typing import cast
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.discovery._helpers.filesystem.core import (
+from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
     discover_enum_files,
     discover_macro_files,
+    discover_model_files,
     discover_model_schema_files,
+    discover_schema_files,
     discover_seed_files,
     discover_sql_function_files,
     discover_sql_hook_files,
+    discover_test_files,
 )
-from sqlbuild.compiler.discovery._helpers.native.model_files import discover_native_model_files
-from sqlbuild.compiler.discovery._helpers.native.sql_test_files import discover_native_test_files
-from sqlbuild.compiler.discovery._helpers.native.yaml_files import discover_native_schema_files
 from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
@@ -63,7 +63,7 @@ _LINK_NAMES: tuple[str, ...] = ("shared", "enums_link", "_sqlbuild_link")
 _PATTERNS: tuple[str, ...] = ("*", "*.sql", "*.py", "*.yml", "schema.yml", "_sqlbuild", "enums")
 _ISOLATED_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
     "model_files": partial(
-        discover_native_model_files,
+        discover_model_files,
         extract_implicit_alias_columns=True,
         extract_output_column_locations=True,
     ),
@@ -72,9 +72,9 @@ _ISOLATED_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
     "model_schema_files": discover_model_schema_files,
     "sql_function_files": discover_sql_function_files,
     "sql_hook_files": discover_sql_hook_files,
-    "schema_files": discover_native_schema_files,
+    "schema_files": discover_schema_files,
     "seed_files": discover_seed_files,
-    "test_files": discover_native_test_files,
+    "test_files": discover_test_files,
     "audit_files": discover_audit_files,
     "macro_files": discover_macro_files,
 }
