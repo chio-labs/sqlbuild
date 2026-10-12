@@ -2,7 +2,7 @@
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.reports import build_move_preview
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import (
     MovePreview,
     ResourceIdentity,
@@ -16,4 +16,4 @@ def preview_scope_move(
 ) -> tuple[MovePreview | None, tuple[ScopeDiagnostic, ...]]:
     """Preview declaration visibility changes without mutating compiler facts."""
 
-    return build_move_preview(lookup=lookup, resource=resource, destination=destination)
+    return _native.scope_move_preview(lookup, resource, destination)

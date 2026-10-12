@@ -1,7 +1,7 @@
 """Private SQLBuild native engine bindings."""
 
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, TypedDict
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -72,13 +72,21 @@ from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
+    DeclarationExplanation,
+    DeclarationIdentity,
     DeclarationRecord,
+    MovePreview,
     ResourceIdentity,
+    ScopeBrowseResult,
+    ScopeDiagnostic,
     ScopeIndex,
+    ScopeListResult,
     ScopeLookup,
+    ScopeReport,
+    ScopeReportFilters,
     UsageRecord,
 )
-from sqlbuild.compiler.scopes.types import JsonValue
+from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssemblyRequest,
@@ -1085,16 +1093,35 @@ class NativeScopeLookup:
     ) -> tuple[list[tuple[int, str, int | None]], list[tuple[int, str]], str | None]: ...
 
 def build_scope_lookup(index: ScopeIndex) -> ScopeLookup: ...
-
-class NativeScopeReports:
-    def report(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-    def explain(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-    def browse(self, request: tuple[Any, ...], /) -> Any: ...
-    def list(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-    def move_preview(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-
-def build_native_scope_reports(lookup: ScopeLookup) -> NativeScopeReports: ...
-def serialize_scope_result_row(kind: str, row: object, /) -> str: ...
+def scope_report(
+    lookup: ScopeLookup,
+    request: tuple[ScopeQueryTarget | None, str | PurePath | None, bool, ScopeReportFilters | None],
+    /,
+) -> ScopeReport: ...
+def scope_explain(
+    lookup: ScopeLookup,
+    request: tuple[
+        str | DeclarationIdentity,
+        str | PurePath | ResourceIdentity | None,
+        str | PurePath | None,
+        bool,
+    ],
+    /,
+) -> tuple[DeclarationExplanation, tuple[ScopeDiagnostic, ...]]: ...
+def scope_browse(
+    lookup: ScopeLookup,
+    request: tuple[str, str | PurePath | ResourceIdentity | None, bool],
+    /,
+) -> ScopeBrowseResult: ...
+def scope_list(
+    lookup: ScopeLookup,
+    request: tuple[str, ScopeReportFilters | None, str | PurePath | ResourceIdentity | None, bool],
+    /,
+) -> ScopeListResult: ...
+def scope_move_preview(
+    lookup: ScopeLookup, resource: str | ResourceIdentity, destination: str | PurePath
+) -> tuple[MovePreview | None, tuple[ScopeDiagnostic, ...]]: ...
+def serialize_scope_report(report: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str: ...
 def scope_metadata_projection(index: ScopeIndex) -> dict[str, JsonValue]: ...
 def effective_config_target_name(
     project_config: object, local_config: object, selected: str | None, /

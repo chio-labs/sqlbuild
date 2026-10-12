@@ -52,7 +52,8 @@ impl<'py> ScopeClasses<'py> {
         self.types.getattr(name)?.call1((value,))
     }
 
-    fn py(&self) -> Python<'py> {
+    /// The interpreter the classes belong to.
+    pub(crate) fn py(&self) -> Python<'py> {
         self.models.py()
     }
 }
@@ -112,7 +113,9 @@ fn read_resource_identity(identity: &Bound<'_, PyAny>) -> PyResult<ResourceIdent
     resource_identity(identity_row(identity)?)
 }
 
-fn read_declaration_identity(identity: &Bound<'_, PyAny>) -> PyResult<DeclarationIdentity> {
+pub(crate) fn read_declaration_identity(
+    identity: &Bound<'_, PyAny>,
+) -> PyResult<DeclarationIdentity> {
     declaration_identity(qualified_row(identity)?)
 }
 

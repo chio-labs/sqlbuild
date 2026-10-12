@@ -1,8 +1,10 @@
-//! `sqb scope` reports over a native scope lookup, their serialization and the metadata projection.
+//! `sqb scope` reports over a `ScopeLookup`, their serialization and the metadata projection.
 
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::models::JsonValue;
 use sqlbuild_scopes::scope_report::main::browse_scope_folders::browse_scope_folders;
 use sqlbuild_scopes::scope_report::main::build_scope_report::build_scope_report;
@@ -12,59 +14,57 @@ use sqlbuild_scopes::scope_report::main::preview_scope_move::preview_scope_move;
 use sqlbuild_scopes::scope_report::main::scope_metadata_projection::scope_metadata_projection;
 use sqlbuild_scopes::scope_report::main::serialize_scope_result::serialize_scope_result;
 use sqlbuild_scopes::scope_report::models::{
-    DeclarationValues, ExplainRequest, FolderRequest, MoveRequest, ProjectionIndex, ReportFailure,
-    ReportRequest, ReportSource, ReportValues, ScopeResult,
+    DeclarationValues, DiagnosticFacts, ExplainRequest, FolderRequest, MoveRequest,
+    ProjectionIndex, ReportDiagnostic, ReportFailure, ReportRequest, ReportSource, ReportValues,
+    ScopeResult,
 };
 
-use crate::bindings::_helpers::scopes::placement::QualifiedRow;
 use crate::bindings::_helpers::scopes::scope_lookup::{
     NativeScopeLookup, identity_message, path_message,
 };
 use crate::bindings::_helpers::scopes::scope_objects::{
-    completeness, declaration_values, projection_index, read_completeness, read_declaration,
-    read_index,
+    ScopeClasses, completeness, declaration_values, projection_index, read_completeness,
+    read_declaration, read_index,
 };
-use crate::bindings::_helpers::scopes::scope_report_rows::{
-    BrowseOutRow, BrowseRow, DiagnosticInRow, ExplanationOutRow, FiltersRow, ListOutRow, ListRow,
-    MoveOutRow, ReportOutRow, ReportRow, TargetRow, browse_in, browse_out, declaration_target,
-    explanation_out, filters, json_to_python, list_in, list_out, move_out, raised_out, report_in,
-    report_out, target,
+use crate::bindings::_helpers::scopes::scope_report_objects::{
+    browse_object, diagnostics_object, explanation_object, json_to_python, list_object,
+    move_object, read_declaration_target, read_filters, read_optional_target, read_result,
+    read_target, report_object,
 };
 
 type PyObject = Py<PyAny>;
 
-/// `(kind, message)` of the scope error Python raises: `path` or `identity`.
-type FailureRow = Option<(&'static str, String)>;
-type ReportRequestRow = (Option<TargetRow>, Option<String>, bool, FiltersRow);
-type ExplainRequestRow = (
-    (Option<QualifiedRow>, String),
-    Option<TargetRow>,
-    Option<String>,
+/// Target, location, whether it is a directory, and the filters.
+type ReportArguments<'py> = (
+    Option<Bound<'py, PyAny>>,
+    Option<Bound<'py, PyAny>>,
+    bool,
+    Option<Bound<'py, PyAny>>,
+);
+/// Declaration, target, location and whether it is a directory.
+type ExplainArguments<'py> = (
+    Bound<'py, PyAny>,
+    Option<Bound<'py, PyAny>>,
+    Option<Bound<'py, PyAny>>,
     bool,
 );
-type FolderRequestRow = (String, Option<TargetRow>, bool, Option<FiltersRow>);
+/// Folder, filters, target and whether the target is prospective.
+type ListArguments<'py> = (
+    String,
+    Option<Bound<'py, PyAny>>,
+    Option<Bound<'py, PyAny>>,
+    bool,
+);
 
-fn failure_row(failure: &ReportFailure) -> PyResult<FailureRow> {
-    match failure {
-        ReportFailure::Path(rejected) => Ok(Some(("path", path_message(rejected)))),
-        ReportFailure::Identity(failure, text) => {
-            Ok(Some(("identity", identity_message(failure, text))))
-        }
-        ReportFailure::Serialization(message) => Err(PyValueError::new_err(message.clone())),
-        ReportFailure::IndexOutOfRange => {
-            Ok(Some(("index", "tuple index out of range".to_owned())))
-        }
-    }
-}
+const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
 
-/// One lookup's reports: the lookup and every declaration's values in input order.
-#[pyclass(module = "sqlbuild._native", frozen)]
-pub(crate) struct NativeScopeReports {
+/// One lookup's native lookup and every declaration's values in input order.
+struct LookupReports {
     lookup: Py<NativeScopeLookup>,
     values: ReportValues,
 }
 
-impl NativeScopeReports {
+impl LookupReports {
     fn source<'a>(&'a self, lookup: &'a NativeScopeLookup) -> ReportSource<'a> {
         ReportSource {
             records: &lookup.records,
@@ -74,112 +74,8 @@ impl NativeScopeReports {
     }
 }
 
-#[pymethods]
-impl NativeScopeReports {
-    /// `query_scope_report`.
-    fn report(
-        &self,
-        py: Python<'_>,
-        request: ReportRequestRow,
-    ) -> PyResult<(Option<ReportOutRow>, FailureRow)> {
-        let (target_row, at, directory, filter_row) = request;
-        let request: ReportRequest = ReportRequest {
-            target: target_row.map(target).transpose()?,
-            at,
-            directory,
-            filters: filters(filter_row),
-        };
-        let lookup = self.lookup.get();
-        match build_scope_report(self.source(lookup), &request) {
-            Ok(report) => Ok((Some(report_out(py, report)?), None)),
-            Err(failure) => Ok((None, failure_row(&failure)?)),
-        }
-    }
-
-    /// `explain_scope_declaration`.
-    fn explain(
-        &self,
-        py: Python<'_>,
-        request: ExplainRequestRow,
-    ) -> PyResult<(Option<ExplanationOutRow>, FailureRow)> {
-        let (declaration, target_row, at, directory) = request;
-        let request: ExplainRequest = ExplainRequest {
-            declaration: declaration_target(declaration)?,
-            target: target_row.map(target).transpose()?,
-            at,
-            directory,
-        };
-        let lookup = self.lookup.get();
-        match explain_scope_declaration(self.source(lookup), &request) {
-            Ok((explanation, diagnostics)) => Ok((
-                Some((explanation_out(py, explanation)?, raised_out(diagnostics))),
-                None,
-            )),
-            Err(failure) => Ok((None, failure_row(&failure)?)),
-        }
-    }
-
-    /// `browse_scope_folders`.
-    fn browse(&self, request: FolderRequestRow) -> PyResult<BrowseOutRow> {
-        let request: FolderRequest = folder_request(request)?;
-        let lookup = self.lookup.get();
-        Ok(browse_out(browse_scope_folders(
-            self.source(lookup),
-            &request,
-        )))
-    }
-
-    /// `list_scope_declarations`.
-    fn list(
-        &self,
-        py: Python<'_>,
-        request: FolderRequestRow,
-    ) -> PyResult<(Option<ListOutRow>, FailureRow)> {
-        let request: FolderRequest = folder_request(request)?;
-        let lookup = self.lookup.get();
-        match list_scope_declarations(self.source(lookup), &request) {
-            Ok(result) => Ok((Some(list_out(py, result)?), None)),
-            Err(failure) => Ok((None, failure_row(&failure)?)),
-        }
-    }
-
-    /// `preview_scope_move`.
-    fn move_preview(
-        &self,
-        py: Python<'_>,
-        request: (TargetRow, String),
-    ) -> PyResult<(Option<MoveOutRow>, FailureRow)> {
-        let request: MoveRequest = MoveRequest {
-            resource: target(request.0)?,
-            destination: request.1,
-        };
-        let lookup = self.lookup.get();
-        match preview_scope_move(self.source(lookup), &request) {
-            Ok((preview, diagnostics)) => Ok((
-                Some((
-                    preview.map(|preview| move_out(py, preview)).transpose()?,
-                    raised_out(diagnostics),
-                )),
-                None,
-            )),
-            Err(failure) => Ok((None, failure_row(&failure)?)),
-        }
-    }
-}
-
-fn folder_request(row: FolderRequestRow) -> PyResult<FolderRequest> {
-    let (folder, target_row, prospective, filter_row) = row;
-    Ok(FolderRequest {
-        folder,
-        target: target_row.map(target).transpose()?,
-        prospective,
-        filters: filter_row.map(filters),
-    })
-}
-
 /// The reports of a `ScopeLookup`: its native lookup with its canonical declarations' values.
-#[pyfunction]
-fn build_native_scope_reports(lookup: &Bound<'_, PyAny>) -> PyResult<NativeScopeReports> {
+fn lookup_reports(lookup: &Bound<'_, PyAny>) -> PyResult<LookupReports> {
     let index: Bound<'_, PyAny> = lookup.getattr("index")?;
     let native: Py<NativeScopeLookup> = lookup.getattr("native")?.extract()?;
     let rows: Vec<DeclarationValues> = index
@@ -197,7 +93,7 @@ fn build_native_scope_reports(lookup: &Bound<'_, PyAny>) -> PyResult<NativeScope
     for (position, row) in canonical.iter().zip(rows) {
         declarations[*position] = row;
     }
-    Ok(NativeScopeReports {
+    Ok(LookupReports {
         lookup: native,
         values: ReportValues {
             declarations,
@@ -206,23 +102,210 @@ fn build_native_scope_reports(lookup: &Bound<'_, PyAny>) -> PyResult<NativeScope
     })
 }
 
-/// `serialize_scope_report` of a `report`, `browse` or `list` result row.
+fn scope_error(py: Python<'_>, class: &str, message: String) -> PyResult<PyErr> {
+    Ok(PyErr::from_value(
+        py.import(EXCEPTIONS_MODULE)?
+            .getattr(class)?
+            .call1((message,))?,
+    ))
+}
+
+/// The error Python raises for a failed query.
+fn failure_error(py: Python<'_>, failure: &ReportFailure) -> PyResult<PyErr> {
+    match failure {
+        ReportFailure::Path(rejected) => {
+            scope_error(py, "InvalidScopePathError", path_message(rejected))
+        }
+        ReportFailure::Identity(failure, text) => scope_error(
+            py,
+            "InvalidQualifiedIdentityError",
+            identity_message(failure, text),
+        ),
+        ReportFailure::Serialization(message) => Ok(PyValueError::new_err(message.clone())),
+        ReportFailure::IndexOutOfRange => Ok(PyIndexError::new_err("tuple index out of range")),
+    }
+}
+
+fn path_text(value: Option<Bound<'_, PyAny>>) -> PyResult<Option<String>> {
+    value
+        .filter(|value| !value.is_none())
+        .map(|value| value.str()?.extract())
+        .transpose()
+}
+
+fn raised(diagnostics: Vec<DiagnosticFacts>) -> Vec<ReportDiagnostic> {
+    diagnostics
+        .into_iter()
+        .map(ReportDiagnostic::Raised)
+        .collect()
+}
+
+/// `query_scope_report`: one existing target or prospective path; invalid paths raise.
 #[pyfunction]
-fn serialize_scope_result_row(kind: &str, row: &Bound<'_, PyAny>) -> PyResult<String> {
-    use pyo3::prelude::PyAnyMethods;
-    let result: ScopeResult = match kind {
-        "report" => ScopeResult::Report(Box::new(report_in(
-            row.extract::<ReportRow<Bound<'_, PyAny>, DiagnosticInRow>>()?,
-        )?)),
-        "browse" => ScopeResult::Browse(browse_in(row.extract::<BrowseRow<DiagnosticInRow>>()?)?),
-        _ => ScopeResult::List(list_in(
-            row.extract::<ListRow<Bound<'_, PyAny>, DiagnosticInRow>>()?,
-        )?),
+fn scope_report(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    request: ReportArguments<'_>,
+) -> PyResult<PyObject> {
+    let (target, at, directory, filters) = request;
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    let selected: Bound<'_, PyAny> = match filters.filter(|filters| !filters.is_none()) {
+        Some(filters) => filters,
+        None => classes.model("ScopeReportFilters")?.call0()?,
     };
+    let reports: LookupReports = lookup_reports(lookup)?;
+    let request: ReportRequest = ReportRequest {
+        target: read_optional_target(&classes, target.as_ref())?,
+        at: path_text(at)?,
+        directory,
+        filters: read_filters(&selected)?,
+    };
+    let native: &NativeScopeLookup = reports.lookup.get();
+    match build_scope_report(reports.source(native), &request) {
+        Ok(report) => {
+            let diagnostics: Bound<'_, PyAny> = lookup.getattr("index")?.getattr("diagnostics")?;
+            Ok(report_object(&classes, report, (&selected, &diagnostics))?.unbind())
+        }
+        Err(failure) => Err(failure_error(py, &failure)?),
+    }
+}
+
+/// `explain_scope_declaration`: one qualified declaration in an optional context.
+#[pyfunction]
+fn scope_explain(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    request: ExplainArguments<'_>,
+) -> PyResult<(PyObject, PyObject)> {
+    let (declaration, target, at, directory) = request;
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    let reports: LookupReports = lookup_reports(lookup)?;
+    let request: ExplainRequest = ExplainRequest {
+        declaration: read_declaration_target(&classes, &declaration)?,
+        target: read_optional_target(&classes, target.as_ref())?,
+        at: path_text(at)?,
+        directory,
+    };
+    let native: &NativeScopeLookup = reports.lookup.get();
+    match explain_scope_declaration(reports.source(native), &request) {
+        Ok((explanation, diagnostics)) => {
+            let index_diagnostics: Bound<'_, PyAny> =
+                lookup.getattr("index")?.getattr("diagnostics")?;
+            Ok((
+                explanation_object(&classes, explanation)?.unbind(),
+                diagnostics_object(&classes, &index_diagnostics, raised(diagnostics))?.unbind(),
+            ))
+        }
+        Err(failure) => Err(failure_error(py, &failure)?),
+    }
+}
+
+fn folder_request(
+    classes: &ScopeClasses<'_>,
+    location: (String, Option<Bound<'_, PyAny>>, bool),
+    filters: Option<Bound<'_, PyAny>>,
+) -> PyResult<FolderRequest> {
+    let (folder, target, prospective) = location;
+    Ok(FolderRequest {
+        folder,
+        target: read_optional_target(classes, target.as_ref())?,
+        prospective,
+        filters: filters
+            .filter(|filters| !filters.is_none())
+            .map(|filters| read_filters(&filters))
+            .transpose()?,
+    })
+}
+
+/// `browse_scope_folders`: the direct child declaration-definition folders of `folder`.
+#[pyfunction]
+fn scope_browse(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    request: (String, Option<Bound<'_, PyAny>>, bool),
+) -> PyResult<PyObject> {
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    let reports: LookupReports = lookup_reports(lookup)?;
+    let request: FolderRequest = folder_request(&classes, request, None)?;
+    let native: &NativeScopeLookup = reports.lookup.get();
+    let result = browse_scope_folders(reports.source(native), &request);
+    let diagnostics: Bound<'_, PyAny> = lookup.getattr("index")?.getattr("diagnostics")?;
+    Ok(browse_object(&classes, result, &diagnostics)?.unbind())
+}
+
+/// `list_scope_declarations`: declarations recursively beneath one definition folder.
+#[pyfunction]
+fn scope_list(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    request: ListArguments<'_>,
+) -> PyResult<PyObject> {
+    let (folder, filters, target, target_is_prospective) = request;
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    let reports: LookupReports = lookup_reports(lookup)?;
+    let request: FolderRequest =
+        folder_request(&classes, (folder, target, target_is_prospective), filters)?;
+    let native: &NativeScopeLookup = reports.lookup.get();
+    match list_scope_declarations(reports.source(native), &request) {
+        Ok(result) => {
+            let diagnostics: Bound<'_, PyAny> = lookup.getattr("index")?.getattr("diagnostics")?;
+            Ok(list_object(&classes, result, &diagnostics)?.unbind())
+        }
+        Err(failure) => Err(failure_error(py, &failure)?),
+    }
+}
+
+/// `preview_scope_move`: visibility deltas of a resource move, without mutating the lookup.
+#[pyfunction]
+fn scope_move_preview(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    resource: &Bound<'_, PyAny>,
+    destination: &Bound<'_, PyAny>,
+) -> PyResult<(Option<PyObject>, PyObject)> {
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    let reports: LookupReports = lookup_reports(lookup)?;
+    let request: MoveRequest = MoveRequest {
+        resource: read_target(&classes, resource)?,
+        destination: destination.str()?.extract()?,
+    };
+    let native: &NativeScopeLookup = reports.lookup.get();
+    match preview_scope_move(reports.source(native), &request) {
+        Ok((preview, diagnostics)) => {
+            let index_diagnostics: Bound<'_, PyAny> =
+                lookup.getattr("index")?.getattr("diagnostics")?;
+            Ok((
+                preview
+                    .map(|preview| Ok::<_, PyErr>(move_object(&classes, preview)?.unbind()))
+                    .transpose()?,
+                diagnostics_object(&classes, &index_diagnostics, raised(diagnostics))?.unbind(),
+            ))
+        }
+        Err(failure) => Err(failure_error(py, &failure)?),
+    }
+}
+
+fn serialized(classes: &ScopeClasses<'_>, result: &Bound<'_, PyAny>) -> PyResult<String> {
+    let result: ScopeResult = read_result(classes, result)?;
     serialize_scope_result(&result).map_err(|failure| match failure {
         ReportFailure::Serialization(message) => PyValueError::new_err(message),
         other => PyValueError::new_err(format!("{other:?}")),
     })
+}
+
+/// `serialize_scope_report`: deterministic schema-version-two ASCII JSON of one result.
+#[pyfunction]
+fn serialize_scope_report(py: Python<'_>, report: &Bound<'_, PyAny>) -> PyResult<String> {
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    match serialized(&classes, report) {
+        Err(error) if error.is_instance_of::<PyValueError>(py) => {
+            let message: String = error.value(py).str()?.extract()?;
+            let raised: PyErr = scope_error(py, "ScopeError", message)?;
+            raised.set_cause(py, Some(error));
+            Err(raised)
+        }
+        other => other,
+    }
 }
 
 /// `scope_metadata_projection` of one `ScopeIndex`, as the dictionary Python builds.
@@ -235,9 +318,12 @@ fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyO
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<NativeScopeReports>()?;
-    module.add_function(wrap_pyfunction!(build_native_scope_reports, module)?)?;
-    module.add_function(wrap_pyfunction!(serialize_scope_result_row, module)?)?;
+    module.add_function(wrap_pyfunction!(scope_report, module)?)?;
+    module.add_function(wrap_pyfunction!(scope_explain, module)?)?;
+    module.add_function(wrap_pyfunction!(scope_browse, module)?)?;
+    module.add_function(wrap_pyfunction!(scope_list, module)?)?;
+    module.add_function(wrap_pyfunction!(scope_move_preview, module)?)?;
+    module.add_function(wrap_pyfunction!(serialize_scope_report, module)?)?;
     module.add_function(wrap_pyfunction!(metadata_projection, module)?)?;
     Ok(())
 }

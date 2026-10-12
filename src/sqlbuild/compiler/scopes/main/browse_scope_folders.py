@@ -2,7 +2,7 @@
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.reports import browse_folders
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import ResourceIdentity, ScopeBrowseResult, ScopeLookup
 
 
@@ -15,9 +15,4 @@ def browse_scope_folders(
 ) -> ScopeBrowseResult:
     """Browse direct declaration-definition child folders only."""
 
-    return browse_folders(
-        lookup=lookup,
-        folder=folder,
-        target=target,
-        target_is_prospective=target_is_prospective,
-    )
+    return _native.scope_browse(lookup, (folder, target, target_is_prospective))
