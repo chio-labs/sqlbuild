@@ -68,6 +68,11 @@ fn failure(error: SelectorError) -> FailureRow {
 }
 
 impl NativeProjectGraph {
+    /// The graph this object wraps.
+    pub(crate) fn graph(&self) -> &ProjectGraph {
+        &self.graph
+    }
+
     /// Wrap a graph another native stage built, such as project assembly.
     pub(crate) fn new(graph: ProjectGraph) -> Self {
         Self { graph }

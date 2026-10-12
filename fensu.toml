@@ -35,6 +35,11 @@ reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding exe
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/dag/types.py"
+reason = "The native DAG builder owns DAG behavior; this package only declares the node kinds integrations read from the artifact."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/adapters/bigquery/__init__.py"
 reason = "The BigQuery backend intentionally owns behavior through its adapter class rather than function entrypoints."
 

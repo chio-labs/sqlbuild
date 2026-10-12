@@ -7,6 +7,7 @@ pub(crate) mod compile_driver;
 pub(crate) mod compile_outputs;
 pub(crate) mod compiled_project;
 pub(crate) mod contracts;
+pub(crate) mod dag_artifact;
 pub(crate) mod discovery;
 pub(crate) mod graph;
 pub(crate) mod lineage;

@@ -9,6 +9,7 @@ pub mod compiled_project;
 pub mod compiler;
 mod constants;
 pub mod contracts;
+pub mod dag_artifact;
 pub mod explicit_references;
 pub mod graph;
 pub mod lineage;

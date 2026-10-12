@@ -72,6 +72,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -782,6 +783,9 @@ def relation_key_row(
     kind: str, name: str, values: dict[str, object], entry: object
 ) -> RelationKeyRow: ...
 def declared_relation_keys(rows: list[RelationKeyRow]) -> dict[str, list[list[str]]]: ...
+def build_dag_json(
+    *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
+) -> str: ...
 
 class NativeProjectGraph:
     @staticmethod

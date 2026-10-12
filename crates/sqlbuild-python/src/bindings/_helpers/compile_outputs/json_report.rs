@@ -220,7 +220,7 @@ impl Conversion {
 }
 
 /// `json.dumps` writes a float key as `float.__repr__`, or as `NaN` / `Infinity`.
-fn float_key(key: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn float_key(key: &Bound<'_, PyAny>) -> PyResult<String> {
     let number: f64 = key.extract::<f64>()?;
     if number.is_nan() {
         return Ok("NaN".to_owned());

@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sqlbuild._native import build_project_graph
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.compiler.dag.main.build import build_dag_json
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -42,7 +41,7 @@ def run_dag(
         ),
         project_dir=effective_project_dir,
     )
-    graph: ProjectGraph = build_project_graph(
+    graph: ProjectGraph = _native.build_project_graph(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
         no_sql_validation=no_sql_validation,
@@ -55,7 +54,7 @@ def run_dag(
     python_graph: PythonNodeGraph = build_discovered_python_node_graph(
         discovered_inputs=discovered_inputs
     )
-    dag_json: str = build_dag_json(
+    dag_json: str = _native.build_dag_json(
         graph=graph,
         project_name=discovered_inputs.project_config.name,
         python_graph=python_graph,
