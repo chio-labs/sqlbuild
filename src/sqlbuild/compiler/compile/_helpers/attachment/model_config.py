@@ -311,15 +311,6 @@ def _str_from_dict(*, values: dict[str, object], key: str) -> str | None:
     return raw if isinstance(raw, str) else None
 
 
-def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
-    raw: object | None = values.get(key)
-    if raw is None:
-        return False
-    if not isinstance(raw, bool):
-        raise CompileInputError(f"AUDIT() '{key}' must be a boolean")
-    return raw
-
-
 def native_model_config_session(
     *, inputs: NativeModelConfigInputs, validator: _native.NativeModelValidator
 ) -> NativeModelConfigSession:

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
     from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
     from sqlbuild.compiler.compile.models import (
-        CompactBatchPreparation,
         CompiledLineageColumnFact,
         CompiledObjectKey,
         CompiledRelationLocation,
@@ -595,12 +594,6 @@ class TypedSqlValueRenderer(Protocol):
     def render_typed_array(self, *, value: SqlValue) -> str: ...
 
     def render_typed_object(self, *, value: SqlValue) -> str: ...
-
-
-class CompactBatchResponseCallback(Protocol):
-    """Keyword-only callback for publishing one native compact response."""
-
-    def __call__(self, *, preparation: CompactBatchPreparation, response: object) -> None: ...
 
 
 class CompileInputsReadyCallback(Protocol):

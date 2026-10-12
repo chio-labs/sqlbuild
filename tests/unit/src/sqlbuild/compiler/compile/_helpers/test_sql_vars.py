@@ -8,7 +8,7 @@ import pytest
 
 from sqlbuild.compiler.compile._helpers.render.sql_vars import (
     interpolate_sql_batch,
-    substitute_sql_vars,
+    substitute_sql_vars_with_spans,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import SqlInterpolation
@@ -130,7 +130,8 @@ def test_given_sql_and_vars_when_substituting_then_returns_expected(
     for target_name, environment_value in test_case.environment_variables.items():
         monkeypatch.setenv(target_name, environment_value)
 
-    result: str = substitute_sql_vars(
+    result: str
+    result, _spans = substitute_sql_vars_with_spans(
         sql=test_case.sql,
         file_path=_FILE_PATH,
         effective_vars=test_case.effective_vars,
@@ -214,7 +215,7 @@ def test_given_missing_var_when_substituting_then_raises(
     test_case: SubstituteSqlVarsErrorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        substitute_sql_vars(
+        substitute_sql_vars_with_spans(
             sql=test_case.sql,
             file_path=_FILE_PATH,
             effective_vars=test_case.effective_vars,

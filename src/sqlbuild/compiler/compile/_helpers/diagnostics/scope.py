@@ -29,12 +29,6 @@ _DECLARATION_RESOURCE_TYPES: dict[DeclarationKind, CompiledResourceType] = {
 }
 
 
-def compiled_resource_type(kind: ResourceKind) -> CompiledResourceType | None:
-    """Return the compiled resource type diagnostics use for a scope resource kind."""
-
-    return _RESOURCE_TYPES.get(kind)
-
-
 def report_scope_index_errors(*, index: ScopeIndex) -> None:
     """Report each error-severity scope finding as its own compile diagnostic."""
 

@@ -115,11 +115,3 @@ class SqlTestExtractionError(CompileInputError):
         self.test_index = test_index
         self.token = token
         self.token_offset = token_offset
-
-
-class CompactAnalysisInputError(CompileInputError):
-    """Raised when compact SQL-analysis batch inputs are inconsistent."""
-
-
-class AnalysisCacheEntryError(ValueError):
-    """Raised when a persisted model analysis cache entry is invalid."""
