@@ -61,6 +61,17 @@ fn given_schema_documents_when_parsing_then_matches_python_seeds_and_errors() {
             expected_seeds: parse_error("/project/seeds/countries.yml seed audits must be a list"),
         },
         SchemaDocumentTestCase {
+            description: "an audit name Python strips to nothing",
+            document: seed(
+                vec![column("code", "VARCHAR")],
+                vec![("audits", Node::List(vec![text("\u{1f}")]))],
+            ),
+            in_seeds_directory: true,
+            expected_seeds: parse_error(
+                "/project/seeds/countries.yml seed audits must not contain empty names",
+            ),
+        },
+        SchemaDocumentTestCase {
             description: "a non-boolean csv setting",
             document: seed(
                 vec![column("code", "VARCHAR")],

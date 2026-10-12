@@ -48,6 +48,7 @@ from sqlbuild.compiler.discovery.main._model_description_inputs import (
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
+    DiscoveredSqlModelFile,
     DiscoveryFileFault,
     NamedSqlHookEntry,
     PythonHookEntry,
@@ -1085,3 +1086,17 @@ def discovery_error(*, project_dir: Path) -> tuple[str, str] | None:
     except Exception as error:
         return type(error).__name__, str(error)
     return None
+
+
+def model_file_record() -> DiscoveredSqlModelFile:
+    """A model file record built through its keyword constructor."""
+
+    return DiscoveredSqlModelFile(
+        file_path=Path("/project/models/orders.sql"),
+        relative_path=Path("models/orders.sql"),
+        contents="MODEL ();\nselect 1 as order_id",
+        header_values={},
+        header_column_locations={},
+        output_column_locations={},
+        query_sql="select 1 as order_id",
+    )

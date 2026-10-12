@@ -2,6 +2,8 @@
 
 use crate::model_validation::constants::SETTING_SNIPPET_INDENT;
 
+use sqlbuild_core::text::main::python_strip::python_strip;
+
 use crate::errors::ConfigError;
 use crate::types::{AuthoredNode, NodeKind};
 
@@ -23,7 +25,7 @@ impl Site<'_> {
 
 /// Return the text of a string whose `strip()` Python finds non-empty, `None` otherwise.
 pub(crate) fn non_blank_text<N: AuthoredNode>(node: &N) -> Option<String> {
-    node.text().filter(|text| !str::trim(text).is_empty())
+    node.text().filter(|text| !python_strip(text).is_empty())
 }
 
 /// Read `optional_named_string`: `None`, or a string `strip()` finds non-empty.

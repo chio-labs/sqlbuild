@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 
 
 @dataclass(frozen=True)
@@ -243,3 +246,12 @@ class CsvDialectTestCase:
     description: str
     settings: bytes
     expected_reader_settings: dict[str, str]
+
+
+@dataclass(frozen=True)
+class RecordCopyTestCase:
+    """One way Python copies a model file record, which must keep every field."""
+
+    description: str
+    copy_record: Callable[[DiscoveredSqlModelFile], DiscoveredSqlModelFile]
+    expected_query_sql: str

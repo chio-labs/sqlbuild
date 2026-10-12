@@ -126,8 +126,8 @@ struct ModelFileFields {
     enum_declarations: Option<Py<PyTuple>>,
     #[pyo3(default)]
     constant_declarations: Option<Py<PyTuple>>,
-    #[pyo3(default)]
-    extract_implicit_alias_columns: Option<bool>,
+    #[pyo3(default = true)]
+    extract_implicit_alias_columns: bool,
 }
 
 impl NativeModelFile {
@@ -201,14 +201,20 @@ impl NativeModelFile {
     #[new]
     #[pyo3(signature = (**fields))]
     fn new(py: Python<'_>, fields: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
-        let fields: ModelFileFields = match fields {
-            Some(fields) => fields.extract()?,
-            None => {
-                return Err(PyTypeError::new_err(
-                    "DiscoveredSqlModelFile requires its fields",
-                ));
-            }
+        let Some(fields) = fields else {
+            return Err(PyTypeError::new_err(
+                "DiscoveredSqlModelFile requires its fields",
+            ));
         };
+        for key in fields.keys() {
+            let key: String = key.extract()?;
+            if !FIELD_NAMES.contains(&key.as_str()) {
+                return Err(PyTypeError::new_err(format!(
+                    "DiscoveredSqlModelFile got an unexpected keyword argument '{key}'"
+                )));
+            }
+        }
+        let fields: ModelFileFields = fields.extract()?;
         Ok(Self {
             file_path: fields.file_path,
             relative_path: fields.relative_path,
@@ -223,7 +229,7 @@ impl NativeModelFile {
             constant_declarations: fields
                 .constant_declarations
                 .unwrap_or_else(|| PyTuple::empty(py).unbind()),
-            extract_implicit_alias_columns: fields.extract_implicit_alias_columns.unwrap_or(true),
+            extract_implicit_alias_columns: fields.extract_implicit_alias_columns,
         })
     }
 
@@ -315,13 +321,15 @@ impl NativeModelFile {
         Ok(format!("DiscoveredSqlModelFile({})", fields.join(", ")))
     }
 
-    fn __reduce__<'py>(
+    /// The keyword fields `copy` and `pickle` rebuild this record from.
+    fn __getnewargs_ex__<'py>(
         slf: &Bound<'py, Self>,
-    ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyTuple>)> {
+    ) -> PyResult<(Bound<'py, PyTuple>, Bound<'py, PyDict>)> {
         let py: Python<'py> = slf.py();
-        Ok((
-            slf.get_type().into_any(),
-            PyTuple::new(py, slf.get().fields(py)?)?,
-        ))
+        let keywords: Bound<'py, PyDict> = PyDict::new(py);
+        for (name, value) in FIELD_NAMES.iter().zip(slf.get().fields(py)?) {
+            keywords.set_item(name, value)?;
+        }
+        Ok((PyTuple::empty(py), keywords))
     }
 }
