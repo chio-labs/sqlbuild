@@ -73,7 +73,7 @@ pub(crate) fn project_facts(
 }
 
 /// `read` applied to each item of the iterable attribute `name` of `owner`.
-fn each<T>(
+pub(crate) fn each<T>(
     owner: &Bound<'_, PyAny>,
     name: &str,
     read: impl Fn(&Bound<'_, PyAny>) -> PyResult<T>,
@@ -94,7 +94,7 @@ fn optional_text(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String
 }
 
 /// `str(Path(...).stem)` of the path attribute `name`.
-fn stem(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
+pub(crate) fn stem(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
     owner.getattr(name)?.getattr("stem")?.extract()
 }
 
@@ -142,7 +142,7 @@ fn seed_file_fact(seed: &Bound<'_, PyAny>) -> PyResult<SeedFileFact> {
     })
 }
 
-fn column_name(column: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn column_name(column: &Bound<'_, PyAny>) -> PyResult<String> {
     column.getattr("name")?.extract()
 }
 

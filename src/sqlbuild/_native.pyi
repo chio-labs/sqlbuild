@@ -738,7 +738,7 @@ class NativeModelLoop:
         self,
         project: NativeCompiledProject,
         host: object,
-        models: list[tuple[object, ...]],
+        model_files: list[DiscoveredSqlModelFile],
     ) -> list[NativeModelInput]: ...
 
 def relation_key_row(
@@ -1190,6 +1190,11 @@ class NativeModelValidator:
         custom_materializations: set[str],
         microbatch_concurrency: bool,
     ) -> None: ...
+    @staticmethod
+    def from_inputs(
+        inputs: DiscoveredProjectInputs, microbatch_concurrency: bool
+    ) -> NativeModelValidator: ...
+    def model_names(self) -> set[str]: ...
     def validate(
         self,
         values: dict[str, object],

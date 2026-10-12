@@ -14,13 +14,6 @@ from sqlbuild.compiler.compile._helpers.attachment.model_config import (
     native_model_config_session,
     validate_declared_schema_models_are_attached,
 )
-from sqlbuild.compiler.compile._helpers.attachment.references import (
-    build_known_function_names,
-    build_known_ref_names,
-    build_known_seed_names,
-    build_known_source_names,
-    build_known_table_function_names,
-)
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsic_semantics,
@@ -30,9 +23,6 @@ from sqlbuild.compiler.compile._helpers.render.declarations import (
 )
 from sqlbuild.compiler.compile._helpers.render.macros import (
     macro_expansion_classes,
-)
-from sqlbuild.compiler.compile._helpers.render.sql_vars import (
-    interpolate_sql_batch,
 )
 from sqlbuild.compiler.compile._helpers.render.templating import (
     expand_effective_vars,
@@ -46,14 +36,11 @@ from sqlbuild.compiler.compile.models import (
     DeclarationResolutionContext,
     LoadedMacro,
     ModelInputBuildContext,
-    ModelResourceNames,
     ModelValidatorContext,
     NativeModelConfigInputs,
-    SqlInterpolation,
 )
 from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.compiled_project.main._model_loop_classes import model_loop_classes
-from sqlbuild.compiler.compiled_project.types import SpanRow
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -67,10 +54,6 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.model_config.main._native_contract_classes import native_contract_classes
-from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
-    scan_native_declaration_references,
-)
-from sqlbuild.compiler.model_loop.types import NativeDeclarationScan
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -113,12 +96,6 @@ class _ModelValidationContext:
     defer_model_sql_validation: bool
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
     sql_lexical_syntax: SqlLexicalSyntax
-    known_model_names: set[str]
-    known_seed_names: set[str]
-    known_source_names: set[str]
-    known_function_names: set[str]
-    known_table_function_names: set[str]
-    custom_materialization_names: frozenset[str]
     validators: ModelValidatorContext
 
 
@@ -129,7 +106,6 @@ class _ModelInputLoop:
     validation_context: _ModelValidationContext
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
     legacy_schema_files: tuple[DiscoveredSchemaFile, ...]
-    native_declaration_references: dict[Path, NativeDeclarationScan]
 
 
 @dataclass
@@ -137,7 +113,6 @@ class _ModelLoopHost:
     """The attachment steps the native model loop calls back into, one model index at a time."""
 
     loop: _ModelInputLoop
-    interpolations: dict[Path, SqlInterpolation]
 
     def constant_text(self, *, declaration: ConstantDeclaration, file_path: Path) -> str:
         return render_constant_declaration(
@@ -185,24 +160,13 @@ def _build_model_inputs(
 ) -> tuple[ModelInput, ...]:
     effective_vars: dict[str, object] = context.effective_vars
     effective_settings: SettingsConfig = context.effective_settings
-    known_model_names: set[str] = build_known_ref_names(discovered_inputs)
-    known_seed_names: set[str] = build_known_seed_names(discovered_inputs)
-    known_source_names: set[str] = build_known_source_names(discovered_inputs)
-    known_function_names: set[str] = build_known_function_names(discovered_inputs)
-    known_table_function_names: set[str] = build_known_table_function_names(discovered_inputs)
+    validator: _native.NativeModelValidator = _native.NativeModelValidator.from_inputs(
+        discovered_inputs, effective_settings.microbatch_concurrency
+    )
     if external_sql_reference_resolver is not None:
-        external_sql_reference_resolver.validate_model_names(known_model_names=known_model_names)
-    custom_materialization_names: frozenset[str] = frozenset(
-        mf.name for mf in discovered_inputs.materialization_files
-    )
-    names: ModelResourceNames = ModelResourceNames(
-        models=known_model_names,
-        seeds=known_seed_names,
-        sources=known_source_names,
-        functions=known_function_names,
-        table_functions=known_table_function_names,
-        custom_materializations=custom_materialization_names,
-    )
+        external_sql_reference_resolver.validate_model_names(
+            known_model_names=validator.model_names()
+        )
     validation_context: _ModelValidationContext = _ModelValidationContext(
         effective_settings=effective_settings,
         no_sql_validation=no_sql_validation,
@@ -210,14 +174,7 @@ def _build_model_inputs(
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
         sql_lexical_syntax=context.sql_lexical_syntax,
-        known_model_names=known_model_names,
-        known_seed_names=known_seed_names,
-        known_source_names=known_source_names,
-        known_function_names=known_function_names,
-        known_table_function_names=known_table_function_names,
-        custom_materialization_names=custom_materialization_names,
         validators=ModelValidatorContext(
-            names=names,
             settings=effective_settings,
             external_sql_reference_resolver=external_sql_reference_resolver,
             native_config=native_model_config_session(
@@ -229,30 +186,12 @@ def _build_model_inputs(
                     run_id=context.run_id,
                     microbatch_concurrency=effective_settings.microbatch_concurrency,
                 ),
-                names=names,
+                validator=validator,
             ),
         ),
     )
     sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = _index_sql_hook_definitions(
         discovered_inputs.sql_hook_files
-    )
-    render_files: tuple[DiscoveredSqlModelFile, ...] = discovered_inputs.model_files
-    interpolations: dict[Path, SqlInterpolation] = dict(
-        zip(
-            (model_file.file_path for model_file in render_files),
-            interpolate_sql_batch(
-                sqls=tuple(
-                    (model_file.query_sql, model_file.file_path) for model_file in render_files
-                ),
-                effective_vars=effective_vars,
-            ),
-            strict=True,
-        )
-    )
-    prepared_files: tuple[DiscoveredSqlModelFile, ...] = tuple(
-        model_file
-        for model_file in render_files
-        if interpolations[model_file.file_path].error is None
     )
     loop: _ModelInputLoop = _ModelInputLoop(
         discovered_inputs=discovered_inputs,
@@ -260,20 +199,9 @@ def _build_model_inputs(
         validation_context=validation_context,
         sql_hook_definitions=sql_hook_definitions,
         legacy_schema_files=legacy_schema_files,
-        native_declaration_references=dict(
-            zip(
-                (model_file.file_path for model_file in prepared_files),
-                scan_native_declaration_references(
-                    sqls=tuple(
-                        interpolations[model_file.file_path].sql for model_file in prepared_files
-                    )
-                ),
-                strict=True,
-            )
-        ),
     )
     model_inputs: list[ModelInput] = _run_native_model_loop(
-        loop=loop, interpolations=interpolations, native_project=native_project
+        loop=loop, native_project=native_project
     )
     validate_declared_schema_models_are_attached(
         model_inputs=tuple(model_inputs),
@@ -283,10 +211,7 @@ def _build_model_inputs(
 
 
 def _run_native_model_loop(
-    *,
-    loop: _ModelInputLoop,
-    interpolations: dict[Path, SqlInterpolation],
-    native_project: _native.NativeCompiledProject,
+    *, loop: _ModelInputLoop, native_project: _native.NativeCompiledProject
 ) -> list[ModelInput]:
     """Run the model loop natively; models it cannot finish yet call back into the attachment."""
 
@@ -351,34 +276,10 @@ def _run_native_model_loop(
             ),
         ),
     )
-    host: _ModelLoopHost = _ModelLoopHost(loop=loop, interpolations=interpolations)
     inputs: list[_native.NativeModelInput] = native_loop.run(
-        native_project,
-        host,
-        [
-            (
-                model_file,
-                loop.native_declaration_references.get(model_file.file_path),
-                _interpolation_row(interpolations[model_file.file_path]),
-            )
-            for model_file in files
-        ],
+        native_project, _ModelLoopHost(loop=loop), list(files)
     )
     return list(inputs)
-
-
-def _interpolation_row(
-    interpolation: SqlInterpolation,
-) -> tuple[str, list[tuple[str, str]], str | None, list[SpanRow]]:
-    return (
-        interpolation.sql,
-        list(interpolation.reads),
-        interpolation.error,
-        [
-            (span.source_start, span.source_end, span.output_start, span.output_end)
-            for span in interpolation.spans
-        ],
-    )
 
 
 def build_effective_connection(

@@ -11,7 +11,6 @@ from sqlbuild.compiler.compile._helpers.attachment.model_config import (
 from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
-    ModelResourceNames,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
@@ -115,13 +114,8 @@ def build_config_natively(  # noqa: PLR0913
             run_id="run_123",
             microbatch_concurrency=False,
         ),
-        names=ModelResourceNames(
-            models={"orders"},
-            seeds=set(),
-            sources=set(),
-            functions=set(),
-            table_functions=set(),
-            custom_materializations=frozenset(),
+        validator=_native.NativeModelValidator(
+            ({"orders"}, set(), set(), set(), set()), set(), False
         ),
     )
     return build_native_model_config(

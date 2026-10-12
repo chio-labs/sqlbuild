@@ -69,8 +69,6 @@ SQL_CEREMONIAL_SELECT_VALUE: str = "1"
 OMITTED_CEREMONIAL_SELECT_SQL: str = f"\nSELECT {SQL_CEREMONIAL_SELECT_VALUE}"
 
 
-TABLE_FUNCTION_RETURN_KEYS: frozenset[str] = frozenset({"table"})
-
 MACRO_TOKEN: str = "@"
 DECLARATION_REFERENCE_NAMES: frozenset[str] = frozenset({"enum", "const"})
 MACRO_CONTEXT_PARAMETER_NAME: str = "ctx"

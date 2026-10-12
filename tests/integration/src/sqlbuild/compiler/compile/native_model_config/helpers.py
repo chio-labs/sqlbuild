@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile._helpers.attachment.model_config import (
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     CompileSqlReference,
-    ModelResourceNames,
     ModelValidationRequest,
     NativeModelConfigInputs,
     NativeModelConfigSession,
@@ -24,14 +23,6 @@ from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.spec.contracts.models import ProjectConfig
 
 _ACCEPTED: str = "accepted"
-_NAMES: ModelResourceNames = ModelResourceNames(
-    models={"orders", "customers"},
-    seeds={"regions"},
-    sources={"raw.orders"},
-    functions={"cents", "order_lines"},
-    table_functions={"order_lines"},
-    custom_materializations=frozenset({"ledger"}),
-)
 
 
 def validation_outcome(*, values: dict[str, object]) -> object:
@@ -46,7 +37,17 @@ def validation_outcome(*, values: dict[str, object]) -> object:
             run_id="20261008T000000Z_orders",
             microbatch_concurrency=False,
         ),
-        names=_NAMES,
+        validator=_native.NativeModelValidator(
+            (
+                {"orders", "customers"},
+                {"regions"},
+                {"raw.orders"},
+                {"cents", "order_lines"},
+                {"order_lines"},
+            ),
+            {"ledger"},
+            False,
+        ),
     )
     request: ModelValidationRequest = ModelValidationRequest(
         model_file=DiscoveredSqlModelFile(

@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_hooks::{
     ExpandedHooks, HookModel, SqlHookClasses, expanded_hooks,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
-    FinishedModel, InterpolationRow, ModelLoopInput, ModelLoopRow, ModelPaths, RecordClasses,
+    DeclarationScan, FinishedModel, InterpolationRow, ModelLoopRow, ModelPaths, RecordClasses,
     RecordInputs, ReferenceRow, finished_record,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
@@ -62,7 +62,11 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     expand_declarations,
 };
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
+use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
+use crate::bindings::_helpers::sqltext::static_sql::{
+    InterpolationRow as SqlInterpolationRow, InterpolationSources, interpolation_batch,
+};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -242,18 +246,60 @@ impl NativeModelLoop {
         slf: &Bound<'py, Self>,
         project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
-        models: Vec<ModelLoopInput>,
+        model_files: Vec<Py<NativeModelFile>>,
     ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let py: Python<'py> = slf.py();
-        let models: Vec<ModelLoopRow> = models
-            .into_iter()
-            .map(|input| ModelLoopRow::new(py, input))
-            .collect::<PyResult<_>>()?;
+        let classes: LoopClasses<'py> = slf.get().loop_classes.bind(py).extract()?;
+        let models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
         project
             .borrow_mut()
             .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
         slf.get().run_models(py, project, host, models)
     }
+}
+
+/// Each model's `@@`-interpolated query and, when it interpolated, its declaration scan.
+///
+/// Every query interpolates before any model runs, as the host's batch did.
+fn prepared_rows<'py>(
+    py: Python<'py>,
+    classes: &LoopClasses<'py>,
+    model_files: Vec<Py<NativeModelFile>>,
+) -> PyResult<Vec<ModelLoopRow>> {
+    let hooks = &classes.sql_hooks;
+    let mut sqls: Vec<(String, String)> = Vec::with_capacity(model_files.len());
+    for model_file in &model_files {
+        let record: &NativeModelFile = model_file.get();
+        let (file_path, _) = record.paths(py);
+        let (query_sql, _) = record.texts(py);
+        sqls.push((
+            query_sql.to_str()?.to_owned(),
+            file_path.str()?.to_str()?.to_owned(),
+        ));
+    }
+    let interpolated: Vec<SqlInterpolationRow> = interpolation_batch(
+        InterpolationSources(
+            hooks.effective_vars.clone(),
+            hooks.environment.clone(),
+            None,
+            hooks.render_project_var.clone(),
+        ),
+        &sqls,
+    )?;
+    let mut rows: Vec<ModelLoopRow> = Vec::with_capacity(model_files.len());
+    for ((model_file, (authored, _)), (rendered, spans, reads, error)) in
+        model_files.into_iter().zip(sqls).zip(interpolated)
+    {
+        let sql: String = rendered.unwrap_or(authored);
+        let scan: Option<DeclarationScan> = error.is_none().then(|| declaration_scan(&sql));
+        let reads: Vec<(String, String)> = reads
+            .into_iter()
+            .map(|(kind, name)| (kind.to_owned(), name))
+            .collect();
+        let interpolation: InterpolationRow = (sql, reads, error, spans);
+        rows.push(ModelLoopRow::new(py, (model_file, scan, interpolation))?);
+    }
+    Ok(rows)
 }
 
 impl NativeModelLoop {

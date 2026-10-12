@@ -17,7 +17,6 @@ from sqlbuild.compiler.compile.constants import (
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
-    ModelResourceNames,
     ModelValidationRequest,
     NativeModelConfigInputs,
     NativeModelConfigSession,
@@ -322,7 +321,7 @@ def _bool_from_dict(*, values: dict[str, object], key: str) -> bool:
 
 
 def native_model_config_session(
-    *, inputs: NativeModelConfigInputs, names: ModelResourceNames
+    *, inputs: NativeModelConfigInputs, validator: _native.NativeModelValidator
 ) -> NativeModelConfigSession:
     """Capture the project inputs every model's native config build and validation read."""
 
@@ -345,11 +344,7 @@ def native_model_config_session(
                 None if target is None else (target.database, target.schema),
             ),
         ),
-        validator=_native.NativeModelValidator(
-            (names.models, names.seeds, names.sources, names.functions, names.table_functions),
-            set(names.custom_materializations),
-            inputs.microbatch_concurrency,
-        ),
+        validator=validator,
         inherited_storage={
             materialized: (
                 resolve_time_travel_retention(

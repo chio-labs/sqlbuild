@@ -1694,18 +1694,6 @@ class NativeModelConfigInputs:
 
 
 @dataclass(frozen=True)
-class ModelResourceNames:
-    """Discovered resource names the native reference check reads."""
-
-    models: set[str]
-    seeds: set[str]
-    sources: set[str]
-    functions: set[str]
-    table_functions: set[str]
-    custom_materializations: frozenset[str]
-
-
-@dataclass(frozen=True)
 class ModelValidationRequest:
     """One model's effective config and the facts its validators read."""
 
@@ -1720,7 +1708,6 @@ class ModelValidationRequest:
 class ModelValidatorContext:
     """The project facts the model validators read, and the native config session."""
 
-    names: ModelResourceNames
     settings: SettingsConfig
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
     native_config: NativeModelConfigSession
