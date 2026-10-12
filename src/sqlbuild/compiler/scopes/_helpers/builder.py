@@ -10,7 +10,6 @@ from sqlbuild.compiler.compile.main._static_macro_inventory import inventory_pro
 from sqlbuild.compiler.compile.models import StaticMacroInventory
 from sqlbuild.compiler.discovery.main._scope_snapshot import discover_scope_snapshot
 from sqlbuild.compiler.discovery.models import TolerantScopeDiscovery
-from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
@@ -25,7 +24,7 @@ def build_tolerant_scope_index(
     macro_inventory: StaticMacroInventory = inventory_project_macros(
         macro_files=snapshot.discovered_inputs.macro_files
     )
-    native: NativeScopeIndex = open_native_scope_index(
+    native: _native.NativeScopeIndex = open_native_scope_index(
         discovered_inputs=snapshot.discovered_inputs,
         loaded_macros={},
         static_macros=macro_inventory.exports,
