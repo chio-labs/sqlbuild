@@ -552,6 +552,7 @@ pub(crate) fn decode_outcome(
             binding_validated,
         },
         cleaned_sql: String::new(),
+        deferred_cleaning: None,
         validated_schema: schema.clone(),
         fused_binding_validated: true,
     };

@@ -213,11 +213,21 @@ pub struct ModelAnalysis {
     pub binding_validated: bool,
 }
 
+/// The inputs a cache hit normalizes into its cleaned SQL only when a reader needs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeferredCleaning {
+    pub(crate) dialect: String,
+    pub(crate) query_sql: String,
+    pub(crate) placeholders: Pairs,
+}
+
 /// Python's `ModelSqlAnalysis` for one model, without the placeholders Python keeps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelOutcome {
     pub analysis: ModelAnalysis,
+    /// Empty while `deferred_cleaning` is set; read through `resolved_cleaned_sql`.
     pub cleaned_sql: String,
+    pub deferred_cleaning: Option<DeferredCleaning>,
     pub validated_schema: Shapes,
     pub fused_binding_validated: bool,
 }
@@ -307,6 +317,8 @@ pub struct AnalysisSession {
     pub(crate) available_nullability: ShapeTable,
     pub(crate) complete_shapes: ShapeTable,
     pub(crate) outcomes: Vec<Option<ModelOutcome>>,
+    /// Cache hits whose cleaned SQL is still unnormalized.
+    pub(crate) pending_cleaned: Vec<bool>,
     pub(crate) phase: Phase,
     pub(crate) publications: Shapes,
     pub(crate) failures: Vec<String>,

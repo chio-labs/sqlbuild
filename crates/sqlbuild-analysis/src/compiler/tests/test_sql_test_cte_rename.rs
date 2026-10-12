@@ -135,10 +135,25 @@ fn given_statement_when_listing_defined_ctes_then_only_with_list_entries_count()
                   ON b.id = s.id",
             expected_keys: &["base", "rows_two"],
         },
+        DefinedCteKeysTestCase {
+            description: "lowercase and mixed-case WITH keywords are listed",
+            sql: "with base as (select 1 as id), Rows_Two as (WiTh deep as (select 2 as id) \
+                  select id from deep) select id from base",
+            expected_keys: &["base", "rows_two", "deep"],
+        },
+        DefinedCteKeysTestCase {
+            description: "a statement without the WITH keyword defines nothing",
+            sql: "SELECT width, within_limit FROM orders WHERE status = 'shipped'",
+            expected_keys: &[],
+        },
+        DefinedCteKeysTestCase {
+            description: "an unscannable statement defines nothing",
+            sql: "WITH base AS (SELECT 'unterminated FROM orders",
+            expected_keys: &[],
+        },
     ];
     for test_case in test_cases {
-        let keys =
-            defined_cte_keys(test_case.sql, SliceDialect::new(Some("duckdb"))).expect("scans");
+        let keys = defined_cte_keys(test_case.sql, SliceDialect::new(Some("duckdb")));
         assert_eq!(keys, test_case.expected_keys, "{}", test_case.description);
     }
 }

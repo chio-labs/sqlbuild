@@ -1793,7 +1793,7 @@ fn assert_names_isolated(sql: &str, dialect: &str, helper_name: &str, label: &st
     });
     assert!(!helper_at_top_level, "{label}: {sql}");
     for cte in &split.ctes {
-        let nested = defined_cte_keys(cte.body, slice_dialect).expect("body scans");
+        let nested = defined_cte_keys(cte.body, slice_dialect);
         assert!(
             nested.iter().all(|name| !top_level.contains(name)),
             "{label}: {} nests {nested:?}: {sql}",

@@ -449,7 +449,7 @@ impl RenderCteState {
             .collect();
         let keys: HashSet<String> = top_level.iter().map(|(name, _, _)| cte_key(name)).collect();
         for (_, body, origin) in &top_level {
-            let nested = defined_cte_keys(body, self.dialect).unwrap_or_default();
+            let nested = defined_cte_keys(body, self.dialect);
             if let Some(name) = nested.iter().find(|name| keys.contains(*name)) {
                 return Err(format!(
                     "{origin} defines CTE '{name}', which is also a CTE SQLBuild generates at the \

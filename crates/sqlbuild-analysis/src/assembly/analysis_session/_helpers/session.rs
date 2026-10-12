@@ -31,9 +31,9 @@ use crate::assembly::analysis_session::_helpers::mappings::{
 use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
 use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_TYPE};
 use crate::assembly::analysis_session::models::{
-    AnalysisSession, ColumnFact, ContractProof, FinishedSession, LineageFacts, LineageRow,
-    ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables, SessionModelFacts,
-    SessionOutcome, SessionRequest, SessionStep,
+    AnalysisSession, ColumnFact, ContractProof, DeferredCleaning, FinishedSession, LineageFacts,
+    LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables,
+    SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -63,6 +63,7 @@ impl AnalysisSession {
             available_nullability: ShapeTable::from_shapes(&request.column_nullability),
             complete_shapes,
             outcomes: vec![None; request.models.len()],
+            pending_cleaned: vec![false; request.models.len()],
             waves: if dependency_ordered || request.models.is_empty() {
                 waves
             } else {
@@ -112,13 +113,26 @@ impl AnalysisSession {
         }
         let dynamic_contracts: Vec<PivotOutcome> = self.dynamic_contracts()?;
         let pool: Result<Arc<ThreadPool>, String> = self.catalog.native.analysis_pool();
-        let models: Vec<ModelOutcome> = self
+        let mut models: Vec<ModelOutcome> = self
             .outcomes
             .into_iter()
             .collect::<Option<_>>()
             .ok_or("the session left a model unanalysed")?;
         let (schema_additions, analysis_names) = self.catalog.into_changes();
-        let request: SessionRequest = self.request;
+        let mut request: SessionRequest = self.request;
+        for ((outcome, model), pending) in models
+            .iter_mut()
+            .zip(request.models.iter_mut())
+            .zip(self.pending_cleaned)
+        {
+            if pending {
+                outcome.deferred_cleaning = Some(DeferredCleaning {
+                    dialect: request.dialect.clone(),
+                    query_sql: std::mem::take(&mut model.query_sql),
+                    placeholders: std::mem::take(&mut model.placeholders),
+                });
+            }
+        }
         let mut model_facts: HashMap<String, SessionModelFacts> = HashMap::new();
         let mut dynamic_proofs: HashMap<String, ContractProof> = HashMap::new();
         for ((model, outcome), proof) in request.models.iter().zip(&models).zip(&dynamic_contracts)
@@ -247,6 +261,7 @@ impl AnalysisSession {
             self.outcomes[*model] = Some(ModelOutcome {
                 analysis,
                 cleaned_sql: result.cleaned_sql,
+                deferred_cleaning: None,
                 validated_schema: schema,
                 fused_binding_validated: true,
             });
@@ -394,8 +409,8 @@ impl AnalysisSession {
     /// Python's deferred binding validation, then the dataflow's shape publication.
     fn finish_wave(&mut self, wave: usize) -> Result<(), String> {
         let models: Vec<usize> = self.waves[wave].clone();
-        let mut validations: Vec<(usize, String, Shapes)> = Vec::new();
         let validated: &[usize] = if self.cyclic { &[] } else { &models };
+        let mut revalidated: Vec<(usize, Shapes)> = Vec::new();
         for model in validated {
             let schema: Shapes = self.binding_schema(&self.request.models[*model]);
             let outcome: &ModelOutcome = self.outcomes[*model]
@@ -404,8 +419,17 @@ impl AnalysisSession {
             if !outcome.fused_binding_validated
                 || !same_relations(&outcome.validated_schema, &schema)
             {
-                validations.push((*model, outcome.cleaned_sql.clone(), schema));
+                revalidated.push((*model, schema));
             }
+        }
+        let pending: Vec<usize> = revalidated.iter().map(|(model, _)| *model).collect();
+        self.ensure_cleaned(&pending)?;
+        let mut validations: Vec<(usize, String, Shapes)> = Vec::new();
+        for (model, schema) in revalidated {
+            let outcome: &ModelOutcome = self.outcomes[model]
+                .as_ref()
+                .ok_or("a wave model was not analysed")?;
+            validations.push((model, outcome.cleaned_sql.clone(), schema));
         }
         if !validations.is_empty() {
             let requests: Vec<(&str, &Shapes)> = validations
@@ -421,6 +445,9 @@ impl AnalysisSession {
             }
         }
         if self.dependency_ordered {
+            if self.request.case_sensitive_shapes {
+                self.ensure_cleaned(&models)?;
+            }
             for model in &models {
                 self.publish(*model)?;
             }
@@ -500,32 +527,49 @@ impl AnalysisSession {
                 None => misses.push(position),
             }
         }
-        let members: Vec<BatchMember<'_>> = hits
-            .iter()
-            .map(|(position, _)| {
-                batch_member(&self.request.models[models[*position]], &schemas[*position])
-            })
-            .collect();
-        let cleaned: Vec<Result<String, String>> = self
-            .catalog
-            .normalize_each(&self.request.dialect, &members)
-            .unwrap_or_else(|error| members.iter().map(|_| Err(error.clone())).collect());
-        for ((position, mut outcome), sql) in hits.into_iter().zip(cleaned) {
+        for (position, outcome) in hits {
             let model: usize = models[position];
-            match sql {
-                Ok(sql) => {
-                    outcome.cleaned_sql = sql;
-                    self.outcomes[model] = Some(outcome);
-                    cache.hits[model] = true;
-                }
-                Err(_) => misses.push(position),
-            }
+            self.outcomes[model] = Some(outcome);
+            self.pending_cleaned[model] = true;
+            cache.hits[model] = true;
         }
         misses.sort_unstable();
         cache.stats.hits += models.len() - misses.len();
         cache.stats.misses += misses.len();
         self.cache = Some(cache);
         Ok(misses)
+    }
+
+    /// Normalize the cleaned SQL of the cache hits among `models` that still lack it.
+    fn ensure_cleaned(&mut self, models: &[usize]) -> Result<(), String> {
+        let pending: Vec<usize> = models
+            .iter()
+            .copied()
+            .filter(|model| self.pending_cleaned[*model])
+            .collect();
+        if pending.is_empty() {
+            return Ok(());
+        }
+        let schemas: Vec<Shapes> = pending
+            .iter()
+            .map(|model| self.binding_schema(&self.request.models[*model]))
+            .collect();
+        let members: Vec<BatchMember<'_>> = pending
+            .iter()
+            .zip(&schemas)
+            .map(|(model, schema)| batch_member(&self.request.models[*model], schema))
+            .collect();
+        let cleaned: Vec<Result<String, String>> = self
+            .catalog
+            .normalize_each(&self.request.dialect, &members)?;
+        for (model, sql) in pending.into_iter().zip(cleaned) {
+            let sql: String = sql.map_err(|reason| {
+                native_failure(&model_context(&self.request.models[model]), &reason)
+            })?;
+            self.outcome_mut(model)?.cleaned_sql = sql;
+            self.pending_cleaned[model] = false;
+        }
+        Ok(())
     }
 
     /// Store each finished native outcome of `models` the cache did not answer.

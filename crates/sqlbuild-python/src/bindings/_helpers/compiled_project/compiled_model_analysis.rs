@@ -1,5 +1,6 @@
 //! A compiled model's analysis, kept from the native session and projected on demand.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use pyo3::IntoPyObject;
@@ -7,14 +8,16 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
+use sqlbuild_analysis::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use sqlbuild_analysis::assembly::analysis_session::models::{
     ColumnFact, ContractProof, LineageFacts, LineageRow, ModelOutcome, PivotOutcome,
 };
 use sqlbuild_analysis::binding_locations::main::locate_binding_diagnostics::locate_binding_diagnostics;
 use sqlbuild_analysis::binding_locations::models::{BindingSource, LocatedDiagnostic};
-use sqlbuild_analysis::semantic_validation::types::Expansion;
+use sqlbuild_analysis::semantic_validation::types::{DiagnosticRow, Expansion};
 
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
+use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     CompiledViewClasses, InferredRow,
 };
@@ -128,12 +131,7 @@ pub(crate) fn analysis_record(
         if let PivotOutcome::Proof(proof) = contract {
             record.proof = Some(proof.clone());
         }
-        record.binding = located(
-            py,
-            input,
-            &analysed.binding_diagnostics,
-            &outcome.cleaned_sql,
-        )?;
+        record.binding = located(py, input, outcome)?;
         record.binding_validated = analysed.binding_validated;
     }
     if let Some(proof) = record.proof.as_ref().filter(|proof| proof.output_proven) {
@@ -147,12 +145,13 @@ pub(crate) fn analysis_record(
 fn located(
     py: Python<'_>,
     input: &ModelInputRecord,
-    rows: &[sqlbuild_analysis::semantic_validation::types::DiagnosticRow],
-    cleaned: &str,
+    outcome: &ModelOutcome,
 ) -> PyResult<Vec<LocatedDiagnostic>> {
+    let rows: &[DiagnosticRow] = &outcome.analysis.binding_diagnostics;
     if rows.is_empty() {
         return Ok(Vec::new());
     }
+    let cleaned: Cow<'_, str> = resolved_cleaned_sql(outcome).map_err(compiler_error)?;
     let model_file: &Bound<'_, PyAny> = input.model_file.bind(py);
     let authored: String = model_file.getattr("contents")?.extract()?;
     let query: String = model_file.getattr("query_sql")?.extract()?;
@@ -164,7 +163,7 @@ fn located(
     let source: BindingSource<'_> = BindingSource {
         authored: &authored,
         query: &query,
-        cleaned,
+        cleaned: &cleaned,
         expansion: expansion
             .authored
             .then_some((expansion.expanded_sql.bind(py).to_str()?, passes.as_slice())),

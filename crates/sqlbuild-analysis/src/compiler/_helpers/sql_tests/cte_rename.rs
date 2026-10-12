@@ -83,11 +83,17 @@ pub(crate) fn rename_ctes(
     preserves_tokens((sql, &tokens), (&renamed, &renamed_tokens), &replaced).then_some(renamed)
 }
 
-/// Case-folded names of every CTE a statement defines at any depth; `None` when unscannable.
-pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<String>> {
-    let tokens = match tokens(sql, dialect) {
-        Ok(tokens) => tokens,
-        Err(_) => return None,
+/// Case-folded names of every CTE a statement defines at any depth; empty without `with`.
+pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Vec<String> {
+    if !sql
+        .as_bytes()
+        .windows(4)
+        .any(|window| window.eq_ignore_ascii_case(b"with"))
+    {
+        return Vec::new();
+    }
+    let Ok(tokens) = tokens(sql, dialect) else {
+        return Vec::new();
     };
     let code: Vec<&Token> = tokens.iter().filter(|token| !token.comment).collect();
     let text = |index: usize| code.get(index).map(|token| &sql[token.start..token.end]);
@@ -138,7 +144,7 @@ pub(crate) fn defined_cte_keys(sql: &str, dialect: SliceDialect) -> Option<Vec<S
             keys.push(key.to_string());
         }
     }
-    Some(keys)
+    keys
 }
 
 /// Whether each token sits directly in a WITH list, so a comma there separates CTEs.
