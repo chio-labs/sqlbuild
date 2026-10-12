@@ -2,10 +2,8 @@
 
 use sqlbuild_core::text::main::is_word_char::is_word_char;
 
-use crate::compiled_project::constants::{
-    CURRENT_DIRECTORY, NEWLINE, OPT_OUT_KEYS, PATH_SEPARATOR,
-};
-use crate::compiled_project::models::{LegacySchemaFile, TextPosition};
+use crate::compiled_project::constants::{NEWLINE, OPT_OUT_KEYS};
+use crate::compiled_project::models::TextPosition;
 
 /// `_text_location`: the first whole-word opt-out key at or after character `start`.
 pub(crate) fn opt_out_position(text: &str, start: usize) -> TextPosition {
@@ -52,44 +50,4 @@ fn starts_key(characters: &[char], index: usize) -> bool {
         }
     }
     false
-}
-
-/// The error for a model a legacy schema file under its directory still declares.
-pub(crate) fn legacy_schema_error(
-    model: (&str, &str),
-    schema_files: &[LegacySchemaFile],
-) -> Option<String> {
-    let (name, relative_path) = model;
-    let model_parts: Vec<&str> = parts(relative_path);
-    let mut matches: Vec<&str> = Vec::new();
-    for file in schema_files {
-        let directory: Vec<&str> = parts(&file.relative_path);
-        if !model_parts.starts_with(&directory[..directory.len().saturating_sub(1)]) {
-            continue;
-        }
-        for entry in &file.model_names {
-            if entry == name {
-                matches.push(&file.relative_path);
-            }
-        }
-    }
-    match matches.as_slice() {
-        [] => None,
-        [file] => Some(format!(
-            "Schema file {file} declares model '{name}', but model metadata must live in \
-             {relative_path} MODEL(...). Move description, columns, and audits into the model \
-             header."
-        )),
-        files => Some(format!(
-            "Model file {relative_path} matched multiple schema.yml declarations: {}",
-            files.join(", ")
-        )),
-    }
-}
-
-/// A relative path's parts, as `PurePosixPath.parts` gives them (`.` has none).
-fn parts(path: &str) -> Vec<&str> {
-    path.split(PATH_SEPARATOR)
-        .filter(|part| !part.is_empty() && *part != CURRENT_DIRECTORY)
-        .collect()
 }

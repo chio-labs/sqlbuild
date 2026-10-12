@@ -4,7 +4,6 @@ pub mod calls_macros;
 pub mod declaration_error_message;
 pub mod enum_member_literal;
 pub mod header_metadata_keys;
-pub mod legacy_schema_error;
 pub mod located_scan_error;
 pub mod merge_call_site_references;
 pub mod model_facts;

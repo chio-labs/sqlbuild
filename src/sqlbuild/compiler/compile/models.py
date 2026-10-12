@@ -18,7 +18,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     AuditInput,
-    CompactBatchResponseCallback,
     CompiledAuditView,
     CompiledFunctionView,
     CompiledModelView,
@@ -194,16 +193,6 @@ class DynamicColumnContractProof:
 
 
 @dataclass(frozen=True)
-class CteFactResolvers:
-    """Expression resolvers used for conservative CTE fact recovery."""
-
-    expression_type: Callable[..., Any]
-    nullability: Callable[..., Any]
-    shallow_nullability: Callable[..., Any]
-    alias_nullability: Callable[..., Any]
-
-
-@dataclass(frozen=True)
 class NonNullFilterContext:
     """Resolved relations and columns constrained by non-null filters."""
 
@@ -311,10 +300,6 @@ class DeclarationScopeResolver:
         default_factory=dict, compare=False, repr=False
     )
 
-    def cache_context(self, *, key: tuple[str, str], context: DeclarationResolutionContext) -> None:
-        """Retain a process-local context for equivalent lexical consumers."""
-        self.contexts_by_directory[key] = context
-
 
 @dataclass(frozen=True)
 class DeclarationScopeBuild:
@@ -397,15 +382,6 @@ class DeclarationExpansionResult:
     sql: str
     spans: tuple[ExpansionSpan, ...] = field(default_factory=tuple)
     usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class AuthoredSqlExpansionResult:
-    """Fully expanded authored SQL with all resolved declaration usages."""
-
-    sql: str
-    usages: tuple[UsageRecord, ...] = field(default_factory=tuple)
-    argument_references: tuple[CompileSqlReference, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -1512,163 +1488,12 @@ class CompiledSqlTest:
 
 
 @dataclass(frozen=True)
-class CompactProjectedFacts:
-    """Decoded compact projection and lineage rows shared by projected analyses."""
-
-    columns: tuple[InferredColumn, ...]
-    lineage_rows: tuple[
-        tuple[int, int, int, tuple[tuple[int, int, int], ...]],
-        ...,
-    ]
-
-
-@dataclass(frozen=True)
-class CompactBatchExecutionOptions:
-    """Optional binding work and cache publication for one native batch."""
-
-    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None = None
-    on_response: CompactBatchResponseCallback | None = None
-    shareable_prekeys: frozenset[str] | None = None
-
-
-@dataclass(frozen=True)
-class CompactBatchPreparation:
-    """Deduplicated native request data and ordered cleaned SQL inputs."""
-
-    cleaned_sql: tuple[str, ...]
-    queries: tuple[dict[str, object], ...]
-    templates: tuple[dict[str, object], ...]
-    projections: tuple[dict[str, object], ...]
-    binding_catalog: Any | None = field(default=None, repr=False, compare=False)
-    shared_query_indexes: frozenset[int] = frozenset()
-
-
-@dataclass(frozen=True)
-class CompactBatchInputs:
-    """Ordered per-model inputs of one compact native analysis batch."""
-
-    query_sqls: tuple[str, ...]
-    references: tuple[tuple[CompileSqlReference, ...], ...]
-    placeholders: tuple[dict[str, str] | None, ...]
-    column_nullability_by_table: dict[str, dict[str, InferredNullability]]
-    column_types_by_table: dict[str, dict[str, str]]
-    inference_profile: Any
-    recover_cte_facts: tuple[bool, ...]
-    rich_type_inference: bool
-    binding_schemas: tuple[dict[str, dict[str, str]] | None, ...] | None
-
-
-@dataclass(frozen=True)
-class CompactBatchContext:
-    """Binding catalog, cleaned SQL, and binding references prepared for one batch."""
-
-    binding_catalog: Any | None
-    normalized_sqls: list[str]
-    binding_queries: tuple[PreparedBindingQuery | None, ...]
-
-
-@dataclass(frozen=True)
 class SharedBindingQuery:
     """Relation-stubbed binding query shared by models with identical input shapes."""
 
     sql: str
     stubs: dict[str, str]
     key: tuple[object, ...]
-
-
-@dataclass(frozen=True)
-class PreparedBindingQuery:
-    """Native binding references for one model and its optional shared form."""
-
-    references: list[tuple[str, bool]]
-    overrides: dict[str, Mapping[str, str]]
-    shared: SharedBindingQuery | None = None
-
-
-@dataclass(frozen=True)
-class CompactProjectionCaches:
-    """Shared identity caches used while decoding compact native facts."""
-
-    columns: dict[tuple[int, int | None, int], InferredColumn] | None = None
-    facts: dict[int, CompactProjectedFacts] | None = None
-    decoded_facts: (
-        dict[
-            int,
-            tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
-        ]
-        | None
-    ) = None
-
-    def column(self, key: tuple[int, int | None, int]) -> InferredColumn | None:
-        return self.columns.get(key) if self.columns is not None else None
-
-    def remember_column(self, *, key: tuple[int, int | None, int], column: InferredColumn) -> None:
-        if self.columns is not None:
-            self.columns[key] = column
-
-    def fact(self, template_index: int | None) -> CompactProjectedFacts | None:
-        if self.facts is None or template_index is None:
-            return None
-        return self.facts.get(template_index)
-
-    def remember_fact(self, *, template_index: int | None, fact: CompactProjectedFacts) -> None:
-        if self.facts is not None and template_index is not None:
-            self.facts[template_index] = fact
-
-    def decoded_fact(
-        self, fact_index: int
-    ) -> tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]] | None:
-        return self.decoded_facts.get(fact_index) if self.decoded_facts is not None else None
-
-    def remember_decoded_fact(
-        self,
-        *,
-        fact_index: int,
-        fact: tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
-    ) -> None:
-        if self.decoded_facts is not None:
-            self.decoded_facts[fact_index] = fact
-
-
-@dataclass(frozen=True)
-class ProjectedAnalysisRequest:
-    """Inputs needed to project one native analysis into the public result contract."""
-
-    analysis: dict[str, Any] | None
-    binding_diagnostics: tuple[SqlBindingDiagnostic, ...]
-    binding_validated: bool
-    compact_rows: list[object] | None = None
-    compact_fact_rows: list[object] | None = None
-    string_pool: tuple[str, ...] = ()
-    caches: CompactProjectionCaches = field(default_factory=CompactProjectionCaches)
-    template_index: int | None = None
-    resource_name_indexes: dict[int, int] = field(default_factory=dict)
-    resource_names: dict[int, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class NativeCompactAnalysis:
-    """One native compact result prepared for Python contract projection."""
-
-    cleaned_sql: str
-    analysis: dict[str, Any] | None
-    projected: bool = False
-    binding_diagnostics: tuple[SqlBindingDiagnostic, ...] | None = None
-    compact_rows: list[object] | None = None
-    compact_fact_rows: list[object] | None = None
-    string_pool: tuple[str, ...] = ()
-    compact_column_cache: dict[tuple[int, int | None, int], InferredColumn] | None = None
-    compact_template_index: int | None = None
-    compact_fact_cache: dict[int, CompactProjectedFacts] | None = None
-    compact_decoded_fact_cache: (
-        dict[
-            int,
-            tuple[InferredColumn, tuple[int, int, int, tuple[tuple[int, int, int], ...]]],
-        ]
-        | None
-    ) = None
-    resource_name_indexes: dict[int, int] = field(default_factory=dict)
-    resource_names: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1694,18 +1519,6 @@ class NativeModelConfigInputs:
 
 
 @dataclass(frozen=True)
-class ModelResourceNames:
-    """Discovered resource names the native reference check reads."""
-
-    models: set[str]
-    seeds: set[str]
-    sources: set[str]
-    functions: set[str]
-    table_functions: set[str]
-    custom_materializations: frozenset[str]
-
-
-@dataclass(frozen=True)
 class ModelValidationRequest:
     """One model's effective config and the facts its validators read."""
 
@@ -1720,7 +1533,6 @@ class ModelValidationRequest:
 class ModelValidatorContext:
     """The project facts the model validators read, and the native config session."""
 
-    names: ModelResourceNames
     settings: SettingsConfig
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None
     native_config: NativeModelConfigSession

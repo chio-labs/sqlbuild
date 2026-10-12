@@ -54,6 +54,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
     EnumDeclaration,
+    ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
@@ -67,6 +68,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.spec.contracts.models import (
+    DefaultsConfig,
     LocalConfig,
     ProjectConfig,
     ScenarioConfig,
@@ -732,13 +734,13 @@ class NativeModelLoop:
         checks: tuple[object, dict[str, object], dict[str, object]],
         syntax: dict[str, object],
         reserved_markers: list[str],
-        settings: tuple[tuple[bool, bool, bool, bool], tuple[str, list[tuple[str, list[str]]]]],
+        settings: tuple[tuple[bool, bool, bool, bool], str],
     ) -> None: ...
     def run(
         self,
         project: NativeCompiledProject,
         host: object,
-        models: list[tuple[object, ...]],
+        model_files: list[DiscoveredSqlModelFile],
     ) -> list[NativeModelInput]: ...
 
 def relation_key_row(
@@ -879,6 +881,18 @@ def parse_schema_document(
 def parse_sources_document(
     loaded: object, path: str, classes: dict[str, object]
 ) -> tuple[SourceEntry, ...]: ...
+def externally_described_models(
+    inputs: DiscoveredProjectInputs, model_schemas: dict[str, ModelSchemaDeclaration]
+) -> list[Path]: ...
+def resolve_required_columns(
+    query_sql: str, references: list[tuple[str, str]], dialect: str | None
+) -> list[tuple[str, str, str]]: ...
+def public_declaration_indexes(
+    inputs: DiscoveredProjectInputs,
+) -> tuple[dict[str, EnumDeclaration], dict[str, ConstantDeclaration]]: ...
+def public_model_schema_index(
+    inputs: DiscoveredProjectInputs,
+) -> dict[str, ModelSchemaDeclaration]: ...
 def discovered_inputs_failure(
     inputs: DiscoveredProjectInputs, nodes: list[dict[str, object]]
 ) -> tuple[object, ...] | None: ...
@@ -1172,7 +1186,7 @@ def expand_effective_vars(
 class NativeModelConfigBuilder:
     def __init__(
         self,
-        layers: tuple[dict[str, object], dict[str, dict[str, object]], tuple[type, ...]],
+        layers: tuple[DefaultsConfig, dict[str, dict[str, object]], tuple[type, ...]],
         sources: tuple[dict[str, object], object],
         target: tuple[tuple[str | None, str], tuple[str | None, str | None] | None],
     ) -> None: ...
@@ -1190,6 +1204,11 @@ class NativeModelValidator:
         custom_materializations: set[str],
         microbatch_concurrency: bool,
     ) -> None: ...
+    @staticmethod
+    def from_inputs(
+        inputs: DiscoveredProjectInputs, microbatch_concurrency: bool
+    ) -> NativeModelValidator: ...
+    def model_names(self) -> set[str]: ...
     def validate(
         self,
         values: dict[str, object],

@@ -50,12 +50,7 @@ from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME
-from sqlbuild.compiler.planner._helpers.graph.buildability import (
-    check_buildability,
-    missing_upstream_message,
-)
 from sqlbuild.compiler.planner._helpers.graph.core import (
-    build_execution_edge_origins,
     build_execution_upstream_deps,
 )
 from sqlbuild.compiler.planner._helpers.graph.loader_dag import (
@@ -78,9 +73,7 @@ from sqlbuild.compiler.planner.models import (
     CursorInputEvidence,
     CursorOverrides,
     CursorSnapshotScope,
-    MissingUpstream,
     ModelCursorSnapshot,
-    PlannerScope,
     WarehouseFingerprints,
     WarehouseSnapshot,
 )
@@ -202,49 +195,6 @@ class _StateTableSchemas:
     source_freshness: frozenset[str]
     old_name_views: frozenset[str]
     migrations: frozenset[str]
-
-
-def build_warehouse_snapshot(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    connection: Any,
-    scope: PlannerScope,
-    full_refresh: bool = False,
-    on_progress: Callable[[str], None] | None = None,
-    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
-    deferred_relations: dict[str, RelationInfo] | None = None,
-) -> WarehouseSnapshot:
-    """Gather warehouse state and validate selected upstream availability."""
-
-    snapshot: WarehouseSnapshot = gather_warehouse_snapshot(
-        project=project,
-        adapter=adapter,
-        connection=connection,
-        execute=adapter.execute,
-        selected_keys=scope.selected_keys,
-        full_refresh_model_names=effectively_full_refreshed_model_names(
-            project=project,
-            cli_full_refresh=full_refresh,
-        ),
-        on_progress=on_progress,
-        deferred_locations=deferred_locations,
-    )
-    missing: tuple[MissingUpstream, ...] = check_buildability(
-        selected_keys=scope.selected_keys,
-        upstream_deps=scope.upstream_deps,
-        snapshot=snapshot,
-        deferred_relations=deferred_relations,
-        satisfied_keys=frozenset(seed.key for seed in project.seeds if seed.external),
-    )
-    if missing:
-        raise PlannerInputError(
-            missing_upstream_message(
-                missing=missing, edge_origins=build_execution_edge_origins(project)
-            ),
-            code="S301",
-        )
-    return snapshot
 
 
 def gather_warehouse_snapshot(

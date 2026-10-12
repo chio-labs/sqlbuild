@@ -14,7 +14,7 @@ const ENVIRONMENT_READ: &str = "env";
 const CONTEXT_READ: &str = "ctx";
 
 /// `(sql or None when unchanged, spans, reads, error message or None)` for one SQL text.
-type InterpolationRow = (
+pub(crate) type InterpolationRow = (
     Option<String>,
     Vec<(usize, usize, usize, usize)>,
     Vec<(&'static str, String)>,
@@ -148,12 +148,20 @@ fn interpolate_sql_batch<'py>(
     sqls: Vec<(String, String)>,
     sources: InterpolationSources<'py>,
 ) -> PyResult<Vec<InterpolationRow>> {
+    interpolation_batch(sources, &sqls)
+}
+
+/// Each `(sql, file path)` interpolated in order; non-rendering Python failures raise.
+pub(crate) fn interpolation_batch(
+    sources: InterpolationSources<'_>,
+    sqls: &[(String, String)],
+) -> PyResult<Vec<InterpolationRow>> {
     let host = PythonInterpolationHost {
         sources,
         raised: RefCell::new(None),
     };
     let mut rows = Vec::with_capacity(sqls.len());
-    for (sql, file_path) in &sqls {
+    for (sql, file_path) in sqls {
         let row = match interpolate_sql(&host, sql, file_path) {
             Ok(result) => (result.sql, result.spans, read_rows(result.reads), None),
             Err(failure) => (

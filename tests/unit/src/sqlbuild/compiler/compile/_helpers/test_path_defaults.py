@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.attachment.model_config import find_matching_path_default
 from sqlbuild.compiler.discovery.exceptions import DiscoveryConflictError
 from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
+from sqlbuild.compiler.path_defaults.main._select import select_path_default
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     FindMatchingPathDefaultErrorTestCase,
     FindMatchingPathDefaultTestCase,
@@ -86,10 +86,9 @@ def test_given_windows_style_model_path_when_finding_path_default_then_returns_n
         query_sql="select 1",
     )
 
-    path_default: str | None = find_matching_path_default(
-        model_file=model_file,
-        path_defaults=test_case.path_defaults,
-    )
+    path_default: str | None = select_path_default(
+        model_path=str(model_file.relative_path), path_keys=tuple(test_case.path_defaults)
+    ).selected_key
 
     assert path_default == test_case.expected_path_default
 
@@ -126,9 +125,8 @@ def test_given_ambiguous_globs_when_finding_path_default_then_raises_structured_
     )
 
     with pytest.raises(DiscoveryConflictError, match=test_case.expected_error_fragment) as error:
-        find_matching_path_default(
-            model_file=model_file,
-            path_defaults=test_case.path_defaults,
+        select_path_default(
+            model_path=str(model_file.relative_path), path_keys=tuple(test_case.path_defaults)
         )
 
     assert error.value.code == "D007"

@@ -4,8 +4,8 @@ import time
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.required_columns import (
-    resolve_required_external_columns,
+from sqlbuild.compiler.compile.main._analyze_columns_and_lineage import (
+    analyze_resolved_column_reads,
 )
 from sqlbuild.compiler.compile.models import CompiledLineageSourceFact, CompileSqlReference
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -222,7 +222,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
 def test_given_query_when_resolving_required_columns_then_returns_external_reads(
     test_case: RequiredExternalColumnsTestCase,
 ) -> None:
-    result: tuple[CompiledLineageSourceFact, ...] = resolve_required_external_columns(
+    result: tuple[CompiledLineageSourceFact, ...] = analyze_resolved_column_reads(
         query_sql=test_case.query_sql,
         references=test_case.references,
         dialect="duckdb",
@@ -261,7 +261,7 @@ def test_given_long_union_chain_when_resolving_required_columns_then_finishes_qu
     )
     started: float = time.perf_counter()
 
-    result: tuple[CompiledLineageSourceFact, ...] = resolve_required_external_columns(
+    result: tuple[CompiledLineageSourceFact, ...] = analyze_resolved_column_reads(
         query_sql=f"WITH combined AS ({branches}) SELECT order_id, amount FROM combined",
         references=(CompileSqlReference(SqlReferenceKind.SOURCE, "orders"),),
         dialect="duckdb",

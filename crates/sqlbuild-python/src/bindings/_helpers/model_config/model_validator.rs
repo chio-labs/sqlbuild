@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{IntoPyObject, pyclass, pymethods};
 use sqlbuild_attachments::functions::models::KnownResources;
@@ -13,8 +13,14 @@ use sqlbuild_model_config::model_validation::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::discovery::project_facts::{column_name, each, stem};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
+
+const FILE_PATH_ATTRIBUTE: &str = "file_path";
+const RETURNS_KEY: &str = "returns";
+/// The only key of a table function's `returns` mapping.
+const TABLE_RETURNS_KEY: &str = "table";
 
 /// Model, seed, source, function and table function names.
 type ResourceNames = (
@@ -47,8 +53,65 @@ impl NativeModelValidator {
     }
 }
 
+/// Model, seed, source, function and table function names discovered in `inputs`.
+fn discovered_names(inputs: &Bound<'_, PyAny>) -> PyResult<ResourceNames> {
+    let model_stem = |file: &Bound<'_, PyAny>| stem(file, FILE_PATH_ATTRIBUTE);
+    let models: HashSet<String> = each(inputs, "model_files", model_stem)?
+        .into_iter()
+        .collect();
+    let mut seeds: HashSet<String> = HashSet::new();
+    for schema in inputs.getattr("schema_files")?.try_iter()? {
+        seeds.extend(each(&schema?, "seed_entries", column_name)?);
+    }
+    let mut sources: HashSet<String> = HashSet::new();
+    for file in inputs.getattr("source_files")?.try_iter()? {
+        sources.extend(each(&file?, "source_entries", column_name)?);
+    }
+    let mut functions: HashSet<String> = HashSet::new();
+    let mut table_functions: HashSet<String> = HashSet::new();
+    for file in inputs.getattr("sql_function_files")?.try_iter()? {
+        let file: Bound<'_, PyAny> = file?;
+        let name: String = model_stem(&file)?;
+        if returns_table(&file)? {
+            table_functions.insert(name.clone());
+        }
+        functions.insert(name);
+    }
+    functions.extend(each(inputs, "python_function_files", model_stem)?);
+    Ok((models, seeds, sources, functions, table_functions))
+}
+
+/// Whether a SQL function's header `returns` is a mapping whose only key is `table`.
+fn returns_table(file: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let headers: Bound<'_, PyAny> = file.getattr("header_values")?;
+    let returns: Bound<'_, PyAny> = headers.call_method1("get", (RETURNS_KEY,))?;
+    let Ok(returns) = returns.downcast::<PyDict>() else {
+        return Ok(false);
+    };
+    let keys: Vec<Bound<'_, PyAny>> = returns.keys().into_iter().collect();
+    Ok(keys.len() == 1 && keys[0].eq(TABLE_RETURNS_KEY)?)
+}
+
 #[pymethods]
 impl NativeModelValidator {
+    /// The validator for the resources and materializations `inputs` discovered.
+    #[staticmethod]
+    fn from_inputs(inputs: Bound<'_, PyAny>, microbatch_concurrency: bool) -> PyResult<Self> {
+        let names: ResourceNames = discovered_names(&inputs)?;
+        let custom_materializations: HashSet<String> =
+            each(&inputs, "materialization_files", |file| {
+                file.getattr("name")?.extract()
+            })?
+            .into_iter()
+            .collect();
+        Self::new(names, custom_materializations, microbatch_concurrency)
+    }
+
+    /// The discovered model names references resolve against.
+    fn model_names(&self) -> HashSet<String> {
+        self.project.models.clone()
+    }
+
     #[new]
     fn new(
         names: ResourceNames,

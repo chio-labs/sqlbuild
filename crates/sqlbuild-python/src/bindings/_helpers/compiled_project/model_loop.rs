@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_hooks::{
     ExpandedHooks, HookModel, SqlHookClasses, expanded_hooks,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
-    FinishedModel, InterpolationRow, ModelLoopInput, ModelLoopRow, ModelPaths, RecordClasses,
+    DeclarationScan, FinishedModel, InterpolationRow, ModelLoopRow, ModelPaths, RecordClasses,
     RecordInputs, ReferenceRow, finished_record,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
@@ -62,7 +62,11 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     expand_declarations,
 };
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
+use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
+use crate::bindings::_helpers::sqltext::static_sql::{
+    InterpolationRow as SqlInterpolationRow, InterpolationSources, interpolation_batch,
+};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -70,11 +74,10 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
 use pyo3::{FromPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
 use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
-use sqlbuild_analysis::compiled_project::main::legacy_schema_error::legacy_schema_error;
 use sqlbuild_analysis::compiled_project::main::located_scan_error::located_scan_error;
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_analysis::compiled_project::models::{
-    AnalysisGate, LegacySchemaFile, ModelLoopSettings, ScanFaultOrigin, SplicedSpan,
+    AnalysisGate, ModelLoopSettings, ScanFaultOrigin, SplicedSpan,
 };
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
@@ -102,14 +105,15 @@ const VALUES_ARGUMENT: &str = "values";
 const CODE_ARGUMENT: &str = "code";
 const ANALYSIS_CONFLICT: &str = "MODEL sql_analysis conflicts with legacy sql_validation";
 const ANALYSIS_CONFLICT_CODE: &str = "P003";
+const SQL_HOOKS_KEY: &str = "sql_hooks";
+const HOOK_FILES_KEY: &str = "hook_files";
+const DEFINITIONS_KEY: &str = "definitions";
+const COMPILE_ERROR_KEY: &str = "compile_error";
 
 /// The native validator, header contract classes, and the loop's Python classes.
 type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
-/// `(analysis switches, native syntax, (project config path, legacy schema files))`.
-type LoopSettingsInput = (
-    (bool, bool, bool, bool),
-    (String, Vec<(String, Vec<String>)>),
-);
+/// `(analysis switches, project config path)`.
+type LoopSettingsInput = ((bool, bool, bool, bool), String);
 
 /// The Python classes and error factory the loop builds usages, hooks and errors with.
 #[derive(FromPyObject)]
@@ -173,7 +177,6 @@ pub(crate) struct NativeModelLoop {
     pub(crate) reserved_markers: Vec<String>,
     pub(crate) settings: ModelLoopSettings,
     pub(crate) project_config_path: String,
-    legacy_schema_files: Vec<LegacySchemaFile>,
     contract_classes: Py<PyDict>,
     loop_classes: Py<PyDict>,
 }
@@ -212,8 +215,9 @@ impl NativeModelLoop {
         let (validator, contract_classes, loop_classes) = checks;
         let (
             (sql_analysis, no_sql_validation, defer_sql_validation, require_sql_analysis),
-            (project_config_path, legacy_schema_files),
+            project_config_path,
         ) = settings;
+        Python::attach(|py| index_sql_hook_definitions(loop_classes.bind(py)))?;
         Ok(Self {
             validator,
             syntax: syntax.into(),
@@ -225,13 +229,6 @@ impl NativeModelLoop {
                 require_sql_analysis,
             },
             project_config_path,
-            legacy_schema_files: legacy_schema_files
-                .into_iter()
-                .map(|(relative_path, model_names)| LegacySchemaFile {
-                    relative_path,
-                    model_names,
-                })
-                .collect(),
             contract_classes,
             loop_classes,
         })
@@ -242,18 +239,87 @@ impl NativeModelLoop {
         slf: &Bound<'py, Self>,
         project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
-        models: Vec<ModelLoopInput>,
+        model_files: Vec<Py<NativeModelFile>>,
     ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let py: Python<'py> = slf.py();
-        let models: Vec<ModelLoopRow> = models
-            .into_iter()
-            .map(|input| ModelLoopRow::new(py, input))
-            .collect::<PyResult<_>>()?;
+        let classes: LoopClasses<'py> = slf.get().loop_classes.bind(py).extract()?;
+        let models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
         project
             .borrow_mut()
             .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
         slf.get().run_models(py, project, host, models)
     }
+}
+
+/// Replace the SQL hook classes' discovered `hook_files` with their `definitions` by name.
+fn index_sql_hook_definitions(loop_classes: &Bound<'_, PyDict>) -> PyResult<()> {
+    let py: Python<'_> = loop_classes.py();
+    let hooks: Bound<'_, PyDict> = loop_classes
+        .as_any()
+        .get_item(SQL_HOOKS_KEY)?
+        .downcast_into()?;
+    let definitions: Bound<'_, PyDict> = PyDict::new(py);
+    for hook_file in hooks.as_any().get_item(HOOK_FILES_KEY)?.try_iter()? {
+        let hook_file: Bound<'_, PyAny> = hook_file?;
+        let name: Bound<'_, PyAny> = hook_file.getattr("name")?;
+        if let Some(existing) = definitions.get_item(&name)? {
+            let message: String = format!(
+                "Duplicate SQL hook name '{}' found in {} and {}",
+                name.str()?,
+                existing.getattr("relative_path")?.str()?,
+                hook_file.getattr("relative_path")?.str()?
+            );
+            let error: Bound<'_, PyAny> = loop_classes
+                .as_any()
+                .get_item(COMPILE_ERROR_KEY)?
+                .call1((message,))?;
+            return Err(PyErr::from_value(error));
+        }
+        definitions.set_item(name, hook_file)?;
+    }
+    hooks.set_item(DEFINITIONS_KEY, definitions)
+}
+
+/// Each model's `@@`-interpolated query and declaration scan, all interpolated before any runs.
+fn prepared_rows<'py>(
+    py: Python<'py>,
+    classes: &LoopClasses<'py>,
+    model_files: Vec<Py<NativeModelFile>>,
+) -> PyResult<Vec<ModelLoopRow>> {
+    let hooks = &classes.sql_hooks;
+    let mut sqls: Vec<(String, String)> = Vec::with_capacity(model_files.len());
+    for model_file in &model_files {
+        let record: &NativeModelFile = model_file.get();
+        let (file_path, _) = record.paths(py);
+        let (query_sql, _) = record.texts(py);
+        sqls.push((
+            query_sql.to_str()?.to_owned(),
+            file_path.str()?.to_str()?.to_owned(),
+        ));
+    }
+    let interpolated: Vec<SqlInterpolationRow> = interpolation_batch(
+        InterpolationSources(
+            hooks.effective_vars.clone(),
+            hooks.environment.clone(),
+            None,
+            hooks.render_project_var.clone(),
+        ),
+        &sqls,
+    )?;
+    let mut rows: Vec<ModelLoopRow> = Vec::with_capacity(model_files.len());
+    for ((model_file, (authored, _)), (rendered, spans, reads, error)) in
+        model_files.into_iter().zip(sqls).zip(interpolated)
+    {
+        let sql: String = rendered.unwrap_or(authored);
+        let scan: Option<DeclarationScan> = error.is_none().then(|| declaration_scan(&sql));
+        let reads: Vec<(String, String)> = reads
+            .into_iter()
+            .map(|(kind, name)| (kind.to_owned(), name))
+            .collect();
+        let interpolation: InterpolationRow = (sql, reads, error, spans);
+        rows.push(ModelLoopRow::new(py, (model_file, scan, interpolation))?);
+    }
+    Ok(rows)
 }
 
 impl NativeModelLoop {
@@ -645,10 +711,6 @@ impl NativeModelLoop {
             schema: schema.as_ref(),
         };
         let header: AttachedHeader<'py> = header_schema(py, context, &source)?;
-        if let Some(message) = legacy_schema_error((name, relative_path), &self.legacy_schema_files)
-        {
-            return Err(compile_error(context.classes, &message, None));
-        }
         let mut named_usages: Vec<Bound<'py, PyAny>> = hook_usages;
         named_usages.extend(schema_usages);
         named_usages.extend(python_hooks);

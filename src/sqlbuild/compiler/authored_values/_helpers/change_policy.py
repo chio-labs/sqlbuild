@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from sqlbuild.compiler.planner.types import BackfillAction, OnSchemaChange
 from sqlbuild.cursor_algebra.models import Duration
-from sqlbuild.errors.setting_help.main.model_header_help import model_header_help
 from sqlbuild.errors.setting_help.main.setting_help import setting_help
 
 _ON_SCHEMA_CHANGE_KEY: str = "on_schema_change"
@@ -44,12 +43,6 @@ def change_policy_problem_impl(*, key: str, value: object) -> str | None:
                 "such as 14d, 12h or 1mo"
             )
     return f"unknown {key} '{value}'; valid values: {valid}"
-
-
-def change_policy_header_help_impl(*, key: str) -> str:
-    """Show a valid MODEL header entry for a change-policy key."""
-
-    return model_header_help(purpose=f"use a valid {key}", entry=f"{key} {_EXAMPLE_VALUES[key]}")
 
 
 def change_policy_toml_help_impl(*, key: str, file_name: str, section: str) -> str:

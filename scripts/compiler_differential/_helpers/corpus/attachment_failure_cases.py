@@ -26,6 +26,7 @@ _SOURCE_FIXTURE: str = (
 )
 _EXPECTED_STAGING: str = "__expected__stg_orders AS (\n  SELECT 1 AS order_id\n)"
 _TEST_PATH: str = "tests/unit/test_stg_orders.sql"
+_SCHEMA_PATH: str = "schemas/orders.sql"
 
 
 def _scenario(*ctes: str, tail: str = "\nSELECT 1\n") -> str:
@@ -56,10 +57,44 @@ def _order_label(header: str) -> dict[str, str]:
     return {_ORDER_LABEL_PATH: f"FUNCTION (\n{header});\n\nUPPER(p_status)\n"}
 
 
+def _schema(*, name: str, extends: str | None, column: str) -> str:
+    parent: str = "" if extends is None else f"extends {extends}, "
+    return f"SCHEMA (name {name}, {parent}columns ({column} (type INTEGER)));\n"
+
+
 def attachment_failure_cases() -> tuple[FailureCase, ...]:
     """Return audit, function, source, SQL test and scenario failures the native stage reports."""
 
     return (
+        failure_case(
+            name="model-schema-extends-unknown",
+            expected_code="P001",
+            expected_message=(
+                "Schema 'order_row' in schemas/orders.sql extends unknown schema 'base_row'"
+            ),
+            files={_SCHEMA_PATH: _schema(name="order_row", extends="base_row", column="id")},
+        ),
+        failure_case(
+            name="model-schema-inheritance-cycle",
+            expected_code="P001",
+            expected_message="Model schema inheritance cycle: order_row -> base_row -> order_row",
+            files={
+                _SCHEMA_PATH: _schema(name="order_row", extends="base_row", column="id")
+                + _schema(name="base_row", extends="order_row", column="amount")
+            },
+        ),
+        failure_case(
+            name="model-schema-redeclared-column",
+            expected_code="P001",
+            expected_message=(
+                "Schema 'order_row' in schemas/orders.sql redeclares inherited column 'ID' from "
+                "schemas/orders.sql:1; column overrides are not supported"
+            ),
+            files={
+                _SCHEMA_PATH: _schema(name="base_row", extends=None, column="id")
+                + _schema(name="order_row", extends="base_row", column="ID")
+            },
+        ),
         failure_case(
             name="generic-audit-unknown-run-scope",
             expected_code="P001",
