@@ -8,3 +8,4 @@ pub(crate) mod project_files;
 pub(crate) mod project_validation;
 pub(crate) mod registration;
 pub(crate) mod sql_test_blocks;
+pub(crate) mod yaml_entries;

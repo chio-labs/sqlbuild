@@ -12,4 +12,5 @@ pub mod models;
 pub mod project_validation;
 pub mod sql_tests;
 pub mod tree;
+pub mod yaml_entries;
 pub mod yaml_files;

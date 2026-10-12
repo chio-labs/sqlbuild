@@ -9,7 +9,6 @@ LEGACY_LOCAL_CONFIG_FILENAME: str = "sqlbuild_local.yml"
 TOML_FILE_SUFFIX: str = ".toml"
 SCHEMA_FILE_NAME: str = "schema.yml"
 YAML_FILE_SUFFIXES: frozenset[str] = frozenset({".yml", ".yaml"})
-RESERVED_MODEL_NAMES: frozenset[str] = frozenset({"_chain_"})
 
 PYTHON_INIT_MODULE_STEM: str = "__init__"
 PYTHON_CACHE_DIRECTORY_NAME: str = "__pycache__"
@@ -122,16 +121,9 @@ PYTHON_UDF_KEYS: frozenset[str] = frozenset(
 )
 PYTHON_UDF_IMPORT_MODULES: frozenset[str] = frozenset({"sqlbuild", "sqlbuild.functions"})
 
-DLT_LOADER_KIND: str = "dlt"
 DLT_SOURCE_TYPE_SQL_DATABASE: str = "sql_database"
 DLT_SOURCE_TYPE_REST_API: str = "rest_api"
 DLT_SOURCE_TYPE_FILESYSTEM: str = "filesystem"
-DLT_SOURCE_TYPES: frozenset[str] = frozenset(
-    {DLT_SOURCE_TYPE_SQL_DATABASE, DLT_SOURCE_TYPE_REST_API, DLT_SOURCE_TYPE_FILESYSTEM}
-)
-DLT_RESOURCE_WRITE_STRATEGY_KEY: str = "write_strategy"
-DLT_WRITE_DISPOSITION_DELETE_INSERT: str = "delete_insert"
-DLT_WRITE_DISPOSITION_MERGE: str = "merge"
 
 CONFIG_CONCURRENCY_KEY: str = "concurrency"
 LEGACY_CONFIG_CONCURRENCY_KEY: str = "max_concurrency"
@@ -157,12 +149,9 @@ DBT_LEGACY_REUSE_FROM_CONFIG_KEY: str = "reuse_from"
 DBT_PRODUCTION_REF_CONFIG_KEY: str = "production_ref"
 DBT_DEFER_CLONE_CONFIG_KEY: str = "defer_clone_from"
 DBT_REPLAY_ON_CHANGE_CONFIG_KEY: str = "replay_on_change"
-SOURCE_LOADER_CONFIG_KEY: str = "loader"
-SOURCE_AGE_POLICY_CONFIG_KEY: str = "age_policy"
 
 MODELS_DIRECTORY_NAME: str = "models"
 SEEDS_DIRECTORY_NAME: str = "seeds"
-CURRENT_DIRECTORY_PATH: str = "."
 SQL_TESTS_OWNERSHIP_ROOT: str = "tests/unit"
 SQL_SCENARIOS_OWNERSHIP_ROOT: str = "tests/scenarios"
 
