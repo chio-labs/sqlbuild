@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.scopes._helpers.placement import (
-    build_placement_validated_index,
-    merged_usage_index,
-)
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
 
 
@@ -17,6 +14,4 @@ def get_placement_validated_scope_index(
 ) -> ScopeIndex:
     """Return complete usage and placement diagnostics, merging any collected compile usages."""
 
-    if compile_usages is not None:
-        index = merged_usage_index(index=index, collected=compile_usages)
-    return build_placement_validated_index(index=index, enforce_placement=enforce_placement)
+    return _native.scope_placement_validated_index(index, enforce_placement, compile_usages)

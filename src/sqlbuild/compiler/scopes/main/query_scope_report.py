@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.reports import build_scope_report
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
     ResourceIdentity,
@@ -24,10 +24,4 @@ def query_scope_report(
 ) -> ScopeReport:
     """Query immutable compiler-owned scope facts without filesystem access."""
 
-    return build_scope_report(
-        lookup=lookup,
-        target=target,
-        at=at,
-        directory=directory,
-        filters=filters,
-    )
+    return _native.scope_report(lookup, (target, at, directory, filters))

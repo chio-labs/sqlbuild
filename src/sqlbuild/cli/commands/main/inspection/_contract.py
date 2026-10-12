@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.cli.commands._helpers.contract.progress import (
     inspect_contracts_with_progress,
     write_contract_updates_with_progress,
@@ -29,7 +30,6 @@ from sqlbuild.compiler.contract_adoption.models import ContractAdoptionResult, C
 from sqlbuild.compiler.contract_adoption.types import ContractAction
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.project_graph import build_project_graph_from_compiled_project
 from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors

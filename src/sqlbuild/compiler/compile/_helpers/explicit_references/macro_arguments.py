@@ -42,18 +42,6 @@ def call_site_sql_references(
     )
 
 
-def merge_call_site_references(
-    *,
-    references: tuple[CompileSqlReference, ...],
-    argument_references: tuple[CompileSqlReference, ...],
-) -> tuple[CompileSqlReference, ...]:
-    """Add typed macro arguments to the references found in expanded SQL, once each."""
-
-    if not argument_references:
-        return references
-    return tuple(dict.fromkeys((*references, *argument_references)))
-
-
 def typed_reference_kinds() -> dict[str, SqlResourceRefKind]:
     """Each typed reference function, such as `__ref`, and the resource kind it names."""
 

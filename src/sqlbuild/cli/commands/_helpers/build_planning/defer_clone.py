@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
     enforce_model_execution_limit,
@@ -33,7 +34,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.main.clone_with_options import run_clone_pipeline_with_options
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.pipeline.main.unit_test_selection import split_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import (
     ClonePipelineConnection,

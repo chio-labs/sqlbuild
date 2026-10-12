@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     SnowflakeOutputInferenceCase,
     SnowflakeSemanticReleaseCase,

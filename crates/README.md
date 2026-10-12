@@ -7,6 +7,7 @@ that can be tested and benchmarked with `cargo test` alone.
 | Crate | Responsibility |
 |---|---|
 | `sqlbuild-core` | Constants shared by several crates, the panic boundary that turns an unwinding native failure into a named compiler error, passive identity, diagnostic and SQL value types, text positions, and a JSON emitter whose output matches Python's `json.dumps` and `orjson` byte for byte. |
+| `sqlbuild-pysource` | Static reading of project Python source with the ruff parser: macro module structure, literal SQL arguments, definition locations and string-literal edits. It never imports or runs user code; CPython stays the authority on whether a file is valid Python. |
 | `sqlbuild-cache` | The shared native store every native cache uses (one atomically replaced, checksummed file per cache kind, keyed by content digests) and the one fingerprinting scheme for cache keys: the content digest and the project file fingerprint. |
 | `sqlbuild-sqltext` | Lexical SQL text without polyglot: comment, quote and parenthesis scanning, the rules quote policy, model header tokenization and matching, static variable substitution, static reference extraction, and the general reference scan with table-function call arguments under each adapter's lexical rules. |
 | `sqlbuild-config` | Configuration file reading without Python: TOML, YAML 1.2 with the core schema and merge keys, and typed project and local config readers for the fields discovery needs. Errors carry their kind and position; YAML outside the supported subset is an `Unsupported` error. |
@@ -29,7 +30,7 @@ Dependencies point one way, from the top of this graph to the bottom:
 sqlbuild-python
   -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
   -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-render -> sqlbuild-discovery -> sqlbuild-config
-  -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-core
+  -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-pysource -> sqlbuild-core
 sqlbuild-cli -> sqlbuild-cache, sqlbuild-core
 ```
 

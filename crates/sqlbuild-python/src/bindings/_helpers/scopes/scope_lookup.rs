@@ -1,76 +1,35 @@
 //! The scope lookup of a full scope index: canonical orders, mappings, targets and visibility.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
+use pyo3::{pyclass, pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::report_lookup::report_lookup;
 use sqlbuild_scopes::scope_index::main::report_target::report_target;
 use sqlbuild_scopes::scope_index::main::resolve_report_visibility::resolve_report_visibility;
 use sqlbuild_scopes::scope_index::models::{
-    GrantKind, IdentityFailure, KeyedGroups, RejectedPath, ReportDiagnosticKey, ReportGrant,
-    ReportLookup, ReportRecords, ReportTarget, ReportUsage, ResolvedVisibility, ResolvedVisible,
-    ScopePathFailure, TargetFailure, TargetMatch,
+    GrantKind, IdentityFailure, KeyedGroups, RejectedPath, ReportLookup, ReportRecords,
+    ReportTarget, ResolvedVisibility, ResolvedVisible, ResourceRecord, ScopePathFailure,
+    TargetFailure, TargetMatch, VisibilityGroups,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::scopes::placement::{
-    DeclarationRow, IdentityRow, QualifiedRow, ResourceRow, RootRow, declaration_identity,
-    declaration_record, ownership_root, qualified_identity, resource_identity, resource_record,
+use crate::bindings::_helpers::scopes::placement::{QualifiedRow, qualified_identity};
+use crate::bindings::_helpers::scopes::scope_objects::{
+    ScopeClasses, read_index, report_records, resource_identity_object, tuple_attribute,
 };
 use crate::bindings::types::CompilerDetach;
 
-/// Consumer, declaration, usage kind and what the consumer uses it through.
-type UsageRow = (QualifiedRow, QualifiedRow, String, Option<QualifiedRow>);
-/// Resource, declaration, what it came through, and the grant kind.
-type GrantRow = (IdentityRow, QualifiedRow, QualifiedRow, String);
-/// Path, line, column and code of a diagnostic.
-type DiagnosticKeyRow = (Option<String>, Option<i64>, Option<i64>, String);
-/// Every record of a full scope index as rows.
-type RecordRows = (
-    Vec<RootRow>,
-    Vec<ResourceRow>,
-    Vec<DeclarationRow>,
-    Vec<UsageRow>,
-    Vec<GrantRow>,
-    Vec<DiagnosticKeyRow>,
-);
-type GroupRows = Vec<Vec<usize>>;
-/// Roots, resources, declarations, usages, grants and diagnostics in canonical order.
-type OrderRows = (
-    Vec<usize>,
-    Vec<usize>,
-    Vec<usize>,
-    Vec<usize>,
-    Vec<usize>,
-    Vec<usize>,
-);
-/// Each mapping's groups, then every input resource's normalized path key.
-type MappingRows = (
-    GroupRows,
-    GroupRows,
-    GroupRows,
-    GroupRows,
-    GroupRows,
-    GroupRows,
-    Vec<String>,
-);
-/// Global, private, local and inherited canonical declaration positions.
-type VisibilityRows = (
-    Vec<usize>,
-    Vec<(IdentityRow, Vec<usize>)>,
-    Vec<(String, Vec<usize>)>,
-    Vec<(String, Vec<usize>)>,
-);
-/// The canonical orders, mappings and visibility groups, else the rejected path's message.
-type LookupRows = (
-    Option<(OrderRows, MappingRows, VisibilityRows)>,
-    Option<String>,
-);
+const TYPES_MODULE: &str = "types";
+const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+
 /// `(declarations, canonical positions)` matched, else identity and path error messages.
-type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);
+pub(crate) type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);
 /// Visible `(position, reason, grant)`, inaccessible `(position, reason)`, else the path error.
-type ResolvedRows = (
+pub(crate) type ResolvedRows = (
     Vec<(usize, &'static str, Option<usize>)>,
     Vec<(usize, &'static str)>,
     Option<String>,
@@ -110,45 +69,6 @@ pub(crate) fn grant_kind(value: &str) -> PyResult<GrantKind> {
     }
 }
 
-fn report_records(rows: RecordRows) -> PyResult<ReportRecords> {
-    let (roots, resources, declarations, usages, grants, diagnostics) = rows;
-    let mut records: ReportRecords = ReportRecords::default();
-    for root in roots {
-        records.roots.push(ownership_root(root)?);
-    }
-    for row in resources {
-        records.resources.push(resource_record(row)?);
-    }
-    for row in declarations {
-        records.declarations.push(declaration_record(row)?);
-    }
-    for (consumer, declaration, kind, through) in usages {
-        records.usages.push(ReportUsage {
-            consumer: qualified_identity(consumer)?,
-            declaration: declaration_identity(declaration)?,
-            kind,
-            through: through.map(qualified_identity).transpose()?,
-        });
-    }
-    for (resource, declaration, through, kind) in grants {
-        records.grants.push(ReportGrant {
-            resource: resource_identity(resource)?,
-            declaration: declaration_identity(declaration)?,
-            through: qualified_identity(through)?,
-            kind: grant_kind(&kind)?,
-        });
-    }
-    for (path, line, column, code) in diagnostics {
-        records.diagnostics.push(ReportDiagnosticKey {
-            path,
-            line,
-            column,
-            code,
-        });
-    }
-    Ok(records)
-}
-
 /// Python's `InvalidScopePathError` message for a rejected path.
 pub(crate) fn path_message(rejected: &RejectedPath) -> String {
     match rejected.failure {
@@ -177,44 +97,6 @@ pub(crate) fn identity_message(failure: &IdentityFailure, value: &str) -> String
     }
 }
 
-fn group_rows(groups: KeyedGroups) -> GroupRows {
-    groups.groups
-}
-
-fn lookup_rows(lookup: &ReportLookup) -> (OrderRows, MappingRows, VisibilityRows) {
-    let groups = lookup.groups.clone();
-    let visibility = lookup.visibility.clone();
-    (
-        (
-            lookup.roots.clone(),
-            lookup.resources.clone(),
-            lookup.declarations.clone(),
-            lookup.usages.clone(),
-            lookup.grants.clone(),
-            lookup.diagnostics.clone(),
-        ),
-        (
-            group_rows(groups.resources),
-            group_rows(groups.resources_by_path),
-            group_rows(groups.declarations),
-            group_rows(groups.usages_by_consumer),
-            group_rows(groups.usages_by_declaration),
-            group_rows(groups.grants_by_resource),
-            lookup.resource_paths.clone(),
-        ),
-        (
-            visibility.global,
-            visibility
-                .private
-                .into_iter()
-                .map(|(owner, positions)| ((owner.kind.as_str().to_owned(), owner.name), positions))
-                .collect(),
-            visibility.local,
-            visibility.inherited,
-        ),
-    )
-}
-
 /// Input positions as canonical positions.
 fn canonical(order: &[usize], positions: Vec<usize>) -> Vec<usize> {
     positions
@@ -223,10 +105,13 @@ fn canonical(order: &[usize], positions: Vec<usize>) -> Vec<usize> {
         .collect()
 }
 
-#[pymethods]
 impl NativeScopeLookup {
     /// The records `target` names: an identity row, else qualified identity or path text.
-    fn target(&self, identity: Option<QualifiedRow>, text: &str) -> PyResult<TargetRows> {
+    pub(crate) fn target(
+        &self,
+        identity: Option<QualifiedRow>,
+        text: &str,
+    ) -> PyResult<TargetRows> {
         let target: ReportTarget = match identity {
             Some(row) => ReportTarget::Identity(qualified_identity(row)?),
             None => ReportTarget::Text(text.to_owned()),
@@ -257,11 +142,14 @@ impl NativeScopeLookup {
     }
 
     /// Python's `_classify_resource` of one resource, with inaccessible reasons.
-    fn resolve(&self, py: Python<'_>, resource: ResourceRow) -> PyResult<ResolvedRows> {
-        let resource = resource_record(resource)?;
+    pub(crate) fn resolve(
+        &self,
+        py: Python<'_>,
+        resource: &ResourceRecord,
+    ) -> PyResult<ResolvedRows> {
         let (records, lookup) = (&self.records, &self.lookup);
         let resolved = py
-            .compiler_detach(|| Ok(resolve_report_visibility(records, lookup, &resource)))
+            .compiler_detach(|| Ok(resolve_report_visibility(records, lookup, resource)))
             .map_err(compiler_error)?;
         Ok(match resolved {
             Ok(resolved) => resolved_rows(resolved, &self.canonical.grants),
@@ -292,33 +180,171 @@ fn resolved_rows(resolved: ResolvedVisibility, grants: &[usize]) -> ResolvedRows
     )
 }
 
-/// The lookup of a full scope index's records, else the message of the path Python rejects.
+fn picked<'py>(values: &Bound<'py, PyTuple>, order: &[usize]) -> PyResult<Bound<'py, PyTuple>> {
+    let items: Vec<Bound<'py, PyAny>> = order
+        .iter()
+        .map(|position| values.get_item(*position))
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(values.py(), items)
+}
+
+fn mapping_proxy<'py>(entries: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
+    entries
+        .py()
+        .import(TYPES_MODULE)?
+        .getattr("MappingProxyType")?
+        .call1((entries,))
+}
+
+/// Python's `_mapping`: each group keyed by its first record's `key` attribute.
+fn grouped<'py>(
+    groups: &KeyedGroups,
+    records: &Bound<'py, PyTuple>,
+    key: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let entries: Bound<'py, PyDict> = PyDict::new(records.py());
+    for group in &groups.groups {
+        let members: Bound<'py, PyTuple> = picked(records, group)?;
+        entries.set_item(members.get_item(0)?.getattr(key)?, members)?;
+    }
+    mapping_proxy(&entries)
+}
+
+fn path_grouped<'py>(
+    groups: &KeyedGroups,
+    records: &Bound<'py, PyTuple>,
+    paths: &[String],
+) -> PyResult<Bound<'py, PyAny>> {
+    let entries: Bound<'py, PyDict> = PyDict::new(records.py());
+    for group in &groups.groups {
+        entries.set_item(paths[group[0]].as_str(), picked(records, group)?)?;
+    }
+    mapping_proxy(&entries)
+}
+
+fn positions_by<'py>(
+    py: Python<'py>,
+    entries: &[(String, Vec<usize>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    let mapping: Bound<'py, PyDict> = PyDict::new(py);
+    for (key, positions) in entries {
+        mapping.set_item(key.as_str(), PyTuple::new(py, positions)?)?;
+    }
+    mapping_proxy(&mapping)
+}
+
+fn visibility_index<'py>(
+    classes: &ScopeClasses<'py>,
+    canonical_declarations: &Bound<'py, PyTuple>,
+    visibility: &VisibilityGroups,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = canonical_declarations.py();
+    let identities: Vec<Bound<'py, PyAny>> = canonical_declarations
+        .iter()
+        .map(|record| record.getattr("identity"))
+        .collect::<PyResult<_>>()?;
+    let private: Bound<'py, PyDict> = PyDict::new(py);
+    for (owner, positions) in &visibility.private {
+        private.set_item(
+            resource_identity_object(classes, owner)?,
+            PyTuple::new(py, positions)?,
+        )?;
+    }
+    classes.model("DeclarationVisibilityIndex")?.call1((
+        PyTuple::new(py, identities)?,
+        PyTuple::new(py, &visibility.global)?,
+        mapping_proxy(&private)?,
+        positions_by(py, &visibility.local)?,
+        positions_by(py, &visibility.inherited)?,
+    ))
+}
+
+pub(crate) fn scope_path_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
+    Ok(PyErr::from_value(
+        py.import(EXCEPTIONS_MODULE)?
+            .getattr("InvalidScopePathError")?
+            .call1((message,))?,
+    ))
+}
+
+/// Python's `build_scope_lookup`: the canonical index, its mappings and the native lookup.
 #[pyfunction]
-fn build_native_scope_lookup(
-    py: Python<'_>,
-    rows: RecordRows,
-) -> PyResult<(Option<NativeScopeLookup>, LookupRows)> {
-    let records: ReportRecords = report_records(rows)?;
+fn build_scope_lookup(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let records: ReportRecords = report_records(&read_index(index)?);
     let built = py
         .compiler_detach(|| Ok(report_lookup(&records)))
         .map_err(compiler_error)?;
-    Ok(match built {
-        Ok(lookup) => {
-            let rows: (OrderRows, MappingRows, VisibilityRows) = lookup_rows(&lookup);
-            let canonical: CanonicalPositions = CanonicalPositions {
-                resources: inverse(&lookup.resources),
-                declarations: inverse(&lookup.declarations),
-                grants: inverse(&lookup.grants),
-            };
-            let native: NativeScopeLookup = NativeScopeLookup {
-                records,
-                lookup,
-                canonical,
-            };
-            (Some(native), (Some(rows), None))
-        }
-        Err(rejected) => (None, (None, Some(path_message(&rejected)))),
-    })
+    let lookup: ReportLookup = match built {
+        Ok(lookup) => lookup,
+        Err(rejected) => return Err(scope_path_error(py, path_message(&rejected))?),
+    };
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    let resources: Bound<'_, PyTuple> = tuple_attribute(index, "resources")?;
+    let declarations: Bound<'_, PyTuple> = tuple_attribute(index, "declarations")?;
+    let usages: Bound<'_, PyTuple> = tuple_attribute(index, "usages")?;
+    let grants: Bound<'_, PyTuple> = tuple_attribute(index, "grants")?;
+    let canonical_declarations: Bound<'_, PyTuple> = picked(&declarations, &lookup.declarations)?;
+    let canonical_index: Bound<'_, PyAny> = classes.model("ScopeIndex")?.call1((
+        picked(&tuple_attribute(index, "ownership_roots")?, &lookup.roots)?,
+        picked(&resources, &lookup.resources)?,
+        &canonical_declarations,
+        picked(&usages, &lookup.usages)?,
+        picked(&grants, &lookup.grants)?,
+        index.getattr("visibility")?,
+        index.getattr("inaccessible")?,
+        picked(&tuple_attribute(index, "diagnostics")?, &lookup.diagnostics)?,
+        index.getattr("completeness")?,
+    ))?;
+    let groups = &lookup.groups;
+    let mappings: [Bound<'_, PyAny>; 6] = [
+        grouped(&groups.resources, &resources, "identity")?,
+        path_grouped(
+            &groups.resources_by_path,
+            &resources,
+            &lookup.resource_paths,
+        )?,
+        grouped(&groups.declarations, &declarations, "identity")?,
+        grouped(&groups.usages_by_consumer, &usages, "consumer")?,
+        grouped(&groups.usages_by_declaration, &usages, "declaration")?,
+        grouped(&groups.grants_by_resource, &grants, "resource")?,
+    ];
+    let visibility: Bound<'_, PyAny> =
+        visibility_index(&classes, &canonical_declarations, &lookup.visibility)?;
+    let canonical: CanonicalPositions = CanonicalPositions {
+        resources: inverse(&lookup.resources),
+        declarations: inverse(&lookup.declarations),
+        grants: inverse(&lookup.grants),
+    };
+    let native: Py<NativeScopeLookup> = Py::new(
+        py,
+        NativeScopeLookup {
+            records,
+            lookup,
+            canonical,
+        },
+    )?;
+    let [
+        by_identity,
+        by_path,
+        by_declaration,
+        by_consumer,
+        by_used,
+        by_resource,
+    ] = mappings;
+    Ok(classes
+        .model("ScopeLookup")?
+        .call1((
+            canonical_index,
+            by_identity,
+            by_path,
+            by_declaration,
+            by_consumer,
+            by_used,
+            by_resource,
+            visibility,
+            native,
+        ))?
+        .unbind())
 }
 
 /// Python's scope `normalize_path`, else the `InvalidScopePathError` message.
@@ -338,7 +364,7 @@ fn scope_normalize_path(path: &str) -> (Option<String>, Option<String>) {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeScopeLookup>()?;
-    module.add_function(wrap_pyfunction!(build_native_scope_lookup, module)?)?;
+    module.add_function(wrap_pyfunction!(build_scope_lookup, module)?)?;
     module.add_function(wrap_pyfunction!(scope_normalize_path, module)?)?;
     Ok(())
 }

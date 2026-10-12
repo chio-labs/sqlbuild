@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -16,7 +17,6 @@ from sqlbuild.compiler.pipeline.constants import (
     PATH_SELECTOR_PREFIX,
     PATH_SEPARATORS,
 )
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 

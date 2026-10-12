@@ -21,7 +21,7 @@ type IdentityRow = (String, String);
 /// A declaration's kind, name and private owner; a resource's kind and name with no owner.
 type QualifiedRow = (String, String, Option<IdentityRow>);
 /// Consumer, declaration, usage kind, what it is used through, and the enum member.
-type UsageRow = (
+pub(crate) type UsageRow = (
     QualifiedRow,
     QualifiedRow,
     String,
@@ -37,9 +37,9 @@ type DiagnosticRow = (Vec<String>, String, String, String);
 /// Usages as `(consumer, declaration)` record positions, S006s, else a scope path error.
 type SchemaUsageRows = (Vec<(usize, usize)>, Vec<DiagnosticRow>, Option<String>);
 /// `(own, position)`: an own dependency's position, else a distinct usage's.
-type SourceRow = (bool, usize);
+pub(crate) type SourceRow = (bool, usize);
 /// Distinct collected positions, merged sources per declaration, and final usage positions.
-type MergeRows = (Vec<usize>, Vec<Option<Vec<SourceRow>>>, Vec<usize>);
+pub(crate) type MergeRows = (Vec<usize>, Vec<Option<Vec<SourceRow>>>, Vec<usize>);
 
 fn invalid(what: &str) -> pyo3::PyErr {
     PyValueError::new_err(format!("invalid compile usage {what}"))
@@ -131,13 +131,12 @@ fn source_rows(sources: Option<Vec<DependencySource>>) -> Option<Vec<SourceRow>>
 }
 
 /// Distinct collected usages, merged macro dependencies, and the distinct prior-then-new usages.
-#[pyfunction]
-fn scope_merged_usages(
-    declarations: Vec<(QualifiedRow, Option<Vec<QualifiedRow>>)>,
-    prior: Vec<UsageRow>,
-    collected: Vec<UsageRow>,
+pub(crate) fn merged_usage_rows(
+    declarations: &[(QualifiedRow, Option<Vec<QualifiedRow>>)],
+    prior: &[UsageRow],
+    collected: &[UsageRow],
 ) -> MergeRows {
-    let distinct: Vec<usize> = distinct_positions(&collected);
+    let distinct: Vec<usize> = distinct_positions(collected);
     let mut consumed: Vec<(Option<QualifiedRow>, QualifiedRow)> =
         Vec::with_capacity(distinct.len());
     for position in &distinct {
@@ -147,7 +146,7 @@ fn scope_merged_usages(
             .then(|| consumer.clone());
         consumed.push((by_declaration, declaration.clone()));
     }
-    let merged: Vec<Option<Vec<SourceRow>>> = merged_dependencies(&declarations, &consumed)
+    let merged: Vec<Option<Vec<SourceRow>>> = merged_dependencies(declarations, &consumed)
         .into_iter()
         .map(source_rows)
         .collect();
@@ -159,6 +158,5 @@ fn scope_merged_usages(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(scope_schema_usages, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_merged_usages, module)?)?;
     Ok(())
 }

@@ -234,9 +234,9 @@ def python_resource_calls(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
     calls: Counter[str] = Counter()
     _ = [
         monkeypatch.setattr(
-            project_module,
+            project_module._native,
             name,
-            _counted(name=name, function=getattr(project_module, name), calls=calls),
+            _counted(name=name, function=getattr(project_module._native, name), calls=calls),
         )
         for name in _PYTHON_RESOURCE_FUNCTIONS
     ]

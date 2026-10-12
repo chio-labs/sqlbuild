@@ -2,7 +2,7 @@
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.reports import list_folder
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import (
     ResourceIdentity,
     ScopeListResult,
@@ -21,10 +21,4 @@ def list_scope_declarations(
 ) -> ScopeListResult:
     """List declarations recursively beneath one browsed folder."""
 
-    return list_folder(
-        lookup=lookup,
-        folder=folder,
-        filters=filters,
-        target=target,
-        target_is_prospective=target_is_prospective,
-    )
+    return _native.scope_list(lookup, (folder, filters, target, target_is_prospective))

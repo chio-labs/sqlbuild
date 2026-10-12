@@ -1,12 +1,19 @@
 """Private SQLBuild native engine bindings."""
 
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
-from typing import Any, TypedDict
+from pathlib import Path, PurePath
+from typing import Any, Literal, TypedDict, overload
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
+from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.compile.models import CompileAnalysis
+from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
+from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
     CompileAuditInput,
     CompiledAudit,
     CompiledFunction,
@@ -33,10 +40,14 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    StaticMacroExport,
+    StaticMacroFault,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
+    CompileInputsView,
     FunctionLanguage,
 )
 from sqlbuild.compiler.discovery.models import (
@@ -53,12 +64,35 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
+    DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestFile,
     EnumDeclaration,
     ModelSchemaDeclaration,
+    TolerantScopeDiscovery,
 )
+from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
+from sqlbuild.compiler.scopes.models import (
+    DeclarationExplanation,
+    DeclarationIdentity,
+    DeclarationRecord,
+    DeclarationVisibility,
+    MovePreview,
+    ResourceIdentity,
+    ScopeBrowseResult,
+    ScopeDiagnostic,
+    ScopeIndex,
+    ScopeListResult,
+    ScopeLookup,
+    ScopeReport,
+    ScopeReportFilters,
+    ScopeTargetQuery,
+    UsageRecord,
+    VisibilityResolution,
+)
+from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssemblyRequest,
@@ -67,6 +101,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -881,6 +916,84 @@ def parse_schema_document(
 def parse_sources_document(
     loaded: object, path: str, classes: dict[str, object]
 ) -> tuple[SourceEntry, ...]: ...
+def analyze_compile_project(
+    *,
+    project_dir: Path,
+    no_sql_validation: bool,
+    selected_target: str | None,
+    lineage_mode: CompileLineageMode,
+    cli_vars: dict[str, object] | None,
+    profile_flags: CompileProfileFlags,
+    analysis_selection: CompileAnalysisSelection,
+    status: TransientStatusReporter | None,
+    prepared_artifacts: PreparedCompileArtifacts | None = None,
+) -> CompileAnalysis: ...
+def build_compiled_project(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    selected_target: str | None = None,
+    no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    cli_vars: dict[str, object] | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolved_connection: dict[str, object] | None = None,
+    analysis_selection: CompileAnalysisSelection | None = None,
+) -> CompiledProjectView: ...
+def build_project_graph_with_analysis_selection(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    analysis_selection: CompileAnalysisSelection,
+    selected_target: str | None = None,
+    no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    cli_vars: dict[str, object] | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> ProjectGraph: ...
+def build_project_graph(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    selected_target: str | None = None,
+    no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    cli_vars: dict[str, object] | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    no_cache: bool = False,
+) -> ProjectGraph: ...
+def run_compile_command(
+    request: CompileCommandRequest, reuse_attempt: CompileReuseAttempt | None = None
+) -> int: ...
+def validate_authored_sql_test_ctes(
+    test_files: tuple[DiscoveredSqlTestFile, ...],
+    scenario_files: tuple[DiscoveredSqlScenarioFile, ...],
+    syntax: dict[str, object],
+) -> None: ...
+def validate_hook_sql_syntax(
+    value: object,
+    hook_name: str,
+    model: tuple[str, Path],
+    parsing: tuple[dict[str, str] | None, str | None] = (None, None),
+) -> None: ...
+def validate_sql_syntax(
+    query_sql: str,
+    model: tuple[str, Path],
+    parsing: tuple[dict[str, str] | None, str | None] = (None, None),
+) -> None: ...
+def hook_sql_statements(value: object) -> list[str]: ...
+def declared_relations(
+    inputs: CompileInputsView,
+) -> tuple[
+    dict[str, dict[str, str]],
+    dict[str, dict[str, InferredNullability]],
+    dict[str, dict[str, str]],
+]: ...
 def externally_described_models(
     inputs: DiscoveredProjectInputs, model_schemas: dict[str, ModelSchemaDeclaration]
 ) -> list[Path]: ...
@@ -946,97 +1059,85 @@ class NativeDeclarationContexts:
     ) -> tuple[Any, bool]: ...
 
 class NativeScopeIndex:
-    def records(
-        self,
-    ) -> tuple[
-        list[str],
-        list[tuple[str, str, str, str | None, str | None]],
-        list[int],
-        list[int],
-        list[tuple[int, int]],
-        list[tuple[str, str, str | None, int | None, int | None, int | None, int | None]],
-        bool,
-    ]: ...
+    @property
+    def index(self) -> ScopeIndex: ...
+    @property
+    def has_scoped_relationship_declarations(self) -> bool: ...
     def grant_relationships(
         self,
-        files: list[tuple[str, list[tuple[str, str, str]]]],
-        scenarios: list[tuple[str, str, str]],
-        settings: dict[str, object],
-    ) -> tuple[list[tuple[str, str, int, str | int, str]] | None, list[tuple[str, str]]]: ...
+        *,
+        discovered_inputs: DiscoveredProjectInputs,
+        syntax: SqlLexicalSyntax,
+        scan_store: tuple[SqlTestScanStore | None, str],
+    ) -> tuple[tuple[Path, str], ...]: ...
+    def index_with_relationships(self) -> ScopeIndex: ...
 
-def scope_placement_diagnostics(
-    rows: tuple[list[Any], list[Any], list[Any]],
-) -> list[tuple[int, str, str]]: ...
-def scope_relocations(
-    rows: tuple[list[Any], list[Any], list[Any]],
-    resource: tuple[str, str],
-    destination: str,
-) -> list[tuple[int, str, str, tuple[str, str, str | None], str | None]] | None: ...
-def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str: ...
+def open_native_scope_index(
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: Mapping[str, LoadedMacro],
+    static_macros: tuple[StaticMacroExport, ...],
+    /,
+) -> NativeScopeIndex: ...
+def scope_tolerant_index(
+    index: ScopeIndex,
+    snapshot: TolerantScopeDiscovery,
+    faults: tuple[tuple[StaticMacroFault, ...], tuple[tuple[Path, str], ...]],
+    /,
+) -> ScopeIndex: ...
+def scope_placement_validated_index(
+    index: ScopeIndex,
+    enforce_placement: bool,
+    compile_usages: tuple[UsageRecord, ...] | None,
+) -> ScopeIndex: ...
+def scope_relocated_declarations(
+    index: ScopeIndex, resource: ResourceIdentity, destination: str
+) -> tuple[DeclarationRecord, ...] | None: ...
 
-type _ScopeQualified = tuple[str, str, tuple[str, str] | None]
-type _ScopeRoot = tuple[str, str, str | None]
-type _ScopeResource = tuple[tuple[str, str], str, _ScopeRoot]
-type _ScopeGroups = list[list[int]]
+class NativeScopeLookup: ...
 
-class NativeScopeLookup:
-    def target(
-        self, identity: _ScopeQualified | None, text: str, /
-    ) -> tuple[bool, list[int], str | None, str | None]: ...
-    def resolve(
-        self, resource: _ScopeResource, /
-    ) -> tuple[list[tuple[int, str, int | None]], list[tuple[int, str]], str | None]: ...
-
-def build_native_scope_lookup(
-    rows: tuple[
-        list[_ScopeRoot],
-        list[_ScopeResource],
-        list[tuple[_ScopeQualified, str, int, int, str, _ScopeRoot, str | None]],
-        list[tuple[_ScopeQualified, _ScopeQualified, str, _ScopeQualified | None]],
-        list[tuple[tuple[str, str], _ScopeQualified, _ScopeQualified, str]],
-        list[tuple[str | None, int | None, int | None, str]],
+def scope_query_target(lookup: ScopeLookup, target: ScopeQueryTarget, /) -> ScopeTargetQuery: ...
+@overload
+def scope_resolve_visibility(
+    lookup: ScopeLookup, target: ScopeQueryTarget, with_reasons: Literal[True], /
+) -> VisibilityResolution: ...
+@overload
+def scope_resolve_visibility(
+    lookup: ScopeLookup, target: ScopeQueryTarget, with_reasons: Literal[False], /
+) -> DeclarationVisibility: ...
+def scope_resolve_path_visibility(
+    lookup: ScopeLookup, path: str | PurePath, /
+) -> tuple[tuple[DeclarationRecord, ...], tuple[DeclarationRecord, ...]]: ...
+def build_scope_lookup(index: ScopeIndex) -> ScopeLookup: ...
+def scope_report(
+    lookup: ScopeLookup,
+    request: tuple[ScopeQueryTarget | None, str | PurePath | None, bool, ScopeReportFilters | None],
+    /,
+) -> ScopeReport: ...
+def scope_explain(
+    lookup: ScopeLookup,
+    request: tuple[
+        str | DeclarationIdentity,
+        str | PurePath | ResourceIdentity | None,
+        str | PurePath | None,
+        bool,
     ],
     /,
-) -> tuple[
-    NativeScopeLookup | None,
-    tuple[
-        tuple[
-            tuple[list[int], list[int], list[int], list[int], list[int], list[int]],
-            tuple[
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                list[str],
-            ],
-            tuple[
-                list[int],
-                list[tuple[tuple[str, str], list[int]]],
-                list[tuple[str, list[int]]],
-                list[tuple[str, list[int]]],
-            ],
-        ]
-        | None,
-        str | None,
-    ],
-]: ...
-
-class NativeScopeReports:
-    def report(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-    def explain(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-    def browse(self, request: tuple[Any, ...], /) -> Any: ...
-    def list(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-    def move_preview(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
-
-def build_native_scope_reports(
-    lookup: NativeScopeLookup,
-    values: tuple[list[Any], tuple[bool, bool, bool, bool, bool, bool]],
+) -> tuple[DeclarationExplanation, tuple[ScopeDiagnostic, ...]]: ...
+def scope_browse(
+    lookup: ScopeLookup,
+    request: tuple[str, str | PurePath | ResourceIdentity | None, bool],
     /,
-) -> NativeScopeReports: ...
-def serialize_scope_result_row(kind: str, row: object, /) -> str: ...
-def scope_metadata_projection_rows(rows: tuple[Any, ...], /) -> Any: ...
+) -> ScopeBrowseResult: ...
+def scope_list(
+    lookup: ScopeLookup,
+    request: tuple[str, ScopeReportFilters | None, str | PurePath | ResourceIdentity | None, bool],
+    /,
+) -> ScopeListResult: ...
+def scope_move_preview(
+    lookup: ScopeLookup, resource: str | ResourceIdentity, destination: str | PurePath
+) -> tuple[MovePreview | None, tuple[ScopeDiagnostic, ...]]: ...
+def serialize_scope_report(report: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str: ...
+def scope_metadata_projection(index: ScopeIndex) -> dict[str, JsonValue]: ...
 def effective_config_target_name(
     project_config: object, local_config: object, selected: str | None, /
 ) -> tuple[str | None, str | None]: ...
@@ -1124,39 +1225,14 @@ def scope_index_fingerprint(
     inputs: tuple[list[str], list[str], list[str], list[str], str],
     /,
 ) -> str | None: ...
-def read_scope_index_cache(path: Path, fingerprint: str, /) -> Any: ...
-def write_scope_index_cache(location: tuple[Path, str], fingerprint: str, rows: Any, /) -> bool: ...
+def read_scope_index_cache(path: Path, fingerprint: str, /) -> ScopeIndex | None: ...
+def write_scope_index_cache(
+    location: tuple[Path, str], fingerprint: str, index: ScopeIndex, /
+) -> bool: ...
 def scope_schema_usages(
     schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
     records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],
 ) -> tuple[list[tuple[int, int]], list[tuple[list[str], str, str, str]], str | None]: ...
-def scope_merged_usages(
-    declarations: list[
-        tuple[
-            tuple[str, str, tuple[str, str] | None],
-            list[tuple[str, str, tuple[str, str] | None]] | None,
-        ]
-    ],
-    prior: list[Any],
-    collected: list[Any],
-) -> tuple[list[int], list[list[tuple[bool, int]] | None], list[int]]: ...
-def build_native_scope_index(
-    resources: list[tuple[str, str, str, str]],
-    declarations: list[
-        tuple[
-            str,
-            str,
-            tuple[str, str] | None,
-            str,
-            int,
-            str,
-            str | None,
-            str,
-            str | None,
-            list[tuple[str, str, tuple[str, str] | None]],
-        ]
-    ],
-) -> NativeScopeIndex | None: ...
 
 class NativeConfigError:
     class_name: str
@@ -1282,6 +1358,16 @@ def fixture_projection_facts(
     sql: str, dialect: str | None, /
 ) -> tuple[list[tuple[str, str]], list[str], list[str]]: ...
 def macro_call_names(sql: str, nested: bool, /) -> tuple[list[str] | None, str | None]: ...
+def inventory_macro_modules(
+    sources: list[
+        tuple[str, str, list[str], list[str] | None, list[str] | None, str, str, str | None]
+    ],
+    /,
+) -> tuple[
+    list[tuple[str, int, list[str], int, str, list[str]]],
+    list[tuple[int, str]],
+    list[tuple[int, str, list[str]]] | None,
+]: ...
 def splice_macro_calls(
     sql: str, sites: list[tuple[int, int]], outputs: list[str]
 ) -> tuple[str, list[tuple[int, int, int, int]]]: ...

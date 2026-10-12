@@ -4,6 +4,8 @@ mod build_scope_index;
 mod classify_resource;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_macro_source_digest.rs"]
+mod macro_source_digest;
 #[path = "tests/test_parse_identity.rs"]
 mod parse_identity;
 #[path = "tests/test_path_visible.rs"]

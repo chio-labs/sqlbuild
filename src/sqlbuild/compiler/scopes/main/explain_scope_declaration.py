@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import PurePath
 
-from sqlbuild.compiler.scopes._helpers.reports import explain_declaration
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import (
     DeclarationExplanation,
     DeclarationIdentity,
@@ -24,6 +24,4 @@ def explain_scope_declaration(
 ) -> tuple[DeclarationExplanation, tuple[ScopeDiagnostic, ...]]:
     """Explain a qualified declaration in an optional resource/path context."""
 
-    return explain_declaration(
-        lookup=lookup, declaration=declaration, target=target, at=at, directory=directory
-    )
+    return _native.scope_explain(lookup, (declaration, target, at, directory))

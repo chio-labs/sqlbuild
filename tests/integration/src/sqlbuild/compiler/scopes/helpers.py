@@ -32,7 +32,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     EnumDeclaration,
 )
-from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main._resolve_scope_declaration_visibility import (
@@ -323,7 +322,7 @@ def native_scope_attempts(
 
     def counted(
         *, discovered_inputs: DiscoveredProjectInputs, loaded_macros: Mapping[str, LoadedMacro]
-    ) -> NativeScopeIndex:
+    ) -> _native.NativeScopeIndex:
         attempts.append(None)
         return open_native_scope_index(
             discovered_inputs=discovered_inputs, loaded_macros=loaded_macros

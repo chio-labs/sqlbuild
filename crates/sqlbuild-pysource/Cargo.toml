@@ -1,0 +1,18 @@
+[package]
+name = "sqlbuild-pysource"
+version.workspace = true
+description = "Static analysis of project Python source with the ruff parser; never imports or runs it."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ruff_python_ast.workspace = true
+ruff_python_parser.workspace = true
+ruff_text_size.workspace = true
+sha2.workspace = true
+sqlbuild-core.workspace = true
+
+[lints]
+workspace = true

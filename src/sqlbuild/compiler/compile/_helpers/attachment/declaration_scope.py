@@ -7,12 +7,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from types import CodeType
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_declaration_scope_resolver,
-)
-from sqlbuild.compiler.compile._helpers.sql_tests.extraction_errors import (
-    validate_authored_scenario_cte_names,
-    validate_authored_test_cte_names,
 )
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM
@@ -22,7 +19,6 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.exceptions import ScopeValidationError
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.main._validate_scope_index import validate_scope_index
@@ -41,11 +37,10 @@ def build_declaration_scope(
 
     scan_cache: SqlTestScanCache = SqlTestScanCache(cache_dir=compile_cache_dir)
 
-    validate_authored_test_cte_names(
-        test_files=discovered_inputs.test_files, syntax=sql_lexical_syntax
-    )
-    validate_authored_scenario_cte_names(
-        scenario_files=discovered_inputs.scenario_files, syntax=sql_lexical_syntax
+    _native.validate_authored_sql_test_ctes(
+        discovered_inputs.test_files,
+        discovered_inputs.scenario_files,
+        sql_lexical_syntax.native_mapping,
     )
     return _build_native_declaration_scope(
         discovered_inputs=discovered_inputs,
@@ -64,7 +59,7 @@ def _build_native_declaration_scope(
 ) -> DeclarationScopeBuild:
     """Build and validate the scope index natively, with its relationship grants and lookup."""
 
-    native: NativeScopeIndex = open_native_scope_index(
+    native: _native.NativeScopeIndex = open_native_scope_index(
         discovered_inputs=discovered_inputs, loaded_macros=loaded_macros
     )
     try:
@@ -82,7 +77,7 @@ def _build_native_declaration_scope(
         if faults:
             raise CompileInputError(faults[0][1])
     index: ScopeIndex = native.index_with_relationships()
-    lookup: ScopeLookup = native.lookup(index=index)
+    lookup: ScopeLookup = _native.build_scope_lookup(index)
     return DeclarationScopeBuild(
         loaded_macros=loaded_macros,
         index=index,

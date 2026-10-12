@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.scopes._helpers.report_rows import build_projection
+import sqlbuild._native as _native
 from sqlbuild.compiler.scopes.models import ScopeIndex
 from sqlbuild.compiler.scopes.types import JsonValue
 
@@ -10,4 +10,4 @@ from sqlbuild.compiler.scopes.types import JsonValue
 def scope_metadata_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
     """Return deterministic, value-free scope metadata for external consumers."""
 
-    return build_projection(index=index)
+    return _native.scope_metadata_projection(index)

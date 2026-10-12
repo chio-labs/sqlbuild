@@ -67,7 +67,7 @@ FULL_COMPILE_MODULES: tuple[str, ...] = (
     "polyglot_sql",
     "pydantic",
     "sqlbuild.adapter.contract.classes.base_adapter",
-    "sqlbuild.cli.commands.main.project._compile",
+    "sqlbuild.cli.commands._helpers.compile.output",
     "sqlbuild.cli.compile.models",
     "sqlbuild.compiler.compile.models",
     "sqlbuild.compiler.pipeline",

@@ -108,3 +108,10 @@ pub(super) struct ParseIdentityTestCase {
         crate::scope_index::models::IdentityFailure,
     >,
 }
+
+/// Macro source text and its digest.
+pub(super) struct MacroDigestTestCase {
+    pub(super) description: &'static str,
+    pub(super) source: &'static str,
+    pub(super) expected_digest: &'static str,
+}

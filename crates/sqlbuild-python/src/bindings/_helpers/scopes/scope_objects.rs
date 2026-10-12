@@ -1,0 +1,733 @@
+//! Python `ScopeIndex` models read into the native full index, and built back from it.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
+use pyo3::types::PyTuple;
+use sqlbuild_scopes::placement::models::{PlacementIndex, PlacementUsage};
+use sqlbuild_scopes::scope_cache::models::{
+    CachedDeclaration, CachedDiagnostic, CachedInaccessible, CachedIndex, CachedUsage,
+    CachedVisibility, ConstantFacts, EnumFacts, MacroFacts,
+};
+use sqlbuild_scopes::scope_index::main::format_identity::format_identity;
+use sqlbuild_scopes::scope_index::models::{
+    DeclarationIdentity, OwnershipRoot, QualifiedIdentity, ReportDiagnosticKey, ReportGrant,
+    ReportRecords, ReportUsage, ResourceIdentity, ResourceKind, ResourceRecord,
+};
+use sqlbuild_scopes::scope_report::models::{
+    Completeness, ConstantValues, DeclarationValues, DiagnosticFacts, EnumValues, MacroValues,
+    ProjectionGrant, ProjectionIndex, ProjectionStanding, ProjectionUsage, ReportValues,
+};
+
+use crate::bindings::_helpers::scopes::placement::{
+    IdentityRow, QualifiedRow, RootRow, declaration_identity, declaration_record, ownership_root,
+    qualified_identity, resource_identity,
+};
+use crate::bindings::_helpers::scopes::scope_lookup::grant_kind;
+
+const MODELS_MODULE: &str = "sqlbuild.compiler.scopes.models";
+const TYPES_MODULE: &str = "sqlbuild.compiler.scopes.types";
+const ENUM_MODULE: &str = "enum";
+
+/// The scope model and enum modules every built object comes from.
+pub(crate) struct ScopeClasses<'py> {
+    models: Bound<'py, PyModule>,
+    types: Bound<'py, PyModule>,
+}
+
+impl<'py> ScopeClasses<'py> {
+    /// Import the scope models and enums.
+    pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
+        Ok(Self {
+            models: py.import(MODELS_MODULE)?,
+            types: py.import(TYPES_MODULE)?,
+        })
+    }
+
+    /// One scope model class.
+    pub(crate) fn model(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        self.models.getattr(name)
+    }
+
+    /// The member of scope enum `name` with `value`; an unknown value raises `ValueError`.
+    pub(crate) fn member(&self, name: &str, value: &str) -> PyResult<Bound<'py, PyAny>> {
+        self.types.getattr(name)?.call1((value,))
+    }
+
+    /// The interpreter the classes belong to.
+    pub(crate) fn py(&self) -> Python<'py> {
+        self.models.py()
+    }
+}
+
+/// `str(value.value)` of an enum, else `str(value)`.
+pub(crate) fn enum_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    let enum_type = value.py().import(ENUM_MODULE)?.getattr("Enum")?;
+    if value.is_instance(&enum_type)? {
+        return value.getattr("value")?.str()?.extract();
+    }
+    value.str()?.extract()
+}
+
+pub(crate) fn value_of(item: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
+    item.getattr(name)?.getattr("value")?.extract()
+}
+
+pub(crate) fn field<'py, T: pyo3::FromPyObject<'py>>(
+    item: &Bound<'py, PyAny>,
+    name: &str,
+) -> PyResult<T> {
+    item.getattr(name)?.extract()
+}
+
+pub(crate) fn optional_item<'py>(
+    item: &Bound<'py, PyAny>,
+    name: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let value: Bound<'py, PyAny> = item.getattr(name)?;
+    Ok(if value.is_none() { None } else { Some(value) })
+}
+
+fn items<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    item.getattr(name)?.try_iter()?.collect()
+}
+
+/// A resource identity's `(kind, name)` row.
+pub(crate) fn identity_row(identity: &Bound<'_, PyAny>) -> PyResult<IdentityRow> {
+    Ok((value_of(identity, "kind")?, field(identity, "name")?))
+}
+
+/// Python's `qualified_row` of a resource or declaration identity.
+pub(crate) fn qualified_row(identity: &Bound<'_, PyAny>) -> PyResult<QualifiedRow> {
+    let owner: Option<IdentityRow> = match identity.getattr_opt("owner")? {
+        Some(owner) if !owner.is_none() => Some(identity_row(&owner)?),
+        _ => None,
+    };
+    Ok((value_of(identity, "kind")?, field(identity, "name")?, owner))
+}
+
+/// A resource or declaration identity as the native qualified identity.
+pub(crate) fn read_qualified(identity: &Bound<'_, PyAny>) -> PyResult<QualifiedIdentity> {
+    qualified_identity(qualified_row(identity)?)
+}
+
+fn read_resource_identity(identity: &Bound<'_, PyAny>) -> PyResult<ResourceIdentity> {
+    resource_identity(identity_row(identity)?)
+}
+
+pub(crate) fn read_declaration_identity(
+    identity: &Bound<'_, PyAny>,
+) -> PyResult<DeclarationIdentity> {
+    declaration_identity(qualified_row(identity)?)
+}
+
+fn read_optional_qualified(
+    item: &Bound<'_, PyAny>,
+    name: &str,
+) -> PyResult<Option<QualifiedIdentity>> {
+    optional_item(item, name)?
+        .map(|value| read_qualified(&value))
+        .transpose()
+}
+
+fn root_row(root: &Bound<'_, PyAny>) -> PyResult<RootRow> {
+    let resource_kind: Option<String> = optional_item(root, "resource_kind")?
+        .map(|kind| kind.getattr("value")?.extract())
+        .transpose()?;
+    Ok((field(root, "path")?, value_of(root, "kind")?, resource_kind))
+}
+
+fn read_root(root: &Bound<'_, PyAny>) -> PyResult<OwnershipRoot> {
+    ownership_root(root_row(root)?)
+}
+
+/// One `ResourceRecord` as its native record.
+pub(crate) fn read_resource(record: &Bound<'_, PyAny>) -> PyResult<ResourceRecord> {
+    Ok(ResourceRecord {
+        identity: read_resource_identity(&record.getattr("identity")?)?,
+        path: field(record, "path")?,
+        ownership_root: read_root(&record.getattr("ownership_root")?)?,
+    })
+}
+
+fn read_macro(facts: &Bound<'_, PyAny>) -> PyResult<MacroFacts> {
+    Ok(MacroFacts {
+        parameters: field(facts, "parameters")?,
+        dependencies: items(facts, "dependencies")?
+            .iter()
+            .map(read_declaration_identity)
+            .collect::<PyResult<_>>()?,
+        source_digest: field(facts, "source_digest")?,
+    })
+}
+
+fn read_enum(facts: &Bound<'_, PyAny>) -> PyResult<EnumFacts> {
+    Ok(EnumFacts {
+        members: items(facts, "members")?
+            .iter()
+            .map(|member| field(member, "name"))
+            .collect::<PyResult<_>>()?,
+        scalar_type: field(facts, "scalar_type")?,
+    })
+}
+
+fn read_constant(facts: &Bound<'_, PyAny>) -> PyResult<ConstantFacts> {
+    Ok(ConstantFacts {
+        logical_type: field(facts, "logical_type")?,
+        collection_kind: field(facts, "collection_kind")?,
+        item_count: field(facts, "item_count")?,
+        nullable: field(facts, "nullable")?,
+        render_as: field(facts, "render_as")?,
+    })
+}
+
+/// One `DeclarationRecord` with its value metadata.
+pub(crate) fn read_declaration(record: &Bound<'_, PyAny>) -> PyResult<CachedDeclaration> {
+    Ok(CachedDeclaration {
+        record: declaration_record((
+            qualified_row(&record.getattr("identity")?)?,
+            field(record, "path")?,
+            field(record, "line")?,
+            field(record, "column")?,
+            value_of(record, "scope")?,
+            root_row(&record.getattr("ownership_root")?)?,
+            field(record, "owning_path")?,
+        ))?,
+        macro_facts: optional_item(record, "macro")?
+            .map(|facts| read_macro(&facts))
+            .transpose()?,
+        enum_facts: optional_item(record, "enum")?
+            .map(|facts| read_enum(&facts))
+            .transpose()?,
+        constant_facts: optional_item(record, "constant")?
+            .map(|facts| read_constant(&facts))
+            .transpose()?,
+    })
+}
+
+fn read_usage(usage: &Bound<'_, PyAny>) -> PyResult<CachedUsage> {
+    Ok(CachedUsage {
+        consumer: read_qualified(&usage.getattr("consumer")?)?,
+        declaration: read_declaration_identity(&usage.getattr("declaration")?)?,
+        kind: value_of(usage, "kind")?,
+        through: read_optional_qualified(usage, "through")?,
+        enum_member: field(usage, "enum_member")?,
+    })
+}
+
+fn read_grant(grant: &Bound<'_, PyAny>) -> PyResult<ReportGrant> {
+    Ok(ReportGrant {
+        resource: read_resource_identity(&grant.getattr("resource")?)?,
+        declaration: read_declaration_identity(&grant.getattr("declaration")?)?,
+        through: read_qualified(&grant.getattr("through")?)?,
+        kind: grant_kind(&value_of(grant, "kind")?)?,
+    })
+}
+
+fn read_visibility(fact: &Bound<'_, PyAny>) -> PyResult<CachedVisibility> {
+    Ok(CachedVisibility {
+        resource: read_resource_identity(&fact.getattr("resource")?)?,
+        declaration: read_declaration_identity(&fact.getattr("declaration")?)?,
+        reason: value_of(fact, "reason")?,
+        through: read_optional_qualified(fact, "through")?,
+    })
+}
+
+fn read_inaccessible(fact: &Bound<'_, PyAny>) -> PyResult<CachedInaccessible> {
+    Ok(CachedInaccessible {
+        resource: read_resource_identity(&fact.getattr("resource")?)?,
+        declaration: read_declaration_identity(&fact.getattr("declaration")?)?,
+        reason: value_of(fact, "reason")?,
+    })
+}
+
+/// One `ScopeDiagnostic`, with its code and severity as their text.
+pub(crate) fn read_diagnostic(diagnostic: &Bound<'_, PyAny>) -> PyResult<CachedDiagnostic> {
+    Ok(CachedDiagnostic {
+        code: enum_text(&diagnostic.getattr("code")?)?,
+        message: field(diagnostic, "message")?,
+        severity: enum_text(&diagnostic.getattr("severity")?)?,
+        path: field(diagnostic, "path")?,
+        line: field(diagnostic, "line")?,
+        column: field(diagnostic, "column")?,
+        declaration: optional_item(diagnostic, "declaration")?
+            .map(|identity| read_declaration_identity(&identity))
+            .transpose()?,
+        resource: optional_item(diagnostic, "resource")?
+            .map(|identity| read_resource_identity(&identity))
+            .transpose()?,
+    })
+}
+
+/// The six `ScopeCompleteness` sections in field order.
+pub(crate) fn read_completeness(index: &Bound<'_, PyAny>) -> PyResult<[bool; 6]> {
+    let done: Bound<'_, PyAny> = index.getattr("completeness")?;
+    Ok([
+        field(&done, "discovery")?,
+        field(&done, "static_visibility")?,
+        field(&done, "runtime_usage")?,
+        field(&done, "relationships")?,
+        field(&done, "placement")?,
+        field(&done, "promotion_impact")?,
+    ])
+}
+
+fn read_all<T>(
+    index: &Bound<'_, PyAny>,
+    name: &str,
+    read: impl Fn(&Bound<'_, PyAny>) -> PyResult<T>,
+) -> PyResult<Vec<T>> {
+    items(index, name)?.iter().map(read).collect()
+}
+
+/// Every record of a Python `ScopeIndex`, in its tuple orders.
+pub(crate) fn read_index(index: &Bound<'_, PyAny>) -> PyResult<CachedIndex> {
+    Ok(CachedIndex {
+        roots: read_all(index, "ownership_roots", read_root)?,
+        resources: read_all(index, "resources", read_resource)?,
+        declarations: read_all(index, "declarations", read_declaration)?,
+        usages: read_all(index, "usages", read_usage)?,
+        grants: read_all(index, "grants", read_grant)?,
+        visibility: read_all(index, "visibility", read_visibility)?,
+        inaccessible: read_all(index, "inaccessible", read_inaccessible)?,
+        diagnostics: read_all(index, "diagnostics", read_diagnostic)?,
+        completeness: read_completeness(index)?,
+    })
+}
+
+/// A Python `ScopeIndex`'s resources, declarations and usages for the placement rules.
+pub(crate) fn read_placement_index(index: &Bound<'_, PyAny>) -> PyResult<PlacementIndex> {
+    Ok(PlacementIndex {
+        resources: read_all(index, "resources", read_resource)?,
+        declarations: read_all(index, "declarations", |record| {
+            Ok(read_declaration(record)?.record)
+        })?,
+        usages: read_all(index, "usages", |usage| {
+            Ok(PlacementUsage {
+                consumer: read_qualified(&usage.getattr("consumer")?)?,
+                declaration: read_declaration_identity(&usage.getattr("declaration")?)?,
+                through: read_optional_qualified(usage, "through")?,
+            })
+        })?,
+    })
+}
+
+/// The lookup's records of a full index.
+pub(crate) fn report_records(index: &CachedIndex) -> ReportRecords {
+    ReportRecords {
+        roots: index.roots.clone(),
+        resources: index.resources.clone(),
+        declarations: index
+            .declarations
+            .iter()
+            .map(|item| item.record.clone())
+            .collect(),
+        usages: index
+            .usages
+            .iter()
+            .map(|item| ReportUsage {
+                consumer: item.consumer.clone(),
+                declaration: item.declaration.clone(),
+                kind: item.kind.clone(),
+                through: item.through.clone(),
+            })
+            .collect(),
+        grants: index.grants.clone(),
+        diagnostics: index
+            .diagnostics
+            .iter()
+            .map(|item| ReportDiagnosticKey {
+                path: item.path.clone(),
+                line: item.line,
+                column: item.column,
+                code: item.code.clone(),
+            })
+            .collect(),
+    }
+}
+
+/// One declaration's report values.
+pub(crate) fn declaration_values(item: &CachedDeclaration) -> DeclarationValues {
+    DeclarationValues {
+        macro_values: item.macro_facts.as_ref().map(|facts| MacroValues {
+            parameters: facts.parameters.clone(),
+            dependencies: facts.dependencies.clone(),
+            source_digest: facts.source_digest.clone(),
+        }),
+        enum_values: item.enum_facts.as_ref().map(|facts| EnumValues {
+            members: facts.members.clone(),
+            scalar_type: facts.scalar_type.clone(),
+        }),
+        constant_values: item.constant_facts.as_ref().map(|facts| ConstantValues {
+            logical_type: facts.logical_type.clone(),
+            collection_kind: facts.collection_kind.clone(),
+            item_count: facts.item_count,
+            nullable: facts.nullable,
+            render_as: facts.render_as.clone(),
+        }),
+    }
+}
+
+/// The six completeness sections as the report engine reads them.
+pub(crate) fn completeness(done: [bool; 6]) -> Completeness {
+    Completeness {
+        discovery: done[0],
+        static_visibility: done[1],
+        runtime_usage: done[2],
+        relationships: done[3],
+        placement: done[4],
+        promotion_impact: done[5],
+    }
+}
+
+/// A diagnostic's facts, with its identities as qualified text.
+pub(crate) fn diagnostic_facts(item: CachedDiagnostic) -> DiagnosticFacts {
+    DiagnosticFacts {
+        code: item.code,
+        message: item.message,
+        severity: item.severity,
+        path: item.path,
+        line: item.line,
+        column: item.column,
+        declaration: item
+            .declaration
+            .map(|identity| format_identity(&QualifiedIdentity::Declaration(identity))),
+        resource: item
+            .resource
+            .map(|identity| format_identity(&QualifiedIdentity::Resource(identity))),
+    }
+}
+
+/// The metadata projection's view of a full index.
+pub(crate) fn projection_index(index: CachedIndex) -> ProjectionIndex {
+    ProjectionIndex {
+        roots: index.roots,
+        resources: index.resources,
+        values: ReportValues {
+            declarations: index.declarations.iter().map(declaration_values).collect(),
+            completeness: completeness(index.completeness),
+        },
+        declarations: index
+            .declarations
+            .into_iter()
+            .map(|item| item.record)
+            .collect(),
+        usages: index
+            .usages
+            .into_iter()
+            .map(|item| ProjectionUsage {
+                consumer: item.consumer,
+                declaration: item.declaration,
+                kind: item.kind,
+                through: item.through,
+                enum_member: item.enum_member,
+            })
+            .collect(),
+        grants: index
+            .grants
+            .into_iter()
+            .map(|item| ProjectionGrant {
+                resource: item.resource,
+                declaration: item.declaration,
+                through: item.through,
+                kind: item.kind,
+            })
+            .collect(),
+        visibility: index
+            .visibility
+            .into_iter()
+            .map(|item| ProjectionStanding {
+                resource: item.resource,
+                declaration: item.declaration,
+                reason: item.reason,
+                through: item.through,
+            })
+            .collect(),
+        inaccessible: index
+            .inaccessible
+            .into_iter()
+            .map(|item| ProjectionStanding {
+                resource: item.resource,
+                declaration: item.declaration,
+                reason: item.reason,
+                through: None,
+            })
+            .collect(),
+        diagnostics: index
+            .diagnostics
+            .into_iter()
+            .map(diagnostic_facts)
+            .collect(),
+    }
+}
+
+/// A `ResourceIdentity`.
+pub(crate) fn resource_identity_object<'py>(
+    classes: &ScopeClasses<'py>,
+    identity: &ResourceIdentity,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("ResourceIdentity")?.call1((
+        classes.member("ResourceKind", identity.kind.as_str())?,
+        identity.name.as_str(),
+    ))
+}
+
+/// A `DeclarationIdentity`.
+pub(crate) fn declaration_identity_object<'py>(
+    classes: &ScopeClasses<'py>,
+    identity: &DeclarationIdentity,
+) -> PyResult<Bound<'py, PyAny>> {
+    let owner: Option<Bound<'py, PyAny>> = identity
+        .owner
+        .as_ref()
+        .map(|owner| resource_identity_object(classes, owner))
+        .transpose()?;
+    classes.model("DeclarationIdentity")?.call1((
+        classes.member("DeclarationKind", identity.kind.as_str())?,
+        identity.name.as_str(),
+        owner,
+    ))
+}
+
+/// A `ResourceIdentity` or `DeclarationIdentity`.
+pub(crate) fn qualified_object<'py>(
+    classes: &ScopeClasses<'py>,
+    identity: &QualifiedIdentity,
+) -> PyResult<Bound<'py, PyAny>> {
+    match identity {
+        QualifiedIdentity::Resource(identity) => resource_identity_object(classes, identity),
+        QualifiedIdentity::Declaration(identity) => declaration_identity_object(classes, identity),
+    }
+}
+
+fn optional_qualified_object<'py>(
+    classes: &ScopeClasses<'py>,
+    identity: Option<&QualifiedIdentity>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    identity
+        .map(|identity| qualified_object(classes, identity))
+        .transpose()
+}
+
+/// An `OwnershipRoot`.
+pub(crate) fn root_object<'py>(
+    classes: &ScopeClasses<'py>,
+    root: &OwnershipRoot,
+) -> PyResult<Bound<'py, PyAny>> {
+    let resource_kind: Option<Bound<'py, PyAny>> = root
+        .resource_kind
+        .map(|kind| classes.member("ResourceKind", ResourceKind::as_str(kind)))
+        .transpose()?;
+    classes.model("OwnershipRoot")?.call1((
+        root.path.as_str(),
+        classes.member("OwnershipRootKind", root.kind.as_str())?,
+        resource_kind,
+    ))
+}
+
+fn resource_object<'py>(
+    classes: &ScopeClasses<'py>,
+    record: &ResourceRecord,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("ResourceRecord")?.call1((
+        resource_identity_object(classes, &record.identity)?,
+        record.path.as_str(),
+        root_object(classes, &record.ownership_root)?,
+    ))
+}
+
+fn tuple_of<'py, T>(
+    py: Python<'py>,
+    values: &[T],
+    build: impl Fn(&T) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let built: Vec<Bound<'py, PyAny>> = values.iter().map(build).collect::<PyResult<_>>()?;
+    PyTuple::new(py, built)
+}
+
+fn macro_object<'py>(
+    classes: &ScopeClasses<'py>,
+    facts: &MacroFacts,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = classes.py();
+    classes.model("MacroMetadata")?.call1((
+        PyTuple::new(py, &facts.parameters)?,
+        tuple_of(py, &facts.dependencies, |identity| {
+            declaration_identity_object(classes, identity)
+        })?,
+        facts.source_digest.as_str(),
+    ))
+}
+
+fn enum_object<'py>(classes: &ScopeClasses<'py>, facts: &EnumFacts) -> PyResult<Bound<'py, PyAny>> {
+    let member_class: Bound<'py, PyAny> = classes.model("EnumMemberMetadata")?;
+    classes.model("EnumMetadata")?.call1((
+        tuple_of(classes.py(), &facts.members, |name| {
+            member_class.call1((name.as_str(),))
+        })?,
+        facts.scalar_type.as_str(),
+    ))
+}
+
+fn constant_object<'py>(
+    classes: &ScopeClasses<'py>,
+    facts: &ConstantFacts,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("ConstantMetadata")?.call1((
+        facts.logical_type.as_str(),
+        facts.collection_kind.as_deref(),
+        facts.item_count,
+        facts.nullable,
+        facts.render_as.as_deref(),
+    ))
+}
+
+fn declaration_object<'py>(
+    classes: &ScopeClasses<'py>,
+    item: &CachedDeclaration,
+) -> PyResult<Bound<'py, PyAny>> {
+    let record = &item.record;
+    let values: [Option<Bound<'py, PyAny>>; 3] = [
+        item.macro_facts
+            .as_ref()
+            .map(|facts| macro_object(classes, facts))
+            .transpose()?,
+        item.enum_facts
+            .as_ref()
+            .map(|facts| enum_object(classes, facts))
+            .transpose()?,
+        item.constant_facts
+            .as_ref()
+            .map(|facts| constant_object(classes, facts))
+            .transpose()?,
+    ];
+    let [macro_metadata, enum_metadata, constant_metadata] = values;
+    classes.model("DeclarationRecord")?.call1((
+        declaration_identity_object(classes, &record.identity)?,
+        record.path.as_str(),
+        record.line,
+        record.column,
+        classes.member("ScopeKind", record.scope.as_str())?,
+        root_object(classes, &record.ownership_root)?,
+        record.owning_path.as_deref(),
+        macro_metadata,
+        enum_metadata,
+        constant_metadata,
+    ))
+}
+
+fn usage_object<'py>(
+    classes: &ScopeClasses<'py>,
+    item: &CachedUsage,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("UsageRecord")?.call1((
+        qualified_object(classes, &item.consumer)?,
+        declaration_identity_object(classes, &item.declaration)?,
+        classes.member("UsageKind", &item.kind)?,
+        optional_qualified_object(classes, item.through.as_ref())?,
+        item.enum_member.as_deref(),
+    ))
+}
+
+fn grant_object<'py>(
+    classes: &ScopeClasses<'py>,
+    item: &ReportGrant,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("GrantRecord")?.call1((
+        resource_identity_object(classes, &item.resource)?,
+        declaration_identity_object(classes, &item.declaration)?,
+        qualified_object(classes, &item.through)?,
+        classes.member("GrantKind", item.kind.as_str())?,
+    ))
+}
+
+fn visibility_object<'py>(
+    classes: &ScopeClasses<'py>,
+    item: &CachedVisibility,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("VisibilityRecord")?.call1((
+        resource_identity_object(classes, &item.resource)?,
+        declaration_identity_object(classes, &item.declaration)?,
+        classes.member("VisibilityReason", &item.reason)?,
+        optional_qualified_object(classes, item.through.as_ref())?,
+    ))
+}
+
+fn inaccessible_object<'py>(
+    classes: &ScopeClasses<'py>,
+    item: &CachedInaccessible,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("InaccessibleRecord")?.call1((
+        resource_identity_object(classes, &item.resource)?,
+        declaration_identity_object(classes, &item.declaration)?,
+        classes.member("InaccessibleReason", &item.reason)?,
+    ))
+}
+
+/// A `ScopeDiagnostic`.
+pub(crate) fn diagnostic_object<'py>(
+    classes: &ScopeClasses<'py>,
+    item: &CachedDiagnostic,
+) -> PyResult<Bound<'py, PyAny>> {
+    classes.model("ScopeDiagnostic")?.call1((
+        classes.member("ScopeDiagnosticCode", &item.code)?,
+        item.message.as_str(),
+        classes.member("DiagnosticSeverity", &item.severity)?,
+        item.path.as_deref(),
+        item.line,
+        item.column,
+        item.declaration
+            .as_ref()
+            .map(|identity| declaration_identity_object(classes, identity))
+            .transpose()?,
+        item.resource
+            .as_ref()
+            .map(|identity| resource_identity_object(classes, identity))
+            .transpose()?,
+    ))
+}
+
+/// A `ScopeCompleteness`.
+pub(crate) fn completeness_object<'py>(
+    classes: &ScopeClasses<'py>,
+    done: [bool; 6],
+) -> PyResult<Bound<'py, PyAny>> {
+    classes
+        .model("ScopeCompleteness")?
+        .call1((done[0], done[1], done[2], done[3], done[4], done[5]))
+}
+
+/// A Python `ScopeIndex` of a full native index.
+pub(crate) fn index_object<'py>(
+    classes: &ScopeClasses<'py>,
+    index: &CachedIndex,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = classes.py();
+    classes.model("ScopeIndex")?.call1((
+        tuple_of(py, &index.roots, |root| root_object(classes, root))?,
+        tuple_of(py, &index.resources, |record| {
+            resource_object(classes, record)
+        })?,
+        tuple_of(py, &index.declarations, |item| {
+            declaration_object(classes, item)
+        })?,
+        tuple_of(py, &index.usages, |item| usage_object(classes, item))?,
+        tuple_of(py, &index.grants, |item| grant_object(classes, item))?,
+        tuple_of(py, &index.visibility, |item| {
+            visibility_object(classes, item)
+        })?,
+        tuple_of(py, &index.inaccessible, |item| {
+            inaccessible_object(classes, item)
+        })?,
+        tuple_of(py, &index.diagnostics, |item| {
+            diagnostic_object(classes, item)
+        })?,
+        completeness_object(classes, index.completeness)?,
+    ))
+}
+
+/// A tuple attribute of a scope model.
+pub(crate) fn tuple_attribute<'py>(
+    item: &Bound<'py, PyAny>,
+    name: &str,
+) -> PyResult<Bound<'py, PyTuple>> {
+    Ok(item.getattr(name)?.downcast_into::<PyTuple>()?)
+}

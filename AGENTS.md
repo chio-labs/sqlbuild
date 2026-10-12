@@ -201,6 +201,53 @@
 - Members marked `[forced]` are adapter contract overrides required by `test_strict_adapter.py`. Record other intentional mirrors in `[dupes]` in `fensu.toml` with a reason.
 - Public adapter contract methods are duplicated per adapter on purpose: `test_strict_adapter.py` requires every first-class adapter to define them, and `[dupes]` exempts them. The private helpers behind them must not be copied. Keep them in shared builders, such as the snapshot SQL builders in `src/sqlbuild/adapter/contract/classes/`, and let each contract method delegate. Express real dialect differences as explicit parameters, such as a `SnapshotSqlDialect` field, not as a forked copy of the helper.
 
+## Rust and Native Builds
+
+- Python imports the native extension built from `crates/sqlbuild-python`. After changing any
+  Rust, rebuild it incrementally with `uv run --no-sync maturin develop --release --skip-install`
+  before running Python tests. Use one profile consistently within a worktree.
+- Always run Python commands with `uv run --no-sync`. A syncing `uv run` or `uv sync` can replace
+  the locally built extension with a packaged one; if that happens, rebuild with maturin rather
+  than debugging stale native behaviour.
+- Keep one persistent `CARGO_TARGET_DIR` per worktree, outside the repository, and reuse it for
+  the whole task. Never run `cargo clean`, delete a target directory, or switch target
+  directories mid-task. Do not override `RUSTC_WRAPPER`; the compiler cache is shared.
+- An incremental rebuild after a focused change takes minutes. A build that is unexpectedly cold
+  or much slower than that is a signal to stop and investigate, not to wait or start over.
+- Get fast feedback first: `cargo check -p <crate>` while editing, `cargo test -p <crate>` for
+  the crate you touched, then one maturin build and the focused Python tests. Run clippy with the
+  CI toolchain for the touched crates only.
+- Fix compiler errors by reading them and making the smallest correct change. Never delete and
+  rewrite a working module, or restart a port from scratch, because a build failed.
+- Do not run two native builds against the same target directory at once, and do not run
+  benchmarks while a build or test suite is running.
+- Every new or changed binding updates `src/sqlbuild/_native.pyi` in the same change, and Rust
+  follows the `fensu.toml` layout rules (`uv run --no-sync fensu check`).
+
+## Implementation Subagents
+
+- Implementation subagents work only with explicit user approval, each on a bounded assignment in
+  its own worktree and branch. The primary agent owns the plan, integration, verification gates,
+  pushes and pull requests.
+- A port's specification is the Python it replaces. Behaviour must match exactly, including error
+  types, messages, ordering and Python string semantics; check the native result against the
+  Python on realistic inputs before deleting the Python.
+- Stop and hand back to the primary agent with a short report (what you tried, what blocks you,
+  the options you see) instead of continuing alone when:
+  - the next step will take an unusually long time, such as a cold rebuild, a broad or full test
+    suite, or any single command expected to run longer than about ten minutes;
+  - you are about to restart, rewrite from scratch, or abandon an approach you already built;
+  - the same build or test has failed twice with the same approach;
+  - the change needs files, crates, dependencies, `stays` entries or behaviour outside the
+    assignment;
+  - the Python specification is ambiguous, or native and Python results differ and the cause is
+    not obvious.
+- Never run `cargo clean`, delete target directories, reset, rebase or force-push shared branches,
+  commit outside the assigned branch, run full suites, or edit `AGENTS.md` or
+  `python-boundary.toml` `stays` entries.
+- Finish with local commits on the assigned branch and a report listing the files changed, the
+  Python deleted, the checks run with their results, and any residual risk.
+
 ## Rust-Hosted Migration
 
 - Rust is moving to host compile, planning and non-warehouse CLI work. Python stays only for the modules listed in `python-boundary.toml`: user Python code, adapters, the executor and public Python APIs.
