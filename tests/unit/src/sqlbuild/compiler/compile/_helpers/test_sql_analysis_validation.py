@@ -4,10 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.analysis.validation import (
-    validate_hook_sql_syntax,
-    validate_sql_syntax,
-)
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     ValidateHookSqlSyntaxTestCase,
@@ -73,11 +70,10 @@ _FILE_PATH: Path = Path("models/test_model.sql")
 def test_given_valid_sql_when_validating_syntax_then_does_not_raise(
     test_case: ValidateSqlSyntaxTestCase,
 ) -> None:
-    validate_sql_syntax(
-        query_sql=test_case.query_sql,
-        model_name=_MODEL_NAME,
-        file_path=_FILE_PATH,
-        dialect=test_case.dialect,
+    _native.validate_sql_syntax(
+        test_case.query_sql,
+        (_MODEL_NAME, _FILE_PATH),
+        (None, test_case.dialect),
     )
 
     assert test_case.expected_valid is True
@@ -111,11 +107,10 @@ def test_given_invalid_sql_when_validating_syntax_then_raises_compile_error(
     test_case: ValidateSqlSyntaxTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_sql_syntax(
-            query_sql=test_case.query_sql,
-            model_name=_MODEL_NAME,
-            file_path=_FILE_PATH,
-            dialect=test_case.dialect,
+        _native.validate_sql_syntax(
+            test_case.query_sql,
+            (_MODEL_NAME, _FILE_PATH),
+            (None, test_case.dialect),
         )
 
     assert test_case.expected_valid is False
@@ -142,12 +137,11 @@ def test_given_invalid_sql_when_validating_syntax_then_raises_compile_error(
 def test_given_polyglot_supported_hook_sql_when_validating_then_does_not_raise(
     test_case: ValidateHookSqlSyntaxTestCase,
 ) -> None:
-    validate_hook_sql_syntax(
-        value=test_case.hook_sql,
-        hook_name="pre_hooks",
-        model_name=_MODEL_NAME,
-        file_path=_FILE_PATH,
-        dialect=test_case.dialect,
+    _native.validate_hook_sql_syntax(
+        test_case.hook_sql,
+        "pre_hooks",
+        (_MODEL_NAME, _FILE_PATH),
+        (None, test_case.dialect),
     )
 
     assert test_case.expected_valid is True
@@ -170,12 +164,11 @@ def test_given_invalid_hook_sql_when_validating_then_raises_compile_error(
     test_case: ValidateHookSqlSyntaxTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        validate_hook_sql_syntax(
-            value=test_case.hook_sql,
-            hook_name="pre_hooks",
-            model_name=_MODEL_NAME,
-            file_path=_FILE_PATH,
-            dialect=test_case.dialect,
+        _native.validate_hook_sql_syntax(
+            test_case.hook_sql,
+            "pre_hooks",
+            (_MODEL_NAME, _FILE_PATH),
+            (None, test_case.dialect),
         )
 
     assert test_case.expected_valid is False

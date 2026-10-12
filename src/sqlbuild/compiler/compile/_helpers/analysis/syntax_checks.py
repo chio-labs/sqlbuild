@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile._helpers.analysis.validation import hook_sql_statements
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
@@ -54,7 +54,7 @@ def _syntax_checks(
     placeholders: dict[str, str] | None = model_placeholders(model_input)
     statements: list[str] = []
     for hook_name in _HOOK_NAMES:
-        statements.extend(hook_sql_statements(model_input.config.values.get(hook_name)))
+        statements.extend(_native.hook_sql_statements(model_input.config.values.get(hook_name)))
     if model_name not in analysis_succeeded:
         statements.append(
             cursor_intrinsics_analysis_sql(

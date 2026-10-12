@@ -890,6 +890,18 @@ def validate_authored_sql_test_ctes(
     scenario_files: tuple[DiscoveredSqlScenarioFile, ...],
     syntax: dict[str, object],
 ) -> None: ...
+def validate_hook_sql_syntax(
+    value: object,
+    hook_name: str,
+    model: tuple[str, Path],
+    parsing: tuple[dict[str, str] | None, str | None] = (None, None),
+) -> None: ...
+def validate_sql_syntax(
+    query_sql: str,
+    model: tuple[str, Path],
+    parsing: tuple[dict[str, str] | None, str | None] = (None, None),
+) -> None: ...
+def hook_sql_statements(value: object) -> list[str]: ...
 def declared_relations(
     inputs: CompileInputsView,
 ) -> tuple[

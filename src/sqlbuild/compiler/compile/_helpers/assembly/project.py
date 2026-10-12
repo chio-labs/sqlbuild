@@ -24,10 +24,6 @@ from sqlbuild.compiler.compile._helpers.analysis.cache import (
 from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import (
     model_placeholders as _model_placeholders,
 )
-from sqlbuild.compiler.compile._helpers.analysis.validation import (
-    validate_hook_sql_syntax,
-    validate_sql_syntax,
-)
 from sqlbuild.compiler.compile._helpers.assembly.hand_built_models import (
     hand_built_compiled_model,
 )
@@ -432,13 +428,11 @@ def _assemble_compiled_model(
     placeholders: dict[str, str] | None = _model_placeholders(model_input)
     if sql_validation_enabled and model_input.sql_validation_enabled and not syntax_validated:
         for hook_name in ("pre_hooks", "post_hooks"):
-            validate_hook_sql_syntax(
-                value=model_input.config.values.get(hook_name),
-                hook_name=hook_name,
-                model_name=model_name,
-                file_path=model_input.model_file.file_path,
-                placeholders=placeholders,
-                dialect=profile.sql_analysis_dialect,
+            _native.validate_hook_sql_syntax(
+                model_input.config.values.get(hook_name),
+                hook_name,
+                (model_name, model_input.model_file.file_path),
+                (placeholders, profile.sql_analysis_dialect),
             )
     session_analysis: tuple[_native.NativeModelAnalysisSession, int] | None = None
     fallback: list[ColumnRow] | None = None
@@ -455,12 +449,10 @@ def _assemble_compiled_model(
         )
         if model_name not in analyses.succeeded:
             if model_input.sql_validation_enabled and not syntax_validated:
-                validate_sql_syntax(
-                    query_sql=analysis_query_sql,
-                    model_name=model_name,
-                    file_path=model_input.model_file.file_path,
-                    placeholders=placeholders,
-                    dialect=profile.sql_analysis_dialect,
+                _native.validate_sql_syntax(
+                    analysis_query_sql,
+                    (model_name, model_input.model_file.file_path),
+                    (placeholders, profile.sql_analysis_dialect),
                 )
             fallback = infer_native_query_column_rows(
                 queries=(
@@ -472,12 +464,10 @@ def _assemble_compiled_model(
                 column_nullability_by_table=column_nullability_by_table,
             )[0][1]
     elif sql_validation_enabled and model_input.sql_validation_enabled and not syntax_validated:
-        validate_sql_syntax(
-            query_sql=analysis_query_sql,
-            model_name=model_name,
-            file_path=model_input.model_file.file_path,
-            placeholders=placeholders,
-            dialect=profile.sql_analysis_dialect,
+        _native.validate_sql_syntax(
+            analysis_query_sql,
+            (model_name, model_input.model_file.file_path),
+            (placeholders, profile.sql_analysis_dialect),
         )
     macro_deps: tuple[str, ...] = model_input.macro_deps or find_macro_call_names(
         model_input.macro_source_sql
