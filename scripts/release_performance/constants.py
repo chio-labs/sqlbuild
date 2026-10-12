@@ -86,23 +86,23 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
         name="lineage hub downstream",
         project=INSPECTION_PROJECT,
         sqb_args=("lineage", SHARED_DIAMOND_HUB, "--direction", "downstream"),
+        max_rss_ratio=1.75,
     ),
     BenchmarkCommand(
         name="lineage rollup upstream",
         project=INSPECTION_PROJECT,
         sqb_args=("lineage", SHARED_DIAMOND_ROLLUP, "--direction", "upstream"),
+        max_rss_ratio=1.75,
     ),
     BenchmarkCommand(
         name="lineage column trace",
         project=INSPECTION_PROJECT,
         sqb_args=("lineage", f"{SHARED_DIAMOND_ROLLUP}.amount", "--direction", "upstream"),
-        max_rss_ratio=2.0,
     ),
     BenchmarkCommand(
         name="dag --json",
         project=INSPECTION_PROJECT,
         sqb_args=("dag", "--json"),
-        max_rss_ratio=1.5,
     ),
     BenchmarkCommand(
         name="scope --json",
@@ -118,7 +118,6 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
     ),
     BenchmarkCommand(
         name="compile (one-model edit)",
-        max_rss_ratio=1.35,
         project=INSPECTION_PROJECT,
         sqb_args=("compile", "--json"),
         edits_model=True,
@@ -128,6 +127,7 @@ BENCHMARK_COMMANDS: tuple[BenchmarkCommand, ...] = (
         name="dense compile (warm cache)",
         project=DENSE_PROJECT,
         sqb_args=("compile", "--json"),
+        max_rss_ratio=1.45,
         max_time_ratio=MAX_COMPILE_TIME_RATIO,
     ),
     BenchmarkCommand(

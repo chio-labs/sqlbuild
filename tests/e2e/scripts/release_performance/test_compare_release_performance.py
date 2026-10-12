@@ -39,9 +39,10 @@ _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
                 "| `plan --json` |",
                 "| `build (empty warehouse)` |",
                 "| `lineage column trace` |",
-                "Peak RSS limit for `lineage column trace`: 2.00x "
-                "(+100%; temporary memory exception).",
-                "Peak RSS limit for `dag --json`: 1.50x (+50%; temporary memory exception).",
+                "Peak RSS limit for `lineage hub downstream`: 1.75x "
+                "(+75%; temporary memory exception).",
+                "Peak RSS limit for `dense compile (warm cache)`: 1.45x "
+                "(+45%; temporary memory exception).",
                 "Benchmark projects are generated per side",
                 "**Result: ",
             ),
@@ -121,9 +122,9 @@ def test_given_two_installations_when_comparing_release_performance_then_reports
     ]
     for command in recorded["commands"]:
         assert command["max_rss_ratio"] == {
-            "lineage column trace": 2.0,
-            "dag --json": 1.5,
-            "compile (one-model edit)": 1.35,
+            "lineage hub downstream": 1.75,
+            "lineage rollup upstream": 1.75,
+            "dense compile (warm cache)": 1.45,
         }.get(command["name"])
 
 
