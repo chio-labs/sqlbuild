@@ -7,6 +7,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild._native import build_project_graph
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.constants import (
@@ -18,7 +19,6 @@ from sqlbuild.cli.commands.models import RulesCommandRequest
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import ProjectGraph

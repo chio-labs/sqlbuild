@@ -106,9 +106,9 @@ def _prepare_graph(
         )
         if cached is not None:
             return cached, None, parsed_depth
+    from sqlbuild._native import build_project_graph
     from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
     from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-    from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(
         project_dir=project_dir,

@@ -8,11 +8,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from sqlbuild.integrations.dbt._helpers.pipeline.plan_output import dbt_failure_detail
 from sqlbuild.integrations.dbt.classes.dbt_compile_reference_resolver import (
     DbtCompileReferenceResolver,

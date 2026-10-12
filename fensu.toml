@@ -249,8 +249,13 @@ reason = "This proxy preserves DuckDB's positional connection execution protocol
 
 [[targets.python.rule_exceptions]]
 rule = "FFL105"
-path = "src/sqlbuild/compiler/pipeline/main/selected_graph.py"
-reason = "The native compile driver imports this pipeline stage by module path; it has no Python importer."
+path = "src/sqlbuild/compiler/manifest/main/build_graph_manifest.py"
+reason = "The native compile driver imports this entry by module path; it has no Python importer."
+
+[[targets.python.rule_exceptions]]
+rule = "FFL105"
+path = "src/sqlbuild/compiler/profiling/main/collect.py"
+reason = "The native compile driver imports this entry by module path; it has no Python importer."
 
 [[targets.python.rule_exceptions]]
 rule = "FFL102"

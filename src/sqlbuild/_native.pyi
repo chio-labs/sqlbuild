@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
@@ -43,6 +44,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
     CompiledModelView,
+    CompiledProjectView,
     CompileInputsView,
     FunctionLanguage,
 )
@@ -65,7 +67,8 @@ from sqlbuild.compiler.discovery.models import (
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
+from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
@@ -904,6 +907,45 @@ def analyze_compile_project(
     status: TransientStatusReporter | None,
     prepared_artifacts: PreparedCompileArtifacts | None = None,
 ) -> CompileAnalysis: ...
+def build_compiled_project(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    selected_target: str | None = None,
+    no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    cli_vars: dict[str, object] | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolved_connection: dict[str, object] | None = None,
+    analysis_selection: CompileAnalysisSelection | None = None,
+) -> CompiledProjectView: ...
+def build_project_graph_with_analysis_selection(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    analysis_selection: CompileAnalysisSelection,
+    selected_target: str | None = None,
+    no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    cli_vars: dict[str, object] | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> ProjectGraph: ...
+def build_project_graph(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    selected_target: str | None = None,
+    no_sql_validation: bool = False,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    cli_vars: dict[str, object] | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    on_progress: Callable[[str], None] | None = None,
+    no_cache: bool = False,
+) -> ProjectGraph: ...
 def run_compile_command(
     request: CompileCommandRequest, reuse_attempt: CompileReuseAttempt | None = None
 ) -> int: ...

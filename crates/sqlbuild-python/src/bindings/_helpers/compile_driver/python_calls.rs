@@ -1,7 +1,8 @@
 //! Calling the Python stages the native driver still runs: imports, keyword calls and `with`.
 
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyString};
+use pyo3::types::{PyDict, PyDictMethods, PyString};
 
 /// `module.name`, imported.
 pub(crate) fn imported<'py>(
@@ -73,5 +74,57 @@ impl Status<'_> {
             )?;
         }
         Ok(())
+    }
+}
+
+/// Keyword-only arguments of a driver entry point, checked as Python checks a signature.
+pub(crate) struct KeywordArguments<'py> {
+    values: Bound<'py, PyDict>,
+}
+
+impl<'py> KeywordArguments<'py> {
+    /// Accept `options` for `function`, rejecting missing `required` and unknown names.
+    pub(crate) fn read(
+        py: Python<'py>,
+        function: &str,
+        options: Option<Bound<'py, PyDict>>,
+        (required, optional): (&[&str], &[&str]),
+    ) -> PyResult<Self> {
+        let values: Bound<'py, PyDict> = options.unwrap_or_else(|| PyDict::new(py));
+        for name in values.keys() {
+            let name: String = name.extract()?;
+            if !required.contains(&name.as_str()) && !optional.contains(&name.as_str()) {
+                return Err(PyTypeError::new_err(format!(
+                    "{function}() got an unexpected keyword argument '{name}'"
+                )));
+            }
+        }
+        for name in required {
+            if !values.contains(*name)? {
+                return Err(PyTypeError::new_err(format!(
+                    "{function}() missing 1 required keyword-only argument: '{name}'"
+                )));
+            }
+        }
+        Ok(Self { values })
+    }
+
+    /// The argument `name`, or `None` when it was not passed.
+    pub(crate) fn value(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        let py: Python<'py> = self.values.py();
+        Ok(self
+            .values
+            .get_item(name)?
+            .unwrap_or_else(|| py.None().into_bound(py)))
+    }
+
+    /// The argument `name` as a truth value, `False` when it was not passed.
+    pub(crate) fn flag(&self, name: &str) -> PyResult<bool> {
+        self.value(name)?.is_truthy()
+    }
+
+    /// Whether `name` was passed.
+    pub(crate) fn passed(&self, name: &str) -> PyResult<bool> {
+        self.values.contains(name)
     }
 }

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
@@ -15,7 +16,6 @@ from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_d
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.pipeline.main.compiled_project import build_compiled_project
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     NativeCatalogCase,
     ValidationCacheCase,
