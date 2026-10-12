@@ -1,4 +1,4 @@
-//! Loaded configuration values as the Python objects PyYAML and `tomllib` build.
+//! Loaded configuration values as the Python objects `tomllib` builds.
 
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyModule, PyResult, Python};

@@ -17,7 +17,7 @@ class GeneratedDocumentOracleTestCase:
 
 @dataclass(frozen=True)
 class RepositoryFileOracleTestCase:
-    """Repository files of one kind loaded natively and by the Python loader."""
+    """Repository files of one kind and how many the native loader may reject."""
 
     description: str
     pattern: str
@@ -28,7 +28,7 @@ class RepositoryFileOracleTestCase:
 
 @dataclass(frozen=True)
 class HostileDocumentOracleTestCase:
-    """A document built to exhaust a naive reader, which the native reader must defer quickly."""
+    """A document built to exhaust a naive reader, which the native reader must refuse quickly."""
 
     description: str
     document: str
@@ -38,10 +38,11 @@ class HostileDocumentOracleTestCase:
 
 @dataclass(frozen=True)
 class LargeDocumentOracleTestCase:
-    """A large single-line document that must load in linear time with PyYAML's value."""
+    """A large single-line document that must load in linear time to its expected value."""
 
     description: str
     document: str
+    expected_value: object
     expected_maximum_seconds: float = 2.0
 
 
@@ -73,6 +74,7 @@ class NativeYamlLoadTestCase:
     description: str
     files: tuple[tuple[str, bytes], ...]
     expected_native_tags: tuple[str, ...]
+    expected_values: tuple[object, ...]
 
 
 @dataclass(frozen=True)

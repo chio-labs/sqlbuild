@@ -1,4 +1,4 @@
-//! Configuration values with the value domain of Python's `tomllib` and PyYAML `safe_load`.
+//! Configuration values read from TOML and YAML, with the value domain of Python's `tomllib`.
 
 use crate::constants::{
     DECIMAL_BASE, FEBRUARY, MAX_HOUR, MAX_MICROSECOND, MAX_MINUTE, MAX_SECOND, MAX_YEAR, MIN_YEAR,
@@ -118,7 +118,7 @@ impl ComposedYamlContent {
     }
 }
 
-/// One node `yaml.compose` returns, with its PyYAML `start_mark.index` and `end_mark.index`.
+/// One composed YAML node, with the char indices where its source text starts and ends.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ComposedYamlNode {
     pub content: ComposedYamlContent,
@@ -126,7 +126,7 @@ pub struct ComposedYamlNode {
     pub end: usize,
 }
 
-/// The node graph PyYAML's safe `yaml.compose` returns; `root` is `None` for an empty stream.
+/// The composed node graph of one YAML document; `root` is `None` for an empty stream.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ComposedYaml {
     pub nodes: Vec<ComposedYamlNode>,

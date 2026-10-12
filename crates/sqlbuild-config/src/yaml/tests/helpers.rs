@@ -1,5 +1,5 @@
 use crate::errors::ConfigErrorKind;
-use crate::models::{ComposedYamlNode, ConfigDate, ConfigDateTime, ConfigTime, ConfigValue};
+use crate::models::{ComposedYamlNode, ConfigValue};
 use crate::yaml::main::compose_marks::compose_marks;
 
 pub(super) fn text(value: &str) -> ConfigValue {
@@ -13,31 +13,6 @@ pub(super) fn under_a(value: ConfigValue) -> ConfigValue {
 
 pub(super) fn mapping(entries: Vec<(ConfigValue, ConfigValue)>) -> ConfigValue {
     ConfigValue::Map(entries)
-}
-
-pub(super) fn datetime(parts: [u32; 7], utc_offset_seconds: Option<i32>) -> ConfigValue {
-    ConfigValue::DateTime(ConfigDateTime {
-        date: date_parts(parts[0], parts[1], parts[2]),
-        time: ConfigTime {
-            hour: u8::try_from(parts[3]).unwrap_or_default(),
-            minute: u8::try_from(parts[4]).unwrap_or_default(),
-            second: u8::try_from(parts[5]).unwrap_or_default(),
-            microsecond: parts[6],
-        },
-        utc_offset_seconds,
-    })
-}
-
-pub(super) fn date(year: u32, month: u32, day: u32) -> ConfigValue {
-    ConfigValue::Date(date_parts(year, month, day))
-}
-
-fn date_parts(year: u32, month: u32, day: u32) -> ConfigDate {
-    ConfigDate {
-        year: u16::try_from(year).unwrap_or_default(),
-        month: u8::try_from(month).unwrap_or_default(),
-        day: u8::try_from(day).unwrap_or_default(),
-    }
 }
 
 /// `a0` holds a list, and every later key nests the previous one through an alias.

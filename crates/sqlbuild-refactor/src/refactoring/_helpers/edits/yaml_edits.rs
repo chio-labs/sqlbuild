@@ -19,7 +19,7 @@ struct YamlRelationship<'a> {
     field: Option<&'a ComposedYamlNode>,
 }
 
-/// One YAML file's text and composed nodes, or `None` where PyYAML raises a `YAMLError`.
+/// One YAML file's text and composed nodes; files that are not valid YAML are skipped.
 struct ComposedFile<'a> {
     file: &'a DiscoveredFile,
     text: Vec<char>,

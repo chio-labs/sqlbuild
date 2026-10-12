@@ -111,8 +111,8 @@ false filter, as in [unit tests](testing.md).
 Every scenario must have at least one fixture CTE and at least one `__expected__` or `__assert__` CTE.
 The file ends after its last CTE; a trailing ceremonial `SELECT 1` is accepted but not required.
 
-Scenario CTEs follow the same strict rules as [unit test CTEs](testing.md), on every
-compiler engine, and other forms are compile errors that point at the offending text:
+Scenario CTEs follow the same strict rules as [unit test CTEs](testing.md), and other
+forms are compile errors that point at the offending text:
 
 - A CTE name is an unquoted identifier of ASCII letters, digits and underscores that starts with a
   letter or underscore. Quoted names such as `"__source__raw_orders"` or `` `recent orders` ``, and
