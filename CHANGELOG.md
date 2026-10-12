@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.156.1](https://github.com/chio-labs/sqlbuild/compare/v0.156.0...v0.156.1) (2026-10-12)
+
+
+### Performance Improvements
+
+* skip redundant SQL normalisation and CTE scans during compile ([#1088](https://github.com/chio-labs/sqlbuild/issues/1088)) ([3ffcae2](https://github.com/chio-labs/sqlbuild/commit/3ffcae2dbe83a5ec44c62e7b15f9edc9608cdcf6))
+
 ## [0.156.0](https://github.com/chio-labs/sqlbuild/compare/v0.155.0...v0.156.0) (2026-10-12)
 
 
