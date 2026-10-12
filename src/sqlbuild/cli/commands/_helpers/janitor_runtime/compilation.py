@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
@@ -15,7 +16,6 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
@@ -35,7 +35,7 @@ def compile_janitor_project(*, invocation: JanitorInvocation) -> JanitorCompileC
     )
     with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
         status.on_progress("Compiling project...")
-        project: CompiledProjectView = compile_project(
+        project: CompiledProjectView = build_compiled_project(
             discovered_inputs=invocation.discovered_inputs,
             adapter=adapter_context.adapter,
             selected_target=(

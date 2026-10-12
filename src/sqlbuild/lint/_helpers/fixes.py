@@ -8,11 +8,11 @@ from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from sqlbuild._native import build_compiled_project
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.lint._helpers.native_format import with_newline_style
 from sqlbuild.lint.constants import (
     LINT_ENGINE_NATIVE,
@@ -217,7 +217,9 @@ class _FixSession:
 
         if self.baseline is None:
             try:
-                self.baseline = compile_project(discovered_inputs=self.inputs, adapter=self.adapter)
+                self.baseline = build_compiled_project(
+                    discovered_inputs=self.inputs, adapter=self.adapter
+                )
             except CompileInputError:
                 return {}
         return compiled_relation_keys(self.baseline)
@@ -228,12 +230,14 @@ class _FixSession:
         verdict: FixVerdict | None
         try:
             if self.baseline is None:
-                self.baseline = compile_project(discovered_inputs=self.inputs, adapter=self.adapter)
+                self.baseline = build_compiled_project(
+                    discovered_inputs=self.inputs, adapter=self.adapter
+                )
             if self.baseline_facts is None:
                 self.baseline_facts = compile_facts(
                     project=self.baseline, project_dir=self.project_dir
                 )
-            compiled: CompiledProjectView = compile_project(
+            compiled: CompiledProjectView = build_compiled_project(
                 discovered_inputs=_updated_inputs(inputs=self.inputs, files=files),
                 adapter=self.adapter,
             )

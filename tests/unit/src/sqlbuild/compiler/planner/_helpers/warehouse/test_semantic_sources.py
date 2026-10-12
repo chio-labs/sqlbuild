@@ -10,12 +10,11 @@ from unittest.mock import Mock
 import duckdb
 import pytest
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import build_compiled_project, discover_project_inputs
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.planner._helpers.warehouse.semantic_sources import (
     _list_source_candidates,
     get_semantic_source_columns,
@@ -59,7 +58,7 @@ def test_given_multiple_missing_source_schemas_when_inspecting_then_metadata_is_
         },
     )
     adapter: DuckDbAdapter = DuckDbAdapter()
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path), adapter=adapter
     )
     listings: Mock = Mock(wraps=adapter.list_relations)
@@ -116,7 +115,7 @@ def test_given_source_schema_case_differs_when_inspecting_then_columns_are_found
         },
     )
     adapter: DuckDbAdapter = DuckDbAdapter()
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=tmp_path), adapter=adapter
     )
     with duckdb.connect() as connection:

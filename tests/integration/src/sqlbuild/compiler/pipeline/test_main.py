@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import build_project_graph, discover_project_inputs
+from sqlbuild._native import build_compiled_project, build_project_graph, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
@@ -15,7 +15,6 @@ from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.rule_engine.exceptions import RulesError
@@ -98,7 +97,7 @@ def test_given_typed_cte_chain_when_compiling_contract_then_type_remains_proven(
     write_repo_files(tmp_path, test_case.project_files)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=DuckDbAdapter(),
     )
@@ -566,7 +565,7 @@ def test_given_snowflake_local_override_without_target_namespace_when_compiling_
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 
     with pytest.raises(ValueError, match=test_case.expected_error_fragment):
-        compile_project(
+        build_compiled_project(
             discovered_inputs=discovered_inputs,
             adapter=SnowflakeAdapter(),
             no_sql_validation=True,
@@ -609,7 +608,7 @@ def test_given_snowflake_local_target_namespace_when_compiling_then_targets_reso
     write_repo_files(tmp_path, test_case.project_files)
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=SnowflakeAdapter(),
         no_sql_validation=True,

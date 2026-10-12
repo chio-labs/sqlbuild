@@ -8,7 +8,12 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import build_compile_inputs, discover_project_inputs, run_compile_pipeline
+from sqlbuild._native import (
+    build_compile_inputs,
+    build_compiled_project,
+    discover_project_inputs,
+    run_compile_pipeline,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
@@ -20,7 +25,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import AuditInput, CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.manifest.main.build import build_manifest
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.sql_values.types import CollectionRendering
@@ -172,7 +176,7 @@ def compile_reshaped_star_model(
         f"MODEL (description 'Test model reshaped_orders.', materialized table);\n{query_sql}",
         encoding="utf-8",
     )
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=DuckDbAdapter(),
     )
@@ -237,7 +241,7 @@ def postgres_semantic_shapes(
         path: Path = project_dir / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         _ = path.write_text(contents, encoding="utf-8")
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discover_project_inputs(project_dir=project_dir),
         adapter=PostgresAdapter(),
         resolved_connection=_OFFLINE_POSTGRES_CONNECTION,

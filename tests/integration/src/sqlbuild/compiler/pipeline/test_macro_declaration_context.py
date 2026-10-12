@@ -5,14 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import build_compiled_project, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     GroupedDeclarationCompileTestCase,
@@ -72,7 +71,7 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
     adapter: BaseAdapter = test_case.adapter_factory()
 
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    project: CompiledProjectView = compile_project(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=adapter,
     )

@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 134615
+remaining_lines = 134588
 
 [[stays]]
 path = "executor"
@@ -231,3 +231,11 @@ note = "Best-effort cost refresh keeps its existing catch-all; discovery is now 
 [[handled_native_errors]]
 location = "compiler/scopes/main/load_or_build_scope_index.py::load_or_build_scope_index"
 note = "Project input errors from discovery and compile-input stages select the tolerant scope index as before; a native compiler failure is a RuntimeError and is not caught."
+
+[[handled_native_errors]]
+location = "lint/_helpers/fixes.py::_FixSession._relation_keys"
+note = "A baseline that does not compile yields no relation keys, as before the compile entry became native; no Python implementation runs instead."
+
+[[handled_native_errors]]
+location = "lint/_helpers/fixes.py::_FixSession._verdict"
+note = "A candidate fix whose project fails to compile is unverified and not applied, as before the compile entry became native; no Python implementation runs instead."
