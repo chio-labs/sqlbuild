@@ -12,7 +12,7 @@ from tempfile import gettempdir
 from types import MappingProxyType
 from typing import Any, cast
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import discover_project_inputs, run_compile_pipeline
 from sqlbuild.adapter.contract.models import RelationInfo, RelationReadProbe
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import (
@@ -47,7 +47,6 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
-from sqlbuild.compiler.pipeline.main.compile import run_compile_pipeline
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.identity.functions import (
     build_compiled_function_fingerprint_sql,

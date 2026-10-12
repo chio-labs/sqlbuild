@@ -72,7 +72,12 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
-from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.pipeline.models import (
+    CompiledProjectPhaseResult,
+    CompilePipelineOptions,
+    CompilePipelineResult,
+    ProjectGraph,
+)
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
@@ -104,6 +109,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -986,6 +992,20 @@ def build_discovered_project_inputs(
     sql_analysis_enabled: bool,
     extract_output_column_locations: bool = True,
 ) -> DiscoveredProjectInputs: ...
+def compile_project_phase(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    options: CompilePipelineOptions | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> CompiledProjectPhaseResult: ...
+def run_compile_pipeline(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    options: CompilePipelineOptions | None = None,
+    hooks: ConnectionHooks | None = None,
+) -> CompilePipelineResult: ...
 def build_compile_inputs(
     *,
     discovered_inputs: DiscoveredProjectInputs,

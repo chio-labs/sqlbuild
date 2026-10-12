@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import Mock
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.pipeline.main import _compile_phase as compile_phase_module
-from sqlbuild.compiler.pipeline.main import compile as compile_module
+from sqlbuild.compiler.pipeline._helpers import analysis_selection
+from sqlbuild.compiler.pipeline.main import _plan_result as plan_result
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
+from sqlbuild.rule_engine.main import load_config, run_rules
 from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
+from sqlbuild.runtime.contracts.main import open_connection
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.compiler.pipeline.main._test_types import PipelinePhaseTimingTestCase
 
@@ -59,20 +63,19 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
         project=project, plan_output=PlanOutput()
     )
     adapter: Mock = Mock()
-    monkeypatch.setattr(compile_module.time, "monotonic", monotonic)
-    monkeypatch.setattr(compile_phase_module.time, "monotonic", monotonic)
-    monkeypatch.setattr(compile_phase_module, "build_compiled_project", Mock(return_value=project))
+    monkeypatch.setattr(time, "monotonic", monotonic)
+    monkeypatch.setattr(_native, "build_compiled_project", Mock(return_value=project))
     monkeypatch.setattr(
-        compile_phase_module, "resolve_compile_analysis_selection", Mock(return_value=None)
+        analysis_selection, "resolve_compile_analysis_selection", Mock(return_value=None)
     )
-    monkeypatch.setattr(compile_module, "open_connection_with_hooks", Mock(return_value=object()))
-    monkeypatch.setattr(compile_module, "_build_result", Mock(return_value=pipeline_result))
-    monkeypatch.setattr(compile_module, "load_rules_config", Mock(return_value=RulesConfig()))
+    monkeypatch.setattr(open_connection, "open_connection_with_hooks", Mock(return_value=object()))
+    monkeypatch.setattr(plan_result, "build_pipeline_result", Mock(return_value=pipeline_result))
+    monkeypatch.setattr(load_config, "load_rules_config", Mock(return_value=RulesConfig()))
     monkeypatch.setattr(
-        compile_module, "resolve_configured_rule_selection", Mock(return_value=None)
+        analysis_selection, "resolve_configured_rule_selection", Mock(return_value=None)
     )
     monkeypatch.setattr(
-        compile_module,
+        run_rules,
         "run_rules",
         Mock(
             return_value=RulesRunResult(findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0)
@@ -86,7 +89,7 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     }
 
     with tracker.scope():
-        result: CompilePipelineResult = compile_module.run_compile_pipeline(
+        result: CompilePipelineResult = _native.run_compile_pipeline(
             discovered_inputs=Mock(),
             adapter=adapter,
             options=CompilePipelineOptions(connection_config={}),

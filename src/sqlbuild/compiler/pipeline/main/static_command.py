@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import compile_project_phase
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -12,7 +13,6 @@ from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     resolve_deferred_target_config,
 )
-from sqlbuild.compiler.pipeline.main._compile_phase import compile_project_phase
 from sqlbuild.compiler.pipeline.models import (
     CompiledProjectPhaseResult,
     CompilePipelineOptions,

@@ -15,11 +15,11 @@ from sqlbuild.compiler.compile.models import InferredColumn
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.pipeline.main import compile as compile_pipeline
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import ModelPlanEntry
 from sqlbuild.rule_engine.exceptions import RulesError
+from sqlbuild.runtime.contracts.main import open_connection as compile_pipeline
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
     CompileProgressIntegrationTestCase,

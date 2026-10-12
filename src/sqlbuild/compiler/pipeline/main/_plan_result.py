@@ -1,11 +1,8 @@
-"""Full compile-and-plan pipeline producing CLI artifacts."""
+"""Plan a compiled project over an open warehouse connection."""
 
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
-from dataclasses import replace
-from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -16,10 +13,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline._helpers.analysis_selection import (
-    apply_unit_test_selectors,
-    resolve_configured_rule_selection,
-)
 from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     build_deferred_locations,
     gather_deferred_relations,
@@ -31,12 +24,9 @@ from sqlbuild.compiler.pipeline._helpers.python_plan_entries import (
     build_python_run_plan_outputs,
     python_read_source_names_for,
 )
-from sqlbuild.compiler.pipeline.main._compile_phase import compile_project_phase
 from sqlbuild.compiler.pipeline.models import (
-    CompiledProjectPhaseResult,
     CompilePipelineOptions,
     CompilePipelineResult,
-    ProjectGraph,
     PythonRunPlanOutputs,
 )
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan
@@ -51,116 +41,10 @@ from sqlbuild.compiler.python_nodes.main._run_selection import (
     resolve_python_sql_run_selection_from_inputs,
 )
 from sqlbuild.compiler.python_nodes.models import PythonSqlRunSelection
-from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
-from sqlbuild.rule_engine.exceptions import RulesError
-from sqlbuild.rule_engine.main.load_config import load_rules_config
-from sqlbuild.rule_engine.main.render_result import format_result
-from sqlbuild.rule_engine.main.render_rules_progress import format_rules_progress
-from sqlbuild.rule_engine.main.run_rules import run_rules
-from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult, RulesRunResult
-from sqlbuild.runtime.contracts.main.open_connection import open_connection_with_hooks
-from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import TargetConfig
 
 
-def run_compile_pipeline(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    options: CompilePipelineOptions | None = None,
-    hooks: ConnectionHooks | None = None,
-) -> CompilePipelineResult:
-    """Run compile inputs, assembly, planning, and manifest generation."""
-
-    resolved_options: CompilePipelineOptions = apply_unit_test_selectors(
-        options=options, discovered_inputs=discovered_inputs
-    )
-    resolved_hooks: ConnectionHooks = hooks if hooks is not None else ConnectionHooks()
-    on_progress: Callable[[str], None] | None = resolved_hooks.on_progress
-    compile_result: CompiledProjectPhaseResult = compile_project_phase(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        options=resolved_options,
-        on_progress=on_progress,
-    )
-    effective_config: dict[str, object] = compile_result.connection_config
-    project: CompiledProjectView = compile_result.project
-    compile_seconds: float = compile_result.compile_seconds
-    graph: ProjectGraph = build_project_graph_impl(project)
-    project_dir: Path | None = discovered_inputs.project_dir
-    if project_dir is None:
-        raise RulesError("compiler rules require a resolved project directory")
-    rules_config: RulesConfig = load_rules_config(project_dir=project_dir)
-    if resolved_options.no_cache:
-        rules_config = replace(rules_config, cache=RulesCacheConfig(enabled=False))
-    if on_progress is not None:
-        on_progress("Evaluating configured rules...")
-    rules_start: float = time.monotonic()
-    rules_result: RulesRunResult = run_rules(
-        graph=graph,
-        discovered_inputs=discovered_inputs,
-        config=rules_config,
-        project_dir=project_dir,
-        dialect=adapter.sql_analysis_dialect() or "generic",
-        selected_keys=resolve_configured_rule_selection(
-            options=resolved_options,
-            discovered_inputs=discovered_inputs,
-            project=project,
-        ),
-        no_sql_analysis=resolved_options.no_sql_validation,
-    )
-    if on_progress is not None:
-        on_progress(
-            format_rules_progress(
-                elapsed_seconds=time.monotonic() - rules_start,
-                result=rules_result,
-                note_skipped_rules=True,
-            )
-        )
-    if rules_result.findings:
-        rendered: str = format_result(
-            result=RulesResult(
-                findings=rules_result.findings,
-                evaluated_models=rules_result.evaluated_models,
-                unevaluated_resources=rules_result.unevaluated_resources,
-                cache_hits=rules_result.cache_hits,
-                cache_misses=rules_result.cache_misses,
-            ),
-            json_output=False,
-        )
-        raise RulesError(f"configured compiler rules failed:\n{rendered}")
-    timing_tracker: BuildPhaseTimingTracker | None = BuildPhaseTimingTracker.current()
-    planning_start: float = time.monotonic()
-    connection: Any | None = None
-    result: CompilePipelineResult | None = None
-    try:
-        connection = open_connection_with_hooks(
-            adapter=adapter,
-            connection_config=effective_config,
-            hooks=resolved_hooks,
-        )
-        result = _build_result(
-            discovered_inputs=discovered_inputs,
-            adapter=adapter,
-            connection=connection,
-            project=project,
-            options=resolved_options,
-            on_progress=on_progress,
-        )
-    finally:
-        if connection is not None:
-            adapter.close(connection)
-        planning_seconds: float = time.monotonic() - planning_start
-        if timing_tracker is not None:
-            timing_tracker.planning_seconds = planning_seconds
-    return replace(
-        result,
-        compile_seconds=compile_seconds,
-        planning_seconds=planning_seconds,
-    )
-
-
-def _build_result(
+def build_pipeline_result(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     adapter: BaseAdapter,
@@ -169,6 +53,8 @@ def _build_result(
     options: CompilePipelineOptions,
     on_progress: Callable[[str], None] | None = None,
 ) -> CompilePipelineResult:
+    """Plan the compiled project over an open connection and attach Python node plans."""
+
     select: tuple[str, ...] = options.select
     exclude: tuple[str, ...] = options.exclude
     deferred_locations: dict[str, CompiledRelationLocation] | None = None
