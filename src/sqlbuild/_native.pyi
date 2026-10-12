@@ -41,6 +41,7 @@ from sqlbuild.compiler.compile.models import (
     LoadedMacro,
     MacroContext,
     StaticMacroExport,
+    StaticMacroFault,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -67,6 +68,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestFile,
     EnumDeclaration,
     ModelSchemaDeclaration,
+    TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.pipeline.models import ProjectGraph
@@ -1076,6 +1078,12 @@ def open_native_scope_index(
     static_macros: tuple[StaticMacroExport, ...],
     /,
 ) -> NativeScopeIndex: ...
+def scope_tolerant_index(
+    index: ScopeIndex,
+    snapshot: TolerantScopeDiscovery,
+    faults: tuple[tuple[StaticMacroFault, ...], tuple[tuple[Path, str], ...]],
+    /,
+) -> ScopeIndex: ...
 def scope_placement_validated_index(
     index: ScopeIndex,
     enforce_placement: bool,
