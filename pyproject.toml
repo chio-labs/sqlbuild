@@ -7,7 +7,7 @@ build-backend = "maturin"
 
 [project]
 name = "sqlbuild"
-version = "0.156.0"
+version = "0.156.1"
 description = "Typed, test-first SQL pipelines with local E2E testing"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
@@ -19,7 +19,7 @@ dependencies = [
   "pydantic-settings>=2,<3",
   "PyYAML>=6.0.2",
   "rich>=15.0.0",
-  "sqlbuild-cli==0.156.0",  # x-release-please-version
+  "sqlbuild-cli==0.156.1",  # x-release-please-version
 ]
 
 [project.optional-dependencies]
