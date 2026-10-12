@@ -49,6 +49,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     OversizedDurationTestCase,
     StartCursorConfigTestCase,
     TargetExecutionLimitsConfigTestCase,
+    TooDeepProjectConnectionTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     write_project_config_test_files,
@@ -2114,14 +2115,16 @@ def test_given_nested_connection_within_the_limit_when_loading_project_then_nest
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeepProjectConnectionTestCase(
-            description="arrays nested three hundred deep", depth=300, expected_depth=0
+        TooDeepProjectConnectionTestCase(
+            description="arrays nested three hundred deep",
+            depth=300,
+            expected_error_fragment="max recursion depth",
         ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_connection_nested_past_the_limit_when_loading_project_then_error_is_raised(
-    test_case: DeepProjectConnectionTestCase,
+    test_case: TooDeepProjectConnectionTestCase,
     tmp_path: Path,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
@@ -2130,8 +2133,10 @@ def test_given_connection_nested_past_the_limit_when_loading_project_then_error_
         encoding="utf-8",
     )
 
-    with pytest.raises(ProjectConfigError, match="max recursion depth"):
+    with pytest.raises(ProjectConfigError) as raised:
         load_project_config(project_dir=tmp_path)
+
+    assert test_case.expected_error_fragment in str(raised.value)
 
 
 @pytest.mark.parametrize(
