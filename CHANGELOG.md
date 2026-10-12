@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.156.0](https://github.com/chio-labs/sqlbuild/compare/v0.155.0...v0.156.0) (2026-10-12)
+
+
+### Features
+
+* complete native compiler ownership and CLI replay ([#1082](https://github.com/chio-labs/sqlbuild/issues/1082)) ([076d64f](https://github.com/chio-labs/sqlbuild/commit/076d64fd3bfec6ec057bfd3ce573b64eda6ad3a0))
+
+
+### Bug Fixes
+
+* install companion CLI wheel in release checks ([#1084](https://github.com/chio-labs/sqlbuild/issues/1084)) ([d9d3477](https://github.com/chio-labs/sqlbuild/commit/d9d34774136f0a77bc30965d7e2e68457b538431))
+* simplify native TOML config reading and restore error columns ([#1085](https://github.com/chio-labs/sqlbuild/issues/1085)) ([00a533d](https://github.com/chio-labs/sqlbuild/commit/00a533d222c9c6eed0661813bb3619a0068eec45))
+
 ## [0.155.0](https://github.com/chio-labs/sqlbuild/compare/v0.154.0...v0.155.0) (2026-10-10)
 
 
