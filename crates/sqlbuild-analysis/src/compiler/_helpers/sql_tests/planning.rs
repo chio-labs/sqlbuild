@@ -1,7 +1,7 @@
 //! Coarse project-level planning for SQL-native test artifacts.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::Instant;
 
 use polyglot_sql::{Dialect, Expression};
@@ -91,6 +91,8 @@ struct ProjectContext {
     patterns: SqlTestPatterns,
     render_dialect: Arc<Dialect>,
     rejects_nested_with: bool,
+    /// Each model query's reserved CTE name, since every test reading the model checks it.
+    reserved_ctes: Arc<Mutex<HashMap<String, Option<String>>>>,
 }
 
 #[derive(Clone)]
@@ -542,6 +544,7 @@ pub(crate) fn plan_batch(request: SqlTestPlanBatch) -> Result<SqlTestPlanBatchOu
         patterns: SqlTestPatterns::new(request.lexical_syntax)?,
         render_dialect,
         rejects_nested_with,
+        reserved_ctes: Arc::new(Mutex::new(HashMap::new())),
     };
     let workers = request.workers.clamp(1, MAX_WORKERS);
     let pool = rayon::ThreadPoolBuilder::new()
@@ -695,6 +698,27 @@ fn plan_direct_test(
     })
 }
 
+impl ProjectContext {
+    fn reserved_cte_name(&self, query_sql: &str) -> Option<String> {
+        let cached: Option<Option<String>> = self
+            .reserved_ctes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(query_sql)
+            .cloned();
+        if let Some(name) = cached {
+            return name;
+        }
+        let name: Option<String> =
+            reserved_cte_name(query_sql, SliceDialect::new(Some(&self.dialect)));
+        self.reserved_ctes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(query_sql.to_owned(), name.clone());
+        name
+    }
+}
+
 /// The first CTE a model defines under a name reserved for generated test-query CTEs.
 fn reserved_cte_name(query_sql: &str, dialect: SliceDialect) -> Option<String> {
     let reserved = MOCK_CTE_PREFIXES.iter().copied().chain([
@@ -705,7 +729,6 @@ fn reserved_cte_name(query_sql: &str, dialect: SliceDialect) -> Option<String> {
     ]);
     let prefixes: Vec<&str> = reserved.collect();
     defined_cte_keys(query_sql, dialect)
-        .unwrap_or_default()
         .into_iter()
         .find(|key| is_reserved_cte_key(key, &prefixes))
 }
@@ -769,8 +792,7 @@ fn plan_model_test(
             .model_query_overrides
             .get(model_name)
             .unwrap_or(&model.query_sql);
-        if let Some(name) = reserved_cte_name(query_sql, SliceDialect::new(Some(&context.dialect)))
-        {
+        if let Some(name) = context.reserved_cte_name(query_sql) {
             return Err(compile_error(&format!(
                 "SQL test '{}' reads model '{model_name}', which defines CTE '{name}'; names \
                  starting with a SQLBuild test prefix such as __helper__ or __ref__ are reserved \

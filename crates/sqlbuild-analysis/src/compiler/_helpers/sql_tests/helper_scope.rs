@@ -228,7 +228,7 @@ impl ScopeGraph {
         request: &ScopeRequest<'_>,
     ) -> Result<(), String> {
         for (label, sql) in readers {
-            for key in defined_cte_keys(sql, request.slice_dialect).unwrap_or_default() {
+            for key in defined_cte_keys(sql, request.slice_dialect) {
                 if let Some(index) = self.helper_indexes.get(&key) {
                     return Err(compile_error(&format!(
                         "SQL test '{}' defines CTE '{}' inside CTE '{label}', which redefines \

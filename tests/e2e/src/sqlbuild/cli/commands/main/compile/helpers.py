@@ -4989,3 +4989,14 @@ def write_counted_error_project(*, project_dir: Path, files: dict[str, str]) -> 
     shutil.rmtree(project_dir, ignore_errors=True)
     for relative_path, contents in {**FAILURE_BASE_FILES, **files}.items():
         write_project_file(project_dir, relative_path, contents)
+
+
+def compile_with_binding_error(project_dir: Path) -> dict[str, Any]:
+    """Compile with the analysis cache and return the JSON payload of the expected failure."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "compile", "--json")
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    payload: dict[str, Any] = json.loads(result.stdout)
+    return payload

@@ -468,6 +468,13 @@ class TypeFindingLocationCase:
 
 
 @dataclass(frozen=True)
+class CachedBindingDiagnosticCase:
+    description: str
+    query_sql: str
+    expected_location: tuple[str, int, int]
+
+
+@dataclass(frozen=True)
 class RequireSqlAnalysisCase:
     description: str
     repo_files: tuple[tuple[str, str], ...]

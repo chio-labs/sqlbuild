@@ -307,6 +307,8 @@ pub struct AnalysisSession {
     pub(crate) available_nullability: ShapeTable,
     pub(crate) complete_shapes: ShapeTable,
     pub(crate) outcomes: Vec<Option<ModelOutcome>>,
+    /// Cache hits whose cleaned SQL is normalized only when a later step reads it.
+    pub(crate) pending_cleaned: Vec<bool>,
     pub(crate) phase: Phase,
     pub(crate) publications: Shapes,
     pub(crate) failures: Vec<String>,
