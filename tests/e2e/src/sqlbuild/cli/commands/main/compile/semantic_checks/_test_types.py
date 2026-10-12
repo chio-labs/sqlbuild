@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class NativeSemanticChecksCliTestCase:
-    """Every engine compiling one failing project through the CLI with identical diagnostics."""
+    """One failing project compiled through the CLI and its diagnostics."""
 
     description: str
     files: dict[str, str]

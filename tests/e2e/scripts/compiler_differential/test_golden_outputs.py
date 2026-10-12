@@ -1,4 +1,4 @@
-"""Goldens recorded from the oracle pass an unchanged check and pinpoint any edited output."""
+"""Recorded goldens pass an unchanged check and pinpoint any edited output."""
 
 from __future__ import annotations
 
@@ -15,31 +15,24 @@ from tests.e2e.scripts.compiler_differential.helpers import (
 
 _CASE: str = "engine-error-week-date-cursor-start"
 _PROJECT: str = "orders"
-_ENGINE_ARGUMENTS: tuple[str, ...] = (
-    "--engines",
-    "native",
-    "native-preview",
-    "--expect",
-    "failure:P001",
-)
+_EXPECT_ARGUMENTS: tuple[str, ...] = ("--expect", "failure:P001")
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         GoldenOutputTestCase(
-            description="unchanged_goldens_pass_for_both_engines",
+            description="unchanged_goldens_pass",
             golden_edit=("", ""),
             expected_exit_code=0,
-            expected_lines=("Compiler differential passed: 1 projects identical",),
+            expected_lines=("Compiler differential passed: 1 projects as expected",),
         ),
         GoldenOutputTestCase(
-            description="edited_error_text_fails_for_both_engines",
+            description="edited_error_text_fails",
             golden_edit=("hour must be in 0..23", "hour must be in 1..24"),
             expected_exit_code=1,
             expected_lines=(
-                "  - golden (native) at /commands/0/diagnostics/0/message",
-                "  - golden (native-preview) at /commands/0/diagnostics/0/message",
+                "  - golden at /commands/0/diagnostics/0/message",
                 "Compiler differential FAILED: 1 of 1 projects differ",
             ),
         ),
@@ -55,7 +48,7 @@ def test_given_recorded_goldens_when_checking_then_only_edited_outputs_differ(
         harness_arguments(
             work_dir=tmp_path / "record",
             project=project,
-            extra=(*_ENGINE_ARGUMENTS, "--goldens", "update", "--golden-dir", str(golden_dir)),
+            extra=(*_EXPECT_ARGUMENTS, "--goldens", "update", "--golden-dir", str(golden_dir)),
         )
     )
     golden: Path = golden_dir / "project" / f"{_PROJECT}.json"
@@ -68,7 +61,7 @@ def test_given_recorded_goldens_when_checking_then_only_edited_outputs_differ(
         harness_arguments(
             work_dir=tmp_path / "check",
             project=project,
-            extra=(*_ENGINE_ARGUMENTS, "--goldens", "check", "--golden-dir", str(golden_dir)),
+            extra=(*_EXPECT_ARGUMENTS, "--goldens", "check", "--golden-dir", str(golden_dir)),
         )
     )
 

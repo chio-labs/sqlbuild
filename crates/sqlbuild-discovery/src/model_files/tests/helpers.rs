@@ -2,7 +2,6 @@ use crate::model_files::main::parse_model_text::parse_model_text;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use crate::model_files::tests::test_types::{Located, ModelSummary, Span};
 use crate::models::LineColumnSpan;
-use sqlbuild_core::text::main::python_text::python_text;
 
 const FILE_PATH: &str = "/project/models/orders.sql";
 
@@ -24,7 +23,6 @@ fn options() -> ModelFileOptions {
         removed_keys: vec!["run_despite_unchanged".to_owned()],
         extract_implicit_alias_columns: true,
         extract_output_column_locations: true,
-        python: python_text((3, 12), "15.0.0").expect("Python 3.12 is supported"),
     }
 }
 

@@ -106,7 +106,7 @@ pub(crate) const MIN_SHARED_MEMBERS: usize = 2;
 /// Text whose presence sends Python's qualifier search to its token scanner.
 pub(crate) const QUALIFIED_SCAN_TOKENS: [&str; 5] = ["\"", "`", "[", "--", "/*"];
 /// Python's `str.isspace` over ASCII.
-pub(crate) const PYTHON_ASCII_SPACES: &str = " \t\n\r\x0b\x0c\x1c\x1d\x1e\x1f";
+pub(crate) const ASCII_SPACES: &str = " \t\n\r\x0b\x0c";
 /// Stack for one standalone CTE fact recovery, whose AST walks recurse with query depth.
 pub(crate) const CTE_FACT_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 /// The wheel's node kinds Python's CTE fact recovery reads.

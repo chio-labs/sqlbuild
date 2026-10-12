@@ -47,8 +47,6 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticSeverity,
     FunctionLanguage,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.sql_test_model_chain import (
     sql_test_model_chain_names_by_key,
@@ -205,15 +203,9 @@ def _publish_staged(*, staged_dir: Path, target_dir: Path, expected_files: froze
         )
     if kind == _PUBLISHED_TREE:
         COMPILE_ARTIFACT_WRITES.moved_tree(source=staged_dir, destination=compiled_dir)
-        report_native_answer(
-            stage=NativeStage.COMPILE_OUTPUTS, kind="published_files", units=len(expected_files)
-        )
         return
     for source, path in published:
         COMPILE_ARTIFACT_WRITES.moved(source=source, destination=path)
-    report_native_answer(
-        stage=NativeStage.COMPILE_OUTPUTS, kind="published_files", units=len(published)
-    )
     if existed:
         with record_compile_timing("stale_traversal_ms"):
             _remove_stale_compiled_files(
@@ -607,11 +599,8 @@ def _write_sql(*, path: Path, sql: str, batch: NativeArtifactBatch) -> None:
 
 
 def _remove_stale_compiled_files(*, target_dir: Path, managed_paths: set[Path]) -> None:
-    removed: int = _native.remove_stale_artifacts(
+    _ = _native.remove_stale_artifacts(
         target_dir / _COMPILED_DIR, [os.fspath(path) for path in managed_paths]
-    )
-    report_native_answer(
-        stage=NativeStage.COMPILE_OUTPUTS, kind="stale_files_removed", units=removed
     )
 
 

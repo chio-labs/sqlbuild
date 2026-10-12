@@ -3,9 +3,6 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_core::panics::main::native_failure::native_failure;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_text::python_text;
 use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names as scan_names;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
@@ -16,8 +13,6 @@ use crate::bindings::_helpers::render::macro_call_memo::MacroCallMemo;
 use crate::bindings::_helpers::render::macro_call_rows::{SiteRow, SpanRow, site_row, span_row};
 use crate::bindings::types::CompilerDetach;
 
-const MACRO_SCAN_CONTEXT: &str = "native macro call scan";
-
 /// `(call start or None, call name or None, message)` of the error Python's scan raises.
 type FailureRow = (Option<usize>, Option<String>, &'static str);
 
@@ -26,17 +21,9 @@ type FailureRow = (Option<usize>, Option<String>, &'static str);
 pub(crate) fn scan_macro_call_sites(
     py: Python<'_>,
     sql: &str,
-    python_version: (u8, u8),
-    unicode_version: &str,
 ) -> PyResult<(Vec<SiteRow>, Option<FailureRow>)> {
-    let python = python_text(python_version, unicode_version).ok_or_else(|| {
-        compiler_error(native_failure(
-            MACRO_SCAN_CONTEXT,
-            "the macro bridge runs on a Python whose text tables are not compiled in",
-        ))
-    })?;
     let MacroCallScan { sites, failure } = py
-        .compiler_detach(|| Ok(scan_sites(python, sql)))
+        .compiler_detach(|| Ok(scan_sites(sql)))
         .map_err(compiler_error)?;
     Ok((
         sites.into_iter().map(site_row).collect(),
@@ -57,9 +44,8 @@ pub(crate) fn macro_call_names(
     sql: &str,
     nested: bool,
 ) -> PyResult<(Option<Vec<String>>, Option<&'static str>)> {
-    let python = active_python_text();
     let names = py
-        .compiler_detach(|| Ok(scan_names(python, sql, nested)))
+        .compiler_detach(|| Ok(scan_names(sql, nested)))
         .map_err(compiler_error)?;
     Ok(match names {
         Ok(names) => (Some(names), None),

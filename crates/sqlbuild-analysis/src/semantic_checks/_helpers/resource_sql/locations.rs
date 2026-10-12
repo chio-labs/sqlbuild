@@ -1,8 +1,6 @@
 //! Python's `_location` and the authored text a resource SQL finding quotes.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_ignorecase_key::python_ignorecase_key;
-use sqlbuild_core::text::main::python_splitlines::python_splitlines;
+use sqlbuild_core::text::main::ignorecase_key::ignorecase_key;
 
 use crate::semantic_checks::_helpers::resource_sql::resources::{ResourceSql, find_code_points};
 use crate::semantic_checks::_helpers::resource_sql::scanning::word_at;
@@ -58,8 +56,7 @@ fn quoted_names(message: &str) -> Vec<&str> {
 
 /// `(?<!\w)identifier(?!\w)`, ignoring case, in `text[start..]`: its code-point offset.
 fn word_offset(text: &[char], start: usize, identifier: &[char]) -> Option<usize> {
-    let python = active_python_text();
-    let key = |character: &char| python_ignorecase_key(python, *character);
+    let key = |character: &char| ignorecase_key(*character);
     let keys: Vec<char> = identifier.iter().map(key).collect();
     let last = text.len().checked_sub(identifier.len())?;
     (start..=last).find(|position| {
@@ -139,10 +136,9 @@ pub(crate) fn location(
     Ok((line, column, None, None))
 }
 
-/// Code-point starts of each `splitlines()` line of `text`.
+/// Code-point starts of each line of `text`.
 fn line_starts(text: &str) -> Vec<usize> {
-    python_splitlines(text)
-        .into_iter()
+    text.lines()
         .map(|line| {
             text[..line.as_ptr() as usize - text.as_ptr() as usize]
                 .chars()
@@ -180,7 +176,7 @@ pub(crate) fn text_from(resource: &ResourceSql, span: Span) -> String {
 
 /// Python's `_line_at`: the authored line of a span, or empty text.
 pub(crate) fn line_at(resource: &ResourceSql, span: Span) -> String {
-    let lines = python_splitlines(&resource.contents);
+    let lines: Vec<&str> = resource.contents.lines().collect();
     if span.0 < 1 {
         return String::new();
     }

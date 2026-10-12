@@ -64,8 +64,6 @@ from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_VALUE,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.main.macro_store_module_paths import (
     macro_store_module_paths,
 )
@@ -115,16 +113,7 @@ def native_attempt(
     )
     if outcome is CompileReuseOutcome.BYPASS:
         return base
-    report_native_answer(
-        stage=NativeStage.COMPILE_OUTPUTS,
-        kind="reuse_snapshot_paths",
-        units=attempt.snapshot_paths(),
-    )
-    report_native_answer(
-        stage=NativeStage.COMPILE_OUTPUTS,
-        kind="reuse_digested_files",
-        units=attempt.digested_files(),
-    )
+    _LOGGER.debug("Compile reuse check digested %d project files", attempt.digested_files())
     missed: CompileReuseAttempt = replace(
         base,
         outcome=CompileReuseOutcome.MISS,
@@ -160,7 +149,6 @@ def _replayed(
         print(line, file=sys.stderr)
     _ = sys.stdout.write(stdout)
     sys.stdout.flush()
-    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="reuse_replays")
     return replace(missed, outcome=CompileReuseOutcome.HIT, check_ms=check_ms, exit_code=exit_code)
 
 
@@ -253,11 +241,7 @@ def _record(
             "rules": reuse_rules(),
         }
     )
-    report_native_answer(
-        stage=NativeStage.COMPILE_OUTPUTS, kind="reuse_digested_files", units=digested_files
-    )
-    if outcome == _STORED:
-        report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="reuse_records")
+    _LOGGER.debug("Compile reuse record digested %d project files", digested_files)
     _finish_notice(
         started=notice_started,
         message=REUSE_STORE_SKIPPED_MESSAGE if outcome == _SKIPPED else REUSE_STORE_DONE_MESSAGE,

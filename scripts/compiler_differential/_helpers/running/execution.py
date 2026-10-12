@@ -1,4 +1,4 @@
-"""Copy a project and run every differential command under one engine in fresh processes."""
+"""Copy a project and run every corpus command in fresh processes."""
 
 from __future__ import annotations
 
@@ -7,20 +7,15 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.running.records import read_analysis_records
 from scripts.compiler_differential.constants import (
-    ANALYSIS_RECORD_ENV_VAR,
     CAPTURES_DIRECTORY,
     COMMAND_TIMEOUT_SECONDS,
     COMPILED_DIRECTORY,
-    DAG_FILE,
-    ENGINE_ENV_VAR,
     EXCLUDED_ENVIRONMENT_KEYS,
     EXCLUDED_ENVIRONMENT_PREFIX,
     GENERATOR_ENVIRONMENT,
     MANIFEST_FILE,
     PROJECT_DIRECTORY,
-    RECORDS_DIRECTORY,
     SQB_ENTRY,
     STAGE_CAPTURE_ENV_VAR,
 )
@@ -29,7 +24,7 @@ from scripts.compiler_differential.models import (
     CorpusProject,
     DifferentialCommand,
     DifferentialOptions,
-    EngineRun,
+    ProjectRun,
 )
 
 _COPY_IGNORED: tuple[str, ...] = (
@@ -42,16 +37,10 @@ _COPY_IGNORED: tuple[str, ...] = (
 )
 
 
-def run_engine(
-    *,
-    project: CorpusProject,
-    source_dir: Path,
-    case_dir: Path,
-    engine: str,
-    side: str,
-    options: DifferentialOptions,
-) -> EngineRun:
-    """Run the project's commands under one engine in a fresh copy, keeping captures on disk."""
+def run_project(
+    *, project: CorpusProject, source_dir: Path, case_dir: Path, options: DifferentialOptions
+) -> ProjectRun:
+    """Run the project's commands in a fresh copy, keeping captures on disk."""
 
     workspace: Path = case_dir / PROJECT_DIRECTORY
     shutil.rmtree(workspace, ignore_errors=True)
@@ -61,51 +50,34 @@ def run_engine(
         if project.project_subdirectory is None
         else workspace / project.project_subdirectory
     )
-    capture_root: Path = case_dir / f"{side}-{engine}-{CAPTURES_DIRECTORY}"
+    capture_root: Path = case_dir / CAPTURES_DIRECTORY
     shutil.rmtree(capture_root, ignore_errors=True)
-    record_root: Path = case_dir / f"{side}-{engine}-{RECORDS_DIRECTORY}"
-    shutil.rmtree(record_root, ignore_errors=True)
     outcomes: list[CommandOutcome] = []
     for index, command in enumerate(project.commands):
         capture_dir: Path | None = (
             capture_root / f"{index}-{command.label}" if options.stage_captures else None
-        )
-        record_dir: Path | None = (
-            record_root / f"{index}-{command.label}" if options.analysis_records else None
         )
         outcomes.append(
             _run_command(
                 command=command,
                 project_dir=project_dir,
                 environment={
-                    **_command_environment(
-                        engine=engine,
-                        options=options,
-                        capture_dir=capture_dir,
-                        record_dir=record_dir,
-                    ),
+                    **_command_environment(capture_dir=capture_dir),
                     **dict(command.environment),
                 },
                 python=options.python,
             )
         )
-    run: EngineRun = EngineRun(
-        engine=engine,
+    return ProjectRun(
         outcomes=tuple(outcomes),
         compiled=_compiled_tree(project_dir / COMPILED_DIRECTORY),
         manifest=_optional_text(project_dir / MANIFEST_FILE),
-        dag=_optional_text(project_dir / DAG_FILE),
         captures=_captures(capture_root),
-        records=read_analysis_records(record_root) if options.analysis_records else None,
     )
-    retained: Path = case_dir / engine
-    shutil.rmtree(retained, ignore_errors=True)
-    _ = workspace.rename(retained)
-    return run
 
 
 def harness_environment() -> dict[str, str]:
-    """Return this environment without engine, capture or dbt settings, plus generator vars."""
+    """Return this environment without capture or dbt settings, plus generator vars."""
 
     return {
         **{
@@ -118,22 +90,10 @@ def harness_environment() -> dict[str, str]:
     }
 
 
-def _command_environment(
-    *,
-    engine: str,
-    options: DifferentialOptions,
-    capture_dir: Path | None,
-    record_dir: Path | None,
-) -> dict[str, str]:
-    environment: dict[str, str] = {
-        **harness_environment(),
-        ENGINE_ENV_VAR: engine,
-        **options.engine_environment.get(engine, {}),
-    }
+def _command_environment(*, capture_dir: Path | None) -> dict[str, str]:
+    environment: dict[str, str] = harness_environment()
     if capture_dir is not None:
         environment[STAGE_CAPTURE_ENV_VAR] = str(capture_dir)
-    if record_dir is not None:
-        environment[ANALYSIS_RECORD_ENV_VAR] = str(record_dir)
     return environment
 
 

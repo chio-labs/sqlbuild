@@ -1,4 +1,4 @@
-//! Python's resource assembly facts for one project, computed natively for the preview engine.
+//! Resource assembly facts for one project, computed natively.
 
 use std::collections::HashMap;
 

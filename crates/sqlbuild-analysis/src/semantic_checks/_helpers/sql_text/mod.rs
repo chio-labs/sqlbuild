@@ -1,3 +1,3 @@
 pub(crate) mod parsed_sql;
-pub(crate) mod python_regex;
+pub(crate) mod patterns;
 pub(crate) mod text;

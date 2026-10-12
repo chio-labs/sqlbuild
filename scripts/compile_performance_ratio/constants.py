@@ -36,7 +36,6 @@ BASE_GENERATOR_ENTRY: str = (
     "kind=sys.argv[1], project_dir=Path(sys.argv[2]), models=int(sys.argv[3]))"
 )
 PYTHONPATH_KEY: str = "PYTHONPATH"
-COMPILER_ENGINE_KEY: str = "SQLBUILD_COMPILER_ENGINE"
 PHASE_NOISE_FLOOR_MS: float = 50.0
 COMPILE_TIMINGS_KEY: str = "compile_timings"
 COMPILED_DIRECTORY: str = "target/compiled"

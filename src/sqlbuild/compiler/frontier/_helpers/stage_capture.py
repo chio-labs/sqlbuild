@@ -1,4 +1,4 @@
-"""Dump frontier objects as canonical JSON so two engines can be compared stage by stage."""
+"""Dump frontier objects as canonical JSON so compiles can be compared stage by stage."""
 
 import io
 import os

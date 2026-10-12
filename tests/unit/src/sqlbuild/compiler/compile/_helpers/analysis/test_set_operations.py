@@ -19,17 +19,12 @@ _PIECES: tuple[str, ...] = (
     " except ",
     "_union",
     "unions",
-    "\u0131ntersect",
-    "\u0130NTERSECT",
-    "INTER\u017fECT",
     "EXCEPT\u00df",
     "\u0149union",
     "\u00e9except",
     "union\u0301",
     " customers ",
     "\n",
-    "\u0130",
-    "\u017f",
     "-- intersect\n",
 )
 
@@ -38,7 +33,7 @@ _PIECES: tuple[str, ...] = (
     "test_case",
     [
         SetOperationSearchTestCase(
-            description="keywords in every case, with folding and boundary characters",
+            description="keywords in every case, with non-ASCII boundary characters",
             seed=20261010,
             count=4000,
             expected_minimum_matches=1000,

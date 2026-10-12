@@ -1,7 +1,6 @@
 //! `Duration.parse`: `^(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$`.
 
-use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::is_decimal_digit::is_decimal_digit;
 
 use crate::model_validation::constants::{DAY_UNIT_INDEX, MAX_DURATION_AMOUNT};
 use crate::model_validation::errors::DurationNumberError;
@@ -37,12 +36,9 @@ impl Duration {
 }
 
 /// `Duration.parse(text)`, `None` when it does not parse, or why the duration is rejected.
-pub(crate) fn parse_duration(
-    python: PythonText,
-    text: &str,
-) -> Result<Option<Duration>, DurationNumberError> {
+pub(crate) fn parse_duration(text: &str) -> Result<Option<Duration>, DurationNumberError> {
     let text: &str = text.strip_suffix('\n').unwrap_or(text);
-    let is_digit = |character: char| is_python_decimal(python, character);
+    let is_digit = |character: char| is_decimal_digit(character);
     let mut amounts = [0_u128; 6];
     let mut next_unit = 0;
     let mut rest = text;

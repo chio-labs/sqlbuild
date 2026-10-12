@@ -1,7 +1,5 @@
 //! Python's `@[A-Za-z_][A-Za-z0-9_]*\s*\(` search over one string.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 /// Whether `text` holds a macro call opening; `\s` is Python's Unicode whitespace class.
 pub(crate) fn macro_call(text: &str) -> bool {
     let bytes = text.as_bytes();
@@ -25,5 +23,6 @@ pub(crate) fn macro_call(text: &str) -> bool {
 
 /// Whether the first non-whitespace character of `rest` is `(`.
 fn opens_call(rest: &str) -> bool {
-    rest.trim_start_matches(is_python_space).starts_with('(')
+    rest.trim_start_matches(char::is_whitespace)
+        .starts_with('(')
 }

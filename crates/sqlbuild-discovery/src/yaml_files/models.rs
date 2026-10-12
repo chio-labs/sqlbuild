@@ -3,7 +3,7 @@
 use crate::models::{DiscoveryFailure, ReadFailure};
 use sqlbuild_config::models::ConfigValue;
 
-/// One YAML file read and loaded as YAML 1.1 `safe_load`, or why it could not be.
+/// One YAML file read and loaded as YAML 1.2, or why it could not be.
 #[derive(Clone, Debug, PartialEq)]
 pub enum YamlFileOutcome {
     Loaded {

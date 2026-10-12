@@ -1,13 +1,12 @@
 //! Python's `_text_position`: the first whole-word occurrence of a name, in code points.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 use crate::semantic_checks::models::SemanticFailure;
 
 /// Python's `\w` for a character next to a match.
 fn word_character(character: char) -> Result<bool, SemanticFailure> {
-    Ok(is_python_word(active_python_text(), character))
+    Ok(is_word_char(character))
 }
 
 /// Python's `text.find(needle)` in code points, or None.

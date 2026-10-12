@@ -1,30 +1,24 @@
 //! Python string and integer semantics the type normalization relies on.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::python_decimal_value::python_decimal_value;
-use sqlbuild_core::text::main::python_strip::python_strip;
-use sqlbuild_core::text::main::python_upper::python_upper;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::decimal_digit_value::decimal_digit_value;
 
 use crate::type_system::models::PythonInteger;
 
 /// Python's `text.upper()` under the running Python's Unicode version.
 pub(crate) fn upper(text: &str) -> String {
-    python_upper(active_python_text(), text)
+    str::to_uppercase(text)
 }
 
 /// Python's `re.sub(r"\s+", "", text)`.
 pub(crate) fn remove_python_space(text: &str) -> String {
     text.chars()
-        .filter(|character| !is_python_space(*character))
+        .filter(|character| !char::is_whitespace(*character))
         .collect()
 }
 
 /// Python's base-10 `int(text)`, None where Python raises `ValueError`.
 pub(crate) fn python_int(text: &str) -> Option<PythonInteger> {
-    let python: PythonText = active_python_text();
-    let stripped: &str = python_strip(text);
+    let stripped: &str = str::trim(text);
     let (negative, digits) = match stripped.chars().next() {
         Some('-') => (true, &stripped[1..]),
         Some('+') => (false, &stripped[1..]),
@@ -40,7 +34,7 @@ pub(crate) fn python_int(text: &str) -> Option<PythonInteger> {
             previous_underscore = true;
             continue;
         }
-        let digit: u32 = python_decimal_value(python, character)?;
+        let digit: u32 = decimal_digit_value(character)?;
         value.push(char::from_digit(digit, 10)?);
         previous_underscore = false;
     }

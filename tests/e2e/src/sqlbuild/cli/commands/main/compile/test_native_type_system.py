@@ -1,4 +1,4 @@
-"""Both engines report contract types and failures alike and compare types natively."""
+"""Contract types and failures are reported, with types compared natively."""
 
 from __future__ import annotations
 
@@ -10,10 +10,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeTypeSystemTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
-    CompileReuseRun,
-    NativeTypeAnswers,
-    report_without_engine,
-    type_system_engine_compile,
+    type_system_compile,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
 
@@ -145,32 +142,23 @@ GROUP BY customer_id
     ],
     ids=lambda case: case.description,
 )
-def test_given_contract_types_when_compiling_with_each_engine_then_reports_are_expected(
+def test_given_contract_types_when_compiling_then_reports_are_expected(
     test_case: NativeTypeSystemTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    outcomes: dict[str, tuple[CompileReuseRun, NativeTypeAnswers]] = {
-        engine: type_system_engine_compile(
-            project_dir=prepare_inline_project(
-                tmp_path=tmp_path, project_name=engine, repo_files=test_case.project_files
-            ),
-            engine=engine,
-            monkeypatch=monkeypatch,
-            capsys=capsys,
-        )
-        for engine in ("native", "native-preview")
-    }
-    native_run, native_answers = outcomes["native"]
-    preview_run, preview_answers = outcomes["native-preview"]
+    run, answers = type_system_compile(
+        project_dir=prepare_inline_project(
+            tmp_path=tmp_path, project_name="orders", repo_files=test_case.project_files
+        ),
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+    )
 
-    assert (native_run.returncode, preview_run.returncode) == (test_case.expected_exit_code,) * 2
-    assert test_case.expected_report_text in native_run.report
-    assert report_without_engine(preview_run) == report_without_engine(native_run)
-    assert preview_run.compiled == native_run.compiled
-    assert native_answers == preview_answers
-    assert native_answers.typed_comparisons >= 1
+    assert run.returncode == test_case.expected_exit_code
+    assert test_case.expected_report_text in run.report
+    assert answers.typed_comparisons >= 1
 
 
 if __name__ == "__main__":

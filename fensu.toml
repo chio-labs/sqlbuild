@@ -291,11 +291,6 @@ path = "crates/sqlbuild-python/src/bindings/models.rs"
 reason = "CompactAnalysisJob holds a prepared analysis closure, which cannot implement Debug; other models derive it."
 
 [[targets.rust.rule_exceptions]]
-rule = "FPRSS130"
-path = "crates/sqlbuild-core/src/text/_helpers/active_text.rs"
-reason = "One interpreter per process: the extension module records the running Python's string semantics once at import, and every native text helper reads that single value."
-
-[[targets.rust.rule_exceptions]]
 rule = "FPRSS201"
 path = "crates/sqlbuild-analysis/src/assembly/analysis_session/models.rs"
 reason = "NullabilityCallback implements Debug manually because it holds the adapter's nullability rule closure, which cannot implement Debug; other models derive it."

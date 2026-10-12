@@ -38,11 +38,6 @@ pub(super) fn analysing_settings(
     }
 }
 
-pub(super) fn python_312() -> sqlbuild_core::text::models::PythonText {
-    sqlbuild_core::text::main::python_text::python_text((3, 12), "15.0.0")
-        .expect("Python 3.12 is supported")
-}
-
 pub(super) fn legacy_schema_files(
     files: &[(&str, &[&str])],
 ) -> Vec<crate::compiled_project::models::LegacySchemaFile> {

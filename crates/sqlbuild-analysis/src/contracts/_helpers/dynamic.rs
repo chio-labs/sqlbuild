@@ -2,9 +2,6 @@
 
 use std::collections::HashMap;
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-
 use crate::contracts::_helpers::type_comparison::{TypeComparer, TypeComparison};
 use crate::contracts::constants::{
     DYNAMIC_FAMILY_TYPE_MISMATCH_HELP, DYNAMIC_FAMILY_UNKNOWN_TYPE_HELP,
@@ -100,7 +97,7 @@ fn families_by_casefold(
 
 /// Python's `str.casefold`.
 fn casefold(name: &str) -> String {
-    python_casefold(active_python_text(), name)
+    str::to_lowercase(name)
 }
 
 fn family_diagnostic(

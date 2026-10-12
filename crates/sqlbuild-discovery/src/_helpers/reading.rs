@@ -3,7 +3,7 @@
 use crate::models::{DiscoveryFailure, FailureKind, ProjectRoot, ReadFailure};
 use crate::tree::models::ProjectTree;
 use sqlbuild_core::text::errors::TextDecodeError;
-use sqlbuild_core::text::main::decode_python_text::decode_python_text;
+use sqlbuild_core::text::main::decode_text::decode_text;
 use std::path::Path;
 
 /// The high half of a `FACILITY_WIN32` HRESULT, which wraps a Win32 error in its low half.
@@ -14,7 +14,7 @@ const HRESULT_CODE_MASK: i32 = 0xFFFF;
 /// The decoded text, or the error Python's read raises.
 pub(crate) fn read_authored_text(path: &Path) -> Result<String, ReadFailure> {
     let bytes: Vec<u8> = std::fs::read(path).map_err(|error| read_failure(&error))?;
-    decode_python_text(&bytes).map_err(|error| decode_failure(bytes, error))
+    decode_text(&bytes).map_err(|error| decode_failure(bytes, error))
 }
 
 /// `D016` for a file discovery reads whose path holds a name that is not valid UTF-8.

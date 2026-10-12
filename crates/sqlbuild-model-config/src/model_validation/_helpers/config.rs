@@ -3,9 +3,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-use sqlbuild_core::text::models::PythonText;
-
 use crate::errors::ConfigError;
 use crate::model_validation::_helpers::durations::{Duration, parse_duration};
 use crate::model_validation::constants::SETTING_SNIPPET_INDENT;
@@ -18,24 +15,18 @@ pub(crate) struct ConfigView<'a, N> {
     values: HashMap<String, N>,
     /// The model name every validator message starts with.
     pub(crate) model_name: &'a str,
-    /// The Python string semantics the validators follow.
-    pub(crate) python: PythonText,
 }
 
 impl<'a, N: AuthoredNode> ConfigView<'a, N> {
     /// View the entries of one config mapping for the model `model_name`.
-    pub(crate) fn new(entries: Vec<(N, N)>, model_name: &'a str, python: PythonText) -> Self {
+    pub(crate) fn new(entries: Vec<(N, N)>, model_name: &'a str) -> Self {
         let mut values: HashMap<String, N> = HashMap::with_capacity(entries.len());
         for (key, value) in entries {
             if let Some(text) = key.text() {
                 values.insert(text, value);
             }
         }
-        Self {
-            values,
-            model_name,
-            python,
-        }
+        Self { values, model_name }
     }
 
     /// Return `values[key]` when the key is present, even when its value is `None`.
@@ -100,7 +91,7 @@ impl<'a, N: AuthoredNode> ConfigView<'a, N> {
         text: &str,
         example: &str,
     ) -> Result<Option<Duration>, ValidationStop> {
-        parse_duration(self.python, text).map_err(|error| {
+        parse_duration(text).map_err(|error| {
             let (problem, purpose) = match error {
                 DurationNumberError::NonAsciiDigits => (
                     "uses digits outside ASCII",
@@ -184,7 +175,7 @@ pub(crate) fn has_config_value<N: AuthoredNode>(value: Option<&N>) -> bool {
 
 /// Check that a value is a string whose Python `strip()` is non-empty.
 pub(crate) fn non_blank_string_check<N: AuthoredNode>(value: &N) -> bool {
-    text_if_string(value).is_some_and(|text| !python_strip(&text).is_empty())
+    text_if_string(value).is_some_and(|text| !str::trim(&text).is_empty())
 }
 
 /// Return whether two names are equal under Python's `str.lower()`.

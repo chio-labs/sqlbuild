@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import sys
 import time
-import unicodedata
 
 import pytest
 
@@ -42,9 +40,7 @@ def test_given_deeply_nested_calls_when_scanning_then_the_native_scan_returns_pr
     sql: str = "@m(" * test_case.depth + "x" + ")" * test_case.depth
     started: float = time.perf_counter()
 
-    rows, failure = _native.scan_macro_call_sites(
-        sql, (sys.version_info[0], sys.version_info[1]), unicodedata.unidata_version
-    )
+    rows, failure = _native.scan_macro_call_sites(sql)
 
     assert time.perf_counter() - started < test_case.expected_max_seconds
     assert (tuple(tuple(row[4] or ()) for row in rows), failure) == (

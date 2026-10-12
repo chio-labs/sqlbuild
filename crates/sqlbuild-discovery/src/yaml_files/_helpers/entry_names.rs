@@ -2,8 +2,6 @@
 
 use std::collections::BTreeSet;
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 const ENTRY_DASH: char = '-';
 const NAME_KEY: &[char] = &['n', 'a', 'm', 'e', ':'];
 const COMMENT_START: char = '#';
@@ -11,7 +9,7 @@ const QUOTES: [Option<char>; 3] = [None, Some('\''), Some('"')];
 
 fn leading_whitespace(characters: &[char], start: usize) -> usize {
     let mut position: usize = start;
-    while position < characters.len() && is_python_space(characters[position]) {
+    while position < characters.len() && char::is_whitespace(characters[position]) {
         position += 1;
     }
     position
@@ -36,7 +34,7 @@ fn closing_positions(value: &[char]) -> BTreeSet<usize> {
     while let Some(end) = tail {
         let mut position: usize = end;
         positions.insert(position);
-        while position > 0 && is_python_space(value[position - 1]) {
+        while position > 0 && char::is_whitespace(value[position - 1]) {
             position -= 1;
             positions.insert(position);
         }

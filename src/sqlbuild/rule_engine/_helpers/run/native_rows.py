@@ -21,8 +21,6 @@ from sqlbuild.compiler.compiled_project.main.compiled_project_facts import compi
 from sqlbuild.compiler.compiled_project.main.declaration_rows import declaration_rows
 from sqlbuild.compiler.compiled_project.main.plain_typed_value import plain_typed_value
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.scopes.main.scope_metadata import scope_metadata_projection
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine.constants import (
@@ -90,8 +88,7 @@ def build_rules_request(
     }
     try:
         request: _native.NativeRulesRequest
-        counts: tuple[int, int, int]
-        request, counts = _native.build_rules_request(
+        request = _native.build_rules_request(
             project_rows,
             (compiled_project_facts(project), [model.name for model in project.models]),
             [_sql_test_row(test) for test in project.sql_tests],
@@ -99,8 +96,6 @@ def build_rules_request(
         )
     except (ValueError, TypeError) as error:
         raise RulesError(str(error)) from error
-    for kind, units in zip(("models", "sql_tests", "sql_scenarios"), counts, strict=True):
-        report_native_answer(stage=NativeStage.RULES_REQUEST, kind=kind, units=units)
     return request
 
 

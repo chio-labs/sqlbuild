@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
-from sqlbuild.compiler.frontier.constants import TARGET_DIRECTORY_NAME
-from sqlbuild.compiler.frontier.main.engine_cache_name import engine_cache_name
+from sqlbuild.compiler.frontier.constants import (
+    NATIVE_CACHE_NAMESPACE_SUFFIX,
+    TARGET_DIRECTORY_NAME,
+)
 from sqlbuild.rule_engine.constants import (
     RULES_BULK_CACHE_DIRECTORY_NAME,
     RULES_CACHE_DIRECTORY_NAME,
@@ -16,7 +18,7 @@ def rules_bulk_cache_path(*, project_dir: Path, file_name: str) -> Path:
     return (
         project_dir
         / TARGET_DIRECTORY_NAME
-        / engine_cache_name(RULES_CACHE_DIRECTORY_NAME)
+        / f"{RULES_CACHE_DIRECTORY_NAME}{NATIVE_CACHE_NAMESPACE_SUFFIX}"
         / RULES_BULK_CACHE_DIRECTORY_NAME
         / file_name
     )

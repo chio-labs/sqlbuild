@@ -51,10 +51,9 @@ class DeepTypeTestCase:
 
 @dataclass(frozen=True)
 class PublicNativeTypeTestCase:
-    """Types normalized through the public entry point under each engine."""
+    """Types normalized through the public entry point."""
 
     description: str
-    engine: str
     dialect: str
     type_strings: tuple[str, ...]
     expected_native_calls: tuple[tuple[str, str], ...]

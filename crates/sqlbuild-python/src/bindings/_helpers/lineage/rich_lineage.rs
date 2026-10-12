@@ -1,4 +1,4 @@
-//! Rich column lineage for the preview compiler engine.
+//! Rich column lineage.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};

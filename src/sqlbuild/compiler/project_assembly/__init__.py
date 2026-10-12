@@ -1,1 +1,1 @@
-"""Native compiled project assembly for the preview compiler engine."""
+"""Native compiled project assembly."""

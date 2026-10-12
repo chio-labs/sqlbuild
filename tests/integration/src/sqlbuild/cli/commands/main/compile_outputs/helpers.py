@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import sys
-from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple, cast
@@ -12,9 +11,6 @@ from typing import Any, NamedTuple, cast
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.cli.commands._helpers.compile import output as output_module
-from sqlbuild.cli.commands._helpers.compile import target_writer as target_writer_module
-from sqlbuild.cli.commands.classes import native_artifact_batch as artifact_batch_module
 from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse._helpers import native_reuse as native_reuse_module
@@ -26,7 +22,6 @@ from sqlbuild.cli.compile_reuse.constants import (
 )
 from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.frontier.types import NativeStage
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
 OUTPUT_MODEL_HEADER: str = (
@@ -45,7 +40,6 @@ OUTPUT_PROJECT_FILES: dict[str, str] = {
 }
 EDITED_MODEL: str = "models/orders_north.sql"
 DELETED_MODEL: str = "models/orders_west.sql"
-COMPILE_OUTPUTS_PREFIX: str = f"{NativeStage.COMPILE_OUTPUTS.value}:"
 TOUCH_BACK_NS: int = 3_600_000_000_000
 BLOCKED_ARTIFACT: str = "target/compiled/models/orders_north.sql"
 HELPER_MODULE_DIRECTORY: str = "site_packages"
@@ -101,25 +95,12 @@ def write_files(*, project_dir: Path, files: dict[str, str]) -> None:
         _ = path.write_text(contents, encoding="utf-8")
 
 
-def record_output_work(*, monkeypatch: pytest.MonkeyPatch, reuse_disabled: str) -> Counter[str]:
-    """Count native compile output work, staging small projects and settling file stamps."""
+def prepare_output_compiles(*, monkeypatch: pytest.MonkeyPatch, reuse_disabled: str) -> None:
+    """Stage small projects natively and settle file stamps."""
 
-    counts: Counter[str] = Counter()
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, reuse_disabled)
     monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
     monkeypatch.setattr(native_reuse_module, "RACY_WINDOW_NS", 0)
-
-    def counted(*, stage: NativeStage, kind: str, units: int = 1) -> None:
-        counts[f"{stage.value}:{kind}"] += units
-
-    for module in (
-        output_module,
-        target_writer_module,
-        artifact_batch_module,
-        native_reuse_module,
-    ):
-        monkeypatch.setattr(module, "report_native_answer", counted)
-    return counts
 
 
 def main_compile_json(*, project_dir: Path) -> int:
@@ -144,8 +125,7 @@ def compile_outputs(
 
     exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json", *args])
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
-    for key in ("compile_timings", "compiler_engine"):
-        _ = payload.pop(key, None)
+    _ = payload.pop("compile_timings", None)
     return exit_code, payload, compile_files(project_dir=project_dir)
 
 
@@ -157,7 +137,6 @@ def reuse_compile(
     exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json"])
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
     timings: dict[str, int] = cast(dict[str, int], payload.pop("compile_timings"))
-    _ = payload.pop("compiler_engine", None)
     return timings["project_reuse_hits"] == 1, (
         exit_code,
         payload,
@@ -318,15 +297,6 @@ def comparable(outcome: CompileOutcome) -> tuple[int, dict[str, Any], dict[str, 
     return exit_code, {**payload, "artifacts": sorted(artifacts)}, files
 
 
-def work_delta(*, before: Counter[str], after: Counter[str]) -> dict[str, int]:
-    """Native compile output work counted between two snapshots, by kind."""
-
-    return {
-        kind.removeprefix(COMPILE_OUTPUTS_PREFIX): units
-        for kind, units in sorted((after - before).items())
-    }
-
-
 def staging_directories(target_dir: Path) -> list[str]:
     """Staging directories left beside the compiled directory."""
 
@@ -389,12 +359,6 @@ _SEQUENCE_ACTIONS: dict[str, Callable[..., None]] = {
     "edit": _edit,
     "delete": _delete,
 }
-
-
-def published_files(counts: Counter[str]) -> int:
-    """Staged artifacts published natively."""
-
-    return counts[f"{COMPILE_OUTPUTS_PREFIX}published_files"]
 
 
 def artifacts_except(*, files: dict[str, bytes], name: str) -> dict[str, bytes]:

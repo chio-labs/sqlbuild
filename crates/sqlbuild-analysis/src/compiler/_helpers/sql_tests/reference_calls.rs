@@ -1,7 +1,6 @@
 //! Reference calls in direct-logic helper and expected bodies, read as Python's reference scan.
 
 use crate::constants::{DBT_REF_REFERENCE_KIND, TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE};
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_sqltext::sql_scan::main::dialect_matching_paren::dialect_matching_paren;
 use sqlbuild_sqltext::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use sqlbuild_sqltext::sql_scan::models::{LexicalSyntax, Unclosed};
@@ -107,7 +106,7 @@ fn quoted_name_end(arguments: &str, start: usize) -> Option<usize> {
 fn python_space_end(sql: &str, start: usize) -> usize {
     let mut index = start;
     while let Some(character) = sql.get(index..).and_then(|rest| rest.chars().next()) {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         index += character.len_utf8();

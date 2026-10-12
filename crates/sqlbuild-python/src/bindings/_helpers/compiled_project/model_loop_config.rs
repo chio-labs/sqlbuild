@@ -1,6 +1,6 @@
 //! A model's effective config: its path default, the native build, and reuse across models.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -55,12 +55,11 @@ struct ReusedConfig<'py> {
     fields: Bound<'py, PyDict>,
 }
 
-/// `_ReusableModelConfigCache` and the builds the loop ran, for one compile.
+/// `_ReusableModelConfigCache` for one compile.
 #[derive(Default)]
 pub(crate) struct ModelConfigs<'py> {
     layers: RefCell<HashMap<Option<String>, InheritedLayer<'py>>>,
     reused: RefCell<HashMap<Option<String>, ReusedConfig<'py>>>,
-    builds: Cell<usize>,
 }
 
 impl<'py> ModelConfigs<'py> {
@@ -92,7 +91,6 @@ impl<'py> ModelConfigs<'py> {
             return view(classes, &values, &cached.fields);
         }
         let built: ConfigBuild<'py> = builder.built(py, header, matched.as_deref(), name)?;
-        self.builds.set(self.builds.get() + 1);
         let built: BuiltConfig<'py> = match built {
             ConfigBuild::Built(built) => built,
             ConfigBuild::Rejected(error) => {
@@ -104,11 +102,6 @@ impl<'py> ModelConfigs<'py> {
             self.remember(&matched, metadata, &built.values, &fields)?;
         }
         view(classes, &built.values, &fields)
-    }
-
-    /// The number of native config builds the loop ran.
-    pub(crate) fn builds(&self) -> usize {
-        self.builds.get()
     }
 
     /// `_is_reusable`: no templates in the inherited values or the target namespace, nothing mutable.

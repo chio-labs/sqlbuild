@@ -14,7 +14,6 @@ from sqlbuild.adapter.type_system._helpers.type_normalization import (
     normalize_type as cached_normalize_type,
 )
 from sqlbuild.adapter.type_system.main.normalize_type import normalize_type
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.adapter.type_system._test_types import (
     DeepTypeTestCase,
     GeneratedTypeTestCase,
@@ -276,19 +275,7 @@ def test_given_deeply_nested_type_when_normalizing_then_python_shape_is_returned
     "test_case",
     [
         PublicNativeTypeTestCase(
-            description="the public entry point asks native first under the preview engine",
-            engine="native-preview",
-            dialect="snowflake",
-            type_strings=("NUMBER(38, 0)", "VARCHAR", "TIMESTAMP_NTZ(9)"),
-            expected_native_calls=(
-                ("NUMBER(38, 0)", "snowflake"),
-                ("VARCHAR", "snowflake"),
-                ("TIMESTAMP_NTZ(9)", "snowflake"),
-            ),
-        ),
-        PublicNativeTypeTestCase(
-            description="the public entry point asks native first under the default engine",
-            engine="native",
+            description="the public entry point asks native first",
             dialect="snowflake",
             type_strings=("NUMBER(38, 0)", "VARCHAR", "TIMESTAMP_NTZ(9)"),
             expected_native_calls=(
@@ -300,7 +287,7 @@ def test_given_deeply_nested_type_when_normalizing_then_python_shape_is_returned
     ],
     ids=lambda case: case.description,
 )
-def test_given_native_engine_when_normalizing_publicly_then_native_answers(
+def test_given_type_strings_when_normalizing_publicly_then_native_answers(
     test_case: PublicNativeTypeTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[tuple[str, str]] = []
@@ -312,7 +299,6 @@ def test_given_native_engine_when_normalizing_publicly_then_native_answers(
         answers.append(native_normalize(type_sql, dialect))
         return answers[-1]
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine)
     monkeypatch.setattr(native_module, "normalize_type", spy)
     cached_normalize_type.cache_clear()
     normalized: list[NormalizedType] = [

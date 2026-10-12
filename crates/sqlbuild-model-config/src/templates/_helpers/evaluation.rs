@@ -7,7 +7,6 @@ use crate::templates::models::{
     ContextValue, Expression, Scalar, TemplateFailure, TemplateOptions,
 };
 use crate::templates::types::TemplateHost;
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 const TRUE_LITERAL: &str = "true";
 const FALSE_LITERAL: &str = "false";
@@ -146,7 +145,7 @@ fn truthiness<H: TemplateHost>(host: &H, value: &H::Value) -> Result<bool, Templ
         Scalar::Null => Ok(false),
         Scalar::Bool(flag) => Ok(flag),
         Scalar::Text(text) => {
-            let normalized = python_strip(&text).to_lowercase();
+            let normalized = str::trim(&text).to_lowercase();
             Ok(!FALSE_VALUES.contains(&normalized.as_str()))
         }
     }

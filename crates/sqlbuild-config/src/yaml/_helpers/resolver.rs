@@ -1,113 +1,66 @@
-//! PyYAML's YAML 1.1 implicit resolvers for plain scalars, without regular expressions.
+//! YAML 1.2 core schema tags for plain scalars, plus merge keys.
 
-use crate::yaml::_helpers::patterns::PatternCursor;
-
-/// A plain-scalar matcher, the tag it resolves to, and the first characters PyYAML tries it for.
-type ScalarResolver = (fn(&str) -> bool, &'static str, &'static str);
-use crate::yaml::_helpers::timestamps::matches_implicit_timestamp;
 use crate::yaml::constants::{
-    BOOL_TAG, BOOL_WORDS, FLOAT_TAG, INT_TAG, MERGE_KEY, MERGE_TAG, NULL_TAG, NULL_WORDS, STR_TAG,
-    TIMESTAMP_TAG, VALUE_KEY, VALUE_TAG,
+    BOOL_TAG, BOOL_WORDS, FLOAT_TAG, INFINITY_WORDS, INT_TAG, MERGE_KEY, MERGE_TAG, NAN_WORDS,
+    NULL_TAG, NULL_WORDS, STR_TAG,
 };
 
-fn is_digit(byte: u8) -> bool {
-    byte.is_ascii_digit()
+/// The text without one leading `+` or `-`.
+fn unsigned(text: &str) -> &str {
+    text.strip_prefix(['+', '-']).unwrap_or(text)
 }
 
-fn is_digit_or_underscore(byte: u8) -> bool {
-    byte.is_ascii_digit() || byte == b'_'
+fn is_digits(text: &str, radix: u32) -> bool {
+    !text.is_empty() && text.chars().all(|character| character.is_digit(radix))
 }
 
-fn matches_float(text: &str) -> bool {
-    let alternatives: [fn(&mut PatternCursor<'_>) -> bool; 5] = [
-        |cursor| {
-            cursor.sign()
-                && cursor.one(is_digit)
-                && cursor.many(is_digit_or_underscore)
-                && cursor.literal(".")
-                && cursor.many(is_digit_or_underscore)
-                && cursor.exponent()
-        },
-        |cursor| {
-            cursor.literal(".")
-                && cursor.one(is_digit)
-                && cursor.many(is_digit_or_underscore)
-                && cursor.exponent()
-        },
-        |cursor| {
-            cursor.sign()
-                && cursor.one(is_digit)
-                && cursor.many(is_digit_or_underscore)
-                && cursor.sexagesimal_groups()
-                && cursor.literal(".")
-                && cursor.many(is_digit_or_underscore)
-        },
-        |cursor| cursor.sign() && cursor.any_literal(&[".inf", ".Inf", ".INF"]),
-        |cursor| cursor.any_literal(&[".nan", ".NaN", ".NAN"]),
-    ];
-    PatternCursor::matches_any(text, &alternatives)
+/// `[-+]?[0-9]+`, `0o[0-7]+` or `0x[0-9a-fA-F]+`.
+pub(crate) fn is_int(text: &str) -> bool {
+    is_digits(unsigned(text), 10)
+        || text
+            .strip_prefix("0o")
+            .is_some_and(|digits| is_digits(digits, 8))
+        || text
+            .strip_prefix("0x")
+            .is_some_and(|digits| is_digits(digits, 16))
 }
 
-fn matches_int(text: &str) -> bool {
-    let alternatives: [fn(&mut PatternCursor<'_>) -> bool; 6] = [
-        |cursor| {
-            cursor.sign()
-                && cursor.literal("0b")
-                && cursor.some(|byte| matches!(byte, b'0' | b'1' | b'_'))
-        },
-        |cursor| {
-            cursor.sign()
-                && cursor.literal("0")
-                && cursor.some(|byte| matches!(byte, b'0'..=b'7' | b'_'))
-        },
-        |cursor| cursor.sign() && cursor.literal("0"),
-        |cursor| {
-            cursor.sign()
-                && cursor.one(|byte| matches!(byte, b'1'..=b'9'))
-                && cursor.many(is_digit_or_underscore)
-        },
-        |cursor| {
-            cursor.sign()
-                && cursor.literal("0x")
-                && cursor.some(|byte| byte.is_ascii_hexdigit() || byte == b'_')
-        },
-        |cursor| {
-            cursor.sign()
-                && cursor.one(|byte| matches!(byte, b'1'..=b'9'))
-                && cursor.many(is_digit_or_underscore)
-                && cursor.sexagesimal_groups()
-        },
-    ];
-    PatternCursor::matches_any(text, &alternatives)
+/// `[-+]?(\.[0-9]+|[0-9]+(\.[0-9]*)?)([eE][-+]?[0-9]+)?`, `[-+]?.inf` or `.nan`.
+fn is_float(text: &str) -> bool {
+    let number = unsigned(text);
+    if INFINITY_WORDS.contains(&number) || NAN_WORDS.contains(&text) {
+        return true;
+    }
+    let (mantissa, exponent) = number
+        .split_once(['e', 'E'])
+        .map_or((number, None), |(mantissa, exponent)| {
+            (mantissa, Some(exponent))
+        });
+    let mantissa_valid = match mantissa.split_once('.') {
+        Some((whole, fraction)) => {
+            (whole.is_empty() && is_digits(fraction, 10))
+                || (is_digits(whole, 10) && (fraction.is_empty() || is_digits(fraction, 10)))
+        }
+        None => is_digits(mantissa, 10),
+    };
+    mantissa_valid && exponent.is_none_or(|exponent| is_digits(unsigned(exponent), 10))
 }
 
-/// The tag PyYAML's `Resolver.resolve` gives a scalar; `implicit` is true for plain scalars.
+/// The tag of a scalar; `implicit` is true for plain scalars, which the core schema resolves.
 pub(crate) fn resolve_scalar(value: &str, implicit: bool) -> &'static str {
     if !implicit {
-        return STR_TAG;
+        STR_TAG
+    } else if NULL_WORDS.contains(&value) {
+        NULL_TAG
+    } else if BOOL_WORDS.iter().any(|(word, _)| *word == value) {
+        BOOL_TAG
+    } else if is_int(value) {
+        INT_TAG
+    } else if is_float(value) {
+        FLOAT_TAG
+    } else if value == MERGE_KEY {
+        MERGE_TAG
+    } else {
+        STR_TAG
     }
-    let candidate = value.strip_suffix('\n').unwrap_or(value);
-    let resolvers: [ScalarResolver; 7] = [
-        (
-            |text| BOOL_WORDS.iter().any(|(word, _)| *word == text),
-            BOOL_TAG,
-            "yYnNtTfFoO",
-        ),
-        (matches_float, FLOAT_TAG, "-+0123456789."),
-        (matches_int, INT_TAG, "-+0123456789"),
-        (|text| text == MERGE_KEY, MERGE_TAG, "<"),
-        (|text| NULL_WORDS.contains(&text), NULL_TAG, "~nN"),
-        (matches_implicit_timestamp, TIMESTAMP_TAG, "0123456789"),
-        (|text| text == VALUE_KEY, VALUE_TAG, "="),
-    ];
-    let first = value.chars().next();
-    resolvers
-        .iter()
-        .filter(|(_, tag, first_characters)| {
-            first.map_or(*tag == NULL_TAG, |character| {
-                first_characters.contains(character)
-            })
-        })
-        .find(|(matches, _, _)| matches(candidate))
-        .map_or(STR_TAG, |(_, tag, _)| tag)
 }

@@ -64,7 +64,7 @@ pub(crate) fn rejected_opt_out<'py>(
     {
         return Ok(OptOut::Accepted);
     }
-    let mut statements: Vec<String> = vec![analysis_sql(model_loop, context, model)?];
+    let mut statements: Vec<String> = vec![analysis_sql(context, model)?];
     for key in HOOK_KEYS {
         if let Some(hooks) = model.values.get_item(key)? {
             statements.extend(hook_statements(context, &hooks)?);
@@ -87,12 +87,11 @@ pub(crate) fn rejected_opt_out<'py>(
 
 /// `validate_sql_syntax`: raise the model's SQL syntax error before its references are scanned.
 pub(crate) fn reject_unparseable_query(
-    model_loop: &NativeModelLoop,
     context: &LoopContext<'_, '_>,
     model: &OptOutModel<'_, '_>,
 ) -> PyResult<()> {
     let check: SyntaxCheck = SyntaxCheck {
-        sql: analysis_sql(model_loop, context, model)?,
+        sql: analysis_sql(context, model)?,
         placeholders: placeholders(model.values)?,
     };
     let Some(error) = syntax_error_message(
@@ -119,22 +118,14 @@ pub(crate) fn reject_unparseable_query(
 }
 
 /// `cursor_intrinsics_analysis_sql`: the query with each cursor intrinsic as a typed literal.
-fn analysis_sql(
-    model_loop: &NativeModelLoop,
-    context: &LoopContext<'_, '_>,
-    model: &OptOutModel<'_, '_>,
-) -> PyResult<String> {
+fn analysis_sql(context: &LoopContext<'_, '_>, model: &OptOutModel<'_, '_>) -> PyResult<String> {
     let literal: &str = match model.values.get_item(CURSOR_TYPE_KEY)? {
         Some(value) if value.eq(INTEGER_CURSOR)? => INTEGER_LITERAL,
         _ => TIMESTAMP_LITERAL,
     };
-    let (analysis_sql, _) = replace_intrinsics(
-        model_loop.python,
-        model.query_sql,
-        INTRINSIC_CONTEXT,
-        |_| literal.to_owned(),
-    )
-    .map_err(|message| compile_error(context.classes, &message, None))?;
+    let (analysis_sql, _) =
+        replace_intrinsics(model.query_sql, INTRINSIC_CONTEXT, |_| literal.to_owned())
+            .map_err(|message| compile_error(context.classes, &message, None))?;
     Ok(analysis_sql)
 }
 
@@ -195,10 +186,7 @@ fn location<'py>(
         .iter()
         .any(|key| OPT_OUT_KEYS.contains(&key.as_str()))
     {
-        (
-            model.relative_path,
-            opt_out_position(model_loop.python, model.contents, 0),
-        )
+        (model.relative_path, opt_out_position(model.contents, 0))
     } else {
         let path_key: Option<String> = model.config.getattr(PATH_DEFAULT_ATTRIBUTE)?.extract()?;
         let config_path: &Path = Path::new(&model_loop.project_config_path);
@@ -216,10 +204,7 @@ fn location<'py>(
             .rsplit('/')
             .next()
             .unwrap_or_default();
-        (
-            file_name,
-            opt_out_position(model_loop.python, &config_text, start),
-        )
+        (file_name, opt_out_position(&config_text, start))
     };
     let path_class: Bound<'py, PyAny> = py.import(PATHLIB_MODULE)?.getattr(PATH_CLASS)?;
     let fields: Bound<'py, PyDict> = PyDict::new(py);

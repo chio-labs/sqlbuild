@@ -8,10 +8,7 @@ use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::_helpers::parsing::audit_text::{AuditText, chars, text};
 use crate::declaration_files::models::{AuditBlock, AuditFile, DeclarationFileOptions};
 use crate::models::FailureKind;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
-use sqlbuild_core::text::main::python_strip::python_strip;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const AUDIT_KEYWORD: &str = "AUDIT";
@@ -54,13 +51,12 @@ pub(crate) fn parse_audit_file(
     let content_chars: Vec<char> = chars(&contents);
     let content_text = AuditText {
         chars: &content_chars,
-        python: options.python,
     };
     let starts: Vec<usize> = content_text.top_level_keywords(AUDIT_KEYWORD);
     let leading: String = starts
         .first()
         .map_or_else(String::new, |first| text(&content_chars[..*first]));
-    if starts.is_empty() || !python_strip(&leading).is_empty() {
+    if starts.is_empty() || !str::trim(&leading).is_empty() {
         return Err(audit_failure(format!(
             "SQL audit '{file_path}' must start with an AUDIT() header as the first \
              non-whitespace content"
@@ -72,7 +68,7 @@ pub(crate) fn parse_audit_file(
             .get(offset + 1)
             .copied()
             .unwrap_or(content_chars.len());
-        let raw_block: String = python_strip(&text(&content_chars[*start..end])).to_owned();
+        let raw_block: String = str::trim(&text(&content_chars[*start..end])).to_owned();
         let block_line: usize = content_chars[..*start]
             .iter()
             .filter(|character| **character == '\n')
@@ -86,10 +82,7 @@ pub(crate) fn parse_audit_file(
 
 impl AuditParse<'_> {
     fn text<'a>(&self, chars: &'a [char]) -> AuditText<'a> {
-        AuditText {
-            chars,
-            python: self.options.python,
-        }
+        AuditText { chars }
     }
 
     fn block(
@@ -114,8 +107,7 @@ impl AuditParse<'_> {
                 .filter(|character| **character == '\n')
                 .count();
         let header_values: Vec<(String, AuthoredValue)> = self.header(&header, header_line)?;
-        let evaluation_mode: &'static str =
-            evaluation_mode(&header_values, file_path, self.options.python)?;
+        let evaluation_mode: &'static str = evaluation_mode(&header_values, file_path)?;
         let body: &[char] = &block_chars[body_start..];
         let mut measure_sql: Option<String> = None;
         let mut evidence_sql: Option<String> = None;
@@ -125,7 +117,7 @@ impl AuditParse<'_> {
             evidence_sql = evidence;
             measure
         } else {
-            let sql_body: String = python_cleandoc(self.options.python, &text(body));
+            let sql_body: String = python_cleandoc(&text(body));
             if sql_body.is_empty() {
                 return Err(audit_failure(format!(
                     "SQL audit '{file_path}' must define SQL after AUDIT(...)"
@@ -145,14 +137,7 @@ impl AuditParse<'_> {
             sql_body
         };
         let name: Option<String> = match get(&header_values, "name") {
-            Some(value) => python_str(
-                value,
-                WordRules {
-                    python: self.options.python,
-                    file_path,
-                },
-            )?
-            .map(str::to_owned),
+            Some(value) => python_str(value, WordRules { file_path })?.map(str::to_owned),
             None => None,
         };
         Ok(AuditBlock {
@@ -179,21 +164,13 @@ impl AuditParse<'_> {
                 statement: "AUDIT()",
                 file_path,
                 supported_keys: &self.options.audit_keys,
-                python: self.options.python,
             },
             header,
             header_line,
         )?;
         for key in STRING_KEYS {
             if let Some(value) = get(&values, key)
-                && non_empty_str(
-                    value,
-                    WordRules {
-                        python: self.options.python,
-                        file_path,
-                    },
-                )?
-                .is_none()
+                && non_empty_str(value, WordRules { file_path })?.is_none()
             {
                 return Err(audit_failure(format!(
                     "AUDIT() {key} in '{file_path}' must be a non-empty string"
@@ -202,13 +179,7 @@ impl AuditParse<'_> {
         }
         for key in BOOLEAN_KEYS {
             if let Some(value) = get(&values, key)
-                && python_type(
-                    value,
-                    WordRules {
-                        python: self.options.python,
-                        file_path,
-                    },
-                )? != PythonType::Bool
+                && python_type(value, WordRules { file_path })? != PythonType::Bool
             {
                 return Err(audit_failure(format!(
                     "AUDIT() {key} in '{file_path}' must be a boolean"
@@ -303,10 +274,7 @@ impl AuditParse<'_> {
         let close_index: usize = scan.matching_parenthesis(open_index).ok_or_else(|| {
             audit_failure(format!("Unclosed {keyword}(...) block in '{file_path}'"))
         })?;
-        let query: String = python_cleandoc(
-            self.options.python,
-            &text(&scan.chars[open_index + 1..close_index]),
-        );
+        let query: String = python_cleandoc(&text(&scan.chars[open_index + 1..close_index]));
         self.validate_single_query(&query, keyword)?;
         let end: usize =
             self.consume_delimiter(scan, close_index + 1, &format!("{keyword}(...) block"))?;
@@ -335,7 +303,7 @@ impl AuditParse<'_> {
             && (semicolons.len() > 1
                 || query_chars[first + 1..]
                     .iter()
-                    .any(|character| !is_python_space(*character)))
+                    .any(|character| !char::is_whitespace(*character)))
         {
             return Err(audit_failure(format!(
                 "{label}(...) in '{file_path}' must contain exactly one query"
@@ -355,7 +323,6 @@ fn keyword_at_slice_start(
     if position == slice_start {
         let slice = AuditText {
             chars: &text.chars[slice_start..],
-            python: text.python,
         };
         return slice.keyword_at(keyword, 0);
     }
@@ -365,10 +332,9 @@ fn keyword_at_slice_start(
 fn evaluation_mode(
     header_values: &[(String, AuthoredValue)],
     file_path: &str,
-    python: PythonText,
 ) -> Result<&'static str, ParseStop> {
     let mode: &str = match get(header_values, "evaluation") {
-        Some(value) => python_str(value, WordRules { python, file_path })?.unwrap_or_default(),
+        Some(value) => python_str(value, WordRules { file_path })?.unwrap_or_default(),
         None => VIOLATIONS,
     };
     let mode: &'static str = match mode {

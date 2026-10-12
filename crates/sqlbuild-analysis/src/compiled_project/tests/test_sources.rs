@@ -2,7 +2,7 @@ use crate::compiled_project::main::legacy_schema_error::legacy_schema_error;
 use crate::compiled_project::main::opt_out_position::opt_out_position;
 use crate::compiled_project::main::text_position::text_position;
 use crate::compiled_project::models::TextPosition;
-use crate::compiled_project::tests::helpers::{legacy_schema_files, python_312};
+use crate::compiled_project::tests::helpers::legacy_schema_files;
 use crate::compiled_project::tests::test_types::{LegacySchemaTestCase, OptOutPositionTestCase};
 
 #[test]
@@ -30,7 +30,7 @@ fn given_text_when_locating_opt_out_then_first_whole_word_key_after_start_is_fou
 
     for test_case in test_cases {
         assert_eq!(
-            opt_out_position(python_312(), test_case.text, test_case.start),
+            opt_out_position(test_case.text, test_case.start),
             test_case.expected_position,
             "{}",
             test_case.description

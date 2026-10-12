@@ -8,7 +8,6 @@ use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyString, PyTuple, PyTupleMethods,
     PyTypeMethods,
 };
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_render::macro_arguments::errors::ArgumentError;
 use sqlbuild_render::macro_arguments::models::{ArgumentValue, MacroArguments};
 use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names as scan_names;
@@ -227,8 +226,8 @@ fn final_sql(run: &Evaluation<'_, '_>, name: &str, value: &Bound<'_, PyAny>) -> 
         return Err(PyErr::from_value(raised_error));
     }
     let sql: String = value.extract()?;
-    let names: Vec<String> = scan_names(expansion.python, &sql, false)
-        .map_err(|error| raised(&classes.compile_error, error.message()))?;
+    let names: Vec<String> =
+        scan_names(&sql, false).map_err(|error| raised(&classes.compile_error, error.message()))?;
     if names.is_empty() {
         return Ok(sql);
     }
@@ -253,11 +252,11 @@ fn call_arguments<'py>(
     args_source: &str,
 ) -> PyResult<(Bound<'py, PyTuple>, Bound<'py, PyDict>)> {
     let py: Python<'py> = run.handle.py();
-    if python_strip(args_source).is_empty() {
+    if str::trim(args_source).is_empty() {
         return Ok((PyTuple::empty(py), PyDict::new(py)));
     }
     let text: CallText<'_> = CallText::new(args_source);
-    let scan: MacroCallScan = scan_sites(run.expansion.python, args_source);
+    let scan: MacroCallScan = scan_sites(args_source);
     let mut values: Vec<Bound<'py, PyAny>> = Vec::with_capacity(scan.sites.len());
     for site in &scan.sites {
         values.push(evaluate_call(run, (&text, site), false)?);

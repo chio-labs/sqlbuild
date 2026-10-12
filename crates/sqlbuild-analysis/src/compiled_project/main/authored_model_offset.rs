@@ -1,7 +1,5 @@
 //! `_authored_model_location`: an offset of expanded model SQL in the authored model file.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::compiled_project::_helpers::locating::{map_through_passes, model_query_start};
 use crate::compiled_project::models::SplicedSpan;
 
@@ -17,7 +15,7 @@ pub fn authored_model_offset(
     let body_start: usize = model_query_start(contents, query_sql).or_else(|| {
         let leading: usize = characters
             .iter()
-            .take_while(|character| is_python_space(**character))
+            .take_while(|character| char::is_whitespace(**character))
             .count();
         let query: Vec<char> = query_sql.chars().collect();
         characters[leading..].starts_with(&query).then_some(leading)

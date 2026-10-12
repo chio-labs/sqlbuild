@@ -101,7 +101,7 @@ def build_rules_request(
     models: tuple[NativeCompiledProject, list[str]],
     sql_tests: list[tuple[object, ...]],
     scenarios: list[tuple[object, ...]],
-) -> tuple[NativeRulesRequest, tuple[int, int, int]]: ...
+) -> NativeRulesRequest: ...
 def evaluate_rules_request(
     request: NativeRulesRequest,
 ) -> tuple[
@@ -732,7 +732,7 @@ class NativeModelLoop:
         self,
         checks: tuple[object, dict[str, object], dict[str, object]],
         syntax: dict[str, object],
-        cursor: tuple[list[str], tuple[tuple[int, int], str]],
+        reserved_markers: list[str],
         settings: tuple[tuple[bool, bool, bool, bool], tuple[str, list[tuple[str, list[str]]]]],
     ) -> None: ...
     def run(
@@ -740,7 +740,7 @@ class NativeModelLoop:
         project: NativeCompiledProject,
         host: object,
         models: list[tuple[object, ...]],
-    ) -> tuple[list[NativeModelInput], tuple[int, int, int, int, int]]: ...
+    ) -> list[NativeModelInput]: ...
 
 def relation_key_row(
     kind: str, name: str, values: dict[str, object], entry: object
@@ -831,7 +831,6 @@ def model_header_column_locations(
 def model_header_failure(
     error: str, header: str, header_line: int | None
 ) -> tuple[str, str | None, int | None]: ...
-def native_text_supported(python_version: tuple[int, int], unicode_version: str) -> bool: ...
 
 class NativeProjectTree:
     def __init__(self, project_dir: str) -> None: ...
@@ -1130,7 +1129,6 @@ class NativeModelConfigBuilder:
         layers: tuple[dict[str, object], dict[str, dict[str, object]], tuple[type, ...]],
         sources: tuple[dict[str, object], object],
         target: tuple[tuple[str | None, str], tuple[str | None, str | None] | None],
-        python: tuple[tuple[int, int], str],
     ) -> None: ...
     def model_config(
         self,
@@ -1145,7 +1143,6 @@ class NativeModelValidator:
         names: tuple[set[str], set[str], set[str], set[str], set[str]],
         custom_materializations: set[str],
         microbatch_concurrency: bool,
-        python: tuple[tuple[int, int], str],
     ) -> None: ...
     def validate(
         self,
@@ -1184,17 +1181,16 @@ def validated_model_cursor_intrinsics(
     sql: str,
     reserved_markers: list[str],
     model: tuple[str, object, object],
-    python: tuple[tuple[int, int], str],
 ) -> tuple[str | None, str | None]: ...
 def replace_cursor_intrinsics(
-    sql: str, context: str, replacements: tuple[str, str], python: tuple[tuple[int, int], str]
+    sql: str, context: str, replacements: tuple[str, str]
 ) -> tuple[str, bool, str | None]: ...
 def parse_macro_arguments(text: str, nested: list[tuple[int, int]]) -> tuple[object, ...]: ...
 def scan_sql_declaration_references(
-    sqls: list[str], python_version: tuple[int, int], unicode_version: str
+    sqls: list[str],
 ) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
 def scan_sql_declaration_usages(
-    sqls: list[str], python_version: tuple[int, int], unicode_version: str
+    sqls: list[str],
 ) -> list[tuple[list[tuple[int, str, str | None, int, int]], int | None]]: ...
 def interpolate_sql_batch(
     sqls: list[tuple[str, str]],
@@ -1204,13 +1200,11 @@ def interpolate_sql_batch(
         Mapping[str, str | None] | None,
         Callable[..., str],
     ],
-    python_version: tuple[int, int],
-    unicode_version: str,
 ) -> list[
     tuple[str | None, list[tuple[int, int, int, int]], list[tuple[str, str]], str | None]
 ]: ...
 def scan_macro_call_sites(
-    sql: str, python_version: tuple[int, int], unicode_version: str
+    sql: str,
 ) -> tuple[
     list[tuple[int, int, int, str, list[str] | None, bool]],
     tuple[int | None, str | None, str] | None,
@@ -1558,12 +1552,3 @@ def _oracle_text_positions(
 ) -> tuple[str, list[tuple[int, int, int] | None]]: ...
 def _oracle_yaml_load(text: str) -> str: ...
 def _oracle_toml_load(text: str) -> str: ...
-def _oracle_python_alnum(
-    python_version: tuple[int, int], unicode_version: str, code_points: list[int]
-) -> list[bool] | None: ...
-def _oracle_cleandoc(
-    python_version: tuple[int, int], unicode_version: str, texts: list[str]
-) -> list[str] | None: ...
-def _oracle_close_matches(
-    word: str, possibilities: list[str], count: int, cutoff: float
-) -> list[str]: ...

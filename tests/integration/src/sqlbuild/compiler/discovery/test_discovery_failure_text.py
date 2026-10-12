@@ -18,7 +18,6 @@ from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
     write_project,
 )
 
-_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _MODEL: tuple[str, bytes] = ("models/orders.sql", b"MODEL ();\nSELECT 1 AS order_id")
 _HOOK: tuple[str, bytes] = ("hooks/sql/refresh.sql", b"HOOK (descri\x00ption 'x');\nSELECT 1")
 _CONSTANT: tuple[str, bytes] = ("constants/limits.sql", b"CONSTANT (name cap, valu\x00e 1);")
@@ -75,19 +74,15 @@ _CONSTANT: tuple[str, bytes] = ("constants/limits.sql", b"CONSTANT (name cap, va
     ],
     ids=lambda case: case.description,
 )
-def test_given_failing_project_when_discovering_then_every_engine_shows_authored_text(
+def test_given_failing_project_when_discovering_then_authored_text_is_shown(
     test_case: FailureTextTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
 
-    outcomes: list[tuple[object, ...]] = [
-        stage_outcome(project_dir=tmp_path, engine=engine, monkeypatch=monkeypatch)
-        for engine in _ENGINES
-    ]
+    outcome: tuple[object, ...] = stage_outcome(project_dir=tmp_path)
 
-    assert {outcome[1:] for outcome in outcomes} == {outcomes[0][1:]}
-    assert outcomes[0][1] == test_case.expected_error_type
-    assert str(outcomes[0][2]).endswith(test_case.expected_message_suffix)
+    assert outcome[1] == test_case.expected_error_type
+    assert str(outcome[2]).endswith(test_case.expected_message_suffix)
 
 
 @pytest.mark.parametrize(
@@ -105,17 +100,10 @@ def test_given_nul_header_keys_when_discovering_tolerantly_then_faults_match(
     test_case: TolerantFailureTextTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
-    shipped: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
-        tolerant_declaration_outcome(project_dir=tmp_path, engine="native", monkeypatch=monkeypatch)
-    )
-
     native: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
-        tolerant_declaration_outcome(
-            project_dir=tmp_path, engine="native-preview", monkeypatch=monkeypatch
-        )
+        tolerant_declaration_outcome(project_dir=tmp_path)
     )
 
-    assert native == shipped
     assert (
         tuple(sorted(fault.message.rsplit("keys: ", 1)[1] for fault in (*native[1], *native[2])))
         == test_case.expected_fault_keys

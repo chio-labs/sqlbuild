@@ -51,7 +51,7 @@ fn given_sql_when_scanning_declaration_references_then_python_offsets_are_return
         },
         DeclarationReferenceScanTestCase {
             description: "Unicode whitespace inside and after the keyword matches Python's \\s",
-            sql: "SELECT @enum\u{a0}(\u{2003}'order_status'\u{1c}) .\u{3000}PLACED",
+            sql: "SELECT @enum\u{a0}(\u{2003}'order_status'\u{3000}) .\u{3000}PLACED",
             expected_references: Some("enum:order_status.PLACED@7..40"),
         },
         DeclarationReferenceScanTestCase {

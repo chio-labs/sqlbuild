@@ -1,4 +1,4 @@
-"""Per-engine environment options parse into exact overrides."""
+"""The --expect option parses into exact outcomes."""
 
 from __future__ import annotations
 
@@ -6,61 +6,12 @@ import argparse
 
 import pytest
 
-from scripts.compiler_differential._helpers.running.options import (
-    parse_engine_environment,
-    parse_expected_outcome,
-)
-from scripts.compiler_differential.exceptions import DifferentialUsageError
+from scripts.compiler_differential._helpers.running.options import parse_expected_outcome
 from scripts.compiler_differential.models import ExpectedOutcome
 from tests.unit.scripts.compiler_differential._helpers.running._test_types import (
-    EngineEnvironmentErrorTestCase,
-    EngineEnvironmentTestCase,
     ExpectedOutcomeErrorTestCase,
     ExpectedOutcomeTestCase,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        EngineEnvironmentTestCase(
-            description="grouped_by_engine",
-            values=(
-                "native:PYTHONPATH=/tmp/hook",
-                "native:ORDERS_REGION=a=b",
-                "native-preview:EMPTY=",
-            ),
-            expected_environment={
-                "native": {"PYTHONPATH": "/tmp/hook", "ORDERS_REGION": "a=b"},
-                "native-preview": {"EMPTY": ""},
-            },
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_engine_assignments_when_parsing_then_values_group_by_engine(
-    test_case: EngineEnvironmentTestCase,
-) -> None:
-    assert parse_engine_environment(list(test_case.values)) == test_case.expected_environment
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        EngineEnvironmentErrorTestCase(
-            description=value.replace(":", "_").replace("=", "_") or "empty",
-            value=value,
-            expected_message="ENGINE:NAME=VALUE",
-        )
-        for value in ("native", "native:NAME", ":NAME=1", "native:=1")
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_malformed_assignment_when_parsing_then_usage_error_is_raised(
-    test_case: EngineEnvironmentErrorTestCase,
-) -> None:
-    with pytest.raises(DifferentialUsageError, match=test_case.expected_message):
-        _ = parse_engine_environment([test_case.value])
 
 
 @pytest.mark.parametrize(

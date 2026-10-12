@@ -18,7 +18,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
-_ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 _CANONICAL_SOURCE: str = '__source("raw_orders")'
 _CANONICAL_REF: str = '__ref("stg_orders")'
 
@@ -27,8 +26,7 @@ _CANONICAL_REF: str = '__ref("stg_orders")'
     "test_case",
     [
         ReplaceableReferenceCallTestCase(
-            description="native engine builds double quoted references",
-            engine="native",
+            description="builds double quoted references",
             expected_total_cents="2850",
         ),
     ],
@@ -41,9 +39,7 @@ def test_given_double_quoted_reference_calls_when_building_then_relations_resolv
         tmp_path=tmp_path, staging_from=_CANONICAL_SOURCE, mart_from=_CANONICAL_REF
     )
 
-    built: subprocess.CompletedProcess[str] = run_sqb(
-        project_dir=project_dir, command=("build",), env={_ENGINE_ENV_VAR: test_case.engine}
-    )
+    built: subprocess.CompletedProcess[str] = run_sqb(project_dir=project_dir, command=("build",))
     totals: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir,
         command=("query", "SELECT total_cents FROM main.order_totals", "--json"),
@@ -58,8 +54,7 @@ def test_given_double_quoted_reference_calls_when_building_then_relations_resolv
     "test_case",
     [
         RejectedReferenceCallTestCase(
-            description="native engine rejects unquoted ref name",
-            engine="native",
+            description="rejects unquoted ref name",
             staging_from=_CANONICAL_SOURCE,
             mart_from="__ref(stg_orders)",
             expected_diagnostics=(
@@ -74,8 +69,7 @@ def test_given_double_quoted_reference_calls_when_building_then_relations_resolv
             ),
         ),
         RejectedReferenceCallTestCase(
-            description="native engine rejects comment inside ref call",
-            engine="native",
+            description="rejects comment inside ref call",
             staging_from=_CANONICAL_SOURCE,
             mart_from="__ref( /* upstream */ 'stg_orders')",
             expected_diagnostics=(
@@ -90,8 +84,7 @@ def test_given_double_quoted_reference_calls_when_building_then_relations_resolv
             ),
         ),
         RejectedReferenceCallTestCase(
-            description="native engine rejects single quoted source name",
-            engine="native",
+            description="rejects single quoted source name",
             staging_from="__source('raw_orders')",
             mart_from=_CANONICAL_REF,
             expected_diagnostics=(
@@ -106,8 +99,7 @@ def test_given_double_quoted_reference_calls_when_building_then_relations_resolv
             ),
         ),
         RejectedReferenceCallTestCase(
-            description="native engine rejects invalid calls in two files",
-            engine="native",
+            description="rejects invalid calls in two files",
             staging_from="__source('raw_orders')",
             mart_from="__ref(stg_orders)",
             expected_diagnostics=(
@@ -142,11 +134,8 @@ def test_given_reference_call_compile_cannot_replace_when_building_then_fails_wi
     compiled: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir,
         command=("compile", "--json"),
-        env={_ENGINE_ENV_VAR: test_case.engine},
     )
-    built: subprocess.CompletedProcess[str] = run_sqb(
-        project_dir=project_dir, command=("build",), env={_ENGINE_ENV_VAR: test_case.engine}
-    )
+    built: subprocess.CompletedProcess[str] = run_sqb(project_dir=project_dir, command=("build",))
 
     diagnostics: list[dict[str, object]] = cast(
         list[dict[str, object]], json.loads(compiled.stdout)["diagnostics"]

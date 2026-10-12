@@ -101,7 +101,7 @@ pub(crate) const TYPE_WORDS: [&str; 18] = [
 pub(crate) const MISSING_PATTERN: &str = r"Unknown column '([^']+)'(?: in table '([^']+)')?";
 pub(crate) const CONTEXT_SUFFIX_PATTERN: &str = r" \(context: [^)]*\)";
 pub(crate) const QUOTED_PIECE_PATTERN: &str = r"'[^']*'";
-/// Python's `_OPERAND` under `re.IGNORECASE`, as a `python_regex` template.
+/// One comparison operand, as a `compile_pattern` template.
 pub(crate) const OPERAND_PATTERN: &str = r"(?:{TIMESTAMP}{S}+'[^']*'|{DATE}{S}+'[^']*'|'(?:[^']|'')*'|-?{D}+(?:\.{D}+)?|{L}{W}*(?:\.{L}{W}*)?)";
 pub(crate) const QUALIFIER_PATTERN: &str = r#"(?:"((?:[^"]|"")+)"|([A-Za-z_]{W}*))\.\z"#;
 pub(crate) const TEMPORAL_OPERAND_PATTERN: &str = r"\A({TIMESTAMP}|{DATE}){S}*'";

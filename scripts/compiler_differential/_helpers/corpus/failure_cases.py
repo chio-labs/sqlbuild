@@ -625,7 +625,7 @@ def _compile_failure_cases() -> tuple[FailureCase, ...]:
 
 
 def engine_error_cases() -> tuple[FailureCase, ...]:
-    """User-facing errors every engine must report with the exact text; see the README."""
+    """User-facing errors that must be reported with the exact text; see the README."""
 
     return (
         failure_case(

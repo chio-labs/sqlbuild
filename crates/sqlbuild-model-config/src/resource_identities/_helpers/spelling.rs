@@ -1,7 +1,5 @@
 //! `validate_resource_identity`'s canonical snake_case check and suggested spelling.
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 /// Return whether `name` fully matches `^[a-z](?:[a-z0-9_]*[a-z0-9])?$`.
 pub(crate) fn is_snake_case(name: &str) -> bool {
     let bytes = name.as_bytes();
@@ -19,7 +17,7 @@ pub(crate) fn is_snake_case(name: &str) -> bool {
 
 /// Return `suggest_resource_identity` for a public identity; its patterns are ASCII-only.
 pub(crate) fn suggested_identity(name: &str) -> String {
-    let characters: Vec<char> = python_strip(name).chars().collect();
+    let characters: Vec<char> = str::trim(name).chars().collect();
     let acronyms = split_where(&characters, |index| {
         characters[index - 1].is_ascii_uppercase()
             && characters[index].is_ascii_uppercase()

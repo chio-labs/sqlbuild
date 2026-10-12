@@ -1,10 +1,5 @@
 //! MODEL header column types: rendering, matching and the authored span of a declared type.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-
 use crate::refactoring::_helpers::scanning::chars::slice;
 use crate::refactoring::constants::{
     CONTRACT_CLOSERS, CONTRACT_HEADER_WORD_EXTRA, CONTRACT_MODEL_HEADER_ESCAPE, CONTRACT_OPENERS,
@@ -27,7 +22,7 @@ fn skip_space(text: &[char], index: usize) -> usize {
     index
         + text[index..]
             .iter()
-            .take_while(|character| is_python_space(**character))
+            .take_while(|character| char::is_whitespace(**character))
             .count()
 }
 
@@ -89,26 +84,23 @@ pub(crate) fn render_model_type(value: &str) -> String {
 fn without_space(value: &str) -> String {
     value
         .chars()
-        .filter(|character| !is_python_space(*character))
+        .filter(|character| !char::is_whitespace(*character))
         .collect()
 }
 
 /// Python's `_model_types_match`.
 fn model_types_match(authored: &str, parsed: &str) -> bool {
-    let python = active_python_text();
-    if python_casefold(python, authored) == python_casefold(python, parsed) {
+    if str::to_lowercase(authored) == str::to_lowercase(parsed) {
         return true;
     }
     if !(is_unquoted_type(authored) && is_unquoted_type(parsed)) {
         return false;
     }
-    python_casefold(python, &without_space(authored))
-        == python_casefold(python, &without_space(parsed))
+    str::to_lowercase(&without_space(authored)) == str::to_lowercase(&without_space(parsed))
 }
 
 fn is_header_word_character(character: char) -> bool {
-    is_python_alnum(active_python_text(), character)
-        || CONTRACT_HEADER_WORD_EXTRA.contains(&character)
+    char::is_alphanumeric(character) || CONTRACT_HEADER_WORD_EXTRA.contains(&character)
 }
 
 fn quoted_value_end(text: &[char], start: usize, end: usize) -> usize {
@@ -141,11 +133,11 @@ fn unquoted_type_value_end(text: &[char], start: usize, end: usize) -> usize {
                 break;
             }
             depth -= 1;
-        } else if depth == 0 && is_python_space(character) {
+        } else if depth == 0 && char::is_whitespace(character) {
             let next = index
                 + text[index..end]
                     .iter()
-                    .take_while(|character| is_python_space(**character))
+                    .take_while(|character| char::is_whitespace(**character))
                     .count();
             if !saw_open && text.get(next) == Some(&'(') {
                 index = next;
@@ -167,7 +159,6 @@ pub(crate) fn declared_type_span(
     declared: &str,
 ) -> Option<(usize, usize)> {
     let (metadata_start, metadata_end) = metadata;
-    let python = active_python_text();
     let key_length = CONTRACT_TYPE_KEY.chars().count();
     let mut index = metadata_start;
     let mut depth = 0_usize;
@@ -188,7 +179,7 @@ pub(crate) fn declared_type_span(
             continue;
         }
         if depth > 0
-            || python_casefold(python, &slice(text, index, index + key_length)) != CONTRACT_TYPE_KEY
+            || str::to_lowercase(&slice(text, index, index + key_length)) != CONTRACT_TYPE_KEY
         {
             index += 1;
             continue;
@@ -201,7 +192,7 @@ pub(crate) fn declared_type_span(
             continue;
         }
         let mut value_start = key_end;
-        while value_start < metadata_end && is_python_space(text[value_start]) {
+        while value_start < metadata_end && char::is_whitespace(text[value_start]) {
             value_start += 1;
         }
         let (value_end, authored) = match text.get(value_start) {

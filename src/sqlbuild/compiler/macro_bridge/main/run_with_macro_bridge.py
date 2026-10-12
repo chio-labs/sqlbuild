@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import logging
-import unicodedata
 from collections.abc import Callable
 from contextvars import Token
 
-from sqlbuild.compiler.discovery.main._require_supported_python import require_supported_python
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE, STORE_MODULE_PATHS
 
@@ -15,10 +13,7 @@ from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE, STORE_
 def run_with_macro_bridge[T](*, stage: Callable[[], T]) -> T:
     """Run `stage` once with the bridge; its errors are the Python stage's, raised as they occur."""
 
-    python_version: tuple[int, int] = require_supported_python()
-    bridge: MacroBridge = MacroBridge(
-        python_version=python_version, unicode_version=unicodedata.unidata_version
-    )
+    bridge: MacroBridge = MacroBridge()
     token: Token[object | None] = ACTIVE_MACRO_BRIDGE.set(bridge)
     try:
         result: T = stage()

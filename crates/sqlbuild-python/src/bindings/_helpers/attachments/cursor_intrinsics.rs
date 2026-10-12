@@ -6,20 +6,11 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
-use sqlbuild_core::text::models::PythonText;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::discovery::project_files::python_semantics;
 
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
 const CURSOR_START: &str = "__cursor_start";
-
-/// The running Python's version and `unicodedata.unidata_version`.
-type PythonRelease = ((u8, u8), String);
-
-fn semantics((version, unicode): PythonRelease) -> PyResult<PythonText> {
-    python_semantics(version, &unicode)
-}
 
 /// A model query with canonical intrinsic calls and no error, or no query and the error.
 #[pyfunction]
@@ -27,9 +18,7 @@ fn validated_model_cursor_intrinsics(
     sql: &str,
     reserved_markers: Vec<String>,
     model: (String, Bound<'_, PyAny>, Bound<'_, PyAny>),
-    python: PythonRelease,
 ) -> PyResult<(Option<String>, Option<String>)> {
-    let python: PythonText = semantics(python)?;
     let (name, materialized, cursor) = model;
     let incremental: bool = materialized
         .downcast::<PyString>()
@@ -41,7 +30,6 @@ fn validated_model_cursor_intrinsics(
     compiler_guard(|| {
         Ok(
             match validated_model_intrinsics(
-                python,
                 sql,
                 &reserved_markers,
                 &IntrinsicModel {
@@ -63,13 +51,11 @@ fn replace_cursor_intrinsics(
     sql: &str,
     context: &str,
     replacements: (String, String),
-    python: PythonRelease,
 ) -> PyResult<(String, bool, Option<String>)> {
-    let python: PythonText = semantics(python)?;
     let (start, end) = replacements;
     compiler_guard(|| {
         Ok(
-            match replace_intrinsics(python, sql, context, |name| {
+            match replace_intrinsics(sql, context, |name| {
                 if name == CURSOR_START {
                     start.clone()
                 } else {

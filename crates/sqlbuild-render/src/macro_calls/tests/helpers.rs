@@ -1,6 +1,4 @@
 use sqlbuild_cache::store::main::open_native_store::open_native_store;
-use sqlbuild_core::text::main::python_text::python_text;
-use sqlbuild_core::text::models::PythonText;
 use std::path::Path;
 
 use crate::macro_calls::errors::ScanError;
@@ -25,11 +23,6 @@ pub(crate) fn recorded_memo() -> (MacroCallMemo, MacroCallEntry) {
     };
     memo.record(1, "@cents(amount)".to_owned(), entry.clone());
     (memo, entry)
-}
-
-/// The character classes of Python 3.12.
-pub(crate) fn python_312() -> PythonText {
-    python_text((3, 12), "15.0.0").expect("Python 3.12 is supported")
 }
 
 /// Record `entry` for `@cents(amount)` into a fresh store at `path`, persistent per `class_texts`.

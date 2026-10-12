@@ -1,14 +1,12 @@
 //! Effective model config layered and templated natively, as `build_model_config` builds it.
 
-use pyo3::exceptions::{PyKeyError, PyValueError};
+use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{
     PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods, PyTuple,
     PyTupleMethods,
 };
 use pyo3::{PyErr, pyclass, pymethods};
-use sqlbuild_core::text::main::python_text::python_text;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_model_config::config_presence::main::contains_template::contains_template;
 use sqlbuild_model_config::config_presence::main::first_macro_path::first_macro_path;
 use sqlbuild_model_config::config_presence::models::MacroPath;
@@ -97,7 +95,6 @@ pub(crate) struct NativeModelConfigBuilder {
     target_name: Option<Py<PyAny>>,
     run_id: Py<PyAny>,
     target_namespace: Option<(Py<PyAny>, Py<PyAny>)>,
-    python: PythonText,
 }
 
 /// One model's built config before Python wraps it in `CompileModelConfig`.
@@ -131,17 +128,9 @@ impl NativeModelConfigBuilder {
         layers: (Bound<'_, PyDict>, Bound<'_, PyDict>, Bound<'_, PyTuple>),
         sources: (Bound<'_, PyDict>, Bound<'_, PyAny>),
         target: TargetInputs<'_>,
-        python: ((u8, u8), String),
     ) -> PyResult<Self> {
         let (run, target_namespace) = target;
         let (defaults, path_defaults, hook_entry_types) = layers;
-        let (python_version, unicode_version) = python;
-        let python = python_text(python_version, &unicode_version).ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "no Python string semantics for Python {}.{} with Unicode {unicode_version}",
-                python_version.0, python_version.1
-            ))
-        })?;
         let path_keys = path_defaults
             .keys()
             .iter()
@@ -159,7 +148,6 @@ impl NativeModelConfigBuilder {
             run_id: run_id.unbind(),
             target_namespace: target_namespace
                 .map(|(database, schema)| (database.unbind(), schema.unbind())),
-            python,
         })
     }
 
@@ -382,7 +370,6 @@ impl NativeModelConfigBuilder {
         }
         let values = storage_free_values(py, &resolved, header)?;
         let retention = retention_override(
-            self.python,
             header.get_item(RETENTION_KEY)?.map(PyNode).as_ref(),
             model_name,
         )?;
@@ -689,7 +676,7 @@ fn string_entry<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     Ok(values
         .get_item(key)?
-        .filter(|value| value.is_instance_of::<PyString>()))
+        .filter(pyo3::types::PyAnyMethods::is_instance_of::<PyString>))
 }
 
 fn text_of(value: &Bound<'_, PyAny>) -> PyResult<String> {

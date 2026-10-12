@@ -1,9 +1,6 @@
 //! An exact port of `scan_interpolation_sites` with the lint lexical policy.
 
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::is_letter::is_letter;
 
 use crate::refactoring::_helpers::scanning::chars::{find, slice, starts_with};
 
@@ -42,12 +39,10 @@ pub(crate) struct InterpolationSite {
 pub(crate) fn interpolation_sites(
     body: &[char],
     backtick_identifiers: bool,
-    python: PythonText,
 ) -> Vec<InterpolationSite> {
     let scanner = Scanner {
         body,
         backtick_identifiers,
-        python,
     };
     let mut sites: Vec<InterpolationSite> = Vec::new();
     let mut copied_to = 0;
@@ -82,7 +77,6 @@ enum PatternMatch {
 struct Scanner<'a> {
     body: &'a [char],
     backtick_identifiers: bool,
-    python: PythonText,
 }
 
 impl Scanner<'_> {
@@ -234,7 +228,7 @@ impl Scanner<'_> {
 
     fn function_site_end(&self, start: usize) -> Option<usize> {
         let mut name_end = self.identifier_end(start);
-        while self.at(name_end).is_some_and(is_python_space) {
+        while self.at(name_end).is_some_and(char::is_whitespace) {
             name_end += 1;
         }
         if self.at(name_end) != Some('(') {
@@ -249,7 +243,7 @@ impl Scanner<'_> {
         if first == '\'' {
             return find(self.body, "'", name_start + 1).map(|closing| closing + 1);
         }
-        if !(is_python_alpha(self.python, first) || first == '_') {
+        if !(is_letter(first) || first == '_') {
             return None;
         }
         let name_end = self.identifier_end(name_start);
@@ -318,7 +312,7 @@ impl Scanner<'_> {
     fn interpolation_name_end(&self, start: usize) -> usize {
         let mut index = start;
         while self.at(index).is_some_and(|character| {
-            is_python_alnum(self.python, character) || INTERPOLATION_NAME_EXTRA.contains(&character)
+            char::is_alphanumeric(character) || INTERPOLATION_NAME_EXTRA.contains(&character)
         }) {
             index += 1;
         }
@@ -329,7 +323,7 @@ impl Scanner<'_> {
         let mut index = start;
         while self
             .at(index)
-            .is_some_and(|character| is_python_alnum(self.python, character) || character == '_')
+            .is_some_and(|character| char::is_alphanumeric(character) || character == '_')
         {
             index += 1;
         }

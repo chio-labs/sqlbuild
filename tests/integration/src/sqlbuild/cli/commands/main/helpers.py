@@ -5,7 +5,6 @@ import os
 import sys
 import tempfile
 import threading
-from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -30,16 +29,11 @@ from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.compiler.analysis_session.models import NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
-from sqlbuild.compiler.compile.main import expand_sql_with_spans as expand_sql_module
 from sqlbuild.compiler.discovery._helpers.native import (
     model_files as native_model_files_module,
 )
-from sqlbuild.compiler.frontier.types import NativeFallbackSite, NativeStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
-from sqlbuild.lint._helpers import fixes as lint_fixes
-from sqlbuild.lint.main import run_format as run_format_module
-from sqlbuild.rule_engine._helpers.run import rules as rules_run_module
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )
@@ -193,27 +187,6 @@ def record_test_planning_threads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     monkeypatch.setattr(prepared_compile_artifacts, "plan_static_sql_tests", recorded_plan)
     return threads
-
-
-def record_fix_sessions(monkeypatch: pytest.MonkeyPatch) -> tuple[list[bool], list[bool]]:
-    """Record whether the inputs a Rule fix starts from, and each fix pass lints, hold a session."""
-
-    original: list[bool] = []
-    passes: list[bool] = []
-    plan: Callable[..., Any] = run_format_module.plan_rule_fixes
-    lint: Callable[..., Any] = lint_fixes.run_lint
-
-    def recorded_plan(**kwargs: Any) -> Any:
-        original.append(getattr(kwargs["discovered_inputs"], "native_session", None) is not None)
-        return plan(**kwargs)
-
-    def recorded_lint(**kwargs: Any) -> Any:
-        passes.append(kwargs["discovered_inputs"].native_session is not None)
-        return lint(**kwargs)
-
-    monkeypatch.setattr(run_format_module, "plan_rule_fixes", recorded_plan)
-    monkeypatch.setattr(lint_fixes, "run_lint", recorded_lint)
-    return original, passes
 
 
 def skip_artifact_preparation(self: PreparedCompileArtifacts, **kwargs: object) -> None:
@@ -860,22 +833,6 @@ EARLY_LINT_PROJECT_FILES: dict[str, str] = {
         "SELECT order_id, amount_cents FROM floored WHERE amount_cents > floor_amount\n"
     ),
 }
-
-
-def record_early_lint_expansions(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count model expansions early lint took from the compile and expanded again in Python."""
-
-    counts: Counter[str] = Counter()
-
-    def handed_over(*, stage: NativeStage, kind: str, units: int = 1) -> None:
-        counts[f"{stage.value}:{kind}"] += units
-
-    def expanded_again(*, site: NativeFallbackSite, kind: str = "deferred") -> None:
-        counts[f"{site.value}:{kind}"] += 1
-
-    monkeypatch.setattr(rules_run_module, "report_native_answer", handed_over)
-    monkeypatch.setattr(expand_sql_module, "report_native_fallback", expanded_again)
-    return counts
 
 
 def compile_findings(

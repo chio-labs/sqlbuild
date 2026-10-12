@@ -1,4 +1,4 @@
-"""Keep a differing project's engine runs where CI can upload them."""
+"""Keep a failing project's run where CI can upload it."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ import os
 import shutil
 from pathlib import Path
 
-from scripts.compiler_differential.models import EngineRun
+from scripts.compiler_differential.constants import PROJECT_DIRECTORY
+from scripts.compiler_differential.models import ProjectRun
 
 _TARGET_DIRECTORY: str = "target"
 _COMPILED_TESTS: tuple[str, ...] = ("target", "compiled", "tests")
@@ -17,27 +18,25 @@ def keep_failure_evidence(
     *,
     case_dir: Path,
     project_subdirectory: str | None,
-    runs: tuple[EngineRun, ...],
+    run: ProjectRun,
     evidence_dir: Path,
 ) -> Path:
-    """Copy each engine's `target/`, every command's stderr and a compiled-test stat listing."""
+    """Copy the project's `target/`, every command's stderr and a compiled-test stat listing."""
 
     destination: Path = evidence_dir / case_dir.name
     shutil.rmtree(destination, ignore_errors=True)
-    for run in runs:
-        project_dir: Path = case_dir / run.engine / (project_subdirectory or "")
-        engine_dir: Path = destination / run.engine
-        engine_dir.mkdir(parents=True)
-        target: Path = project_dir / _TARGET_DIRECTORY
-        if target.is_dir():
-            _ = shutil.copytree(target, engine_dir / _TARGET_DIRECTORY, symlinks=True)
-        for index, outcome in enumerate(run.outcomes):
-            _ = (engine_dir / f"{index}-{outcome.label}.stderr").write_text(
-                outcome.stderr, encoding="utf-8", errors="surrogateescape"
-            )
-        _ = (engine_dir / _STAT_FILE).write_text(
-            _stat_listing(project_dir.joinpath(*_COMPILED_TESTS)), encoding="utf-8"
+    destination.mkdir(parents=True)
+    project_dir: Path = case_dir / PROJECT_DIRECTORY / (project_subdirectory or "")
+    target: Path = project_dir / _TARGET_DIRECTORY
+    if target.is_dir():
+        _ = shutil.copytree(target, destination / _TARGET_DIRECTORY, symlinks=True)
+    for index, outcome in enumerate(run.outcomes):
+        _ = (destination / f"{index}-{outcome.label}.stderr").write_text(
+            outcome.stderr, encoding="utf-8", errors="surrogateescape"
         )
+    _ = (destination / _STAT_FILE).write_text(
+        _stat_listing(project_dir.joinpath(*_COMPILED_TESTS)), encoding="utf-8"
+    )
     return destination
 
 

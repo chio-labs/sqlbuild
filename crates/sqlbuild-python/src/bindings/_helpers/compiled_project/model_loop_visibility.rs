@@ -1,6 +1,6 @@
 //! The declarations a model sees: `_VisibleModelDeclarationCache.for_model`, natively.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -72,7 +72,6 @@ pub(crate) struct VisibilityModel<'a, 'py> {
 #[derive(Default)]
 pub(crate) struct ModelVisibility<'py> {
     by_parent: RefCell<HashMap<String, Bound<'py, PyAny>>>,
-    projected: Cell<usize>,
 }
 
 impl<'py> ModelVisibility<'py> {
@@ -106,11 +105,6 @@ impl<'py> ModelVisibility<'py> {
             declarations,
             consumer,
         })
-    }
-
-    /// The number of declaration contexts the loop projected rather than reused.
-    pub(crate) fn projected(&self) -> usize {
-        self.projected.get()
     }
 
     /// `_build_visible_declaration_indexes`.
@@ -175,7 +169,7 @@ impl<'py> ModelVisibility<'py> {
         ] {
             let inherited: Bound<'py, PyDict> = fields.get_item(field)?.map_or_else(
                 || Ok(PyDict::new(py)),
-                |value| value.downcast_into::<PyDict>(),
+                pyo3::types::PyAnyMethods::downcast_into::<PyDict>,
             )?;
             let visibility: Bound<'py, PyDict> = inherited.copy()?;
             for name in local.keys() {
@@ -196,10 +190,7 @@ impl<'py> ModelVisibility<'py> {
         let resolver: &Bound<'py, PyAny> = &context.classes.visibility.resolver;
         let contexts: Bound<'py, NativeDeclarationContexts> =
             resolver.getattr("native_contexts")?.downcast_into()?;
-        let (resolved, projected) = contexts.get().resolved_context(resolver, file_path, None)?;
-        if projected {
-            self.projected.set(self.projected.get() + 1);
-        }
+        let (resolved, _) = contexts.get().resolved_context(resolver, file_path, None)?;
         Ok(resolved)
     }
 }

@@ -7,7 +7,6 @@ use crate::declaration_files::_helpers::checks::python_values::{
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::models::{DeclarationFileOptions, HookFile};
 use crate::models::FailureKind;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
@@ -34,38 +33,22 @@ pub(crate) fn parse_hook_file(
             statement: "HOOK()",
             file_path,
             supported_keys: &options.hook_keys,
-            python: options.python,
         },
         header,
         contents[..header_start].matches('\n').count() + 1,
     )?;
     let description: Option<String> = match get(&header_values, DESCRIPTION_KEY) {
         Some(value) => {
-            if non_empty_str(
-                value,
-                WordRules {
-                    python: options.python,
-                    file_path,
-                },
-            )?
-            .is_none()
-            {
+            if non_empty_str(value, WordRules { file_path })?.is_none() {
                 return Err(hook_failure(format!(
                     "HOOK() description in '{file_path}' must be a non-empty string"
                 )));
             }
-            python_str(
-                value,
-                WordRules {
-                    python: options.python,
-                    file_path,
-                },
-            )?
-            .map(str::to_owned)
+            python_str(value, WordRules { file_path })?.map(str::to_owned)
         }
         None => None,
     };
-    let sql_body: String = python_cleandoc(options.python, &contents[body_start..]);
+    let sql_body: String = python_cleandoc(&contents[body_start..]);
     if sql_body.is_empty() {
         return Err(hook_failure(format!(
             "SQL hook '{file_path}' must define SQL after HOOK(...)"
@@ -154,6 +137,6 @@ fn next_char_len(contents: &str, index: usize) -> usize {
 fn skip_whitespace(contents: &str, start: usize) -> usize {
     contents[start..]
         .char_indices()
-        .find(|(_, character)| !is_python_space(*character))
+        .find(|(_, character)| !char::is_whitespace(*character))
         .map_or(contents.len(), |(offset, _)| start + offset)
 }

@@ -1,7 +1,5 @@
 //! Python's header value checks: non-empty stripped strings, maps and string lists.
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::functions::errors::NamedTypeError;
 use crate::functions::models::{HeaderValue, NamedType};
 
@@ -11,9 +9,7 @@ pub(crate) const TABLE_RETURN_KEY: &str = "table";
 /// `value.strip()` when `value` is a string that is not blank.
 pub(crate) fn stripped_text(value: Option<&HeaderValue>) -> Option<String> {
     match value? {
-        HeaderValue::Text(text) if !python_strip(text).is_empty() => {
-            Some(python_strip(text).to_owned())
-        }
+        HeaderValue::Text(text) if !str::trim(text).is_empty() => Some(str::trim(text).to_owned()),
         _ => None,
     }
 }
@@ -58,7 +54,7 @@ pub(crate) fn stripped_list(value: Option<&HeaderValue>) -> Result<Vec<String>, 
 pub(crate) fn description(value: Option<&HeaderValue>) -> Option<Option<String>> {
     match value {
         None => Some(None),
-        Some(HeaderValue::Text(text)) => Some(Some(python_strip(text).to_owned())),
+        Some(HeaderValue::Text(text)) => Some(Some(str::trim(text).to_owned())),
         Some(_) => None,
     }
 }

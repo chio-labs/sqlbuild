@@ -18,7 +18,7 @@ pub fn plan_refactor(
     request: &RefactorRequest,
     host: &DeclarationMoveHost<'_>,
 ) -> Result<RefactorPlan, RefactorError> {
-    let context = ScanContext::for_facts(facts)?;
+    let context = ScanContext::for_facts(facts);
     if request.operation == RefactorOperation::RenameColumn {
         let column = column_rename_context(facts, request, &context)?;
         let parts = column_rename_parts(&column)?;

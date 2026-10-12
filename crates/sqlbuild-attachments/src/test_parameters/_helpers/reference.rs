@@ -1,7 +1,5 @@
 //! Python's `@param(?![A-Za-z0-9_])\s*\(\s*"name"\s*\)` reference pattern.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 const TOKEN: &[u8] = b"@param";
 
 /// Python's `_PARAMETER_TOKEN.match` at `index`.
@@ -41,7 +39,7 @@ pub(crate) fn reference_at(sql: &str, index: usize) -> Option<(&str, usize)> {
 
 fn skip_spaces(sql: &str, mut index: usize) -> usize {
     while let Some(character) = sql[index..].chars().next() {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         index += character.len_utf8();

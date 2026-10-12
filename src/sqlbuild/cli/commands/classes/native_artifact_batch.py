@@ -7,8 +7,6 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.cli.compile_reuse.constants import COMPILE_ARTIFACT_WRITES
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.profiling.main.record import record_compile_timing
 
 _POSIX_LINE_SEPARATOR: str = "\n"
@@ -35,8 +33,5 @@ class NativeArtifactBatch:
         if not self._files:
             return
         with record_compile_timing("physical_write_ms"):
-            written, unchanged = _native.write_compiled_artifacts(self._files, self.check_existing)
+            _ = _native.write_compiled_artifacts(self._files, self.check_existing)
         self._files = []
-        report_native_answer(
-            stage=NativeStage.COMPILE_OUTPUTS, kind="artifact_files", units=written + unchanged
-        )

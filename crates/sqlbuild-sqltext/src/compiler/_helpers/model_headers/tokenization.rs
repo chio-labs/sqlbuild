@@ -374,7 +374,7 @@ impl HeaderParser {
             return Err(format!("{name}(...) requires a quoted hook name"));
         }
         self.advance();
-        if token.1.chars().all(is_python_whitespace) {
+        if token.1.chars().all(char::is_whitespace) {
             return Err(format!("{name}(...) requires a non-empty hook name"));
         }
         let kwargs = self.nested(position, Self::parse_hook_kwargs)?;
@@ -515,7 +515,7 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
     let mut index = 0;
     while index < characters.len() {
         let character = characters[index];
-        if is_python_whitespace(character) {
+        if char::is_whitespace(character) {
             index += 1;
             continue;
         }
@@ -555,7 +555,7 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
                 continue;
             }
             let next = characters[index];
-            if is_python_whitespace(next)
+            if char::is_whitespace(next)
                 || is_symbol(next)
                 || next == ':'
                 || starts_comment(&characters, index)
@@ -641,8 +641,4 @@ fn find_character(characters: &[char], needle: char, start: usize) -> Option<usi
 
 fn is_symbol(character: char) -> bool {
     matches!(character, '(' | ')' | '[' | ']' | '{' | '}' | ',')
-}
-
-fn is_python_whitespace(character: char) -> bool {
-    character.is_whitespace() || matches!(character, '\u{1c}'..='\u{1f}')
 }

@@ -1,6 +1,6 @@
 """E2E: macro, UDF and table-function tests are split into CTEs under DuckDB's lexical rules.
 
-Every compiler engine extracts these tests natively before and after expansion, so comments, DuckDB
+These tests are extracted natively before and after expansion, so comments, DuckDB
 nested comments and escape strings hide calls the same way, and the strict authoring rules (plain CTE
 names, no logic calls outside the actual CTE, P012 for malformed reference calls) report the same
 located errors.
@@ -18,7 +18,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
-_ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 _MACRO_TEST: str = "tests/unit/test_tidy_label.sql"
 _UDF_TEST: str = "tests/unit/test_order_label.sql"
 _MODEL_TEST: str = "tests/unit/test_order_summary.sql"
@@ -224,126 +223,54 @@ _UNALIASED_DISTINCT_FROM_FRAGMENTS: tuple[str, ...] = (
     [
         DirectLogicExtractionE2ETestCase(
             description="macro, UDF and table-function tests pass on native",
-            engine="native",
             overrides={},
             expected_exit_code=0,
             expected_output_fragments=_PASSING_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="a quoted CTE name is a located error on native",
-            engine="native",
             overrides=_QUOTED_NAME,
             expected_exit_code=1,
             expected_output_fragments=_QUOTED_NAME_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="a macro-test helper calling a UDF is rejected on native",
-            engine="native",
             overrides=_HELPER_CALLS_UDF,
             expected_exit_code=1,
             expected_output_fragments=_HELPER_CALLS_UDF_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="a malformed helper reference is P012 at its call on native",
-            engine="native",
-            overrides=_MALFORMED_SOURCE,
-            expected_exit_code=1,
-            expected_output_fragments=_MALFORMED_SOURCE_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="macro, UDF and table-function tests pass on native-preview",
-            engine="native-preview",
-            overrides={},
-            expected_exit_code=0,
-            expected_output_fragments=_PASSING_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a quoted CTE name is a located error on native-preview",
-            engine="native-preview",
-            overrides=_QUOTED_NAME,
-            expected_exit_code=1,
-            expected_output_fragments=_QUOTED_NAME_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a macro-test helper calling a UDF is rejected on native-preview",
-            engine="native-preview",
-            overrides=_HELPER_CALLS_UDF,
-            expected_exit_code=1,
-            expected_output_fragments=_HELPER_CALLS_UDF_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a malformed helper reference is P012 at its call on native-preview",
-            engine="native-preview",
             overrides=_MALFORMED_SOURCE,
             expected_exit_code=1,
             expected_output_fragments=_MALFORMED_SOURCE_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="a CTE name in an indented model test is located exactly on native",
-            engine="native",
             overrides=_LOCATED_MODEL_NAME,
             expected_exit_code=1,
             expected_output_fragments=_LOCATED_MODEL_NAME_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="a CTE name in a test with cases is located exactly on native",
-            engine="native",
             overrides=_LOCATED_CASE_NAME,
             expected_exit_code=1,
             expected_output_fragments=_LOCATED_CASE_NAME_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="each repeated malformed reference is P012 at its own call on native",
-            engine="native",
-            overrides=_REPEATED_MALFORMED_SOURCE,
-            expected_exit_code=1,
-            expected_output_fragments=_REPEATED_MALFORMED_SOURCE_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a CTE name in an indented model test is located exactly on native-preview",
-            engine="native-preview",
-            overrides=_LOCATED_MODEL_NAME,
-            expected_exit_code=1,
-            expected_output_fragments=_LOCATED_MODEL_NAME_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="a CTE name in a test with cases is located exactly on native-preview",
-            engine="native-preview",
-            overrides=_LOCATED_CASE_NAME,
-            expected_exit_code=1,
-            expected_output_fragments=_LOCATED_CASE_NAME_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="each repeated malformed reference is P012 at its own call on native-preview",
-            engine="native-preview",
             overrides=_REPEATED_MALFORMED_SOURCE,
             expected_exit_code=1,
             expected_output_fragments=_REPEATED_MALFORMED_SOURCE_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="aliased IS [NOT] DISTINCT FROM and list projections pass on native",
-            engine="native",
             overrides=_ALIASED_OPERATORS,
             expected_exit_code=0,
             expected_output_fragments=_PASSING_FRAGMENTS,
         ),
         DirectLogicExtractionE2ETestCase(
             description="an unaliased IS DISTINCT FROM projection is rejected on native",
-            engine="native",
-            overrides=_UNALIASED_DISTINCT_FROM,
-            expected_exit_code=1,
-            expected_output_fragments=_UNALIASED_DISTINCT_FROM_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="aliased IS [NOT] DISTINCT FROM and list projections pass on native-preview",
-            engine="native-preview",
-            overrides=_ALIASED_OPERATORS,
-            expected_exit_code=0,
-            expected_output_fragments=_PASSING_FRAGMENTS,
-        ),
-        DirectLogicExtractionE2ETestCase(
-            description="an unaliased IS DISTINCT FROM projection is rejected on native-preview",
-            engine="native-preview",
             overrides=_UNALIASED_DISTINCT_FROM,
             expected_exit_code=1,
             expected_output_fragments=_UNALIASED_DISTINCT_FROM_FRAGMENTS,
@@ -351,7 +278,7 @@ _UNALIASED_DISTINCT_FROM_FRAGMENTS: tuple[str, ...] = (
     ],
     ids=lambda case: case.description,
 )
-def test_given_direct_logic_tests_when_testing_then_extraction_rules_hold_on_every_engine(
+def test_given_direct_logic_tests_when_testing_then_extraction_rules_hold(
     test_case: DirectLogicExtractionE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_inline_project(
@@ -360,15 +287,9 @@ def test_given_direct_logic_tests_when_testing_then_extraction_rules_hold_on_eve
         repo_files={**_PROJECT_FILES, **test_case.overrides},
     )
 
-    _ = run_sqb(
-        command=("--no-color", "build", "--no-tests"),
-        project_dir=project_dir,
-        env={_ENGINE_ENV_VAR: test_case.engine},
-    )
+    _ = run_sqb(command=("--no-color", "build", "--no-tests"), project_dir=project_dir)
     tested: CompletedProcess[str] = run_sqb(
-        command=("--no-color", "test", "--select", *_TESTS),
-        project_dir=project_dir,
-        env={_ENGINE_ENV_VAR: test_case.engine},
+        command=("--no-color", "test", "--select", *_TESTS), project_dir=project_dir
     )
 
     output: str = tested.stdout + tested.stderr

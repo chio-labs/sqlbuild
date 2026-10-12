@@ -7,7 +7,6 @@ use crate::declaration_files::main::bare_number_failure::bare_number_failure;
 use crate::model_files::_helpers::output_columns::output_column_locations;
 use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use crate::models::{DiscoveryFailure, FailureKind};
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_sqltext::compiler::main::model_header_byte_matching::match_one_bytes;
 use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
@@ -71,18 +70,15 @@ pub(crate) fn parse_model_file(
             header_line,
             keys: &unsupported,
             supported_keys: &options.supported_keys,
-            python: options.python,
         }));
     }
     for (_, value) in &header_values {
-        bare_number_failure(value, options.python, file_path).map_err(|failure| {
-            DiscoveryFailure {
-                kind: FailureKind::ModelSql,
-                ..failure
-            }
+        bare_number_failure(value, file_path).map_err(|failure| DiscoveryFailure {
+            kind: FailureKind::ModelSql,
+            ..failure
         })?;
     }
-    let query_sql: String = python_strip(&contents[sql_start..]).to_owned();
+    let query_sql: String = str::trim(&contents[sql_start..]).to_owned();
     if query_sql.is_empty() {
         return Err(failure(format!(
             "SQL model '{file_path}' must contain SQL after MODEL(...)"
@@ -91,12 +87,7 @@ pub(crate) fn parse_model_file(
     let header_column_locations =
         header_column_locations(&contents, (header_start, header_end), &column_offsets);
     let output_column_locations = if options.extract_output_column_locations {
-        output_column_locations(
-            options.python,
-            &contents,
-            sql_start,
-            options.extract_implicit_alias_columns,
-        )
+        output_column_locations(&contents, sql_start, options.extract_implicit_alias_columns)
     } else {
         Vec::new()
     };

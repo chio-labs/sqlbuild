@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from itertools import product
 from operator import itemgetter
 from pathlib import Path
 from typing import Any
@@ -17,19 +16,17 @@ from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_refer
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import ExpansionSpan, SqlReferenceOrigin, SqlReferenceScan
 from sqlbuild.compiler.compile.types import SqlReferenceScanFailure
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from tests.integration.src.sqlbuild.compiler.compile._helpers.refs._test_types import (
     CraftedReferenceTestCase,
     NativeReferenceErrorTestCase,
-    ReferenceEngineTestCase,
+    ReferenceExtractionTestCase,
     ReferenceScanBoundTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compile._helpers.refs.helpers import source_map_at
 
 _GENERIC_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
-_ENGINE_SQLS: tuple[
+_REFERENCE_SQLS: tuple[
     tuple[str, str, tuple[tuple[str, str, str | None, int | None], ...], str], ...
 ] = (
     (
@@ -82,7 +79,7 @@ _REJECTED_AFTER_MANY: str = _MANY_REFERENCES + " JOIN __ref(orders, customers)"
             description="every_kind_in_authored_order",
             sql=(
                 'SELECT * FROM __ref("orders") JOIN __source("raw_orders") '
-                'JOIN __seed("regions") JOIN __dbt_ref("shop" ,\x1c"customers") '
+                'JOIN __seed("regions") JOIN __dbt_ref("shop" ,\u3000"customers") '
                 'WHERE __udf("clean")(x) > 0 OR __dbt_ref("orders") IS NULL'
             ),
         ),
@@ -204,24 +201,20 @@ def test_given_crafted_reference_sql_when_extracting_then_rejected_and_failed_co
 @pytest.mark.parametrize(
     "test_case",
     [
-        ReferenceEngineTestCase(
-            description=f"{engine}_{name}",
-            engine=engine,
+        ReferenceExtractionTestCase(
+            description=name,
             sql=sql,
             expected_references=expected_references,
             expected_error=expected_error,
             expected_native_calls=1,
         )
-        for engine, (name, sql, expected_references, expected_error) in product(
-            CompilerEngine, _ENGINE_SQLS
-        )
+        for name, sql, expected_references, expected_error in _REFERENCE_SQLS
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_extracting_references_then_every_engine_runs_native_scanner(
-    test_case: ReferenceEngineTestCase, monkeypatch: pytest.MonkeyPatch
+def test_given_reference_sql_when_extracting_references_then_native_scanner_runs(
+    test_case: ReferenceExtractionTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine.value)
     native_calls: list[str] = []
     native_extract: Callable[..., SqlReferenceScan | SqlReferenceScanFailure] = (
         references.extract_native_sql_references
@@ -334,7 +327,6 @@ def test_given_engine_when_extracting_references_then_every_engine_runs_native_s
 def test_given_native_reference_error_when_extracting_then_raised_located(
     test_case: NativeReferenceErrorTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
 
     with pytest.raises(CompileInputError) as raised:
         _ = extract_sql_references(

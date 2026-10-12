@@ -79,7 +79,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_expression_sources.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_lifecycle_commands.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_manifest_artifact_gating.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/build/test_model_config_engines.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_model_config_build.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_no_tests_no_audits_flags.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_plan_command_surface.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_hooks.py \
@@ -297,22 +297,22 @@ COMPILER_DIFFERENTIAL_JOBS ?= 4
 COMPILER_DIFFERENTIAL_SEEDS ?= 12
 COMPILER_DIFFERENTIAL_DENSE_MODELS ?= 3000
 COMPILER_DIFFERENTIAL_ARGS ?=
-# Native-to-Python fallbacks and analysis deferrals must match the allow-list exactly, and every
-# output its golden. `make compiler-baselines` rewrites both (see scripts/compiler_differential/README.md).
-COMPILER_DIFFERENTIAL_GATES := --native-fallbacks check --goldens check
+# Every output must match its golden. `make compiler-baselines` rewrites them
+# (see scripts/compiler_differential/README.md).
+COMPILER_DIFFERENTIAL_GATES := --goldens check
 
 compiler-differential:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \
 		--jobs $(COMPILER_DIFFERENTIAL_JOBS) --seeds $(COMPILER_DIFFERENTIAL_SEEDS) \
 		$(COMPILER_DIFFERENTIAL_GATES) $(COMPILER_DIFFERENTIAL_ARGS)
 
-# Rewrite the goldens (from the native oracle) and the fallback allow-list from the CI run.
+# Rewrite the goldens from the CI run.
 # Review the diff like code; see scripts/compiler_differential/README.md.
 COMPILER_DIFFERENTIAL_CI_ARGS := --stage-captures --require-discovery-coverage --require-render-coverage
 compiler-baselines:
 	rm -rf tests/goldens/compiler
 	$(MAKE) compiler-differential COMPILER_DIFFERENTIAL_ARGS="$(COMPILER_DIFFERENTIAL_CI_ARGS) \
-		--require-analysis-coverage --native-fallbacks update --goldens update"
+		--require-analysis-coverage --goldens update"
 
 compiler-differential-dense:
 	env PYTHONUNBUFFERED=1 uv run python -m scripts.run_compiler_differential \

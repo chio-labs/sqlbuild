@@ -1,14 +1,10 @@
 //! `get_validated_model_cursor_intrinsics`: check and canonicalize one model query's intrinsics.
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-use sqlbuild_core::text::models::PythonText;
-
 use crate::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
 use crate::cursor_intrinsics::models::IntrinsicModel;
 
 /// The query with every intrinsic call written `name()`, or why the model may not use them.
 pub fn validated_model_intrinsics(
-    python: PythonText,
     sql: &str,
     reserved_markers: &[String],
     model: &IntrinsicModel<'_>,
@@ -22,7 +18,7 @@ pub fn validated_model_intrinsics(
             "{context} contains a reserved internal cursor marker"
         ));
     }
-    let (canonical, found) = replace_intrinsics(python, sql, &context, |name| format!("{name}()"))?;
+    let (canonical, found) = replace_intrinsics(sql, &context, |name| format!("{name}()"))?;
     if !found {
         return Ok(canonical);
     }
@@ -33,7 +29,7 @@ pub fn validated_model_intrinsics(
     }
     if model
         .cursor
-        .is_none_or(|cursor| python_strip(cursor).is_empty())
+        .is_none_or(|cursor| str::trim(cursor).is_empty())
     {
         return Err(format!(
             "{context} uses cursor intrinsics but does not declare a cursor"

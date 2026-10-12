@@ -10,7 +10,6 @@ from itertools import compress
 from pathlib import Path
 from typing import cast
 
-import sqlbuild._native as _native
 from sqlbuild.compiler.discovery._helpers.filesystem import aggregation
 from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_audit_files,
@@ -190,25 +189,6 @@ def model_paths(*, inputs: DiscoveredProjectInputs) -> tuple[str, ...]:
     """Return discovered model paths in discovery order."""
 
     return tuple(file.relative_path.as_posix() for file in inputs.model_files)
-
-
-def header_match_mismatches(*, seed: int, count: int) -> tuple[str, ...]:
-    """Return random MODEL files whose native header match differs from the Python pattern."""
-
-    rng: random.Random = random.Random(seed)
-    contents: list[str] = [_random_model_file(rng) for _ in range(count)]
-    contents.extend(f"MODEL (a){space};{space}SELECT 1" for space in _PYTHON_WHITESPACE)
-    return tuple(
-        compress(
-            contents,
-            [
-                native != _python_header_offsets(value)
-                for value, native in zip(
-                    contents, _native.match_model_headers(contents), strict=True
-                )
-            ],
-        )
-    )
 
 
 def _python_header_offsets(contents: str) -> tuple[int, int, int] | None:

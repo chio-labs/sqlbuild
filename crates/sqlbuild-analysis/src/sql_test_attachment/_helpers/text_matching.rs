@@ -2,12 +2,8 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_ignorecase_key::python_ignorecase_key;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::ignorecase_key::ignorecase_key;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 const DOLLAR: char = '$';
 const QUOTE_CHARACTERS: [char; 2] = ['"', '`'];
@@ -15,8 +11,8 @@ const AS_KEYWORD: [char; 2] = ['a', 's'];
 const OPEN_PAREN: char = '(';
 
 /// One character of `[\w$]`.
-fn identifier_character(python: PythonText, character: char) -> bool {
-    character == DOLLAR || is_python_word(python, character)
+fn identifier_character(character: char) -> bool {
+    character == DOLLAR || is_word_char(character)
 }
 
 /// The start of `[A-Za-z_]`.
@@ -26,7 +22,6 @@ fn identifier_start(character: char) -> bool {
 
 /// `re.findall(r"[A-Za-z_][\w$]*", sql)` casefolded, each distinct token once, first first.
 pub(crate) fn identifier_tokens(sql: &str) -> Vec<String> {
-    let python: PythonText = active_python_text();
     let characters: Vec<char> = sql.chars().collect();
     let mut seen: HashSet<String> = HashSet::new();
     let mut tokens: Vec<String> = Vec::new();
@@ -38,11 +33,11 @@ pub(crate) fn identifier_tokens(sql: &str) -> Vec<String> {
         }
         let start: usize = index;
         index += 1;
-        while index < characters.len() && identifier_character(python, characters[index]) {
+        while index < characters.len() && identifier_character(characters[index]) {
             index += 1;
         }
         let token: String = characters[start..index].iter().collect();
-        let folded: String = python_casefold(python, &token);
+        let folded: String = str::to_lowercase(&token);
         if seen.insert(folded.clone()) {
             tokens.push(folded);
         }
@@ -51,43 +46,40 @@ pub(crate) fn identifier_tokens(sql: &str) -> Vec<String> {
 }
 
 /// Whether `text[at..]` starts with `literal` under `re.IGNORECASE`.
-fn ignorecase_at(python: PythonText, text: &[char], at: usize, literal: &[char]) -> bool {
+fn ignorecase_at(text: &[char], at: usize, literal: &[char]) -> bool {
     text.len() >= at + literal.len()
         && text[at..at + literal.len()]
             .iter()
             .zip(literal)
-            .all(|(left, right)| {
-                python_ignorecase_key(python, *left) == python_ignorecase_key(python, *right)
-            })
+            .all(|(left, right)| ignorecase_key(*left) == ignorecase_key(*right))
 }
 
 /// Whether no `[\w$]` character precedes `at`.
-fn starts_word(python: PythonText, text: &[char], at: usize) -> bool {
-    at == 0 || !identifier_character(python, text[at - 1])
+fn starts_word(text: &[char], at: usize) -> bool {
+    at == 0 || !identifier_character(text[at - 1])
 }
 
 /// The first `at >= from` where `(?<![\w$])literal` matches under `re.IGNORECASE`.
-fn word_start(python: PythonText, text: &[char], from: usize, literal: &[char]) -> Option<usize> {
+fn word_start(text: &[char], from: usize, literal: &[char]) -> Option<usize> {
     (from..=text.len().saturating_sub(literal.len()))
-        .find(|at| starts_word(python, text, *at) && ignorecase_at(python, text, *at, literal))
+        .find(|at| starts_word(text, *at) && ignorecase_at(text, *at, literal))
 }
 
 /// `re.search(rf"(?<![\w$]){re.escape(word)}(?![\w$])", sql, re.IGNORECASE)`.
 pub(crate) fn reads_word(sql: &str, word: &str) -> bool {
-    let python: PythonText = active_python_text();
     let text: Vec<char> = sql.chars().collect();
     let literal: Vec<char> = word.chars().collect();
     (0..=text.len().saturating_sub(literal.len())).any(|at| {
-        starts_word(python, &text, at)
-            && ignorecase_at(python, &text, at, &literal)
+        starts_word(&text, at)
+            && ignorecase_at(&text, at, &literal)
             && text
                 .get(at + literal.len())
-                .is_none_or(|next| !identifier_character(python, *next))
+                .is_none_or(|next| !identifier_character(*next))
     })
 }
 
 /// After a CTE name: an optional quote, `\s+AS\s*\(`; the index after `(`, if it matches.
-fn cte_header_end(python: PythonText, text: &[char], at: usize) -> Option<usize> {
+fn cte_header_end(text: &[char], at: usize) -> Option<usize> {
     let mut index: usize = at;
     if text
         .get(index)
@@ -96,14 +88,14 @@ fn cte_header_end(python: PythonText, text: &[char], at: usize) -> Option<usize>
         index += 1;
     }
     let spaces: usize = index;
-    while index < text.len() && is_python_space(text[index]) {
+    while index < text.len() && char::is_whitespace(text[index]) {
         index += 1;
     }
-    if index == spaces || !ignorecase_at(python, text, index, &AS_KEYWORD) {
+    if index == spaces || !ignorecase_at(text, index, &AS_KEYWORD) {
         return None;
     }
     index += AS_KEYWORD.len();
-    while index < text.len() && is_python_space(text[index]) {
+    while index < text.len() && char::is_whitespace(text[index]) {
         index += 1;
     }
     (text.get(index) == Some(&OPEN_PAREN)).then_some(index + 1)
@@ -111,10 +103,9 @@ fn cte_header_end(python: PythonText, text: &[char], at: usize) -> Option<usize>
 
 /// `(?<![\w$])name["`]?\s+AS\s*\(` searched from `from` under `re.IGNORECASE`: start and end.
 pub(crate) fn cte_header(text: &[char], from: usize, name: &[char]) -> Option<(usize, usize)> {
-    let python: PythonText = active_python_text();
     let mut search: usize = from;
-    while let Some(start) = word_start(python, text, search, name) {
-        if let Some(end) = cte_header_end(python, text, start + name.len()) {
+    while let Some(start) = word_start(text, search, name) {
+        if let Some(end) = cte_header_end(text, start + name.len()) {
             return Some((start, end));
         }
         search = start + 1;
@@ -124,7 +115,5 @@ pub(crate) fn cte_header(text: &[char], from: usize, name: &[char]) -> Option<(u
 
 /// `re.search(re.escape(call), text, re.IGNORECASE)` from `from`.
 pub(crate) fn literal_from(text: &[char], from: usize, literal: &[char]) -> Option<usize> {
-    let python: PythonText = active_python_text();
-    (from..=text.len().saturating_sub(literal.len()))
-        .find(|at| ignorecase_at(python, text, *at, literal))
+    (from..=text.len().saturating_sub(literal.len())).find(|at| ignorecase_at(text, *at, literal))
 }

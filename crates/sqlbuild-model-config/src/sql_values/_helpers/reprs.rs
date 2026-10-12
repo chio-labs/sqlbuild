@@ -4,11 +4,10 @@ use crate::sql_values::_helpers::decimals::{normalized_parts, parse_decimal};
 use crate::sql_values::errors::SqlValueFailure;
 use sqlbuild_core::json::main::python_float_repr::python_float_repr;
 use sqlbuild_core::models::{SqlLogicalType, SqlValue};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 fn text_repr(text: &str) -> String {
-    python_str_repr(active_python_text(), text)
+    python_str_repr(text)
 }
 
 /// `repr(tuple(items))`, with the trailing comma of a one-item tuple.

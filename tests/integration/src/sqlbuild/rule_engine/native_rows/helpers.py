@@ -1,14 +1,11 @@
 import json
 import shutil
-from collections import Counter
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.frontier.types import NativeStage
-from sqlbuild.rule_engine._helpers.run import native_rows as native_rows_module
 
 RULES_FIXTURE: Path = Path("tests/e2e/fixtures/waffle_shop")
 RULES_CONFIG: str = '\n[rules]\nselect = ["SQBR"]\n'
@@ -23,28 +20,6 @@ def write_rules_fixture(*, project_dir: Path) -> None:
     _ = shutil.copytree(RULES_FIXTURE, project_dir)
     config: Path = project_dir / "sqlbuild_project.toml"
     _ = config.write_text(config.read_text(encoding="utf-8") + RULES_CONFIG, encoding="utf-8")
-
-
-def record_built_rows(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count the rules request rows the native builder reports it built."""
-
-    built: Counter[str] = Counter()
-
-    def counted(*, stage: NativeStage, kind: str, units: int = 1) -> None:
-        built[f"{stage.value}:{kind}"] += units
-
-    monkeypatch.setattr(native_rows_module, "report_native_answer", counted)
-    return built
-
-
-def built_rows(built: Counter[str]) -> tuple[int, int, int]:
-    """Models, SQL tests and scenarios built natively, in that order."""
-
-    return (
-        built["rules_request:models"],
-        built["rules_request:sql_tests"],
-        built["rules_request:sql_scenarios"],
-    )
 
 
 def compile_rules(

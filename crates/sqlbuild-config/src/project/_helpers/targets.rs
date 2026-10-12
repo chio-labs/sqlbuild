@@ -21,7 +21,6 @@ use crate::project::constants::{
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
 use crate::project::types::{Entries, Fields, Loaded};
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 /// Policy fields of a target, with the enum each projects to.
 const TARGET_POLICIES: [(&str, &str); 3] = [
@@ -53,7 +52,7 @@ pub(crate) fn load_connections(payload: Option<&ConfigValue>, file: ConfigFile) 
     let mut loaded: Vec<(String, Built)> = Vec::new();
     for (key, value) in mapping {
         let name = key_name(key);
-        if python_strip(name).is_empty() {
+        if str::trim(name).is_empty() {
             return Err(ConfigFailure::at(
                 file,
                 "connections contains an empty name",
@@ -124,9 +123,9 @@ fn target_connection(mapping: &Entries, target: TargetPlace<'_>) -> Loaded<(Buil
     match get(mapping, "connection") {
         None => Ok((Built::Value(ConfigValue::Map(Vec::new())), none())),
         Some(value @ ConfigValue::Map(_)) => Ok((Built::Value(value.clone()), none())),
-        Some(ConfigValue::String(text)) if !python_strip(text).is_empty() => Ok((
+        Some(ConfigValue::String(text)) if !str::trim(text).is_empty() => Ok((
             Built::Value(ConfigValue::Map(Vec::new())),
-            Built::Value(ConfigValue::String(python_strip(text).to_owned())),
+            Built::Value(ConfigValue::String(str::trim(text).to_owned())),
         )),
         Some(_) => Err(ConfigFailure::at(
             target.file,
@@ -268,9 +267,9 @@ fn target_warehouses(payload: Option<&ConfigValue>, target: TargetPlace<'_>) -> 
         .into_iter()
         .map(|group| match get(entries, group) {
             None => Ok((group, none())),
-            Some(ConfigValue::String(text)) if !python_strip(text).is_empty() => Ok((
+            Some(ConfigValue::String(text)) if !str::trim(text).is_empty() => Ok((
                 group,
-                Built::Value(ConfigValue::String(python_strip(text).to_owned())),
+                Built::Value(ConfigValue::String(str::trim(text).to_owned())),
             )),
             Some(_) => Err(ConfigFailure::at(
                 target.file,

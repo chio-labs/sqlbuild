@@ -1,4 +1,4 @@
-"""Every engine compiles a project identically, whichever analysis stages run natively."""
+"""Every analysis stage seam answers natively when a project compiles."""
 
 from __future__ import annotations
 
@@ -18,14 +18,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
-    CompileReuseRun,
-    copy_compile_project,
-    engine_in_process_compile,
     prepare_compile_reuse_project,
-    report_without_engine,
+    seam_recording_compile,
 )
-
-_ENGINES: tuple[str, ...] = ("native", "native-preview")
 
 
 @pytest.mark.parametrize(
@@ -48,7 +43,7 @@ _ENGINES: tuple[str, ...] = ("native", "native-preview")
     ],
     ids=lambda case: case.description,
 )
-def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_and_outputs_match(
+def test_given_project_when_compiling_then_native_seams_answer(
     test_case: NativeAnalysisSeamTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -58,28 +53,15 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
     prepare_compile_reuse_project(project_dir=prepared_project)
     native_sql_test_planning: Mock = Mock(wraps=native_module.plan_compiled_sql_tests)
     monkeypatch.setattr(native_module, "plan_compiled_sql_tests", native_sql_test_planning)
-    outcomes: dict[str, tuple[CompileReuseRun, dict[str, list[object]]]] = {
-        engine: engine_in_process_compile(
-            project_dir=copy_compile_project(
-                source=prepared_project, destination=tmp_path / engine
-            ),
-            engine=engine,
-            monkeypatch=monkeypatch,
-            capsys=capsys,
-        )
-        for engine in _ENGINES
-    }
-    native_run, native_seams = outcomes["native"]
-    preview_run, preview_seams = outcomes["native-preview"]
+    native_run, native_seams = seam_recording_compile(
+        project_dir=prepared_project, monkeypatch=monkeypatch, capsys=capsys
+    )
 
     assert native_run.returncode == 0, native_run.stderr
     assert native_run.compiled
-    assert (native_seams, preview_seams) == (
-        test_case.expected_native_returns,
-        test_case.expected_native_returns,
-    )
+    assert native_seams == test_case.expected_native_returns
     planned_counts: list[int] = []
-    for seams in (native_seams, preview_seams):
+    for seams in (native_seams,):
         assert isinstance(seams["build_native_column_lineage"][0], ProjectColumnLineage)
         assert isinstance(seams["assemble_native_project_resources"][0], NativeProjectResources)
         assert isinstance(seams["analyze_native_model_sql"][0], NativeModelAnalyses)
@@ -101,9 +83,6 @@ def test_given_project_when_compiling_with_each_engine_then_native_seams_answer_
     assert [
         len(call.args[0].tests) for call in native_sql_test_planning.call_args_list
     ] == planned_counts
-    assert preview_run.returncode == 0
-    assert report_without_engine(preview_run) == report_without_engine(native_run)
-    assert preview_run.compiled == native_run.compiled
 
 
 if __name__ == "__main__":

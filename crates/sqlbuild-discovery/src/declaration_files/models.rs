@@ -3,7 +3,6 @@
 use crate::declaration_files::types::Collection;
 use crate::declarations::models::{DeclarationKind, DeclarationLayout};
 use crate::models::{DiscoveredFile, DiscoveryFailure, LineColumnSpan, ProjectRoot, StageFailure};
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 use std::sync::{Arc, Mutex};
 
@@ -13,7 +12,6 @@ pub struct DeclarationFileOptions {
     pub function_keys: Vec<String>,
     pub audit_keys: Vec<String>,
     pub hook_keys: Vec<String>,
-    pub python: PythonText,
 }
 
 /// One collection Python's discovery reads, in its discovery order.

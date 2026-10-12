@@ -1,1 +1,1 @@
-"""Differential harness comparing the Python and native compiler engines."""
+"""Corpus harness checking compiler outputs against expectations and goldens."""

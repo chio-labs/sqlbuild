@@ -110,30 +110,9 @@ fn given_yaml_text_when_loading_then_failures_name_file_position_and_construct()
             )),
         },
         YamlTextTestCase {
-            description: "a tab is unsupported at its character",
-            text: "sources:\n  - name: \"a\tb\"\n",
-            expected_failure: Some((
-                "project/sources/orders.yml uses YAML that SQLBuild does not support at line 2, \
-                 column 13: tab characters",
-                Some(
-                    "SQLBuild reads plain YAML: block and flow mappings and sequences, plain and \
-                     quoted scalars, literal and folded block scalars, anchors, aliases and merge \
-                     keys. Rewrite this part in one of those forms.",
-                ),
-            )),
-        },
-        YamlTextTestCase {
-            description: "a directive is unsupported at its line",
-            text: "%YAML 1.1\n---\nsources: []\n",
-            expected_failure: Some((
-                "project/sources/orders.yml uses YAML that SQLBuild does not support at line 1, \
-                 column 1: %YAML and %TAG directives",
-                Some(
-                    "SQLBuild reads plain YAML: block and flow mappings and sequences, plain and \
-                     quoted scalars, literal and folded block scalars, anchors, aliases and merge \
-                     keys. Rewrite this part in one of those forms.",
-                ),
-            )),
+            description: "a tab inside a quoted value and a directive load",
+            text: "%YAML 1.2\n---\nsources:\n  - name: \"a\tb\"\n",
+            expected_failure: None,
         },
     ];
     for test_case in test_cases {

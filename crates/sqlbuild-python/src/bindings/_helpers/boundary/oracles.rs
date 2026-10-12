@@ -12,11 +12,7 @@ use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{
     JsonDialect, JsonInteger, JsonValue, OrjsonOptions, StdlibJsonOptions,
 };
-use sqlbuild_core::text::main::close_matches::close_matches;
-use sqlbuild_core::text::main::decode_python_text::decode_python_text;
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
-use sqlbuild_core::text::main::python_text::python_text;
+use sqlbuild_core::text::main::decode_text::decode_text;
 use sqlbuild_core::text::models::LineIndex;
 
 fn oracle_error(message: impl std::fmt::Display) -> PyErr {
@@ -127,7 +123,7 @@ fn _oracle_text_positions(
     data: &[u8],
     byte_offsets: Vec<usize>,
 ) -> PyResult<(String, Vec<OraclePosition>)> {
-    let text = decode_python_text(data).map_err(|error| oracle_error(error.valid_up_to))?;
+    let text = decode_text(data).map_err(|error| oracle_error(error.valid_up_to))?;
     let positions = {
         let index = LineIndex::new(&text);
         byte_offsets
@@ -201,54 +197,7 @@ fn _oracle_toml_load(text: &str) -> String {
     outcome(load_toml(text).map(|value| canonical(&value)))
 }
 
-#[pyfunction]
-fn _oracle_python_alnum(
-    python_version: (u8, u8),
-    unicode_version: &str,
-    code_points: Vec<u32>,
-) -> Option<Vec<bool>> {
-    let python = python_text(python_version, unicode_version)?;
-    Some(
-        code_points
-            .into_iter()
-            .map(|code_point| {
-                char::from_u32(code_point)
-                    .is_some_and(|character| is_python_alnum(python, character))
-            })
-            .collect(),
-    )
-}
-
-#[pyfunction]
-fn _oracle_close_matches(
-    word: &str,
-    possibilities: Vec<String>,
-    count: usize,
-    cutoff: f64,
-) -> Vec<String> {
-    let candidates: Vec<&str> = possibilities.iter().map(String::as_str).collect();
-    close_matches(word, &candidates, count, cutoff)
-}
-
-#[pyfunction]
-fn _oracle_cleandoc(
-    python_version: (u8, u8),
-    unicode_version: &str,
-    texts: Vec<String>,
-) -> Option<Vec<String>> {
-    let python = python_text(python_version, unicode_version)?;
-    Some(
-        texts
-            .iter()
-            .map(|text| python_cleandoc(python, text))
-            .collect(),
-    )
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(_oracle_python_alnum, module)?)?;
-    module.add_function(wrap_pyfunction!(_oracle_cleandoc, module)?)?;
-    module.add_function(wrap_pyfunction!(_oracle_close_matches, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_json_dumps, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_text_positions, module)?)?;
     module.add_function(wrap_pyfunction!(_oracle_yaml_load, module)?)?;

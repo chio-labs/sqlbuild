@@ -1,14 +1,10 @@
 //! `_infer_sql_test_mode`: the mode named by a top-level direct-logic actual CTE.
 
 use crate::sql_tests::constants::{ACTUAL_CTE_MARKER, ACTUAL_CTE_MODES, MODEL_MODE};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 fn is_word(character: Option<&char>) -> bool {
-    character.is_some_and(|character| {
-        *character == '$' || is_python_word(active_python_text(), *character)
-    })
+    character.is_some_and(|character| *character == '$' || is_word_char(*character))
 }
 
 fn find(text: &[char], from: usize, needle: &[char]) -> Option<usize> {
@@ -50,7 +46,7 @@ fn skip_space(text: &[char], index: usize) -> usize {
     index
         + text[index..]
             .iter()
-            .take_while(|character| is_python_space(**character))
+            .take_while(|character| char::is_whitespace(**character))
             .count()
 }
 

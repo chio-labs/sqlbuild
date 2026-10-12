@@ -9,7 +9,6 @@ use crate::declaration_files::_helpers::parsing::declaration_headers::declaratio
 use crate::declaration_files::_helpers::parsing::enum_files::declaration_name;
 use crate::declaration_files::models::{SchemaDeclaration, SchemaFile};
 use crate::models::FailureKind;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const SCHEMA_KEYS: [&str; 4] = ["name", "description", "extends", "columns"];
@@ -17,13 +16,12 @@ const SCHEMA_KEYS: [&str; 4] = ["name", "description", "extends", "columns"];
 pub(crate) fn parse_schema_file(
     file_path: &str,
     contents: String,
-    python: PythonText,
 ) -> Result<SchemaFile, ParseStop> {
     let headers = declaration_headers(&contents, file_path, "SCHEMA")?;
     let mut declarations: Vec<SchemaDeclaration> = Vec::with_capacity(headers.len());
     let mut failure: Option<_> = None;
     for header in headers {
-        match parse_schema(&header.values, file_path, python) {
+        match parse_schema(&header.values, file_path) {
             Ok((name, description, extends)) => declarations.push(SchemaDeclaration {
                 name,
                 description,
@@ -57,7 +55,6 @@ type SchemaFacts = (String, Option<String>, Option<String>);
 fn parse_schema(
     values: &[(String, AuthoredValue)],
     file_path: &str,
-    python: PythonText,
 ) -> Result<SchemaFacts, ParseStop> {
     let unknown: Vec<String> = unknown_keys(values, &SCHEMA_KEYS);
     if !unknown.is_empty() {
@@ -66,18 +63,16 @@ fn parse_schema(
             unknown.join(", ")
         )));
     }
-    let name: String = declaration_name(get(values, "name"), file_path, "schema", python)?;
+    let name: String = declaration_name(get(values, "name"), file_path, "schema")?;
     let description: Option<String> = optional_string(
         get(values, "description"),
         file_path,
         &format!("schema '{name}' description"),
-        python,
     )?;
     let extends: Option<String> = optional_string(
         get(values, "extends"),
         file_path,
         &format!("schema '{name}' extends"),
-        python,
     )?;
     if let Some(parent) = &extends
         && !is_identifier(parent)
@@ -94,15 +89,14 @@ fn optional_string(
     raw_value: Option<&AuthoredValue>,
     file_path: &str,
     label: &str,
-    python: PythonText,
 ) -> Result<Option<String>, ParseStop> {
     let Some(raw_value) = raw_value else {
         return Ok(None);
     };
-    if python_type(raw_value, WordRules { python, file_path })? == PythonType::None {
+    if python_type(raw_value, WordRules { file_path })? == PythonType::None {
         return Ok(None);
     }
-    match non_empty_str(raw_value, WordRules { python, file_path })? {
+    match non_empty_str(raw_value, WordRules { file_path })? {
         Some(text) => Ok(Some(text.to_owned())),
         None => Err(declaration(format!(
             "{file_path} {label} must be a non-empty string"

@@ -39,7 +39,7 @@ fn given_yaml_declarations_when_renaming_then_references_and_fields_are_edited()
 fn given_yaml_edge_cases_when_renaming_then_python_edits_are_kept() -> Result<(), RefactorError> {
     let test_cases = [
         YamlSpansTestCase {
-            description: "a file PyYAML rejects is skipped",
+            description: "a file that is not valid YAML is skipped",
             contents: "sources: [unclosed\n",
             expected_spans: (&[], &[]),
         },

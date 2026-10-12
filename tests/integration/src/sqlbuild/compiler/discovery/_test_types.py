@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import sys
-import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -19,7 +17,7 @@ class GeneratedDocumentOracleTestCase:
 
 @dataclass(frozen=True)
 class RepositoryFileOracleTestCase:
-    """Repository files of one kind loaded natively and by the Python loader."""
+    """Repository files of one kind and how many the native loader may reject."""
 
     description: str
     pattern: str
@@ -30,7 +28,7 @@ class RepositoryFileOracleTestCase:
 
 @dataclass(frozen=True)
 class HostileDocumentOracleTestCase:
-    """A document built to exhaust a naive reader, which the native reader must defer quickly."""
+    """A document built to exhaust a naive reader, which the native reader must refuse quickly."""
 
     description: str
     document: str
@@ -40,10 +38,11 @@ class HostileDocumentOracleTestCase:
 
 @dataclass(frozen=True)
 class LargeDocumentOracleTestCase:
-    """A large single-line document that must load in linear time with PyYAML's value."""
+    """A large single-line document that must load in linear time to its expected value."""
 
     description: str
     document: str
+    expected_value: object
     expected_maximum_seconds: float = 2.0
 
 
@@ -56,10 +55,6 @@ class NativeRuntimeTestCase:
     expected_models: int
     expected_error: str = "NoneType"
     expected_message: str = "None"
-    unidata_version: str = field(default_factory=lambda: unicodedata.unidata_version)
-    python_version: tuple[int, int] = field(
-        default_factory=lambda: (sys.version_info[0], sys.version_info[1])
-    )
 
 
 @dataclass(frozen=True)
@@ -79,6 +74,7 @@ class NativeYamlLoadTestCase:
     description: str
     files: tuple[tuple[str, bytes], ...]
     expected_native_tags: tuple[str, ...]
+    expected_values: tuple[object, ...]
 
 
 @dataclass(frozen=True)
@@ -126,16 +122,6 @@ class UndecodablePathToleranceTestCase:
 
 
 @dataclass(frozen=True)
-class UnsupportedPythonCommandTestCase:
-    """A command run on a Python this release does not support."""
-
-    description: str
-    command: tuple[str, ...]
-    expected_exit_code: int
-    expected_error: str
-
-
-@dataclass(frozen=True)
 class NativeOsErrorTestCase:
     """An operating-system read payload and the Python error it becomes."""
 
@@ -157,7 +143,7 @@ class UndecodableDeclarationNameTestCase:
 
 @dataclass(frozen=True)
 class GeneratedDeclarationFileTestCase:
-    """Seeded declaration files of one kind discovered by the Python and native-preview engines."""
+    """Seeded declaration files of one kind discovered and parsed natively."""
 
     description: str
     kind: str
@@ -166,12 +152,11 @@ class GeneratedDeclarationFileTestCase:
     expected_minimum_parsed: int
     expected_minimum_failed: int
     expected_maximum_deferred: int
-    expected_mismatches: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
 class DeclarationFilesParityTestCase:
-    """A project whose declaration files discovery reads under the Python and preview engines."""
+    """A project whose declaration files discovery reads, or the failure it raises."""
 
     description: str
     files: tuple[tuple[str, bytes], ...]
@@ -181,10 +166,9 @@ class DeclarationFilesParityTestCase:
 
 @dataclass(frozen=True)
 class NativeSessionTestCase:
-    """Whether a discovery pass under one engine keeps its native declaration session."""
+    """Whether a discovery pass keeps its native declaration session."""
 
     description: str
-    engine: str
     expected_session: bool
 
 
@@ -239,5 +223,4 @@ class DeepHeaderValuesTestCase:
     description: str
     header: str
     stack_frames: int
-    expected_engines: tuple[str, ...]
     expected_max_depth: int

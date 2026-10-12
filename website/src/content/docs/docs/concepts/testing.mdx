@@ -113,8 +113,7 @@ An `__expected__<model>` CTE compares only the columns it lists, matched by name
 does not matter and unlisted model columns are ignored. Row counts are always compared. Listing a
 column the model does not output is a test error.
 
-SQLBuild reads test CTEs strictly, the same way on every compiler engine, and rejects other forms
-with a compile error that names the CTE:
+SQLBuild reads test CTEs strictly and rejects other forms with a compile error that names the CTE:
 
 - A CTE name is an unquoted identifier of ASCII letters, digits and underscores that starts with a
   letter or underscore. Quoted names such as `"recent orders"` or `` `recent orders` ``, and names

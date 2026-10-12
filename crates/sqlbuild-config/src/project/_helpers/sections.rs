@@ -22,7 +22,6 @@ use crate::project::constants::{
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
 use crate::project::types::{Entries, Fields, Loaded};
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 fn place(file: ConfigFile, label: &str) -> Place<'_> {
     Place { file, label }
@@ -333,8 +332,8 @@ pub(crate) fn load_migrations(payload: Option<&ConfigValue>, file: ConfigFile) -
     let views = match get(mapping, OLD_NAME_VIEWS_KEY) {
         None => return Ok(object("MigrationsConfig", Vec::new())),
         Some(ConfigValue::Bool(false)) => Built::Value(ConfigValue::Null),
-        Some(ConfigValue::String(text)) if parse_duration(python_strip(text))?.is_some() => {
-            Built::Value(ConfigValue::String(python_strip(text).to_owned()))
+        Some(ConfigValue::String(text)) if parse_duration(str::trim(text))?.is_some() => {
+            Built::Value(ConfigValue::String(str::trim(text).to_owned()))
         }
         Some(_) => {
             return Err(ConfigFailure::at(
@@ -556,7 +555,7 @@ fn local_type_overrides(mapping: &Entries, file: ConfigFile) -> Loaded<Built> {
     )?;
     let mut loaded: Vec<(String, Built)> = Vec::new();
     for (dialect, rules) in overrides {
-        let name = python_strip(key_name(dialect));
+        let name = str::trim(key_name(dialect));
         if name.is_empty() {
             return Err(ConfigFailure::at(
                 file,

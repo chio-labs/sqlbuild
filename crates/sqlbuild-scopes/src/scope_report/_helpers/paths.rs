@@ -2,7 +2,6 @@
 
 use sqlbuild_core::posix_path::main::posix_parts::posix_parts;
 use sqlbuild_core::posix_path::main::posix_suffix::posix_suffix;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 
 use crate::scope_index::main::normalize_scope_path::normalize_scope_path;
 use crate::scope_index::models::{OwnershipRoot, RejectedPath, ResourceKind};
@@ -46,7 +45,7 @@ pub(crate) fn part_count(path: &str) -> usize {
 pub(crate) fn looks_like_path(value: &str) -> bool {
     value.contains(PATH_SEPARATOR)
         || value.contains(WINDOWS_PATH_SEPARATOR)
-        || !posix_suffix(active_python_text(), value).is_empty()
+        || !posix_suffix(value).is_empty()
 }
 
 /// `_default_suffix`: sources are YAML, every other resource SQL.
@@ -63,7 +62,7 @@ pub(crate) fn resource_path_is_valid(path: &str, root: &OwnershipRoot) -> bool {
     if path == root.path {
         return false;
     }
-    let suffix: String = posix_suffix(active_python_text(), path).to_ascii_lowercase();
+    let suffix: String = posix_suffix(path).to_ascii_lowercase();
     if root.resource_kind == Some(ResourceKind::Source) {
         suffix == YML_SUFFIX || suffix == YAML_SUFFIX
     } else {

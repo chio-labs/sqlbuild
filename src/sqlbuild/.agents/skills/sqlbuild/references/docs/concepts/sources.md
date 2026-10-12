@@ -301,22 +301,24 @@ naming the key and suggesting the nearest supported key.
 
 ## YAML that SQLBuild reads
 
-Sources files, seed declarations and `schema.yml` files use plain YAML 1.1: block and flow mappings
-and sequences, plain and quoted scalars, literal (`|`) and folded (`>`) block scalars, comments,
-anchors, aliases and merge keys (`<<`). Files must be UTF-8.
+Sources files, seed declarations and `schema.yml` files are YAML 1.2, read with the core schema,
+plus merge keys (`<<`). Files must be UTF-8 and hold one document.
+
+Plain values are typed by the core schema:
+
+- `true` and `false` (also capitalized or uppercase) are booleans; `yes`, `no`, `on` and `off` are
+  text
+- `null`, `~` and an empty value are null
+- decimal integers, `0o` octal and `0x` hexadecimal are integers; `017` is 17
+- decimals with an optional exponent, `.inf` and `.nan` are floats
+- everything else, including dates and timestamps, is text
+
+Quote a value to keep it as text, for example `'2024-01-31'` or `'on'`.
 
 Invalid YAML fails discovery with `D006` (sources) or `D005` (seed declarations and `schema.yml`),
-naming the file, line and column. The following YAML features also fail with the same codes and a
-hint to rewrite the value in plain YAML:
+naming the file, line and column. The following also fail with the same codes and a hint to
+rewrite the value in plain YAML:
 
-- tab characters anywhere in the file, and byte order marks after its start
-- `%YAML` and `%TAG` directives
-- the `!!binary`, `!!set`, `!!omap` and `!!pairs` tags, and an empty scalar tagged `!`
+- tags other than the core schema's, such as `!!set` or `!custom`
 - recursive aliases, and aliases that expand beyond SQLBuild's size limit
-- nesting deeper than 256 levels, integers longer than 4300 digits, and implicit keys longer than
-  1000 characters
-- NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR line breaks
-- `?` inside a plain scalar in a flow collection, and `:` directly before `,`, `]` or `}` in a
-  flow collection
-- a block scalar used as a key, inside a flow collection, or with indentation SQLBuild cannot read
-  unambiguously
+- nesting deeper than 256 levels, and integers longer than 4300 digits

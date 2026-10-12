@@ -32,6 +32,8 @@ class TableTypeValidationErrorTestCase:
 
 
 @dataclass(frozen=True)
-class ExpectedCountTestCase:
+class AttachedColumnsTestCase:
+    """A project's model configs and the schema columns attached to them."""
+
     description: str
-    expected_count: int
+    expected_columns: tuple[tuple[object, ...], ...]

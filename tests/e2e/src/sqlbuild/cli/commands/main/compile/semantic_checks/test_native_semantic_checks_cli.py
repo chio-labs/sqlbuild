@@ -1,4 +1,4 @@
-"""Both native engines complete semantic diagnostics natively with the expected CLI output."""
+"""Semantic diagnostics are completed natively with the expected CLI output."""
 
 from __future__ import annotations
 
@@ -10,13 +10,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.semantic_checks._test_type
     NativeSemanticChecksCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.semantic_checks.helpers import (
-    EngineSemanticRun,
+    SemanticRun,
     diagnostic_codes,
     diagnostic_notes,
-    engine_semantic_run,
+    semantic_run,
 )
 
-_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _CONFIG: str = (
     'name = "orders_semantics"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
 )
@@ -113,22 +112,14 @@ _METADATA_FILES: dict[str, str] = {
     ],
     ids=lambda case: case.description,
 )
-def test_given_failing_project_when_compiling_with_each_engine_then_diagnostics_match(
+def test_given_failing_project_when_compiling_then_diagnostics_are_reported(
     test_case: NativeSemanticChecksCliTestCase, tmp_path: Path
 ) -> None:
-    runs: dict[str, EngineSemanticRun] = {
-        engine: engine_semantic_run(
-            project_dir=tmp_path / engine, files=test_case.files, engine=engine
-        )
-        for engine in _ENGINES
-    }
-    native: EngineSemanticRun = runs["native"]
-    preview: EngineSemanticRun = runs["native-preview"]
+    run: SemanticRun = semantic_run(project_dir=tmp_path / "orders", files=test_case.files)
 
-    assert native.returncode == 1
-    assert diagnostic_codes(native.report) == test_case.expected_codes
-    assert set(test_case.expected_notes) <= diagnostic_notes(native.report)
-    assert (preview.report, preview.returncode) == (native.report, native.returncode)
+    assert run.returncode == 1
+    assert diagnostic_codes(run.report) == test_case.expected_codes
+    assert set(test_case.expected_notes) <= diagnostic_notes(run.report)
 
 
 if __name__ == "__main__":

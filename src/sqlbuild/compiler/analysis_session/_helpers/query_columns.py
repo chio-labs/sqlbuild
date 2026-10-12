@@ -8,13 +8,11 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
-from sqlbuild.compiler.analysis_session._helpers.deferral_records import record_analysis_deferral
 from sqlbuild.compiler.analysis_session._helpers.profile_rows import (
     adapter_nullability_rules,
     nullability_rule_rows,
     shape_rows,
 )
-from sqlbuild.compiler.analysis_session.constants import ADAPTER_NULLABILITY_CALLBACK
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.analysis_session.types import ColumnRow
 from sqlbuild.compiler.compile.models import CompileSqlReference, InferredColumn
@@ -88,8 +86,6 @@ def native_query_column_rows(
         else None
     )
     adapter_rules: dict[str, FunctionNullabilityRule] = adapter_nullability_rules(profile)
-    if adapter_rules:
-        record_analysis_deferral(kind=ADAPTER_NULLABILITY_CALLBACK)
     return _native.infer_query_columns(
         None if catalog is None else catalog.native,
         (

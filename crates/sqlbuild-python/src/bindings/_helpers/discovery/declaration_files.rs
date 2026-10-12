@@ -19,8 +19,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::bindings::_helpers::discovery::project_files::{
-    PyObject, failure_object, object, path_object, python_semantics, read_object,
-    stage_failure_object, tuple_object,
+    PyObject, failure_object, object, path_object, read_object, stage_failure_object, tuple_object,
 };
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{
@@ -306,15 +305,12 @@ fn declaration_collection_object(
 
 fn options(
     (function_keys, audit_keys, hook_keys): (Vec<String>, Vec<String>, Vec<String>),
-    python_version: (u8, u8),
-    unicode_version: &str,
-) -> PyResult<DeclarationFileOptions> {
-    Ok(DeclarationFileOptions {
+) -> DeclarationFileOptions {
+    DeclarationFileOptions {
         function_keys,
         audit_keys,
         hook_keys,
-        python: python_semantics(python_version, unicode_version)?,
-    })
+    }
 }
 
 #[pymethods]
@@ -327,11 +323,7 @@ impl NativeDiscoverySession {
                     directory: PathBuf::from(request.project_dir),
                     display_prefix: request.display_prefix,
                 },
-                options(
-                    (request.function_keys, request.audit_keys, request.hook_keys),
-                    request.python_version,
-                    &request.unicode_version,
-                )?,
+                options((request.function_keys, request.audit_keys, request.hook_keys)),
             ),
         })
     }
@@ -370,11 +362,8 @@ fn parse_declaration_contents(
 ) -> PyResult<PyObject> {
     let (file_path, hook_name): (String, String) = names;
     let kind: CollectionKind = collection_kind(&request.kind)?;
-    let options: DeclarationFileOptions = options(
-        (request.function_keys, request.audit_keys, request.hook_keys),
-        request.python_version,
-        &request.unicode_version,
-    )?;
+    let options: DeclarationFileOptions =
+        options((request.function_keys, request.audit_keys, request.hook_keys));
     let parsed: Option<FileOutcome<ParsedDeclarationText>> = py
         .compiler_detach(|| {
             Ok(parse_declaration_text(

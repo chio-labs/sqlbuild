@@ -1220,8 +1220,6 @@ def macro_expansion_classes() -> dict[str, object]:
     """The classes, enums and helpers the native expansion builds facts and errors from."""
 
     from sqlbuild.compiler.frontier.exceptions import NativeStageMismatchError
-    from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
-    from sqlbuild.compiler.frontier.types import NativeFallbackSite
 
     return {
         "compile_error": CompileInputError,
@@ -1251,9 +1249,6 @@ def macro_expansion_classes() -> dict[str, object]:
             "generated_help": explicit_references_help(allowed="macro-generated references"),
             "all_markers": list(GENERATED_REFERENCE_MARKERS),
         },
-        "report_mocked": partial(
-            report_native_fallback, site=NativeFallbackSite.MACRO_CALL_MOCKED, kind="test_mock"
-        ),
         "int_type": int,
         "float_type": float,
     }

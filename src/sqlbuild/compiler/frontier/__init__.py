@@ -1,1 +1,1 @@
-"""Compiler engine selection and the native frontier seam."""
+"""The native compiler frontier seam."""

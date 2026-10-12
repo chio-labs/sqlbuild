@@ -6,12 +6,8 @@ use polyglot_sql::expressions::With;
 use polyglot_sql::{
     ComplexityGuardOptions, Dialect, DialectType, Expression, ExpressionWalk, ParseOptions,
 };
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_ignorecase_key::python_ignorecase_key;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::ignorecase_key::ignorecase_key;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
@@ -223,7 +219,7 @@ fn is_mock_name(name: &str) -> bool {
 
 /// Python's `str.casefold`.
 fn fold(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    str::to_lowercase(text)
 }
 
 /// Python's `scan_sql_reference_calls(...).references`; a failing scan raises unlocated.
@@ -356,7 +352,6 @@ fn defined_cte_keys(parsed: &Expression) -> HashSet<String> {
 
 /// Python's `_token_reads` over `[A-Za-z_][\w$]*` tokens.
 fn token_reads(sql: &str, keys: &[String]) -> Vec<String> {
-    let python: PythonText = active_python_text();
     let chars: Vec<(usize, char)> = sql.char_indices().collect();
     let mut tokens: Vec<String> = Vec::new();
     let mut index = 0;
@@ -367,7 +362,7 @@ fn token_reads(sql: &str, keys: &[String]) -> Vec<String> {
         }
         let start = chars[index].0;
         index += 1;
-        while index < chars.len() && is_word_or_dollar(python, chars[index].1) {
+        while index < chars.len() && is_word_or_dollar(chars[index].1) {
             index += 1;
         }
         let end = chars.get(index).map_or(sql.len(), |(offset, _)| *offset);
@@ -500,7 +495,6 @@ fn mock_reference_help(mock_name: &str, call: &str, reference: &Reference) -> St
 
 /// Python's `sql_test_cte_location` and `reference_call_location`, in code points.
 fn located(test: &SqlTestAssemblyTest, cte_name: &str, call: &str) -> Span {
-    let python: PythonText = active_python_text();
     let contents: Vec<char> = test.contents.chars().collect();
     let block_offset: usize = test
         .contents
@@ -508,11 +502,9 @@ fn located(test: &SqlTestAssemblyTest, cte_name: &str, call: &str) -> Span {
         .map_or(0, |byte| test.contents[..byte].chars().count());
     let name: Vec<char> = cte_name.chars().collect();
     let call: Vec<char> = call.chars().collect();
-    let (start, length) = match cte_header(python, &contents, &name, block_offset) {
-        Some((header_start, header_end)) => {
-            find_ignoring_case(python, &contents, &call, header_end)
-                .map_or((header_start, name.len()), |found| (found, call.len()))
-        }
+    let (start, length) = match cte_header(&contents, &name, block_offset) {
+        Some((header_start, header_end)) => find_ignoring_case(&contents, &call, header_end)
+            .map_or((header_start, name.len()), |found| (found, call.len())),
         None => (block_offset, 0),
     };
     let (line, column) = line_and_column(&contents, start);
@@ -526,17 +518,12 @@ fn located(test: &SqlTestAssemblyTest, cte_name: &str, call: &str) -> Span {
 }
 
 /// Python's `(?<![\w$])NAME["`]?\s+AS\s*\(` search from `from`, under `re.IGNORECASE`.
-fn cte_header(
-    python: PythonText,
-    contents: &[char],
-    name: &[char],
-    from: usize,
-) -> Option<(usize, usize)> {
-    let space = |index: usize| contents.get(index).is_some_and(|c| is_python_space(*c));
+fn cte_header(contents: &[char], name: &[char], from: usize) -> Option<(usize, usize)> {
+    let space = |index: usize| contents.get(index).is_some_and(|c| char::is_whitespace(*c));
     let mut start = from;
-    while let Some(found) = find_ignoring_case(python, contents, name, start) {
+    while let Some(found) = find_ignoring_case(contents, name, start) {
         start = found + 1;
-        if found > 0 && is_word_or_dollar(python, contents[found - 1]) {
+        if found > 0 && is_word_or_dollar(contents[found - 1]) {
             continue;
         }
         let mut cursor = found + name.len();
@@ -547,7 +534,7 @@ fn cte_header(
         while space(cursor) {
             cursor += 1;
         }
-        if cursor == spaces || !matches_ignoring_case(python, contents, &['a', 's'], cursor) {
+        if cursor == spaces || !matches_ignoring_case(contents, &['a', 's'], cursor) {
             continue;
         }
         cursor += 2;
@@ -562,46 +549,36 @@ fn cte_header(
 }
 
 /// Python's `re.compile(re.escape(needle), re.IGNORECASE).search(contents, from)`.
-fn find_ignoring_case(
-    python: PythonText,
-    contents: &[char],
-    needle: &[char],
-    from: usize,
-) -> Option<usize> {
+fn find_ignoring_case(contents: &[char], needle: &[char], from: usize) -> Option<usize> {
     let needle: Vec<char> = needle
         .iter()
-        .map(|character| python_ignorecase_key(python, *character))
+        .map(|character| ignorecase_key(*character))
         .collect();
     (from..=contents.len().checked_sub(needle.len())?)
-        .find(|&index| keys_at(python, contents, &needle, index))
+        .find(|&index| keys_at(contents, &needle, index))
 }
 
 /// Whether `needle` matches at `at` under `re.IGNORECASE`.
-fn matches_ignoring_case(
-    python: PythonText,
-    contents: &[char],
-    needle: &[char],
-    at: usize,
-) -> bool {
+fn matches_ignoring_case(contents: &[char], needle: &[char], at: usize) -> bool {
     let keys: Vec<char> = needle
         .iter()
-        .map(|character| python_ignorecase_key(python, *character))
+        .map(|character| ignorecase_key(*character))
         .collect();
-    keys_at(python, contents, &keys, at)
+    keys_at(contents, &keys, at)
 }
 
-fn keys_at(python: PythonText, contents: &[char], keys: &[char], at: usize) -> bool {
+fn keys_at(contents: &[char], keys: &[char], at: usize) -> bool {
     contents.get(at..at + keys.len()).is_some_and(|window| {
         window
             .iter()
             .zip(keys)
-            .all(|(character, key)| python_ignorecase_key(python, *character) == *key)
+            .all(|(character, key)| ignorecase_key(*character) == *key)
     })
 }
 
 /// Python's `[\w$]`.
-fn is_word_or_dollar(python: PythonText, character: char) -> bool {
-    character == '$' || is_python_word(python, character)
+fn is_word_or_dollar(character: char) -> bool {
+    character == '$' || is_word_char(character)
 }
 
 fn line_and_column(contents: &[char], offset: usize) -> (usize, usize) {

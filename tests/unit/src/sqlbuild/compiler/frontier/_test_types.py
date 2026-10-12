@@ -1,63 +1,11 @@
-"""Test case types for compiler engine selection, store namespaces, and stage captures."""
+"""Test case types for compiler stage captures."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlbuild.compiler.frontier.types import (
-    CompilerEngine,
-    CompilerStage,
-    NativeFallbackSite,
-)
-
-
-@dataclass(frozen=True)
-class EngineResolutionTestCase:
-    """One SQLBUILD_COMPILER_ENGINE value and the engine it selects."""
-
-    description: str
-    raw_value: str
-    expected_engine: CompilerEngine
-
-
-@dataclass(frozen=True)
-class EngineErrorTestCase:
-    """One unsupported engine value and the exact error naming accepted values."""
-
-    description: str
-    raw_value: str
-    expected_message: str
-
-
-@dataclass(frozen=True)
-class EngineOverrideTestCase:
-    """An engine variable before an override, and what the override shows and restores."""
-
-    description: str
-    previous: str
-    override: CompilerEngine
-    expected_inside: CompilerEngine
-    expected_after: str
-
-
-@dataclass(frozen=True)
-class EngineCacheNameTestCase:
-    """One engine and the store directory name it owns."""
-
-    description: str
-    engine: CompilerEngine
-    base: str
-    expected_name: str
-
-
-@dataclass(frozen=True)
-class EngineStorePathsTestCase:
-    """One engine and the project-relative compiler and Rules store paths it uses."""
-
-    description: str
-    engine: CompilerEngine
-    expected_paths: tuple[str, ...]
+from sqlbuild.compiler.frontier.types import CompilerStage
 
 
 @dataclass(frozen=True)
@@ -102,10 +50,9 @@ class OmittedFieldTestCase:
 
 @dataclass(frozen=True)
 class FrontierCaptureTestCase:
-    """Frontier stages compiled in order on one engine and the capture files they write."""
+    """Frontier stages compiled in order and the capture files they write."""
 
     description: str
-    engine: CompilerEngine
     stages: tuple[CompilerStage, ...]
     expected_results: tuple[object, ...]
     expected_files: tuple[str, ...]
@@ -118,12 +65,3 @@ class SharedCaptureTestCase:
     description: str
     value: Callable[[], object]
     expected_shared_nodes: int
-
-
-@dataclass(frozen=True)
-class NativeFallbackRecorderTestCase:
-    """Fallbacks one process records and the record file it writes at exit."""
-
-    description: str
-    recorded: tuple[tuple[NativeFallbackSite, str], ...]
-    expected_files: list[list[list[object]]]

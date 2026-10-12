@@ -991,14 +991,6 @@ class SnapshotScopeReuseTestCase:
 
 
 @dataclass(frozen=True)
-class NativeHeaderMatchTestCase:
-    description: str
-    seed: int
-    count: int
-    expected_mismatches: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class TargetWarehousesConfigTestCase:
     description: str
     contents: str

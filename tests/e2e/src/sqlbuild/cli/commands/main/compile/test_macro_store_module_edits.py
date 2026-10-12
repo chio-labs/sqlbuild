@@ -35,7 +35,6 @@ _EDITED_PACKAGE: dict[str, str] = {"extpkg/_values.py": "VALUE = \"'choco'\"\n"}
     [
         StoredMacroModuleEditTestCase(
             description="module_default",
-            engine="",
             import_name="extflavor",
             module_files=_MODULE,
             edited_files=_EDITED_MODULE,
@@ -43,23 +42,6 @@ _EDITED_PACKAGE: dict[str, str] = {"extpkg/_values.py": "VALUE = \"'choco'\"\n"}
         ),
         StoredMacroModuleEditTestCase(
             description="package_transitive_import_default",
-            engine="",
-            import_name="extpkg.flavor",
-            module_files=_PACKAGE,
-            edited_files=_EDITED_PACKAGE,
-            expected_compiled_value="'choco' AS flavor",
-        ),
-        StoredMacroModuleEditTestCase(
-            description="module_native_preview",
-            engine="native-preview",
-            import_name="extflavor",
-            module_files=_MODULE,
-            edited_files=_EDITED_MODULE,
-            expected_compiled_value="'choco' AS flavor",
-        ),
-        StoredMacroModuleEditTestCase(
-            description="package_transitive_import_native_preview",
-            engine="native-preview",
             import_name="extpkg.flavor",
             module_files=_PACKAGE,
             edited_files=_EDITED_PACKAGE,
@@ -79,7 +61,6 @@ def test_given_stored_call_reused_when_its_lazily_imported_module_changes_then_o
         extlib=extlib,
         import_name=test_case.import_name,
         log_path=log_path,
-        engine=test_case.engine,
     )
     cold: CompileReuseRun = run_reuse_compile(project_dir=compile_reuse_project, env=env)
     staging_comment(compile_reuse_project)

@@ -4,13 +4,11 @@ use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 use crate::semantic_checks::_helpers::explanation::columns::closest_column;
 use crate::semantic_checks::_helpers::explanation::messages::{missing_column, pattern};
-use crate::semantic_checks::_helpers::sql_text::python_regex::{ignorecase_word, python_regex};
+use crate::semantic_checks::_helpers::sql_text::patterns::{compile_pattern, ignorecase_word};
 use crate::semantic_checks::_helpers::sql_text::text::{casefold, upper};
 use crate::semantic_checks::models::{ResourceSqlKind, SemanticFailure};
 
@@ -38,7 +36,7 @@ const TYPE_WORD: &str = r"(?:{W}|[()])+";
 const NAME_TAIL: &str = r"(?:{W}|\$)*";
 
 static SET_OPERATION_TYPES: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
-    template(&format!(
+    compile_pattern(&format!(
         r"{} (?P<position>{{D}}+).*{} {} (?P<left>{TYPE_WORD}), {} {} (?P<right>{TYPE_WORD})",
         ignorecase_word("column"),
         ignorecase_word("accumulated"),
@@ -48,36 +46,32 @@ static SET_OPERATION_TYPES: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     ))
 });
 static COMPARISON_TYPES: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
-    template(&format!(
+    compile_pattern(&format!(
         r"{} (?P<left>{TYPE_WORD}) {} (?P<right>{TYPE_WORD})",
         ignorecase_word("between"),
         ignorecase_word("and"),
     ))
 });
 static ALIAS_NAME: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
-    template(&format!(
+    compile_pattern(&format!(
         r#"{{S}}+{}{{S}}+"?(?P<name>{{L}}{NAME_TAIL})"?,?\z"#,
         ignorecase_word("AS")
     ))
 });
 static CAST: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
-    template(&format!(
+    compile_pattern(&format!(
         r"\A{}\((?P<inner>.+){{S}}+{}{{S}}+(?:{{W}}|[(), ])+\)\z",
         ignorecase_word("CAST"),
         ignorecase_word("AS")
     ))
 });
 static SINGLE_OPERAND: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
-    template(&format!(
+    compile_pattern(&format!(
         r"\A(?:'(?:[^']|'')*'|[A-Za-z_]{NAME_TAIL}(?:\.[A-Za-z_]{NAME_TAIL})?)\z"
     ))
 });
-static PARAMETER: LazyLock<Result<Regex, String>> = LazyLock::new(|| template(r"@[A-Za-z_]{W}*"));
-
-/// Compile one of this module's Python-class pattern templates.
-fn template(text: &str) -> Result<Regex, String> {
-    python_regex(text)
-}
+static PARAMETER: LazyLock<Result<Regex, String>> =
+    LazyLock::new(|| compile_pattern(r"@[A-Za-z_]{W}*"));
 
 /// What one finding's help reads besides its code and message.
 pub(crate) struct HelpContext<'a> {
@@ -150,15 +144,16 @@ fn set_operation_operand(
     } else {
         String::new()
     };
-    let stripped = python_strip(context.authored_text).trim_end_matches(',');
+    let stripped = str::trim(context.authored_text).trim_end_matches(',');
     let alias = pattern(&ALIAS_NAME)?;
     let mut expression: String = alias.replace_all(stripped, "").into_owned();
     if let Some(captures) = pattern(&CAST)?.captures(&expression) {
-        expression = python_strip(&captures["inner"]).to_owned();
+        expression = str::trim(&captures["inner"]).to_owned();
     }
-    let preceding_is_word = preceding.chars().next().is_some_and(|character| {
-        character == '$' || is_python_word(active_python_text(), character)
-    });
+    let preceding_is_word = preceding
+        .chars()
+        .next()
+        .is_some_and(|character| character == '$' || is_word_char(character));
     if !preceding_is_word
         && pattern(&SINGLE_OPERAND)?.is_match(&expression)
         && !SET_OPERATION_KEYWORDS.contains(&upper(&expression).as_str())
@@ -171,7 +166,7 @@ fn set_operation_operand(
 /// Python's `_model_type`: the tested relation's type for the branch column, when one matches.
 fn model_type(context: &HelpContext<'_>, operand: &str) -> Result<Option<String>, SemanticFailure> {
     let mut names: Vec<String> = Vec::new();
-    if let Some(captures) = pattern(&ALIAS_NAME)?.captures(python_strip(context.authored_text)) {
+    if let Some(captures) = pattern(&ALIAS_NAME)?.captures(str::trim(context.authored_text)) {
         names.push(captures["name"].to_owned());
     }
     names.push(

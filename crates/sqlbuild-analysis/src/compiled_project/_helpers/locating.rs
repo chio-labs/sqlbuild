@@ -1,6 +1,5 @@
 //! Locating a reference-scan fault of expanded model SQL in the authored model file.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_sqltext::compiler::main::model_header_matching::match_batch;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, ReferenceScanFailure};
@@ -69,7 +68,7 @@ pub(crate) fn model_query_start(contents: &str, query_sql: &str) -> Option<usize
     let (_, _, sql_start) = match_batch(&[contents.to_owned()]).pop().flatten()?;
     let characters: Vec<char> = contents.chars().collect();
     let mut start: usize = sql_start;
-    while start < characters.len() && is_python_space(characters[start]) {
+    while start < characters.len() && char::is_whitespace(characters[start]) {
         start += 1;
     }
     let query: Vec<char> = query_sql.chars().collect();

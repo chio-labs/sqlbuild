@@ -2,8 +2,6 @@
 
 use std::collections::BTreeSet;
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-
 use crate::refactoring::_helpers::scanning::chars::{chars, rfind, slice, starts_with};
 use crate::refactoring::_helpers::scanning::interpolation::interpolation_sites;
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
@@ -93,7 +91,7 @@ fn resource_call(text: &[char]) -> Option<(String, String, usize, usize)> {
 }
 
 fn skip_space(text: &[char], mut index: usize) -> usize {
-    while text.get(index).copied().is_some_and(is_python_space) {
+    while text.get(index).copied().is_some_and(char::is_whitespace) {
         index += 1;
     }
     index
@@ -101,7 +99,7 @@ fn skip_space(text: &[char], mut index: usize) -> usize {
 
 /// Resource calls outside comments and strings, with their name spans.
 pub(crate) fn resource_sites(text: &[char], context: &ScanContext) -> Vec<ResourceSite> {
-    interpolation_sites(text, context.backtick_identifiers, context.python)
+    interpolation_sites(text, context.backtick_identifiers)
         .into_iter()
         .filter_map(|site| {
             let (kind, name, name_start, name_end) = resource_call(&chars(&site.text))?;
@@ -187,7 +185,7 @@ pub(crate) fn analysis_sql(text: &[char], context: &ScanContext) -> AnalysisSql 
     let mut sql = String::new();
     let mut tables: Vec<((String, String), BTreeSet<String>)> = Vec::new();
     let mut copied_to = 0;
-    for (index, site) in interpolation_sites(text, context.backtick_identifiers, context.python)
+    for (index, site) in interpolation_sites(text, context.backtick_identifiers)
         .into_iter()
         .enumerate()
     {

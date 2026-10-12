@@ -11,8 +11,8 @@ import pytest
 
 from tests.e2e.scripts.compile_performance_ratio._test_types import (
     CompilePerformanceRatioTestCase,
-    EnginePhaseRatioTestCase,
     PerSideCompilePerformanceRatioTestCase,
+    PhaseRatioTestCase,
 )
 from tests.e2e.scripts.compile_performance_ratio.helpers import (
     FAILING_GENERATOR,
@@ -172,19 +172,18 @@ def test_given_base_root_when_comparing_compile_performance_then_each_side_uses_
 @pytest.mark.parametrize(
     "test_case",
     (
-        EnginePhaseRatioTestCase(
-            description="native-preview contracts within a generous limit of native's",
+        PhaseRatioTestCase(
+            description="contracts within a generous limit",
             max_ratio="1000",
             phase_noise_floor_ms="1000",
             expected_return_code=0,
             expected_fragments=(
-                "Engines: base `native`, head `native-preview`.",
                 "Gated phases: contracts_cpu_ms.",
                 "| contracts_cpu_ms |",
                 "**Result: passed.**",
             ),
         ),
-        EnginePhaseRatioTestCase(
+        PhaseRatioTestCase(
             description="a gated phase over its allowance fails on that phase alone",
             max_ratio="0",
             phase_noise_floor_ms="-1",
@@ -194,7 +193,7 @@ def test_given_base_root_when_comparing_compile_performance_then_each_side_uses_
                 "**Result: failed.**",
             ),
         ),
-        EnginePhaseRatioTestCase(
+        PhaseRatioTestCase(
             description="model analysis CPU over its allowance with rules off fails on it alone",
             max_ratio="0",
             phase_noise_floor_ms="-1",
@@ -207,7 +206,7 @@ def test_given_base_root_when_comparing_compile_performance_then_each_side_uses_
             gate_phase="model_analysis_cpu_ms",
             compile_args=("--compile-arg=--select=*",),
         ),
-        EnginePhaseRatioTestCase(
+        PhaseRatioTestCase(
             description="custom rule CPU over its allowance fails on it alone",
             max_ratio="0",
             phase_noise_floor_ms="-1",
@@ -222,8 +221,8 @@ def test_given_base_root_when_comparing_compile_performance_then_each_side_uses_
     ),
     ids=lambda case: case.description,
 )
-def test_given_two_engines_when_gating_a_phase_then_enforces_only_that_phase(
-    test_case: EnginePhaseRatioTestCase,
+def test_given_two_builds_when_gating_a_phase_then_enforces_only_that_phase(
+    test_case: PhaseRatioTestCase,
 ) -> None:
     environment: dict[str, str] = dict(os.environ)
     _ = environment.pop("GITHUB_STEP_SUMMARY", None)
@@ -244,10 +243,6 @@ def test_given_two_engines_when_gating_a_phase_then_enforces_only_that_phase(
             sys.executable,
             "--head-python",
             sys.executable,
-            "--base-engine",
-            "native",
-            "--head-engine",
-            "native-preview",
             "--gate-phase",
             test_case.gate_phase,
             "--max-ratio",

@@ -56,7 +56,7 @@ pub(crate) fn relation_key_row(
             audits.push((
                 audit.getattr("definition_name")?.extract()?,
                 argument
-                    .filter(|value| value.is_instance_of::<PyString>())
+                    .filter(pyo3::types::PyAnyMethods::is_instance_of::<PyString>)
                     .map(|value| value.extract())
                     .transpose()?,
             ));

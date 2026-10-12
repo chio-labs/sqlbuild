@@ -9,13 +9,10 @@ import pytest
 from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
-from sqlbuild.cli.compile_reuse._helpers.runtime_identity import invocation_identity
 from sqlbuild.cli.compile_reuse.models import (
-    CompileReuseRequest,
     SettingsEnvironmentInputs,
     SettingsInputsResult,
 )
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR, STAGE_CAPTURE_DIR_ENV_VAR
 
 
 def write_file(path: Path, contents: str) -> None:
@@ -152,39 +149,3 @@ def described_settings_inputs(
 
 def _path_names(paths: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(Path(path).name for path in paths)
-
-
-def orders_reuse_request(project_dir: Path) -> CompileReuseRequest:
-    """Return a plain JSON compile reuse request for a project."""
-
-    return CompileReuseRequest(
-        project_dir=project_dir,
-        selected_target=None,
-        json_output=True,
-        no_color=True,
-        manifest=False,
-        dag_path=None,
-        defer_to=None,
-        no_cache=False,
-        no_sql_validation=False,
-        lineage_mode="fast",
-        select=(),
-        exclude=(),
-        cli_vars=None,
-        profiling=False,
-        debug=False,
-    )
-
-
-def engine_reuse_key(
-    *, environment: dict[str, str], project_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> bytes:
-    """Return the encoded invocation identity under one engine environment."""
-
-    monkeypatch.delenv(COMPILER_ENGINE_ENV_VAR, raising=False)
-    monkeypatch.delenv(STAGE_CAPTURE_DIR_ENV_VAR, raising=False)
-    for name, value in environment.items():
-        monkeypatch.setenv(name, value)
-    return invocation_identity(
-        request=orders_reuse_request(project_dir), project_dir=str(project_dir), use_color=False
-    )

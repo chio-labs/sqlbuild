@@ -1,1 +1,1 @@
-"""The native model analysis session for the preview compiler engine."""
+"""The native model analysis session."""

@@ -1,21 +1,20 @@
-//! Build values from a composed document, as PyYAML's `SafeConstructor` does.
+//! Build values from a composed document with the core schema and merge keys.
 
 use crate::errors::{ConfigError, ConfigErrorKind};
 use crate::models::ConfigValue;
 use crate::yaml::_helpers::keys::{is_hashable, key_identity};
 use crate::yaml::_helpers::numbers::{construct_float, construct_int};
-use crate::yaml::_helpers::timestamps::construct_timestamp;
 use crate::yaml::constants::{
     BASE_EXPANSION_BUDGET, BOOL_TAG, BOOL_WORDS, EXPANSION_BUDGET_PER_CHARACTER, FLOAT_TAG,
-    INT_TAG, MAP_TAG, MAX_CONSTRUCTION_DEPTH, MERGE_TAG, NULL_TAG, PYTHON_ONLY_TAGS, SEQ_TAG,
-    STANDARD_TAG_PREFIX, STR_TAG, TIMESTAMP_TAG, VALUE_TAG,
+    INT_TAG, MAP_TAG, MAX_CONSTRUCTION_DEPTH, MERGE_TAG, NULL_TAG, SEQ_TAG, STANDARD_TAG_PREFIX,
+    STR_TAG,
 };
 use crate::yaml::models::{ComposedDocument, Node, NodeContent};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-/// One mapping entry after merge keys are flattened; `string_key` marks a `=` key read as text.
-type FlatEntry = (usize, usize, bool);
+/// One mapping entry after merge keys are flattened.
+type FlatEntry = (usize, usize);
 
 /// A standard tag in its `!!name` shorthand.
 fn short_tag(tag: &str) -> String {
@@ -28,33 +27,28 @@ fn construct_error(message: String) -> ConfigError {
 }
 
 fn construct_bool(text: &str) -> Result<ConfigValue, ConfigError> {
-    let lowered = text.to_lowercase();
     BOOL_WORDS
         .iter()
-        .find(|(word, _)| *word == lowered)
+        .find(|(word, _)| *word == text)
         .map(|(_, flag)| ConfigValue::Bool(*flag))
-        .ok_or_else(|| construct_error(format!("{lowered:?} is not a YAML boolean")))
+        .ok_or_else(|| construct_error(format!("{text:?} is not a YAML boolean")))
 }
 
-/// SafeConstructor's scalar constructors, by resolved tag.
+/// The scalar constructors, by resolved tag.
 fn construct_scalar(tag: &str, text: &str) -> Result<ConfigValue, ConfigError> {
     match tag {
         NULL_TAG => Ok(ConfigValue::Null),
         BOOL_TAG => construct_bool(text),
         INT_TAG => construct_int(text),
         FLOAT_TAG => construct_float(text),
-        STR_TAG => Ok(ConfigValue::String(text.to_owned())),
-        TIMESTAMP_TAG => construct_timestamp(text.strip_suffix('\n').unwrap_or(text)),
-        _ if PYTHON_ONLY_TAGS.contains(&tag) => Err(ConfigError::new(
-            ConfigErrorKind::Unsupported,
-            format!("values tagged {}", short_tag(tag)),
-        )),
+        STR_TAG | MERGE_TAG => Ok(ConfigValue::String(text.to_owned())),
         SEQ_TAG | MAP_TAG => Err(construct_error(format!(
             "expected a collection node for {tag}"
         ))),
-        _ => Err(construct_error(format!(
-            "could not determine a constructor for the tag {tag:?}"
-        ))),
+        _ => Err(ConfigError::new(
+            ConfigErrorKind::Unsupported,
+            format!("values tagged {}", short_tag(tag)),
+        )),
     }
 }
 
@@ -164,13 +158,10 @@ impl Constructor<'_> {
                 Ok((ConfigValue::List(values), size))
             }
             (NodeContent::Mapping(_), MAP_TAG) => self.construct_mapping(id, depth),
-            (_, tag) if PYTHON_ONLY_TAGS.contains(&tag) => Err(ConfigError::new(
+            (_, tag) => Err(ConfigError::new(
                 ConfigErrorKind::Unsupported,
                 format!("values tagged {}", short_tag(tag)),
             )),
-            (_, tag) => Err(construct_error(format!(
-                "could not construct a collection tagged {tag:?}"
-            ))),
         }
     }
 
@@ -184,7 +175,7 @@ impl Constructor<'_> {
         }
     }
 
-    /// The mappings a merge key's value contributes, in PyYAML's order.
+    /// The mappings a merge key's value contributes; earlier mappings in a list win.
     fn merged(&mut self, value: usize, depth: usize) -> Result<Vec<FlatEntry>, ConfigError> {
         let entries = match &self.node(value).content {
             NodeContent::Mapping(_) => self.flatten(value, depth + 1)?,
@@ -206,7 +197,7 @@ impl Constructor<'_> {
         Ok(entries)
     }
 
-    /// PyYAML's `flatten_mapping`: merged entries first, then the mapping's own entries.
+    /// Merged entries first, then the mapping's own entries, which override them.
     fn flatten(&mut self, id: usize, depth: usize) -> Result<Vec<FlatEntry>, ConfigError> {
         if depth > MAX_CONSTRUCTION_DEPTH {
             return Err(deferred("merge keys nested deeper than 256 levels"));
@@ -216,37 +207,20 @@ impl Constructor<'_> {
         for (key, value) in self.entries(id)? {
             match self.node(key).tag.as_str() {
                 MERGE_TAG => merged.extend(self.merged(value, depth)?),
-                VALUE_TAG => own.push((key, value, true)),
-                _ => own.push((key, value, false)),
+                _ => own.push((key, value)),
             }
         }
         merged.extend(own);
         Ok(merged)
     }
 
-    fn construct_key(
-        &mut self,
-        key: usize,
-        string_key: bool,
-        depth: usize,
-    ) -> Result<Sized, ConfigError> {
-        match (&self.node(key).content, string_key) {
-            (NodeContent::Scalar(text), true) => {
-                let text = text.clone();
-                self.spend(1)?;
-                Ok((ConfigValue::String(text), 1))
-            }
-            _ => self.construct(key, depth + 1),
-        }
-    }
-
-    /// A Python dictionary: a repeated key keeps its first position and takes the last value.
+    /// A mapping: a repeated key keeps its first position and takes the last value.
     fn construct_mapping(&mut self, id: usize, depth: usize) -> Result<Sized, ConfigError> {
         let mut entries: Vec<(ConfigValue, ConfigValue)> = Vec::new();
         let mut size = 1;
         let mut positions: HashMap<String, usize> = HashMap::new();
-        for (key, value, string_key) in self.flatten(id, depth)? {
-            let (key, key_size) = self.construct_key(key, string_key, depth)?;
+        for (key, value) in self.flatten(id, depth)? {
+            let (key, key_size) = self.construct(key, depth + 1)?;
             if !is_hashable(&key) {
                 return Err(construct_error("found unhashable key".to_owned()));
             }
@@ -264,7 +238,7 @@ impl Constructor<'_> {
     }
 }
 
-/// The value of a composed document; an empty stream is `None` in Python, here `Null`.
+/// The value of a composed document; an empty stream is `Null`.
 pub(crate) fn construct_document(
     document: &ComposedDocument,
     text_length: usize,

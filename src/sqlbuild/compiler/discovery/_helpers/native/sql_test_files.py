@@ -14,7 +14,6 @@ from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_payload_error,
     native_project_tree,
     native_request,
-    native_text_runtime,
     seed_snapshot_listings,
 )
 from sqlbuild.compiler.discovery._helpers.sql.scenarios import build_sql_scenario_file
@@ -102,7 +101,6 @@ def _text_request(file_path: Path) -> dict[str, object]:
         "file_path": str(file_path),
         "test_keys": sorted(SQL_TEST_HEADER_KEYS),
         "scenario_keys": sorted(SQL_SCENARIO_HEADER_KEYS),
-        **native_text_runtime(),
     }
 
 

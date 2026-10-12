@@ -2,9 +2,7 @@
 
 use crate::_helpers::suggestions::unsupported_keys_help;
 use crate::models::{DiscoveryFailure, FailureKind};
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 /// The facts of one header that declares keys outside its supported set.
 pub(crate) struct UnsupportedKeys<'a> {
@@ -16,7 +14,6 @@ pub(crate) struct UnsupportedKeys<'a> {
     pub(crate) header_line: usize,
     pub(crate) keys: &'a [&'a str],
     pub(crate) supported_keys: &'a [String],
-    pub(crate) python: PythonText,
 }
 
 pub(crate) fn unsupported_keys_failure(facts: &UnsupportedKeys<'_>) -> DiscoveryFailure {
@@ -28,10 +25,9 @@ pub(crate) fn unsupported_keys_failure(facts: &UnsupportedKeys<'_>) -> Discovery
         header_line,
         keys,
         supported_keys,
-        python,
     } = facts;
     let header_chars: Vec<char> = header.chars().collect();
-    let key_offset: usize = header_key_offset(*python, &header_chars, keys[0]);
+    let key_offset: usize = header_key_offset(&header_chars, keys[0]);
     let line: usize = header_line
         + header_chars[..key_offset]
             .iter()
@@ -49,19 +45,14 @@ pub(crate) fn unsupported_keys_failure(facts: &UnsupportedKeys<'_>) -> Discovery
 
 /// One key searched for in one header, under one Python's `\w`.
 struct KeySearch<'a> {
-    python: PythonText,
     header: &'a [char],
     key: &'a [char],
 }
 
 /// `re.search(r"(?:^|[(,])(?:\s|--[^\n]*(?:\n|$)|/\*.*?\*/)*(KEY)\b", header, re.S).start(1)`.
-fn header_key_offset(python: PythonText, header: &[char], key: &str) -> usize {
+fn header_key_offset(header: &[char], key: &str) -> usize {
     let key: Vec<char> = key.chars().collect();
-    let search = KeySearch {
-        python,
-        header,
-        key: &key,
-    };
+    let search = KeySearch { header, key: &key };
     let length: usize = header.len();
     let mut found: Vec<Option<usize>> = vec![None; length + 1];
     for position in (0..=length).rev() {
@@ -89,14 +80,10 @@ fn skip_then_key(
     position: usize,
     found: &[Option<usize>],
 ) -> Option<usize> {
-    let KeySearch {
-        python,
-        header,
-        key,
-    } = *search;
+    let KeySearch { header, key } = *search;
     let length = header.len();
     if position < length {
-        if is_python_space(header[position])
+        if char::is_whitespace(header[position])
             && let Some(offset) = found[position + 1]
         {
             return Some(offset);
@@ -124,20 +111,20 @@ fn skip_then_key(
         }
     }
     let end = position + key.len();
-    if header.get(position..end) == Some(key) && word_boundary(python, header, end) {
+    if header.get(position..end) == Some(key) && word_boundary(header, end) {
         return Some(position);
     }
     None
 }
 
 /// `\b` at `position`: exactly one side is a word character.
-fn word_boundary(python: PythonText, text: &[char], position: usize) -> bool {
+fn word_boundary(text: &[char], position: usize) -> bool {
     let before = position
         .checked_sub(1)
         .and_then(|index| text.get(index))
-        .is_some_and(|character| is_python_word(python, *character));
+        .is_some_and(|character| is_word_char(*character));
     let after = text
         .get(position)
-        .is_some_and(|character| is_python_word(python, *character));
+        .is_some_and(|character| is_word_char(*character));
     before != after
 }

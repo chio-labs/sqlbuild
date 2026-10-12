@@ -29,7 +29,6 @@ from sqlbuild.cli.compile_reuse.constants import (
 )
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.main._launch_record_path import launch_record_path
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from sqlbuild.runtime.compute_logs.classes.text_tee import TextComputeLogTee
 from sqlbuild.runtime.output_capture.constants import INVOCATION_CONTEXT_ENV
 
@@ -56,9 +55,7 @@ def write_launch_record(*, attempt: CompileReuseAttempt) -> None:
 
 
 def _replayable_natively() -> bool:
-    return INVOCATION_CONTEXT_ENV not in os.environ and not os.environ.get(
-        ANALYSIS_RECORD_DIR_ENV_VAR
-    )
+    return INVOCATION_CONTEXT_ENV not in os.environ
 
 
 def _payload(

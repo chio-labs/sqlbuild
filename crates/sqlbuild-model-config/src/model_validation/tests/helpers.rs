@@ -4,13 +4,6 @@ use crate::model_validation::models::{
     ModelReference, ModelValidationFacts, ProjectValidationFacts, ValidationStop,
 };
 use crate::tests::test_types::Value;
-use sqlbuild_core::text::main::python_text::python_text;
-use sqlbuild_core::text::models::PythonText;
-
-/// The string semantics of Python 3.12.
-pub(super) fn python_312() -> PythonText {
-    python_text((3, 12), "15.0.0").expect("Python 3.12 is supported")
-}
 
 /// The validator error `model 'orders_daily': <text>`.
 pub(super) fn validator_error(text: &str) -> ValidationStop {
@@ -80,7 +73,6 @@ pub(super) fn map(entries: Vec<(&'static str, Value)>) -> Value {
 pub(super) fn project() -> ProjectValidationFacts {
     let names = |values: &[&str]| values.iter().map(|value| (*value).to_owned()).collect();
     ProjectValidationFacts {
-        python: python_312(),
         custom_materializations: names(&["ledger"]),
         microbatch_concurrency: false,
         models: names(&["orders", "customers"]),

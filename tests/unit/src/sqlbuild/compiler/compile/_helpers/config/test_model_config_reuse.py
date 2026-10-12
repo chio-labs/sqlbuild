@@ -5,25 +5,33 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild.compiler.compile.types import CompileInputsView
 from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import (
-    ExpectedCountTestCase,
+    AttachedColumnsTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import (
     compile_input_schema_columns,
-    compile_with_config_build_count,
+    compile_with_native_config,
 )
 
 
 @pytest.mark.parametrize(
     "test_case",
-    [ExpectedCountTestCase(description="static configuration is reused", expected_count=1)],
+    [
+        AttachedColumnsTestCase(
+            description="static configuration is shared without aliasing values",
+            expected_columns=(
+                ("customer_id", "INTEGER", False, "Customer id"),
+                ("order_id", "BIGINT", True, "Order id"),
+            ),
+        )
+    ],
     ids=lambda case: case.description,
 )
-def test_given_static_column_contracts_when_attaching_then_reuses_only_base_config(
+def test_given_static_column_contracts_when_attaching_then_values_are_not_aliased(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
-    test_case: ExpectedCountTestCase,
+    test_case: AttachedColumnsTestCase,
 ) -> None:
     write_repo_files(
         tmp_path,
@@ -63,18 +71,14 @@ SELECT 1 AS order_id
         },
     )
 
-    compile_inputs, build_count = compile_with_config_build_count(
-        project_dir=tmp_path,
-        monkeypatch=monkeypatch,
-    )
+    compile_inputs: CompileInputsView = compile_with_native_config(project_dir=tmp_path)
 
-    assert build_count == test_case.expected_count
-    assert tuple(
-        (column.name, column.type, column.nullable, column.description)
-        for column in compile_input_schema_columns(compile_inputs)
-    ) == (
-        ("customer_id", "INTEGER", False, "Customer id"),
-        ("order_id", "BIGINT", True, "Order id"),
+    assert (
+        tuple(
+            (column.name, column.type, column.nullable, column.description)
+            for column in compile_input_schema_columns(compile_inputs)
+        )
+        == test_case.expected_columns
     )
     assert all(
         model_input.config.time_travel_retention.desired_days == 14
@@ -90,17 +94,20 @@ SELECT 1 AS order_id
 @pytest.mark.parametrize(
     "test_case",
     [
-        ExpectedCountTestCase(
-            description="templated configurations remain distinct", expected_count=2
+        AttachedColumnsTestCase(
+            description="templated configurations remain distinct",
+            expected_columns=(
+                ("INTEGER", "customers identifier"),
+                ("INTEGER", "orders identifier"),
+            ),
         )
     ],
     ids=lambda case: case.description,
 )
 def test_given_templated_columns_when_attaching_then_resolves_each_model_context(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     write_repo_files: Callable[[Path, dict[str, str]], None],
-    test_case: ExpectedCountTestCase,
+    test_case: AttachedColumnsTestCase,
 ) -> None:
     write_repo_files(
         tmp_path,
@@ -146,15 +153,12 @@ SELECT 1 AS order_id
         },
     )
 
-    compile_inputs, build_count = compile_with_config_build_count(
-        project_dir=tmp_path,
-        monkeypatch=monkeypatch,
-    )
+    compile_inputs: CompileInputsView = compile_with_native_config(project_dir=tmp_path)
 
-    assert build_count == test_case.expected_count
-    assert tuple(
-        (column.type, column.description) for column in compile_input_schema_columns(compile_inputs)
-    ) == (
-        ("INTEGER", "customers identifier"),
-        ("INTEGER", "orders identifier"),
+    assert (
+        tuple(
+            (column.type, column.description)
+            for column in compile_input_schema_columns(compile_inputs)
+        )
+        == test_case.expected_columns
     )

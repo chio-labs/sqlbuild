@@ -24,9 +24,7 @@ from sqlbuild.compiler.macro_bridge.models import (
 class MacroBridge:
     """Scan, memoize and splice macro calls for one compile; Python still runs every macro."""
 
-    def __init__(self, *, python_version: tuple[int, int], unicode_version: str) -> None:
-        self._python_version: tuple[int, int] = python_version
-        self._unicode_version: str = unicode_version
+    def __init__(self) -> None:
         self.memo: _native.MacroCallMemo = _native.MacroCallMemo()
         self._store_path: Path | None = None
         self._store_trusted: bool = False

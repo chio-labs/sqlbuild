@@ -19,10 +19,9 @@ class HeaderMetadataParityTestCase:
 
 @dataclass(frozen=True)
 class ModelConfigTierTestCase:
-    """One compiler engine and how often its model loop calls each native model config entry."""
+    """How often the model loop calls each native model config entry."""
 
     description: str
-    engine: str
     expected_native_calls: dict[str, int]
 
 

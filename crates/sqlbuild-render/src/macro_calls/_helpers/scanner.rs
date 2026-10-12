@@ -1,9 +1,6 @@
 //! Byte offset port of the Python macro call scanner, with the errors Python's scan raises.
 
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::is_letter::is_letter;
 
 use crate::macro_calls::errors::ScanError;
 
@@ -24,14 +21,11 @@ pub(crate) struct ScannedFailure {
 }
 
 /// Every top-level call of `text` in order, up to the first error Python's scan raises.
-pub(crate) fn top_level_calls(
-    python: PythonText,
-    text: &str,
-) -> (Vec<ScannedCall>, Option<ScannedFailure>) {
+pub(crate) fn top_level_calls(text: &str) -> (Vec<ScannedCall>, Option<ScannedFailure>) {
     let mut calls: Vec<ScannedCall> = Vec::new();
     let mut cursor = 0;
     while cursor < text.len() {
-        let start = match next_macro_start(python, text, cursor) {
+        let start = match next_macro_start(text, cursor) {
             Ok(Some(start)) => start,
             Ok(None) => break,
             Err(error) => {
@@ -42,7 +36,7 @@ pub(crate) fn top_level_calls(
                 return (calls, Some(failure));
             }
         };
-        match call_at(python, text, start) {
+        match call_at(text, start) {
             Ok(call) => {
                 cursor = call.close + 1;
                 calls.push(call);
@@ -60,19 +54,19 @@ pub(crate) fn top_level_calls(
 }
 
 /// Python's `_parse_macro_name`: the identifier after the `@` at byte `start`.
-pub(crate) fn call_name(python: PythonText, text: &str, start: usize) -> String {
-    text[start + 1..identifier_end(python, text, start + 1)].to_owned()
+pub(crate) fn call_name(text: &str, start: usize) -> String {
+    text[start + 1..identifier_end(text, start + 1)].to_owned()
 }
 
 /// Python's `_scan_sqlbuild_call_names(include_nested=True)`: every call start's name in order.
-pub(crate) fn every_call_name(python: PythonText, text: &str) -> Result<Vec<String>, ScanError> {
+pub(crate) fn every_call_name(text: &str) -> Result<Vec<String>, ScanError> {
     let mut names: Vec<String> = Vec::new();
     let mut cursor = 0;
     while cursor < text.len() {
-        let Some(start) = next_macro_start(python, text, cursor)? else {
+        let Some(start) = next_macro_start(text, cursor)? else {
             break;
         };
-        let name_end = identifier_end(python, text, start + 1);
+        let name_end = identifier_end(text, start + 1);
         names.push(text[start + 1..name_end].to_owned());
         let open = skip_whitespace(text, name_end);
         cursor = open + char_at(text, open).map_or(1, char::len_utf8);
@@ -81,7 +75,7 @@ pub(crate) fn every_call_name(python: PythonText, text: &str) -> Result<Vec<Stri
 }
 
 /// Names of every call nested in `args` in source order, in one pass without recursion.
-pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>, ScanError> {
+pub(crate) fn nested_names(args: &str) -> Result<Vec<String>, ScanError> {
     let bytes: &[u8] = args.as_bytes();
     let mut names: Vec<String> = Vec::new();
     let mut open_call_depths: Vec<usize> = Vec::new();
@@ -93,8 +87,8 @@ pub(crate) fn nested_names(python: PythonText, args: &str) -> Result<Vec<String>
             b'$' => index = dollar_quote_end(bytes, index)?.unwrap_or(index + 1),
             b'-' if bytes.get(index + 1) == Some(&b'-') => index = line_comment_end(bytes, index),
             b'/' if bytes.get(index + 1) == Some(&b'*') => index = block_comment_end(bytes, index)?,
-            b'@' if macro_call_starts_at(python, args, index) => {
-                let (name, open) = call_header(python, args, index)?;
+            b'@' if macro_call_starts_at(args, index) => {
+                let (name, open) = call_header(args, index)?;
                 names.push(name);
                 depth += 1;
                 open_call_depths.push(depth);
@@ -126,8 +120,8 @@ pub(crate) fn mentions_typed_reference(args: &str) -> bool {
     TYPED_REFERENCE_NAMES.iter().any(|name| args.contains(name))
 }
 
-fn call_at(python: PythonText, text: &str, start: usize) -> Result<ScannedCall, ScanError> {
-    let (name, open) = call_header(python, text, start)?;
+fn call_at(text: &str, start: usize) -> Result<ScannedCall, ScanError> {
+    let (name, open) = call_header(text, start)?;
     let close = matching_paren(text.as_bytes(), open)?;
     Ok(ScannedCall {
         start,
@@ -137,8 +131,8 @@ fn call_at(python: PythonText, text: &str, start: usize) -> Result<ScannedCall, 
     })
 }
 
-fn call_header(python: PythonText, text: &str, start: usize) -> Result<(String, usize), ScanError> {
-    let name_end = identifier_end(python, text, start + 1);
+fn call_header(text: &str, start: usize) -> Result<(String, usize), ScanError> {
+    let name_end = identifier_end(text, start + 1);
     let open = skip_whitespace(text, name_end);
     if text.as_bytes().get(open) != Some(&b'(') {
         return Err(ScanError::MissingParenthesis);
@@ -146,11 +140,7 @@ fn call_header(python: PythonText, text: &str, start: usize) -> Result<(String, 
     Ok((text[start + 1..name_end].to_owned(), open))
 }
 
-fn next_macro_start(
-    python: PythonText,
-    text: &str,
-    from: usize,
-) -> Result<Option<usize>, ScanError> {
+fn next_macro_start(text: &str, from: usize) -> Result<Option<usize>, ScanError> {
     let bytes = text.as_bytes();
     let mut index = from;
     while index < bytes.len() {
@@ -160,7 +150,7 @@ fn next_macro_start(
             b'-' if bytes.get(index + 1) == Some(&b'-') => index = line_comment_end(bytes, index),
             b'/' if bytes.get(index + 1) == Some(&b'*') => index = block_comment_end(bytes, index)?,
             b'@' => {
-                if macro_call_starts_at(python, text, index) {
+                if macro_call_starts_at(text, index) {
                     return Ok(Some(index));
                 }
                 index += 1;
@@ -171,16 +161,16 @@ fn next_macro_start(
     Ok(None)
 }
 
-fn macro_call_starts_at(python: PythonText, text: &str, at: usize) -> bool {
+fn macro_call_starts_at(text: &str, at: usize) -> bool {
     let Some(first) = char_at(text, at + 1) else {
         return false;
     };
-    if !(first == '_' || is_python_alpha(python, first)) {
+    if !(first == '_' || is_letter(first)) {
         return false;
     }
     let mut cursor = at + 1 + first.len_utf8();
     while let Some(character) = char_at(text, cursor) {
-        if !is_identifier_continue(python, character) {
+        if !is_identifier_continue(character) {
             break;
         }
         cursor = skip_whitespace(text, cursor + character.len_utf8());
@@ -188,10 +178,10 @@ fn macro_call_starts_at(python: PythonText, text: &str, at: usize) -> bool {
     text.as_bytes().get(cursor) == Some(&b'(')
 }
 
-fn identifier_end(python: PythonText, text: &str, from: usize) -> usize {
+fn identifier_end(text: &str, from: usize) -> usize {
     let mut cursor = from;
     while let Some(character) = char_at(text, cursor) {
-        if !is_identifier_continue(python, character) {
+        if !is_identifier_continue(character) {
             break;
         }
         cursor += character.len_utf8();
@@ -199,14 +189,14 @@ fn identifier_end(python: PythonText, text: &str, from: usize) -> usize {
     cursor
 }
 
-fn is_identifier_continue(python: PythonText, character: char) -> bool {
-    character == '_' || is_python_alnum(python, character)
+fn is_identifier_continue(character: char) -> bool {
+    character == '_' || char::is_alphanumeric(character)
 }
 
 fn skip_whitespace(text: &str, from: usize) -> usize {
     let mut cursor = from;
     while let Some(character) = char_at(text, cursor) {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         cursor += character.len_utf8();

@@ -1,6 +1,6 @@
 use crate::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use crate::cursor_intrinsics::models::IntrinsicCheck;
-use crate::cursor_intrinsics::tests::helpers::{python, rejected};
+use crate::cursor_intrinsics::tests::helpers::rejected;
 use crate::cursor_intrinsics::tests::test_types::IntrinsicCheckTestCase;
 
 #[test]
@@ -95,7 +95,6 @@ fn given_sql_when_checking_cursor_intrinsics_then_python_acceptance_or_error_is_
     for test_case in test_cases {
         assert_eq!(
             intrinsic_free(
-                python(),
                 test_case.sql,
                 &["__reserved_marker__".to_owned()],
                 "Audit 'fresh'"

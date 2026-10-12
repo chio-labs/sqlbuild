@@ -15,12 +15,8 @@ from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
 from itertools import compress
-from operator import not_
 from pathlib import Path
 from typing import Any, cast
-
-import pytest
-import yaml
 
 from sqlbuild import _native
 from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
@@ -36,7 +32,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
 )
 from sqlbuild.compiler.discovery._helpers.native.payloads import (
     native_payload_error,
-    native_text_runtime,
 )
 from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
     SelectedContractInputDiscoverer,
@@ -59,7 +54,6 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,
@@ -70,176 +64,18 @@ REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[6]
 EXCLUDED_DIRECTORIES: frozenset[str] = frozenset({".venv", "node_modules", "target", ".git"})
 PYTHON_ERROR: dict[str, str] = {"error": "rejected"}
 DEFERRED: dict[str, str] = {"error": "deferred to Python"}
-LOADERS_DISAGREE: dict[str, str] = {"error": "PyYAML and LibYAML disagree"}
-UNCHECKED_PYTHON_OUTCOMES: tuple[dict[str, str], ...] = (PYTHON_ERROR, LOADERS_DISAGREE)
+UNCHECKED_PYTHON_OUTCOMES: tuple[dict[str, str], ...] = (PYTHON_ERROR,)
 UNDECODABLE_BYTES: tuple[int, ...] = (
     0x80, 0x9F, 0xA0, 0xBF, 0xC0, 0xC1, 0xC2, 0xE0, 0xE2, 0xED, 0xF0, 0xF4, 0xF5, 0xFF,
 )  # fmt: skip
 YAML_LINE_BREAKS: dict[int, None] = {0x85: None, 0x2028: None, 0x2029: None}
-SCALAR_FRAGMENTS: tuple[str, ...] = (
-    "0", "1", "7", "8", "9", "00", "12", "59", "60", "_", ".", ":", "e", "E", "e+", "E-",
-    "+", "-", "x", "b", "o", "0x", "0b", "0o", "a", "f", "F", "inf", "Inf", ".inf", ".nan",
-    "NaN", "yes", "Yes", "NO", "on", "ON", "off", "true", "True", "FALSE", "null", "Null",
-    "NULL", "~", "<<", "=", "y", "n", "T", "t", " ", "Z", "2001", "-12", "-2", "-14", "T21",
-    ":59", ":43", ".10", "-05:00", "+5", " -5", "1_0", "é", "#", "'", '"',
-)  # fmt: skip
-KNOWN_SCALARS: tuple[str, ...] = (
-    "yes", "No", "oN", "~", "", "<<", "=", "017", "0o17", "08", "0b101", "0x1F", "0x_",
-    "1_000", "190:20:30", "1:60", "-190:20:30.5", "1e5", "1.0e5", "1.0e+5", ".5", "5.", "+.5",
-    "-0.0", ".NaN", "-.inf", "2001-12-14", "2001-1-4", "2002-02-30", "2001-12-14t21:59:43.10-05:00",
-    "2001-12-14 21:59:43.10 -5", "2001-12-14 21:59:43.1234567Z", "2001-12-14T24:00:00",
-    "2001-12-14 1:02:03 +23:59", "99999999999999999999999", "-0b_1", "0_", "_1", "1__2.3_",
-)  # fmt: skip
-SCALAR_CONTEXTS: tuple[str, ...] = (
-    "key: {plain}",
-    "- {plain}",
-    "[{plain}, 1]",
-    "{plain}: value",
-    "key: '{single}'",
-    'key: "{double}"',
-    "key: ! {plain}",
-    "key: ! '{single}'",
-    "key: !!int {plain}",
-    "key: !!float {plain}",
-    "key: !!bool {plain}",
-    "key: !!str {plain}",
-    "key: !!null {plain}",
-    "key: !!timestamp {plain}",
-    "? {plain}\n: 1",
-)
-DOCUMENT_TEMPLATES: tuple[str, ...] = (
-    "base{n}: &anchor{n}\n  shared: {a}\n  other: {b}\nitem{n}:\n  <<: *anchor{n}\n  other: {c}\n",
-    "list{n}:\n  - &item{n} {a}\n  - *item{n}\n  - [{b}, {c}]\n",
-    "merged{n}:\n  <<: [{{x: {a}}}, {{x: {b}, y: {c}}}]\n  z: {a}\n",
-    "flow{n}: {{k{n}: {a}, j{n}: [{b}, {{m: {c}}}]}}\n",
-    "literal{n}: |\n  {a}\n   {b}\n\n  {c}\nfolded{n}: >-\n  {a}\n  {b}\n",
-    "? complex{n}\n: {a}\n# comment {b}\nafter{n}: {c}  # trailing\n",
-    "{a}: first\n{a}: second\n",
-    "keep{n}: |+\n  {a}\n\n  {b}\n\n",
-    "strip{n}: >-\n  {a}\n\n   {b}\n  \n",
-    "seq{n}:\n- |\n  {a}\n- >+\n  {b}\n \n",
-    "nested{n}:\n  inner: |\n    {a}\n     {b}\n   \n",
-    "indented{n}:\n  - |2-\n     {a}\n    {c}\n",
-    "empty{n}: |\n   \n\nafter{n}: {b}\n",
-)
-DOCUMENT_TAILS: tuple[str, ...] = (
-    "", "\n", "\n\n", " ", "  ", "\n ", "\n  ", "\n   \n", "  \n  ", "\n# end", "\n...\n",
-)  # fmt: skip
 BYTE_ORDER_MARKS: tuple[str, ...] = ("",) * 19 + ("\ufeff",)
 
 
 def yaml_text(*, rng: random.Random, max_length: int) -> str:
-    """Return random text without the line breaks only YAML 1.1 recognizes."""
+    """Return random text without NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR line breaks."""
 
     return random_text(rng=rng, max_length=max_length).translate(YAML_LINE_BREAKS)
-
-
-def random_scalar(*, rng: random.Random) -> str:
-    """Return a near-miss plain scalar built from resolver-sensitive fragments."""
-
-    pieces: list[str] = [rng.choice(SCALAR_FRAGMENTS) for _ in range(rng.randint(1, 4))]
-    return rng.choice(("".join(pieces), rng.choice(KNOWN_SCALARS)))
-
-
-def scalar_document(*, rng: random.Random) -> str:
-    """Return a scalar embedded in a plain, quoted or tagged YAML context."""
-
-    scalar: str = random_scalar(rng=rng)
-    return rng.choice(SCALAR_CONTEXTS).format(
-        plain=scalar, single=scalar.replace("'", "''"), double=scalar.replace('"', "'")
-    )
-
-
-def anchored_document(*, rng: random.Random) -> str:
-    """Return a block document with anchors, aliases, merge keys, literals and comments."""
-
-    return "".join(
-        rng.choice(DOCUMENT_TEMPLATES).format(
-            n=index, a=random_scalar(rng=rng), b=random_scalar(rng=rng), c=random_scalar(rng=rng)
-        )
-        for index in range(rng.randint(1, 4))
-    )
-
-
-def _yaml_key(rng: random.Random) -> object:
-    return rng.choice(
-        (
-            yaml_text(rng=rng, max_length=6),
-            rng.randint(-5, 5),
-            rng.random() < 0.5,
-            None,
-            datetime.date(2000 + rng.randint(0, 30), rng.randint(1, 12), rng.randint(1, 28)),
-            yaml_text(rng=rng, max_length=12),
-        )
-    )
-
-
-def _yaml_datetime(rng: random.Random) -> object:
-    offset: datetime.timedelta = datetime.timedelta(minutes=rng.randint(-1439, 1439))
-    zone: datetime.tzinfo | None = rng.choice((None, datetime.timezone(offset), datetime.UTC))
-    return datetime.datetime(
-        rng.randint(1, 9999),
-        rng.randint(1, 12),
-        rng.randint(1, 28),
-        rng.randint(0, 23),
-        rng.randint(0, 59),
-        rng.randint(0, 59),
-        rng.choice((0, rng.randint(0, 999_999))),
-        tzinfo=zone,
-    )
-
-
-YAML_SCALARS: tuple[Callable[[random.Random], object], ...] = (
-    lambda rng: None,
-    lambda rng: rng.random() < 0.5,
-    lambda rng: rng.randint(-(2**70), 2**70),
-    lambda rng: random_float(rng=rng),
-    lambda rng: yaml_text(rng=rng, max_length=30),
-    lambda rng: random_scalar(rng=rng),
-    lambda rng: datetime.date(rng.randint(1, 9999), rng.randint(1, 12), rng.randint(1, 28)),
-    _yaml_datetime,
-)
-
-
-def _yaml_list(rng: random.Random, depth: int) -> object:
-    return [random_yaml_value(rng=rng, depth=depth - 1) for _ in range(rng.randint(0, 4))]
-
-
-def _yaml_dict(rng: random.Random, depth: int) -> object:
-    return {
-        _yaml_key(rng): random_yaml_value(rng=rng, depth=depth - 1)
-        for _ in range(rng.randint(0, 4))
-    }
-
-
-YAML_GENERATORS: tuple[Callable[[random.Random, int], object], ...] = (
-    *(lambda rng, depth, scalar=scalar: scalar(rng) for scalar in YAML_SCALARS),
-    _yaml_list,
-    _yaml_dict,
-    _yaml_list,
-    _yaml_dict,
-)
-
-
-def random_yaml_value(*, rng: random.Random, depth: int) -> object:
-    """Return a random value of the types PyYAML's safe dumper writes."""
-
-    available: int = len(YAML_SCALARS) + 4 * min(depth, 1)
-    return rng.choice(YAML_GENERATORS[:available])(rng, depth)
-
-
-def dumped_document(*, rng: random.Random) -> str:
-    """Return a document written by PyYAML's safe dumper in a random style."""
-
-    return yaml.safe_dump(
-        random_yaml_value(rng=rng, depth=3),
-        default_flow_style=rng.choice((None, True, False)),
-        default_style=rng.choice((None, None, '"', "'")),
-        width=rng.choice((12, 80, 4096)),
-        allow_unicode=rng.random() < 0.5,
-        explicit_start=rng.random() < 0.3,
-        sort_keys=False,
-    )
 
 
 def _alias_chain(links: int) -> str:
@@ -282,35 +118,6 @@ HOSTILE_TOML_DOCUMENTS: dict[str, Callable[[], str]] = {
     "deep inline tables": lambda: "a = " + "{b = " * 10_000 + "}" * 10_000,
     "long dotted key": lambda: "a" + ".a" * 100_000 + " = 1",
     "long table header": lambda: "[a" + ".a" * 100_000 + "]",
-}
-
-
-def finished_document(*, rng: random.Random, text: str) -> str:
-    """Return `text` with or without its final line break, trailing blank lines or a BOM."""
-
-    trimmed: str = text.rstrip("\n")
-    ending: str = rng.choice((text, trimmed, trimmed + rng.choice(DOCUMENT_TAILS)))
-    return rng.choice(BYTE_ORDER_MARKS) + ending
-
-
-LONG_KEY_CONTEXTS: tuple[str, ...] = (
-    "{key}: 1\n", "{{{key}: 1}}\n", "[{key}: 1]\n", "a:\n  {key} : 1\n", "'{key}': 1\n",
-    "&k {key}: 1\n", "? {key}\n: 1\n", "x: {{{key}: 1, b: 2}}\n",
-)  # fmt: skip
-
-
-def long_key_document(*, rng: random.Random) -> str:
-    """Return a document whose key length straddles the 1024-character simple-key limit."""
-
-    key: str = rng.choice(("a", "0x", "é")) * rng.randint(990, 1040)
-    return rng.choice(LONG_KEY_CONTEXTS).format(key=key)
-
-
-YAML_DOCUMENT_GENERATORS: dict[str, Callable[[random.Random], str]] = {
-    "long keys": lambda rng: long_key_document(rng=rng),
-    "scalars": lambda rng: finished_document(rng=rng, text=scalar_document(rng=rng)),
-    "anchors": lambda rng: finished_document(rng=rng, text=anchored_document(rng=rng)),
-    "dumped": lambda rng: finished_document(rng=rng, text=dumped_document(rng=rng)),
 }
 
 
@@ -515,25 +322,6 @@ def canonical(value: object) -> object:
     return CANONICAL[type(value)](value)
 
 
-def python_yaml_outcome(*, text: str, loader: type[yaml.SafeLoader]) -> object:
-    """Return PyYAML's canonical value, or the rejection marker when it raises."""
-
-    outcome: list[object] = [PYTHON_ERROR]
-    with suppress(
-        yaml.YAMLError, ValueError, TypeError, OverflowError, AttributeError, KeyError, IndexError
-    ):
-        outcome[0] = canonical(yaml.load(text, Loader=loader))
-    return outcome[0]
-
-
-def expected_yaml_outcome(*, text: str) -> object:
-    """Return the value both PyYAML loaders agree on, or the marker that native must defer."""
-
-    pure: object = python_yaml_outcome(text=text, loader=yaml.SafeLoader)
-    libyaml: object = python_yaml_outcome(text=text, loader=yaml.CSafeLoader)
-    return {True: pure, False: LOADERS_DISAGREE}[pure == libyaml]
-
-
 def python_toml_outcome(*, text: str) -> object:
     """Return `tomllib`'s canonical value, or the rejection marker when it raises."""
 
@@ -627,25 +415,6 @@ def _is_toml_harmful(expected: object, actual: object) -> bool:
 PROJECT_CONFIG: str = 'name = "orders"\nadapter = "duckdb"\n'
 
 
-def native_yaml_tags_and_values(
-    *, project_dir: Path, relative_paths: list[str]
-) -> tuple[list[object], bool]:
-    """Return each file's native tag and whether every natively loaded value equals LibYAML's."""
-
-    payloads: list[tuple[object, ...]] = cast(
-        list[tuple[object, ...]],
-        _native.load_yaml_files(
-            {"project_dir": str(project_dir), "display_prefix": "", "kind": "source"},
-            relative_paths,
-            _native.NativeProjectTree(str(project_dir)),
-        ),
-    )
-    rows: list[tuple[object, ...]] = list(payloads)
-    loaded: list[tuple[object, ...]] = list(compress(rows, [row[0] == "ok" for row in rows]))
-    expected: list[object] = [yaml.load(str(row[1]), Loader=yaml.CSafeLoader) for row in loaded]
-    return [row[0] for row in rows], [row[2] for row in loaded] == expected
-
-
 class FailureCapture:
     """Swallow and keep the discovery failure a block raises."""
 
@@ -671,12 +440,9 @@ def write_project(*, project_dir: Path, files: tuple[tuple[str, bytes], ...]) ->
         _ = path.write_bytes(data)
 
 
-def stage_outcome(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
-) -> tuple[object, ...]:
-    """Return the rendered discovery stage under `engine` with its failure type and message."""
+def stage_outcome(*, project_dir: Path) -> tuple[object, ...]:
+    """Return the rendered discovery stage with its failure type and message."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     capture: FailureCapture = FailureCapture()
     rendered: list[object] = [None]
     with capture:
@@ -797,12 +563,9 @@ DECLARATION_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
 }
 
 
-def declaration_files_outcome(
-    *, project_dir: Path, kind: str, engine: str, monkeypatch: pytest.MonkeyPatch
-) -> tuple[object, ...]:
-    """Return the rendered `kind` collection under `engine`, or its failure type, text and help."""
+def declaration_files_outcome(*, project_dir: Path, kind: str) -> tuple[object, ...]:
+    """Return the rendered `kind` collection, or its failure type, text and help."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     capture: FailureCapture = FailureCapture()
     with capture:
         return (
@@ -822,7 +585,6 @@ def native_declaration_tag(*, file_path: Path, kind: str) -> str:
             "function_keys": sorted(SQL_FUNCTION_HEADER_KEYS),
             "audit_keys": sorted(SQL_AUDIT_HEADER_KEYS),
             "hook_keys": sorted(SQL_HOOK_HEADER_KEYS),
-            **native_text_runtime(),
         },
         (str(file_path), file_path.stem),
         file_path.read_text(encoding="utf-8"),
@@ -831,11 +593,10 @@ def native_declaration_tag(*, file_path: Path, kind: str) -> str:
 
 
 def tolerant_declaration_outcome(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
+    *, project_dir: Path
 ) -> tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]]:
-    """Return tolerant scope discovery's declaration collections and faults under `engine`."""
+    """Return tolerant scope discovery's declaration collections and faults."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     discovery: TolerantScopeDiscovery = build_tolerant_scope_discovery(project_dir=project_dir)
     return (
         render_stage_capture(discovery.discovered_inputs),
@@ -1196,15 +957,11 @@ DECLARATION_GENERATORS: dict[str, Callable[..., str]] = {
 }
 
 
-def generated_declaration_outcomes(
-    *,
-    project_root: Path,
-    test_case: GeneratedDeclarationFileTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[tuple[int, ...], Counter[str]]:
-    """Discover each generated file under both engines: the mismatching seeds and native tags."""
+def generated_declaration_tags(
+    *, project_root: Path, test_case: GeneratedDeclarationFileTestCase
+) -> Counter[str]:
+    """Discover each generated file and count whether native parsing parses or fails it."""
 
-    agreements: list[bool] = []
     tags: Counter[str] = Counter()
     for seed in range(test_case.case_count):
         project_dir: Path = project_root / str(seed)
@@ -1214,22 +971,13 @@ def generated_declaration_outcomes(
         write_project(
             project_dir=project_dir, files=((test_case.relative_path, contents.encode("utf-8")),)
         )
-        shipped: tuple[object, ...] = declaration_files_outcome(
-            project_dir=project_dir, kind=test_case.kind, engine="native", monkeypatch=monkeypatch
-        )
-        native: tuple[object, ...] = declaration_files_outcome(
-            project_dir=project_dir,
-            kind=test_case.kind,
-            engine="native-preview",
-            monkeypatch=monkeypatch,
-        )
+        _ = declaration_files_outcome(project_dir=project_dir, kind=test_case.kind)
         tags[
             native_declaration_tag(
                 file_path=project_dir / test_case.relative_path, kind=test_case.kind
             )
         ] += 1
-        agreements.append(native == shipped)
-    return tuple(compress(range(test_case.case_count), map(not_, agreements))), tags
+    return tags
 
 
 def on_deep_stack(*, frames: int, call: Callable[[], object]) -> object:
@@ -1272,14 +1020,28 @@ def value_shape(value: object) -> tuple[tuple[int, str], ...]:
     return tuple(shape)
 
 
-def deep_model_header_values(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch, frames: int
-) -> dict[str, object]:
-    """Discover the project's only model under `engine` beneath `frames` extra Python frames."""
+def deep_model_header_values(*, project_dir: Path, frames: int) -> dict[str, object]:
+    """Discover the project's only model beneath `frames` extra Python frames."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     inputs: DiscoveredProjectInputs = cast(
         DiscoveredProjectInputs,
         on_deep_stack(frames=frames, call=lambda: discover_project_inputs(project_dir=project_dir)),
     )
     return inputs.model_files[0].header_values
+
+
+def native_yaml_tags_and_values(
+    *, project_dir: Path, relative_paths: list[str]
+) -> tuple[list[object], list[object]]:
+    """Return each file's native tag and the values of the files that loaded."""
+
+    rows: list[tuple[object, ...]] = cast(
+        list[tuple[object, ...]],
+        _native.load_yaml_files(
+            {"project_dir": str(project_dir), "display_prefix": "", "kind": "source"},
+            relative_paths,
+            _native.NativeProjectTree(str(project_dir)),
+        ),
+    )
+    loaded: list[tuple[object, ...]] = list(compress(rows, [row[0] == "ok" for row in rows]))
+    return [row[0] for row in rows], [row[2] for row in loaded]

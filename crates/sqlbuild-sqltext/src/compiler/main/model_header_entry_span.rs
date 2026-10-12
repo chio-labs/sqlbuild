@@ -5,7 +5,6 @@ use crate::compiler::_helpers::model_headers::tokenization::{
     HeaderToken, SYMBOL_TOKEN, WORD_TOKEN, tokenize_one,
 };
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN};
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 
 /// Code-point offsets of the entry from its key to its value's end, or the tokenizer's error.
 pub fn model_header_entry_span(
@@ -28,7 +27,7 @@ pub fn model_header_entry_span(
         } else if depth == 0 && *kind == WORD_TOKEN && value == key && index + 2 < tokens.len() {
             let start: usize = header_start + position;
             let mut end: usize = header_start + tokens[index + 2].2;
-            while end > start && is_python_space(characters[end - 1]) {
+            while end > start && char::is_whitespace(characters[end - 1]) {
                 end -= 1;
             }
             return Ok(Some((start, end)));

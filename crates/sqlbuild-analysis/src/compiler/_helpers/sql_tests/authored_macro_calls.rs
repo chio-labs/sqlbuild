@@ -1,6 +1,5 @@
 //! Whether macro expansion would expand a call in one unexpanded SQL test body.
 
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
 use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
 use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
@@ -75,7 +74,7 @@ fn is_identifier_continue(character: char) -> bool {
 fn space_end(sql: &str, start: usize) -> usize {
     let mut index = start;
     while let Some(character) = char_at(sql, index) {
-        if !is_python_space(character) {
+        if !char::is_whitespace(character) {
             break;
         }
         index += character.len_utf8();

@@ -1,4 +1,4 @@
-//! Model column contracts and promotion conflicts for the preview compiler engine.
+//! Model column contracts and promotion conflicts.
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};

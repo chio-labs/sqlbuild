@@ -2,15 +2,12 @@
 
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::models::{DiscoveryFailure, FailureKind};
-use sqlbuild_core::text::main::is_python_decimal::is_python_decimal;
-use sqlbuild_core::text::main::python_strip::python_strip;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::is_decimal_digit::is_decimal_digit;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 /// The Python whose `\d` decides bare-word numbers, and the file a rejected word is reported in.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct WordRules<'file> {
-    pub(crate) python: PythonText,
     pub(crate) file_path: &'file str,
 }
 
@@ -88,7 +85,7 @@ pub(crate) fn non_empty_str<'value>(
     value: &'value AuthoredValue,
     words: WordRules,
 ) -> Result<Option<&'value str>, ParseStop> {
-    Ok(python_str(value, words)?.filter(|text| !python_strip(text).is_empty()))
+    Ok(python_str(value, words)?.filter(|text| !str::trim(text).is_empty()))
 }
 
 /// Python's `dict.get(key)`.
@@ -131,7 +128,7 @@ pub(crate) fn failure(kind: FailureKind, message: String) -> ParseStop {
 /// `_parse_word_value`: `true`, `false` and `null` are parsed as values; numbers become numbers.
 fn word_type(word: &str, words: WordRules) -> Result<PythonType, ParseStop> {
     if !word.is_ascii() {
-        if is_unicode_number(word, words.python) {
+        if is_unicode_number(word) {
             return Err(ParseStop::Failed(DiscoveryFailure {
                 kind: FailureKind::Declaration,
                 message: format!(
@@ -175,11 +172,8 @@ fn is_float(word: &str) -> bool {
 }
 
 /// Whether Python's `^[+-]?\d+$` or float pattern, with Unicode `\d`, matches a non-ASCII word.
-fn is_unicode_number(word: &str, python: PythonText) -> bool {
-    let digits = |part: &str| {
-        part.chars()
-            .all(|character| is_python_decimal(python, character))
-    };
+fn is_unicode_number(word: &str) -> bool {
+    let digits = |part: &str| part.chars().all(is_decimal_digit);
     let unsigned = unsigned(word);
     if !unsigned.is_empty() && digits(unsigned) {
         return true;

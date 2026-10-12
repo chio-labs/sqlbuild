@@ -7,11 +7,9 @@ from contextvars import ContextVar
 
 from sqlbuild.compiler.frontier.constants import (
     COMPILE_REUSE_DISABLE_ENV_VAR,
-    COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
 )
 from sqlbuild.compiler.references.types import SqlReferenceKind
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 
 GENERATED_REFERENCE_MARKERS: tuple[str, ...] = tuple(
     f"{kind.function_name}(" for kind in SqlReferenceKind
@@ -35,9 +33,7 @@ MAIN_MODULE_NAME: str = "__main__"
 STORE_TRACKED_ENVIRONMENT_PREFIXES: tuple[str, ...] = ("SQLBUILD_", "SQB_")
 STORE_UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
     {
-        ANALYSIS_RECORD_DIR_ENV_VAR,
         COMPILE_REUSE_DISABLE_ENV_VAR,
-        COMPILER_ENGINE_ENV_VAR,
         STAGE_CAPTURE_DIR_ENV_VAR,
     }
 )

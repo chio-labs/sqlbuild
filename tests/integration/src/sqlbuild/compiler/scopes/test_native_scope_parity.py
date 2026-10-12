@@ -1,4 +1,4 @@
-"""Engine parity for the declaration scope the native engine builds: index, lookup and grants."""
+"""The declaration scope built natively: index, lookup and grants."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
+from sqlbuild.compiler.scopes.models import ScopeIndex
 from tests.integration.src.sqlbuild.compiler.scopes._test_types import (
     GeneratedScopeParityTestCase,
     ScopeCommandParityTestCase,
@@ -19,8 +19,8 @@ from tests.integration.src.sqlbuild.compiler.scopes.helpers import (
     ScopeOutcome,
     generated_scope_files,
     native_scope_attempts,
-    scope_command_indexes,
-    scope_engine_outcomes,
+    scope_command_index,
+    scope_outcome,
     write_project,
 )
 
@@ -130,20 +130,18 @@ _MACRO_TEST_HEADER: str = 'TEST (mode macro, name "eu_label");\n\n'
     ],
     ids=lambda case: case.description,
 )
-def test_given_scoped_project_when_building_scope_under_each_engine_then_outcomes_match(
+def test_given_scoped_project_when_building_scope_then_outcome_is_expected(
     test_case: ScopeEngineParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
 
-    shipped, native, built = scope_engine_outcomes(project_dir=tmp_path, monkeypatch=monkeypatch)
+    outcome: ScopeOutcome = scope_outcome(project_dir=tmp_path)
 
     assert (
-        native == shipped,
-        built,
-        (shipped.kind == "error") == bool(test_case.expected_error),
-        test_case.expected_error in shipped.error,
-        native.grants >= test_case.expected_minimum_grants,
-    ) == (True, True, True, True, True), test_case.description
+        (outcome.kind == "error") == bool(test_case.expected_error),
+        test_case.expected_error in outcome.error,
+        outcome.grants >= test_case.expected_minimum_grants,
+    ) == (True, True, True), test_case.description
 
 
 @pytest.mark.parametrize(
@@ -160,7 +158,7 @@ def test_given_scoped_project_when_building_scope_under_each_engine_then_outcome
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_scoped_projects_when_building_scope_then_engines_match(
+def test_given_generated_scoped_projects_when_building_scope_then_outcomes_cover_each_kind(
     test_case: GeneratedScopeParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
@@ -168,24 +166,15 @@ def test_given_generated_scoped_projects_when_building_scope_then_engines_match(
     for project_dir in project_dirs:
         write_project(project_dir=project_dir, files=generated_scope_files(rng=rng))
 
-    outcomes: list[tuple[ScopeOutcome, ScopeOutcome, bool]] = [
-        scope_engine_outcomes(project_dir=project_dir, monkeypatch=monkeypatch)
-        for project_dir in project_dirs
+    outcomes: list[ScopeOutcome] = [
+        scope_outcome(project_dir=project_dir) for project_dir in project_dirs
     ]
 
-    shipped: list[ScopeOutcome] = [outcome[0] for outcome in outcomes]
-    native: list[ScopeOutcome] = [outcome[1] for outcome in outcomes]
     assert (
-        mismatches(
-            inputs=[path.name for path in project_dirs],
-            expected=[*shipped],
-            actual=[*native],
-        ),
-        all(outcome[2] for outcome in outcomes),
-        sum(item.kind == "ok" for item in shipped) >= test_case.expected_minimum_valid,
-        sum(item.kind == "error" for item in shipped) >= test_case.expected_minimum_invalid,
-        sum(item.grants > 0 for item in shipped) >= test_case.expected_minimum_granting,
-    ) == (list(test_case.expected_mismatches), True, True, True, True), test_case.description
+        sum(item.kind == "ok" for item in outcomes) >= test_case.expected_minimum_valid,
+        sum(item.kind == "error" for item in outcomes) >= test_case.expected_minimum_invalid,
+        sum(item.grants > 0 for item in outcomes) >= test_case.expected_minimum_granting,
+    ) == (True, True, True), test_case.description
 
 
 @pytest.mark.parametrize(
@@ -199,39 +188,31 @@ def test_given_generated_scoped_projects_when_building_scope_then_engines_match(
     ],
     ids=lambda case: case.description,
 )
-def test_given_scoped_project_when_scope_command_builds_index_then_engines_match(
+def test_given_scoped_project_when_scope_command_builds_index_then_grants_are_kept(
     test_case: ScopeCommandParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
 
-    shipped, native = scope_command_indexes(project_dir=tmp_path, monkeypatch=monkeypatch)
+    index: ScopeIndex = scope_command_index(project_dir=tmp_path)
 
-    assert (native == shipped, len(native.grants) >= test_case.expected_minimum_grants) == (
-        True,
-        True,
-    ), test_case.description
+    assert len(index.grants) >= test_case.expected_minimum_grants, test_case.description
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         ScopeEngineTierTestCase(
-            description="shipped native stages", engine="native", expected_native_attempts=1
-        ),
-        ScopeEngineTierTestCase(
-            description="native preview", engine="native-preview", expected_native_attempts=1
+            description="native declaration scopes", expected_native_attempts=1
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_tier_when_building_scope_then_the_native_index_is_built_once(
+def test_given_scoped_project_when_building_scope_then_the_native_index_is_built_once(
     test_case: ScopeEngineTierTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=SCOPED_PROJECT)
 
-    attempts, outcome = native_scope_attempts(
-        project_dir=tmp_path, engine=test_case.engine, monkeypatch=monkeypatch
-    )
+    attempts, outcome = native_scope_attempts(project_dir=tmp_path, monkeypatch=monkeypatch)
 
     assert (attempts, outcome.kind) == (test_case.expected_native_attempts, "ok")
 

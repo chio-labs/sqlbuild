@@ -1,4 +1,4 @@
-"""Every corpus entry declares the outcome both engines must produce."""
+"""Every corpus entry declares the outcome its compile must produce."""
 
 from __future__ import annotations
 

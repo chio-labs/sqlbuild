@@ -2,8 +2,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
@@ -77,7 +75,7 @@ fn is_mock(name: &str) -> bool {
 }
 
 fn casefold(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    str::to_lowercase(text)
 }
 
 fn unique(items: impl IntoIterator<Item = String>) -> Vec<String> {

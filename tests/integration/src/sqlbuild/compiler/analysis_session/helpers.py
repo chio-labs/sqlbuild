@@ -4,7 +4,6 @@ import functools
 import itertools
 import json
 import random
-from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
@@ -655,7 +654,7 @@ def analyse_natively(
     with monkeypatch.context() as patch:
         patch.setattr(project_assembly, "_assemble_compiled_model", recorded_model)
         patch.setattr(project_assembly, "analyze_model_sql", analysed_three_ways)
-        patch.setattr(project_assembly, "expression_source_shapes_by_engine", recorded_shapes)
+        patch.setattr(project_assembly, "expression_source_shapes", recorded_shapes)
         with suppress(CompileInputError):
             _ = project_assembly.assemble_compiled_project(
                 inputs=inputs,
@@ -708,19 +707,6 @@ def analysis_request(
             inference_profile=inference_profile,
         )
     return requests[0]
-
-
-def deferral_kinds(record_dir: Path) -> Counter[str]:
-    """Count the `site:kind` deferral records below `record_dir`."""
-
-    lines: list[str] = list(
-        chain.from_iterable(
-            path.read_text("utf-8").splitlines()
-            for path in sorted(record_dir.glob("analysis-deferrals-*.jsonl"))
-        )
-    )
-    records: list[dict[str, str]] = [json.loads(line) for line in lines]
-    return Counter(f"{record['site']}:{record['kind']}" for record in records)
 
 
 def _native_columns(analysis: ModelSqlAnalysis) -> tuple[InferredColumn, ...]:

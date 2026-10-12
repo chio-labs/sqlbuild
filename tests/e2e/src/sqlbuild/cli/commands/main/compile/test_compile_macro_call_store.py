@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 from pathlib import Path
 
@@ -21,11 +20,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     UnkeyableMacroCallTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
-    MACRO_CALL_STORE_ENGINE,
     STORE_ARGUMENT_ENV_VAR,
     STORE_ENVIRONMENT_REGION_VAR,
     CompileReuseRun,
-    EngineMacroCallRuns,
+    FullMacroCallRuns,
     MacroCallStoreRun,
     MacroReferenceCallRuns,
     backdate_flavor_between_processes,
@@ -35,9 +33,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     edit_flavor_while_saving,
     edit_label_helper,
     edit_south_model,
-    engine_macro_call_runs,
     forget_store_flavor_module,
     freeze_macro_call_store_environment,
+    full_macro_call_runs,
     in_process_reuse_run,
     logged_in_process_compile,
     macro_call_store_compile,
@@ -48,7 +46,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     pretend_fresh_process,
     recompile_in_process_after_edit,
     replace_project_text,
-    report_without_engine,
     rezip_flavor_between_processes,
     run_reuse_compile,
     store_files,
@@ -261,7 +258,6 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
     extlib: Path = tmp_path / "extlib"
     prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
     monkeypatch.syspath_prepend(str(extlib))
-    monkeypatch.setenv("SQLBUILD_COMPILER_ENGINE", MACRO_CALL_STORE_ENGINE)
     monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_REUSE", "1")
     monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(tmp_path / "macro-calls.log"))
     freeze_macro_call_store_environment(monkeypatch)
@@ -272,7 +268,7 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
     broken: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     reference: CompileReuseRun = run_reuse_compile(
         project_dir=project_dir,
-        env={"PYTHONPATH": str(extlib), "SQLBUILD_COMPILER_ENGINE": MACRO_CALL_STORE_ENGINE},
+        env={"PYTHONPATH": str(extlib)},
         args=("--no-cache",),
     )
 
@@ -284,38 +280,24 @@ def test_given_broken_store_key_when_compiling_an_edit_then_the_oracle_reports_a
     "test_case",
     [
         EngineMacroCallGateTestCase(
-            description="default_engine",
-            engine="",
+            description="default",
             expected_logged_calls=(1, 0),
             expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
-        ),
-        EngineMacroCallGateTestCase(
-            description="native",
-            engine="native",
-            expected_logged_calls=(1, 0),
-            expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
-        ),
-        EngineMacroCallGateTestCase(
-            description="native_preview",
-            engine="native-preview",
-            expected_logged_calls=(1, 0),
-            expected_store_files=("target/cache/compiler-native-preview-v1/macro-calls.bin",),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_compiling_repeatedly_then_macro_calls_are_batched_and_stored(
+def test_given_macro_project_when_compiling_repeatedly_then_macro_calls_are_batched_and_stored(
     tmp_path: Path, test_case: EngineMacroCallGateTestCase
 ) -> None:
     project_dir: Path = tmp_path / "project"
     extlib: Path = tmp_path / "extlib"
     prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
 
-    runs: EngineMacroCallRuns = engine_macro_call_runs(
+    runs: FullMacroCallRuns = full_macro_call_runs(
         project_dir=project_dir,
         extlib=extlib,
         log_path=tmp_path / "macro-calls.log",
-        engine=test_case.engine,
         runs=2,
     )
 
@@ -329,7 +311,6 @@ def test_given_engine_when_compiling_repeatedly_then_macro_calls_are_batched_and
     [
         MacroReferenceCallStoreTestCase(
             description="native_memo_then_store",
-            engine="native",
             expected_logged_calls=(1, 0),
         ),
     ],
@@ -341,14 +322,12 @@ def test_given_macro_returning_rejected_reference_call_when_replaying_then_repor
     oracle: MacroReferenceCallRuns = macro_reference_call_runs(
         project_dir=prepare_macro_reference_call_project(tmp_path=tmp_path / "oracle"),
         log_path=tmp_path / "oracle.log",
-        engine="native",
         runs=1,
     )
 
     runs: MacroReferenceCallRuns = macro_reference_call_runs(
-        project_dir=prepare_macro_reference_call_project(tmp_path=tmp_path / "engine"),
-        log_path=tmp_path / "engine.log",
-        engine=test_case.engine,
+        project_dir=prepare_macro_reference_call_project(tmp_path=tmp_path / "replayed"),
+        log_path=tmp_path / "replayed.log",
         runs=_MACRO_REFERENCE_CALL_RUNS,
     )
 
@@ -407,7 +386,6 @@ def test_given_macro_module_changed_after_use_when_compiling_in_a_new_process_th
     extlib: Path = tmp_path / "extlib"
     prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
     monkeypatch.syspath_prepend(str(extlib))
-    monkeypatch.setenv("SQLBUILD_COMPILER_ENGINE", MACRO_CALL_STORE_ENGINE)
     monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_REUSE", "1")
     monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(tmp_path / "macro-calls.log"))
     monkeypatch.setattr(sys, "dont_write_bytecode", True)
@@ -446,7 +424,6 @@ def test_given_second_compile_in_one_process_when_compiling_then_the_store_is_no
     log_path: Path = tmp_path / "macro-calls.log"
     prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
     monkeypatch.syspath_prepend(str(extlib))
-    monkeypatch.setenv("SQLBUILD_COMPILER_ENGINE", MACRO_CALL_STORE_ENGINE)
     monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_REUSE", "1")
     monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
     forget_store_flavor_module()
@@ -472,7 +449,6 @@ def test_given_second_compile_in_one_process_when_compiling_then_the_store_is_no
     [
         EngineMacroCallGateTestCase(
             description="native_without_proc",
-            engine="native",
             expected_logged_calls=(1, 0),
             expected_store_files=("target/cache/compiler-native-v1/macro-calls.bin",),
         )
@@ -487,11 +463,10 @@ def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still
     prepare_macro_call_store_project(project_dir=project_dir, extlib=extlib)
     block_proc_reads(extlib)
 
-    runs: EngineMacroCallRuns = engine_macro_call_runs(
+    runs: FullMacroCallRuns = full_macro_call_runs(
         project_dir=project_dir,
         extlib=extlib,
         log_path=tmp_path / "macro-calls.log",
-        engine=test_case.engine,
         runs=2,
     )
 
@@ -507,7 +482,7 @@ def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still
             description="a lone surrogate var is rejected before any macro runs",
             project_files=_TAGGED_STAGING,
             compile_args=("--vars", '{"regions": ["\\udcff"]}'),
-            expected_returncodes=(1, 1),
+            expected_returncode=1,
             expected_report_fragment=(
                 "Variable 'regions' holds a lone surrogate in its value[0] at UTF-8 byte 0, "
                 "which is not valid Unicode text"
@@ -516,28 +491,15 @@ def test_given_no_proc_filesystem_when_compiling_repeatedly_then_the_store_still
     ],
     ids=lambda case: case.description,
 )
-def test_given_unencodable_var_when_compiling_then_every_engine_rejects_it(
+def test_given_unencodable_var_when_compiling_then_it_is_rejected(
     test_case: UnkeyableMacroCallTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = tmp_path / "orders"
-    runs: list[CompileReuseRun] = []
-    for engine in ("native", "native-preview"):
-        shutil.rmtree(project_dir, ignore_errors=True)
-        for relative_path, contents in {**FAILURE_BASE_FILES, **test_case.project_files}.items():
-            write_project_file(project_dir, relative_path, contents)
-        runs.append(
-            run_reuse_compile(
-                project_dir=project_dir,
-                args=test_case.compile_args,
-                global_args=("--compiler-engine", engine),
-            )
-        )
+    for relative_path, contents in {**FAILURE_BASE_FILES, **test_case.project_files}.items():
+        write_project_file(project_dir, relative_path, contents)
+    run: CompileReuseRun = run_reuse_compile(project_dir=project_dir, args=test_case.compile_args)
 
     assert (
-        tuple(run.returncode for run in runs),
-        {report_without_engine(run) for run in runs} == {report_without_engine(runs[0])},
-        [run.compiled for run in runs] == [runs[0].compiled] * len(runs),
-        all(test_case.expected_report_fragment in run.report + run.stderr for run in runs),
-    ) == (test_case.expected_returncodes, True, True, True), tuple(
-        run.report + run.stderr for run in runs
-    )
+        run.returncode,
+        test_case.expected_report_fragment in run.report + run.stderr,
+    ) == (test_case.expected_returncode, True), run.report + run.stderr

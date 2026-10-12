@@ -6,9 +6,6 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTuple
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use sqlbuild_analysis::compiled_project::models::{DynamicProofFact, ModelAnalysisFact};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::models::PythonText;
 
 use crate::bindings::_helpers::compiled_project::compiled_model_analysis::{
     AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
@@ -253,7 +250,6 @@ impl NativeCompiledModel {
         self.read(py, |record, py| {
             let analysis: &AnalysisRecord = &compiled_of(record)?.analysis;
             let rows: &[InferredRow] = analysis.inferred.as_deref().unwrap_or_default();
-            let python: PythonText = active_python_text();
             let mut inferred_columns: Vec<(String, Option<String>)> =
                 Vec::with_capacity(rows.len());
             for (name, column_type, _) in rows {
@@ -264,7 +260,7 @@ impl NativeCompiledModel {
                 analysis.proof.as_ref().map(|proof| DynamicProofFact {
                     output_proven: proof.output_proven,
                     bare_dynamic_pivot: proof.bare_dynamic_pivot,
-                    families: casefolded_families(python, &proof.families),
+                    families: casefolded_families(&proof.families),
                     failure_reason: proof.failure_reason.clone(),
                     named_families: proof.families.clone(),
                 });
@@ -291,13 +287,10 @@ impl NativeCompiledModel {
 }
 
 /// Each family's name casefolded as Python's, with its inferred type.
-fn casefolded_families(
-    python: PythonText,
-    families: &[(String, Option<String>)],
-) -> Vec<(String, Option<String>)> {
+fn casefolded_families(families: &[(String, Option<String>)]) -> Vec<(String, Option<String>)> {
     families
         .iter()
-        .map(|(name, kind)| (python_casefold(python, name), kind.clone()))
+        .map(|(name, kind)| (str::to_lowercase(name), kind.clone()))
         .collect()
 }
 

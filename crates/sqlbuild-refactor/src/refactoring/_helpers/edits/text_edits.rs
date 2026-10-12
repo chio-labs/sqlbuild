@@ -1,7 +1,5 @@
 //! Offsets, positions, and edit application for authored text, as `text_edits.py` does.
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::refactoring::_helpers::scanning::chars::{
     count_before, is_identifier_character, rfind, slice, starts_with_ignoring_case,
 };
@@ -45,7 +43,7 @@ pub(crate) fn text_edit(
         start,
         end,
         before: slice(text, start, end),
-        after: python_strip(&replacement).to_owned(),
+        after: str::trim(&replacement).to_owned(),
         replacement,
         kind,
         line,

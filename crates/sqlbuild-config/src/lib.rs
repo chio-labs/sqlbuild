@@ -1,4 +1,4 @@
-//! Project configuration reading: `tomllib`-compatible TOML and PyYAML-compatible YAML.
+//! Project configuration reading: TOML and YAML 1.2.
 
 #![forbid(unsafe_code)]
 

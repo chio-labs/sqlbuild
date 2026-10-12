@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use sqlbuild_core::text::main::decode_python_text::decode_python_text;
+use sqlbuild_core::text::main::decode_text::decode_text;
 
 use crate::refactoring::_helpers::edits::text_edits::apply_text_edits;
 use crate::refactoring::_helpers::files::paths::{join, suffix};
@@ -77,7 +77,7 @@ fn copy_directory(root: &Path, current: &Path, staging_dir: &Path) -> Result<usi
 /// `Path.read_text(encoding="utf-8")`: strict UTF-8 with universal newlines.
 fn read_text(path: &Path) -> Result<String, RefactorError> {
     let bytes = fs::read(path).map_err(|error| io_error(path, error))?;
-    decode_python_text(&bytes).map_err(|_| io_error(path, "'utf-8' codec can't decode the file"))
+    decode_text(&bytes).map_err(|_| io_error(path, "'utf-8' codec can't decode the file"))
 }
 
 /// The current text of every file a plan changes.

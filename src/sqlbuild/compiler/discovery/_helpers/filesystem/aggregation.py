@@ -34,7 +34,6 @@ from sqlbuild.compiler.discovery._helpers.native.declaration_files import (
 from sqlbuild.compiler.discovery._helpers.native.model_files import (
     discover_native_model_files,
 )
-from sqlbuild.compiler.discovery._helpers.native.payloads import native_text_runtime
 from sqlbuild.compiler.discovery._helpers.native.sql_test_files import (
     discover_native_scenario_files,
     discover_native_test_files,
@@ -238,7 +237,6 @@ def build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscove
 
 
 def _build_tolerant_scope_discovery(*, project_dir: Path) -> TolerantScopeDiscovery:
-    _ = native_text_runtime()
     project_config, local_config, config_faults = _discover_configs(project_dir=project_dir)
     models, model_faults = _discover_models(project_dir=project_dir)
     enums, constants, macros, declaration_faults = _discover_declarations(project_dir=project_dir)

@@ -55,24 +55,13 @@ _HELP: bool = True
             expected_help=_HELP,
         ),
         AuthoredFileFailureTestCase(
-            description="a tab is unsupported at its character",
-            files=(("sources/raw.yml", _SOURCE_HEAD + b'    description: "Raw\torders"\n'),),
-            expected_error="SourceParseError",
-            expected_message=(
-                "{project}/sources/raw.yml uses YAML that SQLBuild does not support at line 3, "
-                "column 22: tab characters"
+            description="a tab inside a quoted value and a directive load",
+            files=(
+                (
+                    "sources/raw.yml",
+                    b"%YAML 1.2\n---\n" + _SOURCE_HEAD + b'    description: "Raw\torders"\n',
+                ),
             ),
-            expected_help=_HELP,
-        ),
-        AuthoredFileFailureTestCase(
-            description="a directive is unsupported at its line",
-            files=(("sources/raw.yml", b"%YAML 1.1\n---\nsources: []\n"),),
-            expected_error="SourceParseError",
-            expected_message=(
-                "{project}/sources/raw.yml uses YAML that SQLBuild does not support at line 1, "
-                "column 1: %YAML and %TAG directives"
-            ),
-            expected_help=_HELP,
         ),
         AuthoredFileFailureTestCase(
             description="a recursive alias is unsupported at the alias",

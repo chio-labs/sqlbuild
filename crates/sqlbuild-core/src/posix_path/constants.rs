@@ -6,5 +6,3 @@ pub(crate) const ROOT: &str = "/";
 pub(crate) const DOUBLE_ROOT: &str = "//";
 pub(crate) const CURRENT: &str = ".";
 pub(crate) const SUFFIX_MARK: char = '.';
-/// Python 3.14 reads the suffix as `os.path.splitext`; earlier releases need text after the dot.
-pub(crate) const SPLITEXT_SUFFIX_MINOR: u8 = 14;

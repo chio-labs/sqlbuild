@@ -2,7 +2,6 @@
 
 use crate::templates::errors::TemplateError;
 use crate::templates::models::TemplateFailure;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TokenKind {
@@ -39,7 +38,7 @@ pub(crate) fn tokenize(expression: &str) -> Result<Vec<Token>, TemplateFailure> 
     let mut tokens: Vec<Token> = Vec::new();
     let mut index = 0;
     while let Some(&character) = characters.get(index) {
-        if is_python_space(character) {
+        if char::is_whitespace(character) {
             index += 1;
         } else if SYMBOLS.contains(&character) {
             tokens.push(Token {
@@ -57,7 +56,7 @@ pub(crate) fn tokenize(expression: &str) -> Result<Vec<Token>, TemplateFailure> 
         } else {
             let start = index;
             while let Some(&next) = characters.get(index) {
-                if is_python_space(next) || SYMBOLS.contains(&next) || is_quote(next) {
+                if char::is_whitespace(next) || SYMBOLS.contains(&next) || is_quote(next) {
                     break;
                 }
                 index += 1;

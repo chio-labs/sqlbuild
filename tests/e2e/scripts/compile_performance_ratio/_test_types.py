@@ -26,7 +26,7 @@ class PerSideCompilePerformanceRatioTestCase:
 
 
 @dataclass(frozen=True)
-class EnginePhaseRatioTestCase:
+class PhaseRatioTestCase:
     description: str
     max_ratio: str
     phase_noise_floor_ms: str

@@ -1,6 +1,5 @@
 """Integration coverage for the built-in rules request built natively from compiled rows."""
 
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -13,11 +12,9 @@ from tests.integration.src.sqlbuild.rule_engine.native_rows._test_types import (
 from tests.integration.src.sqlbuild.rule_engine.native_rows.helpers import (
     TYPE_PROOF_FILES,
     FindingKey,
-    built_rows,
     compile_codes,
     compile_rules,
     edit_model,
-    record_built_rows,
     struct_passthrough_files,
     write_files,
     write_rules_fixture,
@@ -47,7 +44,6 @@ _TYPE_PROOF_FINDINGS: tuple[FindingKey, ...] = (
     [
         NativeRulesRequestTestCase(
             description="compile builds every request row natively",
-            expected_built_rows=(39, 15, 9),
             expected_cold_cache=(0, 26),
             expected_warm_cache=(26, 0),
             expected_edited_cache=(24, 2),
@@ -68,12 +64,10 @@ def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_m
     write_rules_fixture(project_dir=fresh_edited_dir)
     edit_model(project_dir=fresh_edited_dir)
     write_rules_fixture(project_dir=project_dir)
-    _ = record_built_rows(monkeypatch=monkeypatch)
     fresh: tuple[FindingKey, ...] = compile_rules(project_dir=fresh_dir, capsys=capsys)[0]
     fresh_edited: tuple[FindingKey, ...] = compile_rules(
         project_dir=fresh_edited_dir, capsys=capsys
     )[0]
-    built: Counter[str] = record_built_rows(monkeypatch=monkeypatch)
 
     cold: tuple[tuple[FindingKey, ...], tuple[int, int]] = compile_rules(
         project_dir=project_dir, capsys=capsys
@@ -92,7 +86,6 @@ def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_m
         test_case.expected_warm_cache,
         test_case.expected_edited_cache,
     )
-    assert built_rows(built) == test_case.expected_built_rows
 
 
 @pytest.mark.parametrize(
@@ -101,7 +94,6 @@ def test_given_rules_fixture_when_compiling_cold_warm_and_edited_then_findings_m
         NativeTypeProofTestCase(
             description="compile proves passthrough types natively",
             expected_findings=_TYPE_PROOF_FINDINGS,
-            expected_built_rows=(2, 0, 0),
         ),
     ],
     ids=lambda case: case.description,
@@ -113,12 +105,10 @@ def test_given_matching_and_mismatched_passthroughs_when_compiling_then_only_mis
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=TYPE_PROOF_FILES)
-    built: Counter[str] = record_built_rows(monkeypatch=monkeypatch)
 
     findings: tuple[FindingKey, ...] = compile_rules(project_dir=tmp_path, capsys=capsys)[0]
 
     assert findings == test_case.expected_findings
-    assert built_rows(built) == test_case.expected_built_rows
 
 
 @pytest.mark.parametrize(
@@ -149,7 +139,6 @@ def test_given_struct_passthrough_when_proving_types_then_adapter_callback_decid
         project_dir=tmp_path,
         files=struct_passthrough_files(declared_type=test_case.declared_type),
     )
-    _ = record_built_rows(monkeypatch=monkeypatch)
 
     outcome: tuple[int, tuple[str, ...]] = compile_codes(project_dir=tmp_path, capsys=capsys)
 

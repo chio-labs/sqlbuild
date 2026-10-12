@@ -1,4 +1,4 @@
-"""Run one corpus project under both engines and compare what they produced."""
+"""Run one corpus project and check it against its expectation and golden."""
 
 from __future__ import annotations
 
@@ -6,10 +6,7 @@ import shutil
 import time
 from pathlib import Path
 
-from scripts.compiler_differential._helpers.comparing.comparison import (
-    compare_engine_runs,
-    diagnostic_codes,
-)
+from scripts.compiler_differential._helpers.comparing.comparison import diagnostic_codes
 from scripts.compiler_differential._helpers.coverage.analysis import project_analysis_kinds
 from scripts.compiler_differential._helpers.coverage.discovery import project_discovery_kinds
 from scripts.compiler_differential._helpers.coverage.render import project_render_kinds
@@ -18,11 +15,9 @@ from scripts.compiler_differential._helpers.goldens.goldens import (
     golden_path_masks,
 )
 from scripts.compiler_differential._helpers.running.evidence import keep_failure_evidence
-from scripts.compiler_differential._helpers.running.execution import run_engine
+from scripts.compiler_differential._helpers.running.execution import run_project
 from scripts.compiler_differential.constants import (
     ERROR_SEVERITY,
-    LEFT_SIDE,
-    RIGHT_SIDE,
     WARNING_SEVERITY,
 )
 from scripts.compiler_differential.models import (
@@ -30,8 +25,8 @@ from scripts.compiler_differential.models import (
     CorpusProject,
     Difference,
     DifferentialOptions,
-    EngineRun,
     ProjectComparison,
+    ProjectRun,
 )
 
 _SOURCE_DIRECTORY: str = "source"
@@ -40,39 +35,24 @@ _EXPECTATION_LABELS: tuple[str, str] = ("expected", "actual")
 
 
 def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> ProjectComparison:
-    """Compare both engines on one project against its expectation; any timeout fails."""
+    """Check one project against its expectation and golden; any timeout fails."""
 
     started: float = time.monotonic()
     case_dir: Path = options.work_dir / project.name.replace("/", "__")
     shutil.rmtree(case_dir, ignore_errors=True)
     case_dir.mkdir(parents=True)
     source_dir: Path = _materialized_source(project=project, case_dir=case_dir)
-    left_engine, right_engine = options.engines
-    left: EngineRun = run_engine(
-        project=project,
-        source_dir=source_dir,
-        case_dir=case_dir,
-        engine=left_engine,
-        side=LEFT_SIDE,
-        options=options,
-    )
-    right: EngineRun = run_engine(
-        project=project,
-        source_dir=source_dir,
-        case_dir=case_dir,
-        engine=right_engine,
-        side=RIGHT_SIDE,
-        options=options,
+    run: ProjectRun = run_project(
+        project=project, source_dir=source_dir, case_dir=case_dir, options=options
     )
     counted: bool = project.seed_coverage and options.stage_captures
     differences: list[Difference] = [
-        *_timeout_differences(project=project, runs=(left, right)),
-        *_corpus_differences(project=project, run=left),
-        *compare_engine_runs(project=project.name, left=left, right=right),
+        *_timeout_differences(project=project, run=run),
+        *_corpus_differences(project=project, run=run),
         *(
             golden_differences(
                 project=project,
-                runs=(left, right),
+                run=run,
                 golden_dir=options.golden_dir,
                 mode=options.golden_mode,
                 masked_paths=golden_path_masks(case_dir=case_dir, work_dir=options.work_dir),
@@ -85,7 +65,7 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         _ = keep_failure_evidence(
             case_dir=case_dir,
             project_subdirectory=project.project_subdirectory,
-            runs=(left, right),
+            run=run,
             evidence_dir=options.evidence_dir,
         )
     return ProjectComparison(
@@ -93,13 +73,12 @@ def compare_project(*, project: CorpusProject, options: DifferentialOptions) -> 
         differences=tuple(differences),
         seconds=time.monotonic() - started,
         discovered_kinds=(
-            project_discovery_kinds(captures=left.captures, source_dir=source_dir)
+            project_discovery_kinds(captures=run.captures, source_dir=source_dir)
             if counted
             else frozenset()
         ),
-        rendered_kinds=project_render_kinds(left.captures) if counted else frozenset(),
-        analysed_kinds=project_analysis_kinds(left.captures) if counted else frozenset(),
-        records=(left.records, right.records) if options.analysis_records else None,
+        rendered_kinds=project_render_kinds(run.captures) if counted else frozenset(),
+        analysed_kinds=project_analysis_kinds(run.captures) if counted else frozenset(),
     )
 
 
@@ -112,7 +91,7 @@ def _materialized_source(*, project: CorpusProject, case_dir: Path) -> Path:
     return source_dir
 
 
-def _corpus_differences(*, project: CorpusProject, run: EngineRun) -> list[Difference]:
+def _corpus_differences(*, project: CorpusProject, run: ProjectRun) -> list[Difference]:
     first: CommandOutcome = run.outcomes[0]
     errors: tuple[str, ...] = diagnostic_codes(outcome=first, severity=ERROR_SEVERITY)
     if project.expected.error_code is not None:
@@ -176,22 +155,17 @@ def _failure_differences(
     return differences
 
 
-def _timeout_differences(
-    *, project: CorpusProject, runs: tuple[EngineRun, ...]
-) -> list[Difference]:
-    differences: list[Difference] = []
-    for run in runs:
-        differences.extend(
-            _expectation_difference(
-                project=project,
-                location=f"{run.engine} `{outcome.label}`",
-                expected="completes within the command timeout",
-                actual="timed out",
-            )
-            for outcome in run.outcomes
-            if outcome.timed_out
+def _timeout_differences(*, project: CorpusProject, run: ProjectRun) -> list[Difference]:
+    return [
+        _expectation_difference(
+            project=project,
+            location=f"`{outcome.label}`",
+            expected="completes within the command timeout",
+            actual="timed out",
         )
-    return differences
+        for outcome in run.outcomes
+        if outcome.timed_out
+    ]
 
 
 def _expectation_difference(

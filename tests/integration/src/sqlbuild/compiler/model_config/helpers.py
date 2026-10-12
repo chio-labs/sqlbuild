@@ -21,7 +21,6 @@ from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
@@ -35,7 +34,7 @@ _TEXTS: tuple[object, ...] = (
     "   ",
     "\u00a0",
     "mail@example.com",
-    "\x1c",
+    "\u3000",
     1,
     True,
     None,
@@ -176,10 +175,10 @@ def generated_header_metadata(*, rng: random.Random, count: int) -> list[tuple[o
     return [(_columns(rng=rng), _audit_list(rng=rng)) for _ in range(count)]
 
 
-def model_config_engine_outcome(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
+def model_config_outcome(
+    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[dict[str, int], str]:
-    """Build compile inputs under `engine`; count native entry calls and describe model config."""
+    """Build compile inputs; count native entry calls and describe model config."""
 
     for relative_path, contents in MODEL_CONFIG_PROJECT.items():
         path: Path = project_dir / relative_path
@@ -189,7 +188,6 @@ def model_config_engine_outcome(
     for name in NATIVE_MODEL_CONFIG_ENTRIES:
         monkeypatch.setattr(_native, name, _counted(calls=calls, name=name))
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     adapter: DuckDbAdapter = DuckDbAdapter()
     inputs: CompileInputsView = build_compile_inputs(
         discovered_inputs=discovered,

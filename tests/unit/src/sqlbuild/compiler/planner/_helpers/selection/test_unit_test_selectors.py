@@ -139,12 +139,12 @@ def test_given_selectors_when_splitting_unit_tests_then_tests_and_resources_sepa
             expected_help="did you mean 'order_status'?",
         ),
         UnitTestSelectorErrorTestCase(
-            description="an unknown bare name suggests unit tests and resources",
+            description="an unknown bare name suggests the closest unit test",
             select=("customer_stat",),
             accepts_unit_tests=True,
             expected_code="S007",
             expected_message="unknown selector name 'customer_stat'",
-            expected_help="did you mean 'customer_status', 'customers'?",
+            expected_help="did you mean 'customer_status'?",
         ),
         UnitTestSelectorErrorTestCase(
             description="graph expansion of a unit test is refused",

@@ -745,7 +745,6 @@ class StoredMacroModuleEditTestCase:
     """An outside module behind a stored macro call, edited after a compile that reused the call."""
 
     description: str
-    engine: str
     import_name: str
     module_files: dict[str, str]
     edited_files: dict[str, str]
@@ -804,19 +803,8 @@ class SharedCacheKeyTestCase:
 
 
 @dataclass(frozen=True)
-class CompilerEngineParityTestCase:
-    """Two engines compiling separate copies of one project."""
-
-    description: str
-    left_engine: str
-    right_engine: str
-    expected_engines: tuple[str, str]
-    expected_exit_codes: tuple[int, int]
-
-
-@dataclass(frozen=True)
 class NativeTypeSystemTestCase:
-    """Compiles of one project by each engine whose contracts compare types or fail."""
+    """A compile of one project whose contracts compare types or fail."""
 
     description: str
     project_files: dict[str, str]
@@ -826,29 +814,17 @@ class NativeTypeSystemTestCase:
 
 @dataclass(frozen=True)
 class NativeAnalysisSeamTestCase:
-    """Every engine compiling a copy of one project while the analysis stage seams are recorded."""
+    """Compiling one project while the analysis stage seams are recorded."""
 
     description: str
     expected_native_returns: dict[str, list[object]]
 
 
 @dataclass(frozen=True)
-class CompilerEngineTierStoreTestCase:
-    """Alternating compiles under two native tiers and the stores each tier must own alone."""
-
-    description: str
-    engines: tuple[str, ...]
-    expected_reused: tuple[bool, ...]
-    expected_first_engine_stores: tuple[str, ...]
-    expected_second_engine_stores: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class ReplaceableReferenceCallTestCase:
-    """A compiler engine that must build double-quoted reference calls end to end."""
+    """A project whose double-quoted reference calls must build end to end."""
 
     description: str
-    engine: str
     expected_total_cents: str
 
 
@@ -857,7 +833,6 @@ class RejectedReferenceCallTestCase:
     """A reference call form compile cannot replace and the error it must report first."""
 
     description: str
-    engine: str
     staging_from: str
     mart_from: str
     expected_diagnostics: tuple[tuple[str, str, str, int, int, str], ...]
@@ -865,7 +840,7 @@ class RejectedReferenceCallTestCase:
 
 @dataclass(frozen=True)
 class NativeDeclarationErrorTestCase:
-    """A failing project whose declaration error both engines must report the same way."""
+    """A failing project whose declaration error is reported once."""
 
     description: str
     project_files: dict[str, str]
@@ -875,18 +850,18 @@ class NativeDeclarationErrorTestCase:
 
 @dataclass(frozen=True)
 class ReferenceScanErrorTestCase:
-    """A project whose reference scan error every engine must locate and type the same way."""
+    """A project whose reference scan error must be located and typed."""
 
     description: str
     project_files: dict[str, str]
     expected_message: str
-    expected_macro_calls: tuple[int, int]
-    expected_error_types: tuple[str, ...]
+    expected_macro_calls: int
+    expected_error_type: str
 
 
 @dataclass(frozen=True)
 class NativeMacroErrorTestCase:
-    """A failing macro project every engine must report identically, running each call once."""
+    """A failing macro project reported once, running each call once."""
 
     description: str
     project_files: dict[str, str]
@@ -896,53 +871,52 @@ class NativeMacroErrorTestCase:
 
 @dataclass(frozen=True)
 class UnkeyableMacroCallTestCase:
-    """Compile arguments holding text that is not valid Unicode; every engine rejects them."""
+    """Compile arguments holding text that is not valid Unicode, which compile rejects."""
 
     description: str
     project_files: dict[str, str]
     compile_args: tuple[str, ...]
-    expected_returncodes: tuple[int, ...]
+    expected_returncode: int
     expected_report_fragment: str
 
 
 @dataclass(frozen=True)
 class MacroErrorLifecycleTestCase:
-    """A failing macro project whose invocation lifecycle every engine reports the same way."""
+    """A failing macro project and the error type its invocation lifecycle reports."""
 
     description: str
     project_files: dict[str, str]
-    expected_error_types: tuple[str, ...]
+    expected_error_type: str
 
 
 @dataclass(frozen=True)
 class NativeConfigErrorTestCase:
-    """A failing project whose model config error both engines must report the same way."""
+    """A failing project whose model config error is reported without Python fallbacks."""
 
     description: str
     project_files: dict[str, str]
     expected_report_text: str
-    expected_macro_calls: list[int]
+    expected_macro_calls: int
     expected_python_fallbacks: list[str]
 
 
 @dataclass(frozen=True)
 class MacroExpandedValidatorErrorTestCase:
-    """A validator error from macro-expanded SQL that every engine reports, running macros once."""
+    """A validator error from macro-expanded SQL, reported after running macros once."""
 
     description: str
     project_files: dict[str, str]
-    engines: tuple[str, ...]
     expected_report_text: str
-    expected_macro_calls: list[int]
+    expected_macro_calls: int
 
 
 @dataclass(frozen=True)
 class DeclarationErrorLifecycleTestCase:
-    """A failing project whose invocation lifecycle every engine must report the same way."""
+    """A failing project and the error type its invocation lifecycle reports."""
 
     description: str
     project_files: dict[str, str]
-    expected_error_types: tuple[str, ...]
+    expected_error_type: str
 
 
 @dataclass(frozen=True)
@@ -950,7 +924,6 @@ class MacroReferenceCallStoreTestCase:
     """Repeated compiles of models sharing a macro that returns a rejected reference call."""
 
     description: str
-    engine: str
     expected_logged_calls: tuple[int, ...]
 
 
@@ -986,10 +959,9 @@ class BrokenMacroCallStoreKeyTestCase:
 
 @dataclass(frozen=True)
 class EngineMacroCallGateTestCase:
-    """Repeated full compiles under one engine and whether the bridge and store took part."""
+    """Repeated full compiles and whether the bridge and store took part."""
 
     description: str
-    engine: str
     expected_logged_calls: tuple[int, ...]
     expected_store_files: tuple[str, ...]
 
@@ -1024,7 +996,6 @@ class SecondCompileStoreTestCase:
 @dataclass(frozen=True)
 class DeepHeaderNestingCompileCase:
     description: str
-    engine: str
     path: str
     prefix: str
     suffix: str
@@ -1036,13 +1007,11 @@ class DeepHeaderNestingCompileCase:
 class DeepCallNestingCompileCase:
     description: str
     depth: int
-    engines: tuple[str, ...]
     expected_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class DollarQuotedProjectVarCompileCase:
     description: str
-    engine: str
     model_sql: str
     expected_fragment: str

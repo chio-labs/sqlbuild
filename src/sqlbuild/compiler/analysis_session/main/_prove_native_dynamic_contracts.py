@@ -1,4 +1,4 @@
-"""Prove dynamic column contracts natively for the preview compiler engine."""
+"""Prove dynamic column contracts natively."""
 
 from __future__ import annotations
 

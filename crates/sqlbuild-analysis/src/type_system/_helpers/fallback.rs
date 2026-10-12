@@ -1,7 +1,5 @@
 //! Python's `_normalize_with_fallback`: type text normalized without a parser.
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::type_system::_helpers::python_text::{
     remove_python_space, split_type_and_params, upper,
 };
@@ -19,7 +17,7 @@ pub(crate) fn normalize_with_fallback(
     type_sql: &str,
     dialect: Option<TypeDialect>,
 ) -> NormalizedType {
-    let normalized: String = remove_python_space(python_strip(&upper(type_sql)));
+    let normalized: String = remove_python_space(str::trim(&upper(type_sql)));
     let (base_type, params) = split_type_and_params(&normalized);
     let first: Option<PythonInteger> = params.first().cloned();
     let second: Option<PythonInteger> = params.get(1).cloned();

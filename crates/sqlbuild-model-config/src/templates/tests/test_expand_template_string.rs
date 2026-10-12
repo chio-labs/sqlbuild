@@ -186,7 +186,7 @@ fn given_template_strings_when_expanding_then_values_and_reads_match_python() {
         },
         TemplateTestCase {
             description: "Python separators are whitespace between tokens",
-            text: "${coalesce(\u{1f}env\t)}",
+            text: "${coalesce(\u{3000}env\t)}",
             expected: value(Value::Text("prod".to_owned())),
             expected_reads: &[],
         },

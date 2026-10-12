@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.frontier.main.engine_cache_name import engine_cache_name
+from sqlbuild.compiler.frontier.constants import NATIVE_CACHE_NAMESPACE_SUFFIX
 from tests.e2e.src.sqlbuild.cli.commands.main.lineage._test_types import (
     ColumnLineageCacheCliTestCase,
     DiamondLineageTreeCliTestCase,
@@ -36,7 +36,10 @@ _EXPANDED_DIAMOND_NODE: re.Pattern[str] = re.compile(
     re.MULTILINE,
 )
 _LINEAGE_CACHE_RELATIVE_PATH: Path = (
-    Path("target/cache") / engine_cache_name("lineage") / "v1" / "structural-graph.sqlite3"
+    Path("target/cache")
+    / f"lineage{NATIVE_CACHE_NAMESPACE_SUFFIX}"
+    / "v1"
+    / "structural-graph.sqlite3"
 )
 
 

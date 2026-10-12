@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
-import unicodedata
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import cast
@@ -13,7 +11,6 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
     NATIVE_FAILED_TAG,
-    NATIVE_SUPPORTED_PYTHON_VERSIONS,
     NATIVE_UNLISTABLE_TAG,
     NATIVE_UNREADABLE_TAG,
 )
@@ -28,7 +25,6 @@ from sqlbuild.compiler.discovery.exceptions import (
     SqlHookParseError,
     SqlScenarioParseError,
     SqlTestParseError,
-    UnsupportedPythonError,
 )
 from sqlbuild.compiler.discovery.models import DiscoveryFileFault
 from sqlbuild.compiler.discovery.types import (
@@ -164,19 +160,6 @@ def native_locations(
     }
 
 
-def native_text_runtime() -> dict[str, object]:
-    """Return the request fields naming the Python whose string semantics native reproduces."""
-
-    python_version: tuple[int, int] = (sys.version_info[0], sys.version_info[1])
-    if not _native.native_text_supported(python_version, unicodedata.unidata_version):
-        raise UnsupportedPythonError(
-            f"This SQLBuild release supports Python {NATIVE_SUPPORTED_PYTHON_VERSIONS}, not "
-            f"Python {python_version[0]}.{python_version[1]} (Unicode "
-            f"{unicodedata.unidata_version}); run sqb with a supported Python"
-        )
-    return {"python_version": python_version, "unicode_version": unicodedata.unidata_version}
-
-
 def native_project_tree(project_dir: Path) -> _native.NativeProjectTree:
     """Return the native listings shared by every native call of this discovery pass."""
 
@@ -196,13 +179,12 @@ def native_project_tree(project_dir: Path) -> _native.NativeProjectTree:
 
 
 def native_request(*, project_dir: Path, fields: dict[str, object]) -> dict[str, object]:
-    """Return a native discovery request for the project with the running Python's semantics."""
+    """Return a native discovery request for the project."""
 
     return {
         "project_dir": str(project_dir),
         "display_prefix": native_display_prefix(project_dir),
         **fields,
-        **native_text_runtime(),
     }
 
 

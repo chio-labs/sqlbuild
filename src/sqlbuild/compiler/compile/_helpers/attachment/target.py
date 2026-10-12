@@ -76,7 +76,7 @@ def compile_cache_root(
 
 
 def _remove_retired_caches(*, root: Path) -> None:
-    """Delete the fact and reference caches older releases kept under every engine's root."""
+    """Delete the fact and reference caches older releases kept under each retired cache root."""
 
     for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES:
         for name in (RETIRED_FACT_CACHE_DIRECTORY_NAME, RETIRED_REFERENCE_CACHE_DIRECTORY_NAME):

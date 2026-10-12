@@ -45,13 +45,13 @@ fn given_config_values_when_scanning_then_presence_matches_python() {
             expected_macro_call: false,
         },
         PresenceTestCase {
-            description: "Python separators count as whitespace before the call",
-            value: Value::Str("@m\u{1f}\t("),
+            description: "a tab and an ideographic space before the call",
+            value: Value::Str("@m\u{3000}\t("),
             expected_template: false,
             expected_macro_call: true,
         },
         PresenceTestCase {
-            description: "Unicode whitespace after a macro name counts as Python's \\s",
+            description: "Unicode whitespace after a macro name",
             value: Value::Str("@m\u{a0}\u{3000}("),
             expected_template: false,
             expected_macro_call: true,

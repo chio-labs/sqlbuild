@@ -1,61 +1,31 @@
 //! Python string operations, with offsets in code points as Python's string indexes count them.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_upper::python_upper;
-
 /// Python's `str.casefold`.
 pub(crate) fn casefold(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    str::to_lowercase(text)
 }
 
 /// Python's `str.upper`.
 pub(crate) fn upper(text: &str) -> String {
-    python_upper(active_python_text(), text)
+    str::to_uppercase(text)
 }
 
-/// The line boundaries Python's `str.splitlines` splits on.
-fn is_line_boundary(character: char) -> bool {
-    matches!(
-        character,
-        '\n' | '\r'
-            | '\u{b}'
-            | '\u{c}'
-            | '\u{1c}'
-            | '\u{1d}'
-            | '\u{1e}'
-            | '\u{85}'
-            | '\u{2028}'
-            | '\u{2029}'
-    )
-}
-
-/// Python's `str.splitlines(keepends=True)` as `(start, content end, next start)` byte offsets.
+/// `(start, content end, next start)` byte offsets of each line; `\r\n` and `\n` end lines.
 fn line_ends(text: &str) -> Vec<(usize, usize, usize)> {
-    let mut lines: Vec<(usize, usize, usize)> = Vec::new();
     let mut start: usize = 0;
-    let mut characters = text.char_indices().peekable();
-    while let Some((index, character)) = characters.next() {
-        if !is_line_boundary(character) {
-            continue;
-        }
-        let mut next: usize = index + character.len_utf8();
-        if character == '\r'
-            && let Some((_, '\n')) = characters.peek()
-        {
-            let _ = characters.next();
-            next += 1;
-        }
-        lines.push((start, index, next));
-        start = next;
-    }
-    if start < text.len() {
-        lines.push((start, text.len(), text.len()));
-    }
-    lines
+    text.split_inclusive('\n')
+        .map(|line| {
+            let content: &str = line.strip_suffix('\n').map_or(line, |content| {
+                content.strip_suffix('\r').unwrap_or(content)
+            });
+            let offsets: (usize, usize, usize) = (start, start + content.len(), start + line.len());
+            start += line.len();
+            offsets
+        })
+        .collect()
 }
 
-/// Python's `_line_index`: `splitlines()` and the running starts of `splitlines(keepends=True)`.
+/// The lines of a text and the code-point offset where each starts.
 pub(crate) struct LineIndex<'a> {
     pub(crate) lines: Vec<&'a str>,
     /// Code-point offsets of each line start, then the text length.

@@ -11,8 +11,6 @@ use crate::constants::{
     DIRECT_DEPENDENCY_PATH_LENGTH, MACRO_TEST_MODE, OPERAND_KEYWORDS, OPERATOR_CHARACTERS,
     SELECT_STAR_PROJECTION, TABLE_FUNCTION_TEST_MODE, UDF_TEST_MODE, VALUE_KEYWORDS,
 };
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_sqltext::sql_scan::main::dialect_matching_paren::dialect_matching_paren;
 use sqlbuild_sqltext::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use sqlbuild_sqltext::sql_scan::models::{LexicalSyntax, Unclosed};
@@ -249,9 +247,9 @@ fn scan_ctes(
         }
         let close = matching_paren(sql, index, "SQL test", syntax)?;
         let body = &sql[index + 1..close];
-        let leading = body.len() - body.trim_start_matches(is_python_space).len();
+        let leading = body.len() - body.trim_start_matches(char::is_whitespace).len();
         body_starts.push(sql[..index + 1 + leading].chars().count());
-        ctes.push(SqlTestCteText(name, python_strip(body).to_owned()));
+        ctes.push(SqlTestCteText(name, str::trim(body).to_owned()));
         index = skip_ignorable(sql, close + 1, syntax)?;
         if byte_at(sql, index) == Some(b',') {
             index = skip_ignorable(sql, index + 1, syntax)?;
@@ -815,7 +813,7 @@ fn projection_name(
             return Ok(alias);
         }
     }
-    let value = python_strip(expression);
+    let value = str::trim(expression);
     if value == SELECT_STAR_PROJECTION
         || value
             .strip_suffix(SELECT_STAR_PROJECTION)
@@ -899,7 +897,7 @@ fn last_top_level_token_start(
             index = end;
             continue;
         }
-        if char_at(expression, index).is_some_and(is_python_space) {
+        if char_at(expression, index).is_some_and(char::is_whitespace) {
             separated = true;
             index += char_len(expression, index);
             continue;
@@ -944,7 +942,7 @@ fn qualified_projection_name(
         end = part_end;
         qualified = true;
     }
-    Ok((qualified && python_strip(&expression[end..]).is_empty()).then_some(name))
+    Ok((qualified && str::trim(&expression[end..]).is_empty()).then_some(name))
 }
 
 pub(crate) fn validate_independence(
@@ -1287,7 +1285,7 @@ fn non_empty_trimmed<'a>(
             continue;
         }
         let width = char_len(value, index);
-        if !char_at(value, index).is_some_and(is_python_space) {
+        if !char_at(value, index).is_some_and(char::is_whitespace) {
             end = index + width;
         }
         index += width;
@@ -1601,7 +1599,8 @@ fn char_len(sql: &str, index: usize) -> usize {
 
 /// Skip Python whitespace (`str.isspace`).
 fn space_end(sql: &str, mut index: usize) -> usize {
-    while let Some(character) = char_at(sql, index).filter(|character| is_python_space(*character))
+    while let Some(character) =
+        char_at(sql, index).filter(|character| char::is_whitespace(*character))
     {
         index += character.len_utf8();
     }

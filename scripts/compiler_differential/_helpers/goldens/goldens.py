@@ -39,7 +39,7 @@ from scripts.compiler_differential.models import (
     CorpusProject,
     Difference,
     Divergence,
-    EngineRun,
+    ProjectRun,
 )
 
 _SQLBUILD_VERSION: str = version("sqlbuild")
@@ -48,22 +48,20 @@ _SQLBUILD_VERSION: str = version("sqlbuild")
 def golden_differences(
     *,
     project: CorpusProject,
-    runs: tuple[EngineRun, ...],
+    run: ProjectRun,
     golden_dir: Path,
     mode: str,
     masked_paths: tuple[tuple[str, str], ...],
 ) -> list[Difference]:
-    """Check every run against the project's golden, or rewrite it from the first (oracle) run."""
+    """Check the run against the project's golden, or rewrite the golden from it."""
 
     path: Path | None = golden_path(golden_dir=golden_dir, project=project.name)
     if path is None:
         return []
-    payloads: list[dict[str, object]] = [
-        golden_payload(run=run, masked_paths=masked_paths) for run in runs
-    ]
+    payload: dict[str, object] = golden_payload(run=run, masked_paths=masked_paths)
     if mode != GOLDEN_MODE_CHECK:
         path.parent.mkdir(parents=True, exist_ok=True)
-        _ = path.write_text(golden_text(payloads[0]), encoding="utf-8")
+        _ = path.write_text(golden_text(payload), encoding="utf-8")
         return []
     seed_range: Path = golden_dir / GOLDEN_SEED_RANGE_FILE
     if path.parent.name == GOLDEN_SEED_CORPUS and not seed_range.is_file():
@@ -93,21 +91,19 @@ def golden_differences(
             )
         ]
     golden: object = json.loads(path.read_text(encoding="utf-8"))
-    found: list[Difference] = []
-    for run, payload in zip(runs, payloads, strict=True):
-        divergence: Divergence | None = first_json_difference(left=golden, right=payload)
-        if divergence is not None:
-            found.append(
-                Difference(
-                    project=project.name,
-                    artifact=f"golden ({run.engine})",
-                    location=divergence.location,
-                    left=divergence.left,
-                    right=divergence.right,
-                    labels=(GOLDEN_LABEL, run.engine),
-                )
-            )
-    return found
+    divergence: Divergence | None = first_json_difference(left=golden, right=payload)
+    if divergence is None:
+        return []
+    return [
+        Difference(
+            project=project.name,
+            artifact="golden",
+            location=divergence.location,
+            left=divergence.left,
+            right=divergence.right,
+            labels=(GOLDEN_LABEL, "actual"),
+        )
+    ]
 
 
 def golden_path(*, golden_dir: Path, project: str) -> Path | None:
@@ -120,7 +116,7 @@ def golden_path(*, golden_dir: Path, project: str) -> Path | None:
 
 
 def golden_payload(
-    *, run: EngineRun, masked_paths: tuple[tuple[str, str], ...]
+    *, run: ProjectRun, masked_paths: tuple[tuple[str, str], ...]
 ) -> dict[str, object]:
     """Return a run's diagnostics, compiled SQL and slimmed manifest with run noise masked."""
 

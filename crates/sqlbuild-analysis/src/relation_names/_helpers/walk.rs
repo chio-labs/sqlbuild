@@ -2,9 +2,6 @@
 
 use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions};
 use serde_json::{Map, Value, json};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::models::PythonText;
 
 use crate::relation_names::constants::{
     CATALOG_KEY, CREATE_TABLE_KEY, CTE_ALIAS_KEY, CTE_LIST_KEY, GENERIC_DIALECT,
@@ -24,23 +21,19 @@ pub(crate) fn extracted_relations(
     let Some(statements) = parsed_statements(sql, dialect)? else {
         return Ok(None);
     };
-    let python: PythonText = active_python_text();
     let mut extracted: ExtractedRelations = ExtractedRelations::default();
     for statement in &statements {
         let tree: Value = serde_json::to_value(statement)
             .map_err(|error| RelationNamesFailure::Internal(error.to_string()))?;
         let nodes: Vec<&Map<String, Value>> = walked(&tree);
-        let cte_names: Vec<String> = nodes
-            .iter()
-            .flat_map(|node| cte_names(python, node))
-            .collect();
+        let cte_names: Vec<String> = nodes.iter().flat_map(|node| cte_names(node)).collect();
         extracted
             .temporary
-            .extend(nodes.iter().filter_map(|node| temporary_name(python, node)));
+            .extend(nodes.iter().filter_map(|node| temporary_name(node)));
         let relations = nodes.iter().filter_map(|node| table_name(node));
         for relation in relations {
             let unqualified: bool = relation.schema.is_none() && relation.database.is_none();
-            if unqualified && cte_names.contains(&python_casefold(python, &relation.name)) {
+            if unqualified && cte_names.contains(&str::to_lowercase(&relation.name)) {
                 continue;
             }
             if !extracted.relations.contains(&relation) {
@@ -120,22 +113,22 @@ fn table_name(node: &Map<String, Value>) -> Option<RelationName> {
 }
 
 /// Python's `_cte_names` for one node, casefolded.
-fn cte_names(python: PythonText, node: &Map<String, Value>) -> Vec<String> {
+fn cte_names(node: &Map<String, Value>) -> Vec<String> {
     let Some(Value::Array(ctes)) = node.get(CTE_LIST_KEY) else {
         return Vec::new();
     };
     ctes.iter()
         .filter_map(|cte| identifier(cte.as_object()?.get(CTE_ALIAS_KEY)))
-        .map(|alias| python_casefold(python, alias))
+        .map(str::to_lowercase)
         .collect()
 }
 
 /// Python's `_temporary_table_names` for one node, casefolded.
-fn temporary_name(python: PythonText, node: &Map<String, Value>) -> Option<String> {
+fn temporary_name(node: &Map<String, Value>) -> Option<String> {
     let create: &Map<String, Value> = node.get(CREATE_TABLE_KEY)?.as_object()?;
     if create.get(TEMPORARY_KEY) != Some(&Value::Bool(true)) {
         return None;
     }
     let table: &Map<String, Value> = create.get(NAME_KEY)?.as_object()?;
-    identifier(table.get(NAME_KEY)).map(|name| python_casefold(python, name))
+    identifier(table.get(NAME_KEY)).map(str::to_lowercase)
 }

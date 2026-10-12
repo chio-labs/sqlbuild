@@ -2,7 +2,6 @@
 
 import json
 import logging
-from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
@@ -19,14 +18,13 @@ from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs._test_type
     NestedReportTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs.helpers import (
-    COMPILE_OUTPUTS_PREFIX,
     SURROGATE_HOOK_FILES,
     SURROGATE_SELECTOR,
     compile_json_text,
     main_compile_json,
     nested_lists,
     nested_payload_hook_files,
-    record_output_work,
+    prepare_output_compiles,
     write_files,
 )
 
@@ -178,14 +176,13 @@ def test_given_lone_surrogate_in_full_report_when_compiling_json_then_native_wri
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=SURROGATE_HOOK_FILES)
-    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
+    prepare_output_compiles(monkeypatch=monkeypatch, reuse_disabled="1")
 
     text: str = compile_json_text(project_dir=tmp_path, args=test_case.args, capsys=capsys)
 
     assert test_case.expected_fragment in text
     assert text.isascii()
     assert text == json.dumps(json.loads(text), indent=2) + "\n"
-    assert counts[f"{COMPILE_OUTPUTS_PREFIX}json_reports"] == 1
     assert not hasattr(output_module, "json")
     assert not hasattr(output_module, "orjson")
 
@@ -210,7 +207,7 @@ def test_given_lone_surrogate_in_error_report_when_compiling_json_then_orjson_er
 ) -> None:
     caplog.set_level(logging.CRITICAL, logger=CLI_LOGGER)
     write_files(project_dir=tmp_path, files=SURROGATE_HOOK_FILES)
-    _ = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
+    prepare_output_compiles(monkeypatch=monkeypatch, reuse_disabled="1")
 
     with pytest.raises(TypeError) as raised:
         _ = compile_json_text(project_dir=tmp_path, args=test_case.args, capsys=capsys)
@@ -237,7 +234,7 @@ def test_given_deeply_nested_hook_payload_when_compiling_json_then_orjson_writes
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=nested_payload_hook_files(depth=test_case.depth))
-    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
+    prepare_output_compiles(monkeypatch=monkeypatch, reuse_disabled="1")
 
     exit_code: int = main_compile_json(project_dir=tmp_path)
     text: str = capsys.readouterr().out
@@ -245,7 +242,6 @@ def test_given_deeply_nested_hook_payload_when_compiling_json_then_orjson_writes
     assert exit_code == test_case.expected_exit_code
     assert text == orjson.dumps(json.loads(text), option=orjson.OPT_INDENT_2).decode() + "\n"
     assert '"payload": [' in text
-    assert counts[f"{COMPILE_OUTPUTS_PREFIX}json_reports"] == 1
 
 
 @pytest.mark.parametrize(

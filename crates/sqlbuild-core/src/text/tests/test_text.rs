@@ -1,6 +1,10 @@
-use crate::text::main::decode_python_text::decode_python_text;
+use crate::text::main::decimal_digit_value::decimal_digit_value;
+use crate::text::main::decode_text::decode_text;
+use crate::text::main::is_decimal_digit::is_decimal_digit;
 use crate::text::models::LineIndex;
-use crate::text::tests::test_types::{DecodeTestCase, PositionTestCase, SpanTestCase};
+use crate::text::tests::test_types::{
+    DecimalDigitTestCase, DecodeTestCase, PositionTestCase, SpanTestCase,
+};
 
 #[test]
 fn given_offsets_when_indexing_text_then_lines_and_columns_match_python() {
@@ -124,10 +128,62 @@ fn given_authored_bytes_when_decoding_then_text_matches_python_read_text() {
         },
     ];
     for test_case in test_cases {
-        let actual = decode_python_text(test_case.bytes).map_err(|error| error.valid_up_to);
+        let actual = decode_text(test_case.bytes).map_err(|error| error.valid_up_to);
         assert_eq!(
             actual.as_deref().map_err(|offset| *offset),
             test_case.expected_text,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_characters_when_reading_decimal_digits_then_only_unicode_nd_has_a_value() {
+    let test_cases = [
+        DecimalDigitTestCase {
+            description: "an ASCII digit",
+            character: '7',
+            expected_value: Some(7),
+        },
+        DecimalDigitTestCase {
+            description: "an Arabic-Indic digit",
+            character: '\u{663}',
+            expected_value: Some(3),
+        },
+        DecimalDigitTestCase {
+            description: "the first of five adjacent mathematical digit runs",
+            character: '\u{1d7ce}',
+            expected_value: Some(0),
+        },
+        DecimalDigitTestCase {
+            description: "the last mathematical digit",
+            character: '\u{1d7ff}',
+            expected_value: Some(9),
+        },
+        DecimalDigitTestCase {
+            description: "a Roman numeral is numeric but not decimal",
+            character: '\u{2167}',
+            expected_value: None,
+        },
+        DecimalDigitTestCase {
+            description: "a code point just past a digit run",
+            character: '\u{66a}',
+            expected_value: None,
+        },
+        DecimalDigitTestCase {
+            description: "a letter",
+            character: 'a',
+            expected_value: None,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            (
+                decimal_digit_value(test_case.character),
+                is_decimal_digit(test_case.character)
+            ),
+            (test_case.expected_value, test_case.expected_value.is_some()),
             "{}",
             test_case.description
         );

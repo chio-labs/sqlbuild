@@ -1,12 +1,6 @@
 """Helpers for model configuration reuse and native validation tests."""
 
-import sys
-import unicodedata
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
-import pytest
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
@@ -23,7 +17,7 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
+from sqlbuild.compiler.discovery.models import DiscoveredSqlModelFile
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     MaterializationDefaultsConfig,
@@ -38,41 +32,13 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import (
 _NO_MATERIALIZATION_DEFAULTS: MaterializationDefaultsConfig = MaterializationDefaultsConfig()
 
 
-def compile_with_config_build_count(
-    *,
-    project_dir: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[CompileInputsView, int]:
-    """Compile a project while counting its native model config builds."""
+def compile_with_native_config(*, project_dir: Path) -> CompileInputsView:
+    """Compile a project's inputs through the native model config stage."""
 
-    build_counts: list[int] = [0]
-    native_loop_type: type = _native.NativeModelLoop
-    monkeypatch.setattr(
-        _native,
-        "NativeModelLoop",
-        lambda *arguments: _ConfigCountingLoop(native_loop_type(*arguments), build_counts),
+    return build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
     )
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-    return (
-        build_compile_inputs(
-            discovered_inputs=discovered_inputs,
-            adapter_context=DUCKDB_COMPILE_ADAPTER_CONTEXT,
-        ),
-        build_counts[0],
-    )
-
-
-@dataclass(frozen=True)
-class _ConfigCountingLoop:
-    """The native model loop, adding up the model config builds it runs."""
-
-    native_loop: Any
-    build_counts: list[int]
-
-    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int]]:
-        inputs, counts = self.native_loop.run(*arguments)
-        self.build_counts[0] += counts[1]
-        return inputs, counts
 
 
 def compile_input_schema_columns(inputs: CompileInputsView) -> tuple[SchemaColumn, ...]:
@@ -106,7 +72,6 @@ def validate_natively(  # noqa: PLR0913
         (set(names), set(), set(), set(), set()),
         set(custom_materialization_names),
         microbatch_concurrency,
-        ((sys.version_info[0], sys.version_info[1]), unicodedata.unidata_version),
     )
     outcome: int | _native.NativeConfigError | None = validator.validate(
         config.values,

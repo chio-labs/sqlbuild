@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import random
-import sys
-import unicodedata
 from pathlib import Path
 
 import pytest
@@ -80,21 +78,13 @@ _FAILURE_BASE_FILES: dict[str, str] = {
     ],
     ids=lambda case: case.description,
 )
-def test_given_macro_heavy_project_when_rendering_with_each_engine_then_inputs_are_expected(
+def test_given_macro_heavy_project_when_rendering_then_inputs_are_expected(
     test_case: MacroBridgeParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_dir: Path = write_project(root=tmp_path / "project", files=test_case.files)
 
-    native_capture: str = comparable_capture(
-        render_compile_inputs(project_dir=project_dir, engine="native", monkeypatch=monkeypatch)
-    )
-    preview_capture: str = comparable_capture(
-        render_compile_inputs(
-            project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
-        )
-    )
+    native_capture: str = comparable_capture(render_compile_inputs(project_dir=project_dir))
 
-    assert preview_capture == native_capture
     assert all(map(native_capture.__contains__, test_case.expected_fragments))
 
 
@@ -113,17 +103,14 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
     test_case: MacroBridgeMemoTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_dir: Path = write_project(root=tmp_path / "project", files=test_case.files)
-    executions: dict[str, int] = {}
-    for engine in ("native", "native-preview"):
-        log_path: Path = tmp_path / f"{engine}.log"
-        monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
-        _ = render_compile_inputs(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
-        executions[engine] = len(log_path.read_text(encoding="utf-8").splitlines())
+    log_path: Path = tmp_path / "macros.log"
+    monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
 
-    assert executions == {
-        "native": test_case.expected_native_executions,
-        "native-preview": test_case.expected_native_executions,
-    }
+    _ = render_compile_inputs(project_dir=project_dir)
+
+    assert len(log_path.read_text(encoding="utf-8").splitlines()) == (
+        test_case.expected_native_executions
+    )
 
 
 @pytest.mark.parametrize(
@@ -180,13 +167,9 @@ def test_given_failing_render_when_rendering_natively_then_raises_the_expected_e
     project_dir: Path = write_project(root=tmp_path / "project", files=test_case.files)
 
     native_error: tuple[type[BaseException], str, type[object]] = render_error(
-        project_dir=project_dir, engine="native", monkeypatch=monkeypatch
-    )
-    preview_error: tuple[type[BaseException], str, type[object]] = render_error(
-        project_dir=project_dir, engine="native-preview", monkeypatch=monkeypatch
+        project_dir=project_dir
     )
 
-    assert preview_error == native_error
     assert test_case.expected_message_fragment in native_error[1]
 
 
@@ -208,10 +191,7 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     texts: list[str] = [random_macro_sql(rng=rng) for _ in range(test_case.samples)]
-    bridge: MacroBridge = MacroBridge(
-        python_version=(sys.version_info[0], sys.version_info[1]),
-        unicode_version=unicodedata.unidata_version,
-    )
+    bridge: MacroBridge = MacroBridge()
     unbridged: list[tuple[object, ...]] = [expansion_outcome(sql=sql, bridge=None) for sql in texts]
     bridged: list[tuple[object, ...]] = [expansion_outcome(sql=sql, bridge=bridge) for sql in texts]
     expected: list[GoldenEntry] = read_golden(golden_name("macro_expansion", test_case.description))
@@ -257,10 +237,7 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
 def test_given_nested_macro_arguments_when_expanding_then_matches_python_golden(
     test_case: MacroExpansionEdgeTestCase,
 ) -> None:
-    bridge: MacroBridge = MacroBridge(
-        python_version=(sys.version_info[0], sys.version_info[1]),
-        unicode_version=unicodedata.unidata_version,
-    )
+    bridge: MacroBridge = MacroBridge()
     unbridged: list[tuple[object, ...]] = [
         expansion_outcome(sql=sql, bridge=None) for sql in test_case.texts
     ]
@@ -282,17 +259,15 @@ def test_given_nested_macro_arguments_when_expanding_then_matches_python_golden(
             description="seeded projects with raising, mistyped, unparsable and unreachable macros",
             seed=1043,
             projects=150,
-            engines=("native", "native-preview"),
             expected_minimum_failures=100,
             expected_minimum_successes=10,
             expected_minimum_errors_after_macro_runs=80,
             expected_minimum_distinct_errors=10,
-            expected_mismatches=[],
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_failing_macro_projects_when_rendering_then_every_engine_raises_one_error(
+def test_given_failing_macro_projects_when_rendering_then_each_raises_one_error(
     test_case: FailingMacroProjectParityTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -302,11 +277,9 @@ def test_given_failing_macro_projects_when_rendering_then_every_engine_raises_on
     parity: FailingMacroParity = failing_macro_parity(
         projects=[generated_failing_macro_project(rng=rng) for _ in range(test_case.projects)],
         root=tmp_path,
-        engines=test_case.engines,
         monkeypatch=monkeypatch,
     )
 
-    assert parity.mismatches == [test_case.expected_mismatches] * (len(test_case.engines) - 1)
     assert (
         parity.failures >= test_case.expected_minimum_failures,
         parity.successes >= test_case.expected_minimum_successes,

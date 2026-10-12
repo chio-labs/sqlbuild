@@ -6,7 +6,6 @@ use crate::project::_helpers::values::{int_below, is_int};
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
 use crate::project::types::{Entries, Loaded};
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 /// `mapping.get(key)`.
 pub(crate) fn get<'a>(mapping: &'a Entries, key: &str) -> Option<&'a ConfigValue> {
@@ -47,8 +46,8 @@ pub(crate) fn coerce_mapping<'a>(
 
 fn non_empty(value: &ConfigValue) -> Option<String> {
     match value {
-        ConfigValue::String(text) if !python_strip(text).is_empty() => {
-            Some(python_strip(text).to_owned())
+        ConfigValue::String(text) if !str::trim(text).is_empty() => {
+            Some(str::trim(text).to_owned())
         }
         _ => None,
     }

@@ -4,7 +4,6 @@ use sqlbuild_config::models::ConfigValue;
 use sqlbuild_config::toml::main::load_toml::load_toml;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 use sqlbuild_core::posix_path::main::posix_suffix::posix_suffix;
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 
 use std::collections::HashSet;
 
@@ -23,7 +22,7 @@ pub(crate) struct Unserializable;
 
 /// Python's `Path(name).suffix` under the running Python.
 fn suffix(path: &str) -> &str {
-    posix_suffix(active_python_text(), path)
+    posix_suffix(path)
 }
 
 /// `_source_role`: declaration, macro, relationship or resource.

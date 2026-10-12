@@ -11,7 +11,6 @@ use crate::sql_values::errors::SqlValueFailure;
 use crate::sql_values::models::{RawKey, RawSqlValue, SqlValueLimits};
 use sqlbuild_core::json::main::python_float_repr::python_float_repr;
 use sqlbuild_core::models::{SqlLogicalType, SqlValue, SqlValueKind};
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 type Normalized = Result<SqlValue, SqlValueFailure>;
@@ -181,7 +180,7 @@ fn explicit_decimal(raw: &RawSqlValue, path: &str, state: &Normalization<'_>) ->
             ),
         ));
     };
-    let quoted = python_str_repr(active_python_text(), text);
+    let quoted = python_str_repr(text);
     let number = parse_decimal(text)
         .ok_or_else(|| state.fail(path, &format!("has invalid decimal value {quoted}")))?;
     if number.special.is_some() {

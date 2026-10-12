@@ -1,9 +1,5 @@
-"""Compiler engine selection errors."""
-
-
-class CompilerEngineError(ValueError):
-    """Raised when the requested compiler engine is not a supported value."""
+"""Compiler frontier errors."""
 
 
 class NativeStageMismatchError(RuntimeError):
-    """Raised when a native stage and the Python compiler disagree about one input."""
+    """Raised when native state the compiler replays is inconsistent with its inputs."""

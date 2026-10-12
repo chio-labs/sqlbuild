@@ -1,9 +1,9 @@
-//! Load one YAML document the way PyYAML's `yaml.safe_load` does.
+//! Load one YAML 1.2 document with the core schema and merge keys.
 
 use crate::errors::ConfigError;
 use crate::models::ConfigValue;
 
-/// The value `yaml.safe_load(text)` returns, with YAML 1.1 implicit typing and merge keys.
+/// The value of the single document in `text`; an empty stream is `Null`.
 pub fn safe_load(text: &str) -> Result<ConfigValue, ConfigError> {
     let text = crate::yaml::_helpers::reader::without_byte_order_mark(text);
     crate::yaml::_helpers::reader::check_characters(text)?;

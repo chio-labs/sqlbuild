@@ -3,8 +3,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::semantic_checks::_helpers::resource_sql::columns::resolve_binding_column;
 use crate::semantic_checks::_helpers::resource_sql::fixtures::{
     prepared_test_sql, reference_names,
@@ -34,7 +32,7 @@ pub(crate) struct ResourceSql {
 }
 
 fn is_blank(text: &str) -> bool {
-    python_strip(text).is_empty()
+    str::trim(text).is_empty()
 }
 
 /// `str.find` in code points, or None.

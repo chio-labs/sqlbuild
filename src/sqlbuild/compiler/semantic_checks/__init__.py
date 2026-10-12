@@ -1,1 +1,1 @@
-"""Native semantic completion for the preview compiler engine."""
+"""Native semantic completion."""

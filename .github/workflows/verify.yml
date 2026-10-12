@@ -282,7 +282,7 @@ jobs:
         run: make ${{ matrix.target }}
 
   compiler_differential:
-    name: Compiler engine differential
+    name: Compiler golden outputs
     needs: [changes, lockfile]
     if: needs.changes.outputs.compiler_differential == 'true'
     runs-on: ubuntu-24.04
@@ -303,22 +303,13 @@ jobs:
         run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
-      - name: Compare fixtures, examples, generated seeds and the failure corpus (native vs native-preview, goldens)
+      - name: Check fixtures, examples, generated seeds and the failure corpus against the goldens
         run: >-
           make compiler-differential
           COMPILER_DIFFERENTIAL_ARGS="--stage-captures --require-discovery-coverage
           --require-render-coverage --require-analysis-coverage
-          --wheel-site-report ${{ runner.temp }}/compiler-differential-wheel-sites.json
-          --evidence-dir ${{ runner.temp }}/compiler-differential-evidence/preview"
-      - name: Upload the Polyglot wheel-site and deferral report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: compiler-differential-wheel-sites-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/compiler-differential-wheel-sites.json
-          if-no-files-found: warn
-          retention-days: 30
-      - name: Upload differing projects' targets, stderr and compiled-test stats
+          --evidence-dir ${{ runner.temp }}/compiler-differential-evidence"
+      - name: Upload failing projects' targets, stderr and compiled-test stats
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -355,21 +346,12 @@ jobs:
         run: uv python install ${{ matrix.python }}
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras --python ${{ matrix.python }}
-      - name: Require native discovery to support this Python
-        run: >-
-          uv run --no-sync python -c "import sys, unicodedata, sqlbuild._native as n;
-          assert n.native_text_supported(sys.version_info[:2], unicodedata.unidata_version)"
-      - name: Compare native text helpers with this Python
-        run: >-
-          uv run --no-sync pytest
-          tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
-          -n auto --dist loadfile
-      - name: Compare native with native-preview and the goldens on fixtures, examples, the failure corpus and a few seeds
+      - name: Check fixtures, examples, the failure corpus and a few seeds against the goldens
         env:
           PYTHONUNBUFFERED: "1"
         run: >-
           uv run --no-sync python -m scripts.run_compiler_differential
-          --engines native native-preview --goldens check
+          --goldens check
           --corpus fixtures examples failures seeds --seeds 4 --jobs 4
 
   native_discovery_windows:
@@ -401,27 +383,22 @@ jobs:
         run: |
           uv sync --locked --no-dev --python 3.12
           uv pip install "pytest>=8.4.2" "pytest-xdist>=3.8.0"
-      - name: Compare native text, YAML and TOML readers and the lineage fingerprint with this Python
+      - name: Check the native YAML and TOML readers and the lineage fingerprint with this Python
         run: >-
           uv run --no-sync pytest
-          tests/integration/src/sqlbuild/compiler/test_native_python_compat_oracle.py
           tests/integration/src/sqlbuild/compiler/discovery/test_native_yaml_oracle.py
           tests/integration/src/sqlbuild/compiler/discovery/test_native_toml_oracle.py
           tests/unit/src/sqlbuild/cli/commands/_helpers/lineage/test_cache.py
           -n auto --dist loadfile
-      - name: Compile playground projects on the default and preview engines, and build
+      - name: Compile and build playground projects
         run: |
           project="${RUNNER_TEMP}/waffle-shop"
-          oracle="${RUNNER_TEMP}/waffle-shop-preview"
           uv run --no-sync sqb playground "${project}"
-          cp -r "${project}" "${oracle}"
           uv run --no-sync sqb --project-dir "${project}" --no-color compile
-          SQLBUILD_COMPILER_ENGINE=native-preview uv run --no-sync sqb --project-dir "${oracle}" --no-color compile
-          diff -r "${oracle}/target/compiled" "${project}/target/compiled"
           if ! test -f "${project}/target/cache/compiler-native-v1/macro-calls.bin"; then
-            echo "The default compile did not write the macro-call store; macro bridge debug log:"
-            rm -rf "${oracle}/target"
-            uv run --no-sync sqb --project-dir "${oracle}" --no-color --debug compile 2>&1 \
+            echo "The compile did not write the macro-call store; macro bridge debug log:"
+            rm -rf "${project}/target"
+            uv run --no-sync sqb --project-dir "${project}" --no-color --debug compile 2>&1 \
               | grep "macro_bridge" || true
             exit 1
           fi

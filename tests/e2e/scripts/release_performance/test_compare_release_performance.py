@@ -39,10 +39,6 @@ _REPO_ROOT: Path = Path(__file__).resolve().parents[4]
                 "| `plan --json` |",
                 "| `build (empty warehouse)` |",
                 "| `lineage column trace` |",
-                "Peak RSS limit for `lineage hub downstream`: 1.75x "
-                "(+75%; temporary memory exception).",
-                "Peak RSS limit for `dense compile (warm cache)`: 1.45x "
-                "(+45%; temporary memory exception).",
                 "Benchmark projects are generated per side",
                 "**Result: ",
             ),
@@ -121,11 +117,7 @@ def test_given_two_installations_when_comparing_release_performance_then_reports
         command.name for command in BENCHMARK_COMMANDS
     ]
     for command in recorded["commands"]:
-        assert command["max_rss_ratio"] == {
-            "lineage hub downstream": 1.75,
-            "lineage rollup upstream": 1.75,
-            "dense compile (warm cache)": 1.45,
-        }.get(command["name"])
+        assert command["max_rss_ratio"] is None
 
 
 if __name__ == "__main__":

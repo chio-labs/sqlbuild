@@ -1,16 +1,12 @@
 //! Python `re` building blocks over code points: `\s`, `\w`, `\b` and ignore-case words.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-
-use crate::semantic_checks::_helpers::sql_text::python_regex::ignorecase_equal;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 /// Python's `\w` for the character at `index`, false past either end.
 pub(crate) fn word_at(text: &[char], index: Option<usize>) -> bool {
     index
         .and_then(|index| text.get(index))
-        .is_some_and(|character| is_python_word(active_python_text(), *character))
+        .is_some_and(|character| is_word_char(*character))
 }
 
 /// Python's `\b` before `index`, where the next character is a word character.
@@ -23,7 +19,7 @@ pub(crate) fn spaces(text: &[char], index: usize, required: bool) -> Option<usiz
     let end = index
         + text[index.min(text.len())..]
             .iter()
-            .take_while(|character| is_python_space(**character))
+            .take_while(|character| char::is_whitespace(**character))
             .count();
     (!required || end > index).then_some(end)
 }
@@ -48,7 +44,7 @@ pub(crate) fn literal(
     for expected in literal.chars() {
         let actual = *text.get(end)?;
         let matched = if ignore_case && expected.is_ascii_alphabetic() {
-            ignorecase_equal(actual, expected)
+            actual.eq_ignore_ascii_case(&expected)
         } else {
             actual == expected
         };

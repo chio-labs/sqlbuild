@@ -2,8 +2,6 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::model_validation::_helpers::config::{
     ConfigView, has_config_value, one_of, sorted_values, string_sequence,
 };
@@ -186,7 +184,7 @@ fn change_policy_problem<N: AuthoredNode>(
             return Ok(None);
         }
         if let Some(rest) = text.strip_prefix(BOUNDED_REPLAY_PREFIX) {
-            let duration = python_strip(rest);
+            let duration = str::trim(rest);
             if config
                 .duration_written_as(key, duration, REPLAY_ON_CHANGE_EXAMPLE)?
                 .is_some()
@@ -281,7 +279,7 @@ fn ordering_key<N: AuthoredNode>(
     cursor_type: &str,
     key: &str,
 ) -> Result<Option<BoundKey>, ValidationStop> {
-    match bound_key(config, bound, cursor_type) {
+    match bound_key(bound, cursor_type) {
         Some(BoundKey::Overflow(utc_value)) => {
             let text = bound.python_str();
             let help = model_header_help(

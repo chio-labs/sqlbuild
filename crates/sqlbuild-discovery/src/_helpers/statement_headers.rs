@@ -3,7 +3,6 @@
 use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
 use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
 use crate::models::{DiscoveryFailure, FailureKind};
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
@@ -16,7 +15,6 @@ pub(crate) struct StatementHeader<'a> {
     pub(crate) statement: &'a str,
     pub(crate) file_path: &'a str,
     pub(crate) supported_keys: &'a [String],
-    pub(crate) python: PythonText,
 }
 
 /// `parse_header_values` then `reject_unsupported_header_keys`; `header_line` is one-based.
@@ -53,7 +51,6 @@ pub(crate) fn parse_statement_header(
         header_line,
         keys: &unsupported,
         supported_keys: contract.supported_keys,
-        python: contract.python,
     }))
 }
 

@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 use crate::assembly::project::constants::{
@@ -23,7 +22,7 @@ pub(crate) fn audit_deps(audit: &AuditFacts) -> Fact<Vec<ObjectKey>> {
     let mut keys: Vec<ObjectKey> = reference_deps(&audit.references);
     if let Some((kind, name)) = &audit.attached {
         if !ATTACHED_AUDIT_KINDS.contains(&kind.as_str()) {
-            let repr: String = python_str_repr(active_python_text(), kind);
+            let repr: String = python_str_repr(kind);
             return Err(AssemblyError::Value(format!(
                 "{repr} is not a valid {AUDIT_TARGET_KIND_ENUM}"
             )));

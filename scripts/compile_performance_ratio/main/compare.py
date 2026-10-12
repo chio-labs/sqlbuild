@@ -61,7 +61,6 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
             head_python=args.head_python,
             runs=args.runs,
             modes=modes,
-            engines=(args.base_engine, args.head_engine),
             compile_args=tuple(args.compile_args),
         )
     mode_max_ratios: dict[str, float] = (
@@ -97,7 +96,6 @@ def compare_compile_performance(argv: list[str] | None = None) -> int:
         failures=failures,
         mode_max_ratios=mode_max_ratios,
         mode_cpu_max_ratios=mode_cpu_max_ratios,
-        engines=(args.base_engine, args.head_engine),
         gate_phases=gate_phases,
         compile_args=tuple(args.compile_args),
     )
@@ -150,16 +148,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         type=float,
         default=NOISE_FLOOR_SECONDS,
         help="Seconds of slack added to the ratio allowance before a slowdown fails.",
-    )
-    parser.add_argument(
-        "--base-engine",
-        default=None,
-        help="Compiler engine the base build runs; defaults to the build's own default.",
-    )
-    parser.add_argument(
-        "--head-engine",
-        default=None,
-        help="Compiler engine the head build runs; defaults to the build's own default.",
     )
     parser.add_argument(
         "--compile-arg",

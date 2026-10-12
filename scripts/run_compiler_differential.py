@@ -1,4 +1,4 @@
-"""Direct wrapper for the compiler engine differential harness."""
+"""Direct wrapper for the compiler differential harness."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from scripts.compiler_differential.main.differential import run_compiler_differe
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Compare compile and plan output between the Python and native compiler engines."""
+    """Check compile and plan output of the corpus against its expectations and goldens."""
 
     return run_compiler_differential(argv)
 

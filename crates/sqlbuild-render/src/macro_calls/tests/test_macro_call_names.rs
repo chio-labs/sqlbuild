@@ -1,6 +1,6 @@
 use crate::macro_calls::errors::ScanError;
 use crate::macro_calls::main::macro_call_names::macro_call_names;
-use crate::macro_calls::tests::helpers::{owned_names, python_312};
+use crate::macro_calls::tests::helpers::owned_names;
 use crate::macro_calls::tests::test_types::MacroCallNamesTestCase;
 
 #[test]
@@ -52,8 +52,8 @@ fn given_sql_when_listing_macro_call_names_then_python_scan_agrees() {
     for test_case in test_cases {
         assert_eq!(
             (
-                macro_call_names(python_312(), test_case.sql, false),
-                macro_call_names(python_312(), test_case.sql, true)
+                macro_call_names(test_case.sql, false),
+                macro_call_names(test_case.sql, true)
             ),
             (
                 owned_names(test_case.expected_top_level),

@@ -1,4 +1,4 @@
-"""Assemble compiled SQL test facts natively for the preview compiler engine."""
+"""Assemble compiled SQL test facts natively."""
 
 from __future__ import annotations
 

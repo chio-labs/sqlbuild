@@ -1,9 +1,5 @@
 //! Contract adoption's YAML source declaration edit, as Python's `edit_source` plans it.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_splitlines::python_splitlines;
-
 use crate::refactoring::_helpers::contracts::model_edits::python_dict;
 use crate::refactoring::_helpers::contracts::yaml_lines::{
     column_lines, comment, indent, is_content, key, list_name, sequence_indent, yaml_string,
@@ -17,11 +13,11 @@ use crate::refactoring::types::LineEdit;
 
 /// Whether the first lines of the discovered file mark it as generated.
 pub(crate) fn is_generated(contents: &str) -> bool {
-    let head: Vec<&str> = python_splitlines(contents)
-        .into_iter()
+    let head: Vec<&str> = contents
+        .lines()
         .take(CONTRACT_GENERATED_MARKER_LINES)
         .collect();
-    python_casefold(active_python_text(), &head.join("\n")).contains(CONTRACT_GENERATED_MARKER)
+    str::to_lowercase(&head.join("\n")).contains(CONTRACT_GENERATED_MARKER)
 }
 
 /// The `columns:` key directly under the source block `(start, end, indent)`.
@@ -73,7 +69,6 @@ fn column_blocks(
     (start, end): (usize, usize),
     column_indent: usize,
 ) -> Vec<(String, (usize, usize))> {
-    let python = active_python_text();
     let mut found: Vec<(String, (usize, usize))> = Vec::new();
     let mut index = start;
     while index < end {
@@ -84,7 +79,7 @@ fn column_blocks(
                         indent(lines[*line]) <= column_indent && list_name(lines[*line]).is_some()
                     })
                     .unwrap_or(end);
-                found.push((python_casefold(python, name), (index, block_end)));
+                found.push((str::to_lowercase(name), (index, block_end)));
                 index = block_end;
             }
             _ => index += 1,
@@ -103,7 +98,6 @@ fn type_edit(
     (declared_type, physical_type): (Option<&str>, &str),
     (column_indent, overwrite): (usize, bool),
 ) -> Option<LineEdit> {
-    let python = active_python_text();
     let typed = format!(
         "{}type: {}",
         " ".repeat(column_indent + 2),
@@ -114,7 +108,7 @@ fn type_edit(
         Some(type_line)
             if overwrite
                 && declared_type.is_some_and(|declared| {
-                    python_casefold(python, declared) != python_casefold(python, physical_type)
+                    str::to_lowercase(declared) != str::to_lowercase(physical_type)
                 }) =>
         {
             let line = lines[type_line];
@@ -135,7 +129,6 @@ pub(crate) fn column_edits(
     lines: &[&str],
     (columns_index, source_end): (usize, usize),
 ) -> Result<Vec<LineEdit>, String> {
-    let python = active_python_text();
     let column_indent = sequence_indent(
         lines,
         (columns_index + 1, source_end),
@@ -148,13 +141,13 @@ pub(crate) fn column_edits(
         request
             .columns
             .iter()
-            .map(|column| (python_casefold(python, &column.0), column)),
+            .map(|column| (str::to_lowercase(&column.0), column)),
     );
     let physical = python_dict(
         request
             .physical_columns
             .iter()
-            .map(|column| (python_casefold(python, &column.0), column)),
+            .map(|column| (str::to_lowercase(&column.0), column)),
     );
     let mut line_edits: Vec<LineEdit> = Vec::new();
     for (name, (declared_name, declared_type)) in &declared {
@@ -176,7 +169,7 @@ pub(crate) fn column_edits(
     }
     let mut insertion: Vec<String> = Vec::new();
     for (name, column_type) in &request.physical_columns {
-        let key = python_casefold(python, name);
+        let key = str::to_lowercase(name);
         if !declared.iter().any(|(declared, _)| *declared == key) {
             insertion.extend(column_lines(name, column_type, column_indent));
         }

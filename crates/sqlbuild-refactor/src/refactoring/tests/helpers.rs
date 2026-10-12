@@ -2,8 +2,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use sqlbuild_core::text::main::python_text::python_text;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy;
 
 use crate::refactoring::_helpers::edits::header_edits::{
@@ -30,14 +28,9 @@ use crate::refactoring::models::{
 };
 use crate::refactoring::tests::test_types::{ExpectedSpans, PlannedMoves, Spans};
 
-pub(super) fn python() -> PythonText {
-    python_text((3, 12), "15.0.0").expect("Python 3.12 is supported")
-}
-
 pub(super) fn context(dialect: &str) -> ScanContext {
     ScanContext {
         backtick_identifiers: quote_policy(dialect).backtick_identifiers,
-        python: python(),
     }
 }
 
@@ -183,7 +176,6 @@ pub(super) fn schema_model_edits(contents: &'static str) -> Result<Vec<TextEdit>
         contents,
         &chars(contents),
         ("stg_orders", "stg_order_lines"),
-        python(),
     )
 }
 
@@ -192,7 +184,6 @@ pub(super) fn schema_field_edits(contents: &'static str) -> Result<Vec<TextEdit>
         contents,
         &chars(contents),
         ("stg_orders", ("order_id", "order_key")),
-        python(),
     )
 }
 
@@ -292,8 +283,6 @@ pub(super) fn facts(project_dir: &str, models: Vec<ModelFacts>) -> RefactorFacts
     RefactorFacts {
         project_dir: project_dir.to_owned(),
         dialect: "duckdb".to_owned(),
-        python_version: (3, 12),
-        unicode_version: "15.0.0".to_owned(),
         models,
         sources: Vec::new(),
         seeds: Vec::new(),
@@ -328,7 +317,6 @@ pub(super) fn blocking_reasons(
     let target = model_target(facts, request)?;
     let context = ScanContext {
         backtick_identifiers: false,
-        python: python(),
     };
     let host = |_: &str, _: &str| {
         Ok(DeclarationPlacement {
@@ -547,12 +535,7 @@ pub(super) fn header_fact_column_edits(
 pub(super) fn schema_fact_model_edits(
     contents: &'static str,
 ) -> Result<Vec<TextEdit>, RefactorError> {
-    schema_model_name_edits(
-        contents,
-        &chars(contents),
-        ("fact_orders", "order_facts"),
-        python(),
-    )
+    schema_model_name_edits(contents, &chars(contents), ("fact_orders", "order_facts"))
 }
 
 pub(super) fn schema_fact_column_edits(
@@ -562,7 +545,6 @@ pub(super) fn schema_fact_column_edits(
         contents,
         &chars(contents),
         ("fact_orders", ("amount", "revenue")),
-        python(),
     )
 }
 

@@ -54,7 +54,6 @@ use crate::bindings::_helpers::compiled_project::source_views::{
 use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     AttachedSqlTests, SqlTestSettings, TestFileRow, TestScope,
 };
-use crate::bindings::_helpers::discovery::project_files::python_semantics;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::render::declaration_expansion::{
@@ -80,7 +79,6 @@ use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::v
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 use sqlbuild_attachments::functions::models::KnownResources;
 use sqlbuild_attachments::test_targets::models::TargetCatalog;
-use sqlbuild_core::text::models::PythonText;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
@@ -104,8 +102,6 @@ const CODE_ARGUMENT: &str = "code";
 const ANALYSIS_CONFLICT: &str = "MODEL sql_analysis conflicts with legacy sql_validation";
 const ANALYSIS_CONFLICT_CODE: &str = "P003";
 
-/// `(finished, config builds, projected visibilities, hook statements, described models)`.
-type LoopCounts = (usize, usize, usize, usize, usize);
 /// The native validator, header contract classes, and the loop's Python classes.
 type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
 /// `(analysis switches, native syntax, (project config path, legacy schema files))`.
@@ -174,7 +170,6 @@ pub(crate) struct NativeModelLoop {
     pub(crate) validator: Py<PyAny>,
     pub(crate) syntax: LexicalSyntax,
     pub(crate) reserved_markers: Vec<String>,
-    pub(crate) python: PythonText,
     pub(crate) settings: ModelLoopSettings,
     pub(crate) project_config_path: String,
     legacy_schema_files: Vec<LegacySchemaFile>,
@@ -210,11 +205,10 @@ impl NativeModelLoop {
     fn new(
         checks: LoopChecks,
         syntax: LexicalSyntaxInput,
-        cursor: (Vec<String>, ((u8, u8), String)),
+        reserved_markers: Vec<String>,
         settings: LoopSettingsInput,
     ) -> PyResult<Self> {
         let (validator, contract_classes, loop_classes) = checks;
-        let (reserved_markers, (python_version, unicode_version)) = cursor;
         let (
             (sql_analysis, no_sql_validation, defer_sql_validation, require_sql_analysis),
             (project_config_path, legacy_schema_files),
@@ -223,7 +217,6 @@ impl NativeModelLoop {
             validator,
             syntax: syntax.into(),
             reserved_markers,
-            python: python_semantics(python_version, &unicode_version)?,
             settings: ModelLoopSettings {
                 sql_analysis,
                 no_sql_validation,
@@ -243,13 +236,13 @@ impl NativeModelLoop {
         })
     }
 
-    /// Build every model in order into `project`; return each model's input view and counts.
+    /// Build every model in order into `project`; return each model's input view.
     fn run<'py>(
         slf: &Bound<'py, Self>,
         project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
         models: Vec<ModelLoopRow>,
-    ) -> PyResult<(Vec<Bound<'py, NativeModelInput>>, LoopCounts)> {
+    ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let py: Python<'py> = slf.py();
         project
             .borrow_mut()
@@ -265,7 +258,7 @@ impl NativeModelLoop {
         project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
         models: Vec<ModelLoopRow>,
-    ) -> PyResult<(Vec<Bound<'py, NativeModelInput>>, LoopCounts)> {
+    ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
         let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
         let context: LoopContext<'_, 'py> = LoopContext {
@@ -277,9 +270,6 @@ impl NativeModelLoop {
             .borrow_mut()
             .set_input_classes(classes.input_view.clone().unbind());
         let mut inputs: Vec<Bound<'py, NativeModelInput>> = Vec::with_capacity(models.len());
-        let mut finished_natively: usize = 0;
-        let mut hook_statements: usize = 0;
-        let mut described: usize = 0;
         let configs: ModelConfigs<'py> = ModelConfigs::default();
         let visibility: ModelVisibility<'py> = ModelVisibility::default();
         let signatures: HookSignatures = HookSignatures::default();
@@ -304,9 +294,6 @@ impl NativeModelLoop {
                 visibility: &visibility,
             };
             let finished: FinishedModel<'py> = self.finish(py, &context, model)?;
-            finished_natively += 1;
-            hook_statements += finished.hook_statements;
-            described += usize::from(finished.header.schema.is_some());
             let record_inputs: RecordInputs<'_, 'py> = RecordInputs {
                 classes: &classes.record,
                 visible: &visible.declarations,
@@ -321,16 +308,7 @@ impl NativeModelLoop {
                 NativeModelInput::new(project.clone().unbind(), index),
             )?);
         }
-        Ok((
-            inputs,
-            (
-                finished_natively,
-                configs.builds(),
-                visibility.projected(),
-                hook_statements,
-                described,
-            ),
-        ))
+        Ok(inputs)
     }
 }
 
@@ -623,7 +601,7 @@ impl NativeModelLoop {
             (name, &query_sql, relative_path),
             (&references, declared_columns),
         )?;
-        let (values, hook_statements, hook_usages) = if hooked {
+        let (values, hook_usages) = if hooked {
             let hook_model: HookModel<'_, 'py> = HookModel {
                 name,
                 posix_path,
@@ -635,9 +613,9 @@ impl NativeModelLoop {
                 visibility,
             };
             let hooks: ExpandedHooks<'py> = expanded_hooks(self, context, &values, &hook_model)?;
-            (hooks.values, hooks.statements, hooks.usages)
+            (hooks.values, hooks.usages)
         } else {
-            (values, 0, Vec::new())
+            (values, Vec::new())
         };
         let source: HeaderSource<'_, 'py> = HeaderSource {
             name,
@@ -662,7 +640,6 @@ impl NativeModelLoop {
             header,
             references,
             declarations,
-            hook_statements,
             analysis,
             named_usages,
             macros: macros.map(|macros| macros.output),
@@ -691,7 +668,7 @@ impl NativeModelLoop {
                 },
             };
         if analysed && !self.settings.defer_sql_validation {
-            reject_unparseable_query(self, context, model)?;
+            reject_unparseable_query(context, model)?;
         }
         Ok((analysed, rejected))
     }
@@ -721,7 +698,6 @@ impl NativeModelLoop {
             cursor: cursor.as_deref(),
         };
         Ok(validated_model_intrinsics(
-            self.python,
             sql,
             &self.reserved_markers,
             &model,

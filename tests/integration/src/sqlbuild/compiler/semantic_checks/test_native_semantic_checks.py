@@ -245,7 +245,7 @@ def test_given_project_without_catalog_when_completing_then_raises_native_compil
     ],
     ids=lambda case: case.description,
 )
-def test_given_preview_compiles_when_completing_from_the_session_then_matches_payload_and_python(
+def test_given_compiles_when_completing_from_the_session_then_matches_payload_and_python(
     test_case: SessionCompletionTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -258,7 +258,6 @@ def test_given_preview_compiles_when_completing_from_the_session_then_matches_pa
                 corpus=test_case.corpus, rng=rng, model_count=test_case.model_count
             ),
             monkeypatch=monkeypatch,
-            engine="native-preview",
         )
         for index in range(test_case.count)
     ]

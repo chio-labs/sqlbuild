@@ -7,11 +7,11 @@ import pytest
 
 @dataclass(frozen=True)
 class CompileOutputsSequenceTestCase:
-    """A cached edit sequence and the native output work counted per step."""
+    """A cached edit sequence and whether each step replayed the stored compile."""
 
     description: str
     expected_exit_codes: tuple[int, ...]
-    expected_work: tuple[dict[str, int], ...]
+    expected_reused: tuple[bool, ...]
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,6 @@ class PublicationFailureTestCase:
 
     description: str
     expected_error: str
-    expected_published_files: int
 
 
 @dataclass(frozen=True)

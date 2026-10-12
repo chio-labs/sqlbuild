@@ -3,9 +3,7 @@
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::models::{DiscoveryFailure, FailureKind};
 use crate::sql_tests::models::{DiscoveredSqlTestFile, SqlTestBlock, SqlTestFileOptions};
-use sqlbuild_core::text::main::is_python_space::is_python_space;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
-use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_sqltext::compiler::main::statement_header_matching::match_statement_header;
 
 const TEST_KEYWORD: &str = "TEST";
@@ -28,7 +26,7 @@ pub(crate) fn parse_sql_test_file(
     let Some(first) = matches.first() else {
         return Err(missing_header_failure(file_path));
     };
-    if !python_strip(&contents[..first.start]).is_empty() {
+    if !str::trim(&contents[..first.start]).is_empty() {
         return Err(missing_header_failure(file_path));
     }
     let contract = StatementHeader {
@@ -37,7 +35,6 @@ pub(crate) fn parse_sql_test_file(
         statement: TEST_STATEMENT,
         file_path,
         supported_keys: &options.test_keys,
-        python: options.python,
     };
     let mut blocks: Vec<SqlTestBlock> = Vec::with_capacity(matches.len());
     let mut failure: Option<DiscoveryFailure> = None;
@@ -51,11 +48,11 @@ pub(crate) fn parse_sql_test_file(
             Ok(header_values) => {
                 let body_start: usize = block.end.min(next_start);
                 let authored: &str =
-                    contents[body_start..next_start].trim_end_matches(is_python_space);
+                    contents[body_start..next_start].trim_end_matches(char::is_whitespace);
                 let span_start: usize = contents[..body_start].chars().count();
                 blocks.push(SqlTestBlock {
                     header_values,
-                    sql_body: python_cleandoc(options.python, authored),
+                    sql_body: python_cleandoc(authored),
                     body_span: (span_start, span_start + authored.chars().count()),
                 });
             }

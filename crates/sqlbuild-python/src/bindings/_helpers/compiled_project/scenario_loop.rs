@@ -37,12 +37,8 @@ impl<'py> TestScope<'_, 'py> {
             .call1((self.settings.scenario_kind.bind(py), name))?;
         let declarations: Bound<'py, PyAny> =
             scoped_declarations(self.context, file_path, &resource)?;
-        let expansion: AuthoredExpansion<'py> = expanded_authored_sql(
-            self.model_loop,
-            self.context,
-            (sql_body, file_path),
-            &declarations,
-        )?;
+        let expansion: AuthoredExpansion<'py> =
+            expanded_authored_sql(self.context, (sql_body, file_path), &declarations)?;
         let stem: &str = std::path::Path::new(file_path)
             .file_stem()
             .and_then(|stem| stem.to_str())

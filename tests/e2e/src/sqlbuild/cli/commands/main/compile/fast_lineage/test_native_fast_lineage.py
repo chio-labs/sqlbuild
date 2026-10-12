@@ -1,4 +1,4 @@
-"""Both native engines build fast column lineage natively with the expected CLI output."""
+"""Fast and rich column lineage are built natively with the expected CLI output."""
 
 from __future__ import annotations
 
@@ -12,14 +12,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage._test_types i
     NativeRichLineageFailureCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.fast_lineage.helpers import (
-    EngineLineageRun,
     FailedLineageRun,
-    engine_lineage_run,
+    LineageRun,
     failed_rich_lineage_run,
+    lineage_run,
     model_lineage_summaries,
 )
 
-_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "orders_lineage"\nadapter = "duckdb"\n\n[connection]\ndatabase = "orders.duckdb"\n'
@@ -118,8 +117,6 @@ def _panicked(request):
 native.build_rich_column_lineage = _panicked
 """
 _RICH_COMPILE: tuple[str, ...] = (
-    "--compiler-engine",
-    "native",
     "compile",
     "--json",
     "--no-cache",
@@ -172,19 +169,12 @@ _RICH_COMPILE: tuple[str, ...] = (
     ],
     ids=lambda case: case.description,
 )
-def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_matches(
+def test_given_project_when_compiling_then_fast_lineage_is_traced(
     test_case: NativeFastLineageCliTestCase, tmp_path: Path
 ) -> None:
-    runs: dict[str, EngineLineageRun] = {
-        engine: engine_lineage_run(
-            project_dir=tmp_path / engine,
-            files=test_case.files,
-            engine=engine,
-            targets=test_case.lineage_targets,
-        )
-        for engine in _ENGINES
-    }
-    native: EngineLineageRun = runs["native"]
+    native: LineageRun = lineage_run(
+        project_dir=tmp_path, files=test_case.files, targets=test_case.lineage_targets
+    )
     summaries: dict[str, object] = model_lineage_summaries(native.compile_report)
 
     assert native.compile_returncode == 0, native.compile_report
@@ -195,7 +185,6 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
     assert sum('"source"' in stdout for _, stdout, _ in native.traces) >= (
         test_case.expected_minimum_traced_edges
     )
-    assert runs["native-preview"] == native
 
 
 @pytest.mark.parametrize(
@@ -235,26 +224,17 @@ def test_given_project_when_compiling_with_each_engine_then_fast_lineage_output_
                     "has_star": True,
                 },
             },
-            expected_wheel_calls=0,
             expected_minimum_traced_edges=4,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_project_when_tracing_rich_lineage_with_each_engine_then_output_matches(
+def test_given_project_when_tracing_rich_lineage_then_it_is_traced(
     test_case: NativeRichLineageCliTestCase, tmp_path: Path
 ) -> None:
-    runs: dict[str, EngineLineageRun] = {
-        engine: engine_lineage_run(
-            project_dir=tmp_path / engine,
-            files=test_case.files,
-            engine=engine,
-            targets=test_case.lineage_targets,
-            mode="rich",
-        )
-        for engine in _ENGINES
-    }
-    native: EngineLineageRun = runs["native"]
+    native: LineageRun = lineage_run(
+        project_dir=tmp_path, files=test_case.files, targets=test_case.lineage_targets, mode="rich"
+    )
 
     assert native.compile_returncode == 0, native.compile_report
     assert model_lineage_summaries(native.compile_report) == test_case.expected_lineage
@@ -262,8 +242,6 @@ def test_given_project_when_tracing_rich_lineage_with_each_engine_then_output_ma
     assert sum('"source"' in stdout for _, stdout, _ in native.traces) >= (
         test_case.expected_minimum_traced_edges
     )
-    assert native.wheel_calls == test_case.expected_wheel_calls
-    assert runs["native-preview"] == native
 
 
 @pytest.mark.parametrize(
@@ -275,14 +253,11 @@ def test_given_project_when_tracing_rich_lineage_with_each_engine_then_output_ma
             command=_RICH_COMPILE,
             expected_returncode=1,
             expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
-            expected_wheel_calls=0,
         ),
         NativeRichLineageFailureCliTestCase(
             description="lineage --mode rich",
             files=_RICH_FILES,
             command=(
-                "--compiler-engine",
-                "native",
                 "lineage",
                 "order_facts.whole_amount",
                 "--mode",
@@ -291,12 +266,11 @@ def test_given_project_when_tracing_rich_lineage_with_each_engine_then_output_ma
             ),
             expected_returncode=1,
             expected_error_line=f"_native.NativeCompilerError: {_NATIVE_PANIC_ERROR}",
-            expected_wheel_calls=0,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_native_rich_lineage_panic_when_running_then_command_fails_without_the_wheel(
+def test_given_native_rich_lineage_panic_when_running_then_command_fails(
     test_case: NativeRichLineageFailureCliTestCase, tmp_path: Path
 ) -> None:
     run: FailedLineageRun = failed_rich_lineage_run(
@@ -309,7 +283,6 @@ def test_given_native_rich_lineage_panic_when_running_then_command_fails_without
     assert run == FailedLineageRun(
         returncode=test_case.expected_returncode,
         last_error_line=test_case.expected_error_line,
-        wheel_calls=test_case.expected_wheel_calls,
     )
 
 

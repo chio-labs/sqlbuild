@@ -5,7 +5,7 @@
 pub enum ConfigErrorKind {
     /// The text is not a valid document; Python's parser rejects it too.
     Syntax,
-    /// The document parses but a value cannot be built, as PyYAML's constructor or `tomllib` reports.
+    /// The document parses but a value cannot be built from it.
     Construct,
     /// The document uses a feature the native reader leaves to Python.
     Unsupported,

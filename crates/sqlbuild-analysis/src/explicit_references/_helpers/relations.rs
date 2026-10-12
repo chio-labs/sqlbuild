@@ -2,10 +2,6 @@
 
 use std::collections::HashSet;
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
-use sqlbuild_core::text::main::python_strip::python_strip;
-
 use crate::explicit_references::constants::{
     MIGRATE_FROM_QUOTES, MODEL_TYPE, SCHEMA_QUALIFIED_PARTS, SEED_TYPE, SOURCE_TYPE,
 };
@@ -63,7 +59,7 @@ pub(crate) fn matched<'a>(
 }
 
 fn folded(text: &str) -> String {
-    python_casefold(active_python_text(), text)
+    str::to_lowercase(text)
 }
 
 /// `_parts_compatible`: either part missing, or equal casefolded.
@@ -88,7 +84,7 @@ fn old_names(request: &ReferenceRequest, declared: &[ProjectRelation]) -> Vec<Pr
         };
         let parts: Vec<&str> = raw
             .split('.')
-            .map(|part| python_strip(part).trim_matches(MIGRATE_FROM_QUOTES))
+            .map(|part| str::trim(part).trim_matches(MIGRATE_FROM_QUOTES))
             .collect();
         if parts.len() == 1 && model_names.contains(parts[0]) {
             continue;

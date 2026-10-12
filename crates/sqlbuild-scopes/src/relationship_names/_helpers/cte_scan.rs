@@ -1,11 +1,6 @@
 //! The top-level CTE scan of `extract_top_level_ctes_with_scanner`.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_alpha::is_python_alpha;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::python_strip::python_strip;
-use sqlbuild_core::text::main::python_upper::python_upper;
+use sqlbuild_core::text::main::is_letter::is_letter;
 use sqlbuild_sqltext::sql_scan::main::dialect_matching_paren::dialect_matching_paren;
 use sqlbuild_sqltext::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use sqlbuild_sqltext::sql_scan::models::{LexicalSyntax, Unclosed};
@@ -103,7 +98,7 @@ pub(crate) fn top_level_ctes(
         let body_end = matching_paren(text, index, syntax)?;
         ctes.push((
             name.to_owned(),
-            python_strip(&text.sql[index + 1..body_end]).to_owned(),
+            str::trim(&text.sql[index + 1..body_end]).to_owned(),
         ));
         index = skip_ignorable(sql, body_end + 1, text, syntax)?;
         if sql.get(index) == Some(&b',') {
@@ -214,7 +209,7 @@ fn skip_ignorable(
 ) -> Scan<usize> {
     let mut index = start;
     while let Some(character) = text.sql[index..].chars().next() {
-        if is_python_space(character) {
+        if char::is_whitespace(character) {
             index += character.len_utf8();
             continue;
         }
@@ -236,7 +231,7 @@ fn try_consume_keyword(sql: &str, start: usize, keyword: &str) -> Option<usize> 
         .char_indices()
         .nth(keyword.len())
         .map_or(sql.len(), |(offset, _)| start + offset);
-    if python_upper(active_python_text(), &sql[start..window_end]) != keyword {
+    if str::to_uppercase(&sql[start..window_end]) != keyword {
         return None;
     }
     let continues = |character: Option<char>| character.is_some_and(is_identifier_character);
@@ -249,7 +244,7 @@ fn try_consume_keyword(sql: &str, start: usize, keyword: &str) -> Option<usize> 
 fn read_identifier<'sql>(text: &ScanText<'sql>, start: usize) -> Scan<(&'sql str, usize)> {
     let mut characters = text.sql[start..].char_indices();
     match characters.next() {
-        Some((_, first)) if is_python_alpha(active_python_text(), first) || first == '_' => {}
+        Some((_, first)) if is_letter(first) || first == '_' => {}
         _ => return Err(failed(text, "expected a CTE name".to_owned())),
     }
     let end: usize = characters
@@ -264,5 +259,5 @@ fn matching_paren(text: &ScanText<'_>, open: usize, syntax: &LexicalSyntax) -> S
 
 /// Python's `isalnum() or _`.
 fn is_identifier_character(character: char) -> bool {
-    is_python_alnum(active_python_text(), character) || character == '_'
+    char::is_alphanumeric(character) || character == '_'
 }

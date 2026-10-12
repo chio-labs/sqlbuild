@@ -16,11 +16,8 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlTestInput,
 )
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.frontier.main._report_native_fallback import report_native_fallback
-from sqlbuild.compiler.frontier.types import NativeFallbackSite
 from sqlbuild.compiler.sql_test_glue.constants import (
     SQL_TEST_DECIMAL_OVERFLOW,
-    SQL_TEST_EXTENSION_CALLBACK,
     SQL_TEST_INPUT_FAILURE,
 )
 from sqlbuild.compiler.sql_test_glue.main._assemble_native_sql_tests import (
@@ -29,7 +26,7 @@ from sqlbuild.compiler.sql_test_glue.main._assemble_native_sql_tests import (
 from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly
 
 
-def assemble_sql_tests_by_engine(
+def assemble_sql_tests(
     *,
     inputs: CompileInputsView,
     macro_mock_queries: Callable[[CompileSqlTestInput], dict[str, str]],
@@ -49,10 +46,6 @@ def assemble_sql_tests_by_engine(
         test: CompiledSqlTest = assembly.test
         payload: object = test_input.payload
         if isinstance(payload, CompileModelSqlTestInputPayload) and payload.macro_mocks:
-            report_native_fallback(
-                site=NativeFallbackSite.SQL_TEST_MACRO_MOCK_QUERIES,
-                kind=SQL_TEST_EXTENSION_CALLBACK,
-            )
             test = _with_model_queries(test=test, queries=macro_mock_queries(test_input))
         if assembly.failure is not None and assembly.failure.kind == SQL_TEST_DECIMAL_OVERFLOW:
             raise decimal.Overflow([decimal.Overflow])

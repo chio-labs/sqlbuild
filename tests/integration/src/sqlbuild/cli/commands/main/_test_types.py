@@ -149,12 +149,10 @@ class CombinedCompilationTestCase:
 
 @dataclass(frozen=True)
 class EarlyLintInputsTestCase:
-    """Early SQL lint: the expansions it took from the compile and redid."""
+    """Early SQL lint findings taken from the compile's expansion."""
 
     description: str
     expected_findings: tuple[tuple[str, str, int | None, int | None], ...]
-    expected_compile_expansions: int
-    expected_python_expansions: int
 
 
 @dataclass(frozen=True)
@@ -1073,13 +1071,3 @@ class InferredFreshnessCliTestCase:
     description: str
     sources_yaml: str
     expected_sources: tuple[tuple[object, ...], ...]
-
-
-@dataclass(frozen=True)
-class FixSessionTestCase:
-    """A Rule fix under an engine whose discovery retains a native session."""
-
-    description: str
-    engine: str
-    expected_original_sessions: tuple[bool, ...]
-    expected_fix_pass_sessions: frozenset[bool]

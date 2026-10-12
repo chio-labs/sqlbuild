@@ -1329,10 +1329,9 @@ class UntypedCursorOverrideSelectionE2ETestCase:
 
 @dataclass(frozen=True)
 class ModelConfigEnginesBuildE2ETestCase:
-    """One compiler engine building a project whose models layer and validate config."""
+    """Building a project whose models layer and validate config."""
 
     description: str
-    engine: str
     overrides: dict[str, str]
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]

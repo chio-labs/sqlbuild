@@ -19,7 +19,6 @@ use crate::project::constants::{
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
 use crate::project::types::{Entries, Fields, Loaded};
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 /// A retention or table-type field: where it lives and whether `'inherit'` is accepted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -184,7 +183,7 @@ fn invalid_path_key(file: ConfigFile, path_key: &str, problem: &str) -> ConfigFa
 
 /// `_normalize_path_default_key`.
 fn normalize_path_key(path_key: &str, file: ConfigFile) -> Loaded<String> {
-    let normalized = python_strip(path_key);
+    let normalized = str::trim(path_key);
     if normalized.is_empty() {
         return Err(ConfigFailure::at(
             file,
@@ -358,7 +357,7 @@ pub(crate) fn optional_retention_policy(
     if text == ZERO_DAY_DURATION {
         return Ok(retention(Some("0")));
     }
-    match parse_duration(text)?.filter(|duration| duration.is_whole_days()) {
+    match parse_duration(text)?.filter(super::durations::Duration::is_whole_days) {
         Some(duration) => Ok(retention(Some(&duration.days()))),
         None => Err(ConfigFailure::at(
             file,

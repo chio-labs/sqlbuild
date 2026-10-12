@@ -1,10 +1,5 @@
 //! The top-level SELECT list of a model's SQL and the output name of each simple item.
 
-use sqlbuild_core::text::main::active_python_text::active_python_text;
-use sqlbuild_core::text::main::is_python_alnum::is_python_alnum;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::python_upper::python_upper;
-
 const SELECT_KEYWORD: &str = "SELECT";
 const UNION_KEYWORD: &str = "UNION";
 const FROM_KEYWORD: &str = "FROM";
@@ -31,12 +26,12 @@ fn is_special(character: char) -> bool {
 fn keyword_at(sql: &[char], keyword: &str, index: usize) -> bool {
     let end = index + keyword.chars().count();
     let slice: String = sql[index..end.min(sql.len())].iter().collect();
-    if python_upper(active_python_text(), &slice) != keyword {
+    if str::to_uppercase(&slice) != keyword {
         return false;
     }
     let word = |character: Option<&char>| {
         character.is_some_and(|character| {
-            is_python_alnum(active_python_text(), *character) || *character == IDENTIFIER_SEPARATOR
+            char::is_alphanumeric(*character) || *character == IDENTIFIER_SEPARATOR
         })
     };
     let before = index.checked_sub(1).and_then(|position| sql.get(position));
@@ -193,7 +188,7 @@ fn is_identifier_part(character: char, ignore_case: bool) -> bool {
 fn trim_end(text: &[char]) -> &[char] {
     let end = text
         .iter()
-        .rposition(|character| !is_python_space(*character))
+        .rposition(|character| !char::is_whitespace(*character))
         .map_or(0, |position| position + 1);
     &text[..end]
 }
@@ -201,7 +196,7 @@ fn trim_end(text: &[char]) -> &[char] {
 fn trim_start(text: &[char]) -> &[char] {
     let start = text
         .iter()
-        .position(|character| !is_python_space(*character))
+        .position(|character| !char::is_whitespace(*character))
         .unwrap_or(text.len());
     &text[start..]
 }
@@ -250,7 +245,7 @@ fn explicit_alias(text: &[char]) -> Option<&[char]> {
     (is_as
         && preceding
             .last()
-            .is_some_and(|character| is_python_space(*character)))
+            .is_some_and(|character| char::is_whitespace(*character)))
     .then_some(&text[start..])
 }
 
@@ -354,11 +349,11 @@ pub(crate) fn trimmed_item(sql: &[char], (start, end): (usize, usize)) -> Option
     let item = &sql[start..end];
     let leading = item
         .iter()
-        .position(|character| !is_python_space(*character))
+        .position(|character| !char::is_whitespace(*character))
         .unwrap_or(item.len());
     let trailing = item
         .iter()
-        .rposition(|character| !is_python_space(*character))
+        .rposition(|character| !char::is_whitespace(*character))
         .map_or(0, |position| position + 1);
     (leading < trailing).then_some((start + leading, start + trailing))
 }

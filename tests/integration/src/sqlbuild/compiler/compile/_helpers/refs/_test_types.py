@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sqlbuild.compiler.compile.models import SqlReferenceSourceMap
-from sqlbuild.compiler.frontier.types import CompilerEngine
 
 
 @dataclass(frozen=True)
@@ -17,11 +16,10 @@ class CraftedReferenceTestCase:
 
 
 @dataclass(frozen=True)
-class ReferenceEngineTestCase:
-    """Reference extraction through the compiler entry point under one engine."""
+class ReferenceExtractionTestCase:
+    """Reference extraction through the compiler entry point."""
 
     description: str
-    engine: CompilerEngine
     sql: str
     expected_references: tuple[tuple[str, str, str | None, int | None], ...] = ()
     expected_error: str = ""

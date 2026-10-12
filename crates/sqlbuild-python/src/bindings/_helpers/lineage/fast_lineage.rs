@@ -1,4 +1,4 @@
-//! Fast column lineage for the preview compiler engine.
+//! Fast column lineage.
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};

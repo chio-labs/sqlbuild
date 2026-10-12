@@ -2,9 +2,7 @@
 
 use crate::_helpers::locations::{absolute_span, line_starts};
 use crate::models::LineColumnSpan;
-use sqlbuild_core::text::main::is_python_space::is_python_space;
-use sqlbuild_core::text::main::is_python_word::is_python_word;
-use sqlbuild_core::text::models::PythonText;
+use sqlbuild_core::text::main::is_word_char::is_word_char;
 
 const SELECT_KEYWORD: &str = "SELECT";
 const UNION_KEYWORD: &str = "UNION";
@@ -13,7 +11,6 @@ const ESCAPE: char = '\\';
 
 /// Python's `matched_model_output_column_locations` from the SQL start (a byte offset).
 pub(crate) fn output_column_locations(
-    python: PythonText,
     contents: &str,
     sql_start: usize,
     extract_implicit_alias_columns: bool,
@@ -21,7 +18,7 @@ pub(crate) fn output_column_locations(
     let characters: Vec<char> = contents.chars().collect();
     let sql_offset = contents[..sql_start].chars().count();
     let sql = &characters[sql_offset..];
-    let Some((list_start, list_end)) = top_level_select_list_bounds(python, sql) else {
+    let Some((list_start, list_end)) = top_level_select_list_bounds(sql) else {
         return Vec::new();
     };
     let starts = line_starts(&characters);
@@ -33,11 +30,11 @@ pub(crate) fn output_column_locations(
             continue;
         };
         let mut start = item_start;
-        while start < item_end && is_python_space(sql[start]) {
+        while start < item_end && char::is_whitespace(sql[start]) {
             start += 1;
         }
         let mut end = item_end;
-        while end > start && is_python_space(sql[end - 1]) {
+        while end > start && char::is_whitespace(sql[end - 1]) {
             end -= 1;
         }
         if start >= end {
@@ -58,7 +55,7 @@ fn is_scan_special(character: char) -> bool {
     )
 }
 
-fn top_level_select_list_bounds(python: PythonText, sql: &[char]) -> Option<(usize, usize)> {
+fn top_level_select_list_bounds(sql: &[char]) -> Option<(usize, usize)> {
     let length = sql.len();
     let has_union_candidate = contains_lowercase_union(sql);
     let (mut depth, mut index) = (0_usize, 0_usize);
@@ -108,20 +105,17 @@ fn top_level_select_list_bounds(python: PythonText, sql: &[char]) -> Option<(usi
         let upper = character.to_ascii_uppercase();
         match list_start {
             None => {
-                if upper == 'S' && keyword_at(python, sql, SELECT_KEYWORD, index) {
+                if upper == 'S' && keyword_at(sql, SELECT_KEYWORD, index) {
                     index += SELECT_KEYWORD.len();
                     list_start = Some(index);
                     continue;
                 }
             }
             Some(start) => {
-                if upper == 'U' && keyword_at(python, sql, UNION_KEYWORD, index) {
+                if upper == 'U' && keyword_at(sql, UNION_KEYWORD, index) {
                     return None;
                 }
-                if list_end.is_none()
-                    && upper == 'F'
-                    && keyword_at(python, sql, FROM_KEYWORD, index)
-                {
+                if list_end.is_none() && upper == 'F' && keyword_at(sql, FROM_KEYWORD, index) {
                     list_end = Some(index);
                     if !has_union_candidate {
                         return Some((start, index));
@@ -160,7 +154,7 @@ fn ascii_upper(character: char) -> Option<char> {
     }
 }
 
-fn keyword_at(python: PythonText, sql: &[char], keyword: &str, index: usize) -> bool {
+fn keyword_at(sql: &[char], keyword: &str, index: usize) -> bool {
     let end = index + keyword.len();
     let slice = &sql[index..end.min(sql.len())];
     if slice.len() != keyword.len()
@@ -173,7 +167,7 @@ fn keyword_at(python: PythonText, sql: &[char], keyword: &str, index: usize) -> 
     }
     let before = index.checked_sub(1).map_or(' ', |previous| sql[previous]);
     let after = sql.get(end).copied().unwrap_or(' ');
-    !is_python_word(python, before) && !is_python_word(python, after)
+    !is_word_char(before) && !is_word_char(after)
 }
 
 fn split_top_level_items(sql: &[char], start: usize, end: usize) -> Vec<(usize, usize)> {
@@ -262,12 +256,12 @@ fn name_end(item: &[char], start: usize, ignore_case: bool) -> Option<usize> {
 fn rest_is_space(item: &[char], start: usize) -> bool {
     item[start..]
         .iter()
-        .all(|character| is_python_space(*character))
+        .all(|character| char::is_whitespace(*character))
 }
 
 fn space_run_end(item: &[char], start: usize) -> usize {
     let mut end = start;
-    while end < item.len() && is_python_space(item[end]) {
+    while end < item.len() && char::is_whitespace(item[end]) {
         end += 1;
     }
     end
@@ -284,7 +278,8 @@ fn captured_name(item: &[char], start: usize, end: usize) -> String {
 /// `re.search(r"\s+AS\s+NAME\s*\Z", item, re.IGNORECASE)`.
 fn explicit_alias(item: &[char]) -> Option<String> {
     for start in 0..item.len() {
-        if !is_python_space(item[start]) || (start > 0 && is_python_space(item[start - 1])) {
+        if !char::is_whitespace(item[start]) || (start > 0 && char::is_whitespace(item[start - 1]))
+        {
             continue;
         }
         let keyword = space_run_end(item, start);

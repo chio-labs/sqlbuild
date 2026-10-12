@@ -1,4 +1,4 @@
-"""Analyze model SQL natively for the preview compiler engine."""
+"""Analyze model SQL natively."""
 
 from __future__ import annotations
 

@@ -19,9 +19,9 @@ fn given_sql_when_listing_identifier_tokens_then_they_match_python_re_and_casefo
             expected_tokens: &["caf\u{e9}", "t\u{e9}", "_a1", "b"],
         },
         TokensTestCase {
-            description: "casefolding expands sharp s and a long s cannot start a token",
+            description: "sharp s stays distinct from ss and a long s cannot start a token",
             sql: "Stra\u{df}e STRASSE \u{17f}pan",
-            expected_tokens: &["strasse", "pan"],
+            expected_tokens: &["stra\u{df}e", "strasse", "pan"],
         },
     ];
     for test_case in test_cases {
@@ -100,14 +100,6 @@ fn given_helper_problems_when_locating_then_spans_match_the_python_locator() {
             cte_name: "orders",
             call: None,
             expected_location: (1, 7, 1, 13),
-        },
-        CteLocationTestCase {
-            description: "a dollar-prefixed name is skipped and a long s matches s",
-            contents: "TEST (name 't');\nWITH x$orders AS (1), \u{17f}ORDERS AS (\n  __REF(\"orders\"))",
-            sql_body: "WITH",
-            cte_name: "sorders",
-            call: Some("__ref(\"orders\")"),
-            expected_location: (3, 3, 3, 18),
         },
         CteLocationTestCase {
             description: "a missing block and CTE fall back to the file start",
