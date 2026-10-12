@@ -5,7 +5,6 @@ from __future__ import annotations
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
 from sqlbuild.compiler.graph.main._lineage_graph_names import lineage_graph_names
-from sqlbuild.compiler.graph.main._native_project_graph import build_native_project_graph
 from sqlbuild.compiler.planner._helpers.graph.auto_load import managed_source_upstream_keys
 from sqlbuild.compiler.planner._helpers.graph.core import (
     build_downstream_deps,
@@ -47,9 +46,7 @@ def build_planner_scope(
     resolved_selected_keys: frozenset[CompiledObjectKey] = (
         selected_keys
         if selected_keys is not None
-        else resolve_graph_selectors(
-            graph=build_native_project_graph(project), select=select, exclude=exclude
-        )
+        else resolve_graph_selectors(graph=project.lineage_graph, select=select, exclude=exclude)
     )
     executable_dependency_source_keys: frozenset[CompiledObjectKey] = (
         _upstream_source_selector_keys(
