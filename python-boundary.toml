@@ -1,0 +1,221 @@
+# Python that stays once Rust hosts SQLBuild. Every other Python file under src/sqlbuild is
+# migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
+# a PR that moves code lowers it, and adding movable Python fails the check.
+# Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
+remaining_lines = 146314
+
+[[stays]]
+path = "executor"
+reason = "executor"
+note = "Runs plans against warehouses; a separate later decision."
+
+[[stays]]
+path = "adapters"
+reason = "adapter"
+note = "Built-in warehouse adapters that project adapters subclass and override."
+
+[[stays]]
+path = "adapter/contract"
+reason = "adapter"
+note = "BaseAdapter and StrictAdapter, the documented classes project adapters subclass."
+
+[[stays]]
+path = "adapter/discovery"
+reason = "user-code"
+note = "Imports project adapter modules."
+
+[[stays]]
+path = "adapter/relations"
+reason = "adapter"
+note = "Relation inspection wrappers adapters call, with per-connection caches."
+
+[[stays]]
+path = "adapter/state_sql"
+reason = "adapter"
+note = "State-table SQL rendered through adapter callbacks."
+
+[[stays]]
+path = "adapter/type_system"
+reason = "adapter"
+note = "Type normalisation adapters import; already a thin native wrapper."
+
+[[stays]]
+path = "provider"
+reason = "user-code"
+note = "Provider base class users subclass, and injection into user functions."
+
+[[stays]]
+path = "python_nodes"
+reason = "user-code"
+note = "Decorators that run when user modules are imported."
+
+[[stays]]
+path = "microbatches"
+reason = "executor"
+note = "Microbatch state store the executor and adapters use."
+
+[[stays]]
+path = "rules"
+reason = "public-api"
+note = "Public custom-rule API and test helper."
+
+[[stays]]
+path = "rule_engine/_helpers/host"
+reason = "user-code"
+note = "Subprocess host that loads and runs user rule modules."
+
+[[stays]]
+path = "rule_engine/classes/rule_context.py"
+reason = "user-code"
+note = "The context object user rules receive."
+
+[[stays]]
+path = "runtime/observability"
+reason = "public-api"
+note = "Documented observability API used throughout the executor."
+
+[[stays]]
+path = "runtime/execution_history"
+reason = "public-api"
+note = "Documented SQLite and Postgres execution-history backends."
+
+[[stays]]
+path = "runtime/execution_limits"
+reason = "executor"
+note = "Deadline the executor scheduler and warehouse cursors enforce."
+
+[[stays]]
+path = "integrations/dagster"
+reason = "public-api"
+note = "Documented orchestrator integration."
+
+[[stays]]
+path = "integrations/rivers"
+reason = "public-api"
+note = "Documented orchestrator integration."
+
+[[stays]]
+path = "integrations/dlt"
+reason = "user-code"
+note = "Loader runtime that runs inside user loaders."
+
+[[stays]]
+path = "integrations/ingestr"
+reason = "user-code"
+note = "Loader runtime that runs inside the executor load phase."
+
+[[stays]]
+path = "compiler/python_nodes/_helpers/identity.py"
+reason = "user-code"
+note = "Identity hashing over live user functions (source and globals)."
+
+[[stays]]
+path = "compiler/discovery/_helpers/filesystem/command_output_sinks.py"
+reason = "user-code"
+note = "Inspects loaded user sink functions."
+
+[[stays]]
+path = "compiler/pipeline/_helpers/materializations.py"
+reason = "user-code"
+note = "Imports user materialization modules."
+
+[[stays]]
+path = "assets.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "audits.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "checks.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "compute_logs.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "execution_history.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "factories.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "functions.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "hooks.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "loaders.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "observability.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "postgres_history.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "providers.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "refs.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "retries.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "sinks.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "sqlite_history.py"
+reason = "public-api"
+note = "Public facade."
+
+[[stays]]
+path = "tasks.py"
+reason = "public-api"
+note = "Public facade."
+
+[[handled_native_errors]]
+location = "compiler/macro_bridge/_helpers/store_keys.py::macro_store_token"
+note = "A macro without a stable key is not stored; no Python implementation runs."
+
+[[handled_native_errors]]
+location = "compiler/macro_bridge/_helpers/store_keys.py::context_store_token"
+note = "A context without a stable key is not stored; no Python implementation runs."
+
+[[handled_native_errors]]
+location = "lint/_helpers/native_sql.py::_native_responses"
+note = "A native lint failure is reported as a lint error result, not recomputed in Python."
+
+[[handled_native_errors]]
+location = "rule_engine/_helpers/run/rules.py::_cached_sql_findings"
+note = "An undecodable cached finding is a cache miss; the rules run again natively."

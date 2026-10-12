@@ -201,6 +201,13 @@
 - Members marked `[forced]` are adapter contract overrides required by `test_strict_adapter.py`. Record other intentional mirrors in `[dupes]` in `fensu.toml` with a reason.
 - Public adapter contract methods are duplicated per adapter on purpose: `test_strict_adapter.py` requires every first-class adapter to define them, and `[dupes]` exempts them. The private helpers behind them must not be copied. Keep them in shared builders, such as the snapshot SQL builders in `src/sqlbuild/adapter/contract/classes/`, and let each contract method delegate. Express real dialect differences as explicit parameters, such as a `SnapshotSqlDialect` field, not as a forked copy of the helper.
 
+## Rust-Hosted Migration
+
+- Rust is moving to host compile, planning and non-warehouse CLI work. Python stays only for the modules listed in `python-boundary.toml`: user Python code, adapters, the executor and public Python APIs.
+- A migration change deletes the Python it replaces in the same pull request and lowers `remaining_lines`. Never keep a parallel Python implementation, and never fall back to Python after a native failure; surface the failure as an error.
+- Adding a `stays` or `handled_native_errors` entry, or raising `remaining_lines`, requires a stated reason in the pull request and explicit user approval. Difficulty or a small measured speed gain is not a reason.
+- Moving code into a path listed in `stays`, or behind a reviewed handler, is not migration progress; only code that now runs in Rust lowers `remaining_lines`.
+
 ## Bounded Review Process
 
 Orchestrating agents must run reviews as a single bounded cycle, not an open-ended loop:
