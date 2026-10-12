@@ -2,25 +2,25 @@ from __future__ import annotations
 
 import gc
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
-import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.compile import lineage as compile_lineage
-from sqlbuild.cli.commands._helpers.compile import pipeline as compile_pipeline
-from sqlbuild.cli.commands._helpers.compile import status as compile_status
+from sqlbuild.cli.commands._helpers.compile import target_writer
 from sqlbuild.cli.commands._helpers.runtime import adapters as runtime_adapters
 from sqlbuild.cli.commands.classes import prepared_compile_artifacts
-from sqlbuild.cli.commands.main.project import _compile as compile_command
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.main.run import run_compile
 from sqlbuild.cli.entry.models import CompileCommandRequest
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
+from sqlbuild.compiler.discovery.main import discover as discovery_entry
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.presentation.classes import transient_status_reporter
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileColumnContractModeTestCase,
     CompileCommandTestCase,
@@ -132,8 +132,8 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
         def close(self) -> None:
             return None
 
-    monkeypatch.setattr(compile_status.sys, "stdout", FakeStdout())
-    monkeypatch.setattr(compile_status, "TransientStatusReporter", FakeStatusReporter)
+    monkeypatch.setattr(sys, "stdout", FakeStdout())
+    monkeypatch.setattr(transient_status_reporter, "TransientStatusReporter", FakeStatusReporter)
     monkeypatch.setattr(
         runtime_adapters,
         "resolve_adapter",
@@ -596,7 +596,7 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
     )
     planning_calls: list[Path] = []
     static_planning: Callable[..., tuple[CompilerDiagnostic, ...]] = (
-        compile_pipeline.static_sql_test_planning_diagnostics
+        target_writer.static_sql_test_planning_diagnostics
     )
 
     def counted_static_planning(**kwargs: Any) -> tuple[CompilerDiagnostic, ...]:
@@ -607,7 +607,7 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
         runtime_adapters, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
     )
     monkeypatch.setattr(
-        compile_pipeline, "static_sql_test_planning_diagnostics", counted_static_planning
+        target_writer, "static_sql_test_planning_diagnostics", counted_static_planning
     )
     monkeypatch.setattr(
         prepared_compile_artifacts,
@@ -655,16 +655,16 @@ def test_given_collection_state_when_compiling_then_cycles_are_paused_and_state_
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
     enabled_during: list[bool] = []
-    analyze: Callable[..., Any] = _native.analyze_compile_project
+    discover: Callable[..., Any] = discovery_entry.discover_project_inputs
 
-    def observed_analyze(**kwargs: Any) -> Any:
+    def observed_discover(**kwargs: Any) -> Any:
         enabled_during.append(gc.isenabled())
-        return analyze(**kwargs)
+        return discover(**kwargs)
 
     monkeypatch.setattr(
         runtime_adapters, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
     )
-    monkeypatch.setattr(compile_command, "analyze_compile_project", observed_analyze)
+    monkeypatch.setattr(discovery_entry, "discover_project_inputs", observed_discover)
     set_collection: dict[bool, Callable[[], None]] = {True: gc.enable, False: gc.disable}
     was_enabled: bool = gc.isenabled()
     set_collection[test_case.collection_enabled_before]()

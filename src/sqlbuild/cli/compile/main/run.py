@@ -14,9 +14,9 @@ def run_compile(request: CompileCommandRequest) -> int:
     attempt: CompileReuseAttempt = attempt_compile_reuse(request=_reuse_request(request=request))
     if attempt.outcome is CompileReuseOutcome.HIT and attempt.exit_code is not None:
         return attempt.exit_code
-    from sqlbuild.cli.commands.main.project._compile import run_compile as run_full_compile
+    from sqlbuild._native import run_compile_command
 
-    return run_full_compile(request=request, reuse_attempt=attempt)
+    return run_compile_command(request, attempt)
 
 
 def _reuse_request(*, request: CompileCommandRequest) -> CompileReuseRequest:

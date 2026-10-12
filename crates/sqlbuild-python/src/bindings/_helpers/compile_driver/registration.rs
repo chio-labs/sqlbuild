@@ -2,8 +2,9 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
-use crate::bindings::_helpers::compile_driver::analysis;
+use crate::bindings::_helpers::compile_driver::{analysis, command};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    analysis::register(module)
+    analysis::register(module)?;
+    command::register(module)
 }

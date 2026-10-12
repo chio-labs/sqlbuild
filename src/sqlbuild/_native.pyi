@@ -7,7 +7,8 @@ from typing import Any, TypedDict
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
-from sqlbuild.cli.entry.models import CompileProfileFlags
+from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
+from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.models import (
@@ -903,6 +904,9 @@ def analyze_compile_project(
     status: TransientStatusReporter | None,
     prepared_artifacts: PreparedCompileArtifacts | None = None,
 ) -> CompileAnalysis: ...
+def run_compile_command(
+    request: CompileCommandRequest, reuse_attempt: CompileReuseAttempt | None = None
+) -> int: ...
 def validate_authored_sql_test_ctes(
     test_files: tuple[DiscoveredSqlTestFile, ...],
     scenario_files: tuple[DiscoveredSqlScenarioFile, ...],

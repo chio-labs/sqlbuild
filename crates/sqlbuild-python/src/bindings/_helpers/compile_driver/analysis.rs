@@ -7,7 +7,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMetho
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    call_with, imported, keywords, within,
+    Status, call_with, imported, keywords, within,
 };
 
 const DISCOVER_MODULE: &str = "sqlbuild.compiler.discovery.main.discover";
@@ -75,28 +75,6 @@ impl<'py> AnalysisOptions<'py> {
     }
 }
 
-/// The transient status line, when one is shown.
-struct Status<'py>(Bound<'py, PyAny>);
-
-impl Status<'_> {
-    fn start(&self, message: &str) -> PyResult<()> {
-        if !self.0.is_none() {
-            self.0.call_method1("start", (message,))?;
-        }
-        Ok(())
-    }
-
-    fn complete(&self, message: &str) -> PyResult<()> {
-        if !self.0.is_none() {
-            call_with(
-                &self.0.getattr("complete")?,
-                &[("message", PyString::new(self.0.py(), message).into_any())],
-            )?;
-        }
-        Ok(())
-    }
-}
-
 /// `{seconds:.2f}`, as Python formats elapsed milliseconds over a thousand.
 fn seconds(milliseconds: u64) -> String {
     format!("{:.2}", milliseconds as f64 / 1000.0)
@@ -119,8 +97,15 @@ fn analyze_compile_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let options: Bound<'py, PyDict> = options.unwrap_or_else(|| PyDict::new(py));
-    let options: AnalysisOptions<'py> = AnalysisOptions::read(py, &options)?;
+    analyze(py, &options.unwrap_or_else(|| PyDict::new(py)))
+}
+
+/// `analyze_compile_project` with its keyword options.
+pub(crate) fn analyze<'py>(
+    py: Python<'py>,
+    options: &Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let options: AnalysisOptions<'py> = AnalysisOptions::read(py, options)?;
     let selection: &Bound<'py, PyAny> = &options.analysis_selection;
     let enabled: bool = !(selection.getattr("select")?.is_truthy()?
         || selection.getattr("exclude")?.is_truthy()?);

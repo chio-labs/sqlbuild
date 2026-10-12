@@ -1,7 +1,7 @@
 //! Calling the Python stages the native driver still runs: imports, keyword calls and `with`.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyString};
 
 /// `module.name`, imported.
 pub(crate) fn imported<'py>(
@@ -51,5 +51,27 @@ pub(crate) fn within<'py, T>(
             )?;
             Err(error)
         }
+    }
+}
+
+/// The transient status line, when one is shown.
+pub(crate) struct Status<'py>(pub(crate) Bound<'py, PyAny>);
+
+impl Status<'_> {
+    pub(crate) fn start(&self, message: &str) -> PyResult<()> {
+        if !self.0.is_none() {
+            self.0.call_method1("start", (message,))?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn complete(&self, message: &str) -> PyResult<()> {
+        if !self.0.is_none() {
+            call_with(
+                &self.0.getattr("complete")?,
+                &[("message", PyString::new(self.0.py(), message).into_any())],
+            )?;
+        }
+        Ok(())
     }
 }

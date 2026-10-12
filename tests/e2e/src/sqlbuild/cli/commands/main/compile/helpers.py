@@ -32,8 +32,8 @@ import pytest
 import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
-import sqlbuild.cli.commands.main.project._compile as compile_command_module
 import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
+import sqlbuild.cli.compile_reuse.main._write_reusable_compile as write_reusable_module
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
@@ -3355,7 +3355,7 @@ def write_before_reuse_store(
 ) -> None:
     """Let another writer change target/ once, after a compile wrote it and before it stores."""
 
-    original: Callable[..., None] = compile_command_module.write_reusable_compile
+    original: Callable[..., None] = write_reusable_module.write_reusable_compile
     pending: list[Callable[[Path], None]] = [write]
 
     def write_then_store(**kwargs: Any) -> None:
@@ -3364,7 +3364,7 @@ def write_before_reuse_store(
         pending.clear()
         original(**kwargs)
 
-    monkeypatch.setattr(compile_command_module, "write_reusable_compile", write_then_store)
+    monkeypatch.setattr(write_reusable_module, "write_reusable_compile", write_then_store)
 
 
 def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
