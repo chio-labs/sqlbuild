@@ -54,6 +54,8 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSourceFile,
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
+    DiscoveredSqlScenarioFile,
+    DiscoveredSqlTestFile,
     EnumDeclaration,
     ModelSchemaDeclaration,
 )
@@ -883,6 +885,11 @@ def parse_schema_document(
 def parse_sources_document(
     loaded: object, path: str, classes: dict[str, object]
 ) -> tuple[SourceEntry, ...]: ...
+def validate_authored_sql_test_ctes(
+    test_files: tuple[DiscoveredSqlTestFile, ...],
+    scenario_files: tuple[DiscoveredSqlScenarioFile, ...],
+    syntax: dict[str, object],
+) -> None: ...
 def declared_relations(
     inputs: CompileInputsView,
 ) -> tuple[

@@ -7,12 +7,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from types import CodeType
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_declaration_scope_resolver,
-)
-from sqlbuild.compiler.compile._helpers.sql_tests.extraction_errors import (
-    validate_authored_scenario_cte_names,
-    validate_authored_test_cte_names,
 )
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.constants import SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM
@@ -41,11 +38,10 @@ def build_declaration_scope(
 
     scan_cache: SqlTestScanCache = SqlTestScanCache(cache_dir=compile_cache_dir)
 
-    validate_authored_test_cte_names(
-        test_files=discovered_inputs.test_files, syntax=sql_lexical_syntax
-    )
-    validate_authored_scenario_cte_names(
-        scenario_files=discovered_inputs.scenario_files, syntax=sql_lexical_syntax
+    _native.validate_authored_sql_test_ctes(
+        discovered_inputs.test_files,
+        discovered_inputs.scenario_files,
+        sql_lexical_syntax.native_mapping,
     )
     return _build_native_declaration_scope(
         discovered_inputs=discovered_inputs,
