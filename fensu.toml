@@ -321,6 +321,7 @@ crate_names = [
     "sqlbuild-core",
     "sqlbuild-discovery",
     "sqlbuild-model-config",
+    "sqlbuild-pysource",
     "sqlbuild-python",
     "sqlbuild-refactor",
     "sqlbuild-render",
