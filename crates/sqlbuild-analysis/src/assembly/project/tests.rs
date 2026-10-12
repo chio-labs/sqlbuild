@@ -1,3 +1,5 @@
+#[path = "tests/test_configured_namespace.rs"]
+mod configured_namespace;
 #[path = "tests/test_environment_names.rs"]
 mod environment_names;
 #[path = "tests/helpers.rs"]

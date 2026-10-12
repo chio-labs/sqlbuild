@@ -177,3 +177,9 @@ pub(crate) struct ReferenceFactsTestCase {
     pub(crate) expected_lineage: &'static [(&'static str, &'static str, &'static str)],
     pub(crate) expected_required: &'static [&'static str],
 }
+
+pub(crate) struct NativeDialectTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: Option<&'static str>,
+    pub(crate) expected_dialect: Option<&'static str>,
+}

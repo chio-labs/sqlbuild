@@ -86,3 +86,9 @@ pub(crate) struct EnvironmentNamesTestCase {
     pub(crate) values: &'static [Option<&'static str>],
     pub(crate) expected_names: &'static [&'static str],
 }
+
+pub(crate) struct ConfiguredNamespaceTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) value: &'static str,
+    pub(crate) expected_namespace: Option<&'static str>,
+}
