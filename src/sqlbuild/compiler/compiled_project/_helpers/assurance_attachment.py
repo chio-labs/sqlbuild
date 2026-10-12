@@ -25,7 +25,6 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.compiled_project._helpers import resource_locators
 from sqlbuild.compiler.compiled_project._helpers.resource_rows import (
     loader_rows,
     python_resource_rows,
@@ -208,7 +207,6 @@ def resource_diagnostics_impl(
             "python_resources": python_resource_rows(
                 discovered_inputs=discovered_inputs, source_inputs=source_inputs
             ),
-            "locators": resource_locators,
         }
     )
     return (*orphans, *descriptions, *cursors)
