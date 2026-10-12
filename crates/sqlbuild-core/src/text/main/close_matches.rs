@@ -1,7 +1,6 @@
 //! Spelling suggestions ranked by edit-distance similarity, counting adjacent swaps as one edit.
 
-/// The number of single-character insertions, deletions, substitutions and adjacent swaps
-/// between two words, with each character edited at most once.
+/// The optimal-string-alignment distance: edits and adjacent swaps between two words.
 fn edit_distance(left: &[char], right: &[char]) -> usize {
     let width: usize = right.len() + 1;
     let mut rows: [Vec<usize>; 3] = [vec![0; width], vec![0; width], (0..width).collect()];

@@ -176,12 +176,7 @@ impl<'input> Composer<'input> {
         let input_ends_with_break = matches!(self.chars.last(), Some('\n' | '\r'));
         let header: String = self
             .block_indicator(span)
-            .map(|indicator| {
-                self.chars[indicator + 1..]
-                    .iter()
-                    .take_while(|character| !character.is_whitespace())
-                    .collect()
-            })
+            .map(|indicator| first_word(&self.chars[indicator + 1..]))
             .unwrap_or_default();
         let clipped = !header.contains(['+', '-']);
         if block && at_end && clipped && !input_ends_with_break && value.ends_with('\n') {
@@ -327,4 +322,12 @@ pub(crate) fn compose(text: &str) -> Result<ComposedDocument, ConfigError> {
         current_end: 0,
     }
     .compose_stream()
+}
+
+/// The characters before the first whitespace.
+fn first_word(characters: &[char]) -> String {
+    characters
+        .iter()
+        .take_while(|character| !character.is_whitespace())
+        .collect()
 }

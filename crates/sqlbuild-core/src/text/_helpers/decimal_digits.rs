@@ -1,5 +1,7 @@
 //! Unicode decimal digits (`Nd`): runs of ten code points valued 0 to 9.
 
+use crate::text::constants::DIGITS_PER_RUN;
+
 /// The zero of every non-ASCII run of decimal digits in Unicode 16.0, in order.
 const NON_ASCII_ZEROS: [u32; 75] = [
     0x660, 0x6F0, 0x7C0, 0x966, 0x9E6, 0xA66, 0xAE6, 0xB66, 0xBE6, 0xC66, 0xCE6, 0xD66, 0xDE6,
@@ -20,5 +22,5 @@ pub(crate) fn decimal_digit(character: char) -> Option<u32> {
     let run: usize = NON_ASCII_ZEROS.partition_point(|zero| *zero <= code_point);
     let zero: u32 = *NON_ASCII_ZEROS.get(run.checked_sub(1)?)?;
     let value: u32 = code_point - zero;
-    (value < 10).then_some(value)
+    (value < DIGITS_PER_RUN).then_some(value)
 }
