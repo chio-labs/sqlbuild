@@ -1,23 +1,22 @@
-"""Engine runs for the golden output tests."""
+"""Project runs for the golden output tests."""
 
 from __future__ import annotations
 
 import json
 
-from scripts.compiler_differential.models import CommandOutcome, EngineRun
+from scripts.compiler_differential.models import CommandOutcome, ProjectRun
 
 PROJECT_PATH: str = "/work/failure__unknown-ref/project"
 
 
-def engine_run(*, engine: str, message: str, compiled_sql: str) -> EngineRun:
+def project_run(*, message: str, compiled_sql: str) -> ProjectRun:
     """A one-command run whose first diagnostic carries `message` and one compiled model."""
 
     report: dict[str, object] = {
         "compile_timings": {"total": 1.5},
         "diagnostics": [{"code": "P001", "message": message, "severity": "error"}],
     }
-    return EngineRun(
-        engine=engine,
+    return ProjectRun(
         outcomes=(
             CommandOutcome(
                 label="compile", exit_code=1, stdout=json.dumps(report), stderr="done in 12ms\n"
@@ -42,5 +41,4 @@ def engine_run(*, engine: str, message: str, compiled_sql: str) -> EngineRun:
                 "parent_map": {"model.orders.customer_totals": []},
             }
         ),
-        dag=None,
     )

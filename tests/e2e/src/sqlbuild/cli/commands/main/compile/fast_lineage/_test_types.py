@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class NativeFastLineageCliTestCase:
-    """Every engine compiling and tracing fast lineage of one project through the CLI."""
+    """Compiling and tracing fast lineage of one project through the CLI."""
 
     description: str
     files: dict[str, str]
@@ -23,16 +23,14 @@ class NativeRichLineageFailureCliTestCase:
     command: tuple[str, ...]
     expected_returncode: int
     expected_error_line: str
-    expected_wheel_calls: int
 
 
 @dataclass(frozen=True)
 class NativeRichLineageCliTestCase:
-    """Every engine compiling and tracing rich lineage of one project through the CLI."""
+    """Compiling and tracing rich lineage of one project through the CLI."""
 
     description: str
     files: dict[str, str]
     lineage_targets: tuple[str, ...]
     expected_lineage: dict[str, dict[str, object]]
-    expected_wheel_calls: int
     expected_minimum_traced_edges: int

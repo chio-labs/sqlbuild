@@ -1,1 +1,1 @@
-"""Compare what two engines produced and locate the first differences."""
+"""Check a project run against its expectation and locate golden differences."""

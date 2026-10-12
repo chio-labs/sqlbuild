@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from threading import Event
@@ -40,7 +39,6 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     EARLY_LINT_PROJECT_FILES,
     compile_finding_keys,
     compile_findings,
-    record_early_lint_expansions,
     write_project_files,
 )
 
@@ -951,8 +949,6 @@ def test_given_cold_non_model_sql_finding_when_compiling_then_rules_reuse_early_
         EarlyLintInputsTestCase(
             description="compile lints every model from the compile's expansion",
             expected_findings=_EARLY_LINT_FINDINGS,
-            expected_compile_expansions=2,
-            expected_python_expansions=0,
         ),
     ],
     ids=lambda case: case.description,
@@ -964,17 +960,11 @@ def test_given_variable_and_macro_models_when_compiling_then_early_lint_findings
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_project_files(project_dir=tmp_path, files=EARLY_LINT_PROJECT_FILES)
-    counts: Counter[str] = record_early_lint_expansions(monkeypatch=monkeypatch)
-
     findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
         project_dir=tmp_path, capsys=capsys
     )
 
     assert findings == test_case.expected_findings
-    assert (
-        counts["compile_lint_inputs:lint_expansions"],
-        counts["model_loop.lint_expansion:deferred"],
-    ) == (test_case.expected_compile_expansions, test_case.expected_python_expansions)
 
 
 @pytest.mark.parametrize(
@@ -983,8 +973,6 @@ def test_given_variable_and_macro_models_when_compiling_then_early_lint_findings
         EarlyLintInputsTestCase(
             description="old build entries leave early lint enabled",
             expected_findings=_EARLY_LINT_FINDINGS,
-            expected_compile_expansions=2,
-            expected_python_expansions=0,
         )
     ],
     ids=lambda case: case.description,
@@ -1001,18 +989,12 @@ def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_
         previous_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
             project_dir=tmp_path, capsys=capsys
         )
-    counts: Counter[str] = record_early_lint_expansions(monkeypatch=monkeypatch)
-
     upgraded_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
         project_dir=tmp_path, capsys=capsys
     )
 
     assert previous_findings == upgraded_findings == test_case.expected_findings
-    assert counts["compile_lint_inputs:lint_expansions"] == test_case.expected_compile_expansions
-    assert counts["model_loop.lint_expansion:deferred"] == test_case.expected_python_expansions
-    counts.clear()
     assert compile_findings(project_dir=tmp_path, capsys=capsys) == upgraded_findings
-    assert counts["compile_lint_inputs:lint_expansions"] == 0
 
 
 @pytest.mark.parametrize(

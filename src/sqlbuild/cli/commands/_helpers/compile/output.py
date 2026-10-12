@@ -36,9 +36,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.discovery.constants import SQL_HOOK_OUTPUT_FIELDS
 from sqlbuild.compiler.discovery.main.serialize_hook_entries import serialize_hook_entries
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
@@ -209,13 +206,11 @@ def format_compile_json(
             sql_validation_enabled=sql_validation_enabled,
         ),
         "compile_timings": timings_ms,
-        "compiler_engine": resolve_compiler_engine().value,
         "lineage_mode": lineage_mode.value,
         "resources": _resources(graph=graph, lineage=lineage),
         "artifacts": _artifacts(written=written, manifest=manifest),
     }
     emitted: str = _native.emit_json_report(result)
-    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
     return emitted
 
 
@@ -244,7 +239,6 @@ def format_compile_error_json(
         "diagnostics": [_diagnostic_to_json(diagnostic)],
     }
     emitted: str = _native.emit_orjson_report(result)
-    report_native_answer(stage=NativeStage.COMPILE_OUTPUTS, kind="json_reports")
     return emitted
 
 

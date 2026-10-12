@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class NativeAttachmentErrorTestCase:
-    """One failing attachment project compiled by every engine through the CLI."""
+    """One failing attachment project compiled through the CLI."""
 
     description: str
     case_name: str
-    expected_macro_calls: tuple[int, int]
-    expected_error_types: tuple[str, str]
+    expected_macro_calls: int
+    expected_error_type: str

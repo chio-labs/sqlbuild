@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class GeneratedAssemblyParityTestCase:
-    """Seeded generated projects whose resource assembly both engines must agree on."""
+    """Seeded generated projects whose resource assembly is checked natively."""
 
     description: str
     seed: int

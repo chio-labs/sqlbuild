@@ -30,8 +30,6 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
@@ -331,11 +329,6 @@ def early_lint_expansions(
         expansion: CompiledSqlExpansion | None = model.lint_expansion or model.sql_expansion
         if expansion is not None:
             expansions[model.model_file.file_path] = expansion
-    report_native_answer(
-        stage=NativeStage.COMPILE_LINT_INPUTS,
-        kind="lint_expansions",
-        units=sum(model.lint_expansion is not None for model in model_inputs),
-    )
     return expansions
 
 

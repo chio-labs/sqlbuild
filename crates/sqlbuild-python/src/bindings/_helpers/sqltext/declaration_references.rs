@@ -1,4 +1,4 @@
-//! `@enum`/`@const` reference offsets scanned natively for the preview model loop.
+//! `@enum`/`@const` reference offsets scanned natively for the model loop.
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};

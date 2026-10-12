@@ -48,7 +48,6 @@ class SqlTestPlanInspectionE2ETestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_exit_code: int = 0
     unexpected_stdout_fragments: tuple[str, ...] = ()
-    engine_env: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -179,7 +178,6 @@ class CursorWindowE2ETestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     expected_compiled_fragments: tuple[str, ...] = ()
-    engine_env: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -332,7 +330,6 @@ class HelperReferenceE2ETestCase:
     description: str
     tests: tuple[str, ...]
     command: tuple[str, ...]
-    engine: str
     sql_analysis: bool
     expected_output_fragments: tuple[str, ...]
     expected_compiled_fragments: tuple[str, ...]
@@ -345,7 +342,6 @@ class HelperReferenceErrorE2ETestCase:
 
     description: str
     test_name: str
-    engine: str
     expected_message: str
     expected_line: int
     expected_code: str
@@ -358,17 +354,15 @@ class HelperRedefinitionE2ETestCase:
     """Test case for a nested CTE that redefines a helper CTE's name."""
 
     description: str
-    engine: str
     expected_output_fragments: tuple[str, ...]
     expected_absent_output_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class DirectLogicExtractionE2ETestCase:
-    """One direct-logic test project variant run through `sqb test` on one compiler engine."""
+    """One direct-logic test project variant run through `sqb test`."""
 
     description: str
-    engine: str
     overrides: dict[str, str]
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]

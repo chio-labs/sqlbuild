@@ -46,11 +46,11 @@ from sqlbuild.compiler.compile._helpers.diagnostics.recovery import complete_sem
 from sqlbuild.compiler.compile._helpers.diagnostics.scope import report_scope_index_errors
 from sqlbuild.compiler.compile._helpers.native_stages.assembly import (
     analyze_model_sql,
-    expression_source_shapes_by_engine,
-    project_facts_by_engine,
+    expression_source_shapes,
+    native_project_facts,
 )
 from sqlbuild.compiler.compile._helpers.native_stages.sql_tests import (
-    assemble_sql_tests_by_engine,
+    assemble_sql_tests,
 )
 from sqlbuild.compiler.compile._helpers.render.context_templates import (
     resolve_early_model_templates,
@@ -185,7 +185,7 @@ def assemble_compiled_project(
             for source_input in inputs.source_inputs
             if source_input.source_entry.expression
         )
-        expression_shapes: tuple[dict[str, str] | None, ...] = expression_source_shapes_by_engine(
+        expression_shapes: tuple[dict[str, str] | None, ...] = expression_source_shapes(
             expressions=tuple(
                 cast(str, source_input.source_entry.expression)
                 for source_input in expression_sources
@@ -272,7 +272,7 @@ def assemble_compiled_project(
                 )
             )
     native_session: Any | None = None if analyses is None else analyses.session
-    native: NativeProjectFacts = project_facts_by_engine(
+    native: NativeProjectFacts = native_project_facts(
         inputs=inputs,
         dialect=profile.sql_analysis_dialect,
         analysis_model_names=analysis_model_names,
@@ -345,7 +345,7 @@ def assemble_compiled_project(
         seeds=_compiled_seeds(inputs=inputs, resources=resources),
         functions=_compiled_functions(inputs=inputs, resources=resources),
         audits=_compiled_audits(inputs=inputs, resources=resources),
-        sql_tests=assemble_sql_tests_by_engine(
+        sql_tests=assemble_sql_tests(
             inputs=inputs,
             macro_mock_queries=lambda test_input: _build_test_model_query_overrides(
                 test_input=test_input, model_inputs=inputs.model_inputs, inputs=inputs

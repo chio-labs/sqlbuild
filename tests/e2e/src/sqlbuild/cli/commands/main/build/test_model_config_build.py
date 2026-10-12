@@ -1,8 +1,6 @@
-"""E2E: layered, templated and validated model config builds the same on every compiler engine.
+"""E2E: layered, templated and validated model config builds and reports validator errors.
 
-The native and preview engines build model config (path defaults, templates, storage policies)
-and check the model validators natively with Python's exact errors; inputs only Python can judge
-run in Python. Every engine must build the same relations and report the same validator errors.
+Model config (path defaults, templates, storage policies) is built and validated natively.
 """
 
 from __future__ import annotations
@@ -23,7 +21,6 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     run_sqb,
 )
 
-_ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 _MART_SCHEMA_ENV_VAR: str = "SQB_MART_SCHEMA"
 _INCREMENTAL_MODEL: str = "models/marts/orders_incremental.sql"
 _SNAPSHOT_MODEL: str = "models/marts/order_history.sql"
@@ -88,48 +85,21 @@ _SNAPSHOT_WITHOUT_KEY_FRAGMENTS: tuple[str, ...] = (
     "test_case",
     [
         ModelConfigEnginesBuildE2ETestCase(
-            description="layered and templated config builds on native",
-            engine="native",
+            description="layered and templated config builds",
             overrides={},
             expected_exit_code=0,
             expected_output_fragments=_PASSING_FRAGMENTS,
             expected_relations=_BUILT_RELATIONS,
         ),
         ModelConfigEnginesBuildE2ETestCase(
-            description="reversed cursor bounds are the expected error on native",
-            engine="native",
+            description="reversed cursor bounds are the expected error",
             overrides=_REVERSED_CURSOR_BOUNDS,
             expected_exit_code=1,
             expected_output_fragments=_REVERSED_BOUNDS_FRAGMENTS,
             expected_relations=(),
         ),
         ModelConfigEnginesBuildE2ETestCase(
-            description="a snapshot without a unique key is the Python error on native",
-            engine="native",
-            overrides=_SNAPSHOT_WITHOUT_KEY,
-            expected_exit_code=1,
-            expected_output_fragments=_SNAPSHOT_WITHOUT_KEY_FRAGMENTS,
-            expected_relations=(),
-        ),
-        ModelConfigEnginesBuildE2ETestCase(
-            description="layered and templated config builds on native-preview",
-            engine="native-preview",
-            overrides={},
-            expected_exit_code=0,
-            expected_output_fragments=_PASSING_FRAGMENTS,
-            expected_relations=_BUILT_RELATIONS,
-        ),
-        ModelConfigEnginesBuildE2ETestCase(
-            description="reversed cursor bounds are the expected error on native-preview",
-            engine="native-preview",
-            overrides=_REVERSED_CURSOR_BOUNDS,
-            expected_exit_code=1,
-            expected_output_fragments=_REVERSED_BOUNDS_FRAGMENTS,
-            expected_relations=(),
-        ),
-        ModelConfigEnginesBuildE2ETestCase(
-            description="a snapshot without a unique key is the Python error on native-preview",
-            engine="native-preview",
+            description="a snapshot without a unique key is the Python error",
             overrides=_SNAPSHOT_WITHOUT_KEY,
             expected_exit_code=1,
             expected_output_fragments=_SNAPSHOT_WITHOUT_KEY_FRAGMENTS,
@@ -138,7 +108,7 @@ _SNAPSHOT_WITHOUT_KEY_FRAGMENTS: tuple[str, ...] = (
     ],
     ids=lambda case: case.description,
 )
-def test_given_layered_model_config_when_building_on_each_engine_then_results_match(
+def test_given_layered_model_config_when_building_then_relations_and_errors_are_expected(
     test_case: ModelConfigEnginesBuildE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_inline_project(
@@ -150,7 +120,7 @@ def test_given_layered_model_config_when_building_on_each_engine_then_results_ma
     result: CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
         project_dir=project_dir,
-        env={_ENGINE_ENV_VAR: test_case.engine, _MART_SCHEMA_ENV_VAR: "analytics"},
+        env={_MART_SCHEMA_ENV_VAR: "analytics"},
     )
     output: str = result.stdout + result.stderr
     execute_duckdb(db_path=project_dir / "orders.duckdb", sql="SELECT 1")

@@ -1,4 +1,4 @@
-"""Typed records for the compiler engine differential harness."""
+"""Typed records for the compiler golden harness."""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from scripts.compiler_differential.types import FallbackKey
-
 
 @dataclass(frozen=True)
 class DifferentialCommand:
-    """One sqb invocation run identically under both engines, with extra environment values."""
+    """One sqb invocation run on every corpus project, with extra environment values."""
 
     label: str
     arguments: tuple[str, ...]
@@ -31,7 +29,7 @@ class ExpectedOutcome:
 
 @dataclass(frozen=True)
 class CorpusProject:
-    """One project compared across engines."""
+    """One project run and checked against its expectation and golden."""
 
     name: str
     commands: tuple[DifferentialCommand, ...]
@@ -54,25 +52,13 @@ class CommandOutcome:
 
 
 @dataclass(frozen=True)
-class AnalysisRecords:
-    """Wheel calls by `(site, api)`, deferrals by `(kind, site)`, fallbacks by `(site, kind)`."""
+class ProjectRun:
+    """Everything one corpus project's commands produced."""
 
-    wheel_sites: dict[tuple[str, str], int] = field(default_factory=dict)
-    deferrals: dict[tuple[str, str], int] = field(default_factory=dict)
-    fallbacks: dict[tuple[str, str], int] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class EngineRun:
-    """Everything one engine produced for one corpus project."""
-
-    engine: str
     outcomes: tuple[CommandOutcome, ...]
     compiled: dict[str, bytes]
     manifest: str | None
-    dag: str | None
     captures: dict[str, dict[str, Path]] = field(default_factory=dict)
-    records: AnalysisRecords | None = None
 
 
 @dataclass(frozen=True)
@@ -93,7 +79,7 @@ class Difference:
     location: str
     left: str
     right: str
-    labels: tuple[str, str] | None = None
+    labels: tuple[str, str] = ("expected", "actual")
 
 
 @dataclass(frozen=True)
@@ -106,23 +92,19 @@ class ProjectComparison:
     discovered_kinds: frozenset[str] = frozenset()
     rendered_kinds: frozenset[str] = frozenset()
     analysed_kinds: frozenset[str] = frozenset()
-    records: tuple[AnalysisRecords | None, AnalysisRecords | None] | None = None
 
 
 @dataclass(frozen=True)
 class DifferentialOptions:
     """Resolved harness settings."""
 
-    engines: tuple[str, str]
     work_dir: Path
     jobs: int
     stage_captures: bool
     python: Path
-    engine_environment: dict[str, dict[str, str]]
     require_discovery_coverage: bool = False
     require_render_coverage: bool = False
     require_analysis_coverage: bool = False
-    analysis_records: bool = False
     evidence_dir: Path | None = None
     golden_mode: str | None = None
     golden_dir: Path | None = None
@@ -213,32 +195,3 @@ class EmittedCodes:
         """Return the first reported error code, if any."""
 
         return self.errors[0] if self.errors else None
-
-
-@dataclass(frozen=True)
-class RecordedRun:
-    """The engines, corpora and seed range one harness run covered."""
-
-    engines: tuple[str, ...]
-    corpora: tuple[str, ...]
-    seed_start: int
-    seeds: int
-
-
-@dataclass(frozen=True)
-class AllowList:
-    """Allowed counts by `(engine, stage, site, kind)` and corpus, and the seeds they hold for."""
-
-    seed_start: int
-    seeds: int
-    counts: dict[FallbackKey, dict[str, int]]
-    max_counts: dict[FallbackKey, dict[str, int]]
-
-
-@dataclass(frozen=True)
-class FallbackGateRequest:
-    """One run's fallback gate: check or rewrite `allow_list` from what the engines recorded."""
-
-    mode: str
-    allow_list: Path
-    run: RecordedRun

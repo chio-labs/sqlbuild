@@ -4,15 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.compiler_differential._helpers.comparing.compare import (
-    first_json_difference,
-    first_text_difference,
-)
+from scripts.compiler_differential._helpers.comparing.compare import first_json_difference
 from scripts.compiler_differential.models import Divergence
 from tests.unit.scripts.compiler_differential._helpers.comparing._test_types import (
     JsonDifferenceTestCase,
     PreviewTestCase,
-    TextDifferenceTestCase,
 )
 
 
@@ -74,29 +70,6 @@ def test_given_two_documents_when_comparing_then_first_difference_pointer_is_rep
     test_case: JsonDifferenceTestCase,
 ) -> None:
     found: Divergence | None = first_json_difference(left=test_case.left, right=test_case.right)
-
-    assert getattr(found, "location", None) == test_case.expected_location
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        TextDifferenceTestCase(
-            description="identical", left="a\nb\n", right="a\nb\n", expected_location=None
-        ),
-        TextDifferenceTestCase(
-            description="second_line", left="a\nb\nc", right="a\nx\nc", expected_location="line 2"
-        ),
-        TextDifferenceTestCase(
-            description="trailing_line", left="a\nb", right="a\nb\nc", expected_location="line 3"
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_two_texts_when_comparing_then_first_differing_line_is_reported(
-    test_case: TextDifferenceTestCase,
-) -> None:
-    found: Divergence | None = first_text_difference(left=test_case.left, right=test_case.right)
 
     assert getattr(found, "location", None) == test_case.expected_location
 

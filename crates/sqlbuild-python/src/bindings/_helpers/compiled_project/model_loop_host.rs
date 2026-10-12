@@ -64,7 +64,6 @@ pub(crate) struct FinishedModel<'py> {
     pub(crate) header: AttachedHeader<'py>,
     pub(crate) references: Vec<ReferenceRow>,
     pub(crate) declarations: ExpandedDeclarations<'py>,
-    pub(crate) hook_statements: usize,
     /// Whether the SQL is analysed, and where a rejected `sql_analysis false` was authored.
     pub(crate) analysis: (bool, Option<Bound<'py, PyAny>>),
     /// The usages of the model's named schema and Python hooks, recorded after its hook usages.

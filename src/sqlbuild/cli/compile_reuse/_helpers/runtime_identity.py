@@ -10,7 +10,6 @@ import sys
 import sqlbuild._native as native
 from sqlbuild.cli.compile_reuse.constants import OUTPUT_FILE_DESCRIPTORS, REUSE_FORMAT_VERSION
 from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
-from sqlbuild.compiler.frontier.main.resolve_compiler_engine import resolve_compiler_engine
 
 
 def runtime_identity() -> dict[str, str]:
@@ -48,7 +47,6 @@ def invocation_identity(
         "exclude": list(request.exclude),
         "cli_vars": request.cli_vars,
         "sys_path": list(sys.path),
-        "compiler_engine": resolve_compiler_engine().value,
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=repr).encode(
         "utf-8", "surrogateescape"

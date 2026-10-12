@@ -13,13 +13,13 @@ from scripts.compiler_differential.constants import (
 from scripts.compiler_differential.models import Difference, ProjectComparison
 
 
-def format_comparison(*, comparison: ProjectComparison, engines: tuple[str, str]) -> str:
-    """Render one project's verdict and the first difference in every differing artifact."""
+def format_comparison(*, comparison: ProjectComparison) -> str:
+    """Render one project's verdict and every difference found."""
 
     status: str = "OK  " if not comparison.differences else "DIFF"
     lines: list[str] = [f"{status} {comparison.project} ({comparison.seconds:.1f}s)"]
     for difference in comparison.differences:
-        left_label, right_label = difference.labels or engines
+        left_label, right_label = difference.labels
         width: int = max(len(left_label), len(right_label))
         lines.append(f"  - {difference.artifact} at {difference.location}")
         lines.append(f"      {left_label:<{width}}: {difference.left}")
@@ -30,26 +30,23 @@ def format_comparison(*, comparison: ProjectComparison, engines: tuple[str, str]
 def format_summary(
     *,
     comparisons: list[ProjectComparison],
-    engines: tuple[str, str],
     seconds: float,
     missing_coverage: dict[str, tuple[str, ...]] | None = None,
-    gate_failures: tuple[str, ...] = (),
 ) -> str:
-    """Summarize the run; a difference, missing coverage or gate failure reports FAILED."""
+    """Summarize the run; a difference or missing coverage reports FAILED."""
 
     differing: list[ProjectComparison] = [item for item in comparisons if item.differences]
     gaps: dict[str, tuple[str, ...]] = {
         stage: kinds for stage, kinds in (missing_coverage or {}).items() if kinds
     }
-    left_engine, right_engine = engines
-    if not differing and not gaps and not gate_failures:
+    if not differing and not gaps:
         return (
-            f"Compiler differential passed: {len(comparisons)} projects identical "
-            f"({left_engine} vs {right_engine}) in {seconds:.1f}s"
+            f"Compiler differential passed: {len(comparisons)} projects as expected "
+            f"in {seconds:.1f}s"
         )
     lines: list[str] = [
         f"Compiler differential FAILED: {len(differing)} of {len(comparisons)} projects differ "
-        f"({left_engine} vs {right_engine}) in {seconds:.1f}s"
+        f"in {seconds:.1f}s"
     ]
     if differing:
         first: Difference = differing[0].differences[0]
@@ -57,15 +54,13 @@ def format_summary(
     lines.extend(
         f"Required {stage} coverage missing: {', '.join(kinds)}" for stage, kinds in gaps.items()
     )
-    if gate_failures:
-        lines.append(f"Native fallback allow-list: {len(gate_failures)} problems (listed above)")
-    if gate_failures or any(_golden_differs(comparison) for comparison in differing):
+    if any(_golden_differs(comparison) for comparison in differing):
         lines.append(BASELINES_HINT)
     return "\n".join(lines)
 
 
 def _golden_differs(comparison: ProjectComparison) -> bool:
-    return any(GOLDEN_LABEL in (difference.labels or ()) for difference in comparison.differences)
+    return any(GOLDEN_LABEL in difference.labels for difference in comparison.differences)
 
 
 def format_discovery_coverage(*, covered: frozenset[str], required: tuple[str, ...]) -> str:

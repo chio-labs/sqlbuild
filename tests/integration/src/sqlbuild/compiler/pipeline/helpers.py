@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 import pytest
 
@@ -219,29 +219,6 @@ def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...
 
     monkeypatch.setattr(native_module, "infer_expression_source_shapes", traced)
     return batches
-
-
-def count_declaration_resolutions(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Count the native model loop's declaration projections."""
-
-    counts: list[int] = [0]
-    native_loop_type: type = native_module.NativeModelLoop
-    monkeypatch.setattr(
-        native_module,
-        "NativeModelLoop",
-        lambda *arguments: _ResolutionCountingLoop(native_loop_type(*arguments), counts),
-    )
-    return counts
-
-
-class _ResolutionCountingLoop(NamedTuple):
-    native_loop: Any
-    counts: list[int]
-
-    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int, int, int]]:
-        inputs, counts = self.native_loop.run(*arguments)
-        self.counts[0] += counts[2]
-        return inputs, counts
 
 
 _OFFLINE_POSTGRES_CONNECTION: dict[str, object] = {

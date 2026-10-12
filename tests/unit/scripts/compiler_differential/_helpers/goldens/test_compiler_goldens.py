@@ -20,7 +20,7 @@ from tests.unit.scripts.compiler_differential._helpers.goldens._test_types impor
 )
 from tests.unit.scripts.compiler_differential._helpers.goldens.helpers import (
     PROJECT_PATH,
-    engine_run,
+    project_run,
 )
 
 _SQL: str = "SELECT customer_id\nFROM orders -- 20261009T010203Z_0123456789ab\n"
@@ -60,7 +60,7 @@ def test_given_corpus_project_when_locating_its_golden_then_only_golden_corpora_
     [
         GoldenPayloadTestCase(
             description="paths_ids_timings_and_repeated_sql_masked",
-            run=engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),
+            run=project_run(message=_MESSAGE, compiled_sql=_SQL),
             masked_paths=((PROJECT_PATH, "<project>"),),
             expected_payload={
                 "commands": [
@@ -102,7 +102,7 @@ def test_given_corpus_project_when_locating_its_golden_then_only_golden_corpora_
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_run_when_building_golden_then_run_specific_noise_is_masked(
+def test_given_project_run_when_building_golden_then_run_specific_noise_is_masked(
     test_case: GoldenPayloadTestCase,
 ) -> None:
     payload: dict[str, object] = golden_payload(
@@ -116,72 +116,66 @@ def test_given_engine_run_when_building_golden_then_run_specific_noise_is_masked
     "test_case",
     [
         GoldenCheckTestCase(
-            description="identical_engines_match",
+            description="identical_output_matches",
             project="failure/unknown-ref",
-            recorded=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
-            checked=(
-                engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),
-                engine_run(engine="native-preview", message=_MESSAGE, compiled_sql=_SQL),
-            ),
+            recorded=(project_run(message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql=_SQL),
             expected_differences=(),
         ),
         GoldenCheckTestCase(
-            description="changed_sql_names_the_engine",
+            description="changed_sql_is_reported",
             project="failure/unknown-ref",
-            recorded=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
-            checked=(
-                engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),
-                engine_run(engine="native-preview", message=_MESSAGE, compiled_sql="SELECT 2\n"),
-            ),
-            expected_differences=(("golden (native-preview)", ("golden", "native-preview")),),
+            recorded=(project_run(message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql="SELECT 2\n"),
+            expected_differences=(("golden", ("golden", "actual")),),
         ),
         GoldenCheckTestCase(
             description="missing_failure_golden_fails",
             project="failure/unknown-ref",
             recorded=(),
-            checked=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql=_SQL),
             expected_differences=(("golden unknown-ref.json", ("golden", "hint")),),
         ),
         GoldenCheckTestCase(
             description="missing_seed_golden_outside_the_recorded_range_is_skipped",
             project="seed/40",
             recorded=(),
-            checked=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql=_SQL),
             expected_differences=(),
         ),
         GoldenCheckTestCase(
             description="missing_seed_golden_inside_the_recorded_range_fails",
             project="seed/3",
             recorded=(),
-            checked=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql=_SQL),
             expected_differences=(("golden 3.json", ("golden", "hint")),),
         ),
         GoldenCheckTestCase(
             description="missing_dialect_variant_of_the_recorded_first_seed_fails",
             project="seed/0-postgres",
             recorded=(),
-            checked=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql=_SQL),
             expected_differences=(("golden 0-postgres.json", ("golden", "hint")),),
         ),
         GoldenCheckTestCase(
             description="dialect_variant_of_an_ad_hoc_first_seed_is_skipped",
             project="seed/3-postgres",
             recorded=(),
-            checked=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql=_SQL),
             expected_differences=(),
         ),
         GoldenCheckTestCase(
             description="missing_seed_range_fails_closed_even_with_the_seed_golden",
             project="seed/3",
-            recorded=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
-            checked=(engine_run(engine="native", message=_MESSAGE, compiled_sql=_SQL),),
+            recorded=(project_run(message=_MESSAGE, compiled_sql=_SQL),),
+            checked=project_run(message=_MESSAGE, compiled_sql=_SQL),
             expected_differences=(("golden seed_range.toml", ("golden", "hint")),),
             seed_range_dir="elsewhere",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_recorded_golden_when_checking_runs_then_each_differing_engine_is_reported(
+def test_given_recorded_golden_when_checking_run_then_differences_are_reported(
     test_case: GoldenCheckTestCase, tmp_path: Path
 ) -> None:
     project: CorpusProject = CorpusProject(
@@ -191,7 +185,7 @@ def test_given_recorded_golden_when_checking_runs_then_each_differing_engine_is_
     for recorded in test_case.recorded:
         _ = golden_differences(
             project=project,
-            runs=(recorded,),
+            run=recorded,
             golden_dir=tmp_path,
             mode="update",
             masked_paths=((PROJECT_PATH, "<project>"),),
@@ -199,7 +193,7 @@ def test_given_recorded_golden_when_checking_runs_then_each_differing_engine_is_
 
     differences: list[Difference] = golden_differences(
         project=project,
-        runs=test_case.checked,
+        run=test_case.checked,
         golden_dir=tmp_path,
         mode="check",
         masked_paths=((PROJECT_PATH, "<project>"),),

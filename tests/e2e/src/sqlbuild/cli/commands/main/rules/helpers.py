@@ -634,7 +634,7 @@ def move_order_totals_description_to_path_defaults(root: Path) -> None:
 
 
 def write_bulk_rules_cache(*, root: Path, file_name: str, text: str) -> None:
-    """Overwrite one bulk Rules cache file of the active compiler engine."""
+    """Overwrite one bulk Rules cache file."""
 
     _ = rules_bulk_cache_path(project_dir=root, file_name=file_name).write_text(
         text, encoding="utf-8"

@@ -34,7 +34,6 @@ type FaultRow = (bool, String, String, u64, u64, String, String);
 type CteRow = (String, String);
 type ModelTestPayloadPy = (Vec<CteRow>, Vec<CteRow>, Vec<CteRow>, bool, bool);
 type TestNamesRow = (Vec<String>, Vec<String>, Vec<String>, Vec<String>);
-type BuiltCounts = (usize, usize, usize);
 type EvaluationRow = (Vec<FaultRow>, Vec<String>, u64, u64, u64, u64, bool);
 
 /// Name, relative path, members, value, value type and rendering of one declaration.
@@ -111,7 +110,7 @@ fn build_rules_request<'py>(
     models: (PyRef<'py, NativeCompiledProject>, Vec<String>),
     sql_tests: Vec<SqlTestRowPy<'py>>,
     scenarios: Vec<ScenarioRowPy>,
-) -> PyResult<(NativeRulesRequest, BuiltCounts)> {
+) -> PyResult<NativeRulesRequest> {
     compiler_guard(|| {
         let mut request: EvaluateRequest =
             serde_json::from_slice(project.header_json.as_bytes()).map_err(value_error)?;
@@ -129,21 +128,13 @@ fn build_rules_request<'py>(
         let rows: Vec<ModelRow> =
             project_model_rows(models.0.facts(), &models.1).map_err(value_error)?;
         request.models = built_models(&project, &request, rows)?;
-        let counts: BuiltCounts = (
-            request.models.len(),
-            request.sql_tests.len(),
-            request.sql_scenarios.len(),
-        );
         let memo: Option<(String, PathBuf)> = project
             .memo
             .take()
             .map(|(identity, path)| (identity, PathBuf::from(path)));
-        Ok((
-            NativeRulesRequest {
-                request: Mutex::new(Some(RowsRequest { request, memo })),
-            },
-            counts,
-        ))
+        Ok(NativeRulesRequest {
+            request: Mutex::new(Some(RowsRequest { request, memo })),
+        })
     })
 }
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import random
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -279,16 +278,6 @@ def lineage_log_records(caplog: pytest.LogCaptureFixture) -> list[tuple[str, str
         (record.name, record.getMessage(), record.__dict__.get("sqlbuild_error"))
         for record in caplog.records
     ]
-
-
-def deferral_records(record_dir: Path) -> list[object]:
-    """Every deferral line the native lineage stage wrote below `record_dir`."""
-
-    records: list[object] = []
-    for path in sorted(record_dir.glob("analysis-deferrals-*.jsonl")):
-        for line in path.read_text("utf-8").splitlines():
-            records.append(json.loads(line))
-    return records
 
 
 def record_native_outcomes(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:

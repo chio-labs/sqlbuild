@@ -12,14 +12,13 @@ from scripts.compiler_differential.classes.capture_file import expand_capture_te
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.classes.stage_capture_encoder import StageCaptureEncoder
 from sqlbuild.compiler.frontier.constants import (
-    COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
     STAGE_CAPTURE_OMITTED_ATTRIBUTES,
     STAGE_CAPTURE_SHARED_NODES_KEY,
     STAGE_CAPTURE_UNORDERED_ATTRIBUTES,
 )
 from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
-from sqlbuild.compiler.frontier.types import CompilerEngine, CompilerStage
+from sqlbuild.compiler.frontier.types import CompilerStage
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     FrontierCaptureTestCase,
     OmittedFieldTestCase,
@@ -321,8 +320,7 @@ def test_given_repeated_large_subtrees_when_rendering_capture_then_each_is_store
     "test_case",
     [
         FrontierCaptureTestCase(
-            description=engine.value,
-            engine=engine,
+            description="discovery and compiled project",
             stages=(CompilerStage.DISCOVERED_PROJECT_INPUTS, CompilerStage.COMPILED_PROJECT),
             expected_results=(
                 "discovered_project_inputs-result",
@@ -330,14 +328,12 @@ def test_given_repeated_large_subtrees_when_rendering_capture_then_each_is_store
             ),
             expected_files=("discovered_project_inputs.json", "compiled_project.json"),
         )
-        for engine in CompilerEngine
     ],
     ids=lambda case: case.description,
 )
 def test_given_capture_directory_when_compiling_frontier_then_each_stage_is_captured_in_order(
     test_case: FrontierCaptureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine.value)
     monkeypatch.setenv(STAGE_CAPTURE_DIR_ENV_VAR, str(tmp_path))
 
     results: tuple[object, ...] = tuple(

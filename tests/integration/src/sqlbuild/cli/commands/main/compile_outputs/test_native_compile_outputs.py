@@ -1,7 +1,6 @@
 """Integration coverage for compile JSON, artifact writes, publication and reuse snapshots."""
 
 import shutil
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -21,11 +20,10 @@ from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs.helpers im
     edit_sequence_step,
     main_compile,
     neutral_error,
-    published_files,
-    record_output_work,
+    prepare_output_compiles,
+    reuse_compile,
     staging_directories,
     uncached_reference,
-    work_delta,
     write_files,
 )
 
@@ -41,39 +39,9 @@ _PUBLICATION_ERROR: str = (
     "test_case",
     [
         CompileOutputsSequenceTestCase(
-            description="compile writes outputs and reuses compiles natively",
+            description="compile writes outputs and reuses unchanged compiles",
             expected_exit_codes=(0, 0, 0, 0, 0, 0),
-            expected_work=(
-                {
-                    "artifact_files": 3,
-                    "json_reports": 1,
-                    "reuse_records": 1,
-                    "reuse_snapshot_paths": 5,
-                },
-                {"reuse_replays": 1, "reuse_snapshot_paths": 5},
-                {
-                    "artifact_files": 3,
-                    "json_reports": 1,
-                    "reuse_digested_files": 1,
-                    "reuse_records": 1,
-                    "reuse_snapshot_paths": 5,
-                },
-                {"reuse_digested_files": 1, "reuse_replays": 1, "reuse_snapshot_paths": 5},
-                {
-                    "artifact_files": 3,
-                    "json_reports": 1,
-                    "reuse_digested_files": 1,
-                    "reuse_records": 1,
-                    "reuse_snapshot_paths": 5,
-                },
-                {
-                    "artifact_files": 2,
-                    "json_reports": 1,
-                    "reuse_records": 1,
-                    "reuse_snapshot_paths": 4,
-                    "stale_files_removed": 1,
-                },
-            ),
+            expected_reused=(False, True, False, True, False, False),
         ),
     ],
     ids=lambda case: case.description,
@@ -86,15 +54,14 @@ def test_given_cached_edit_sequence_when_compiling_then_each_step_matches_uncach
 ) -> None:
     project_dir: Path = tmp_path / "project"
     write_files(project_dir=project_dir, files=OUTPUT_PROJECT_FILES)
-    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="0")
-    work: list[dict[str, int]] = []
+    prepare_output_compiles(monkeypatch=monkeypatch, reuse_disabled="0")
+    reused: list[bool] = []
     exit_codes: list[int] = []
 
     for step in _SEQUENCE_STEPS:
         edit_sequence_step(project_dir=project_dir, step=step)
-        before: Counter[str] = Counter(counts)
-        cached: CompileOutcome = compile_outputs(project_dir=project_dir, args=(), capsys=capsys)
-        work.append(work_delta(before=before, after=counts))
+        replayed, cached = reuse_compile(project_dir=project_dir, capsys=capsys)
+        reused.append(replayed)
         exit_codes.append(cached[0])
         reference: CompileOutcome = uncached_reference(
             project_dir=project_dir, reference_dir=tmp_path / f"uncached_{step}", capsys=capsys
@@ -102,7 +69,7 @@ def test_given_cached_edit_sequence_when_compiling_then_each_step_matches_uncach
         assert comparable(cached) == comparable(reference)
 
     assert tuple(exit_codes) == test_case.expected_exit_codes
-    assert tuple(work) == test_case.expected_work
+    assert tuple(reused) == test_case.expected_reused
 
 
 @pytest.mark.parametrize(
@@ -111,7 +78,6 @@ def test_given_cached_edit_sequence_when_compiling_then_each_step_matches_uncach
         PublicationFailureTestCase(
             description="compile reports the blocked move and recovers",
             expected_error=_PUBLICATION_ERROR,
-            expected_published_files=9,
         ),
     ],
     ids=lambda case: case.description,
@@ -123,7 +89,7 @@ def test_given_artifact_path_blocked_when_publishing_staged_artifacts_then_compi
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=OUTPUT_PROJECT_FILES)
-    counts: Counter[str] = record_output_work(monkeypatch=monkeypatch, reuse_disabled="1")
+    prepare_output_compiles(monkeypatch=monkeypatch, reuse_disabled="1")
     published: CompileOutcome = compile_outputs(
         project_dir=tmp_path, args=("--no-cache",), capsys=capsys
     )
@@ -151,4 +117,3 @@ def test_given_artifact_path_blocked_when_publishing_staged_artifacts_then_compi
     assert {name: remaining[name] for name in untouched} == untouched
     assert kept == "kept\n"
     assert comparable(recovered) == comparable(reference)
-    assert published_files(counts) == test_case.expected_published_files

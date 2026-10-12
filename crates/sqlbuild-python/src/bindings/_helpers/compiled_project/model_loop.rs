@@ -102,8 +102,6 @@ const CODE_ARGUMENT: &str = "code";
 const ANALYSIS_CONFLICT: &str = "MODEL sql_analysis conflicts with legacy sql_validation";
 const ANALYSIS_CONFLICT_CODE: &str = "P003";
 
-/// `(finished, config builds, projected visibilities, hook statements, described models)`.
-type LoopCounts = (usize, usize, usize, usize, usize);
 /// The native validator, header contract classes, and the loop's Python classes.
 type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
 /// `(analysis switches, native syntax, (project config path, legacy schema files))`.
@@ -238,13 +236,13 @@ impl NativeModelLoop {
         })
     }
 
-    /// Build every model in order into `project`; return each model's input view and counts.
+    /// Build every model in order into `project`; return each model's input view.
     fn run<'py>(
         slf: &Bound<'py, Self>,
         project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
         models: Vec<ModelLoopRow>,
-    ) -> PyResult<(Vec<Bound<'py, NativeModelInput>>, LoopCounts)> {
+    ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let py: Python<'py> = slf.py();
         project
             .borrow_mut()
@@ -260,7 +258,7 @@ impl NativeModelLoop {
         project: Bound<'py, NativeCompiledProject>,
         host: Bound<'py, PyAny>,
         models: Vec<ModelLoopRow>,
-    ) -> PyResult<(Vec<Bound<'py, NativeModelInput>>, LoopCounts)> {
+    ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let contracts: ContractClasses<'py> = self.contract_classes.bind(py).extract()?;
         let classes: LoopClasses<'py> = self.loop_classes.bind(py).extract()?;
         let context: LoopContext<'_, 'py> = LoopContext {
@@ -272,9 +270,6 @@ impl NativeModelLoop {
             .borrow_mut()
             .set_input_classes(classes.input_view.clone().unbind());
         let mut inputs: Vec<Bound<'py, NativeModelInput>> = Vec::with_capacity(models.len());
-        let mut finished_natively: usize = 0;
-        let mut hook_statements: usize = 0;
-        let mut described: usize = 0;
         let configs: ModelConfigs<'py> = ModelConfigs::default();
         let visibility: ModelVisibility<'py> = ModelVisibility::default();
         let signatures: HookSignatures = HookSignatures::default();
@@ -299,9 +294,6 @@ impl NativeModelLoop {
                 visibility: &visibility,
             };
             let finished: FinishedModel<'py> = self.finish(py, &context, model)?;
-            finished_natively += 1;
-            hook_statements += finished.hook_statements;
-            described += usize::from(finished.header.schema.is_some());
             let record_inputs: RecordInputs<'_, 'py> = RecordInputs {
                 classes: &classes.record,
                 visible: &visible.declarations,
@@ -316,16 +308,7 @@ impl NativeModelLoop {
                 NativeModelInput::new(project.clone().unbind(), index),
             )?);
         }
-        Ok((
-            inputs,
-            (
-                finished_natively,
-                configs.builds(),
-                visibility.projected(),
-                hook_statements,
-                described,
-            ),
-        ))
+        Ok(inputs)
     }
 }
 
@@ -618,7 +601,7 @@ impl NativeModelLoop {
             (name, &query_sql, relative_path),
             (&references, declared_columns),
         )?;
-        let (values, hook_statements, hook_usages) = if hooked {
+        let (values, hook_usages) = if hooked {
             let hook_model: HookModel<'_, 'py> = HookModel {
                 name,
                 posix_path,
@@ -630,9 +613,9 @@ impl NativeModelLoop {
                 visibility,
             };
             let hooks: ExpandedHooks<'py> = expanded_hooks(self, context, &values, &hook_model)?;
-            (hooks.values, hooks.statements, hooks.usages)
+            (hooks.values, hooks.usages)
         } else {
-            (values, 0, Vec::new())
+            (values, Vec::new())
         };
         let source: HeaderSource<'_, 'py> = HeaderSource {
             name,
@@ -657,7 +640,6 @@ impl NativeModelLoop {
             header,
             references,
             declarations,
-            hook_statements,
             analysis,
             named_usages,
             macros: macros.map(|macros| macros.output),

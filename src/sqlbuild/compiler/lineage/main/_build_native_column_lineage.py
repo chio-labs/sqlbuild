@@ -1,4 +1,4 @@
-"""Build fast column lineage facts natively for the preview compiler engine."""
+"""Build fast column lineage facts natively."""
 
 from __future__ import annotations
 

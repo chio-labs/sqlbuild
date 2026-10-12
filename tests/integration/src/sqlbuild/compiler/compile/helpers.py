@@ -1,4 +1,4 @@
-"""Macro-heavy projects, engine-switched render runs and bridged-expansion outcomes."""
+"""Macro-heavy projects, render runs and bridged-expansion outcomes."""
 
 from __future__ import annotations
 
@@ -29,7 +29,6 @@ from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
 from sqlbuild.compiler.frontier.constants import (
-    COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_INVOCATION_ID_MASK,
     STAGE_CAPTURE_INVOCATION_ID_PATTERN,
 )
@@ -42,7 +41,6 @@ from sqlbuild.compiler.scopes.types import ResourceKind
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
 )
-from tests.integration.src.sqlbuild.compiler.helpers import mismatches
 
 MACRO_CALL_LOG_ENV_VAR: str = "SQLBUILD_TEST_MACRO_CALL_LOG"
 _RUN_ID_PATTERN: re.Pattern[str] = re.compile(r'"run_id": "[^"]*"')
@@ -228,35 +226,31 @@ def write_project(*, root: Path, files: dict[str, str]) -> Path:
     return root
 
 
-def render_compile_inputs(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
-) -> CompileInputsView:
-    """Render the project's compile inputs through the frontier under one compiler engine."""
+def render_compile_inputs(*, project_dir: Path) -> CompileInputsView:
+    """Render the project's compile inputs through the frontier."""
 
-    with monkeypatch.context() as patch:
-        patch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
-        discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
-        adapter: DuckDbAdapter = DuckDbAdapter()
-        return compile_frontier(
-            until=CompilerStage.COMPILE_PROJECT_INPUTS,
-            python_stage=partial(
-                build_compile_inputs,
-                discovered_inputs=discovered,
-                adapter_context=CompileAdapterContext(
-                    value_renderer=adapter,
-                    collection_rendering=resolve_effective_collection_rendering(
-                        project_config=discovered.project_config, declaration_override=None
-                    ),
-                    python_functions_inherit_default_namespace=(
-                        adapter.python_functions_inherit_default_namespace()
-                    ),
-                    sql_lexical_syntax=adapter.sql_lexical_syntax,
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    return compile_frontier(
+        until=CompilerStage.COMPILE_PROJECT_INPUTS,
+        python_stage=partial(
+            build_compile_inputs,
+            discovered_inputs=discovered,
+            adapter_context=CompileAdapterContext(
+                value_renderer=adapter,
+                collection_rendering=resolve_effective_collection_rendering(
+                    project_config=discovered.project_config, declaration_override=None
                 ),
-                resolved_connection={},
-                defer_model_sql_validation=True,
-                no_cache=True,
+                python_functions_inherit_default_namespace=(
+                    adapter.python_functions_inherit_default_namespace()
+                ),
+                sql_lexical_syntax=adapter.sql_lexical_syntax,
             ),
-        )
+            resolved_connection={},
+            defer_model_sql_validation=True,
+            no_cache=True,
+        ),
+    )
 
 
 def comparable_capture(inputs: CompileInputsView) -> str:
@@ -268,13 +262,11 @@ def comparable_capture(inputs: CompileInputsView) -> str:
     )
 
 
-def render_error(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
-) -> tuple[type[BaseException], str, type[object]]:
-    """Render the project under one engine and describe the error it raises."""
+def render_error(*, project_dir: Path) -> tuple[type[BaseException], str, type[object]]:
+    """Render the project and describe the error it raises."""
 
     with pytest.raises(CompileInputError) as raised:
-        _ = render_compile_inputs(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
+        _ = render_compile_inputs(project_dir=project_dir)
     return type(raised.value), str(raised.value), type(raised.value.__cause__)
 
 
@@ -461,9 +453,8 @@ def _generated_model(*, rng: random.Random, model: int) -> tuple[str, str]:
 
 @dataclass(frozen=True)
 class FailingMacroParity:
-    """How each engine's render of generated failing-macro projects compared with Python's."""
+    """How rendering generated failing-macro projects failed."""
 
-    mismatches: list[list[tuple[object, object, object]]]
     failures: int
     successes: int
     failures_after_macro_runs: int
@@ -474,38 +465,25 @@ def failing_macro_parity(
     *,
     projects: list[dict[str, str]],
     root: Path,
-    engines: tuple[str, ...],
     monkeypatch: pytest.MonkeyPatch,
 ) -> FailingMacroParity:
-    """Render every project under each engine; compare errors and macro runs with the first."""
+    """Render every project; summarize its errors and macro runs."""
 
     project_dirs: list[Path] = [
         write_project(root=root / f"project_{index}", files=files)
         for index, files in enumerate(projects)
     ]
-    outcomes: dict[str, list[object]] = {
-        engine: _engine_outcomes(
-            project_dirs=project_dirs,
-            engine=engine,
-            log_path=root / f"{engine}.log",
-            monkeypatch=monkeypatch,
+    python_outcomes: list[object] = [
+        render_outcome(
+            project_dir=project_dir, log_path=root / "macros.log", monkeypatch=monkeypatch
         )
-        for engine in engines
-    }
-    python_outcomes: list[object] = outcomes[engines[0]]
+        for project_dir in project_dirs
+    ]
     failed: list[bool] = [_is_failure(outcome) for outcome in python_outcomes]
     failures: list[tuple[tuple[object, ...], tuple[str, ...]]] = cast(
         list[tuple[tuple[object, ...], tuple[str, ...]]], list(compress(python_outcomes, failed))
     )
     return FailingMacroParity(
-        mismatches=[
-            mismatches(
-                inputs=list[object](project_dirs),
-                expected=python_outcomes,
-                actual=outcomes[engine],
-            )
-            for engine in engines[1:]
-        ],
         failures=len(failures),
         successes=len(python_outcomes) - len(failures),
         failures_after_macro_runs=sum(bool(runs) for _, runs in failures),
@@ -515,34 +493,21 @@ def failing_macro_parity(
     )
 
 
-def _engine_outcomes(
-    *, project_dirs: list[Path], engine: str, log_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> list[object]:
-    return [
-        engine_render_outcome(
-            project_dir=project_dir, engine=engine, log_path=log_path, monkeypatch=monkeypatch
-        )
-        for project_dir in project_dirs
-    ]
-
-
 def _is_failure(outcome: object) -> bool:
     return isinstance(cast(tuple[object, ...], outcome)[0], tuple)
 
 
-def engine_render_outcome(
-    *, project_dir: Path, engine: str, log_path: Path, monkeypatch: pytest.MonkeyPatch
+def render_outcome(
+    *, project_dir: Path, log_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[object, tuple[str, ...]]:
-    """Render under `engine`; return the error's full shape or the capture, and macro runs."""
+    """Render; return the error's full shape or the capture, and macro runs."""
 
     _ = log_path.write_text("", encoding="utf-8")
     monkeypatch.setenv(MACRO_CALL_LOG_ENV_VAR, str(log_path))
     capture: ExpansionFailureCapture = ExpansionFailureCapture()
     rendered: list[object] = [None]
     with capture:
-        rendered[0] = comparable_capture(
-            render_compile_inputs(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
-        )
+        rendered[0] = comparable_capture(render_compile_inputs(project_dir=project_dir))
     failure: BaseException | None = capture.failure
     outcome: object = {
         True: rendered[0],

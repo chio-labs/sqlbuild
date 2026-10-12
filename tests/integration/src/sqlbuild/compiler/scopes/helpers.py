@@ -1,4 +1,4 @@
-"""Scoped projects and engine-parity outcomes for the native declaration scope tests."""
+"""Scoped projects and outcomes for the native declaration scope tests."""
 
 from __future__ import annotations
 
@@ -32,8 +32,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     EnumDeclaration,
 )
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
 from sqlbuild.compiler.scopes.main._declaration_lexical_path import declaration_lexical_path
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
@@ -129,7 +127,7 @@ SCOPED_PROJECT: dict[str, str] = {
 
 @dataclass(frozen=True)
 class ScopeOutcome:
-    """What building the declaration scope produced under one engine."""
+    """What building the declaration scope produced."""
 
     kind: str
     value: tuple[object, ...]
@@ -295,52 +293,29 @@ _TEST_WRITERS: dict[str, Callable[..., str]] = {
 }
 
 
-def scope_engine_outcomes(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[ScopeOutcome, ScopeOutcome, bool]:
-    """Return the shipped and preview scope outcomes and whether the native index was built."""
+def scope_outcome(*, project_dir: Path) -> ScopeOutcome:
+    """Return what building the project's declaration scope produced."""
 
     try:
         discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
         macros: dict[str, LoadedMacro] = load_project_macros(discovered.macro_files)
     except (DiscoveryError, CompileInputError) as error:
-        failure: ScopeOutcome = ScopeOutcome(kind="discovery", value=(), error=str(error))
-        return failure, failure, True
-    syntax: SqlLexicalSyntax = DuckDbAdapter().sql_lexical_syntax
-    shipped: ScopeOutcome = _scope_outcome(
-        discovered=discovered,
-        macros=macros,
-        syntax=syntax,
-        engine=CompilerEngine.NATIVE.value,
-        monkeypatch=monkeypatch,
+        return ScopeOutcome(kind="discovery", value=(), error=str(error))
+    return _scope_outcome(
+        discovered=discovered, macros=macros, syntax=DuckDbAdapter().sql_lexical_syntax
     )
-    native: ScopeOutcome = _scope_outcome(
-        discovered=discovered,
-        macros=macros,
-        syntax=syntax,
-        engine=CompilerEngine.NATIVE_PREVIEW.value,
-        monkeypatch=monkeypatch,
-    )
-    _ = open_native_scope_index(discovered_inputs=discovered, loaded_macros=macros)
-    return shipped, native, True
 
 
-def scope_command_indexes(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[ScopeIndex, ScopeIndex]:
-    """Return the offline `sqb scope` index under the shipped and preview engines."""
+def scope_command_index(*, project_dir: Path) -> ScopeIndex:
+    """Return the offline `sqb scope` index."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
-    shipped: ScopeIndex = load_or_build_scope_index(project_dir=project_dir, no_cache=True)
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
-    native: ScopeIndex = load_or_build_scope_index(project_dir=project_dir, no_cache=True)
-    return shipped, native
+    return load_or_build_scope_index(project_dir=project_dir, no_cache=True)
 
 
 def native_scope_attempts(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
+    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[int, ScopeOutcome]:
-    """Build the declaration scope under `engine`; count how often the native index was opened."""
+    """Build the declaration scope; count how often the native index was opened."""
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
     macros: dict[str, LoadedMacro] = load_project_macros(discovered.macro_files)
@@ -359,8 +334,6 @@ def native_scope_attempts(
         discovered=discovered,
         macros=macros,
         syntax=DuckDbAdapter().sql_lexical_syntax,
-        engine=engine,
-        monkeypatch=monkeypatch,
     )
     return len(attempts), outcome
 
@@ -370,10 +343,7 @@ def _scope_outcome(
     discovered: DiscoveredProjectInputs,
     macros: dict[str, LoadedMacro],
     syntax: SqlLexicalSyntax,
-    engine: str,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> ScopeOutcome:
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     try:
         scope: DeclarationScopeBuild = build_declaration_scope(
             discovered_inputs=discovered, loaded_macros=macros, sql_lexical_syntax=syntax
@@ -605,7 +575,6 @@ def declaration_context_parity(
     try:
         discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
         macros: dict[str, LoadedMacro] = load_project_macros(discovered.macro_files)
-        monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
         scope: DeclarationScopeBuild = build_declaration_scope(
             discovered_inputs=discovered,
             loaded_macros=macros,

@@ -4,14 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 
-from sqlbuild.compiler.compile._helpers.attachment.target import compile_cache_root
 from sqlbuild.compiler.compile.models import CompactLineageFacts
-from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME
 from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
-from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 
 HELPERS_MODULE: str = "tests.unit.src.sqlbuild.compiler.frontier.helpers"
 
@@ -123,16 +119,3 @@ def order_line() -> OrderLine:
     """Return one neutral order line."""
 
     return OrderLine(order_id=7, status=OrderStatus.PLACED, path=PurePosixPath("models/a.sql"))
-
-
-def store_paths(project_dir: Path) -> tuple[str, ...]:
-    """Return every engine-owned store path relative to the project directory."""
-
-    paths: tuple[Path, ...] = (
-        compiler_cache_directory(project_dir),
-        compile_cache_root(project_dir=project_dir, target_config=None, no_cache=False)
-        or project_dir,
-        compiler_cache_directory(project_dir) / SCOPE_CACHE_DIRECTORY_NAME,
-        rules_bulk_cache_path(project_dir=project_dir, file_name="sql.json"),
-    )
-    return tuple(path.relative_to(project_dir).as_posix() for path in paths)

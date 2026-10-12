@@ -6,7 +6,7 @@ import json
 import shutil
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -327,41 +327,21 @@ MACRO_FILES: dict[str, str] = {
 
 
 def build_inputs_with_native_loop(
-    *, project_dir: Path, monkeypatch: pytest.MonkeyPatch, defer_validation: bool = True
-) -> tuple[CompileInputsView, list[int]]:
-    """Build compile inputs, counting the models the native loop finishes."""
+    *, project_dir: Path, defer_validation: bool = True
+) -> CompileInputsView:
+    """Build compile inputs through the native model loop."""
 
-    finished: list[int] = []
-    native_loop_type: type = _native.NativeModelLoop
-
-    def counting_loop(*arguments: Any) -> _CountingLoop:
-        return _CountingLoop(native_loop_type(*arguments), finished)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(_native, "NativeModelLoop", counting_loop)
-        inputs: CompileInputsView = build_compile_inputs(
-            discovered_inputs=discover_project_inputs(project_dir=project_dir),
-            adapter_context=CompileAdapterContext(
-                value_renderer=DuckDbAdapter(),
-                collection_rendering=CollectionRendering.VALUE_LIST,
-                python_functions_inherit_default_namespace=True,
-                sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
-            ),
-            defer_model_sql_validation=defer_validation,
-            no_cache=True,
-        )
-    return inputs, finished
-
-
-@dataclass(frozen=True)
-class _CountingLoop:
-    native_loop: Any
-    finished: list[int]
-
-    def run(self, *arguments: object) -> tuple[list[object], tuple[int, int, int]]:
-        inputs, counts = self.native_loop.run(*arguments)
-        self.finished.append(counts[0])
-        return inputs, counts
+    return build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter_context=CompileAdapterContext(
+            value_renderer=DuckDbAdapter(),
+            collection_rendering=CollectionRendering.VALUE_LIST,
+            python_functions_inherit_default_namespace=True,
+            sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
+        ),
+        defer_model_sql_validation=defer_validation,
+        no_cache=True,
+    )
 
 
 _SUMMARY_FIELDS: tuple[str, ...] = (
@@ -457,7 +437,7 @@ def compile_source_project(
         adapter=DuckDbAdapter(),
         resolved_connection=_SOURCE_CONNECTION,
     )
-    inputs, _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+    inputs: CompileInputsView = build_inputs_with_native_loop(project_dir=project_dir)
     return project, inputs
 
 
@@ -503,7 +483,7 @@ def compile_function_project(
         adapter=DuckDbAdapter(),
         resolved_connection=_SOURCE_CONNECTION,
     )
-    inputs, _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+    inputs: CompileInputsView = build_inputs_with_native_loop(project_dir=project_dir)
     return project, inputs
 
 
@@ -588,7 +568,7 @@ def resource_diagnostics_of(
     write_files(
         project_dir=project_dir, files={"sqlbuild_project.toml": RESOURCE_PROJECT_FILE, **files}
     )
-    inputs, _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+    inputs: CompileInputsView = build_inputs_with_native_loop(project_dir=project_dir)
     resource_diagnostics: Iterator[CompilerDiagnostic] = filter(
         lambda diagnostic: diagnostic.code in RESOURCE_DIAGNOSTIC_CODES, inputs.diagnostics
     )

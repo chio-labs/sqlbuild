@@ -33,7 +33,7 @@ _COMPILER_ROOT: Path = Path(compiler_package.__file__).parent
     "test_case",
     [
         FailureCorpusCodesTestCase(
-            description="native_engine",
+            description="failure_corpus",
             expected_first_errors={
                 **{f"failure/{case.name}": case.expected_code for case in failure_cases()},
                 **{project.name: project.expected.error_code for project in refactor_cases()},
@@ -84,12 +84,10 @@ def test_given_failure_corpus_when_compiling_then_first_errors_match_and_cover_e
 ) -> None:
     emitted: dict[str, EmittedCodes] = emitted_failure_codes(
         options=DifferentialOptions(
-            engines=("native", "native"),
             work_dir=tmp_path,
             jobs=4,
             stage_captures=False,
             python=Path(sys.executable),
-            engine_environment={},
         )
     )
 

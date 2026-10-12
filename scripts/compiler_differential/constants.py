@@ -1,45 +1,15 @@
-"""Stable constants for the compiler engine differential harness."""
+"""Stable constants for the compiler golden harness."""
 
 import json
 import re
 
 from scripts.compiler_differential.models import DifferentialCommand, ExpectedOutcome
 
-ENGINE_ENV_VAR: str = "SQLBUILD_COMPILER_ENGINE"
 STAGE_CAPTURE_ENV_VAR: str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR"
-ANALYSIS_RECORD_ENV_VAR: str = "SQLBUILD_ANALYSIS_RECORD_DIR"
-WHEEL_SITE_RECORD_PREFIX: str = "polyglot-sites-"
-ANALYSIS_DEFERRAL_RECORD_PREFIX: str = "analysis-deferrals-"
-NATIVE_FALLBACK_RECORD_PREFIX: str = "native-fallbacks-"
-NATIVE_FALLBACK_LIST: str = "scripts/compiler_differential/native_fallbacks.toml"
-NATIVE_FALLBACK_MODE_UPDATE: str = "update"
-NATIVE_FALLBACK_MODES: tuple[str, ...] = ("check", NATIVE_FALLBACK_MODE_UPDATE)
-NATIVE_FALLBACK_SITE_SEPARATOR: str = "."
-NATIVE_FALLBACK_ANSWER_SUFFIX: str = ".native"
 BASELINES_HINT: str = (
     "Intended? Run `make compiler-baselines` and commit the changes to "
-    "scripts/compiler_differential/native_fallbacks.toml and tests/goldens/compiler, with a "
-    "reason in the PR body for every added entry, higher fallback count or changed golden."
+    "tests/goldens/compiler, with a reason in the PR body for every changed golden."
 )
-NATIVE_FALLBACK_MAX_COUNTS_FIELD: str = "max_counts"
-NATIVE_FALLBACK_COUNTS_FIELD: str = "counts"
-NATIVE_FALLBACK_PROJECT_CORPUS: str = "project"
-NATIVE_TIMING_DEPENDENT_METRICS: frozenset[tuple[str, str]] = frozenset(
-    {("compile_outputs.native", "reuse_digested_files")}
-)
-NATIVE_FALLBACK_DEFERRAL_STAGES: dict[str, str] = {
-    "analysis_session": "model_analysis",
-    "contracts/columns.py": "contracts",
-}
-NATIVE_FALLBACK_DEFERRAL_UNKNOWN_STAGE: str = "analysis"
-NATIVE_FALLBACK_LIST_HEADER: str = (
-    "# Every native-to-Python fallback and analysis deferral the CI corpus may still\n"
-    "# reach, with its exact count per corpus. `--native-fallbacks check` fails on anything new,\n"
-    "# changed or gone. Ports delete their entries; see scripts/compiler_differential/README.md.\n"
-    "# The corpus does not reach type normalization (type_system): its callers are the planner,\n"
-    "# the executor and the analysis fallbacks, so test_native_type_parity.py covers that stage."
-)
-RECORDS_DIRECTORY: str = "records"
 GOLDEN_DIRECTORY: str = "tests/goldens/compiler"
 GOLDEN_MODE_CHECK: str = "check"
 GOLDEN_MODE_UPDATE: str = "update"
@@ -62,25 +32,15 @@ GOLDEN_PATH_MASK: str = "<project>"
 GOLDEN_WORK_MASK: str = "<work>"
 GOLDEN_VERSION_MASK: str = "<sqlbuild-version>"
 GOLDEN_MISSING_HINT: str = "no golden; record it with `make compiler-baselines`"
-ENGINE_NAMES: tuple[str, ...] = ("native", "native-preview")
-DEFAULT_ENGINES: tuple[str, str] = ("native", "native-preview")
 SQB_ENTRY: str = "import sys; from sqlbuild.cli.entry.main.entry import main; sys.exit(main())"
-EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset(
-    {"VIRTUAL_ENV", ENGINE_ENV_VAR, STAGE_CAPTURE_ENV_VAR, ANALYSIS_RECORD_ENV_VAR}
-)
+EXCLUDED_ENVIRONMENT_KEYS: frozenset[str] = frozenset({"VIRTUAL_ENV", STAGE_CAPTURE_ENV_VAR})
 EXCLUDED_ENVIRONMENT_PREFIX: str = "DBT_"
 PROJECT_CONFIG_FILE: str = "sqlbuild_project.toml"
 DUCKDB_ADAPTER: str = "duckdb"
 PROJECT_DIRECTORY: str = "project"
 CAPTURES_DIRECTORY: str = "captures"
-LEFT_SIDE: str = "left"
-RIGHT_SIDE: str = "right"
-TARGET_DIRECTORY: str = "target"
 COMPILED_DIRECTORY: str = "target/compiled"
 MANIFEST_FILE: str = "target/manifest.json"
-DAG_FILE: str = "target/sqlbuild_dag.json"
-STRIPPED_REPORT_FIELDS: frozenset[str] = frozenset({"compile_timings", "compiler_engine"})
-MANIFEST_VOLATILE_METADATA: frozenset[str] = frozenset({"generated_at", "invocation_id"})
 ELAPSED_TIME_PATTERN: re.Pattern[str] = re.compile(r"\b\d+(?:\.\d+)?\s?m?s\b")
 ELAPSED_TIME_MASK: str = "<elapsed>"
 COMMAND_TIMEOUT_SECONDS: float = 900.0
@@ -90,7 +50,6 @@ DEFAULT_SEED_COUNT: int = 12
 PLAN_LABEL: str = "plan"
 ERROR_SEVERITY: str = "error"
 WARNING_SEVERITY: str = "warning"
-MODEL_RESOURCE_TYPE: str = "model"
 DEFAULT_DENSE_MODELS: int = 3000
 FIXTURE_ROOT: str = "tests/e2e/fixtures"
 EXAMPLE_ROOT: str = "website/examples"
@@ -136,10 +95,6 @@ def short_model_names(*, model: Model, ctx: RuleContext) -> list[Finding]:
 CUSTOM_RULE_THRESHOLDS: str = "\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
 COLD_COMPILE: DifferentialCommand = DifferentialCommand(
     label="compile", arguments=("compile", "--json", "--manifest", "--dag")
-)
-COLD_CAPTURE_COMMAND: str = f"0-{COLD_COMPILE.label}"
-ANALYSIS_CACHE_STATE_POINTERS: frozenset[str] = frozenset(
-    {"/binding_catalog/schemas", "/binding_catalog/analysis_shapes"}
 )
 WARM_COMPILE: DifferentialCommand = DifferentialCommand(
     label="compile-warm", arguments=("compile", "--json")

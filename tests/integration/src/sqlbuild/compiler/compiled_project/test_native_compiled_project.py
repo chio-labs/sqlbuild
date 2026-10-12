@@ -12,7 +12,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import InferredColumn
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.pipeline.main.project import compile_project
 from sqlbuild.compiler.scopes.exceptions import InvalidQualifiedIdentityError
@@ -205,11 +205,9 @@ def test_given_project_when_running_native_model_loop_then_inputs_match_recorded
         fixtures=test_case.fixtures, files=test_case.files, project_dir=tmp_path / "project"
     )
 
-    native, native_counts = build_inputs_with_native_loop(
-        project_dir=project_dir, monkeypatch=monkeypatch
-    )
+    native: CompileInputsView = build_inputs_with_native_loop(project_dir=project_dir)
 
-    assert native_counts == [test_case.expected_native_models]
+    assert len(native.model_inputs) == test_case.expected_native_models
     assert inputs_summary(inputs=native, project_dir=project_dir) == expected_summary(
         test_case.expected_summary
     )
@@ -481,7 +479,7 @@ def test_given_invalid_model_when_running_native_model_loop_then_attachment_erro
     )
 
     with pytest.raises(CompileInputError) as raised:
-        _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+        _ = build_inputs_with_native_loop(project_dir=project_dir)
 
     assert raised.value.message == test_case.expected_message.format(
         model_path=project_dir / "models" / "orders.sql"
@@ -531,9 +529,7 @@ def test_given_unparseable_model_when_validating_immediately_then_syntax_error_i
     )
 
     with pytest.raises(CompileInputError) as raised:
-        _ = build_inputs_with_native_loop(
-            project_dir=project_dir, monkeypatch=monkeypatch, defer_validation=False
-        )
+        _ = build_inputs_with_native_loop(project_dir=project_dir, defer_validation=False)
 
     assert raised.value.message == test_case.expected_message.format(
         model_path=project_dir / "models" / "orders.sql"
@@ -603,7 +599,7 @@ def test_given_model_path_scope_rejects_when_running_native_model_loop_then_scop
     )
 
     with pytest.raises(InvalidQualifiedIdentityError) as raised:
-        _ = build_inputs_with_native_loop(project_dir=project_dir, monkeypatch=monkeypatch)
+        _ = build_inputs_with_native_loop(project_dir=project_dir)
 
     assert (str(raised.value), raised.value.code) == (
         test_case.expected_message,

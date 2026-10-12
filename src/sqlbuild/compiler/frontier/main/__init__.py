@@ -1,1 +1,1 @@
-"""Public compiler engine and frontier entry points."""
+"""Public compiler frontier entry points."""

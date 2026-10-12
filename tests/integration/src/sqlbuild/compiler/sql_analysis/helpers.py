@@ -1,25 +1,12 @@
-"""Read the wheel-site records a test process wrote."""
+"""Relation-name extraction outcomes for SQL analysis tests."""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import cast
 
 from sqlbuild.compiler.references.main.extract_relation_names import extract_relation_names
 from sqlbuild.compiler.references.models import RelationName
-from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_SITE_RECORD_PREFIX
 from tests.integration.src.sqlbuild.compiler.compile.helpers import ExpansionFailureCapture
-
-
-def recorded_rows(root: Path) -> tuple[tuple[str, str, int], ...]:
-    """Return every `(site, api, calls)` row the site recorder wrote below `root`."""
-
-    rows: list[tuple[str, str, int]] = []
-    for path in sorted(root.rglob(f"{POLYGLOT_SITE_RECORD_PREFIX}*.json")):
-        for site, api, count in json.loads(path.read_text(encoding="utf-8"))["calls"]:
-            rows.append((str(site), str(api), int(count)))
-    return tuple(rows)
 
 
 def relation_names_outcome(sql: str, dialect: str | None) -> object:

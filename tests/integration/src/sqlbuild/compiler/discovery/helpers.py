@@ -15,11 +15,9 @@ from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
 from itertools import compress
-from operator import not_
 from pathlib import Path
 from typing import Any, cast
 
-import pytest
 import yaml
 
 from sqlbuild import _native
@@ -58,7 +56,6 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,
@@ -670,12 +667,9 @@ def write_project(*, project_dir: Path, files: tuple[tuple[str, bytes], ...]) ->
         _ = path.write_bytes(data)
 
 
-def stage_outcome(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
-) -> tuple[object, ...]:
-    """Return the rendered discovery stage under `engine` with its failure type and message."""
+def stage_outcome(*, project_dir: Path) -> tuple[object, ...]:
+    """Return the rendered discovery stage with its failure type and message."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     capture: FailureCapture = FailureCapture()
     rendered: list[object] = [None]
     with capture:
@@ -796,12 +790,9 @@ DECLARATION_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
 }
 
 
-def declaration_files_outcome(
-    *, project_dir: Path, kind: str, engine: str, monkeypatch: pytest.MonkeyPatch
-) -> tuple[object, ...]:
-    """Return the rendered `kind` collection under `engine`, or its failure type, text and help."""
+def declaration_files_outcome(*, project_dir: Path, kind: str) -> tuple[object, ...]:
+    """Return the rendered `kind` collection, or its failure type, text and help."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     capture: FailureCapture = FailureCapture()
     with capture:
         return (
@@ -829,11 +820,10 @@ def native_declaration_tag(*, file_path: Path, kind: str) -> str:
 
 
 def tolerant_declaration_outcome(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch
+    *, project_dir: Path
 ) -> tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]]:
-    """Return tolerant scope discovery's declaration collections and faults under `engine`."""
+    """Return tolerant scope discovery's declaration collections and faults."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     discovery: TolerantScopeDiscovery = build_tolerant_scope_discovery(project_dir=project_dir)
     return (
         render_stage_capture(discovery.discovered_inputs),
@@ -1194,15 +1184,11 @@ DECLARATION_GENERATORS: dict[str, Callable[..., str]] = {
 }
 
 
-def generated_declaration_outcomes(
-    *,
-    project_root: Path,
-    test_case: GeneratedDeclarationFileTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[tuple[int, ...], Counter[str]]:
-    """Discover each generated file under both engines: the mismatching seeds and native tags."""
+def generated_declaration_tags(
+    *, project_root: Path, test_case: GeneratedDeclarationFileTestCase
+) -> Counter[str]:
+    """Discover each generated file and count whether native parsing parses or fails it."""
 
-    agreements: list[bool] = []
     tags: Counter[str] = Counter()
     for seed in range(test_case.case_count):
         project_dir: Path = project_root / str(seed)
@@ -1212,22 +1198,13 @@ def generated_declaration_outcomes(
         write_project(
             project_dir=project_dir, files=((test_case.relative_path, contents.encode("utf-8")),)
         )
-        shipped: tuple[object, ...] = declaration_files_outcome(
-            project_dir=project_dir, kind=test_case.kind, engine="native", monkeypatch=monkeypatch
-        )
-        native: tuple[object, ...] = declaration_files_outcome(
-            project_dir=project_dir,
-            kind=test_case.kind,
-            engine="native-preview",
-            monkeypatch=monkeypatch,
-        )
+        _ = declaration_files_outcome(project_dir=project_dir, kind=test_case.kind)
         tags[
             native_declaration_tag(
                 file_path=project_dir / test_case.relative_path, kind=test_case.kind
             )
         ] += 1
-        agreements.append(native == shipped)
-    return tuple(compress(range(test_case.case_count), map(not_, agreements))), tags
+    return tags
 
 
 def on_deep_stack(*, frames: int, call: Callable[[], object]) -> object:
@@ -1270,12 +1247,9 @@ def value_shape(value: object) -> tuple[tuple[int, str], ...]:
     return tuple(shape)
 
 
-def deep_model_header_values(
-    *, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch, frames: int
-) -> dict[str, object]:
-    """Discover the project's only model under `engine` beneath `frames` extra Python frames."""
+def deep_model_header_values(*, project_dir: Path, frames: int) -> dict[str, object]:
+    """Discover the project's only model beneath `frames` extra Python frames."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
     inputs: DiscoveredProjectInputs = cast(
         DiscoveredProjectInputs,
         on_deep_stack(frames=frames, call=lambda: discover_project_inputs(project_dir=project_dir)),

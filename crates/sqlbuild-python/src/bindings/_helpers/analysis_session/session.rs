@@ -1,4 +1,4 @@
-//! The native model analysis session and expression-source shapes for the preview engine.
+//! The native model analysis session and expression-source shapes.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyErr, PyModule, PyModuleMethods, PyRef, PyResult, Python};
 use pyo3::types::PyDict;

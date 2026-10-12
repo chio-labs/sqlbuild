@@ -25,7 +25,6 @@ from scripts.compile_performance_ratio.constants import (
     COMPILE_ENTRY,
     COMPILE_TIMINGS_KEY,
     COMPILED_DIRECTORY,
-    COMPILER_ENGINE_KEY,
     DENSE_KIND,
     EDIT_MODE,
     ERROR_TAIL_CHARACTERS,
@@ -123,45 +122,41 @@ def compare_builds(
     head_python: Path,
     runs: int,
     modes: tuple[str, ...],
-    engines: tuple[str | None, str | None] = (None, None),
     compile_args: tuple[str, ...] = (),
 ) -> tuple[CompileComparison, ...]:
     """Alternate base and head compiles per mode; warm and edit reuse the cold project."""
 
-    base_engine, head_engine = engines
-    builds: tuple[tuple[str, Path, Path, str | None], ...] = (
-        (BASE_LABEL, base_python, base_project_dir, base_engine),
-        (HEAD_LABEL, head_python, head_project_dir, head_engine),
+    builds: tuple[tuple[str, Path, Path], ...] = (
+        (BASE_LABEL, base_python, base_project_dir),
+        (HEAD_LABEL, head_python, head_project_dir),
     )
     comparisons: list[CompileComparison] = []
     cache_primed: bool = False
     for mode in modes:
         print(f"Comparing {MODE_TITLES[mode]} over {runs} alternating runs", file=sys.stderr)
         if mode == COLD_MODE:
-            for label, python, project_dir, engine in builds:
+            for label, python, project_dir in builds:
                 _ = _compile_once(
                     label=label,
                     python=python,
                     project_dir=project_dir,
                     mode=mode,
-                    engine=engine,
                     compile_args=compile_args,
                 )
             cache_primed = False
         elif not cache_primed:
-            for label, python, project_dir, engine in builds:
+            for label, python, project_dir in builds:
                 _ = _compile_once(
                     label=label,
                     python=python,
                     project_dir=project_dir,
                     mode=WARM_MODE,
-                    engine=engine,
                     compile_args=compile_args,
                 )
             cache_primed = True
         results: dict[str, list[CompileRun]] = {BASE_LABEL: [], HEAD_LABEL: []}
         for revision in range(runs):
-            for label, python, project_dir, engine in builds:
+            for label, python, project_dir in builds:
                 if mode == EDIT_MODE:
                     _ = apply_one_model_edit(project_dir=project_dir, revision=revision)
                 run: CompileRun = _compile_once(
@@ -169,13 +164,12 @@ def compare_builds(
                     python=python,
                     project_dir=project_dir,
                     mode=mode,
-                    engine=engine,
                     compile_args=compile_args,
                 )
                 check_cache_use(run=run, mode=mode)
                 results[label].append(run)
         if mode != COLD_MODE:
-            _, head_python, head_dir, head_build_engine = builds[1]
+            _, head_python, head_dir = builds[1]
             check_matches_uncached(
                 incremental=results[HEAD_LABEL][-1],
                 compiled=compiled_tree(project_dir=head_dir),
@@ -185,7 +179,6 @@ def compare_builds(
                     python=head_python,
                     project_dir=head_dir,
                     mode=UNCACHED_MODE,
-                    engine=head_build_engine,
                     compile_args=compile_args,
                 ),
                 project_dir=head_dir,
@@ -286,7 +279,6 @@ def _compile_once(
     python: Path,
     project_dir: Path,
     mode: str,
-    engine: str | None,
     compile_args: tuple[str, ...],
 ) -> CompileRun:
     cache_args: tuple[str, ...] = ()
@@ -295,8 +287,6 @@ def _compile_once(
     if mode in {COLD_MODE, UNCACHED_MODE}:
         cache_args = ("--no-cache",)
     environment: dict[str, str] = _compile_environment()
-    if engine is not None:
-        environment[COMPILER_ENGINE_KEY] = engine
     before: resource.struct_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
     started: float = time.perf_counter()
     completed: subprocess.CompletedProcess[str] = subprocess.run(

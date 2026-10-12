@@ -69,8 +69,6 @@ pub(crate) struct ExpansionClasses<'py> {
     pub(crate) invocation_context: Bound<'py, PyAny>,
     /// What reference calls a macro returned are reported with.
     generated: GeneratedReferenceClasses<'py>,
-    /// Counts a call run outside the memo because a test mocks its macro.
-    report_mocked: Bound<'py, PyAny>,
     pub(crate) int_type: Bound<'py, PyAny>,
     pub(crate) float_type: Bound<'py, PyAny>,
 }
@@ -210,7 +208,6 @@ impl NativeMacroExpansion {
         let classes: &ExpansionClasses<'py> = run.classes;
         let py: Python<'py> = bridge.py();
         if self.mocked(site, py)? {
-            let _ = classes.report_mocked.call0()?;
             return self.evaluated_output(run, (text, site));
         }
         let call_text: &str = text.slice(site.start, site.end);

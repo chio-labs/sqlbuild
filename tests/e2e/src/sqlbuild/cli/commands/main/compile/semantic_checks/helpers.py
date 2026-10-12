@@ -10,17 +10,15 @@ from sqlbuild.cli.compile_reuse.constants import REUSE_DISABLE_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import run_installed_sqb
 
 
-class EngineSemanticRun(NamedTuple):
-    """One engine's compile report and exit code."""
+class SemanticRun(NamedTuple):
+    """One compile report and exit code."""
 
     report: dict[str, object]
     returncode: int
 
 
-def engine_semantic_run(
-    *, project_dir: Path, files: dict[str, str], engine: str
-) -> EngineSemanticRun:
-    """Write the project and compile it once under `engine`."""
+def semantic_run(*, project_dir: Path, files: dict[str, str]) -> SemanticRun:
+    """Write the project and compile it once."""
 
     for relative_path, contents in files.items():
         path: Path = project_dir / "project" / relative_path
@@ -28,13 +26,12 @@ def engine_semantic_run(
         _ = path.write_text(contents, encoding="utf-8")
     compiled: subprocess.CompletedProcess[str] = run_installed_sqb(
         project_dir=project_dir / "project",
-        args=("--compiler-engine", engine, "compile", "--json", "--no-cache"),
+        args=("compile", "--json", "--no-cache"),
         env={REUSE_DISABLE_ENV_VAR: "1"},
     )
     report: dict[str, object] = json.loads(compiled.stdout.replace(str(project_dir), "<project>"))
-    _ = report.pop("compiler_engine", None)
     _ = report.pop("compile_timings", None)
-    return EngineSemanticRun(report=report, returncode=compiled.returncode)
+    return SemanticRun(report=report, returncode=compiled.returncode)
 
 
 def diagnostic_codes(report: dict[str, object]) -> tuple[str, ...]:

@@ -10,7 +10,6 @@ import pytest
 from sqlbuild import _native
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryFileFault
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     DeclarationFilesParityTestCase,
     DeepDeclarationHeaderTestCase,
@@ -20,14 +19,13 @@ from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
 )
 from tests.integration.src.sqlbuild.compiler.discovery.helpers import (
     declaration_files_outcome,
-    generated_declaration_outcomes,
+    generated_declaration_tags,
     native_declaration_tag,
     stage_outcome,
     tolerant_declaration_outcome,
     write_project,
 )
 
-_PREVIEW: str = "native-preview"
 _NESTING_SUFFIX: str = "contains invalid SQLBuild header syntax: values nest deeper than 256 levels"
 _MODEL: bytes = b'MODEL (description "Orders");\nSELECT 1 AS order_id'
 _MACRO: bytes = b"def cents(value):\n    return f'{value} * 100'\n"
@@ -154,19 +152,13 @@ _EVERY_KIND: tuple[tuple[str, bytes], ...] = (
     ],
     ids=lambda case: case.description,
 )
-def test_given_generated_declaration_files_when_discovering_then_engines_agree(
+def test_given_generated_declaration_files_when_discovering_then_native_parses_or_fails_them(
     test_case: GeneratedDeclarationFileTestCase,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mismatches: tuple[int, ...]
-    tags: Counter[str]
+    tags: Counter[str] = generated_declaration_tags(project_root=tmp_path, test_case=test_case)
 
-    mismatches, tags = generated_declaration_outcomes(
-        project_root=tmp_path, test_case=test_case, monkeypatch=monkeypatch
-    )
-
-    assert mismatches == test_case.expected_mismatches
     assert tags["ok"] >= test_case.expected_minimum_parsed, tags
     assert tags["error"] >= test_case.expected_minimum_failed, tags
     assert tags["defer"] <= test_case.expected_maximum_deferred, tags
@@ -265,19 +257,12 @@ def test_given_generated_declaration_files_when_discovering_then_engines_agree(
     ],
     ids=lambda case: case.description,
 )
-def test_given_declaration_files_when_discovering_through_the_engine_switch_then_inputs_match(
+def test_given_declaration_files_when_discovering_then_inputs_or_failures_are_expected(
     test_case: DeclarationFilesParityTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
-    shipped: tuple[object, ...] = stage_outcome(
-        project_dir=tmp_path, engine="native", monkeypatch=monkeypatch
-    )
+    native: tuple[object, ...] = stage_outcome(project_dir=tmp_path)
 
-    native: tuple[object, ...] = stage_outcome(
-        project_dir=tmp_path, engine=_PREVIEW, monkeypatch=monkeypatch
-    )
-
-    assert native == shipped
     assert native[1] == test_case.expected_failure_type
     assert test_case.expected_message_fragment in str(native[2])
 
@@ -328,21 +313,16 @@ def test_given_declaration_files_when_discovering_through_the_engine_switch_then
     ],
     ids=lambda case: case.description,
 )
-def test_given_deeply_nested_declaration_header_when_discovering_then_engines_report_its_line(
+def test_given_deeply_nested_declaration_header_when_discovering_then_its_line_is_reported(
     test_case: DeepDeclarationHeaderTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     nested: str = "[" * test_case.depth + "1" + "]" * test_case.depth
     contents: str = test_case.prefix + nested + test_case.suffix
     write_project(project_dir=tmp_path, files=((test_case.relative_path, contents.encode()),))
-    shipped: tuple[object, ...] = declaration_files_outcome(
-        project_dir=tmp_path, kind=test_case.kind, engine="native", monkeypatch=monkeypatch
-    )
-
     native: tuple[object, ...] = declaration_files_outcome(
-        project_dir=tmp_path, kind=test_case.kind, engine=_PREVIEW, monkeypatch=monkeypatch
+        project_dir=tmp_path, kind=test_case.kind
     )
 
-    assert native == shipped
     assert native[0] == test_case.expected_failure_type
     assert str(native[1]).endswith(test_case.expected_message_suffix), native[1]
     assert native[2] == test_case.expected_help
@@ -376,15 +356,10 @@ def test_given_broken_declaration_files_when_discovering_tolerantly_then_faults_
     test_case: TolerantDeclarationFilesTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=test_case.files)
-    shipped: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
-        tolerant_declaration_outcome(project_dir=tmp_path, engine="native", monkeypatch=monkeypatch)
-    )
-
     native: tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]] = (
-        tolerant_declaration_outcome(project_dir=tmp_path, engine=_PREVIEW, monkeypatch=monkeypatch)
+        tolerant_declaration_outcome(project_dir=tmp_path)
     )
 
-    assert native == shipped
     assert len(native[1]) == test_case.expected_resource_faults
     assert len(native[2]) == test_case.expected_declaration_faults
 
@@ -393,23 +368,16 @@ def test_given_broken_declaration_files_when_discovering_tolerantly_then_faults_
     "test_case",
     [
         NativeSessionTestCase(
-            description="the preview engine keeps its declaration session",
-            engine=_PREVIEW,
-            expected_session=True,
-        ),
-        NativeSessionTestCase(
-            description="the shipped engine keeps its declaration session",
-            engine="native",
+            description="discovery keeps its declaration session",
             expected_session=True,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_when_discovering_then_native_session_is_kept(
+def test_given_project_when_discovering_then_native_session_is_kept(
     test_case: NativeSessionTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     write_project(project_dir=tmp_path, files=_EVERY_KIND)
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, test_case.engine)
 
     discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
 

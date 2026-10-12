@@ -65,8 +65,6 @@ from sqlbuild.compiler.discovery.models import (
     NamedSqlHookEntry,
     PythonHookEntry,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.model_config.main._native_contract_classes import native_contract_classes
 from sqlbuild.compiler.model_loop.main._scan_native_declaration_references import (
@@ -354,49 +352,32 @@ def _run_native_model_loop(
         ),
     )
     host: _ModelLoopHost = _ModelLoopHost(loop=loop, interpolations=interpolations)
-    inputs, (finished_natively, config_builds, declaration_contexts, hook_statements, described) = (
-        native_loop.run(
-            native_project,
-            host,
-            [
+    inputs: list[_native.NativeModelInput] = native_loop.run(
+        native_project,
+        host,
+        [
+            (
                 (
-                    (
-                        model_file.file_path.stem,
-                        model_file.relative_path.as_posix(),
-                        str(model_file.relative_path),
-                        str(model_file.file_path),
-                    ),
-                    (
-                        model_file.header_column_locations,
-                        model_file.header_values,
-                        model_file.enum_declarations,
-                        model_file.constant_declarations,
-                    ),
-                    model_file.query_sql,
-                    model_file.contents,
-                    loop.native_declaration_references.get(model_file.file_path),
-                    _interpolation_row(interpolations[model_file.file_path]),
-                    model_file,
-                )
-                for model_file in files
-            ],
-        )
+                    model_file.file_path.stem,
+                    model_file.relative_path.as_posix(),
+                    str(model_file.relative_path),
+                    str(model_file.file_path),
+                ),
+                (
+                    model_file.header_column_locations,
+                    model_file.header_values,
+                    model_file.enum_declarations,
+                    model_file.constant_declarations,
+                ),
+                model_file.query_sql,
+                model_file.contents,
+                loop.native_declaration_references.get(model_file.file_path),
+                _interpolation_row(interpolations[model_file.file_path]),
+                model_file,
+            )
+            for model_file in files
+        ],
     )
-    report_native_answer(stage=NativeStage.MODEL_CONFIG, kind="config_builds", units=config_builds)
-    report_native_answer(
-        stage=NativeStage.MODEL_LOOP, kind="declaration_contexts", units=declaration_contexts
-    )
-    report_native_answer(
-        stage=NativeStage.MODEL_LOOP, kind="native_model_inputs", units=finished_natively
-    )
-    for stage, kind, units in (
-        (NativeStage.MODEL_LOOP, "declaration_expansions", finished_natively),
-        (NativeStage.MODEL_LOOP, "cursor_intrinsic_validations", finished_natively),
-        (NativeStage.MODEL_CONFIG, "validations", finished_natively),
-        (NativeStage.MODEL_CONFIG, "header_metadata_parses", described),
-        (NativeStage.ATTACHMENTS, "cursor_intrinsic_rejections", hook_statements),
-    ):
-        report_native_answer(stage=stage, kind=kind, units=units)
     return list(inputs)
 
 

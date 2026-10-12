@@ -1,4 +1,4 @@
-"""Plan and render SQL test artifacts natively for the preview compiler engine."""
+"""Plan and render SQL test artifacts natively."""
 
 from __future__ import annotations
 

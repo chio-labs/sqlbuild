@@ -35,7 +35,7 @@ from sqlbuild.compiler.project_assembly.models import (
 from sqlbuild.spec.contracts.models import SchemaDynamicColumnFamily
 
 
-def project_facts_by_engine(
+def native_project_facts(
     *,
     inputs: CompileInputsView,
     dialect: str | None,
@@ -91,7 +91,7 @@ def project_facts_by_engine(
     )
 
 
-def expression_source_shapes_by_engine(
+def expression_source_shapes(
     *, expressions: tuple[str, ...], profile: ExpressionInferenceProfile
 ) -> tuple[dict[str, str] | None, ...]:
     """Infer one shape per expression source natively."""

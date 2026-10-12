@@ -1,4 +1,4 @@
-"""Generated projects and engine views for native project assembly parity."""
+"""Generated projects and assembly views for native project assembly."""
 
 from __future__ import annotations
 
@@ -24,8 +24,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from sqlbuild.sql_values.types import CollectionRendering
 
@@ -158,23 +156,20 @@ def project_inputs(*, project_dir: Path, files: dict[str, str]) -> CompileInputs
 
 
 def assemble_with(
-    *, inputs: CompileInputsView, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+    *, inputs: CompileInputsView, monkeypatch: pytest.MonkeyPatch
 ) -> CompiledProjectView:
-    """Assemble `inputs` with `engine`."""
+    """Assemble `inputs`."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
     return assemble_compiled_project(inputs=inputs)
 
 
 def recorded_assembly(
-    *, inputs: CompileInputsView, engine: CompilerEngine, monkeypatch: pytest.MonkeyPatch
+    *, inputs: CompileInputsView, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[object, tuple[tuple[str, ...], bool]]:
-    """Assemble `inputs` with `engine`; return its assembly view and the input reads recorded."""
+    """Assemble `inputs`; return its assembly view and the input reads recorded."""
 
     with COMPILE_INPUT_READS.recording() as reads:
-        project: CompiledProjectView = assemble_with(
-            inputs=inputs, engine=engine, monkeypatch=monkeypatch
-        )
+        project: CompiledProjectView = assemble_with(inputs=inputs, monkeypatch=monkeypatch)
     return assembly_view(project), (reads.environment_names, reads.read_run_id)
 
 
@@ -194,9 +189,7 @@ def assembly_outcome(
         )
         return (
             "ok",
-            assembly_view(
-                assemble_with(inputs=merged, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch)
-            ),
+            assembly_view(assemble_with(inputs=merged, monkeypatch=monkeypatch)),
         )
     except Exception as error:
         return (
@@ -224,12 +217,10 @@ def rejected_opt_outs(
     *,
     project_dir: Path,
     files: dict[str, str],
-    engine: CompilerEngine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> dict[str, bool]:
-    """Attach `files` with `engine`; return whether each opt-out is rejected."""
+    """Attach `files`; return whether each opt-out is rejected."""
 
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, engine.value)
     inputs: CompileInputsView = project_inputs(project_dir=project_dir, files=files)
     return {
         model_input.model_file.file_path.stem: model_input.rejected_sql_analysis_opt_out is not None

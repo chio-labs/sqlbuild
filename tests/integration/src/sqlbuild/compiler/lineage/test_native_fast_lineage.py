@@ -18,7 +18,6 @@ from sqlbuild.compiler.lineage.main._build_native_column_lineage import (
     build_native_column_lineage,
 )
 from sqlbuild.compiler.lineage.models import ProjectColumnLineage
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
@@ -35,7 +34,6 @@ from tests.integration.src.sqlbuild.compiler.lineage._test_types import (
 )
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import (
     compiled_project,
-    deferral_records,
     generated_lineage_files,
     lineage_log_records,
     lineage_views,
@@ -195,8 +193,6 @@ def test_given_formerly_deferred_models_when_building_fast_lineage_then_native_a
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
     compiled: CompiledProjectView = without_compact_facts(
         compiled_project(
@@ -211,7 +207,6 @@ def test_given_formerly_deferred_models_when_building_fast_lineage_then_native_a
     _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
 
     assert statuses == Counter(test_case.expected_native_statuses), test_case.description
-    assert deferral_records(record_dir) == []
 
 
 @pytest.mark.parametrize(
@@ -232,8 +227,6 @@ def test_given_unknown_dialect_when_building_fast_lineage_then_python_error_rais
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     statuses: Counter[str] = record_native_outcomes(monkeypatch=monkeypatch)
     compiled: CompiledProjectView = without_compact_facts(
         compiled_project(
@@ -249,7 +242,6 @@ def test_given_unknown_dialect_when_building_fast_lineage_then_python_error_rais
         _ = lineage_views(project=project, dialect=test_case.dialect, model_names=None)
 
     assert statuses == Counter(test_case.expected_native_statuses), test_case.description
-    assert deferral_records(record_dir) == []
 
 
 @pytest.mark.parametrize(

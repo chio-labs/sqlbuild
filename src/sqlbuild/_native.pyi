@@ -101,7 +101,7 @@ def build_rules_request(
     models: tuple[NativeCompiledProject, list[str]],
     sql_tests: list[tuple[object, ...]],
     scenarios: list[tuple[object, ...]],
-) -> tuple[NativeRulesRequest, tuple[int, int, int]]: ...
+) -> NativeRulesRequest: ...
 def evaluate_rules_request(
     request: NativeRulesRequest,
 ) -> tuple[
@@ -740,7 +740,7 @@ class NativeModelLoop:
         project: NativeCompiledProject,
         host: object,
         models: list[tuple[object, ...]],
-    ) -> tuple[list[NativeModelInput], tuple[int, int, int, int, int]]: ...
+    ) -> list[NativeModelInput]: ...
 
 def relation_key_row(
     kind: str, name: str, values: dict[str, object], entry: object

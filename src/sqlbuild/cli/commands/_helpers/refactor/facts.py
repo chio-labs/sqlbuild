@@ -16,8 +16,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredProjectInputs,
     DiscoveredSqlTestBlock,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.refactoring.constants import (
     GENERIC_DIALECT,
     MIGRATE_FROM_KEY,
@@ -106,7 +104,6 @@ def declaration_placement_host(*, project: RefactorProject) -> Callable[[tuple[s
 
     def placement(move: tuple[str, str]) -> str:
         model_name, destination = move
-        report_native_answer(stage=NativeStage.REFACTORING, kind="declaration_moves")
         index: ScopeIndex = project.graph.project.scope_index
         preview: MovePreview | None
         diagnostics: tuple[ScopeDiagnostic, ...]

@@ -54,37 +54,20 @@ The same check fails when the workspace version, the `pyproject.toml` version an
 `fensu check` applies the Rust structure rules inside each crate: other crates use items through
 `main/` entry points, `models.rs`, `types.rs` and `constants.rs`, not through `_helpers/`.
 
-## Compiler engines
+## Compiler
 
-`SQLBUILD_COMPILER_ENGINE` (or the hidden `--compiler-engine` flag) selects which compiler
-stages run natively:
-
-| Engine | Runs |
-|---|---|
-| `native` | The default: discovery, rendering and analysis, and every native stage that passed its flip gate (`shipped` tier). |
-| `native-preview` | Opt-in: shipped stages plus stages still in development (`preview` tier). |
-
-The Python compiler and its `python` engine were removed once discovery, rendering and analysis
-shipped natively; setting `python` is an error that says so. Generic compiler stages do not
-rescue native failures through a Python implementation. User macros, custom rules and adapter
-callbacks retain their explicit Python boundaries. The recorder in
-`scripts/compiler_differential/native_fallbacks.toml` tracks native answers and the remaining
-extension/test-mock callbacks. A failing render raises its first error directly and runs each macro call at most
-once; a divergence the bridge detects is reported as a native stage mismatch. Because the
-macro-call store is always on, the
+The compiler runs discovery, rendering and analysis natively. Generic compiler stages do not
+rescue native failures through a Python implementation; user macros, custom rules and adapter
+callbacks keep their explicit Python boundaries. A failing render raises its first error directly
+and runs each macro call at most once; a divergence the bridge detects is reported as a native
+stage mismatch. Because the macro-call store is always on, the
 [macro determinism contract](../website/src/content/docs/docs/concepts/macros.mdx) applies to
 every compile.
 
-Each native stage declares its tier once, in `NATIVE_STAGE_TIERS` in
-`src/sqlbuild/compiler/frontier/constants.py`. A stage moves from `preview` to `shipped` by
-changing that line, after its flip gate passes: a byte-identical real project, a green
-differential, and no measured slowdown on cold, edit and no-change compiles. Every engine keeps
-its own compiler, Rules and compile-reuse stores, so preview output is never reused by `native`.
-
-`make compiler-differential` compares `native` with `native-preview` on the full per-PR corpus
-and checks both against the goldens in `tests/goldens/compiler`, with stage captures and full
-discovery, render and analysis coverage required. CI also runs it on Python 3.13 and 3.14, and
-on Windows checks that both engines compile a playground project to the same files.
+`make compiler-differential` runs the full per-PR corpus once and checks every output against
+the goldens in `tests/goldens/compiler`, with stage captures and full discovery, render and
+analysis coverage required. CI also runs it on Python 3.13 and 3.14, and compiles and builds a
+playground project on Windows.
 
 ## Working on the crates
 

@@ -1,4 +1,4 @@
-"""Both compiler engines discover identical SQL model files, failures and project inputs."""
+"""Native discovery reads SQL model files, failures and project inputs."""
 
 from __future__ import annotations
 

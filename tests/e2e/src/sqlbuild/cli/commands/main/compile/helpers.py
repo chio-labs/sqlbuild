@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+import logging
 import os
 import random
 import re
@@ -57,6 +58,7 @@ from sqlbuild.cli.compile_reuse.constants import (
     NATIVE_REUSE_SUFFIX,
     RETIRED_REUSE_DIRECTORY_NAME,
     REUSE_DISABLE_ENV_VAR,
+    REUSE_LOGGER_NAME,
 )
 from sqlbuild.compiler.analysis_session.constants import NATIVE_ANALYSIS_STORE_FILE_NAME
 from sqlbuild.compiler.compile.constants import (
@@ -67,11 +69,9 @@ from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.frontier.constants import (
     COMPILER_CACHE_DIRECTORY_NAME,
-    COMPILER_ENGINE_ENV_VAR,
     RETIRED_CACHE_NAMESPACE_SUFFIXES,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -2989,7 +2989,6 @@ COMPILE_REUSE_ENV: dict[str, str] = {
     COMPILE_REUSE_REGION_ENV_VAR: "north",
 }
 COMPILE_REUSE_HIT_LINE: str = "Inputs unchanged; reused the previous compile"
-REUSE_DIGESTED_FILES_KIND: str = "reuse_digested_files"
 _COMPILE_REUSE_RULES_CONFIG: str = (
     '\n[rules]\nselect = ["XSQBR"]\n\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n'
     "\n[references]\nenforce_explicit = false\n"
@@ -3375,17 +3374,26 @@ def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
     path.write_bytes(path.read_bytes())
 
 
-def record_digested_files(*, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, int]]:
-    """Record every native reuse answer, among them the project files read for digests."""
+class _DigestedFilesHandler(logging.Handler):
+    """Collect the project-file digest counts compile reuse logs at debug level."""
 
-    reads: list[dict[str, int]] = []
-    original: Callable[..., None] = native_reuse.report_native_answer
+    def __init__(self, reads: list[int]) -> None:
+        super().__init__(level=logging.DEBUG)
+        self._reads: list[int] = reads
 
-    def recording(*, stage: NativeStage, kind: str, units: int = 1) -> None:
-        reads.append({kind: units})
-        original(stage=stage, kind=kind, units=units)
+    def emit(self, record: logging.LogRecord) -> None:
+        digest: bool = "digested %d project files" in str(record.msg)
+        self._reads.extend(int(count) for count in cast(tuple[int], record.args)[: int(digest)])
 
-    monkeypatch.setattr(native_reuse, "report_native_answer", recording)
+
+def record_digested_files(*, monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record how many project files each compile reuse check and record digested."""
+
+    reads: list[int] = []
+    logger: logging.Logger = logging.getLogger(REUSE_LOGGER_NAME)
+    monkeypatch.setattr(logger, "handlers", [*logger.handlers, _DigestedFilesHandler(reads)])
+    monkeypatch.setattr(logger, "level", logger.level)
+    logger.setLevel(logging.DEBUG)
     return reads
 
 
@@ -3432,7 +3440,7 @@ def compile_in_process_reused(
 
 
 def in_process_compile_reads(
-    *, project_dir: Path, digested: list[dict[str, int]], capsys: pytest.CaptureFixture[str]
+    *, project_dir: Path, digested: list[int], capsys: pytest.CaptureFixture[str]
 ) -> tuple[int, int, bool]:
     """Compile in this process; return its exit code, project files read, and whether it reused."""
 
@@ -3440,7 +3448,7 @@ def in_process_compile_reads(
     _ = capsys.readouterr()
     code: int = compile_in_process(project_dir=project_dir)
     reused: bool = COMPILE_REUSE_HIT_LINE in capsys.readouterr().err
-    reads: int = sum(answer.get(REUSE_DIGESTED_FILES_KIND, 0) for answer in digested[start:])
+    reads: int = sum(digested[start:])
     return code, reads, reused
 
 
@@ -4150,7 +4158,7 @@ RETIRED_RENDER_FILES: tuple[str, ...] = (
 
 
 def write_retired_compiler_cache_files(project_dir: Path) -> tuple[Path, ...]:
-    """Leave every engine's fact and reference caches and other slots' render files behind."""
+    """Leave retired fact and reference caches and other slots' render files behind."""
 
     written: list[Path] = []
     for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES:
@@ -4287,7 +4295,7 @@ def write_external_modules(*, extlib: Path, files: dict[str, str]) -> None:
 
 
 def add_stored_flavor_macro(
-    *, project_dir: Path, extlib: Path, import_name: str, log_path: Path, engine: str
+    *, project_dir: Path, extlib: Path, import_name: str, log_path: Path
 ) -> dict[str, str]:
     """Make fact orders call a logged macro that lazily imports `import_name`; return its env."""
 
@@ -4311,7 +4319,6 @@ def add_stored_flavor_macro(
         "PYTHONPATH": str(extlib),
         "PYTHONDONTWRITEBYTECODE": "1",
         STORED_FLAVOR_LOG_ENV_VAR: str(log_path),
-        COMPILER_ENGINE_ENV_VAR: engine,
     }
 
 
@@ -4328,34 +4335,11 @@ def compiled_text(*, run: CompileReuseRun, suffix: str) -> str:
     return run.compiled[path].decode("utf-8")
 
 
-_COMPILER_ENGINE_LINE: re.Pattern[str] = re.compile(r'\n  "compiler_engine": "([a-z-]+)",')
-
-
 def copy_compile_project(*, source: Path, destination: Path) -> Path:
     """Copy a prepared project to a new directory and return the copy."""
 
     _ = shutil.copytree(source, destination)
     return destination
-
-
-def engine_reuse_compile(*, project_dir: Path, engine: str) -> CompileReuseRun:
-    """Compile with reuse enabled under one engine selected by the hidden flag."""
-
-    return run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
-
-
-def report_engine(run: CompileReuseRun) -> str:
-    """Return the engine named in a JSON compile report."""
-
-    match: re.Match[str] | None = _COMPILER_ENGINE_LINE.search(run.report)
-    assert match is not None
-    return match.group(1)
-
-
-def report_without_engine(run: CompileReuseRun) -> str:
-    """Return a JSON compile report without its timings and engine fields."""
-
-    return _COMPILER_ENGINE_LINE.sub("", run.report)
 
 
 def store_digests(*, project_dir: Path, stores: tuple[str, ...]) -> dict[str, str]:
@@ -4478,12 +4462,11 @@ def _diagnostic_fields(item: dict[str, object]) -> tuple[object, ...]:
 
 
 def macro_reference_call_runs(
-    *, project_dir: Path, log_path: Path, engine: str, runs: int
+    *, project_dir: Path, log_path: Path, runs: int
 ) -> MacroReferenceCallRuns:
     """Compile `runs` times in fresh processes, keeping the macro call store between runs."""
 
     env: dict[str, str] = {
-        COMPILER_ENGINE_ENV_VAR: engine,
         REUSE_DISABLE_ENV_VAR: "1",
         MACRO_CALL_LOG_ENV_VAR: str(log_path),
     }
@@ -4508,7 +4491,6 @@ def macro_reference_call_runs(
     )
 
 
-MACRO_CALL_STORE_ENGINE: str = "native"
 STORE_ENVIRONMENT_REGION_VAR: str = "SQB_STORE_TEST_REGION"
 STORE_ARGUMENT_ENV_VAR: str = "STORE_TEST_ARGUMENT"
 _REUSE_DISABLED_VALUES: dict[bool, str] = {True: "0", False: "1"}
@@ -4632,7 +4614,7 @@ def macro_call_store_compile(
         STORE_ARGUMENT_ENV_VAR: "first",
         **dict(extra_env),
     }
-    global_args: tuple[str, ...] = ("--compiler-engine", MACRO_CALL_STORE_ENGINE)
+    global_args: tuple[str, ...] = ()
     _ = log_path.write_text("", encoding="utf-8")
     incremental: CompileReuseRun = run_reuse_compile(
         project_dir=project_dir, env=env, args=args, global_args=global_args
@@ -4782,7 +4764,7 @@ def uncached_reference_compile(*, project_dir: Path, extlib: Path) -> CompileReu
 
     return run_reuse_compile(
         project_dir=project_dir,
-        env={"PYTHONPATH": str(extlib), COMPILER_ENGINE_ENV_VAR: MACRO_CALL_STORE_ENGINE},
+        env={"PYTHONPATH": str(extlib)},
         args=("--no-cache",),
     )
 
@@ -4816,21 +4798,20 @@ def store_files(project_dir: Path) -> dict[str, bytes]:
     }
 
 
-class EngineMacroCallRuns(NamedTuple):
-    """Full compiles under one engine: exit codes, macro executions, and macro call stores."""
+class FullMacroCallRuns(NamedTuple):
+    """Full compiles: exit codes, macro executions, and macro call stores."""
 
     returncodes: tuple[int, ...]
     logged_calls: tuple[int, ...]
     store_files: tuple[str, ...]
 
 
-def engine_macro_call_runs(
-    *, project_dir: Path, extlib: Path, log_path: Path, engine: str, runs: int
-) -> EngineMacroCallRuns:
-    """Compile fully `runs` times under an engine selected by environment; empty is the default."""
+def full_macro_call_runs(
+    *, project_dir: Path, extlib: Path, log_path: Path, runs: int
+) -> FullMacroCallRuns:
+    """Compile fully `runs` times."""
 
     env: dict[str, str] = {
-        COMPILER_ENGINE_ENV_VAR: engine,
         REUSE_DISABLE_ENV_VAR: "1",
         MACRO_CALL_LOG_ENV_VAR: str(log_path),
         "PYTHONPATH": str(extlib),
@@ -4842,7 +4823,7 @@ def engine_macro_call_runs(
         _ = log_path.write_text("", encoding="utf-8")
         returncodes.append(run_reuse_compile(project_dir=project_dir, env=env).returncode)
         logged_calls.append(len(log_path.read_text(encoding="utf-8").splitlines()))
-    return EngineMacroCallRuns(
+    return FullMacroCallRuns(
         returncodes=tuple(returncodes),
         logged_calls=tuple(logged_calls),
         store_files=tuple(
@@ -4889,19 +4870,17 @@ def _recorded_seam(
     return recorded
 
 
-def engine_in_process_compile(
+def seam_recording_compile(
     *,
     project_dir: Path,
-    engine: str,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> tuple[CompileReuseRun, dict[str, list[object]]]:
-    """Compile in this process under `engine`; return the run and what each seam returned."""
+    """Compile in this process; return the run and what each seam returned."""
 
     with monkeypatch.context() as patch:
         for name, value in {
             **COMPILE_REUSE_ENV,
-            COMPILER_ENGINE_ENV_VAR: engine,
             REUSE_DISABLE_ENV_VAR: "1",
         }.items():
             patch.setenv(name, value)
@@ -4918,14 +4897,13 @@ class NativeTypeAnswers(NamedTuple):
     typed_comparisons: int
 
 
-def type_system_engine_compile(
+def type_system_compile(
     *,
     project_dir: Path,
-    engine: str,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> tuple[CompileReuseRun, NativeTypeAnswers]:
-    """Compile in this process under `engine`; return the run and what native types answered."""
+    """Compile in this process; return the run and what native types answered."""
 
     normalized: list[bool] = []
     statuses: Counter[str] = Counter()
@@ -4950,7 +4928,7 @@ def type_system_engine_compile(
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
         patch.setattr(contract_entry, "native_model_contracts", recorded_contracts)
-        for name, value in {COMPILER_ENGINE_ENV_VAR: engine, REUSE_DISABLE_ENV_VAR: "1"}.items():
+        for name, value in {REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     type_normalization.normalize_type.cache_clear()
@@ -4960,12 +4938,11 @@ def type_system_engine_compile(
     )
 
 
-def lifecycle_error_type(*, project_dir: Path, engine: str, monkeypatch: pytest.MonkeyPatch) -> str:
-    """Compile in this process under `engine`; return the failed invocation's error type."""
+def lifecycle_error_type(*, project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Compile in this process; return the failed invocation's error type."""
 
     published: list[LifecycleEvent] = []
     with monkeypatch.context() as patch:
-        patch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
         patch.setenv(REUSE_DISABLE_ENV_VAR, "1")
         patch.setattr(
             EventDispatcher,
@@ -4984,7 +4961,7 @@ def fallback_free_preview_compile(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> tuple[CompileReuseRun, list[str]]:
-    """Compile under native-preview in this process; return the run and fallbacks it called."""
+    """Compile in this process; return the run and fallbacks it called."""
 
     called: list[str] = []
 
@@ -4999,7 +4976,6 @@ def fallback_free_preview_compile(
         for module, name in fallbacks:
             patch.setattr(module, name, recorder(name))
         for variable, value in {
-            COMPILER_ENGINE_ENV_VAR: "native-preview",
             REUSE_DISABLE_ENV_VAR: "1",
         }.items():
             patch.setenv(variable, value)

@@ -14,8 +14,6 @@ from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.project_assembly.types import ProjectRequestRow
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
@@ -93,8 +91,7 @@ def test_given_generated_projects_when_assembling_natively_then_matches_python_g
         for project_dir in project_dirs
     ]
     native: list[tuple[object, tuple[tuple[str, ...], bool]]] = [
-        recorded_assembly(inputs=item, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch)
-        for item in inputs
+        recorded_assembly(inputs=item, monkeypatch=monkeypatch) for item in inputs
     ]
     golden: list[GoldenEntry] = [
         golden_entry("project_assembly", view, masked=(str(project_dir),))
@@ -187,7 +184,7 @@ def test_given_model_sql_the_parser_rejects_when_assembling_then_raises_python_e
     inputs: CompileInputsView = project_inputs(project_dir=tmp_path, files=test_case.files)
 
     with pytest.raises(CompileInputError) as raised:
-        _ = assemble_with(inputs=inputs, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch)
+        _ = assemble_with(inputs=inputs, monkeypatch=monkeypatch)
 
     assert test_case.expected_error in str(raised.value)
 
@@ -217,9 +214,7 @@ def test_given_windows_environment_when_assembling_natively_then_env_lookups_mat
         },
     )
 
-    native: CompiledProjectView = assemble_with(
-        inputs=inputs, engine=CompilerEngine.NATIVE, monkeypatch=monkeypatch
-    )
+    native: CompiledProjectView = assemble_with(inputs=inputs, monkeypatch=monkeypatch)
 
     assert native.seeds[0].destination.schema == test_case.expected_schema
 
@@ -250,7 +245,6 @@ def test_given_sql_analysis_opt_outs_when_attaching_natively_then_python_rejecti
     native: dict[str, bool] = rejected_opt_outs(
         project_dir=tmp_path / "native",
         files=files,
-        engine=CompilerEngine.NATIVE,
         monkeypatch=monkeypatch,
     )
 
@@ -297,7 +291,6 @@ def test_given_project_when_assembling_natively_then_request_carries_graph_facts
     requests: list[ProjectRequestRow] = record_assembly_requests(monkeypatch=monkeypatch)
     project: CompiledProjectView = assemble_with(
         inputs=project_inputs(project_dir=tmp_path / "project", files=test_case.files),
-        engine=CompilerEngine.NATIVE,
         monkeypatch=monkeypatch,
     )
     request: ProjectRequestRow = requests[0]
@@ -343,7 +336,6 @@ def test_given_project_when_assembling_natively_then_request_carries_graph_facts
 def test_given_native_assembly_panics_when_assembling_then_raises_without_python_retry(
     test_case: NativePanicTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
     inputs: CompileInputsView = project_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )

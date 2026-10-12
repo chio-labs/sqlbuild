@@ -1,4 +1,4 @@
-"""Run the failure corpus under one engine and report the codes each case really emits."""
+"""Run the failure corpus and report the codes each case really emits."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from scripts.compiler_differential._helpers.comparing.comparison import (
 )
 from scripts.compiler_differential._helpers.corpus.corpus import build_corpus
 from scripts.compiler_differential._helpers.goldens.goldens import golden_path_masks, masked_text
-from scripts.compiler_differential._helpers.running.execution import run_engine
+from scripts.compiler_differential._helpers.running.execution import run_project
 from scripts.compiler_differential.constants import (
     ANALYSIS_CODE_SCAN_ROOTS,
     ANALYSIS_NATIVE_CODE_SCAN_ROOTS,
@@ -22,7 +22,6 @@ from scripts.compiler_differential.constants import (
     DIAGNOSTIC_CODE_PATTERN,
     ERROR_SEVERITY,
     EXPECT_SUCCESS,
-    LEFT_SIDE,
     NATIVE_CODE_CONSTANT_PATTERN,
     NATIVE_CODE_TEST_DIRECTORY,
     RENDER_CODE_SCAN_EXCLUDED,
@@ -34,9 +33,9 @@ from scripts.compiler_differential.models import (
     CorpusProject,
     DifferentialOptions,
     EmittedCodes,
-    EngineRun,
     ExpectedOutcome,
     FailureCase,
+    ProjectRun,
 )
 from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_SHADOW_CODE
 from sqlbuild.compiler.compile import constants as compile_constants
@@ -51,7 +50,7 @@ _CODE_KEYWORD: str = "code"
 
 
 def emitted_failure_codes(*, options: DifferentialOptions) -> dict[str, EmittedCodes]:
-    """Compile every failure case under the first engine and return its emitted codes by name."""
+    """Compile every failure case and return its emitted codes by name."""
 
     corpus: list[CorpusProject] = build_corpus(
         repo_root=options.work_dir,
@@ -69,7 +68,7 @@ def emitted_failure_codes(*, options: DifferentialOptions) -> dict[str, EmittedC
 
 
 def case_emitted_codes(*, case: FailureCase, options: DifferentialOptions) -> EmittedCodes:
-    """Compile one failure case under the first engine and return what it really emitted."""
+    """Compile one failure case and return what it really emitted."""
 
     return _emitted_codes(
         project=CorpusProject(
@@ -209,13 +208,8 @@ def _emitted_codes(*, project: CorpusProject, options: DifferentialOptions) -> E
     source_dir: Path = case_dir / _SOURCE_DIRECTORY
     if project.writer is not None:
         project.writer(source_dir)
-    run: EngineRun = run_engine(
-        project=project,
-        source_dir=source_dir,
-        case_dir=case_dir,
-        engine=options.engines[0],
-        side=LEFT_SIDE,
-        options=options,
+    run: ProjectRun = run_project(
+        project=project, source_dir=source_dir, case_dir=case_dir, options=options
     )
     first: dict[str, object] = first_diagnostic(outcome=run.outcomes[0], severity=ERROR_SEVERITY)
     message: str | None = first_diagnostic_message(outcome=run.outcomes[0], severity=ERROR_SEVERITY)

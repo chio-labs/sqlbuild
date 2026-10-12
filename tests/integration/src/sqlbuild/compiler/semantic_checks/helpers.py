@@ -25,7 +25,6 @@ from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
 from sqlbuild.compiler.pipeline.main.graph import build_project_graph
 from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_diagnostics
 from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_models
@@ -196,9 +195,8 @@ def captured_semantic_inputs(
     project_dir: Path,
     files: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
-    engine: str = "native",
 ) -> SemanticInputs:
-    """Compile with `engine` and keep the semantic completion stage's inputs."""
+    """Compile and keep the semantic completion stage's inputs."""
 
     for relative_path, contents in files.items():
         path: Path = project_dir / relative_path
@@ -211,7 +209,6 @@ def captured_semantic_inputs(
         return complete_semantic_diagnostics(**arguments)
 
     with monkeypatch.context() as patch:
-        patch.setenv(COMPILER_ENGINE_ENV_VAR, engine)
         patch.setattr(assembly_project, "complete_semantic_diagnostics", capture)
         _ = build_project_graph(
             discovered_inputs=discover_project_inputs(project_dir=project_dir),

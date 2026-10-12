@@ -12,8 +12,6 @@ from sqlbuild.cli.commands._helpers.refactor.facts import (
     model_facts_json,
     refactor_facts_json,
 )
-from sqlbuild.compiler.frontier.main.report_native_answer import report_native_answer
-from sqlbuild.compiler.frontier.types import NativeStage
 from sqlbuild.compiler.refactoring.exceptions import (
     RefactorEditError,
     RefactorInputError,
@@ -36,8 +34,6 @@ from sqlbuild.compiler.refactoring.types import (
     RefactorOperation,
 )
 
-_PLANNED_EDITS_KIND: str = "planned_edits"
-_MIGRATION_EDITS_KIND: str = "migration_edits"
 _PLAN_KEY: str = "plan"
 _ERROR_KEY: str = "error"
 
@@ -56,11 +52,6 @@ def plan_native_refactor(
     )
     payload: dict[str, Any] = _payload(response=response, key=_PLAN_KEY)
     plan: RefactorPlan = decode_plan(payload)
-    report_native_answer(
-        stage=NativeStage.REFACTORING,
-        kind=_PLANNED_EDITS_KIND,
-        units=sum(len(change.edits) for change in plan.changes),
-    )
     return plan, json.dumps(payload)
 
 
@@ -97,10 +88,6 @@ def migrate_native_refactor(
     )
     payload: dict[str, Any] = _payload(response=response, key=_PLAN_KEY)
     migrated: RefactorPlan = decode_plan(payload)
-    added: int = sum(len(change.edits) for change in migrated.changes) - sum(
-        len(change.edits) for change in decode_plan(json.loads(plan_json)).changes
-    )
-    report_native_answer(stage=NativeStage.REFACTORING, kind=_MIGRATION_EDITS_KIND, units=added)
     return migrated, json.dumps(payload)
 
 

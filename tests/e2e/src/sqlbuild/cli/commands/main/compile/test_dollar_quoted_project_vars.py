@@ -1,4 +1,4 @@
-"""E2E coverage for project variables around dollar-quoted text on every compiler engine."""
+"""E2E coverage for project variables around dollar-quoted text."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
-_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _PROJECT_TOML: str = 'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "north"\n'
 _MODEL_HEADER: str = "MODEL (description 'Order region labels.', materialized view);\n\n"
 _COMPILED_MODEL: Path = Path("target/compiled/models/order_labels.sql")
@@ -22,8 +21,7 @@ _COMPILED_MODEL: Path = Path("target/compiled/models/order_labels.sql")
     "test_case",
     [
         DollarQuotedProjectVarCompileCase(
-            description=f"comment_markers_inside_dollar_quotes_are_text_{engine}",
-            engine=engine,
+            description="comment_markers_inside_dollar_quotes_are_text",
             model_sql=(
                 "SELECT $$--@@region$$ AS label, $tag$ it's /* $tag$ AS note, "
                 "$$ /* $$ AS a, '@@region' AS b -- */\n"
@@ -33,7 +31,6 @@ _COMPILED_MODEL: Path = Path("target/compiled/models/order_labels.sql")
                 "$$ /* $$ AS a, 'north' AS b -- */"
             ),
         )
-        for engine in _ENGINES
     ],
     ids=lambda case: case.description,
 )
@@ -50,7 +47,7 @@ def test_given_dollar_quoted_model_sql_when_compiling_then_vars_substitute_insid
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "--compiler-engine", test_case.engine, "compile"),
+        command=("--no-color", "compile"),
         project_dir=project_dir,
     )
 
@@ -63,12 +60,10 @@ def test_given_dollar_quoted_model_sql_when_compiling_then_vars_substitute_insid
     "test_case",
     [
         DollarQuotedProjectVarCompileCase(
-            description=f"unclosed_dollar_quote_reports_interpolation_error_{engine}",
-            engine=engine,
+            description="unclosed_dollar_quote_reports_interpolation_error",
             model_sql="SELECT $tag$ @@region AS label\n",
             expected_fragment="error[P001]: SQL interpolation contains an unclosed quoted string",
         )
-        for engine in _ENGINES
     ],
     ids=lambda case: case.description,
 )
@@ -85,7 +80,7 @@ def test_given_unclosed_dollar_quote_with_var_when_compiling_then_interpolation_
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "--compiler-engine", test_case.engine, "compile"),
+        command=("--no-color", "compile"),
         project_dir=project_dir,
     )
 

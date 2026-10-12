@@ -1,4 +1,4 @@
-"""The native model config stage parses headers like the YAML schema parsers, on every engine."""
+"""The native model config stage parses headers like the YAML schema parsers."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from tests.integration.src.sqlbuild.compiler.model_config.helpers import (
     column_metadata_outcome,
     generated_header_metadata,
     header_metadata_parity,
-    model_config_engine_outcome,
+    model_config_outcome,
 )
 
 
@@ -95,15 +95,7 @@ def test_given_template_or_macro_column_metadata_when_attaching_then_loop_expand
     "test_case",
     [
         ModelConfigTierTestCase(
-            description="shipped native stages",
-            engine="native",
-            expected_native_calls={
-                "expand_config_templates": 0,
-            },
-        ),
-        ModelConfigTierTestCase(
-            description="native preview",
-            engine="native-preview",
+            description="native model config",
             expected_native_calls={
                 "expand_config_templates": 0,
             },
@@ -111,20 +103,12 @@ def test_given_template_or_macro_column_metadata_when_attaching_then_loop_expand
     ],
     ids=lambda case: case.description,
 )
-def test_given_engine_tier_when_building_model_inputs_then_every_engine_runs_native_config(
+def test_given_project_when_building_model_inputs_then_native_config_entries_are_called(
     test_case: ModelConfigTierTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls, config = model_config_engine_outcome(
-        project_dir=tmp_path / test_case.engine, engine=test_case.engine, monkeypatch=monkeypatch
-    )
-    _, shipped_config = model_config_engine_outcome(
-        project_dir=tmp_path / "shipped", engine="native", monkeypatch=monkeypatch
-    )
+    calls, _ = model_config_outcome(project_dir=tmp_path / "orders", monkeypatch=monkeypatch)
 
-    assert (calls, config.replace(test_case.engine, "shipped")) == (
-        test_case.expected_native_calls,
-        shipped_config,
-    )
+    assert calls == test_case.expected_native_calls
 
 
 if __name__ == "__main__":

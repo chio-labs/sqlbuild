@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import itertools
 import random
-from collections import Counter
 from itertools import product
 from pathlib import Path
 from typing import Any
@@ -21,10 +20,7 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 from sqlbuild.compiler.analysis_session.models import NativeModelAnalysisRequest
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.frontier.constants import COMPILER_ENGINE_ENV_VAR
-from sqlbuild.compiler.frontier.types import CompilerEngine
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     AdapterRuleCallbackTestCase,
     CyclicAnalysisTestCase,
@@ -44,7 +40,6 @@ from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     compile_inputs,
     compiled_project_view,
     custom_nullability_rule,
-    deferral_kinds,
     duplicate_analysed_model_names,
     generated_analysis_files,
     native_pivot_proofs,
@@ -189,8 +184,6 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     rng: random.Random = random.Random(test_case.seed)
     runs: NativeAnalysisRuns = NativeAnalysisRuns()
     for index in range(test_case.count):
@@ -210,8 +203,6 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
                 cache_root=tmp_path / f"cache_{index}_{profile_index}",
                 monkeypatch=monkeypatch,
             )
-    kinds: Counter[str] = deferral_kinds(record_dir)
-    kinds.pop("analysis_session:adapter_nullability_callback", None)
 
     assert (
         golden_differences(
@@ -220,7 +211,6 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
         == []
     )
     assert mismatches(inputs=runs.names, expected=runs.uncached, actual=runs.cached) == []
-    assert kinds == Counter()
     assert runs.analysed_models >= test_case.expected_minimum_native
     assert runs.expression_shapes >= test_case.expected_minimum_expression_shapes
     assert runs.pivot_proofs >= test_case.expected_minimum_pivot_proofs
@@ -251,8 +241,6 @@ def test_given_generated_projects_when_analysing_natively_then_cached_and_proven
 def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cached_runs_agree(
     test_case: SharedAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project",
         files=shared_analysis_files(
@@ -289,14 +277,12 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
         shared,
         sum(session.sharing[1] for session in uncached),
         runs.analysed_models - shared,
-        deferral_kinds(record_dir),
         runs.native_column_values,
     ) == (
         test_case.expected_analysed,
         test_case.expected_shared,
         test_case.expected_reanalysed,
         test_case.expected_unshared,
-        Counter(),
         test_case.expected_column_values,
     )
 
@@ -317,8 +303,6 @@ def test_given_equal_model_queries_when_analysing_natively_then_shares_and_cache
 def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_cached_runs_agree(
     test_case: CyclicAnalysisTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
@@ -348,12 +332,10 @@ def test_given_cyclic_models_when_analysing_natively_then_session_answers_and_ca
         runs.analysed_models,
         len(sessions) // 3,
         None in sessions,
-        deferral_kinds(record_dir),
     ) == (
         test_case.expected_analysed,
         len(test_case.dialects) * len(test_case.lineage_modes),
         False,
-        Counter(),
     )
 
 
@@ -380,23 +362,18 @@ def test_given_cyclic_project_when_compiling_then_native_output_is_complete_and_
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE.value)
     native: tuple[int, object, object, dict[str, str]] = compiled_project_view(
         project_dir=tmp_path / "native" / "orders_cycle", files=test_case.files, capsys=capsys
     )
-    native_deferrals: Counter[str] = deferral_kinds(record_dir)
 
     repeated: tuple[int, object, object, dict[str, str]] = compiled_project_view(
         project_dir=tmp_path / "repeated" / "orders_cycle", files=test_case.files, capsys=capsys
     )
 
     assert native == repeated
-    assert (native[0], tuple(native[3]), native_deferrals) == (
+    assert (native[0], tuple(native[3])) == (
         test_case.expected_exit_code,
         test_case.expected_compiled,
-        Counter(),
     )
 
 
@@ -416,8 +393,6 @@ def test_given_cyclic_project_when_compiling_then_native_output_is_complete_and_
 def test_given_internal_native_failure_when_assembling_then_raises_without_python_analysis(
     test_case: InternalFailureTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
     inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
@@ -429,10 +404,7 @@ def test_given_internal_native_failure_when_assembling_then_raises_without_pytho
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
         )
 
-    assert (str(raised.value), deferral_kinds(record_dir)) == (
-        test_case.expected_message,
-        Counter(),
-    )
+    assert str(raised.value) == test_case.expected_message
 
 
 @pytest.mark.parametrize(
@@ -469,7 +441,6 @@ def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_with
     inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=pivot_project_files()
     )
-    monkeypatch.setenv(COMPILER_ENGINE_ENV_VAR, CompilerEngine.NATIVE_PREVIEW.value)
     recorded: NativePivotProofs = native_pivot_proofs(monkeypatch=monkeypatch)
 
     project: CompiledProjectView = assemble_compiled_project(
@@ -514,8 +485,6 @@ def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_cal
     request: NativeModelAnalysisRequest = adapter_rule_request(
         test_case=test_case, rule=rule, tmp_path=tmp_path, monkeypatch=monkeypatch
     )
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
 
     assert analyze_native_model_sql(request=request).positions
     assert len(rule.calls) >= test_case.expected_minimum_calls, test_case.description
@@ -523,9 +492,6 @@ def test_given_adapter_nullability_rule_when_analysing_natively_then_rule_is_cal
         isinstance(value, InferredNullability)
         for value in itertools.chain.from_iterable(rule.calls)
     )
-    assert deferral_kinds(record_dir) == Counter(
-        {"analysis_session:adapter_nullability_callback": 1}
-    ), test_case.description
 
 
 @pytest.mark.parametrize(
@@ -548,16 +514,11 @@ def test_given_failing_adapter_nullability_rule_when_analysing_natively_then_its
     request: NativeModelAnalysisRequest = adapter_rule_request(
         test_case=test_case, rule=rule, tmp_path=tmp_path, monkeypatch=monkeypatch
     )
-    record_dir: Path = tmp_path / "records"
-    monkeypatch.setenv(ANALYSIS_RECORD_DIR_ENV_VAR, str(record_dir))
 
     with pytest.raises(LookupError, match="adapter rule failed"):
         _ = analyze_native_model_sql(request=request)
 
     assert len(rule.calls) >= test_case.expected_minimum_calls, test_case.description
-    assert deferral_kinds(record_dir) == Counter(
-        {"analysis_session:adapter_nullability_callback": 1}
-    ), test_case.description
 
 
 if __name__ == "__main__":

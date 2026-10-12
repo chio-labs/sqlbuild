@@ -144,12 +144,6 @@ def test_given_project_edit_when_digesting_store_environment_then_only_model_edi
             expected_unchanged=False,
         ),
         StoreEnvironmentVariableTestCase(
-            description="compiler engine selection",
-            name="SQLBUILD_COMPILER_ENGINE",
-            value="python",
-            expected_unchanged=True,
-        ),
-        StoreEnvironmentVariableTestCase(
             description="variable outside the tracked prefixes",
             name="STORE_REGION",
             value="south",

@@ -17,7 +17,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs.helpers im
     edit_loaded_module,
     edit_then_fail_store,
     load_helper_module,
-    record_output_work,
+    prepare_output_compiles,
     reuse_against_uncached,
     set_tracked_variable,
     set_untracked_variable,
@@ -99,7 +99,7 @@ def test_given_stored_compile_disrupted_when_rerunning_then_it_misses_and_matche
     project_dir: Path = tmp_path / "project"
     write_files(project_dir=project_dir, files=OUTPUT_PROJECT_FILES)
     load_helper_module(tmp_path=tmp_path, monkeypatch=monkeypatch)
-    _ = record_output_work(monkeypatch=monkeypatch, reuse_disabled="0")
+    prepare_output_compiles(monkeypatch=monkeypatch, reuse_disabled="0")
 
     cold: ReuseComparison = reuse_against_uncached(project_dir=project_dir, capsys=capsys)
     warm: ReuseComparison = reuse_against_uncached(project_dir=project_dir, capsys=capsys)

@@ -1,4 +1,4 @@
-"""Complete semantic diagnostics natively for the preview compiler engine."""
+"""Complete semantic diagnostics natively."""
 
 from __future__ import annotations
 

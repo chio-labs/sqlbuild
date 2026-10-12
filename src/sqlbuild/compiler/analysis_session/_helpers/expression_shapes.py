@@ -7,13 +7,11 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
-from sqlbuild.compiler.analysis_session._helpers.deferral_records import record_analysis_deferral
 from sqlbuild.compiler.analysis_session._helpers.profile_rows import (
     adapter_nullability_rules,
     case_sensitive_shapes,
     nullability_rule_rows,
 )
-from sqlbuild.compiler.analysis_session.constants import ADAPTER_NULLABILITY_CALLBACK
 from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.compiler.sql_analysis.constants import NATIVE_DIALECT_ALIASES
 from sqlbuild.compiler.sql_analysis.main._binding_catalog import create_binding_catalog
@@ -39,8 +37,6 @@ def native_expression_source_shapes(
     )
     if pending:
         adapter_rules: dict[str, FunctionNullabilityRule] = adapter_nullability_rules(profile)
-        if adapter_rules:
-            record_analysis_deferral(kind=ADAPTER_NULLABILITY_CALLBACK)
         shapes: list[list[tuple[str, str]] | None] = _native.infer_expression_source_shapes(
             catalog.native,
             (

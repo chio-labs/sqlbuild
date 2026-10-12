@@ -98,10 +98,9 @@ pub(crate) struct HookModel<'a, 'py> {
     pub(crate) visibility: &'a ModelVisibility<'py>,
 }
 
-/// The hook-expanded config values, SQL hook count, and the usages hook SQL recorded.
+/// The hook-expanded config values and the usages hook SQL recorded.
 pub(crate) struct ExpandedHooks<'py> {
     pub(crate) values: Bound<'py, PyDict>,
-    pub(crate) statements: usize,
     pub(crate) usages: Vec<Bound<'py, PyAny>>,
 }
 
@@ -155,10 +154,9 @@ pub(crate) fn expanded_hooks<'py>(
         .bind(py)
         .call_method1(REFERENCES_METHOD, ((model.name, model.relative_path), rows))?;
     validation_outcome(context, &outcome, external, &PyDict::new(py))?;
-    let statements: usize = reject_hook_intrinsics(model_loop, context, model.name, &expanded)?;
+    reject_hook_intrinsics(model_loop, context, model.name, &expanded)?;
     Ok(ExpandedHooks {
         values: expanded,
-        statements,
         usages: run.usages.take(),
     })
 }
@@ -553,14 +551,13 @@ fn named_label(name: &str, position: HookPosition<'_>) -> String {
     }
 }
 
-/// Reject cursor intrinsics in each SQL hook statement; return how many statements were checked.
+/// Reject cursor intrinsics in each SQL hook statement.
 fn reject_hook_intrinsics(
     model_loop: &NativeModelLoop,
     context: &LoopContext<'_, '_>,
     name: &str,
     values: &Bound<'_, PyDict>,
-) -> PyResult<usize> {
-    let mut statements: usize = 0;
+) -> PyResult<()> {
     for key in HOOK_KEYS {
         let Some(hooks) = present(values, key)? else {
             continue;
@@ -574,7 +571,6 @@ fn reject_hook_intrinsics(
             if !entry.is_instance(&context.classes.sql_hook_entry)? {
                 continue;
             }
-            statements += 1;
             let statement: String = entry.getattr(STATEMENT_ATTRIBUTE)?.extract()?;
             if let IntrinsicCheck::Rejected(message) =
                 intrinsic_free(&statement, &model_loop.reserved_markers, &hook_context)
@@ -583,5 +579,5 @@ fn reject_hook_intrinsics(
             }
         }
     }
-    Ok(statements)
+    Ok(())
 }

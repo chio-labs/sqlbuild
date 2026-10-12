@@ -1,8 +1,7 @@
-"""Every engine locates reference scan errors identically and reports them as CompileInputError."""
+"""Reference scan errors are located and reported as CompileInputError."""
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -18,13 +17,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     lifecycle_error_type,
-    report_without_engine,
     run_reuse_compile,
-    stderr_without_durations,
     write_project_file,
 )
 
-_ENGINES: tuple[str, ...] = ("native", "native-preview")
 _CALL_LOG: str = "macro_calls.log"
 _EMIT_MACRO: str = (
     "from pathlib import Path\n\n\n"
@@ -53,8 +49,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}:6:6: SQL reference contains an unclosed parenthesis"
             ),
-            expected_macro_calls=(0, 0),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=0,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="unclosed_quote_after_a_rejected_call",
@@ -66,8 +62,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}:7:14: SQL reference contains an unclosed quoted string"
             ),
-            expected_macro_calls=(0, 0),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=0,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="empty_table_function_argument",
@@ -78,8 +74,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}:6:31: SQL reference contains an empty argument"
             ),
-            expected_macro_calls=(0, 0),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=0,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="header_string_with_an_escaped_quote_and_apostrophe",
@@ -90,8 +86,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}:7:7: SQL reference contains an unclosed quoted string"
             ),
-            expected_macro_calls=(0, 0),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=0,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="macro_output_fault_before_an_authored_fault_is_unlocated",
@@ -104,8 +100,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}: SQL reference contains an unclosed parenthesis"
             ),
-            expected_macro_calls=(1, 1),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=1,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="authored_fault_after_a_macro_is_located_natively",
@@ -117,8 +113,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 f"{FAILURE_MART_PATH}:6:6: SQL reference contains an unclosed parenthesis"
             ),
-            expected_macro_calls=(1, 1),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=1,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="test_file_header_names_the_file",
@@ -137,8 +133,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 "tests/unit/test_customer_totals.sql: SQL reference contains an empty argument"
             ),
-            expected_macro_calls=(0, 0),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=0,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="audit_file_header_names_the_file",
@@ -155,8 +151,8 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 "audits/generic/positive_total.sql: SQL reference contains an unclosed quoted string"
             ),
-            expected_macro_calls=(0, 0),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=0,
+            expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
             description="function_file_header_names_the_file",
@@ -171,51 +167,32 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_message=(
                 "functions/sql/orders_for.sql: SQL reference contains an unclosed parenthesis"
             ),
-            expected_macro_calls=(0, 0),
-            expected_error_types=("CompileInputError",) * 2,
+            expected_macro_calls=0,
+            expected_error_type="CompileInputError",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_reference_scan_error_when_compiling_with_each_engine_then_located_and_typed_alike(
+def test_given_reference_scan_error_when_compiling_then_it_is_located_and_typed(
     test_case: ReferenceScanErrorTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project_dir: Path = tmp_path / "orders"
-    runs: list[CompileReuseRun] = []
-    macro_calls: list[int] = []
-    error_types: list[str] = []
-    for engine in _ENGINES:
-        shutil.rmtree(project_dir, ignore_errors=True)
-        for relative_path, contents in {
-            **FAILURE_BASE_FILES,
-            _CALL_LOG: "",
-            **test_case.project_files,
-        }.items():
-            write_project_file(project_dir, relative_path, contents)
-        runs.append(
-            run_reuse_compile(project_dir=project_dir, global_args=("--compiler-engine", engine))
-        )
-        macro_calls.append(len((project_dir / _CALL_LOG).read_text(encoding="utf-8").splitlines()))
-        error_types.append(
-            lifecycle_error_type(project_dir=project_dir, engine=engine, monkeypatch=monkeypatch)
-        )
+    for relative_path, contents in {
+        **FAILURE_BASE_FILES,
+        _CALL_LOG: "",
+        **test_case.project_files,
+    }.items():
+        write_project_file(project_dir, relative_path, contents)
+    run: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
+    macro_calls: int = len((project_dir / _CALL_LOG).read_text(encoding="utf-8").splitlines())
+    error_type: str = lifecycle_error_type(project_dir=project_dir, monkeypatch=monkeypatch)
 
     assert (
-        tuple(run.returncode for run in runs),
-        {report_without_engine(run) for run in runs} == {report_without_engine(runs[0])},
-        {stderr_without_durations(stderr=run.stderr) for run in runs}
-        == {stderr_without_durations(stderr=runs[0].stderr)},
-        test_case.expected_message in runs[0].report,
-        tuple(macro_calls),
-        tuple(error_types),
-    ) == (
-        (1, 1),
-        True,
-        True,
-        True,
-        test_case.expected_macro_calls,
-        test_case.expected_error_types,
-    ), (runs[0].report, runs[1].report)
+        run.returncode,
+        test_case.expected_message in run.report,
+        macro_calls,
+        error_type,
+    ) == (1, True, test_case.expected_macro_calls, test_case.expected_error_type), run.report
 
 
 if __name__ == "__main__":

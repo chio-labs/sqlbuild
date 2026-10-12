@@ -1,4 +1,4 @@
-"""Harness invocations and a perturbation that makes one engine's output differ."""
+"""Harness invocations and small corpus projects for the harness tests."""
 
 from __future__ import annotations
 
@@ -6,117 +6,7 @@ from pathlib import Path
 
 from scripts.compiler_differential.main.failure_cases import failure_cases
 
-NATIVE_ONLY_STDERR_LINE: str = "native engine perturbation active"
 WAFFLE_SHOP_FIXTURE: Path = Path(__file__).resolve().parents[2] / "fixtures" / "waffle_shop"
-_SITECUSTOMIZE: str = f'''
-import dataclasses
-import sys
-
-from sqlbuild.compiler.compiled_project.main.compiled_model_record import compiled_model_record
-from sqlbuild.compiler.compiled_project.main.compiled_project_record import compiled_project_record
-
-import sqlbuild.compiler.frontier.main._compile_frontier as frontier
-from sqlbuild.compiler.frontier.types import CompilerStage
-
-_original = frontier.native_frontier
-
-
-def _perturbed(*, until, **stages):
-    result = _original(until=until, **stages)
-    if until is not CompilerStage.COMPILED_PROJECT or not result.models:
-        return result
-    result = compiled_project_record(result)
-    first = compiled_model_record(result.models[0])
-    changed = dataclasses.replace(
-        first, query_sql=f"SELECT * FROM ({{first.query_sql}}) AS perturbed_by_test"
-    )
-    return dataclasses.replace(result, models=(changed, *result.models[1:]), native_project=None)
-
-
-frontier.native_frontier = _perturbed
-print("{NATIVE_ONLY_STDERR_LINE}", file=sys.stderr)
-'''
-
-DISCOVERY_PERTURBATION: str = """
-import dataclasses
-
-import sqlbuild.compiler.frontier.main._compile_frontier as frontier
-from sqlbuild.compiler.frontier.types import CompilerStage
-
-_original = frontier.native_frontier
-
-
-def _perturbed(*, until, **stages):
-    result = _original(until=until, **stages)
-    if until is not CompilerStage.DISCOVERED_PROJECT_INPUTS or len(result.model_files) < 2:
-        return result
-    return dataclasses.replace(result, model_files=tuple(reversed(result.model_files)))
-
-
-frontier.native_frontier = _perturbed
-"""
-
-RENDER_PERTURBATION: str = """
-import dataclasses
-
-from sqlbuild.compiler.compile.models import CompileModelInput
-from sqlbuild.compiler.compiled_project.main.inputs_with import inputs_with
-
-import sqlbuild.compiler.frontier.main._compile_frontier as frontier
-from sqlbuild.compiler.frontier.types import CompilerStage
-
-_original = frontier.native_frontier
-
-
-def _perturbed(*, until, **stages):
-    result = _original(until=until, **stages)
-    if until is not CompilerStage.COMPILE_PROJECT_INPUTS or not result.model_inputs:
-        return result
-    first = CompileModelInput(**{
-        field.name: getattr(result.model_inputs[0], field.name)
-        for field in dataclasses.fields(CompileModelInput)
-    })
-    changed = dataclasses.replace(first, macro_deps=(*first.macro_deps, "perturbed_by_test"))
-    return inputs_with(inputs=result, model_inputs=(changed, *result.model_inputs[1:]))
-
-
-frontier.native_frontier = _perturbed
-"""
-
-CATALOG_PERTURBATION: str = """
-import sqlbuild.compiler.analysis_session.classes.native_model_analysis as native_analysis
-
-_original = native_analysis.NativeModelAnalysis._record_catalog_changes
-
-
-def _perturbed(self, **changes):
-    _original(self, **changes)
-    self._catalog.schemas["perturbed_by_test"] = {"order_id": "INTEGER"}
-
-
-native_analysis.NativeModelAnalysis._record_catalog_changes = _perturbed
-"""
-
-DEFERRAL_PERTURBATION: str = """
-import json
-import os
-from pathlib import Path
-
-_directory = os.environ.get("SQLBUILD_ANALYSIS_RECORD_DIR")
-if _directory:
-    Path(_directory).mkdir(parents=True, exist_ok=True)
-    with open(Path(_directory) / f"analysis-deferrals-{os.getpid()}.jsonl", "a") as _record:
-        _record.write(json.dumps({"kind": "legacy_fallback", "site": "orders.sql"}) + "\\n")
-"""
-
-FALLBACK_RECORD_PERTURBATION: str = """
-from sqlbuild.compiler.frontier._helpers.process_recorder import process_recorder
-
-recorder = process_recorder()
-if recorder is not None:
-    recorder.record(site="analysis_session", kind="session")
-"""
-
 _BROKEN_REF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "broken_orders"\nadapter = "duckdb"\n\n'
@@ -145,17 +35,6 @@ def write_failure_case_project(directory: Path, *, name: str) -> Path:
     return directory
 
 
-def write_native_perturbation(directory: Path, *, source: str = _SITECUSTOMIZE) -> Path:
-    """Write a sitecustomize module that perturbs one frontier object on the native path.
-
-    By default it changes the first compiled model.
-    """
-
-    directory.mkdir(parents=True, exist_ok=True)
-    _ = (directory / "sitecustomize.py").write_text(source, encoding="utf-8")
-    return directory
-
-
 def harness_arguments(
     *, work_dir: Path, extra: tuple[str, ...], project: Path = WAFFLE_SHOP_FIXTURE
 ) -> list[str]:
@@ -171,13 +50,3 @@ def harness_arguments(
         str(work_dir),
         *extra,
     ]
-
-
-def perturbation_arguments(directory: Path, *, source: str = _SITECUSTOMIZE) -> tuple[str, ...]:
-    """Return the options that load the perturbation into native-engine processes only."""
-
-    return (
-        "--stage-captures",
-        "--engine-env",
-        f"native-preview:PYTHONPATH={write_native_perturbation(directory, source=source)}",
-    )

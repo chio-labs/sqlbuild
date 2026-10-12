@@ -1,9 +1,7 @@
-"""The differential harness passes identical engines and pinpoints a perturbed one."""
+"""The harness passes a healthy project and fails unexpected outcomes or missing coverage."""
 
 from __future__ import annotations
 
-import json
-import re
 from pathlib import Path
 
 import pytest
@@ -13,16 +11,9 @@ from tests.e2e.scripts.compiler_differential._test_types import (
     CoverageFailureTestCase,
     HarnessRunTestCase,
     ProjectExpectationTestCase,
-    WheelSiteReportTestCase,
 )
 from tests.e2e.scripts.compiler_differential.helpers import (
-    CATALOG_PERTURBATION,
-    DEFERRAL_PERTURBATION,
-    DISCOVERY_PERTURBATION,
-    NATIVE_ONLY_STDERR_LINE,
-    RENDER_PERTURBATION,
     harness_arguments,
-    perturbation_arguments,
     write_broken_ref_project,
     write_failure_case_project,
 )
@@ -32,12 +23,12 @@ from tests.e2e.scripts.compiler_differential.helpers import (
     "test_case",
     [
         HarnessRunTestCase(
-            description="identical_engines",
+            description="healthy_fixture",
             extra_arguments=(),
             expected_exit_code=0,
             expected_lines=(
                 "OK   project/waffle_shop",
-                "Compiler differential passed: 1 projects identical (native vs native-preview)",
+                "Compiler differential passed: 1 projects as expected",
             ),
             expected_patterns=(),
             expected_absent=("DIFF",),
@@ -45,7 +36,7 @@ from tests.e2e.scripts.compiler_differential.helpers import (
     ],
     ids=lambda case: case.description,
 )
-def test_given_identical_engines_when_comparing_fixture_then_harness_passes(
+def test_given_healthy_fixture_when_checking_then_harness_passes(
     test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     exit_code: int = run_compiler_differential(
@@ -55,153 +46,6 @@ def test_given_identical_engines_when_comparing_fixture_then_harness_passes(
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code, output
     assert all(line in output for line in test_case.expected_lines), output
-    assert not any(text in output for text in test_case.expected_absent), output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        HarnessRunTestCase(
-            description="perturbed_native_compiled_project",
-            extra_arguments=(),
-            expected_exit_code=1,
-            expected_lines=(
-                "DIFF project/waffle_shop",
-                "- `compile` stdout at /resources/models/0/query_sql",
-                'native-preview: "SELECT * FROM (',
-                "- `compile` stderr at line 1",
-                f'native-preview: "{NATIVE_ONLY_STDERR_LINE}"',
-                "- stage capture 0-compile/003-compiled_project.json at /models/0/query_sql",
-                "First difference: project/waffle_shop: `compile` stdout at",
-            ),
-            expected_patterns=(
-                r"- target/compiled/models/\S+\.sql at line \d+",
-                r"- query fingerprint of model \w+ \(manifest query hash\)",
-                r"- query fingerprint of model \w+ \(plan version hash\)",
-            ),
-            expected_absent=("discovered_project_inputs.json", "compile_project_inputs.json"),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_perturbed_native_engine_when_comparing_then_every_artifact_is_located(
-    test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    exit_code: int = run_compiler_differential(
-        harness_arguments(
-            work_dir=tmp_path / "work",
-            extra=(*perturbation_arguments(tmp_path / "perturbation"), *test_case.extra_arguments),
-        )
-    )
-
-    output: str = capsys.readouterr().out
-    assert exit_code == test_case.expected_exit_code, output
-    assert all(line in output for line in test_case.expected_lines), output
-    assert all(re.search(pattern, output) for pattern in test_case.expected_patterns), output
-    assert not any(text in output for text in test_case.expected_absent), output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        HarnessRunTestCase(
-            description="perturbed_native_discovery",
-            extra_arguments=(),
-            expected_exit_code=1,
-            expected_lines=("DIFF project/waffle_shop",),
-            expected_patterns=(
-                r"- stage capture 0-compile/001-discovered_project_inputs\.json at /model_files/0/",
-                r"- stage capture 3-plan/001-discovered_project_inputs\.json at /model_files/0/",
-            ),
-            expected_absent=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_perturbed_native_discovery_when_comparing_then_discovery_capture_names_the_stage(
-    test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    exit_code: int = run_compiler_differential(
-        harness_arguments(
-            work_dir=tmp_path / "work",
-            extra=perturbation_arguments(tmp_path / "perturbation", source=DISCOVERY_PERTURBATION),
-        )
-    )
-
-    output: str = capsys.readouterr().out
-    assert exit_code == test_case.expected_exit_code, output
-    assert all(line in output for line in test_case.expected_lines), output
-    assert all(re.search(pattern, output) for pattern in test_case.expected_patterns), output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        HarnessRunTestCase(
-            description="perturbed_native_compile_inputs",
-            extra_arguments=(),
-            expected_exit_code=1,
-            expected_lines=("DIFF project/waffle_shop",),
-            expected_patterns=(
-                r"- stage capture 0-compile/002-compile_project_inputs\.json at "
-                r"/model_inputs/0/macro_deps/",
-                r"- stage capture 2-compile-store-warm/002-compile_project_inputs\.json at "
-                r"/model_inputs/0/macro_deps/",
-                r"- stage capture 3-plan/002-compile_project_inputs\.json at "
-                r"/model_inputs/0/macro_deps/",
-            ),
-            expected_absent=("001-discovered_project_inputs.json",),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_perturbed_native_render_when_comparing_then_compile_inputs_capture_names_the_stage(
-    test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    exit_code: int = run_compiler_differential(
-        harness_arguments(
-            work_dir=tmp_path / "work",
-            extra=perturbation_arguments(tmp_path / "perturbation", source=RENDER_PERTURBATION),
-        )
-    )
-
-    output: str = capsys.readouterr().out
-    assert exit_code == test_case.expected_exit_code, output
-    assert all(line in output for line in test_case.expected_lines), output
-    assert all(re.search(pattern, output) for pattern in test_case.expected_patterns), output
-    assert not any(text in output for text in test_case.expected_absent), output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        HarnessRunTestCase(
-            description="wrong_native_catalog_shape",
-            extra_arguments=(),
-            expected_exit_code=1,
-            expected_lines=("DIFF project/waffle_shop",),
-            expected_patterns=(
-                r"- stage capture 0-compile/\d+-compiled_project\.json at /binding_catalog/schemas",
-            ),
-            expected_absent=("warm/", "3-plan/"),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_wrong_native_catalog_shape_when_comparing_then_only_the_cold_capture_differs(
-    test_case: HarnessRunTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    exit_code: int = run_compiler_differential(
-        harness_arguments(
-            work_dir=tmp_path / "work",
-            extra=perturbation_arguments(tmp_path / "perturbation", source=CATALOG_PERTURBATION),
-        )
-    )
-
-    output: str = capsys.readouterr().out
-    assert exit_code == test_case.expected_exit_code, output
-    assert all(line in output for line in test_case.expected_lines), output
-    assert all(re.search(pattern, output) for pattern in test_case.expected_patterns), output
     assert not any(text in output for text in test_case.expected_absent), output
 
 
@@ -235,7 +79,7 @@ def test_given_wrong_native_catalog_shape_when_comparing_then_only_the_cold_capt
     ],
     ids=lambda case: case.description,
 )
-def test_given_both_engines_fail_alike_when_outcome_is_unexpected_then_harness_fails(
+def test_given_project_outcome_when_it_is_unexpected_then_harness_fails(
     test_case: ProjectExpectationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     exit_code: int = run_compiler_differential(
@@ -315,7 +159,7 @@ def test_given_both_engines_fail_alike_when_outcome_is_unexpected_then_harness_f
     ],
     ids=lambda case: case.description,
 )
-def test_given_required_coverage_missing_when_comparing_then_harness_fails_and_says_so(
+def test_given_required_coverage_missing_when_checking_then_harness_fails_and_says_so(
     test_case: CoverageFailureTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     exit_code: int = run_compiler_differential(
@@ -365,69 +209,6 @@ def test_given_failure_expectation_when_code_is_not_the_first_error_then_harness
     output: str = capsys.readouterr().out
     assert exit_code == test_case.expected_exit_code, output
     assert all(line in output for line in test_case.expected_lines), output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        WheelSiteReportTestCase(
-            description="native_and_preview_wheel_calls_without_preview_deferrals",
-            perturbation="",
-            expected_lines=(
-                "Polyglot wheel calls (native):",
-                "Polyglot wheel calls (native-preview):",
-                "Analysis deferrals (native): none recorded",
-                "Analysis deferrals (native-preview): none recorded",
-                "Compiler differential passed: 1 projects identical",
-            ),
-            expected_sites=frozenset(
-                {
-                    "compiler/compile/_helpers/analysis/required_columns.py:"
-                    "resolve_required_external_columns parse_one",
-                }
-            ),
-            expected_deferrals=frozenset(),
-        ),
-        WheelSiteReportTestCase(
-            description="preview_deferrals_are_counted_per_kind_and_site",
-            perturbation=DEFERRAL_PERTURBATION,
-            expected_lines=(
-                "Analysis deferrals (native): none recorded",
-                "Analysis deferrals (native-preview):",
-                " legacy_fallback orders.sql (project ",
-            ),
-            expected_sites=frozenset(),
-            expected_deferrals=frozenset({"legacy_fallback orders.sql"}),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_wheel_site_report_when_comparing_then_sites_and_deferrals_are_reported(
-    test_case: WheelSiteReportTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    report_path: Path = tmp_path / "report" / "wheel-sites.json"
-    exit_code: int = run_compiler_differential(
-        harness_arguments(
-            work_dir=tmp_path / "work",
-            extra=(
-                *perturbation_arguments(tmp_path / "perturbation", source=test_case.perturbation),
-                "--wheel-site-report",
-                str(report_path),
-            ),
-        )
-    )
-
-    output: str = capsys.readouterr().out
-    report: dict[str, dict[str, dict[str, dict[str, int]]]] = json.loads(
-        report_path.read_text(encoding="utf-8")
-    )
-    preview: dict[str, dict[str, dict[str, int]]] = report["native-preview"]
-    assert exit_code == 0, output
-    assert all(line in output for line in test_case.expected_lines), output
-    assert test_case.expected_sites <= set(report["native"]["wheel_sites"]), report
-    assert set(preview["deferrals"]) == test_case.expected_deferrals
-    assert all(sum(by_corpus.values()) > 0 for by_corpus in preview["deferrals"].values())
-    assert report["native"]["deferrals"] == {}
 
 
 if __name__ == "__main__":

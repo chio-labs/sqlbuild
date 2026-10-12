@@ -16,8 +16,7 @@ from sqlbuild.cli.commands.constants import TARGET_DIRECTORY_NAME
 from sqlbuild.cli.commands.models import LineageNode, RelationLineageIndex
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.frontier.constants import CACHE_DIRECTORY_NAME
-from sqlbuild.compiler.frontier.main.engine_cache_name import engine_cache_name
+from sqlbuild.compiler.frontier.constants import CACHE_DIRECTORY_NAME, NATIVE_CACHE_NAMESPACE_SUFFIX
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 _CACHE_SCHEMA_VERSION: int = 1
@@ -121,7 +120,7 @@ def _cache_path(*, project_dir: Path) -> Path:
         project_dir
         / TARGET_DIRECTORY_NAME
         / CACHE_DIRECTORY_NAME
-        / engine_cache_name(_LINEAGE_CACHE_DIRECTORY_NAME)
+        / f"{_LINEAGE_CACHE_DIRECTORY_NAME}{NATIVE_CACHE_NAMESPACE_SUFFIX}"
         / _CACHE_FILE_RELATIVE_PATH
     )
 

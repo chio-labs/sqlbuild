@@ -7,10 +7,8 @@ from sqlbuild.cli.compile_reuse.classes.compile_artifact_write_registry import (
 )
 from sqlbuild.compiler.frontier.constants import (
     COMPILE_REUSE_DISABLE_ENV_VAR,
-    COMPILER_ENGINE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
 )
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_RECORD_DIR_ENV_VAR
 
 REUSE_FORMAT_VERSION: int = 1
 RETIRED_REUSE_DIRECTORY_NAME: str = "project-reuse-v1"
@@ -24,9 +22,7 @@ REUSE_LOGGER_NAME: str = "sqlbuild.compile.reuse"
 TRACKED_ENVIRONMENT_PREFIXES: tuple[str, ...] = ("SQLBUILD_", "SQB_")
 UNTRACKED_ENVIRONMENT_NAMES: frozenset[str] = frozenset(
     {
-        ANALYSIS_RECORD_DIR_ENV_VAR,
         COMPILE_REUSE_DISABLE_ENV_VAR,
-        COMPILER_ENGINE_ENV_VAR,
         STAGE_CAPTURE_DIR_ENV_VAR,
     }
 )
