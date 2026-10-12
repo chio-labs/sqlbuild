@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
@@ -23,11 +22,9 @@ from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
-    DiscoveredModelSchemaFile,
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     EnumDeclaration,
-    ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
@@ -46,40 +43,11 @@ from sqlbuild.compiler.scopes.types import (
     ResourceKind,
     ScopeKind,
 )
-from sqlbuild.spec.contracts.models import SchemaColumn
 from sqlbuild.sql_values.exceptions import SqlValueRenderingError, SqlValueValidationError
 from sqlbuild.sql_values.main.validate_rendered_size import validate_rendered_sql_value_size
 from sqlbuild.sql_values.types import CollectionRendering, SqlValueKind
 
 _ACCEPTED_VALUES_AUDIT: str = "accepted_values"
-
-
-def build_public_declaration_indexes(
-    *, discovered_inputs: DiscoveredProjectInputs
-) -> tuple[dict[str, EnumDeclaration], dict[str, ConstantDeclaration]]:
-    """Build collision-checked indexes of every public declaration."""
-
-    enums: dict[str, EnumDeclaration] = {}
-    constants: dict[str, ConstantDeclaration] = {}
-    enum_file: DiscoveredEnumFile
-    for enum_file in discovered_inputs.enum_files:
-        declaration: EnumDeclaration
-        for declaration in enum_file.declarations:
-            enums = _with_declaration(
-                declarations=enums,
-                declaration=declaration,
-                kind="enum",
-            )
-    constant_file: DiscoveredConstantFile
-    for constant_file in discovered_inputs.constant_files:
-        constant_declaration: ConstantDeclaration
-        for constant_declaration in constant_file.declarations:
-            constants = _with_declaration(
-                declarations=constants,
-                declaration=constant_declaration,
-                kind="constant",
-            )
-    return enums, constants
 
 
 def build_declaration_scope_resolver(
@@ -164,103 +132,6 @@ def build_model_declaration_indexes(
     )
 
 
-def build_public_model_schema_index(
-    *, discovered_inputs: DiscoveredProjectInputs
-) -> dict[str, ModelSchemaDeclaration]:
-    """Build and resolve the collision-checked public model-schema index."""
-
-    authored: dict[str, ModelSchemaDeclaration] = {}
-    schema_file: DiscoveredModelSchemaFile
-    for schema_file in discovered_inputs.model_schema_files:
-        declaration: ModelSchemaDeclaration
-        for declaration in schema_file.declarations:
-            existing: ModelSchemaDeclaration | None = authored.get(declaration.name)
-            if existing is not None:
-                raise CompileInputError(
-                    f"Duplicate public schema '{declaration.name}' in "
-                    f"{existing.relative_path} and {declaration.relative_path}"
-                )
-            authored[declaration.name] = declaration
-
-    resolved: dict[str, ModelSchemaDeclaration] = {}
-    for schema_name in authored:
-        _declaration: ModelSchemaDeclaration
-        _declaration, resolved = _resolve_model_schema_declaration(
-            name=schema_name,
-            authored=authored,
-            resolved=resolved,
-            resolving=(),
-        )
-    return resolved
-
-
-def _resolve_model_schema_declaration(
-    *,
-    name: str,
-    authored: dict[str, ModelSchemaDeclaration],
-    resolved: dict[str, ModelSchemaDeclaration],
-    resolving: tuple[str, ...],
-) -> tuple[ModelSchemaDeclaration, dict[str, ModelSchemaDeclaration]]:
-    existing_resolved: ModelSchemaDeclaration | None = resolved.get(name)
-    if existing_resolved is not None:
-        return existing_resolved, resolved
-    if name in resolving:
-        cycle_start: int = resolving.index(name)
-        cycle: str = " -> ".join((*resolving[cycle_start:], name))
-        raise CompileInputError(f"Model schema inheritance cycle: {cycle}")
-    declaration: ModelSchemaDeclaration = authored[name]
-    inherited_columns: tuple[SchemaColumn, ...] = ()
-    if declaration.extends is not None:
-        parent: ModelSchemaDeclaration | None = authored.get(declaration.extends)
-        if parent is None:
-            raise CompileInputError(
-                f"Schema '{name}' in {declaration.relative_path} extends unknown schema "
-                f"'{declaration.extends}'"
-            )
-        resolved_parent: ModelSchemaDeclaration
-        resolved_parent, resolved = _resolve_model_schema_declaration(
-            name=parent.name,
-            authored=authored,
-            resolved=resolved,
-            resolving=(*resolving, name),
-        )
-        inherited_columns = resolved_parent.columns
-    _validate_no_inherited_column_overrides(
-        declaration=declaration,
-        inherited_columns=inherited_columns,
-    )
-    resolved_declaration: ModelSchemaDeclaration = replace(
-        declaration,
-        columns=(*inherited_columns, *declaration.columns),
-    )
-    return resolved_declaration, resolved | {name: resolved_declaration}
-
-
-def _validate_no_inherited_column_overrides(
-    *,
-    declaration: ModelSchemaDeclaration,
-    inherited_columns: tuple[SchemaColumn, ...],
-) -> None:
-    inherited_by_name: dict[str, SchemaColumn] = {
-        column.name.lower(): column for column in inherited_columns
-    }
-    local_column: SchemaColumn
-    for local_column in declaration.columns:
-        inherited: SchemaColumn | None = inherited_by_name.get(local_column.name.lower())
-        if inherited is None:
-            continue
-        inherited_origin: str = (
-            f"{inherited.location.path}:{inherited.location.line}"
-            if inherited.location is not None
-            else "an ancestor schema"
-        )
-        raise CompileInputError(
-            f"Schema '{declaration.name}' in {declaration.relative_path} redeclares inherited "
-            f"column '{local_column.name}' from {inherited_origin}; column overrides are not "
-            "supported"
-        )
-
-
 def expand_scanned_declaration_references(  # noqa: PLR0913
     *,
     sql: str,
@@ -300,18 +171,6 @@ def expand_scanned_declaration_references(  # noqa: PLR0913
         spans=tuple(ExpansionSpan(*span) for span in spans),
         usages=tuple(dict.fromkeys(usages)),
     )
-
-
-def _with_declaration[T: EnumDeclaration | ConstantDeclaration](
-    *, declarations: dict[str, T], declaration: T, kind: str
-) -> dict[str, T]:
-    existing: T | None = declarations.get(declaration.name)
-    if existing is not None:
-        raise CompileInputError(
-            f"Duplicate public {kind} '{declaration.name}' in {existing.relative_path} and "
-            f"{declaration.relative_path}"
-        )
-    return declarations | {declaration.name: declaration}
 
 
 def render_constant_declaration(

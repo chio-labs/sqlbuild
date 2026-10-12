@@ -258,9 +258,7 @@ impl NativeModelLoop {
     }
 }
 
-/// Each model's `@@`-interpolated query and, when it interpolated, its declaration scan.
-///
-/// Every query interpolates before any model runs, as the host's batch did.
+/// Each model's `@@`-interpolated query and declaration scan, all interpolated before any runs.
 fn prepared_rows<'py>(
     py: Python<'py>,
     classes: &LoopClasses<'py>,

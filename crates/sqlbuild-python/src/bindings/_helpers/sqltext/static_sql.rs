@@ -151,8 +151,7 @@ fn interpolate_sql_batch<'py>(
     interpolation_batch(sources, &sqls)
 }
 
-/// Each `(sql, file path)` interpolated in order; a Python failure other than a rendering
-/// `ValueError` is raised at the text that hits it.
+/// Each `(sql, file path)` interpolated in order; non-rendering Python failures raise.
 pub(crate) fn interpolation_batch(
     sources: InterpolationSources<'_>,
     sqls: &[(String, String)],

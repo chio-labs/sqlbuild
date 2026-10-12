@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile._helpers.attachment.core import build_effective_vars
 from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
     build_declaration_scope,
@@ -11,7 +12,6 @@ from sqlbuild.compiler.compile._helpers.attachment.declaration_scope import (
 )
 from sqlbuild.compiler.compile._helpers.render.declarations import (
     build_model_declaration_indexes,
-    build_public_declaration_indexes,
 )
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
@@ -65,9 +65,7 @@ def build_sql_expansion_context(
     loaded_macros: dict[str, LoadedMacro] = scope.loaded_macros
     enums: dict[str, EnumDeclaration]
     constants: dict[str, ConstantDeclaration]
-    enums, constants = build_public_declaration_indexes(
-        discovered_inputs=effective_discovered_inputs
-    )
+    enums, constants = _native.public_declaration_indexes(effective_discovered_inputs)
     local_declarations: dict[Path, DeclarationResolutionContext] = {}
     for model_file in effective_discovered_inputs.model_files:
         local_enums: dict[str, EnumDeclaration]

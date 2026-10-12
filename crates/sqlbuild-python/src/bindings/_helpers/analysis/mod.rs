@@ -7,4 +7,5 @@ pub(crate) mod normalization_results;
 mod positions;
 pub(crate) mod queries;
 pub(crate) mod relation_names;
+mod required_columns;
 pub(crate) mod sql_tests;

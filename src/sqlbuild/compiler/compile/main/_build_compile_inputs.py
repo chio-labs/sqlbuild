@@ -21,10 +21,6 @@ from sqlbuild.compiler.compile._helpers.macro_bridge.call_store import (
     target_context_with_macro_call_store,
 )
 from sqlbuild.compiler.compile._helpers.render.context_templates import resolve_run_id
-from sqlbuild.compiler.compile._helpers.render.declarations import (
-    build_public_declaration_indexes,
-    build_public_model_schema_index,
-)
 from sqlbuild.compiler.compile._helpers.render.macros import load_project_macros
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -222,11 +218,9 @@ def _build_models_with_declarations(
 ) -> ModelInputScopeBuild:
     public_enums: dict[str, EnumDeclaration]
     public_constants: dict[str, ConstantDeclaration]
-    public_enums, public_constants = build_public_declaration_indexes(
-        discovered_inputs=discovered_inputs
-    )
-    public_model_schemas: dict[str, ModelSchemaDeclaration] = build_public_model_schema_index(
-        discovered_inputs=discovered_inputs
+    public_enums, public_constants = _native.public_declaration_indexes(discovered_inputs)
+    public_model_schemas: dict[str, ModelSchemaDeclaration] = _native.public_model_schema_index(
+        discovered_inputs
     )
     declarations: DeclarationResolutionContext = DeclarationResolutionContext(
         enums=public_enums,

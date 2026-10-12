@@ -54,6 +54,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlFunctionFile,
     DiscoveredSqlHookFile,
     EnumDeclaration,
+    ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
@@ -879,6 +880,15 @@ def parse_schema_document(
 def parse_sources_document(
     loaded: object, path: str, classes: dict[str, object]
 ) -> tuple[SourceEntry, ...]: ...
+def resolve_required_columns(
+    query_sql: str, references: list[tuple[str, str]], dialect: str | None
+) -> list[tuple[str, str, str]]: ...
+def public_declaration_indexes(
+    inputs: DiscoveredProjectInputs,
+) -> tuple[dict[str, EnumDeclaration], dict[str, ConstantDeclaration]]: ...
+def public_model_schema_index(
+    inputs: DiscoveredProjectInputs,
+) -> dict[str, ModelSchemaDeclaration]: ...
 def discovered_inputs_failure(
     inputs: DiscoveredProjectInputs, nodes: list[dict[str, object]]
 ) -> tuple[object, ...] | None: ...
