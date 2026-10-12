@@ -26,6 +26,10 @@ pub enum FailureKind {
     SqlAudit,
     /// `ResourceIdentityError` (D016).
     ResourceIdentity,
+    /// `DiscoveryConflictError` (D007).
+    Conflict,
+    /// `SeedDiscoveryError` (D008).
+    Seed,
 }
 
 impl FailureKind {
@@ -42,6 +46,8 @@ impl FailureKind {
             Self::SqlHook => "sql_hook",
             Self::SqlAudit => "sql_audit",
             Self::ResourceIdentity => "resource_identity",
+            Self::Conflict => "conflict",
+            Self::Seed => "seed",
         }
     }
 }

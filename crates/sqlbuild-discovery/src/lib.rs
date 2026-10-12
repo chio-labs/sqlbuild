@@ -9,6 +9,7 @@ pub mod declarations;
 pub mod key_checks;
 pub mod model_files;
 pub mod models;
+pub mod project_validation;
 pub mod sql_tests;
 pub mod tree;
 pub mod yaml_files;

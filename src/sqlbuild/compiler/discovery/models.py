@@ -33,7 +33,6 @@ from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SourceColumnEntry,
     SourceEntry,
-    SourceLocation,
 )
 from sqlbuild.spec.contracts.types import EventExportSeverity, SourceWriteStrategy
 from sqlbuild.sql_values.models import SqlLogicalType, SqlValue

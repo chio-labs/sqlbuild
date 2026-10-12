@@ -834,6 +834,7 @@ dependencies = [
  "rayon",
  "sqlbuild-config",
  "sqlbuild-core",
+ "sqlbuild-model-config",
  "sqlbuild-sqltext",
  "tempfile",
 ]

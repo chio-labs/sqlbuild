@@ -224,3 +224,13 @@ class DeepHeaderValuesTestCase:
     header: str
     stack_frames: int
     expected_max_depth: int
+
+
+@dataclass(frozen=True)
+class ProjectValidationTestCase:
+    """A project whose files conflict across discovery, with the error discovery raises."""
+
+    description: str
+    files: tuple[tuple[str, bytes], ...]
+    expected_error_type: str
+    expected_message: str

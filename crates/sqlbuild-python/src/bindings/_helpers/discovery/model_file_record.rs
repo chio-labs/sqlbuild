@@ -265,7 +265,7 @@ impl NativeModelFile {
         let other: &NativeModelFile = other.get();
         for (left, right) in self.fields(py)?.iter().zip(other.fields(py)?) {
             if !left.eq(right)? {
-                return Ok(false.into_py_any(py)?);
+                return false.into_py_any(py);
             }
         }
         true.into_py_any(py)

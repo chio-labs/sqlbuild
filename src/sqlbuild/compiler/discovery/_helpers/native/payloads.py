@@ -16,10 +16,12 @@ from sqlbuild.compiler.discovery.constants import (
 )
 from sqlbuild.compiler.discovery.exceptions import (
     DeclarationParseError,
+    DiscoveryConflictError,
     DiscoveryError,
     ModelSqlParseError,
     ProjectPathError,
     SchemaParseError,
+    SeedDiscoveryError,
     SourceParseError,
     SqlAuditParseError,
     SqlHookParseError,
@@ -58,6 +60,8 @@ _FAILURE_CLASSES: dict[str, type[DiscoveryError]] = {
     "sql_hook": SqlHookParseError,
     "sql_audit": SqlAuditParseError,
     "resource_identity": ResourceIdentityError,
+    "conflict": DiscoveryConflictError,
+    "seed": SeedDiscoveryError,
 }
 
 

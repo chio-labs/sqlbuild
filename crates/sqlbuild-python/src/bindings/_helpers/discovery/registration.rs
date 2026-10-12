@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::discovery::{
     declaration_files, globbing, header_declarations, key_checks, locations, project_files,
-    sql_test_blocks,
+    project_validation, sql_test_blocks,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -15,5 +15,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     header_declarations::register(module)?;
     key_checks::register(module)?;
     globbing::register(module)?;
+    project_validation::register(module)?;
     Ok(())
 }

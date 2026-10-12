@@ -69,9 +69,7 @@ def discover_native_model_files(
     )
 
 
-def _model_file(
-    *, project_dir: Path, relative_path: Path, item: object
-) -> DiscoveredSqlModelFile:
+def _model_file(*, project_dir: Path, relative_path: Path, item: object) -> DiscoveredSqlModelFile:
     if isinstance(item, DiscoveredSqlModelFile):
         return item
     payload: tuple[object, ...] = cast(tuple[object, ...], item)
