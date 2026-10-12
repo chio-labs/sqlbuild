@@ -51,13 +51,6 @@ pub(super) struct OptOutPositionTestCase {
     pub(super) expected_position: crate::compiled_project::models::TextPosition,
 }
 
-pub(super) struct LegacySchemaTestCase {
-    pub(super) description: &'static str,
-    /// `(schema file, model names)` per legacy schema file.
-    pub(super) schema_files: &'static [(&'static str, &'static [&'static str])],
-    pub(super) expected_error: Option<&'static str>,
-}
-
 pub(super) struct LocatedScanErrorTestCase {
     pub(super) description: &'static str,
     pub(super) sql: &'static str,

@@ -38,20 +38,6 @@ pub(super) fn analysing_settings(
     }
 }
 
-pub(super) fn legacy_schema_files(
-    files: &[(&str, &[&str])],
-) -> Vec<crate::compiled_project::models::LegacySchemaFile> {
-    files
-        .iter()
-        .map(
-            |(path, names)| crate::compiled_project::models::LegacySchemaFile {
-                relative_path: (*path).to_owned(),
-                model_names: names.iter().map(|name| (*name).to_owned()).collect(),
-            },
-        )
-        .collect()
-}
-
 pub(super) fn generic_syntax() -> sqlbuild_sqltext::sql_scan::models::LexicalSyntax {
     sqlbuild_sqltext::sql_scan::models::LexicalSyntax {
         line_comment_prefixes: vec!["--".to_owned()],

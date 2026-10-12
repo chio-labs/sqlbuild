@@ -1,9 +1,7 @@
-use crate::compiled_project::main::legacy_schema_error::legacy_schema_error;
 use crate::compiled_project::main::opt_out_position::opt_out_position;
 use crate::compiled_project::main::text_position::text_position;
 use crate::compiled_project::models::TextPosition;
-use crate::compiled_project::tests::helpers::legacy_schema_files;
-use crate::compiled_project::tests::test_types::{LegacySchemaTestCase, OptOutPositionTestCase};
+use crate::compiled_project::tests::test_types::OptOutPositionTestCase;
 
 #[test]
 fn given_text_when_locating_opt_out_then_first_whole_word_key_after_start_is_found() {
@@ -32,50 +30,6 @@ fn given_text_when_locating_opt_out_then_first_whole_word_key_after_start_is_fou
         assert_eq!(
             opt_out_position(test_case.text, test_case.start),
             test_case.expected_position,
-            "{}",
-            test_case.description
-        );
-    }
-}
-
-#[test]
-fn given_legacy_schema_files_when_matching_model_then_attachment_error_is_returned() {
-    let test_cases = [
-        LegacySchemaTestCase {
-            description: "schema file in another directory",
-            schema_files: &[("models/staging/schema.yml", &["orders"])],
-            expected_error: None,
-        },
-        LegacySchemaTestCase {
-            description: "root schema file declares the model",
-            schema_files: &[("schema.yml", &["orders"])],
-            expected_error: Some(
-                "Schema file schema.yml declares model 'orders', but model metadata must live in \
-                 models/marts/orders.sql MODEL(...). Move description, columns, and audits into \
-                 the model header.",
-            ),
-        },
-        LegacySchemaTestCase {
-            description: "two schema files declare the model",
-            schema_files: &[
-                ("models/schema.yml", &["orders"]),
-                ("models/marts/schema.yml", &["orders", "customers"]),
-            ],
-            expected_error: Some(
-                "Model file models/marts/orders.sql matched multiple schema.yml declarations: \
-                 models/schema.yml, models/marts/schema.yml",
-            ),
-        },
-    ];
-
-    for test_case in test_cases {
-        assert_eq!(
-            legacy_schema_error(
-                ("orders", "models/marts/orders.sql"),
-                &legacy_schema_files(test_case.schema_files)
-            )
-            .as_deref(),
-            test_case.expected_error,
             "{}",
             test_case.description
         );

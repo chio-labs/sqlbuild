@@ -10,9 +10,7 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.authored_values.main._project_var_values import render_project_var_text
 from sqlbuild.compiler.compile._helpers.analysis.validation import sql_analysis_opt_out_help
 from sqlbuild.compiler.compile._helpers.attachment.model_config import (
-    legacy_schema_rows,
     native_model_config_session,
-    validate_declared_schema_models_are_attached,
 )
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
@@ -45,8 +43,6 @@ from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredProjectInputs,
-    DiscoveredSchemaFile,
-    DiscoveredSqlHookFile,
     DiscoveredSqlModelFile,
     EnumDeclaration,
     NamedSqlHookEntry,
@@ -104,8 +100,6 @@ class _ModelInputLoop:
     discovered_inputs: DiscoveredProjectInputs
     context: ModelInputBuildContext
     validation_context: _ModelValidationContext
-    sql_hook_definitions: dict[str, DiscoveredSqlHookFile]
-    legacy_schema_files: tuple[DiscoveredSchemaFile, ...]
 
 
 @dataclass
@@ -134,16 +128,12 @@ def build_model_inputs(
 ) -> tuple[ModelInput, ...]:
     """Attach schema metadata to discovered model files."""
 
-    legacy_schema_files: tuple[DiscoveredSchemaFile, ...] = tuple(
-        schema_file for schema_file in discovered_inputs.schema_files if schema_file.model_entries
-    )
     return _build_model_inputs(
         discovered_inputs=discovered_inputs,
         context=context,
         no_sql_validation=no_sql_validation,
         defer_model_sql_validation=defer_model_sql_validation,
         external_sql_reference_resolver=external_sql_reference_resolver,
-        legacy_schema_files=legacy_schema_files,
         native_project=native_project,
     )
 
@@ -155,7 +145,6 @@ def _build_model_inputs(
     no_sql_validation: bool,
     defer_model_sql_validation: bool,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None,
-    legacy_schema_files: tuple[DiscoveredSchemaFile, ...],
     native_project: _native.NativeCompiledProject,
 ) -> tuple[ModelInput, ...]:
     effective_vars: dict[str, object] = context.effective_vars
@@ -190,24 +179,12 @@ def _build_model_inputs(
             ),
         ),
     )
-    sql_hook_definitions: dict[str, DiscoveredSqlHookFile] = _index_sql_hook_definitions(
-        discovered_inputs.sql_hook_files
-    )
     loop: _ModelInputLoop = _ModelInputLoop(
         discovered_inputs=discovered_inputs,
         context=context,
         validation_context=validation_context,
-        sql_hook_definitions=sql_hook_definitions,
-        legacy_schema_files=legacy_schema_files,
     )
-    model_inputs: list[ModelInput] = _run_native_model_loop(
-        loop=loop, native_project=native_project
-    )
-    validate_declared_schema_models_are_attached(
-        model_inputs=tuple(model_inputs),
-        schema_files=discovered_inputs.schema_files,
-    )
-    return tuple(model_inputs)
+    return tuple(_run_native_model_loop(loop=loop, native_project=native_project))
 
 
 def _run_native_model_loop(
@@ -245,7 +222,7 @@ def _run_native_model_loop(
                     "sql_hooks": {
                         "named_sql_hook_entry": NamedSqlHookEntry,
                         "python_hook_entry": PythonHookEntry,
-                        "definitions": loop.sql_hook_definitions,
+                        "hook_files": loop.discovered_inputs.sql_hook_files,
                         "effective_vars": loop.context.effective_vars,
                         "environment": UnicodeEnvironment(),
                         "render_project_var": render_project_var_text,
@@ -270,10 +247,7 @@ def _run_native_model_loop(
                 loop.validation_context.defer_model_sql_validation,
                 settings.require_sql_analysis,
             ),
-            (
-                str(loop.validation_context.project_config_path),
-                legacy_schema_rows(loop.legacy_schema_files),
-            ),
+            str(loop.validation_context.project_config_path),
         ),
     )
     inputs: list[_native.NativeModelInput] = native_loop.run(
@@ -335,19 +309,3 @@ def build_effective_vars(
     return expand_effective_vars(
         _native.effective_config_vars((project_config, local_config), target_config, cli_vars)
     )
-
-
-def _index_sql_hook_definitions(
-    hook_files: tuple[DiscoveredSqlHookFile, ...],
-) -> dict[str, DiscoveredSqlHookFile]:
-    definitions: dict[str, DiscoveredSqlHookFile] = {}
-    hook_file: DiscoveredSqlHookFile
-    for hook_file in hook_files:
-        existing: DiscoveredSqlHookFile | None = definitions.get(hook_file.name)
-        if existing is not None:
-            raise CompileInputError(
-                f"Duplicate SQL hook name '{hook_file.name}' found in "
-                f"{existing.relative_path} and {hook_file.relative_path}"
-            )
-        definitions[hook_file.name] = hook_file
-    return definitions

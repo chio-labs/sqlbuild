@@ -226,13 +226,6 @@ pub struct TextPosition {
     pub column: usize,
 }
 
-/// A legacy schema file that declares model entries, by its relative path.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct LegacySchemaFile {
-    pub relative_path: String,
-    pub model_names: Vec<String>,
-}
-
 /// The authored model a reference-scan fault is located in.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ScanFaultOrigin<'a> {

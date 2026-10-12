@@ -11,17 +11,14 @@ from sqlbuild.compiler.compile._helpers.render.templating import (
     record_template_reads,
 )
 from sqlbuild.compiler.compile.classes.unicode_environment import UnicodeEnvironment
-from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileModelConfig,
     ModelValidationRequest,
     NativeModelConfigInputs,
     NativeModelConfigSession,
 )
-from sqlbuild.compiler.compile.types import ModelInput
 from sqlbuild.compiler.compiled_project.main._native_config_classes import native_config_classes
 from sqlbuild.compiler.discovery.models import (
-    DiscoveredSchemaFile,
     DiscoveredSqlModelFile,
     NamedSqlHookEntry,
     PythonHookEntry,
@@ -32,7 +29,6 @@ from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.spec.contracts.models import (
     MaterializationDefaultsConfig,
     ProjectConfig,
-    SchemaModelEntry,
     TargetConfig,
 )
 
@@ -53,48 +49,6 @@ type _BuiltConfig = tuple[
 ]
 _MODEL_DESCRIPTION_KEY: str = "description"
 _MODEL_SCHEMA_KEY: str = "model_schema"
-
-
-def legacy_schema_rows(
-    schema_files: tuple[DiscoveredSchemaFile, ...],
-) -> list[tuple[str, list[str]]]:
-    """Each legacy schema file's relative path and the model names it declares."""
-
-    rows: list[tuple[str, list[str]]] = []
-    for schema_file in schema_files:
-        rows.append(
-            (str(schema_file.relative_path), [entry.name for entry in schema_file.model_entries])
-        )
-    return rows
-
-
-def validate_declared_schema_models_are_attached(
-    *,
-    model_inputs: tuple[ModelInput, ...],
-    schema_files: tuple[DiscoveredSchemaFile, ...],
-) -> None:
-    """Ensure every declared schema.yml model entry attaches within its directory scope."""
-
-    attached_model_names: set[str | None] = {
-        model_input.attached_schema_name for model_input in model_inputs
-    }
-    schema_file: DiscoveredSchemaFile
-    for schema_file in schema_files:
-        schema_entry: SchemaModelEntry
-        for schema_entry in schema_file.model_entries:
-            if schema_entry.name not in attached_model_names:
-                raise CompileInputError(
-                    f"schema.yml declaration for model '{schema_entry.name}' in "
-                    f"{schema_file.relative_path} "
-                    "does not match any discovered model file in that directory scope"
-                )
-
-
-def _str_from_dict(*, values: dict[str, object], key: str) -> str | None:
-    """Extract a string value from a dict."""
-
-    raw: object | None = values.get(key)
-    return raw if isinstance(raw, str) else None
 
 
 def native_model_config_session(
