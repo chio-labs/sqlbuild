@@ -7,4 +7,6 @@ from dataclasses import dataclass
 class LocalWheelTestCase:
     """A synchronized candidate and companion version."""
 
+    description: str
     version: str
+    expected_version: str

@@ -11,7 +11,17 @@ from tests.integration.scripts.release_performance._test_types import LocalWheel
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Release comparison uses POSIX environments")
-@pytest.mark.parametrize("test_case", [LocalWheelTestCase(version="0.1.0")])
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LocalWheelTestCase(
+            description="unpublished companion installs offline beside its candidate",
+            version="0.1.0",
+            expected_version="0.1.0",
+        )
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_unpublished_companion_when_installing_candidate_then_resolves_local_wheel(
     test_case: LocalWheelTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -40,4 +50,4 @@ def test_given_unpublished_companion_when_installing_candidate_then_resolves_loc
         venv_dir=tmp_path / "candidate",
         python=sys.executable,
     )
-    assert installed_version(sqb=sqb) == version
+    assert installed_version(sqb=sqb) == test_case.expected_version
