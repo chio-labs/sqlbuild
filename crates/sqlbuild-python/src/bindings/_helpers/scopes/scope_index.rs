@@ -1,267 +1,929 @@
-//! Native declaration scopes as the plain rows the Python scope facade materialises.
+//! The static scope index built natively from discovered inputs, as the Python scope models.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::{IntoPyObject, pyclass, pyfunction, pymethods, wrap_pyfunction};
+use std::collections::HashMap;
+
+use pyo3::exceptions::PyKeyError;
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_scopes::relationship_names::models::RelationshipScan;
 use sqlbuild_scopes::scope_index::main::build_scope_index::build_scope_index;
+use sqlbuild_scopes::scope_index::main::macro_source_digest::macro_source_digest;
+use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::relationship_grants::relationship_grants;
 use sqlbuild_scopes::scope_index::models::{
-    DeclarationIdentity, DeclarationInput, DeclarationRecord, GrantRecord, GrantThrough,
-    RelationshipFact, ResourceIdentity, ResourceInput, ScopeDeferral, ScopeDiagnostic, ScopeIndex,
-    ScopeInputs,
-};
-use sqlbuild_scopes::scope_index::models::{
-    DeclarationKind, ResourceKind, ResourceRoot, ScopeKind,
+    DeclarationIdentity, DeclarationInput, DeclarationKind, GrantRecord, GrantThrough,
+    RejectedPath, RelationshipFact, ResourceIdentity, ResourceInput, ResourceKind, ResourceRoot,
+    ScopeDeferral, ScopeIndex, ScopeInputs, ScopeKind,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::scopes::relationship_scan::{
     RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
 };
+use crate::bindings::_helpers::scopes::scope_lookup::{path_message, scope_path_error};
+use crate::bindings::_helpers::scopes::scope_objects::{
+    ScopeClasses, field, optional_item, root_object, value_of,
+};
+use crate::bindings::_helpers::scopes::scope_validation::replace;
 use crate::bindings::types::CompilerDetach;
-use sqlbuild_scopes::relationship_names::models::RelationshipScan;
 
-type IdentityRow = (String, String);
-type DeclarationIdentityRow = (String, String, Option<IdentityRow>);
-type ResourceRow = (String, String, String, String);
-type DeclarationRow = (
-    String,
-    String,
-    Option<IdentityRow>,
-    String,
-    i64,
-    String,
-    Option<String>,
-    String,
-    Option<String>,
-    Vec<DeclarationIdentityRow>,
-);
-type DeclarationRecordRow = (
-    String,
-    String,
-    &'static str,
-    Option<&'static str>,
-    Option<String>,
-);
-type DiagnosticRow = (
-    &'static str,
-    String,
-    Option<String>,
-    Option<i64>,
-    Option<i64>,
-    Option<usize>,
-    Option<usize>,
-);
-type IndexRows = (
-    Vec<String>,
-    Vec<DeclarationRecordRow>,
-    Vec<usize>,
-    Vec<usize>,
-    Vec<(usize, usize)>,
-    Vec<DiagnosticRow>,
-    bool,
-);
-type GrantRow = (&'static str, String, usize, ThroughRow, &'static str);
-/// The grants, or `None` when the index cannot place them, and each `(path, message)` fault.
-type GrantedRelationships = (Option<Vec<GrantRow>>, Vec<(String, String)>);
+const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.scopes.exceptions";
+const INSPECT_MODULE: &str = "inspect";
+const CODE_TYPE_MODULE: &str = "types";
+const PATHLIB_MODULE: &str = "pathlib";
+const PRIVATE_ROOT: &str = "models";
+const MACRO_FALLBACK: &str = "macros";
+const ENUM_FALLBACK: &str = "enums";
+const CONSTANT_FALLBACK: &str = "constants";
+const COLLECTION_KINDS: [&str; 3] = ["list", "set", "object"];
+const NULL_KIND: &str = "null";
+/// Each resource kind's own ownership root, in the order Python sorts them by path.
+const KIND_ROOTS: [(ResourceKind, &str); 5] = [
+    (ResourceKind::Function, "functions/sql"),
+    (ResourceKind::Model, "models"),
+    (ResourceKind::Source, "sources"),
+    (ResourceKind::Scenario, "tests/scenarios"),
+    (ResourceKind::Test, "tests/unit"),
+];
 
-/// What a grant came through: an expected model's name or a tested macro's declaration index.
-#[derive(IntoPyObject)]
-enum ThroughRow {
-    Model(String),
-    Declaration(usize),
+/// The Python parts of one declaration record the native index does not hold.
+struct DeclarationValues<'py> {
+    identity: Bound<'py, PyAny>,
+    line: i64,
+    scope: Bound<'py, PyAny>,
+    metadata: [Option<Bound<'py, PyAny>>; 3],
+    dependencies: Vec<Bound<'py, PyAny>>,
 }
 
-/// A built scope index held natively between the facade's index, grant and lookup steps.
+/// Where one declaration lives: path, ownership root, root fallback and owning path.
+struct Placement {
+    path: String,
+    ownership_root: Option<String>,
+    root_fallback: String,
+    owning_path: Option<String>,
+}
+
+/// The builder's walk of discovered inputs: native inputs and the Python values beside them.
+struct Walk<'py> {
+    classes: ScopeClasses<'py>,
+    inputs: ScopeInputs,
+    resource_identities: Vec<Bound<'py, PyAny>>,
+    /// Each resource's kind and root, which pick its ownership root.
+    resource_roots: Vec<(ResourceKind, ResourceRoot)>,
+    declarations: Vec<DeclarationValues<'py>>,
+    /// Whether every walked kind, scope and root parsed natively.
+    indexable: bool,
+}
+
+fn text(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    value.str()?.extract()
+}
+
+fn optional_text(item: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
+    optional_item(item, name)?
+        .map(|value| text(&value))
+        .transpose()
+}
+
+fn stem(path: &Bound<'_, PyAny>) -> PyResult<String> {
+    path.getattr("stem")?.extract()
+}
+
+/// `value or fallback` with Python truthiness.
+fn or_else<'py>(
+    value: Bound<'py, PyAny>,
+    fallback: impl FnOnce() -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    if value.is_truthy()? {
+        Ok(value)
+    } else {
+        fallback()
+    }
+}
+
+/// `value if isinstance(value, str) and value else path.stem`.
+fn name_or_stem(value: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<String> {
+    if let Ok(name) = value.extract::<String>()
+        && !name.is_empty()
+    {
+        return Ok(name);
+    }
+    stem(path)
+}
+
+fn header_name<'py>(file: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    file.getattr("header_values")?
+        .call_method1("get", ("name",))
+}
+
+fn items<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    item.getattr(name)?.try_iter()?.collect()
+}
+
+impl<'py> Walk<'py> {
+    fn new(py: Python<'py>) -> PyResult<Self> {
+        Ok(Self {
+            classes: ScopeClasses::new(py)?,
+            inputs: ScopeInputs::default(),
+            resource_identities: Vec::new(),
+            resource_roots: Vec::new(),
+            declarations: Vec::new(),
+            indexable: true,
+        })
+    }
+
+    fn add_resource(
+        &mut self,
+        kind: ResourceKind,
+        name: String,
+        location: (&Bound<'py, PyAny>, ResourceRoot),
+    ) -> PyResult<()> {
+        let (path, root) = location;
+        self.resource_identities
+            .push(self.classes.model("ResourceIdentity")?.call1((
+                self.classes.member("ResourceKind", kind.as_str())?,
+                name.as_str(),
+            ))?);
+        self.resource_roots.push((kind, root));
+        self.inputs.resources.push(ResourceInput {
+            identity: ResourceIdentity { kind, name },
+            path: text(path)?,
+            root,
+        });
+        Ok(())
+    }
+
+    fn native_identity(&mut self, identity: &Bound<'py, PyAny>) -> PyResult<DeclarationIdentity> {
+        let kind: String = value_of(identity, "kind")?;
+        let owner: Option<ResourceIdentity> = match optional_item(identity, "owner")? {
+            None => None,
+            Some(owner) => {
+                let owner_kind: String = value_of(&owner, "kind")?;
+                match ResourceKind::parse(&owner_kind) {
+                    Some(kind) => Some(ResourceIdentity {
+                        kind,
+                        name: field(&owner, "name")?,
+                    }),
+                    None => {
+                        self.indexable = false;
+                        None
+                    }
+                }
+            }
+        };
+        let kind: DeclarationKind = DeclarationKind::parse(&kind).unwrap_or_else(|| {
+            self.indexable = false;
+            DeclarationKind::Macro
+        });
+        Ok(DeclarationIdentity {
+            kind,
+            name: field(identity, "name")?,
+            owner,
+        })
+    }
+
+    fn add_declaration(
+        &mut self,
+        values: DeclarationValues<'py>,
+        placement: Placement,
+    ) -> PyResult<()> {
+        let identity: DeclarationIdentity = self.native_identity(&values.identity)?;
+        let scope_text: String = values.scope.getattr("value")?.extract()?;
+        let scope: ScopeKind = ScopeKind::parse(&scope_text).unwrap_or_else(|| {
+            self.indexable = false;
+            ScopeKind::Global
+        });
+        let dependencies: Vec<DeclarationIdentity> = values
+            .dependencies
+            .iter()
+            .map(|item| self.native_identity(item))
+            .collect::<PyResult<_>>()?;
+        self.inputs.declarations.push(DeclarationInput {
+            identity,
+            path: placement.path,
+            line: values.line,
+            scope,
+            ownership_root: placement.ownership_root,
+            root_fallback: placement.root_fallback,
+            owning_path: placement.owning_path,
+            dependencies,
+        });
+        self.declarations.push(values);
+        Ok(())
+    }
+
+    fn declaration_identity(
+        &self,
+        kind: DeclarationKind,
+        name: &Bound<'py, PyAny>,
+        owner: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.classes.model("DeclarationIdentity")?.call1((
+            self.classes.member("DeclarationKind", kind.as_str())?,
+            name,
+            owner,
+        ))
+    }
+
+    fn values(
+        &self,
+        identity: Bound<'py, PyAny>,
+        scope: Bound<'py, PyAny>,
+        metadata: [Option<Bound<'py, PyAny>>; 3],
+    ) -> DeclarationValues<'py> {
+        DeclarationValues {
+            identity,
+            line: 1,
+            scope,
+            metadata,
+            dependencies: Vec::new(),
+        }
+    }
+
+    fn enum_metadata(&self, declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let member_class: Bound<'py, PyAny> = self.classes.model("EnumMemberMetadata")?;
+        let members: Vec<Bound<'py, PyAny>> = items(declaration, "members")?
+            .iter()
+            .map(|member| member_class.call1((member.getattr("name")?,)))
+            .collect::<PyResult<_>>()?;
+        self.classes.model("EnumMetadata")?.call1((
+            PyTuple::new(declaration.py(), members)?,
+            declaration.getattr("scalar_type")?,
+        ))
+    }
+
+    fn constant_metadata(&self, declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let value: Bound<'py, PyAny> = declaration.getattr("value")?;
+        let kind: Bound<'py, PyAny> = value.getattr("kind")?;
+        let kind_text: String = kind.getattr("value")?.extract()?;
+        let is_collection: bool = COLLECTION_KINDS.contains(&kind_text.as_str());
+        let payload: Bound<'py, PyAny> = value.getattr("value")?;
+        let item_count: Option<usize> = if is_collection && payload.is_instance_of::<PyTuple>() {
+            Some(payload.len()?)
+        } else {
+            None
+        };
+        let render_as: Option<Bound<'py, PyAny>> = optional_item(declaration, "render_as")?
+            .map(|rendering| rendering.getattr("value"))
+            .transpose()?;
+        self.classes.model("ConstantMetadata")?.call1((
+            declaration
+                .getattr("logical_type")?
+                .getattr("display_name")?,
+            if is_collection {
+                Some(kind.getattr("value")?)
+            } else {
+                None
+            },
+            item_count,
+            kind_text == NULL_KIND,
+            render_as,
+        ))
+    }
+
+    fn add_models(&mut self, inputs: &Bound<'py, PyAny>) -> PyResult<()> {
+        for model_file in items(inputs, "model_files")? {
+            let path: Bound<'py, PyAny> = model_file.getattr("relative_path")?;
+            let model_name: String = name_or_stem(&header_name(&model_file)?, &path)?;
+            self.add_resource(
+                ResourceKind::Model,
+                model_name.clone(),
+                (&path, ResourceRoot::Kind),
+            )?;
+            let owner: Bound<'py, PyAny> = self.classes.model("ResourceIdentity")?.call1((
+                self.classes
+                    .member("ResourceKind", ResourceKind::Model.as_str())?,
+                model_name,
+            ))?;
+            let private: Bound<'py, PyAny> = self
+                .classes
+                .member("ScopeKind", ScopeKind::Private.as_str())?;
+            for declaration in items(&model_file, "enum_declarations")? {
+                let identity: Bound<'py, PyAny> = self.declaration_identity(
+                    DeclarationKind::Enum,
+                    &declaration.getattr("name")?,
+                    Some(&owner),
+                )?;
+                let metadata = [None, Some(self.enum_metadata(&declaration)?), None];
+                let values = self.values(identity, private.clone(), metadata);
+                self.add_private(values, &path)?;
+            }
+            for declaration in items(&model_file, "constant_declarations")? {
+                let identity: Bound<'py, PyAny> = self.declaration_identity(
+                    DeclarationKind::Constant,
+                    &declaration.getattr("name")?,
+                    Some(&owner),
+                )?;
+                let metadata = [None, None, Some(self.constant_metadata(&declaration)?)];
+                let values = self.values(identity, private.clone(), metadata);
+                self.add_private(values, &path)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn add_private(
+        &mut self,
+        values: DeclarationValues<'py>,
+        path: &Bound<'py, PyAny>,
+    ) -> PyResult<()> {
+        self.add_declaration(
+            values,
+            Placement {
+                path: text(path)?,
+                ownership_root: Some(PRIVATE_ROOT.to_owned()),
+                root_fallback: PRIVATE_ROOT.to_owned(),
+                owning_path: Some(text(&path.getattr("parent")?)?),
+            },
+        )
+    }
+
+    fn add_resources(&mut self, inputs: &Bound<'py, PyAny>) -> PyResult<()> {
+        for test_file in items(inputs, "test_files")? {
+            let path: Bound<'py, PyAny> = test_file.getattr("relative_path")?;
+            for block in items(&test_file, "blocks")? {
+                let name: Bound<'py, PyAny> =
+                    or_else(block.getattr("name")?, || path.getattr("stem"))?;
+                self.add_resource(
+                    ResourceKind::Test,
+                    name.extract()?,
+                    (&path, ResourceRoot::Kind),
+                )?;
+            }
+        }
+        for scenario in items(inputs, "scenario_files")? {
+            self.add_resource(
+                ResourceKind::Scenario,
+                field(&scenario, "name")?,
+                (&scenario.getattr("relative_path")?, ResourceRoot::Kind),
+            )?;
+        }
+        for function in items(inputs, "sql_function_files")? {
+            let path: Bound<'py, PyAny> = function.getattr("relative_path")?;
+            let name: String = name_or_stem(&header_name(&function)?, &path)?;
+            self.add_resource(ResourceKind::Function, name, (&path, ResourceRoot::Kind))?;
+        }
+        for function in items(inputs, "python_function_files")? {
+            self.add_resource(
+                ResourceKind::Function,
+                stem(&function.getattr("file_path")?)?,
+                (
+                    &function.getattr("relative_path")?,
+                    ResourceRoot::PythonFunction,
+                ),
+            )?;
+        }
+        for seed in items(inputs, "seed_files")? {
+            self.add_resource(
+                ResourceKind::Seed,
+                stem(&seed.getattr("file_path")?)?,
+                (&seed.getattr("relative_path")?, ResourceRoot::Seed),
+            )?;
+        }
+        for source_file in items(inputs, "source_files")? {
+            let path: Bound<'py, PyAny> = source_file.getattr("relative_path")?;
+            for source in items(&source_file, "source_entries")? {
+                self.add_resource(
+                    ResourceKind::Source,
+                    field(&source, "name")?,
+                    (&path, ResourceRoot::Kind),
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn file_placement(file: &Bound<'py, PyAny>, root_fallback: String) -> PyResult<Placement> {
+        Ok(Placement {
+            path: text(&file.getattr("relative_path")?)?,
+            ownership_root: optional_text(file, "ownership_root")?,
+            root_fallback,
+            owning_path: optional_text(file, "owning_path")?,
+        })
+    }
+
+    fn add_declaration_files(&mut self, inputs: &Bound<'py, PyAny>) -> PyResult<()> {
+        for enum_file in items(inputs, "enum_files")? {
+            for declaration in items(&enum_file, "declarations")? {
+                let identity: Bound<'py, PyAny> = self.declaration_identity(
+                    DeclarationKind::Enum,
+                    &declaration.getattr("name")?,
+                    None,
+                )?;
+                let metadata = [None, Some(self.enum_metadata(&declaration)?), None];
+                let values = self.values(identity, enum_file.getattr("scope_kind")?, metadata);
+                let placement = Self::file_placement(&enum_file, ENUM_FALLBACK.to_owned())?;
+                self.add_declaration(values, placement)?;
+            }
+        }
+        for constant_file in items(inputs, "constant_files")? {
+            for declaration in items(&constant_file, "declarations")? {
+                let identity: Bound<'py, PyAny> = self.declaration_identity(
+                    DeclarationKind::Constant,
+                    &declaration.getattr("name")?,
+                    None,
+                )?;
+                let metadata = [None, None, Some(self.constant_metadata(&declaration)?)];
+                let values = self.values(identity, constant_file.getattr("scope_kind")?, metadata);
+                let placement = Self::file_placement(&constant_file, CONSTANT_FALLBACK.to_owned())?;
+                self.add_declaration(values, placement)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn add_named(
+        &mut self,
+        item: &Bound<'py, PyAny>,
+        kind: DeclarationKind,
+        name: &Bound<'py, PyAny>,
+    ) -> PyResult<()> {
+        let identity: Bound<'py, PyAny> = self.declaration_identity(kind, name, None)?;
+        let values = self.values(identity, item.getattr("scope_kind")?, [None, None, None]);
+        let fallback: Bound<'py, PyAny> = or_else(item.getattr("declaration_root")?, || {
+            item.getattr("relative_path")?.getattr("parent")
+        })?;
+        let placement = Self::file_placement(item, text(&fallback)?)?;
+        self.add_declaration(values, placement)
+    }
+
+    fn add_named_declarations(&mut self, inputs: &Bound<'py, PyAny>) -> PyResult<()> {
+        let audit_kind: String = DeclarationKind::Audit.as_str().to_owned();
+        for audit_file in items(inputs, "audit_files")? {
+            let stem_name: Bound<'py, PyAny> =
+                audit_file.getattr("relative_path")?.getattr("stem")?;
+            if value_of(&audit_file, "declaration_kind")? == audit_kind {
+                self.add_named(&audit_file, DeclarationKind::Audit, &stem_name)?;
+                continue;
+            }
+            for block in items(&audit_file, "blocks")? {
+                let name: Bound<'py, PyAny> =
+                    or_else(block.getattr("name")?, || Ok(stem_name.clone()))?;
+                self.add_named(&audit_file, DeclarationKind::SingularAudit, &name)?;
+            }
+        }
+        for schema_file in items(inputs, "model_schema_files")? {
+            for declaration in items(&schema_file, "declarations")? {
+                self.add_named(
+                    &schema_file,
+                    DeclarationKind::Schema,
+                    &declaration.getattr("name")?,
+                )?;
+            }
+        }
+        for hook_file in items(inputs, "sql_hook_files")? {
+            self.add_named(
+                &hook_file,
+                DeclarationKind::SqlHook,
+                &hook_file.getattr("name")?,
+            )?;
+        }
+        for hook in items(inputs, "hook_functions")? {
+            self.add_named(&hook, DeclarationKind::PythonHook, &hook.getattr("name")?)?;
+        }
+        Ok(())
+    }
+
+    fn macro_values(
+        &self,
+        macro_file: Option<&Bound<'py, PyAny>>,
+        source: (&Bound<'py, PyAny>, i64, Bound<'py, PyAny>),
+    ) -> PyResult<(DeclarationValues<'py>, Placement)> {
+        let (export, line, metadata) = source;
+        let identity: Bound<'py, PyAny> =
+            self.declaration_identity(DeclarationKind::Macro, &export.getattr("name")?, None)?;
+        let scope: Bound<'py, PyAny> = match macro_file {
+            Some(file) => file.getattr("scope_kind")?,
+            None => self
+                .classes
+                .member("ScopeKind", ScopeKind::Global.as_str())?,
+        };
+        let dependencies: Vec<Bound<'py, PyAny>> = items(export, "dependencies")?;
+        let placement: Placement = Placement {
+            path: text(&export.getattr("relative_path")?)?,
+            ownership_root: match macro_file {
+                Some(file) => optional_text(file, "ownership_root")?,
+                None => None,
+            },
+            root_fallback: MACRO_FALLBACK.to_owned(),
+            owning_path: match macro_file {
+                Some(file) => optional_text(file, "owning_path")?,
+                None => None,
+            },
+        };
+        Ok((
+            DeclarationValues {
+                identity,
+                line,
+                scope,
+                metadata: [Some(metadata), None, None],
+                dependencies,
+            },
+            placement,
+        ))
+    }
+
+    fn loaded_metadata(&self, loaded: &Bound<'py, PyAny>) -> PyResult<(i64, Bound<'py, PyAny>)> {
+        let py: Python<'py> = loaded.py();
+        let function: Bound<'py, PyAny> = loaded.getattr("function")?;
+        let parameters: Vec<Bound<'py, PyAny>> = py
+            .import(INSPECT_MODULE)?
+            .getattr("signature")?
+            .call1((&function,))?
+            .getattr("parameters")?
+            .try_iter()?
+            .collect::<PyResult<_>>()?;
+        let raw_source: String = field(loaded, "raw_source")?;
+        let metadata: Bound<'py, PyAny> = self.classes.model("MacroMetadata")?.call1((
+            PyTuple::new(py, parameters)?,
+            loaded.getattr("dependencies")?,
+            macro_source_digest(&raw_source),
+        ))?;
+        let code_type: Bound<'py, PyAny> = py.import(CODE_TYPE_MODULE)?.getattr("CodeType")?;
+        let line: i64 = match function.getattr_opt("__code__")? {
+            Some(code) if code.is_instance(&code_type)? => {
+                code.getattr("co_firstlineno")?.extract()?
+            }
+            _ => 1,
+        };
+        Ok((line, metadata))
+    }
+
+    fn add_macros(
+        &mut self,
+        inputs: &Bound<'py, PyAny>,
+        macros: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    ) -> PyResult<()> {
+        let (loaded_macros, static_macros) = macros;
+        let py: Python<'py> = inputs.py();
+        let mut macro_files: HashMap<String, Bound<'py, PyAny>> = HashMap::new();
+        for macro_file in items(inputs, "macro_files")? {
+            let key: String = normalized(py, &macro_file.getattr("relative_path")?)?;
+            macro_files.insert(key, macro_file);
+        }
+        for loaded in loaded_macros.call_method0("values")?.try_iter()? {
+            let loaded: Bound<'py, PyAny> = loaded?;
+            let key: String = normalized(py, &loaded.getattr("relative_path")?)?;
+            let (line, metadata) = self.loaded_metadata(&loaded)?;
+            let (values, placement) =
+                self.macro_values(macro_files.get(&key), (&loaded, line, metadata))?;
+            self.add_declaration(values, placement)?;
+        }
+        for export in static_macros.try_iter()? {
+            let export: Bound<'py, PyAny> = export?;
+            let key: String = normalized(py, &export.getattr("relative_path")?)?;
+            let metadata: Bound<'py, PyAny> = self.classes.model("MacroMetadata")?.call1((
+                export.getattr("parameters")?,
+                export.getattr("dependencies")?,
+                export.getattr("source_digest")?,
+            ))?;
+            let (values, placement) = self.macro_values(
+                macro_files.get(&key),
+                (&export, field(&export, "line")?, metadata),
+            )?;
+            self.add_declaration(values, placement)?;
+        }
+        Ok(())
+    }
+}
+
+/// Python's scope `normalize_path` of a path; a rejected path raises `InvalidScopePathError`.
+fn normalized(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<String> {
+    let path: String = text(path)?;
+    normalize_scope_path(&path).map_err(|failure| {
+        scope_path_error(py, path_message(&RejectedPath { failure, path }))
+            .unwrap_or_else(|error| error)
+    })
+}
+
+fn unindexable(py: Python<'_>) -> PyResult<PyErr> {
+    Ok(PyErr::from_value(
+        py.import(EXCEPTIONS_MODULE)?
+            .getattr("UnindexableScopeError")?
+            .call0()?,
+    ))
+}
+
+/// A built scope index and the Python records materialised from it.
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct NativeScopeIndex {
-    index: ScopeIndex,
-    grants: Vec<GrantRecord>,
+    native: ScopeIndex,
+    /// Each declaration record in input order.
+    declarations: Vec<Py<PyAny>>,
+    index: Py<PyAny>,
+    grants: Py<PyTuple>,
+}
+
+fn resource_root<'py>(
+    classes: &ScopeClasses<'py>,
+    kind: ResourceKind,
+    root: ResourceRoot,
+) -> PyResult<Bound<'py, PyAny>> {
+    let (path, root_kind, resource_kind): (&str, &str, ResourceKind) = match root {
+        ResourceRoot::Seed => ("seeds", "global", ResourceKind::Seed),
+        ResourceRoot::PythonFunction => ("functions/python", "global", ResourceKind::Function),
+        ResourceRoot::Kind => match KIND_ROOTS.iter().find(|(candidate, _)| *candidate == kind) {
+            Some((_, path)) => (path, "resource", kind),
+            None => {
+                return Err(PyKeyError::new_err(
+                    classes.member("ResourceKind", kind.as_str())?.unbind(),
+                ));
+            }
+        },
+    };
+    classes.model("OwnershipRoot")?.call1((
+        path,
+        classes.member("OwnershipRootKind", root_kind)?,
+        classes.member("ResourceKind", resource_kind.as_str())?,
+    ))
+}
+
+fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScopeIndex> {
+    let classes: &ScopeClasses<'py> = &walk.classes;
+    let py: Python<'py> = classes.py();
+    let mut resources: Vec<Bound<'py, PyAny>> = Vec::with_capacity(native.resources.len());
+    for ((record, (kind, root)), identity) in native
+        .resources
+        .iter()
+        .zip(&walk.resource_roots)
+        .zip(&walk.resource_identities)
+    {
+        resources.push(classes.model("ResourceRecord")?.call1((
+            identity,
+            record.path.as_str(),
+            resource_root(classes, *kind, *root)?,
+        ))?);
+    }
+    let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(native.declarations.len());
+    for (record, values) in native.declarations.iter().zip(&walk.declarations) {
+        let [macro_metadata, enum_metadata, constant_metadata] = &values.metadata;
+        let arguments: Vec<Bound<'py, PyAny>> = vec![
+            values.identity.clone(),
+            record.path.as_str().into_bound_py_any(py)?,
+            values.line.into_bound_py_any(py)?,
+            1_i64.into_bound_py_any(py)?,
+            values.scope.clone(),
+            root_object(classes, &record.ownership_root)?,
+            record.owning_path.as_deref().into_bound_py_any(py)?,
+            macro_metadata.into_bound_py_any(py)?,
+            enum_metadata.into_bound_py_any(py)?,
+            constant_metadata.into_bound_py_any(py)?,
+        ];
+        declarations.push(
+            classes
+                .model("DeclarationRecord")?
+                .call1(PyTuple::new(py, arguments)?)?,
+        );
+    }
+    let usage_class: Bound<'py, PyAny> = classes.model("UsageRecord")?;
+    let dependency_kind: Bound<'py, PyAny> =
+        classes.member("UsageKind", "declaration_dependency")?;
+    let mut usages: Vec<Bound<'py, PyAny>> = Vec::with_capacity(native.usages.len());
+    for usage in &native.usages {
+        usages.push(usage_class.call1((
+            declarations[usage.consumer].getattr("identity")?,
+            &walk.declarations[usage.consumer].dependencies[usage.dependency],
+            &dependency_kind,
+        ))?);
+    }
+    let diagnostic_class: Bound<'py, PyAny> = classes.model("ScopeDiagnostic")?;
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::with_capacity(native.diagnostics.len());
+    for diagnostic in &native.diagnostics {
+        let keywords: Bound<'py, PyDict> = PyDict::new(py);
+        keywords.set_item("path", diagnostic.path.as_deref())?;
+        keywords.set_item("line", diagnostic.line)?;
+        keywords.set_item("column", diagnostic.column)?;
+        keywords.set_item(
+            "declaration",
+            diagnostic
+                .declaration
+                .map(|position| declarations[position].getattr("identity"))
+                .transpose()?,
+        )?;
+        keywords.set_item(
+            "resource",
+            diagnostic
+                .resource
+                .map(|position| resources[position].getattr("identity"))
+                .transpose()?,
+        )?;
+        diagnostics.push(diagnostic_class.call(
+            (
+                classes.member("ScopeDiagnosticCode", diagnostic.code.as_str())?,
+                diagnostic.message.as_str(),
+            ),
+            Some(&keywords),
+        )?);
+    }
+    let roots: Vec<Bound<'py, PyAny>> = KIND_ROOTS
+        .iter()
+        .map(|(kind, path)| {
+            let keywords: Bound<'py, PyDict> = PyDict::new(py);
+            keywords.set_item("path", *path)?;
+            keywords.set_item(
+                "resource_kind",
+                classes.member("ResourceKind", kind.as_str())?,
+            )?;
+            classes.model("OwnershipRoot")?.call((), Some(&keywords))
+        })
+        .collect::<PyResult<_>>()?;
+    let completeness: Bound<'py, PyAny> = {
+        let keywords: Bound<'py, PyDict> = PyDict::new(py);
+        for section in [
+            "runtime_usage",
+            "relationships",
+            "placement",
+            "promotion_impact",
+        ] {
+            keywords.set_item(section, false)?;
+        }
+        classes
+            .model("ScopeCompleteness")?
+            .call((), Some(&keywords))?
+    };
+    let ordered =
+        |records: &[Bound<'py, PyAny>], order: &[usize]| -> PyResult<Bound<'py, PyTuple>> {
+            PyTuple::new(py, order.iter().map(|position| records[*position].clone()))
+        };
+    let index: Bound<'py, PyAny> = classes.model("ScopeIndex")?.call1((
+        PyTuple::new(py, roots)?,
+        ordered(&resources, &native.resource_order)?,
+        ordered(&declarations, &native.declaration_order)?,
+        PyTuple::new(py, usages)?,
+        PyTuple::empty(py),
+        PyTuple::empty(py),
+        PyTuple::empty(py),
+        PyTuple::new(py, diagnostics)?,
+        completeness,
+    ))?;
+    Ok(NativeScopeIndex {
+        native,
+        declarations: declarations.into_iter().map(Bound::unbind).collect(),
+        index: index.unbind(),
+        grants: PyTuple::empty(py).unbind(),
+    })
+}
+
+fn test_file_row(test_file: &Bound<'_, PyAny>) -> PyResult<TestFileRow> {
+    let path: Bound<'_, PyAny> = test_file.getattr("relative_path")?;
+    let mut blocks: Vec<(String, String, String)> = Vec::new();
+    for block in items(test_file, "blocks")? {
+        let name: Bound<'_, PyAny> = or_else(block.getattr("name")?, || path.getattr("stem"))?;
+        blocks.push((
+            name.extract()?,
+            field(&block, "sql_body")?,
+            value_of(&block, "mode")?,
+        ));
+    }
+    Ok((text(&path)?, blocks))
+}
+
+fn scenario_row(scenario: &Bound<'_, PyAny>) -> PyResult<ScenarioRow> {
+    Ok((
+        field(scenario, "name")?,
+        text(&scenario.getattr("relative_path")?)?,
+        field(scenario, "sql_body")?,
+    ))
 }
 
 #[pymethods]
 impl NativeScopeIndex {
-    /// The index's records, builder orders, usages, diagnostics and relationship flag.
-    fn records(&self) -> IndexRows {
-        let index: &ScopeIndex = &self.index;
-        (
-            index
-                .resources
-                .iter()
-                .map(|record| record.path.clone())
-                .collect(),
-            index.declarations.iter().map(declaration_row).collect(),
-            index.resource_order.clone(),
-            index.declaration_order.clone(),
-            index
-                .usages
-                .iter()
-                .map(|usage| (usage.consumer, usage.dependency))
-                .collect(),
-            index.diagnostics.iter().map(diagnostic_row).collect(),
-            index.has_scoped_relationship_declarations,
-        )
+    /// The static index, without grants.
+    #[getter]
+    fn index(&self, py: Python<'_>) -> Py<PyAny> {
+        self.index.clone_ref(py)
     }
 
-    /// Read every test's and scenario's relationship facts, then resolve and keep their grants.
+    /// Whether any macro, enum or constant is scoped, which makes relationship grants matter.
+    #[getter]
+    fn has_scoped_relationship_declarations(&self) -> bool {
+        self.native.has_scoped_relationship_declarations
+    }
+
+    /// Grant every test's and scenario's relationships; return each extraction fault.
+    #[pyo3(signature = (*, discovered_inputs, syntax, scan_store))]
     fn grant_relationships(
         &mut self,
         py: Python<'_>,
-        files: Vec<TestFileRow>,
-        scenarios: Vec<ScenarioRow>,
-        settings: RelationshipScanSettings,
-    ) -> PyResult<GrantedRelationships> {
+        discovered_inputs: &Bound<'_, PyAny>,
+        syntax: &Bound<'_, PyAny>,
+        scan_store: (Bound<'_, PyAny>, String),
+    ) -> PyResult<Py<PyTuple>> {
+        let files: Vec<TestFileRow> = items(discovered_inputs, "test_files")?
+            .iter()
+            .map(test_file_row)
+            .collect::<PyResult<_>>()?;
+        let scenarios: Vec<ScenarioRow> = items(discovered_inputs, "scenario_files")?
+            .iter()
+            .map(scenario_row)
+            .collect::<PyResult<_>>()?;
+        let (store, algorithm) = scan_store;
+        let settings: Bound<'_, PyDict> = PyDict::new(py);
+        settings.set_item("syntax", syntax.getattr("native_mapping")?)?;
+        settings.set_item("store", store)?;
+        settings.set_item("scan_key", (algorithm, syntax.getattr("cache_key")?))?;
+        let settings: RelationshipScanSettings = settings.extract()?;
         let scan: RelationshipScan = scanned_relationships(py, &files, &scenarios, settings)?;
-        let index: &ScopeIndex = &self.index;
+        let index: &ScopeIndex = &self.native;
         let facts: &[RelationshipFact] = &scan.facts;
         let grants: Result<Vec<GrantRecord>, ScopeDeferral> = py
             .compiler_detach(|| Ok(relationship_grants(index, facts)))
             .map_err(compiler_error)?;
         let Ok(grants) = grants else {
-            return Ok((None, scan.faults));
+            return Err(unindexable(py)?);
         };
-        let rows: Vec<GrantRow> = grants.iter().map(grant_row).collect();
-        self.grants = grants;
-        Ok((Some(rows), scan.faults))
+        let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+        let mut records: Vec<Bound<'_, PyAny>> = Vec::with_capacity(grants.len());
+        for grant in &grants {
+            let through: Bound<'_, PyAny> = match &grant.through {
+                GrantThrough::Model(name) => classes.model("ResourceIdentity")?.call1((
+                    classes.member("ResourceKind", ResourceKind::Model.as_str())?,
+                    name.as_str(),
+                ))?,
+                GrantThrough::Declaration(position) => {
+                    self.declarations[*position].bind(py).getattr("identity")?
+                }
+            };
+            records.push(
+                classes.model("GrantRecord")?.call1((
+                    classes.model("ResourceIdentity")?.call1((
+                        classes.member("ResourceKind", grant.resource.kind.as_str())?,
+                        grant.resource.name.as_str(),
+                    ))?,
+                    self.declarations[grant.declaration]
+                        .bind(py)
+                        .getattr("identity")?,
+                    through,
+                    classes.member("GrantKind", grant.kind.as_str())?,
+                ))?,
+            );
+        }
+        self.grants = PyTuple::new(py, records)?.unbind();
+        let path_class: Bound<'_, PyAny> = py.import(PATHLIB_MODULE)?.getattr("Path")?;
+        let faults: Vec<Bound<'_, PyAny>> = scan
+            .faults
+            .into_iter()
+            .map(|(path, message)| {
+                Ok(PyTuple::new(
+                    py,
+                    [path_class.call1((path,))?, message.into_bound_py_any(py)?],
+                )?
+                .into_any())
+            })
+            .collect::<PyResult<_>>()?;
+        Ok(PyTuple::new(py, faults)?.unbind())
+    }
+
+    /// The index with its grants attached and relationships complete.
+    fn index_with_relationships(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let index: &Bound<'_, PyAny> = self.index.bind(py);
+        let completeness: Bound<'_, PyAny> = replace(
+            &index.getattr("completeness")?,
+            &[("relationships", true.into_bound_py_any(py)?)],
+        )?;
+        Ok(replace(
+            index,
+            &[
+                ("grants", self.grants.bind(py).clone().into_any()),
+                ("completeness", completeness),
+            ],
+        )?
+        .unbind())
     }
 }
 
-/// Build the static scope index natively, or return `None` when Python must build it.
+/// Python's `open_native_scope_index`: the natively built index of discovered inputs.
 #[pyfunction]
-fn build_native_scope_index(
+fn open_native_scope_index(
     py: Python<'_>,
-    resources: Vec<ResourceRow>,
-    declarations: Vec<DeclarationRow>,
-) -> PyResult<Option<NativeScopeIndex>> {
-    let Some(inputs) = scope_inputs(resources, declarations) else {
-        return Ok(None);
-    };
-    let index: Result<ScopeIndex, ScopeDeferral> = py
+    discovered_inputs: &Bound<'_, PyAny>,
+    loaded_macros: &Bound<'_, PyAny>,
+    static_macros: &Bound<'_, PyAny>,
+) -> PyResult<NativeScopeIndex> {
+    let mut walk: Walk<'_> = Walk::new(py)?;
+    walk.add_models(discovered_inputs)?;
+    walk.add_resources(discovered_inputs)?;
+    walk.add_declaration_files(discovered_inputs)?;
+    walk.add_named_declarations(discovered_inputs)?;
+    walk.add_macros(discovered_inputs, (loaded_macros, static_macros))?;
+    if !walk.indexable {
+        return Err(unindexable(py)?);
+    }
+    let inputs: ScopeInputs = std::mem::take(&mut walk.inputs);
+    let built: Result<ScopeIndex, ScopeDeferral> = py
         .compiler_detach(|| Ok(build_scope_index(inputs)))
         .map_err(compiler_error)?;
-    match index {
-        Ok(index) => Ok(Some(NativeScopeIndex {
-            index,
-            grants: Vec::new(),
-        })),
-        Err(_deferral) => Ok(None),
-    }
-}
-
-fn scope_inputs(
-    resources: Vec<ResourceRow>,
-    declarations: Vec<DeclarationRow>,
-) -> Option<ScopeInputs> {
-    Some(ScopeInputs {
-        resources: resources
-            .into_iter()
-            .map(|(kind, name, path, root)| {
-                Some(ResourceInput {
-                    identity: resource_identity((kind, name))?,
-                    path,
-                    root: match root.as_str() {
-                        "kind" => ResourceRoot::Kind,
-                        "seed" => ResourceRoot::Seed,
-                        "python_function" => ResourceRoot::PythonFunction,
-                        _ => return None,
-                    },
-                })
-            })
-            .collect::<Option<_>>()?,
-        declarations: declarations
-            .into_iter()
-            .map(declaration_input)
-            .collect::<Option<_>>()?,
-    })
-}
-
-fn declaration_input(row: DeclarationRow) -> Option<DeclarationInput> {
-    let (
-        kind,
-        name,
-        owner,
-        path,
-        line,
-        scope,
-        ownership_root,
-        root_fallback,
-        owning_path,
-        dependencies,
-    ) = row;
-    Some(DeclarationInput {
-        identity: declaration_identity((kind, name, owner))?,
-        path,
-        line,
-        scope: ScopeKind::parse(&scope)?,
-        ownership_root,
-        root_fallback,
-        owning_path,
-        dependencies: dependencies
-            .into_iter()
-            .map(declaration_identity)
-            .collect::<Option<_>>()?,
-    })
-}
-
-fn resource_identity((kind, name): IdentityRow) -> Option<ResourceIdentity> {
-    Some(ResourceIdentity {
-        kind: ResourceKind::parse(&kind)?,
-        name,
-    })
-}
-
-fn declaration_identity(
-    (kind, name, owner): DeclarationIdentityRow,
-) -> Option<DeclarationIdentity> {
-    Some(DeclarationIdentity {
-        kind: DeclarationKind::parse(&kind)?,
-        name,
-        owner: match owner {
-            Some(owner) => Some(resource_identity(owner)?),
-            None => None,
-        },
-    })
-}
-
-fn declaration_row(record: &DeclarationRecord) -> DeclarationRecordRow {
-    (
-        record.path.clone(),
-        record.ownership_root.path.clone(),
-        record.ownership_root.kind.as_str(),
-        record
-            .ownership_root
-            .resource_kind
-            .map(ResourceKind::as_str),
-        record.owning_path.clone(),
-    )
-}
-
-fn diagnostic_row(diagnostic: &ScopeDiagnostic) -> DiagnosticRow {
-    (
-        diagnostic.code.as_str(),
-        diagnostic.message.clone(),
-        diagnostic.path.clone(),
-        diagnostic.line,
-        diagnostic.column,
-        diagnostic.declaration,
-        diagnostic.resource,
-    )
-}
-
-fn grant_row(grant: &GrantRecord) -> GrantRow {
-    (
-        grant.resource.kind.as_str(),
-        grant.resource.name.clone(),
-        grant.declaration,
-        match &grant.through {
-            GrantThrough::Model(name) => ThroughRow::Model(name.clone()),
-            GrantThrough::Declaration(declaration) => ThroughRow::Declaration(*declaration),
-        },
-        grant.kind.as_str(),
-    )
+    let Ok(native) = built else {
+        return Err(unindexable(py)?);
+    };
+    materialise(walk, native)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeScopeIndex>()?;
-    module.add_function(wrap_pyfunction!(build_native_scope_index, module)?)?;
+    module.add_function(wrap_pyfunction!(open_native_scope_index, module)?)?;
     Ok(())
 }

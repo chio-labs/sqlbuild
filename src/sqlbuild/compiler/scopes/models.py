@@ -129,19 +129,6 @@ class GrantRecord:
 
 
 @dataclass(frozen=True)
-class NativeDeclarationValues:
-    """The Python-side parts of one declaration record the native scope index does not hold."""
-
-    identity: DeclarationIdentity
-    line: int
-    scope: ScopeKind
-    macro: MacroMetadata | None = None
-    enum: EnumMetadata | None = None
-    constant: ConstantMetadata | None = None
-    dependencies: tuple[DeclarationIdentity, ...] = ()
-
-
-@dataclass(frozen=True)
 class VisibilityRecord:
     """A resolved positive visibility fact with stable provenance."""
 

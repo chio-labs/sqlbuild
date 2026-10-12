@@ -8,8 +8,6 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import LoadedMacro, StaticMacroExport
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.classes.native_scope_index import NativeScopeIndex
-from sqlbuild.compiler.scopes.classes.native_scope_rows import NativeScopeRows
-from sqlbuild.compiler.scopes.exceptions import UnindexableScopeError
 
 
 def open_native_scope_index(
@@ -20,14 +18,6 @@ def open_native_scope_index(
 ) -> NativeScopeIndex:
     """Return the natively built index; discovery's normalized paths always index."""
 
-    rows: NativeScopeRows = NativeScopeRows(
-        discovered_inputs=discovered_inputs,
-        loaded_macros=loaded_macros,
-        static_macros=static_macros,
+    return NativeScopeIndex(
+        native=_native.open_native_scope_index(discovered_inputs, loaded_macros, static_macros)
     )
-    native: _native.NativeScopeIndex | None = _native.build_native_scope_index(
-        rows.resources, rows.declarations
-    )
-    if native is None:
-        raise UnindexableScopeError
-    return NativeScopeIndex(native=native, rows=rows)

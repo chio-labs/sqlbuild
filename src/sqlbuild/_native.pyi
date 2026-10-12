@@ -40,6 +40,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    StaticMacroExport,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -1056,24 +1057,25 @@ class NativeDeclarationContexts:
     ) -> tuple[Any, bool]: ...
 
 class NativeScopeIndex:
-    def records(
-        self,
-    ) -> tuple[
-        list[str],
-        list[tuple[str, str, str, str | None, str | None]],
-        list[int],
-        list[int],
-        list[tuple[int, int]],
-        list[tuple[str, str, str | None, int | None, int | None, int | None, int | None]],
-        bool,
-    ]: ...
+    @property
+    def index(self) -> ScopeIndex: ...
+    @property
+    def has_scoped_relationship_declarations(self) -> bool: ...
     def grant_relationships(
         self,
-        files: list[tuple[str, list[tuple[str, str, str]]]],
-        scenarios: list[tuple[str, str, str]],
-        settings: dict[str, object],
-    ) -> tuple[list[tuple[str, str, int, str | int, str]] | None, list[tuple[str, str]]]: ...
+        *,
+        discovered_inputs: DiscoveredProjectInputs,
+        syntax: SqlLexicalSyntax,
+        scan_store: tuple[SqlTestScanStore | None, str],
+    ) -> tuple[tuple[Path, str], ...]: ...
+    def index_with_relationships(self) -> ScopeIndex: ...
 
+def open_native_scope_index(
+    discovered_inputs: DiscoveredProjectInputs,
+    loaded_macros: Mapping[str, LoadedMacro],
+    static_macros: tuple[StaticMacroExport, ...],
+    /,
+) -> NativeScopeIndex: ...
 def scope_placement_validated_index(
     index: ScopeIndex,
     enforce_placement: bool,
@@ -1223,23 +1225,6 @@ def scope_schema_usages(
     schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
     records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],
 ) -> tuple[list[tuple[int, int]], list[tuple[list[str], str, str, str]], str | None]: ...
-def build_native_scope_index(
-    resources: list[tuple[str, str, str, str]],
-    declarations: list[
-        tuple[
-            str,
-            str,
-            tuple[str, str] | None,
-            str,
-            int,
-            str,
-            str | None,
-            str,
-            str | None,
-            list[tuple[str, str, tuple[str, str] | None]],
-        ]
-    ],
-) -> NativeScopeIndex | None: ...
 
 class NativeConfigError:
     class_name: str

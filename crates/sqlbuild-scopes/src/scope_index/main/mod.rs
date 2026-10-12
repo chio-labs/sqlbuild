@@ -4,6 +4,7 @@ pub mod classify_resource;
 pub mod explain_report_declaration;
 pub mod format_identity;
 pub mod identity_repr;
+pub mod macro_source_digest;
 pub mod normalize_scope_path;
 pub mod parse_identity;
 pub mod path_visible;

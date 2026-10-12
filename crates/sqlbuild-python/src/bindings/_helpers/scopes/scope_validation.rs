@@ -26,7 +26,7 @@ const DATACLASSES_MODULE: &str = "dataclasses";
 const RUNTIME_USAGE: usize = 2;
 
 /// `dataclasses.replace(item, **changes)`.
-fn replace<'py>(
+pub(crate) fn replace<'py>(
     item: &Bound<'py, PyAny>,
     changes: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
