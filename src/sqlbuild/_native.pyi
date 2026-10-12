@@ -71,7 +71,14 @@ from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullabili
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
-from sqlbuild.compiler.scopes.models import ScopeIndex, UsageRecord
+from sqlbuild.compiler.scopes.models import (
+    DeclarationRecord,
+    ResourceIdentity,
+    ScopeIndex,
+    ScopeLookup,
+    UsageRecord,
+)
+from sqlbuild.compiler.scopes.types import JsonValue
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssemblyRequest,
@@ -1056,20 +1063,18 @@ class NativeScopeIndex:
         settings: dict[str, object],
     ) -> tuple[list[tuple[str, str, int, str | int, str]] | None, list[tuple[str, str]]]: ...
 
-def scope_placement_diagnostics(
-    rows: tuple[list[Any], list[Any], list[Any]],
-) -> list[tuple[int, str, str]]: ...
-def scope_relocations(
-    rows: tuple[list[Any], list[Any], list[Any]],
-    resource: tuple[str, str],
-    destination: str,
-) -> list[tuple[int, str, str, tuple[str, str, str | None], str | None]] | None: ...
-def scope_declaration_directory(kind: str, scope: str, path: str | None) -> str: ...
+def scope_placement_validated_index(
+    index: ScopeIndex,
+    enforce_placement: bool,
+    compile_usages: tuple[UsageRecord, ...] | None,
+) -> ScopeIndex: ...
+def scope_relocated_declarations(
+    index: ScopeIndex, resource: ResourceIdentity, destination: str
+) -> tuple[DeclarationRecord, ...] | None: ...
 
 type _ScopeQualified = tuple[str, str, tuple[str, str] | None]
 type _ScopeRoot = tuple[str, str, str | None]
 type _ScopeResource = tuple[tuple[str, str], str, _ScopeRoot]
-type _ScopeGroups = list[list[int]]
 
 class NativeScopeLookup:
     def target(
@@ -1079,41 +1084,7 @@ class NativeScopeLookup:
         self, resource: _ScopeResource, /
     ) -> tuple[list[tuple[int, str, int | None]], list[tuple[int, str]], str | None]: ...
 
-def build_native_scope_lookup(
-    rows: tuple[
-        list[_ScopeRoot],
-        list[_ScopeResource],
-        list[tuple[_ScopeQualified, str, int, int, str, _ScopeRoot, str | None]],
-        list[tuple[_ScopeQualified, _ScopeQualified, str, _ScopeQualified | None]],
-        list[tuple[tuple[str, str], _ScopeQualified, _ScopeQualified, str]],
-        list[tuple[str | None, int | None, int | None, str]],
-    ],
-    /,
-) -> tuple[
-    NativeScopeLookup | None,
-    tuple[
-        tuple[
-            tuple[list[int], list[int], list[int], list[int], list[int], list[int]],
-            tuple[
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                _ScopeGroups,
-                list[str],
-            ],
-            tuple[
-                list[int],
-                list[tuple[tuple[str, str], list[int]]],
-                list[tuple[str, list[int]]],
-                list[tuple[str, list[int]]],
-            ],
-        ]
-        | None,
-        str | None,
-    ],
-]: ...
+def build_scope_lookup(index: ScopeIndex) -> ScopeLookup: ...
 
 class NativeScopeReports:
     def report(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
@@ -1122,13 +1093,9 @@ class NativeScopeReports:
     def list(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
     def move_preview(self, request: tuple[Any, ...], /) -> tuple[Any, tuple[str, str] | None]: ...
 
-def build_native_scope_reports(
-    lookup: NativeScopeLookup,
-    values: tuple[list[Any], tuple[bool, bool, bool, bool, bool, bool]],
-    /,
-) -> NativeScopeReports: ...
+def build_native_scope_reports(lookup: ScopeLookup) -> NativeScopeReports: ...
 def serialize_scope_result_row(kind: str, row: object, /) -> str: ...
-def scope_metadata_projection_rows(rows: tuple[Any, ...], /) -> Any: ...
+def scope_metadata_projection(index: ScopeIndex) -> dict[str, JsonValue]: ...
 def effective_config_target_name(
     project_config: object, local_config: object, selected: str | None, /
 ) -> tuple[str | None, str | None]: ...
@@ -1216,22 +1183,14 @@ def scope_index_fingerprint(
     inputs: tuple[list[str], list[str], list[str], list[str], str],
     /,
 ) -> str | None: ...
-def read_scope_index_cache(path: Path, fingerprint: str, /) -> Any: ...
-def write_scope_index_cache(location: tuple[Path, str], fingerprint: str, rows: Any, /) -> bool: ...
+def read_scope_index_cache(path: Path, fingerprint: str, /) -> ScopeIndex | None: ...
+def write_scope_index_cache(
+    location: tuple[Path, str], fingerprint: str, index: ScopeIndex, /
+) -> bool: ...
 def scope_schema_usages(
     schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
     records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],
 ) -> tuple[list[tuple[int, int]], list[tuple[list[str], str, str, str]], str | None]: ...
-def scope_merged_usages(
-    declarations: list[
-        tuple[
-            tuple[str, str, tuple[str, str] | None],
-            list[tuple[str, str, tuple[str, str] | None]] | None,
-        ]
-    ],
-    prior: list[Any],
-    collected: list[Any],
-) -> tuple[list[int], list[list[tuple[bool, int]] | None], list[int]]: ...
 def build_native_scope_index(
     resources: list[tuple[str, str, str, str]],
     declarations: list[

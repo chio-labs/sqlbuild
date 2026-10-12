@@ -5,25 +5,22 @@ from __future__ import annotations
 from enum import Enum
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.scopes._helpers.placement import qualified_row, root_row
-from sqlbuild.compiler.scopes._helpers.reports import filters_row, values_row
+from sqlbuild.compiler.scopes._helpers.placement import qualified_row
+from sqlbuild.compiler.scopes._helpers.reports import filters_row
 from sqlbuild.compiler.scopes.exceptions import ScopeError
 from sqlbuild.compiler.scopes.models import (
     DeclarationExplanation,
     DeclarationReport,
     MovePreview,
     ScopeBrowseResult,
-    ScopeCompleteness,
     ScopeDiagnostic,
     ScopeFolder,
-    ScopeIndex,
     ScopeListResult,
     ScopeReport,
     ScopeResourceReport,
     ScopeSection,
 )
 from sqlbuild.compiler.scopes.types import (
-    JsonValue,
     NativeScopeDeclarationRow,
     NativeScopeDiagnosticRow,
     NativeScopeExplanationRow,
@@ -60,84 +57,6 @@ def serialize_result(*, result: ScopeReport | ScopeBrowseResult | ScopeListResul
         )
     except ValueError as error:
         raise ScopeError(str(error)) from error
-
-
-def build_projection(*, index: ScopeIndex) -> dict[str, JsonValue]:
-    """Deterministic value-free metadata of one canonical index."""
-
-    completeness: ScopeCompleteness = index.completeness
-    return _native.scope_metadata_projection_rows(
-        (
-            [root_row(root=root) for root in index.ownership_roots],
-            [
-                (
-                    (record.identity.kind.value, record.identity.name),
-                    record.path,
-                    root_row(root=record.ownership_root),
-                )
-                for record in index.resources
-            ],
-            [
-                (
-                    qualified_row(identity=record.identity),
-                    record.path,
-                    record.line,
-                    record.column,
-                    record.scope.value,
-                    root_row(root=record.ownership_root),
-                    record.owning_path,
-                )
-                for record in index.declarations
-            ],
-            [values_row(record=record) for record in index.declarations],
-            [
-                (
-                    qualified_row(identity=usage.consumer),
-                    qualified_row(identity=usage.declaration),
-                    usage.kind.value,
-                    None if usage.through is None else qualified_row(identity=usage.through),
-                    usage.enum_member,
-                )
-                for usage in index.usages
-            ],
-            [
-                (
-                    (grant.resource.kind.value, grant.resource.name),
-                    qualified_row(identity=grant.declaration),
-                    qualified_row(identity=grant.through),
-                    grant.kind.value,
-                )
-                for grant in index.grants
-            ],
-            [
-                (
-                    (fact.resource.kind.value, fact.resource.name),
-                    qualified_row(identity=fact.declaration),
-                    fact.reason.value,
-                    None if fact.through is None else qualified_row(identity=fact.through),
-                )
-                for fact in index.visibility
-            ],
-            [
-                (
-                    (fact.resource.kind.value, fact.resource.name),
-                    qualified_row(identity=fact.declaration),
-                    fact.reason.value,
-                    None,
-                )
-                for fact in index.inaccessible
-            ],
-            _diagnostic_rows(diagnostics=index.diagnostics),
-            (
-                completeness.discovery,
-                completeness.static_visibility,
-                completeness.runtime_usage,
-                completeness.relationships,
-                completeness.placement,
-                completeness.promotion_impact,
-            ),
-        )
-    )
 
 
 def _folder_row(*, folder: ScopeFolder) -> NativeScopeFolderRow:

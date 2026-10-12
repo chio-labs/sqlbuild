@@ -11,8 +11,7 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 use sqlbuild_scopes::scope_index::main::format_identity::format_identity;
 use sqlbuild_scopes::scope_index::models::QualifiedIdentity;
 use sqlbuild_scopes::scope_report::models::{
-    BrowseResult, Completeness, ConstantValues, DeclarationReport, DeclarationTarget,
-    DeclarationValues, DiagnosticFacts, EnumValues, Explanation, ListResult, MacroValues,
+    BrowseResult, DeclarationReport, DeclarationTarget, DiagnosticFacts, Explanation, ListResult,
     MovePreview, Provenance, QueryTarget, ReportDiagnostic, ReportFilters, ResourceReport,
     ScopeChainEntry, ScopeFolder, ScopeReport, ScopeSection, SourceLocation,
 };
@@ -40,14 +39,6 @@ pub(crate) type FiltersRow = (
     i64,
     String,
 );
-/// Parameters, dependencies and source digest.
-type MacroRow = (Vec<String>, Vec<QualifiedRow>, String);
-/// Member names and scalar type.
-type EnumRow = (Vec<String>, String);
-/// Logical type, collection kind, item count, nullable and render-as.
-type ConstantRow = (String, Option<String>, Option<i64>, bool, Option<String>);
-pub(crate) type ValuesRow = (Option<MacroRow>, Option<EnumRow>, Option<ConstantRow>);
-pub(crate) type CompletenessRow = (bool, bool, bool, bool, bool, bool);
 /// Code, message, severity, path, line, column, declaration and resource identities.
 pub(crate) type DiagnosticInRow = (
     String,
@@ -203,49 +194,6 @@ fn filters_row(filters: &ReportFilters) -> FiltersRow {
         filters.nearby_depth,
         filters.globals.clone(),
     )
-}
-
-pub(crate) fn declaration_values(row: ValuesRow) -> PyResult<DeclarationValues> {
-    let (macro_row, enum_row, constant_row) = row;
-    Ok(DeclarationValues {
-        macro_values: match macro_row {
-            Some((parameters, dependencies, source_digest)) => Some(MacroValues {
-                parameters,
-                dependencies: dependencies
-                    .into_iter()
-                    .map(declaration_identity)
-                    .collect::<PyResult<_>>()?,
-                source_digest,
-            }),
-            None => None,
-        },
-        enum_values: enum_row.map(|(members, scalar_type)| EnumValues {
-            members,
-            scalar_type,
-        }),
-        constant_values: constant_row.map(
-            |(logical_type, collection_kind, item_count, nullable, render_as)| ConstantValues {
-                logical_type,
-                collection_kind,
-                item_count,
-                nullable,
-                render_as,
-            },
-        ),
-    })
-}
-
-pub(crate) fn completeness(row: CompletenessRow) -> Completeness {
-    let (discovery, static_visibility, runtime_usage, relationships, placement, promotion_impact) =
-        row;
-    Completeness {
-        discovery,
-        static_visibility,
-        runtime_usage,
-        relationships,
-        placement,
-        promotion_impact,
-    }
 }
 
 /// A diagnostic row's facts, with its identities as qualified text.

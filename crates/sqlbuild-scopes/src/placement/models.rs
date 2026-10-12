@@ -32,6 +32,19 @@ pub enum PlacementCode {
 }
 
 impl PlacementCode {
+    /// The placement code with Python's `ScopeDiagnosticCode` value `code`.
+    pub fn parse(code: &str) -> Option<Self> {
+        [
+            Self::LocalNeededByDescendant,
+            Self::OverBroadInherited,
+            Self::RequiresGlobalPlacement,
+            Self::UnusedDeclaration,
+            Self::OverBroadGlobal,
+        ]
+        .into_iter()
+        .find(|item| item.as_str() == code)
+    }
+
     /// Python's `ScopeDiagnosticCode` value.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -68,4 +81,14 @@ pub struct Relocation {
     pub scope: ScopeKind,
     pub ownership_root: OwnershipRoot,
     pub owning_path: Option<String>,
+}
+
+/// The fields Python orders scope diagnostics by.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DiagnosticOrderKey {
+    pub path: Option<String>,
+    pub line: Option<i64>,
+    pub column: Option<i64>,
+    pub code: String,
+    pub message: String,
 }

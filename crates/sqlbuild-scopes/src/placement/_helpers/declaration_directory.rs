@@ -5,7 +5,7 @@ use crate::scope_index::models::{DeclarationKind, ScopeKind};
 
 /// Python's `declaration_directory`.
 #[must_use]
-pub fn declaration_directory(
+pub(crate) fn declaration_directory(
     kind: DeclarationKind,
     scope: ScopeKind,
     path: Option<&str>,

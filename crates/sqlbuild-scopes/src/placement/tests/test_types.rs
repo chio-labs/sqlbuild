@@ -1,4 +1,4 @@
-use crate::placement::models::PlacementIndex;
+use crate::placement::models::{DiagnosticOrderKey, PlacementIndex};
 use crate::scope_index::models::{DeclarationKind, ScopeKind};
 
 /// A usage-complete index and the `(declaration, code, message)` diagnostics it raises.
@@ -26,4 +26,11 @@ pub(super) struct RelocationTestCase {
     pub(super) index: fn() -> PlacementIndex,
     pub(super) destination: &'static str,
     pub(super) expected_relocations: Option<&'static [RelocationCase]>,
+}
+
+/// Diagnostic order keys and the stable order Python sorts them into.
+pub(super) struct DiagnosticOrderTestCase {
+    pub(super) description: &'static str,
+    pub(super) keys: fn() -> Vec<DiagnosticOrderKey>,
+    pub(super) expected_order: &'static [usize],
 }

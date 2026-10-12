@@ -1,12 +1,14 @@
-use crate::placement::main::declaration_directory::declaration_directory;
+use crate::placement::_helpers::declaration_directory::declaration_directory;
+use crate::placement::main::diagnostic_order::diagnostic_order;
 use crate::placement::main::placement_diagnostics::placement_diagnostics;
 use crate::placement::main::relocate_for_resource_move::relocate_for_resource_move;
 use crate::placement::models::Relocation;
 use crate::placement::tests::helpers::{
-    chained_macros, descendant_models, model, owned_relocations,
+    chained_macros, descendant_models, mixed_diagnostics, model, owned_relocations,
 };
 use crate::placement::tests::test_types::{
-    DeclarationDirectoryTestCase, PlacementDiagnosticsTestCase, RelocationTestCase,
+    DeclarationDirectoryTestCase, DiagnosticOrderTestCase, PlacementDiagnosticsTestCase,
+    RelocationTestCase,
 };
 use crate::scope_index::models::{DeclarationKind, ScopeKind};
 
@@ -142,6 +144,23 @@ fn given_resource_move_when_relocating_then_chained_local_declarations_follow() 
                     .collect::<Vec<_>>()
             }),
             test_case.expected_relocations.map(owned_relocations),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_diagnostics_when_ordering_then_python_sort_key_and_stability_hold() {
+    let test_cases = [DiagnosticOrderTestCase {
+        description: "missing paths and lines sort as empty and zero; equal keys keep their order",
+        keys: mixed_diagnostics,
+        expected_order: &[2, 3, 4, 1, 5, 0],
+    }];
+    for test_case in test_cases {
+        assert_eq!(
+            diagnostic_order(&(test_case.keys)()),
+            test_case.expected_order,
             "{}",
             test_case.description
         );

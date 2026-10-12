@@ -3,9 +3,9 @@
 use crate::placement::_helpers::anchors::{
     AnchorSets, UsagesByDeclaration, anchor_sets, usages_by_declaration,
 };
+use crate::placement::_helpers::declaration_directory::declaration_directory;
 use crate::placement::_helpers::required::{owner_uses_directly, required_placement};
 use crate::placement::_helpers::roles::scope_label;
-use crate::placement::main::declaration_directory::declaration_directory;
 use crate::placement::models::{
     PlacementCode, PlacementDiagnostic, PlacementIndex, PlacementUsage, RequiredPlacement,
 };

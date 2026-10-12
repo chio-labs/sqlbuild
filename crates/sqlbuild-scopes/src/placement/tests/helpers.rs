@@ -1,4 +1,4 @@
-use crate::placement::models::{PlacementIndex, PlacementUsage};
+use crate::placement::models::{DiagnosticOrderKey, PlacementIndex, PlacementUsage};
 use crate::scope_index::models::{
     DeclarationIdentity, DeclarationKind, DeclarationRecord, OwnershipRoot, OwnershipRootKind,
     QualifiedIdentity, ResourceIdentity, ResourceKind, ResourceRecord, ScopeKind,
@@ -107,4 +107,31 @@ pub(super) fn owned_relocations(
         .iter()
         .map(|(position, path, owning)| (*position, (*path).to_owned(), owning.map(str::to_owned)))
         .collect()
+}
+
+fn order_key(
+    path: Option<&str>,
+    line: Option<i64>,
+    code: &str,
+    message: &str,
+) -> DiagnosticOrderKey {
+    DiagnosticOrderKey {
+        path: path.map(str::to_owned),
+        line,
+        column: None,
+        code: code.to_owned(),
+        message: message.to_owned(),
+    }
+}
+
+/// Diagnostics without a path or line first, then by path, line, code and message.
+pub(super) fn mixed_diagnostics() -> Vec<DiagnosticOrderKey> {
+    vec![
+        order_key(Some("models/b.sql"), Some(2), "S010", "b"),
+        order_key(Some("models/a.sql"), Some(9), "S010", "a"),
+        order_key(None, None, "S019", "parse"),
+        order_key(Some(""), Some(0), "S019", "parse"),
+        order_key(Some("models/a.sql"), Some(9), "S007", "z"),
+        order_key(Some("models/b.sql"), None, "S010", "b"),
+    ]
 }

@@ -1,0 +1,315 @@
+//! Compile usage merging, placement validation and move relocation over a Python `ScopeIndex`.
+
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_scopes::placement::main::diagnostic_order::diagnostic_order;
+use sqlbuild_scopes::placement::main::placement_diagnostics::placement_diagnostics;
+use sqlbuild_scopes::placement::main::relocate_for_resource_move::relocate_for_resource_move;
+use sqlbuild_scopes::placement::models::{
+    DiagnosticOrderKey, PlacementCode, PlacementDiagnostic, PlacementIndex, Relocation,
+};
+use sqlbuild_scopes::scope_index::models::ResourceIdentity;
+
+use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::scopes::compile_usages::{
+    MergeRows, SourceRow, UsageRow, merged_usage_rows,
+};
+use crate::bindings::_helpers::scopes::placement::{QualifiedRow, resource_identity};
+use crate::bindings::_helpers::scopes::scope_objects::{
+    ScopeClasses, enum_text, field, identity_row, optional_item, qualified_row, read_completeness,
+    read_placement_index, root_object, tuple_attribute, value_of,
+};
+use crate::bindings::types::CompilerDetach;
+
+const DATACLASSES_MODULE: &str = "dataclasses";
+const RUNTIME_USAGE: usize = 2;
+
+/// `dataclasses.replace(item, **changes)`.
+fn replace<'py>(
+    item: &Bound<'py, PyAny>,
+    changes: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = item.py();
+    let keywords: Bound<'py, PyDict> = PyDict::new(py);
+    for (name, value) in changes {
+        keywords.set_item(*name, value)?;
+    }
+    py.import(DATACLASSES_MODULE)?
+        .getattr("replace")?
+        .call((item,), Some(&keywords))
+}
+
+fn tuple_from<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyTuple::new(py, items)?.into_any())
+}
+
+fn usage_row(usage: &Bound<'_, PyAny>) -> PyResult<UsageRow> {
+    Ok((
+        qualified_row(&usage.getattr("consumer")?)?,
+        qualified_row(&usage.getattr("declaration")?)?,
+        value_of(usage, "kind")?,
+        optional_item(usage, "through")?
+            .map(|through| qualified_row(&through))
+            .transpose()?,
+        field(usage, "enum_member")?,
+    ))
+}
+
+fn dependency_row(
+    record: &Bound<'_, PyAny>,
+) -> PyResult<(QualifiedRow, Option<Vec<QualifiedRow>>)> {
+    let dependencies: Option<Vec<QualifiedRow>> = match optional_item(record, "macro")? {
+        None => None,
+        Some(metadata) => Some(
+            metadata
+                .getattr("dependencies")?
+                .try_iter()?
+                .map(|item| qualified_row(&item?))
+                .collect::<PyResult<_>>()?,
+        ),
+    };
+    Ok((qualified_row(&record.getattr("identity")?)?, dependencies))
+}
+
+fn with_dependencies<'py>(
+    record: Bound<'py, PyAny>,
+    sources: Option<Vec<SourceRow>>,
+    usages: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    let (Some(metadata), Some(sources)) = (optional_item(&record, "macro")?, sources) else {
+        return Ok(record);
+    };
+    let own: Bound<'py, PyTuple> = tuple_attribute(&metadata, "dependencies")?;
+    let dependencies: Vec<Bound<'py, PyAny>> = sources
+        .into_iter()
+        .map(|(is_own, position)| {
+            if is_own {
+                own.get_item(position)
+            } else {
+                usages[position].getattr("declaration")
+            }
+        })
+        .collect::<PyResult<_>>()?;
+    let py: Python<'py> = record.py();
+    let metadata: Bound<'py, PyAny> = replace(
+        &metadata,
+        &[("dependencies", tuple_from(py, dependencies)?)],
+    )?;
+    replace(&record, &[("macro", metadata)])
+}
+
+/// Python's `merged_usage_index`: compile usages merged into usages and macro dependencies.
+fn merged_usage_index<'py>(
+    index: &Bound<'py, PyAny>,
+    collected: &Bound<'py, PyTuple>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = index.py();
+    let records: Bound<'py, PyTuple> = tuple_attribute(index, "declarations")?;
+    let prior: Bound<'py, PyTuple> = tuple_attribute(index, "usages")?;
+    let declaration_rows: Vec<(QualifiedRow, Option<Vec<QualifiedRow>>)> = records
+        .iter()
+        .map(|record| dependency_row(&record))
+        .collect::<PyResult<_>>()?;
+    let prior_rows: Vec<UsageRow> = prior
+        .iter()
+        .map(|usage| usage_row(&usage))
+        .collect::<PyResult<_>>()?;
+    let collected_rows: Vec<UsageRow> = collected
+        .iter()
+        .map(|usage| usage_row(&usage))
+        .collect::<PyResult<_>>()?;
+    let (distinct, merged, combined): MergeRows =
+        merged_usage_rows(&declaration_rows, &prior_rows, &collected_rows);
+    let usages: Vec<Bound<'py, PyAny>> = distinct
+        .iter()
+        .map(|position| collected.get_item(*position))
+        .collect::<PyResult<_>>()?;
+    let mut all_usages: Vec<Bound<'py, PyAny>> = prior.iter().collect();
+    all_usages.extend(usages.iter().cloned());
+    let declarations: Vec<Bound<'py, PyAny>> = records
+        .iter()
+        .zip(merged)
+        .map(|(record, sources)| with_dependencies(record, sources, &usages))
+        .collect::<PyResult<_>>()?;
+    let true_value: Bound<'py, PyAny> = true.into_bound_py_any(py)?;
+    let completeness: Bound<'py, PyAny> = replace(
+        &index.getattr("completeness")?,
+        &[
+            ("runtime_usage", true_value.clone()),
+            ("promotion_impact", true_value),
+        ],
+    )?;
+    replace(
+        index,
+        &[
+            ("declarations", tuple_from(py, declarations)?),
+            (
+                "usages",
+                tuple_from(
+                    py,
+                    combined
+                        .iter()
+                        .map(|position| all_usages[*position].clone())
+                        .collect(),
+                )?,
+            ),
+            ("completeness", completeness),
+        ],
+    )
+}
+
+fn order_key(diagnostic: &Bound<'_, PyAny>) -> PyResult<DiagnosticOrderKey> {
+    Ok(DiagnosticOrderKey {
+        path: field(diagnostic, "path")?,
+        line: field(diagnostic, "line")?,
+        column: field(diagnostic, "column")?,
+        code: enum_text(&diagnostic.getattr("code")?)?,
+        message: field(diagnostic, "message")?,
+    })
+}
+
+fn with_placement<'py>(
+    index: &Bound<'py, PyAny>,
+    diagnostics: Vec<Bound<'py, PyAny>>,
+    placement: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = index.py();
+    let completeness: Bound<'py, PyAny> = replace(
+        &index.getattr("completeness")?,
+        &[("placement", placement.into_bound_py_any(py)?)],
+    )?;
+    replace(
+        index,
+        &[
+            ("diagnostics", tuple_from(py, diagnostics)?),
+            ("completeness", completeness),
+        ],
+    )
+}
+
+/// Python's `build_placement_validated_index`.
+fn placement_validated_index<'py>(
+    index: &Bound<'py, PyAny>,
+    enforce_placement: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = index.py();
+    let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut keys: Vec<DiagnosticOrderKey> = Vec::new();
+    for diagnostic in tuple_attribute(index, "diagnostics")?.iter() {
+        if PlacementCode::parse(&enum_text(&diagnostic.getattr("code")?)?).is_none() {
+            keys.push(order_key(&diagnostic)?);
+            kept.push(diagnostic);
+        }
+    }
+    if !read_completeness(index)?[RUNTIME_USAGE] {
+        return with_placement(index, kept, false);
+    }
+    let classes: ScopeClasses<'py> = ScopeClasses::new(py)?;
+    let severity: Bound<'py, PyAny> = classes.member(
+        "DiagnosticSeverity",
+        if enforce_placement {
+            "error"
+        } else {
+            "warning"
+        },
+    )?;
+    let placement: PlacementIndex = read_placement_index(index)?;
+    let found: Vec<PlacementDiagnostic> = py
+        .compiler_detach(|| Ok(placement_diagnostics(&placement)))
+        .map_err(compiler_error)?;
+    let records: Bound<'py, PyTuple> = tuple_attribute(index, "declarations")?;
+    let diagnostic_class: Bound<'py, PyAny> = classes.model("ScopeDiagnostic")?;
+    for item in found {
+        let record: Bound<'py, PyAny> = records.get_item(item.declaration)?;
+        let native = &placement.declarations[item.declaration];
+        keys.push(DiagnosticOrderKey {
+            path: Some(native.path.clone()),
+            line: Some(native.line),
+            column: Some(native.column),
+            code: item.code.as_str().to_owned(),
+            message: item.message.clone(),
+        });
+        kept.push(diagnostic_class.call1((
+            classes.member("ScopeDiagnosticCode", item.code.as_str())?,
+            item.message,
+            &severity,
+            record.getattr("path")?,
+            record.getattr("line")?,
+            record.getattr("column")?,
+            record.getattr("identity")?,
+        ))?);
+    }
+    let ordered: Vec<Bound<'py, PyAny>> = diagnostic_order(&keys)
+        .into_iter()
+        .map(|position| kept[position].clone())
+        .collect();
+    with_placement(index, ordered, true)
+}
+
+/// Complete usage and placement diagnostics, merging any collected compile usages first.
+#[pyfunction]
+#[pyo3(signature = (index, enforce_placement, compile_usages))]
+fn scope_placement_validated_index(
+    index: &Bound<'_, PyAny>,
+    enforce_placement: bool,
+    compile_usages: Option<Bound<'_, PyTuple>>,
+) -> PyResult<Py<PyAny>> {
+    let merged: Bound<'_, PyAny> = match compile_usages {
+        Some(collected) => merged_usage_index(index, &collected)?,
+        None => index.clone(),
+    };
+    Ok(placement_validated_index(&merged, enforce_placement)?.unbind())
+}
+
+/// Declarations whose placement changes when `resource` moves, or `None` if unsettled.
+#[pyfunction]
+fn scope_relocated_declarations(
+    py: Python<'_>,
+    index: &Bound<'_, PyAny>,
+    resource: &Bound<'_, PyAny>,
+    destination: &str,
+) -> PyResult<Option<Py<PyTuple>>> {
+    if !read_completeness(index)?[RUNTIME_USAGE] {
+        return Ok(None);
+    }
+    let placement: PlacementIndex = read_placement_index(index)?;
+    let resource: ResourceIdentity = resource_identity(identity_row(resource)?)?;
+    let relocations: Option<Vec<Relocation>> = py
+        .compiler_detach(|| {
+            Ok(relocate_for_resource_move(
+                &placement,
+                &resource,
+                destination,
+            ))
+        })
+        .map_err(compiler_error)?;
+    let Some(relocations) = relocations else {
+        return Ok(None);
+    };
+    let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
+    let records: Bound<'_, PyTuple> = tuple_attribute(index, "declarations")?;
+    let mut moved: Vec<Bound<'_, PyAny>> = Vec::with_capacity(relocations.len());
+    for item in relocations {
+        let owning_path: Bound<'_, PyAny> = item.owning_path.into_bound_py_any(py)?;
+        moved.push(replace(
+            &records.get_item(item.declaration)?,
+            &[
+                ("path", item.path.into_bound_py_any(py)?),
+                ("scope", classes.member("ScopeKind", item.scope.as_str())?),
+                (
+                    "ownership_root",
+                    root_object(&classes, &item.ownership_root)?,
+                ),
+                ("owning_path", owning_path),
+            ],
+        )?);
+    }
+    Ok(Some(PyTuple::new(py, moved)?.unbind()))
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(scope_placement_validated_index, module)?)?;
+    module.add_function(wrap_pyfunction!(scope_relocated_declarations, module)?)?;
+    Ok(())
+}

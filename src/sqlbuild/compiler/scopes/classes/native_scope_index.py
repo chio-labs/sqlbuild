@@ -7,7 +7,6 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlTestFile
-from sqlbuild.compiler.scopes._helpers.lookup import build_lookup
 from sqlbuild.compiler.scopes.classes.native_scope_rows import NativeScopeRows
 from sqlbuild.compiler.scopes.exceptions import UnindexableScopeError
 from sqlbuild.compiler.scopes.models import (
@@ -172,7 +171,7 @@ class NativeScopeIndex:
     def lookup(self, *, index: ScopeIndex) -> ScopeLookup:
         """The native scope lookup of `index_with_relationships()`."""
 
-        return build_lookup(index=index)
+        return _native.build_scope_lookup(index)
 
 
 def _test_file_row(

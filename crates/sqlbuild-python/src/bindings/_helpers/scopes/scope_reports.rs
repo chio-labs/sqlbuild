@@ -1,7 +1,7 @@
 //! `sqb scope` reports over a native scope lookup, their serialization and the metadata projection.
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::json::models::JsonValue;
 use sqlbuild_scopes::scope_report::main::browse_scope_folders::browse_scope_folders;
@@ -12,22 +12,21 @@ use sqlbuild_scopes::scope_report::main::preview_scope_move::preview_scope_move;
 use sqlbuild_scopes::scope_report::main::scope_metadata_projection::scope_metadata_projection;
 use sqlbuild_scopes::scope_report::main::serialize_scope_result::serialize_scope_result;
 use sqlbuild_scopes::scope_report::models::{
-    ExplainRequest, FolderRequest, MoveRequest, ProjectionGrant, ProjectionIndex,
-    ProjectionStanding, ProjectionUsage, ReportFailure, ReportRequest, ReportSource, ReportValues,
-    ScopeResult,
+    DeclarationValues, ExplainRequest, FolderRequest, MoveRequest, ProjectionIndex, ReportFailure,
+    ReportRequest, ReportSource, ReportValues, ScopeResult,
 };
 
-use crate::bindings::_helpers::scopes::placement::{
-    DeclarationRow, IdentityRow, QualifiedRow, ResourceRow, RootRow, declaration_identity,
-    declaration_record, ownership_root, qualified_identity, resource_identity, resource_record,
-};
+use crate::bindings::_helpers::scopes::placement::QualifiedRow;
 use crate::bindings::_helpers::scopes::scope_lookup::{
-    NativeScopeLookup, grant_kind, identity_message, path_message,
+    NativeScopeLookup, identity_message, path_message,
+};
+use crate::bindings::_helpers::scopes::scope_objects::{
+    completeness, declaration_values, projection_index, read_completeness, read_declaration,
+    read_index,
 };
 use crate::bindings::_helpers::scopes::scope_report_rows::{
-    BrowseOutRow, BrowseRow, CompletenessRow, DiagnosticInRow, ExplanationOutRow, FiltersRow,
-    ListOutRow, ListRow, MoveOutRow, ReportOutRow, ReportRow, TargetRow, ValuesRow, browse_in,
-    browse_out, completeness, declaration_target, declaration_values, diagnostic_facts,
+    BrowseOutRow, BrowseRow, DiagnosticInRow, ExplanationOutRow, FiltersRow, ListOutRow, ListRow,
+    MoveOutRow, ReportOutRow, ReportRow, TargetRow, browse_in, browse_out, declaration_target,
     explanation_out, filters, json_to_python, list_in, list_out, move_out, raised_out, report_in,
     report_out, target,
 };
@@ -36,31 +35,6 @@ type PyObject = Py<PyAny>;
 
 /// `(kind, message)` of the scope error Python raises: `path` or `identity`.
 type FailureRow = Option<(&'static str, String)>;
-/// Consumer, declaration, usage kind, what it came through and the enum member.
-type UsageRow = (
-    QualifiedRow,
-    QualifiedRow,
-    String,
-    Option<QualifiedRow>,
-    Option<String>,
-);
-/// Resource, declaration, through and grant kind.
-type GrantRow = (IdentityRow, QualifiedRow, QualifiedRow, String);
-/// Resource, declaration, reason and what it came through.
-type StandingRow = (IdentityRow, QualifiedRow, String, Option<QualifiedRow>);
-/// Every `ScopeIndex` tuple, with declaration values parallel to the declarations.
-type ProjectionRows = (
-    Vec<RootRow>,
-    Vec<ResourceRow>,
-    Vec<DeclarationRow>,
-    Vec<ValuesRow>,
-    Vec<UsageRow>,
-    Vec<GrantRow>,
-    Vec<StandingRow>,
-    Vec<StandingRow>,
-    Vec<DiagnosticInRow>,
-    CompletenessRow,
-);
 type ReportRequestRow = (Option<TargetRow>, Option<String>, bool, FiltersRow);
 type ExplainRequestRow = (
     (Option<QualifiedRow>, String),
@@ -203,15 +177,17 @@ fn folder_request(row: FolderRequestRow) -> PyResult<FolderRequest> {
     })
 }
 
-/// The reports of `lookup`, with each canonical declaration's values and the completeness.
+/// The reports of a `ScopeLookup`: its native lookup with its canonical declarations' values.
 #[pyfunction]
-fn build_native_scope_reports(
-    lookup: Py<NativeScopeLookup>,
-    values: (Vec<ValuesRow>, CompletenessRow),
-) -> PyResult<NativeScopeReports> {
-    let (rows, completeness_row) = values;
-    let native: &NativeScopeLookup = lookup.get();
-    let canonical: &[usize] = &native.lookup.declarations;
+fn build_native_scope_reports(lookup: &Bound<'_, PyAny>) -> PyResult<NativeScopeReports> {
+    let index: Bound<'_, PyAny> = lookup.getattr("index")?;
+    let native: Py<NativeScopeLookup> = lookup.getattr("native")?.extract()?;
+    let rows: Vec<DeclarationValues> = index
+        .getattr("declarations")?
+        .try_iter()?
+        .map(|record| Ok(declaration_values(&read_declaration(&record?)?)))
+        .collect::<PyResult<_>>()?;
+    let canonical: &[usize] = &native.get().lookup.declarations;
     if rows.len() != canonical.len() {
         return Err(PyValueError::new_err(
             "scope report values must match the lookup's declarations",
@@ -219,13 +195,13 @@ fn build_native_scope_reports(
     }
     let mut declarations = vec![Default::default(); canonical.len()];
     for (position, row) in canonical.iter().zip(rows) {
-        declarations[*position] = declaration_values(row)?;
+        declarations[*position] = row;
     }
     Ok(NativeScopeReports {
-        lookup,
+        lookup: native,
         values: ReportValues {
             declarations,
-            completeness: completeness(completeness_row),
+            completeness: completeness(read_completeness(&index)?),
         },
     })
 }
@@ -249,90 +225,11 @@ fn serialize_scope_result_row(kind: &str, row: &Bound<'_, PyAny>) -> PyResult<St
     })
 }
 
-fn projection_index(rows: ProjectionRows) -> PyResult<ProjectionIndex> {
-    let (
-        roots,
-        resources,
-        declarations,
-        values,
-        usages,
-        grants,
-        visibility,
-        inaccessible,
-        diagnostics,
-        completeness_row,
-    ) = rows;
-    let standing =
-        |(resource, declaration, reason, through): StandingRow| -> PyResult<ProjectionStanding> {
-            Ok(ProjectionStanding {
-                resource: resource_identity(resource)?,
-                declaration: declaration_identity(declaration)?,
-                reason,
-                through: through.map(qualified_identity).transpose()?,
-            })
-        };
-    Ok(ProjectionIndex {
-        roots: roots
-            .into_iter()
-            .map(ownership_root)
-            .collect::<PyResult<_>>()?,
-        resources: resources
-            .into_iter()
-            .map(resource_record)
-            .collect::<PyResult<_>>()?,
-        declarations: declarations
-            .into_iter()
-            .map(declaration_record)
-            .collect::<PyResult<_>>()?,
-        values: ReportValues {
-            declarations: values
-                .into_iter()
-                .map(declaration_values)
-                .collect::<PyResult<_>>()?,
-            completeness: completeness(completeness_row),
-        },
-        usages: usages
-            .into_iter()
-            .map(|(consumer, declaration, kind, through, enum_member)| {
-                Ok(ProjectionUsage {
-                    consumer: qualified_identity(consumer)?,
-                    declaration: declaration_identity(declaration)?,
-                    kind,
-                    through: through.map(qualified_identity).transpose()?,
-                    enum_member,
-                })
-            })
-            .collect::<PyResult<_>>()?,
-        grants: grants
-            .into_iter()
-            .map(|(resource, declaration, through, kind)| {
-                Ok(ProjectionGrant {
-                    resource: resource_identity(resource)?,
-                    declaration: declaration_identity(declaration)?,
-                    through: qualified_identity(through)?,
-                    kind: grant_kind(&kind)?,
-                })
-            })
-            .collect::<PyResult<_>>()?,
-        visibility: visibility
-            .into_iter()
-            .map(standing)
-            .collect::<PyResult<_>>()?,
-        inaccessible: inaccessible
-            .into_iter()
-            .map(standing)
-            .collect::<PyResult<_>>()?,
-        diagnostics: diagnostics
-            .into_iter()
-            .map(diagnostic_facts)
-            .collect::<PyResult<_>>()?,
-    })
-}
-
-/// `scope_metadata_projection` of one index's rows, as the dictionary Python builds.
+/// `scope_metadata_projection` of one `ScopeIndex`, as the dictionary Python builds.
 #[pyfunction]
-fn scope_metadata_projection_rows(py: Python<'_>, rows: ProjectionRows) -> PyResult<PyObject> {
-    let index: ProjectionIndex = projection_index(rows)?;
+#[pyo3(name = "scope_metadata_projection")]
+fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    let index: ProjectionIndex = projection_index(read_index(index)?);
     let projection: JsonValue = scope_metadata_projection(&index);
     json_to_python(py, projection, false)
 }
@@ -341,6 +238,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeScopeReports>()?;
     module.add_function(wrap_pyfunction!(build_native_scope_reports, module)?)?;
     module.add_function(wrap_pyfunction!(serialize_scope_result_row, module)?)?;
-    module.add_function(wrap_pyfunction!(scope_metadata_projection_rows, module)?)?;
+    module.add_function(wrap_pyfunction!(metadata_projection, module)?)?;
     Ok(())
 }

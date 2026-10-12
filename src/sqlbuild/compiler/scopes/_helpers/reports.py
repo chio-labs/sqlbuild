@@ -12,18 +12,13 @@ from sqlbuild.compiler.scopes.exceptions import (
     InvalidScopePathError,
 )
 from sqlbuild.compiler.scopes.models import (
-    ConstantMetadata,
     DeclarationExplanation,
     DeclarationIdentity,
-    DeclarationRecord,
     DeclarationReport,
-    EnumMetadata,
-    MacroMetadata,
     MovePreview,
     ResourceIdentity,
     ScopeBrowseResult,
     ScopeChainEntry,
-    ScopeCompleteness,
     ScopeDiagnostic,
     ScopeFolder,
     ScopeListResult,
@@ -47,7 +42,6 @@ from sqlbuild.compiler.scopes.types import (
     NativeScopeReportRow,
     NativeScopeSectionRow,
     NativeScopeTargetRow,
-    NativeScopeValuesRow,
     ScopeDiagnosticCode,
     ScopeQueryTarget,
 )
@@ -188,49 +182,8 @@ def filters_row(*, filters: ScopeReportFilters) -> NativeScopeFiltersRow:
     )
 
 
-def values_row(*, record: DeclarationRecord) -> NativeScopeValuesRow:
-    """One declaration's value metadata as the native engine reads it."""
-
-    macro: MacroMetadata | None = record.macro
-    enum: EnumMetadata | None = record.enum
-    constant: ConstantMetadata | None = record.constant
-    return (
-        None
-        if macro is None
-        else (
-            list(macro.parameters),
-            [qualified_row(identity=item) for item in macro.dependencies],
-            macro.source_digest,
-        ),
-        None if enum is None else ([member.name for member in enum.members], enum.scalar_type),
-        None
-        if constant is None
-        else (
-            constant.logical_type,
-            constant.collection_kind,
-            constant.item_count,
-            constant.nullable,
-            constant.render_as,
-        ),
-    )
-
-
 def _reports(lookup: ScopeLookup) -> _native.NativeScopeReports:
-    completeness: ScopeCompleteness = lookup.index.completeness
-    return _native.build_native_scope_reports(
-        cast(_native.NativeScopeLookup, lookup.native),
-        (
-            [values_row(record=record) for record in lookup.index.declarations],
-            (
-                completeness.discovery,
-                completeness.static_visibility,
-                completeness.runtime_usage,
-                completeness.relationships,
-                completeness.placement,
-                completeness.promotion_impact,
-            ),
-        ),
-    )
+    return _native.build_native_scope_reports(lookup)
 
 
 def _checked[Row](*, row: Row | None, failure: NativeScopeFailureRow) -> Row:
