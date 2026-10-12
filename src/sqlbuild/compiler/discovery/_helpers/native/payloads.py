@@ -119,11 +119,11 @@ def native_collection[ResultT](
     raise native_failure(payload)
 
 
-def materialise_native_files[RecordT](
+def materialise_native_files[ItemT, RecordT](
     *,
     project_dir: Path,
-    files: Iterable[tuple[Path, tuple[object, ...]]],
-    build: Callable[[Path, tuple[object, ...]], RecordT],
+    files: Iterable[tuple[Path, ItemT]],
+    build: Callable[[Path, ItemT], RecordT],
     on_fault: Callable[[DiscoveryFileFault], None] | None,
 ) -> tuple[RecordT, ...]:
     """Build each native file payload, reporting and skipping a failing file when asked."""

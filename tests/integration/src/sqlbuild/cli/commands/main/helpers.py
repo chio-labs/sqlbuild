@@ -655,9 +655,9 @@ def record_eager_output_column_scans(monkeypatch: pytest.MonkeyPatch) -> list[di
     eager: list[dict[str, object]] = []
     original: Callable[..., object] = native_model_files_module._native.discover_model_files
 
-    def recording(request: dict[str, object], tree: NativeProjectTree) -> object:
+    def recording(request: dict[str, object], tree: NativeProjectTree, project_dir: Path) -> object:
         eager.extend(filter(lambda item: item["extract_output_column_locations"], (request,)))
-        return original(request, tree)
+        return original(request, tree, project_dir)
 
     monkeypatch.setattr(native_model_files_module._native, "discover_model_files", recording)
     return eager

@@ -1,6 +1,6 @@
 //! Native discovery results as the plain data the Python discovery facade materialises.
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
 use pyo3::prelude::{
     Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -382,12 +382,13 @@ fn model_record<'py>(
         relative_path.clone(),
     ) {
         Ok(declarations) => declarations,
-        Err(error) => {
+        Err(error) if error.is_instance_of::<PyException>(py) => {
             return tuple_object(
                 py,
                 vec![object(py, RAISED_TAG)?, error.into_value(py).into_any()],
             );
         }
+        Err(error) => return Err(error),
     };
     let (enum_declarations, constant_declarations) = declarations;
     let record: NativeModelFile = NativeModelFile::discovered(ModelFileParts {

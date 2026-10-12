@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
-use pyo3::{pyclass, pymethods};
+use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_discovery::models::LineColumnSpan;
 
 const SOURCE_LOCATION_MODULE: &str = "sqlbuild.spec.contracts.models";
@@ -258,17 +258,17 @@ impl NativeModelFile {
         self.extract_implicit_alias_columns
     }
 
-    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
         let Ok(other) = other.downcast::<NativeModelFile>() else {
-            return Ok(false);
+            return Ok(py.NotImplemented());
         };
         let other: &NativeModelFile = other.get();
         for (left, right) in self.fields(py)?.iter().zip(other.fields(py)?) {
             if !left.eq(right)? {
-                return Ok(false);
+                return Ok(false.into_py_any(py)?);
             }
         }
-        Ok(true)
+        true.into_py_any(py)
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
