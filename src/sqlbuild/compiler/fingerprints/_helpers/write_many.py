@@ -7,11 +7,11 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.types import AdapterExecute, FrameworkType
 from sqlbuild.compiler.fingerprints._helpers.sql import (
     build_create_table_sql,
-    build_insert_many_sql,
-    build_insert_sql,
+    build_qualified_table_name,
 )
 from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_WRITE_ATTEMPTS,
@@ -19,7 +19,6 @@ from sqlbuild.compiler.fingerprints.constants import (
     FINGERPRINT_WRITE_BATCH_SIZE,
     FINGERPRINT_WRITE_RETRY_BASE_SECONDS,
 )
-from sqlbuild.compiler.fingerprints.exceptions import FingerprintInputError
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.fingerprints.types import FingerprintWriteProgress
 
@@ -60,23 +59,19 @@ def write_fingerprints_impl(
         sqls=(create_sql, *index_sqls),
         fingerprints=fingerprints,
     )
-    batches: tuple[tuple[Fingerprint, ...], ...] = _fingerprint_batches(
-        database=database,
-        schema=schema,
-        fingerprints=fingerprints,
-        render_qualified_name=render_qualified_name,
-        batch_size=FINGERPRINT_WRITE_BATCH_SIZE,
-        batch_max_bytes=FINGERPRINT_WRITE_BATCH_MAX_BYTES,
+    batches: list[tuple[tuple[Fingerprint, ...], str]] = _native.fingerprint_insert_batches(
+        build_qualified_table_name(
+            database=database,
+            schema=schema,
+            render_qualified_name=render_qualified_name,
+        ),
+        list(fingerprints),
+        (FINGERPRINT_WRITE_BATCH_SIZE, FINGERPRINT_WRITE_BATCH_MAX_BYTES),
     )
     completed_count: int = 0
     batch: tuple[Fingerprint, ...]
-    for batch in batches:
-        insert_sql: str = build_insert_many_sql(
-            database=database,
-            schema=schema,
-            fingerprints=batch,
-            render_qualified_name=render_qualified_name,
-        )
+    insert_sql: str
+    for batch, insert_sql in batches:
         _ = _execute_with_retry(
             connection=connection,
             execute=execute,
@@ -86,45 +81,6 @@ def write_fingerprints_impl(
         completed_count += len(batch)
         if on_progress is not None:
             on_progress(completed=completed_count, total=len(fingerprints))
-
-
-def _fingerprint_batches(
-    *,
-    database: str | None,
-    schema: str,
-    fingerprints: Sequence[Fingerprint],
-    render_qualified_name: Callable[..., str | None],
-    batch_size: int,
-    batch_max_bytes: int,
-) -> tuple[tuple[Fingerprint, ...], ...]:
-    if batch_size < 1:
-        raise FingerprintInputError("fingerprint batch size must be positive")
-    if batch_max_bytes < 1:
-        raise FingerprintInputError("fingerprint batch byte limit must be positive")
-    batches: list[tuple[Fingerprint, ...]] = []
-    current_batch: list[Fingerprint] = []
-    current_bytes: int = 0
-    fingerprint: Fingerprint
-    for fingerprint in fingerprints:
-        single_row_bytes: int = len(
-            build_insert_sql(
-                database=database,
-                schema=schema,
-                fingerprint=fingerprint,
-                render_qualified_name=render_qualified_name,
-            ).encode("utf-8")
-        )
-        if current_batch and (
-            len(current_batch) >= batch_size or current_bytes + single_row_bytes > batch_max_bytes
-        ):
-            batches.append(tuple(current_batch))
-            current_batch = []
-            current_bytes = 0
-        current_batch.append(fingerprint)
-        current_bytes += single_row_bytes
-    if current_batch:
-        batches.append(tuple(current_batch))
-    return tuple(batches)
 
 
 def _execute_with_retry(

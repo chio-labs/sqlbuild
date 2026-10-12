@@ -9,6 +9,7 @@ pub(crate) mod compiled_project;
 pub(crate) mod contracts;
 pub(crate) mod dag_artifact;
 pub(crate) mod discovery;
+pub(crate) mod fingerprints;
 pub(crate) mod graph;
 pub(crate) mod lineage;
 pub(crate) mod manifest;

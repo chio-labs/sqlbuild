@@ -11,6 +11,7 @@ mod constants;
 pub mod contracts;
 pub mod dag_artifact;
 pub mod explicit_references;
+pub mod fingerprint_storage;
 pub mod graph;
 pub mod lineage;
 pub mod manifest;
