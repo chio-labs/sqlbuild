@@ -6,9 +6,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import build_compile_inputs
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )

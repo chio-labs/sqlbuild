@@ -13,6 +13,7 @@ from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.models import (
+    CompileAdapterContext,
     CompileAnalysisSelection,
     CompileAuditInput,
     CompiledAudit,
@@ -971,6 +972,19 @@ def build_project_graph(
     on_progress: Callable[[str], None] | None = None,
     no_cache: bool = False,
 ) -> ProjectGraph: ...
+def build_compile_inputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter_context: CompileAdapterContext,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+    run_id: str | None = None,
+    no_sql_validation: bool = False,
+    defer_model_sql_validation: bool = False,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+    resolved_connection: dict[str, object] | None = None,
+    no_cache: bool = False,
+) -> CompileInputsView: ...
 def run_compile_command(
     request: CompileCommandRequest, reuse_attempt: CompileReuseAttempt | None = None
 ) -> int: ...

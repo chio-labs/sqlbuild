@@ -13,7 +13,7 @@ from _pytest.capture import CaptureResult
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.attachment.declaration_scope as declaration_scope_module
-import sqlbuild.compiler.compile.main._build_compile_inputs as compile_inputs_module
+import sqlbuild.compiler.compile._helpers.render.macros as macros_module
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
 import sqlbuild.rule_engine._helpers.host.custom_host_pool as custom_host_pool_module
 import sqlbuild.rule_engine._helpers.run.rules as rules_module
@@ -810,7 +810,7 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
             compile_cache_dir=compile_cache_dir,
         )
 
-    monkeypatch.setattr(compile_inputs_module, "build_declaration_scope", counting_build)
+    monkeypatch.setattr(declaration_scope_module, "build_declaration_scope", counting_build)
     monkeypatch.setattr(expansion_context_module, "build_declaration_scope", counting_build)
 
     warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
@@ -877,9 +877,9 @@ def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_pr
         macro_loads.append(loaded)
         return loaded
 
-    monkeypatch.setattr(compile_inputs_module, "build_declaration_scope", counting_build)
+    monkeypatch.setattr(declaration_scope_module, "build_declaration_scope", counting_build)
     monkeypatch.setattr(expansion_context_module, "build_declaration_scope", counting_build)
-    monkeypatch.setattr(compile_inputs_module, "load_project_macros", recording_load)
+    monkeypatch.setattr(macros_module, "load_project_macros", recording_load)
     monkeypatch.setattr(expansion_context_module, "load_project_macros", recording_load)
 
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)

@@ -11,7 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const FRONTIER_MODULE: &str = "sqlbuild.compiler.frontier.main._compile_frontier";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
-const BUILD_INPUTS_MODULE: &str = "sqlbuild.compiler.compile.main._build_compile_inputs";
+const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
 const ASSEMBLE_MODULE: &str = "sqlbuild.compiler.compile.main._assemble_project";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PROJECT_WITH_MODULE: &str = "sqlbuild.compiler.compiled_project.main.project_with";

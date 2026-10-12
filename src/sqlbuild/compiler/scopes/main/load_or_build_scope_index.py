@@ -5,9 +5,9 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 
+from sqlbuild._native import build_compile_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
     scope_index_with_compile_usages,
 )

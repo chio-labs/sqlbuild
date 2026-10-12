@@ -19,7 +19,6 @@ ALLOWED_COMMENT_PREFIXES: tuple[str, ...] = (
 )
 ALLOWED_MACRO_LOAD_PATHS: frozenset[str] = frozenset(
     {
-        "src/sqlbuild/compiler/compile/main/_build_compile_inputs.py",
         "src/sqlbuild/compiler/compile/main/sql_expansion_context.py",
         "src/sqlbuild/compiler/compile/_helpers/render/macros.py",
     }

@@ -13,11 +13,11 @@ from typing import Any
 import pytest
 
 import sqlbuild._native as _native
+from sqlbuild._native import build_compile_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.assembly import project as project_module
 from sqlbuild.compiler.compile._helpers.assembly.project import assemble_compiled_project
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
-from sqlbuild.compiler.compile.main._build_compile_inputs import build_compile_inputs
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
 )

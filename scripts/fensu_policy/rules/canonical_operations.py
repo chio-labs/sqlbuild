@@ -170,7 +170,7 @@ def source_freshness_sql_ownership(*, module: object, ctx: RuleContext) -> list[
     code="XSB062",
     family=Family.CUSTOM,
     slug="single-macro-load-site",
-    message="project macros must be loaded once in build_compile_inputs",
+    message="project macros must be loaded once by the native compile driver",
     remediation="Pass loaded_macros down instead of calling load_project_macros again.",
 )
 def single_macro_load_site(*, module: object, ctx: RuleContext) -> list[Fault]:
