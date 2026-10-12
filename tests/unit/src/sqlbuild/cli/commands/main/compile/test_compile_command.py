@@ -8,9 +8,11 @@ from typing import Any, cast
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.compile import lineage as compile_lineage
 from sqlbuild.cli.commands._helpers.compile import pipeline as compile_pipeline
 from sqlbuild.cli.commands._helpers.compile import status as compile_status
+from sqlbuild.cli.commands._helpers.runtime import adapters as runtime_adapters
 from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.main.project import _compile as compile_command
 from sqlbuild.cli.commands.types import CompileLineageMode
@@ -61,7 +63,7 @@ def test_given_local_project_when_running_compile_then_it_does_not_connect(
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
     monkeypatch.setattr(
-        compile_pipeline,
+        runtime_adapters,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -133,7 +135,7 @@ def test_given_tty_stdout_when_running_compile_then_it_persists_phase_timings(
     monkeypatch.setattr(compile_status.sys, "stdout", FakeStdout())
     monkeypatch.setattr(compile_status, "TransientStatusReporter", FakeStatusReporter)
     monkeypatch.setattr(
-        compile_pipeline,
+        runtime_adapters,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -175,7 +177,7 @@ def test_given_dag_flag_when_running_compile_then_writes_dag_artifact(
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
     monkeypatch.setattr(
-        compile_pipeline,
+        runtime_adapters,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -232,7 +234,7 @@ def test_given_python_project_dag_flag_when_running_compile_then_writes_python_d
 ) -> None:
     project_dir: Path = prepare_python_compile_project(tmp_path)
     monkeypatch.setattr(
-        compile_pipeline,
+        runtime_adapters,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -356,7 +358,7 @@ def test_given_contract_errors_when_running_compile_then_reports_diagnostics(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        compile_pipeline,
+        runtime_adapters,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -411,7 +413,7 @@ def test_given_contract_errors_when_running_compile_json_then_serializes_diagnos
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        compile_pipeline,
+        runtime_adapters,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -479,7 +481,7 @@ def test_given_explicit_column_contract_mode_when_compiling_column_audit_then_au
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        compile_pipeline,
+        runtime_adapters,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
@@ -602,7 +604,7 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
         return static_planning(**kwargs)
 
     monkeypatch.setattr(
-        compile_pipeline, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
+        runtime_adapters, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
     )
     monkeypatch.setattr(
         compile_pipeline, "static_sql_test_planning_diagnostics", counted_static_planning
@@ -653,14 +655,14 @@ def test_given_collection_state_when_compiling_then_cycles_are_paused_and_state_
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
     enabled_during: list[bool] = []
-    analyze: Callable[..., Any] = compile_pipeline.analyze_compile_project
+    analyze: Callable[..., Any] = _native.analyze_compile_project
 
     def observed_analyze(**kwargs: Any) -> Any:
         enabled_during.append(gc.isenabled())
         return analyze(**kwargs)
 
     monkeypatch.setattr(
-        compile_pipeline, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
+        runtime_adapters, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
     )
     monkeypatch.setattr(compile_command, "analyze_compile_project", observed_analyze)
     set_collection: dict[bool, Callable[[], None]] = {True: gc.enable, False: gc.disable}

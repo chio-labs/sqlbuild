@@ -4,9 +4,14 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, TypedDict
 
+from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
+from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.compile.models import CompileAnalysis
+from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
 from sqlbuild.compiler.compile.models import (
+    CompileAnalysisSelection,
     CompileAuditInput,
     CompiledAudit,
     CompiledFunction,
@@ -71,6 +76,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
+from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -885,6 +891,18 @@ def parse_schema_document(
 def parse_sources_document(
     loaded: object, path: str, classes: dict[str, object]
 ) -> tuple[SourceEntry, ...]: ...
+def analyze_compile_project(
+    *,
+    project_dir: Path,
+    no_sql_validation: bool,
+    selected_target: str | None,
+    lineage_mode: CompileLineageMode,
+    cli_vars: dict[str, object] | None,
+    profile_flags: CompileProfileFlags,
+    analysis_selection: CompileAnalysisSelection,
+    status: TransientStatusReporter | None,
+    prepared_artifacts: PreparedCompileArtifacts | None = None,
+) -> CompileAnalysis: ...
 def validate_authored_sql_test_ctes(
     test_files: tuple[DiscoveredSqlTestFile, ...],
     scenario_files: tuple[DiscoveredSqlScenarioFile, ...],

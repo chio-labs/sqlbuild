@@ -3,15 +3,8 @@
 from __future__ import annotations
 
 import time
-from dataclasses import replace
-from functools import partial
 from pathlib import Path
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.compile.lineage import (
-    build_compile_lineage,
-    compile_analysis_lineage_mode,
-)
 from sqlbuild.cli.commands._helpers.compile.status import (
     complete_compile_phase,
     elapsed_ms,
@@ -21,244 +14,25 @@ from sqlbuild.cli.commands._helpers.compile.target_writer import (
     static_sql_test_planning_diagnostics,
     write_static_compile_target,
 )
-from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.classes.native_artifact_batch import NativeArtifactBatch
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
-from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import (
     CompileAnalysis,
     CompileWriteResult,
 )
-from sqlbuild.cli.entry.models import CompileProfileFlags
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
 from sqlbuild.compiler.compile.exceptions import CompileInputError, SqlTestReferenceError
 from sqlbuild.compiler.compile.models import (
-    CompileAnalysisSelection,
-    CompiledObjectKey,
     CompilerDiagnostic,
 )
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
-from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
-from sqlbuild.compiler.contracts.models import ContractValidationResult
-from sqlbuild.compiler.discovery.main.discover import discover_project_inputs
-from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.lineage.models import ProjectColumnLineage
-from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
-from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
-from sqlbuild.compiler.pipeline.main.selected_graph import (
-    build_project_graph_with_analysis_selection,
-)
-from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.rule_engine.classes.early_sql_lint import EarlySqlLint
-from sqlbuild.rule_engine.constants import RULE_FIX_AVAILABLE_NOTE
-from sqlbuild.rule_engine.main.load_config import load_rules_config
-from sqlbuild.rule_engine.main.render_rules_progress import format_rules_progress
-from sqlbuild.rule_engine.main.run_rules import run_rules
-from sqlbuild.rule_engine.models import RulesConfig, RulesRunResult
-from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
-
-
-def analyze_compile_project(
-    *,
-    project_dir: Path,
-    no_sql_validation: bool,
-    selected_target: str | None,
-    lineage_mode: CompileLineageMode,
-    cli_vars: dict[str, object] | None,
-    profile_flags: CompileProfileFlags,
-    analysis_selection: CompileAnalysisSelection,
-    status: TransientStatusReporter | None,
-    prepared_artifacts: PreparedCompileArtifacts | None = None,
-) -> CompileAnalysis:
-    """Discover, compile, and validate the project into one analysis result."""
-
-    with EarlySqlLint(
-        enabled=not (analysis_selection.select or analysis_selection.exclude)
-    ) as early_lint:
-        return _analyze_compile_project(
-            project_dir=project_dir,
-            no_sql_validation=no_sql_validation,
-            selected_target=selected_target,
-            lineage_mode=lineage_mode,
-            cli_vars=cli_vars,
-            profile_flags=profile_flags,
-            analysis_selection=analysis_selection,
-            status=status,
-            early_lint=early_lint,
-            prepared_artifacts=prepared_artifacts,
-        )
-
-
-def _analyze_compile_project(
-    *,
-    project_dir: Path,
-    no_sql_validation: bool,
-    selected_target: str | None,
-    lineage_mode: CompileLineageMode,
-    cli_vars: dict[str, object] | None,
-    profile_flags: CompileProfileFlags,
-    analysis_selection: CompileAnalysisSelection,
-    status: TransientStatusReporter | None,
-    early_lint: EarlySqlLint,
-    prepared_artifacts: PreparedCompileArtifacts | None = None,
-) -> CompileAnalysis:
-    select: tuple[str, ...] = analysis_selection.select
-    exclude: tuple[str, ...] = analysis_selection.exclude
-
-    discover_start: float = time.monotonic()
-    _ = start_compile_phase(status=status, message="Discovering project...")
-    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(
-        project_dir=project_dir,
-        extract_output_column_locations=False,
-        sql_analysis_enabled_override=(
-            False if profile_flags.skip_discovery_sql_analysis else None
-        ),
-    )
-    reject_unit_test_selectors(select=select, exclude=exclude, discovered_inputs=discovered_inputs)
-    discover_ms: int = elapsed_ms(discover_start)
-    _ = complete_compile_phase(
-        status=status, message=f"Discovered project. ({discover_ms / 1000:.2f}s)"
-    )
-    adapter: BaseAdapter = resolve_adapter(
-        adapter_name=resolve_effective_adapter_name(
-            project_config=discovered_inputs.project_config,
-            local_config=discovered_inputs.local_config,
-        ),
-        project_dir=project_dir,
-    )
-    graph_start: float = time.monotonic()
-    _ = start_compile_phase(status=status, message="Compiling project graph...")
-    with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
-        graph: ProjectGraph = build_project_graph_with_analysis_selection(
-            discovered_inputs=discovered_inputs,
-            adapter=adapter,
-            selected_target=selected_target,
-            no_sql_validation=no_sql_validation,
-            skip_column_inference=profile_flags.skip_column_inference,
-            column_lineage_mode=compile_analysis_lineage_mode(lineage_mode),
-            cli_vars=cli_vars,
-            analysis_selection=replace(
-                analysis_selection,
-                on_inputs_ready=partial(
-                    early_lint.start, dialect=adapter.sql_analysis_dialect() or "generic"
-                ),
-            ),
-        )
-    graph_ms: int = elapsed_ms(graph_start)
-    _ = complete_compile_phase(
-        status=status, message=f"Compiled project graph. ({graph_ms / 1000:.2f}s)"
-    )
-    graph_failed: bool = any(diagnostic.is_error for diagnostic in graph.project.diagnostics)
-    early_lint_wait_ms: int = early_lint.stop() if graph_failed else 0
-    lineage_start: float = time.monotonic()
-    _ = start_compile_phase(status=status, message="Analyzing column lineage...")
-    lineage: ProjectColumnLineage | None = build_compile_lineage(
-        graph=graph,
-        dialect=adapter.sql_analysis_dialect(),
-        mode=lineage_mode,
-    )
-    lineage_ms: int = elapsed_ms(lineage_start)
-    _ = complete_compile_phase(
-        status=status, message=f"Analyzed column lineage. ({lineage_ms / 1000:.2f}s)"
-    )
-    contracts_start: float = time.monotonic()
-    contracts_cpu_start: float = time.thread_time()
-    contract_result: ContractValidationResult
-    if profile_flags.skip_contracts:
-        contract_result = ContractValidationResult(diagnostics=())
-    else:
-        _ = start_compile_phase(status=status, message="Validating model contracts...")
-        contract_result = evaluate_model_contracts(
-            project=graph.project,
-            dialect=adapter.sql_analysis_dialect(),
-        )
-    contract_ms: int = elapsed_ms(contracts_start)
-    contract_cpu_ms: int = int((time.thread_time() - contracts_cpu_start) * 1000)
-    if not profile_flags.skip_contracts:
-        _ = complete_compile_phase(
-            status=status, message=f"Validated model contracts. ({contract_ms / 1000:.2f}s)"
-        )
-    selected_keys: frozenset[CompiledObjectKey] = select_project_graph(
-        graph=graph, select=select, exclude=exclude
-    )
-    rules_result: RulesRunResult = RulesRunResult(
-        findings=(), evaluated_models=0, built_in_ms=0, custom_ms=0
-    )
-    core_diagnostics: tuple[CompilerDiagnostic, ...] = (
-        *graph.project.diagnostics,
-        *contract_result.diagnostics,
-    )
-    if not graph_failed:
-        rules_config: RulesConfig = load_rules_config(project_dir=project_dir)
-        if prepared_artifacts is not None and not any(item.is_error for item in core_diagnostics):
-            prepared_artifacts.start(
-                project=graph.project,
-                adapter=adapter,
-                target_dir=project_dir / "target",
-                stage_artifacts=bool(rules_config.select),
-            )
-        _ = start_compile_phase(status=status, message="Evaluating built-in and custom rules...")
-        rules_start: float = time.monotonic()
-        rules_result = run_rules(
-            graph=graph,
-            discovered_inputs=discovered_inputs,
-            config=rules_config,
-            project_dir=project_dir,
-            dialect=adapter.sql_analysis_dialect() or "generic",
-            selected_keys=selected_keys if select or exclude else None,
-            prepared_sql=early_lint.preparation,
-            expansion_reuse=early_lint.expansion_reuse,
-            no_sql_analysis=no_sql_validation,
-        )
-        _ = complete_compile_phase(
-            status=status,
-            message=format_rules_progress(
-                elapsed_seconds=time.monotonic() - rules_start, result=rules_result
-            ),
-        )
-        early_lint_wait_ms = early_lint.stop()
-    rule_diagnostics: tuple[CompilerDiagnostic, ...] = tuple(
-        CompilerDiagnostic(
-            phase=DiagnosticPhase.RULE,
-            severity=DiagnosticSeverity.ERROR,
-            code=fault.code,
-            message=fault.message,
-            path=fault.path,
-            line=fault.line,
-            column=fault.column,
-            help=fault.remediation,
-            notes=(RULE_FIX_AVAILABLE_NOTE,) if fault.fixable else (),
-            affected_rules=fault.affected_rules,
-        )
-        for fault in rules_result.findings
-    )
-    return CompileAnalysis(
-        discovered_inputs=discovered_inputs,
-        adapter=adapter,
-        graph=graph,
-        selected_keys=selected_keys,
-        lineage=lineage,
-        diagnostics=(*core_diagnostics, *rule_diagnostics),
-        discover_ms=discover_ms,
-        graph_ms=graph_ms,
-        lineage_ms=lineage_ms,
-        contract_ms=contract_ms,
-        contract_cpu_ms=contract_cpu_ms,
-        built_in_rules_ms=rules_result.built_in_ms,
-        custom_rules_ms=rules_result.custom_ms,
-        custom_rules_cpu_ms=rules_result.custom_cpu_ms,
-        early_lint_wait_ms=early_lint_wait_ms,
-        rule_cache_hits=rules_result.cache_hits,
-        rule_cache_misses=rules_result.cache_misses,
-        skipped_type_proof_rules=rules_result.skipped_type_proof_rules,
-    )
 
 
 def build_compile_manifest_payload(

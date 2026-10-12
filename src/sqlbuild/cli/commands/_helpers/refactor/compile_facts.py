@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.compile.pipeline import analyze_compile_project
+from sqlbuild._native import analyze_compile_project
 from sqlbuild.cli.commands._helpers.compile.target_writer import (
     static_sql_test_planning_diagnostics,
 )

@@ -6,6 +6,7 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild._native import analyze_compile_project
 from sqlbuild.cli.commands._helpers.compile.collection import paused_cyclic_collection
 from sqlbuild.cli.commands._helpers.compile.dag import resolve_compile_dag_path
 from sqlbuild.cli.commands._helpers.compile.output import (
@@ -13,7 +14,6 @@ from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_text,
 )
 from sqlbuild.cli.commands._helpers.compile.pipeline import (
-    analyze_compile_project,
     build_compile_manifest_payload,
     compile_sql_test_planning_diagnostics,
     write_compile_artifacts,
