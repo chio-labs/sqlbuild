@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod code_scanner;
 pub mod compiler;
 mod constants;
 pub mod sql_references;
