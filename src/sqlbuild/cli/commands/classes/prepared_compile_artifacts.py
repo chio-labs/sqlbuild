@@ -12,6 +12,7 @@ from types import TracebackType
 
 from filelock import FileLock, Timeout
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.compile.target_writer import (
     plan_static_sql_tests,
@@ -148,7 +149,7 @@ class PreparedCompileArtifacts:
         return True
 
     def publish(
-        self, *, target_dir: Path, manifest: dict[str, object] | None
+        self, *, target_dir: Path, manifest: _native.NativeManifest | None
     ) -> WrittenTarget | None:
         if self._planned_tests is not None and self._planning_inputs is not None:
             project, adapter, _ = self._planning_inputs

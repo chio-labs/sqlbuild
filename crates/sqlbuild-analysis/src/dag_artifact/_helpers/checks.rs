@@ -11,8 +11,9 @@ use crate::dag_artifact::constants::{
 use crate::dag_artifact::errors::DagArtifactError;
 use crate::dag_artifact::models::{
     DagAuditInput, DagProjectInput, DagPythonGraphInput, DagPythonNodeInput, DagScenarioInput,
-    DagSqlTestInput, DagValue,
+    DagSqlTestInput,
 };
+use crate::dag_artifact::types::DagValue;
 
 /// Every `DagCheck` field, `None` or empty where a check kind leaves it out.
 #[derive(Default)]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
@@ -19,7 +20,7 @@ def write_build_compile_target(
 ) -> None:
     """Write the compile target artifacts with the optional manifest payload."""
 
-    manifest_payload: dict[str, object] | None = None
+    manifest_payload: _native.NativeManifest | None = None
     if request.manifest:
         manifest_payload = build_manifest(
             project=pipeline_result.project,

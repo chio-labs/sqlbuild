@@ -1,7 +1,8 @@
 use crate::dag_artifact::errors::DagArtifactError;
-use crate::dag_artifact::models::{DagProjectInput, DagPythonGraphInput, DagValue};
+use crate::dag_artifact::models::{DagProjectInput, DagPythonGraphInput};
 use crate::dag_artifact::tests::helpers::{built, key, loader, python_node, source, team_meta};
 use crate::dag_artifact::tests::test_types::BuildDagJsonTestCase;
+use crate::dag_artifact::types::DagValue;
 
 const EMPTY_JSON: &str = "{
   \"version\": 1,

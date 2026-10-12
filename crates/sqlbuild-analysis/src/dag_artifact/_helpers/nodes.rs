@@ -16,9 +16,10 @@ use crate::dag_artifact::errors::DagArtifactError;
 use crate::dag_artifact::models::{
     DagColumnInput, DagFunctionInput, DagLoaderInput, DagModelInput, DagProjectInput,
     DagPythonNodeInput, DagRelationInput, DagSeedInput, DagSourceEntryInput, DagSourceInput,
-    DagValue,
 };
 use crate::dag_artifact::types::DagColumnLineage;
+use crate::dag_artifact::types::DagValue;
+use crate::python_values::main::text_key::text_key;
 
 /// Every `DagNode` field, `None` or empty where a node kind leaves it out.
 #[derive(Default)]
@@ -68,7 +69,7 @@ impl NodeFields {
                 DagValue::Object(
                     self.column_lineage
                         .iter()
-                        .map(|(name, refs)| (Ok(name.clone()), lineage_refs(refs)))
+                        .map(|(name, refs)| (text_key(name), lineage_refs(refs)))
                         .collect(),
                 ),
             ),
@@ -283,7 +284,7 @@ pub(crate) fn loader_node(
         ))),
         path: Some(loader.path.clone()),
         meta: Some(DagValue::Object(vec![(
-            Ok(LOADER_NODE_META_KEY.to_owned()),
+            text_key(LOADER_NODE_META_KEY),
             DagValue::Bool(true),
         )])),
         columns: columns(&loader.columns),

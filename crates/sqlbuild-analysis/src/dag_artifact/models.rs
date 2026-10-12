@@ -1,25 +1,7 @@
 //! The compiled project, Python node graph and authored values the DAG artifact is built from.
 
-use sqlbuild_core::json::models::JsonInteger;
-
 use crate::assembly::project::types::ObjectKey;
-use crate::dag_artifact::types::{DagColumnLineage, DagKey};
-
-/// A Python value as `dataclasses.asdict` copies it, before `json.dumps` encodes it.
-#[derive(Clone, Debug, PartialEq)]
-pub enum DagValue {
-    Null,
-    Bool(bool),
-    Integer(JsonInteger),
-    Float(f64),
-    String(String),
-    /// A `str` holding lone surrogates, as UTF-16 code units.
-    Utf16(Vec<u16>),
-    Array(Vec<DagValue>),
-    Object(Vec<(DagKey, DagValue)>),
-    /// A value `json.dumps` refuses, with the message of its `TypeError`.
-    Unencodable(String),
-}
+use crate::dag_artifact::types::{DagColumnLineage, DagValue};
 
 /// One authored column: name, type, nullability, description and meta.
 #[derive(Clone, Debug, PartialEq)]

@@ -6,7 +6,7 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.graph.main._native_graph_from_edges import native_graph_from_edges
-from sqlbuild.compiler.manifest._helpers.payload import build_manifest_payload
+from sqlbuild.compiler.manifest.main._build_graph_manifest import build_graph_manifest
 from sqlbuild.compiler.planner.models import PlanOutput
 
 
@@ -18,13 +18,13 @@ def build_manifest(
     adapter_type: str,
     upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> dict[str, object]:
-    """Build a full dbt v12-compatible manifest dictionary from caller-built edge maps."""
+) -> _native.NativeManifest:
+    """Build a full dbt v12-compatible manifest from caller-built edge maps."""
 
     graph: _native.NativeProjectGraph = native_graph_from_edges(
         upstream=upstream_deps, downstream=downstream_deps
     )
-    return build_manifest_payload(
+    return build_graph_manifest(
         project=project,
         plan_output=plan_output,
         project_name=project_name,

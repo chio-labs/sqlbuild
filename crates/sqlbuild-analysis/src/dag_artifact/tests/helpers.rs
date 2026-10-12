@@ -3,10 +3,11 @@ use crate::dag_artifact::errors::DagArtifactError;
 use crate::dag_artifact::main::build_dag_json::build_dag_json;
 use crate::dag_artifact::models::{
     DagColumnInput, DagLoaderInput, DagPythonNodeInput, DagSourceEntryInput, DagSourceInput,
-    DagValue,
 };
 use crate::dag_artifact::tests::test_types::BuildDagJsonTestCase;
+use crate::dag_artifact::types::DagValue;
 use crate::graph::models::ProjectGraph;
+use crate::python_values::main::text_key::text_key;
 
 /// A `(resource type, name)` key.
 pub(crate) fn key(kind: &str, name: &str) -> ObjectKey {
@@ -91,7 +92,7 @@ pub(crate) fn built(test_case: &BuildDagJsonTestCase) -> Result<String, DagArtif
 /// Source meta with a `None` owner and the given team.
 pub(crate) fn team_meta(value: DagValue) -> DagValue {
     DagValue::Object(vec![
-        (Ok("owner".to_owned()), DagValue::Null),
-        (Ok("team".to_owned()), value),
+        (text_key("owner"), DagValue::Null),
+        (text_key("team"), value),
     ])
 }

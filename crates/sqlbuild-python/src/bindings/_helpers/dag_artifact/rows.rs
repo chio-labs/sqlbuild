@@ -7,12 +7,13 @@ use sqlbuild_analysis::dag_artifact::models::{
     DagAuditInput, DagColumnInput, DagFunctionInput, DagLoaderInput, DagModelInput,
     DagModelSchemaInput, DagProjectInput, DagPythonAssetInput, DagPythonGraphInput,
     DagPythonNodeInput, DagRelationInput, DagScenarioInput, DagSeedInput, DagSourceEntryInput,
-    DagSourceInput, DagSqlTestCaseInput, DagSqlTestInput, DagValue,
+    DagSourceInput, DagSqlTestCaseInput, DagSqlTestInput,
 };
+use sqlbuild_analysis::dag_artifact::types::DagValue;
 
 use sqlbuild_analysis::dag_artifact::types::DagColumnLineage;
 
-use crate::bindings::_helpers::dag_artifact::values::dag_value;
+use crate::bindings::_helpers::python_values::values::python_value;
 
 const AUDIT_SEVERITY_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const DECIMAL_KIND: &str = "decimal";
@@ -453,4 +454,9 @@ pub(crate) fn python_graph_input(graph: &Bound<'_, PyAny>) -> PyResult<DagPython
             .collect::<PyResult<_>>()?,
         kinds_by_name,
     })
+}
+
+/// A value as `asdict` copies it into the artifact.
+fn dag_value(value: &Bound<'_, PyAny>) -> PyResult<DagValue> {
+    python_value(value, true)
 }

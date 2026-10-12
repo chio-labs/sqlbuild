@@ -12,7 +12,8 @@ use crate::dag_artifact::_helpers::nodes::{
 use crate::dag_artifact::_helpers::values::{drop_none, encoded, integer, object, text};
 use crate::dag_artifact::constants::{DAG_INDENT, DAG_VERSION, LOADER_KIND};
 use crate::dag_artifact::errors::DagArtifactError;
-use crate::dag_artifact::models::{DagProjectInput, DagPythonGraphInput, DagValue};
+use crate::dag_artifact::models::{DagProjectInput, DagPythonGraphInput};
+use crate::dag_artifact::types::DagValue;
 use crate::graph::models::ProjectGraph;
 
 fn nodes(

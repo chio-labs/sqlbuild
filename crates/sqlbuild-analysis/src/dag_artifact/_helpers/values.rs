@@ -4,15 +4,18 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::dag_artifact::constants::REQUIRED_COLLECTION_KEYS;
 use crate::dag_artifact::errors::DagArtifactError;
-use crate::dag_artifact::models::{DagColumnInput, DagValue};
-use crate::dag_artifact::types::DagKey;
+use crate::dag_artifact::models::DagColumnInput;
+use crate::dag_artifact::types::DagValue;
+use crate::python_values::main::encode_python_value::encode_python_value;
+use crate::python_values::main::text_key::text_key;
+use crate::python_values::models::PythonKey;
 
 /// An object whose keys are all field names.
 pub(crate) fn object(entries: Vec<(&str, DagValue)>) -> DagValue {
     DagValue::Object(
         entries
             .into_iter()
-            .map(|(key, value)| (Ok(key.to_owned()), value))
+            .map(|(key, value)| (text_key(key), value))
             .collect(),
     )
 }
@@ -62,8 +65,9 @@ pub(crate) fn typed_column((name, data_type): &(String, Option<String>)) -> DagV
     ])
 }
 
-fn is_required_collection(key: &DagKey) -> bool {
-    key.as_ref()
+fn is_required_collection(key: &PythonKey) -> bool {
+    key.text
+        .as_ref()
         .is_ok_and(|key| REQUIRED_COLLECTION_KEYS.contains(&key.as_str()))
 }
 
@@ -93,25 +97,5 @@ pub(crate) fn drop_none(value: DagValue) -> DagValue {
 
 /// The value `json.dumps` encodes, or the `TypeError` it raises first in output order.
 pub(crate) fn encoded(value: DagValue) -> Result<JsonValue, DagArtifactError> {
-    Ok(match value {
-        DagValue::Null => JsonValue::Null,
-        DagValue::Bool(flag) => JsonValue::Bool(flag),
-        DagValue::Integer(number) => JsonValue::Integer(number),
-        DagValue::Float(number) => JsonValue::Float(number),
-        DagValue::String(text) => JsonValue::String(text),
-        DagValue::Utf16(units) => JsonValue::Utf16(units),
-        DagValue::Array(items) => {
-            JsonValue::Array(items.into_iter().map(encoded).collect::<Result<_, _>>()?)
-        }
-        DagValue::Object(entries) => JsonValue::Object(
-            entries
-                .into_iter()
-                .map(|(key, item)| {
-                    let key: String = key.map_err(DagArtifactError::Unencodable)?;
-                    Ok((key, encoded(item)?))
-                })
-                .collect::<Result<_, DagArtifactError>>()?,
-        ),
-        DagValue::Unencodable(message) => return Err(DagArtifactError::Unencodable(message)),
-    })
+    encode_python_value(value).map_err(DagArtifactError::Unencodable)
 }

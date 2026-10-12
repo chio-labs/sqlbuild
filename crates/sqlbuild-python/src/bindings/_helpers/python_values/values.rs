@@ -1,19 +1,18 @@
-//! Python values as `dataclasses.asdict` copies them and `json.dumps` would encode them.
+//! Python values as `json.dumps` would encode them, optionally after `dataclasses.asdict`.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
     PyBool, PyBoolMethods, PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList,
     PyString, PyStringMethods, PyTuple, PyTypeMethods,
 };
-use sqlbuild_analysis::dag_artifact::models::DagValue;
-use sqlbuild_analysis::dag_artifact::types::DagKey;
+use sqlbuild_analysis::python_values::models::{PythonKey, PythonValue};
 use sqlbuild_core::json::models::JsonInteger;
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_outputs::json_report::float_key;
 
 const DATACLASS_FIELDS: &str = "__dataclass_fields__";
-const SURROGATE_KEY: &str = "a DAG artifact mapping key holds a lone surrogate, which the native \
+const SURROGATE_KEY: &str = "a JSON artifact mapping key holds a lone surrogate, which the native \
                              encoder does not write";
 const DATACLASSES_MODULE: &str = "dataclasses";
 
@@ -22,14 +21,14 @@ fn type_name(value: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 /// A `str`, as UTF-16 code units when it holds lone surrogates.
-pub(crate) fn text_value(text: &Bound<'_, PyString>) -> PyResult<DagValue> {
+pub(crate) fn text_value(text: &Bound<'_, PyString>) -> PyResult<PythonValue> {
     if let Ok(text) = text.to_str() {
-        return Ok(DagValue::String(text.to_owned()));
+        return Ok(PythonValue::String(text.to_owned()));
     }
     let encoded: Bound<'_, PyBytes> = text
         .call_method1("encode", ("utf-16-le", "surrogatepass"))?
         .downcast_into::<PyBytes>()?;
-    Ok(DagValue::Utf16(
+    Ok(PythonValue::Utf16(
         encoded
             .as_bytes()
             .as_chunks::<2>()
@@ -40,25 +39,35 @@ pub(crate) fn text_value(text: &Bound<'_, PyString>) -> PyResult<DagValue> {
     ))
 }
 
-fn integer_value(value: &Bound<'_, PyAny>) -> PyResult<DagValue> {
+fn integer_value(value: &Bound<'_, PyAny>) -> PyResult<PythonValue> {
     if let Ok(signed) = value.extract::<i64>() {
-        return Ok(DagValue::Integer(JsonInteger::from(signed)));
+        return Ok(PythonValue::Integer(JsonInteger::from(signed)));
     }
     if let Ok(unsigned) = value.extract::<u64>() {
-        return Ok(DagValue::Integer(JsonInteger::from(unsigned)));
+        return Ok(PythonValue::Integer(JsonInteger::from(unsigned)));
     }
     let decimal: String = value.str()?.to_str()?.to_owned();
-    Ok(JsonInteger::parse(&decimal).map_or(DagValue::Null, DagValue::Integer))
+    Ok(JsonInteger::parse(&decimal).map_or(PythonValue::Null, PythonValue::Integer))
 }
 
 /// A mapping key as `json.dumps` writes it, or its `TypeError` message.
-fn key_value(key: &Bound<'_, PyAny>) -> PyResult<DagKey> {
+fn key_value(key: &Bound<'_, PyAny>) -> PyResult<PythonKey> {
     if let Ok(text) = key.downcast::<PyString>() {
         return text
             .to_str()
-            .map(|text| Ok(text.to_owned()))
+            .map(|text| PythonKey {
+                text: Ok(text.to_owned()),
+                is_str: true,
+            })
             .map_err(|_| NativeCompilerError::new_err(SURROGATE_KEY));
     }
+    Ok(PythonKey {
+        text: scalar_key_text(key)?,
+        is_str: false,
+    })
+}
+
+fn scalar_key_text(key: &Bound<'_, PyAny>) -> PyResult<Result<String, String>> {
     if key.is_none() {
         return Ok(Ok("null".to_owned()));
     }
@@ -77,58 +86,58 @@ fn key_value(key: &Bound<'_, PyAny>) -> PyResult<DagKey> {
     )))
 }
 
-fn dataclass_value(value: &Bound<'_, PyAny>) -> PyResult<DagValue> {
+fn dataclass_value(value: &Bound<'_, PyAny>) -> PyResult<PythonValue> {
     let fields: Bound<'_, PyAny> = value
         .py()
         .import(DATACLASSES_MODULE)?
         .getattr("fields")?
         .call1((value,))?;
-    let mut entries: Vec<(DagKey, DagValue)> = Vec::new();
+    let mut entries: Vec<(PythonKey, PythonValue)> = Vec::new();
     for field in fields.try_iter()? {
         let name: Bound<'_, PyAny> = field?.getattr("name")?;
         let item: Bound<'_, PyAny> = value.getattr(name.downcast::<PyString>()?)?;
-        entries.push((key_value(&name)?, dag_value(&item)?));
+        entries.push((key_value(&name)?, python_value(&item, true)?));
     }
-    Ok(DagValue::Object(entries))
+    Ok(PythonValue::Object(entries))
 }
 
-/// The value `asdict` copies into the artifact; refused leaves keep `json.dumps`'s message.
-pub(crate) fn dag_value(value: &Bound<'_, PyAny>) -> PyResult<DagValue> {
+/// The value `json.dumps` encodes, copied by `asdict` first when `dataclasses` is set.
+pub(crate) fn python_value(value: &Bound<'_, PyAny>, dataclasses: bool) -> PyResult<PythonValue> {
     if value.is_none() {
-        return Ok(DagValue::Null);
+        return Ok(PythonValue::Null);
     }
-    if value.get_type().hasattr(DATACLASS_FIELDS)? {
+    if dataclasses && value.get_type().hasattr(DATACLASS_FIELDS)? {
         return dataclass_value(value);
     }
     if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
-        return Ok(DagValue::Array(
+        return Ok(PythonValue::Array(
             value
                 .try_iter()?
-                .map(|item| dag_value(&item?))
+                .map(|item| python_value(&item?, dataclasses))
                 .collect::<PyResult<_>>()?,
         ));
     }
     if let Ok(mapping) = value.downcast::<PyDict>() {
-        return Ok(DagValue::Object(
+        return Ok(PythonValue::Object(
             mapping
                 .iter()
-                .map(|(key, item)| Ok((key_value(&key)?, dag_value(&item)?)))
+                .map(|(key, item)| Ok((key_value(&key)?, python_value(&item, dataclasses)?)))
                 .collect::<PyResult<_>>()?,
         ));
     }
     if let Ok(flag) = value.downcast::<PyBool>() {
-        return Ok(DagValue::Bool(flag.is_true()));
+        return Ok(PythonValue::Bool(flag.is_true()));
     }
     if value.is_instance_of::<PyInt>() {
         return integer_value(value);
     }
     if value.is_instance_of::<PyFloat>() {
-        return Ok(DagValue::Float(value.extract::<f64>()?));
+        return Ok(PythonValue::Float(value.extract::<f64>()?));
     }
     if let Ok(text) = value.downcast::<PyString>() {
         return text_value(text);
     }
-    Ok(DagValue::Unencodable(format!(
+    Ok(PythonValue::Unencodable(format!(
         "Object of type {} is not JSON serializable",
         type_name(value)?
     )))

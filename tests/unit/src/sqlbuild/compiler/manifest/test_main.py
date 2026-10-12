@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     LoadedMacro,
@@ -18,8 +20,7 @@ from sqlbuild.compiler.compile.types import (
 )
 from sqlbuild.compiler.compiled_project.main.project_with import project_with
 from sqlbuild.compiler.discovery.models import DiscoveredSqlHookFile, SqlHookEntry
-from sqlbuild.compiler.manifest._helpers.shared import build_fqn
-from sqlbuild.compiler.manifest.constants import DBT_MANIFEST_SCHEMA_VERSION
+from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.planner.models import AuditPlanEntry, ChainStep, PlanOutput, SqlTestPlanEntry
 from sqlbuild.compiler.scopes.models import (
     DeclarationIdentity,
@@ -33,6 +34,7 @@ from sqlbuild.spec.contracts.models import SchemaColumn, SourceColumnEntry
 from tests.unit.src.sqlbuild.compiler.manifest._test_types import (
     FqnTestCase,
     ManifestAuditNodeTestCase,
+    ManifestEncodingErrorTestCase,
     ManifestMacroNodeTestCase,
     ManifestModelNodeTestCase,
     ManifestParentMapTestCase,
@@ -61,6 +63,7 @@ from tests.unit.src.sqlbuild.compiler.manifest.helpers import (
 
 _PROJECT: str = "demo"
 _ADAPTER: str = "duckdb"
+_DBT_MANIFEST_SCHEMA_VERSION: str = "https://schemas.getdbt.com/dbt/manifest/v12.json"
 
 _MODEL_ORDERS: CompiledModelView = build_test_model(
     name="orders",
@@ -158,7 +161,7 @@ _SOURCE_FIXTURES: dict[str, Any] = {
             expected_macro_count=0,
             expected_metadata_project_name=_PROJECT,
             expected_metadata_adapter_type=_ADAPTER,
-            expected_metadata_schema_version=DBT_MANIFEST_SCHEMA_VERSION,
+            expected_metadata_schema_version=_DBT_MANIFEST_SCHEMA_VERSION,
         ),
         ManifestTopLevelTestCase(
             description="produces correct counts for multi-resource project",
@@ -179,7 +182,7 @@ _SOURCE_FIXTURES: dict[str, Any] = {
             expected_macro_count=0,
             expected_metadata_project_name=_PROJECT,
             expected_metadata_adapter_type=_ADAPTER,
-            expected_metadata_schema_version=DBT_MANIFEST_SCHEMA_VERSION,
+            expected_metadata_schema_version=_DBT_MANIFEST_SCHEMA_VERSION,
         ),
     ],
     ids=lambda case: case.description,
@@ -608,15 +611,23 @@ def test_given_seed_when_building_manifest_then_produces_correct_node(
     ],
     ids=lambda case: case.description,
 )
-def test_given_relative_path_when_building_fqn_then_returns_expected_parts(
+def test_given_relative_path_when_building_manifest_then_fqn_has_expected_parts(
     test_case: FqnTestCase,
 ) -> None:
-    result: list[str] = build_fqn(
-        project_name=test_case.project_name,
-        relative_path=Path(test_case.relative_path),
+    model: CompiledModelView = build_test_model(
+        name="orders", relative_path=test_case.relative_path
     )
 
-    assert result == test_case.expected_fqn
+    result: dict[str, Any] = run_manifest(
+        project=build_test_project(models=(model,)),
+        project_name=test_case.project_name,
+        adapter_type=_ADAPTER,
+        upstream_deps={},
+        downstream_deps={},
+    )
+
+    node: dict[str, Any] = manifest_nodes(result)[f"model.{test_case.project_name}.orders"]
+    assert node["fqn"] == test_case.expected_fqn
 
 
 @pytest.mark.parametrize(
@@ -1038,3 +1049,37 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
         "sqlbuild_resource_type": "sql_hook",
         "sqlbuild_hook_name": "record_access",
     }
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ManifestEncodingErrorTestCase(
+            description="unencodable meta value raises when the manifest is written",
+            meta={"owners": {"orders"}},
+            expected_message="Object of type set is not JSON serializable",
+        ),
+        ManifestEncodingErrorTestCase(
+            description="unencodable meta key raises when the manifest is written",
+            meta={("orders", 1): "owner"},
+            expected_message="keys must be str, int, float, bool or None, not tuple",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unencodable_meta_when_writing_manifest_then_raises_json_type_error(
+    test_case: ManifestEncodingErrorTestCase,
+) -> None:
+    model: CompiledModelView = build_test_model(
+        name="orders", meta=cast(dict[str, object], test_case.meta)
+    )
+    manifest: _native.NativeManifest = build_manifest(
+        project=build_test_project(models=(model,)),
+        project_name=_PROJECT,
+        adapter_type=_ADAPTER,
+        upstream_deps={},
+        downstream_deps={},
+    )
+
+    with pytest.raises(TypeError, match=re.escape(test_case.expected_message)):
+        manifest.contents()

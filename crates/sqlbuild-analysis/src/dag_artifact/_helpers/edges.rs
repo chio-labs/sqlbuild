@@ -6,7 +6,8 @@ use crate::dag_artifact::_helpers::nodes::{
     loader_or_source_id, node_id, python_node_id, sources_by_loader,
 };
 use crate::dag_artifact::_helpers::values::{object, text};
-use crate::dag_artifact::models::{DagProjectInput, DagPythonGraphInput, DagValue};
+use crate::dag_artifact::models::{DagProjectInput, DagPythonGraphInput};
+use crate::dag_artifact::types::DagValue;
 use crate::graph::models::ProjectGraph;
 
 /// Each Python node name's kind, as `nodes_by_name` maps it.

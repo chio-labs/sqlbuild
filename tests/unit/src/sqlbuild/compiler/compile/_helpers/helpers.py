@@ -1,4 +1,5 @@
 import itertools
+import json
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
@@ -59,6 +60,7 @@ from sqlbuild.compiler.lineage.types import (
     ColumnTransformKind,
     InferredNullability,
 )
+from sqlbuild.compiler.manifest.main.build import build_manifest
 from sqlbuild.compiler.model_loop.main._build_native_declaration_contexts import (
     build_native_declaration_contexts,
 )
@@ -482,3 +484,18 @@ def reanalysed_columns(
         profile=inference_profile or ExpressionInferenceProfile(),
         column_types_by_table=column_types_by_table,
     )[0]
+
+
+def manifest_model_node(*, project: CompiledProjectView, name: str) -> dict[str, object]:
+    """Build the project's manifest and return one model node from its published JSON."""
+
+    manifest: dict[str, dict[str, dict[str, object]]] = json.loads(
+        build_manifest(
+            project=project,
+            project_name="demo",
+            adapter_type="duckdb",
+            upstream_deps={},
+            downstream_deps={},
+        ).contents()
+    )
+    return manifest["nodes"][f"model.demo.{name}"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -69,10 +70,9 @@ def source_key(name: str) -> CompiledObjectKey:
 
 
 def run_manifest(**kwargs: Any) -> dict[str, Any]:
-    """Build a manifest and return it with Any typing for test convenience."""
+    """Build a manifest and return its parsed `manifest.json` contents."""
 
-    result: dict[str, object] = build_manifest(**kwargs)
-    return result  # type: ignore[return-value]
+    return json.loads(build_manifest(**kwargs).contents())
 
 
 def manifest_nodes(result: dict[str, Any]) -> dict[str, Any]:

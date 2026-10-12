@@ -78,7 +78,8 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineResult,
     ProjectGraph,
 )
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
+from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -793,6 +794,23 @@ def declared_relation_keys(rows: list[RelationKeyRow]) -> dict[str, list[list[st
 def build_dag_json(
     *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
 ) -> str: ...
+
+class _ManifestFacts(TypedDict):
+    project_name: str
+    adapter_type: str
+    generated_at: str
+    hook_identities: Mapping[str, PythonNodeIdentity]
+
+class NativeManifest:
+    def contents(self) -> bytes: ...
+
+def build_manifest(
+    *,
+    project: CompiledProjectView,
+    plan_output: PlanOutput | None,
+    graph: NativeProjectGraph,
+    facts: _ManifestFacts,
+) -> NativeManifest: ...
 
 class NativeProjectGraph:
     @staticmethod

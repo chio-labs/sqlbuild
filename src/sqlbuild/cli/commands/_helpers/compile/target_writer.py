@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Callable
 from functools import partial
@@ -78,7 +77,7 @@ def write_compile_target(
     target_dir: Path,
     adapter: BaseAdapter,
     plan_output: PlanOutput,
-    manifest: dict[str, object] | None = None,
+    manifest: _native.NativeManifest | None = None,
 ) -> WrittenTarget:
     """Write compiled output files under target_dir."""
 
@@ -115,7 +114,7 @@ def write_static_compile_target(
     target_dir: Path,
     adapter: BaseAdapter,
     project: CompiledProjectView,
-    manifest: dict[str, object] | None = None,
+    manifest: _native.NativeManifest | None = None,
     planned_tests: Callable[[], PlannedStaticSqlTests] | None = None,
 ) -> WrittenTarget:
     """Write offline compiled output files under target_dir, reusing SQL tests planned ahead."""
@@ -166,7 +165,7 @@ def publish_static_compile_target(
     *,
     prepared: WrittenTarget,
     target_dir: Path,
-    manifest: dict[str, object] | None,
+    manifest: _native.NativeManifest | None,
     expected_files: frozenset[str],
 ) -> WrittenTarget:
     """Publish staged files with the same unchanged-file and stale-file semantics."""
@@ -583,12 +582,12 @@ def _sql_test_artifact_diagnostics(
     )
 
 
-def _write_manifest(*, target_dir: Path, manifest: dict[str, object]) -> None:
+def _write_manifest(*, target_dir: Path, manifest: _native.NativeManifest) -> None:
     """Write manifest.json."""
 
     manifest_path: Path = target_dir / _MANIFEST_FILE
     batch: NativeArtifactBatch = NativeArtifactBatch(check_existing=True)
-    batch.queue(path=manifest_path, contents=(json.dumps(manifest, indent=2) + "\n").encode())
+    batch.queue(path=manifest_path, contents=manifest.contents())
     batch.flush()
 
 

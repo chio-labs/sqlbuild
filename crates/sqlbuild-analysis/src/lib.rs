@@ -13,6 +13,8 @@ pub mod dag_artifact;
 pub mod explicit_references;
 pub mod graph;
 pub mod lineage;
+pub mod manifest;
+pub mod python_values;
 pub mod query_analysis;
 pub mod relation_names;
 pub mod required_columns;
