@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlbuild.compiler.compile.models import SqlReferenceSourceMap
-
 
 @dataclass(frozen=True)
 class CraftedReferenceTestCase:
@@ -23,18 +21,6 @@ class ReferenceExtractionTestCase:
     sql: str
     expected_references: tuple[tuple[str, str, str | None, int | None], ...] = ()
     expected_error: str = ""
-    expected_native_calls: int = 0
-
-
-@dataclass(frozen=True)
-class NativeReferenceErrorTestCase:
-    """Expanded SQL whose native error is located through its source map without Python."""
-
-    description: str
-    sql: str
-    contents: str
-    source_map: SqlReferenceSourceMap | None
-    expected_message: str
 
 
 @dataclass(frozen=True)

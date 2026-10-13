@@ -499,26 +499,6 @@ class SqlReferenceScan:
 
 
 @dataclass(frozen=True)
-class SqlReferenceSourceMap:
-    """Where the authored body starts in its file and the expansion passes from it to the SQL."""
-
-    body_start: Callable[[], int | None]
-    passes: tuple[tuple[ExpansionSpan, ...], ...]
-
-
-@dataclass(frozen=True)
-class SqlReferenceOrigin:
-    """The authored file that SQL handed to reference extraction came from."""
-
-    file_path: Path
-    relative_path: Path
-    contents: str
-    resource_type: CompiledResourceType | None = None
-    resource_name: str | None = None
-    source_map: SqlReferenceSourceMap | None = None
-
-
-@dataclass(frozen=True)
 class CompiledLineageSourceFact:
     """Compact upstream column fact extracted during SQL analysis."""
 
