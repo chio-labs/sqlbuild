@@ -16,6 +16,7 @@ from typing import Any
 import sqlbuild._native as _native
 from sqlbuild._native import (
     project_with,
+    with_duplicate_literal_hints,
 )
 from sqlbuild.compiler.compile.constants import MACRO_TOKEN
 from sqlbuild.compiler.compile.models import (
@@ -63,7 +64,6 @@ from sqlbuild.rule_engine._helpers.engine.native import (
 )
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
-from sqlbuild.rule_engine._helpers.run.literal_duplicates import with_duplicate_literal_hints
 from sqlbuild.rule_engine._helpers.run.memory import release_freed_memory
 from sqlbuild.rule_engine.constants import SQL_RULES_CACHE_FILE, TYPE_PROOF_RULE_CODES
 from sqlbuild.rule_engine.exceptions import RulesError

@@ -208,6 +208,7 @@ from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.rule_engine.models import Finding, RulesResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
@@ -2738,6 +2739,10 @@ def _oracle_yaml_load(text: str) -> str: ...
 def _oracle_toml_load(text: str) -> str: ...
 
 # Discovery: header values and authored locations.
+def format_rules_result(*, result: RulesResult, json_output: bool) -> str: ...
+def with_duplicate_literal_hints(
+    *, findings: tuple[Finding, ...], project_dir: Path
+) -> tuple[Finding, ...]: ...
 def scan_headers(*, contents: str, first_only: bool = False) -> tuple[HeaderSpan, ...]: ...
 def sql_body_ranges(
     *, contents: str, headers: tuple[HeaderSpan, ...]

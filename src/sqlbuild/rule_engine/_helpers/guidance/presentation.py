@@ -2,69 +2,10 @@
 
 from __future__ import annotations
 
-import json
-
 from sqlbuild.rule_engine._helpers.guidance.thresholds import format_threshold_lines
-from sqlbuild.rule_engine.constants import RULE_FIX_AVAILABLE_NOTE
-from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult
+from sqlbuild.rule_engine.models import Rule, RulesConfig
 
 _MINIMUM_RULES_CODES: frozenset[str] = frozenset({"SQBRTEST201", "SQBRTEST202"})
-
-
-def format_result_text(*, result: RulesResult) -> str:
-    if not result.findings:
-        return (
-            f"Rules passed: {result.evaluated_models} models evaluated, 0 findings "
-            f"({result.cache_hits} cache hits, {result.cache_misses} misses)"
-        )
-    blocks: list[str] = []
-    for finding in result.findings:
-        blocks.append(
-            f"{finding.path}:{finding.line}:{finding.column} "
-            f"[{finding.code}] {finding.message}\n"
-            f"  Remediation: {finding.remediation}"
-        )
-        if finding.affected_rules:
-            blocks.append(f"  Affected Rules: {', '.join(finding.affected_rules)}")
-        if finding.fixable:
-            blocks.append(f"  {RULE_FIX_AVAILABLE_NOTE}")
-    blocks.append(f"Found {len(result.findings)} Rules findings")
-    if result.unevaluated_resources:
-        blocks.append(
-            f"{result.evaluated_models} models evaluated, "
-            f"{result.unevaluated_resources} resources could not be evaluated"
-        )
-    return "\n".join(blocks)
-
-
-def format_result_json(*, result: RulesResult) -> str:
-    findings: list[dict[str, object]] = []
-    for finding in result.findings:
-        findings.append(
-            {
-                "code": finding.code,
-                "path": finding.path.as_posix(),
-                "line": finding.line,
-                "column": finding.column,
-                "message": finding.message,
-                "remediation": finding.remediation,
-                **(
-                    {"affected_rules": list(finding.affected_rules)}
-                    if finding.affected_rules
-                    else {}
-                ),
-                **({"fixable": True} if finding.fixable else {}),
-            }
-        )
-    payload: dict[str, object] = {
-        "evaluated_models": result.evaluated_models,
-        "unevaluated_resources": result.unevaluated_resources,
-        "cache_hits": result.cache_hits,
-        "cache_misses": result.cache_misses,
-        "finding_count": len(result.findings),
-        "findings": findings,
-    }
-    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def format_rule_text(*, rule: Rule, config: RulesConfig | None = None) -> str:
