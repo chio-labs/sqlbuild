@@ -438,9 +438,9 @@ const DIFF_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const DIFF_ROUTE: Route = routed(
     "run_diff",
-    ("sqlbuild.cli.commands.main.inspection._diff", "run_diff"),
+    ("sqlbuild._native", "run_diff_command"),
     &DIFF_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const QUERY_ARGUMENTS: [Field; 6] = [

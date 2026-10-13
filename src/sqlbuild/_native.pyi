@@ -27,6 +27,7 @@ from sqlbuild.cli.commands.models import (
     LineageCommandRequest,
     LoadCommandRequest,
     PlaygroundCommandRequest,
+    QueryDiffPreparation,
     RefactorCommandRequest,
     ScopeCommandRequest,
     TestCommandRequest,
@@ -1538,16 +1539,6 @@ def render_diff_output(
     suppress_example_values: bool = ...,
     outcome: str | None = ...,
 ) -> str: ...
-def render_diff_json_output(
-    *,
-    result: DiffExecutionResult,
-    from_label: str,
-    to_label: str,
-    max_value_length: int | None = ...,
-    suppress_example_values: bool = ...,
-    phase_seconds: dict[str, float] | None = ...,
-    outcome: str | None = ...,
-) -> str: ...
 def render_diff_error_json(
     *,
     status: str,
@@ -1556,20 +1547,10 @@ def render_diff_error_json(
     help_text: str | None = ...,
     size_guard: dict[str, object] | None = ...,
 ) -> str: ...
-def write_diff_output(
-    *,
-    request: DiffCommandRequest,
-    from_label: str,
-    to_label: str,
-    max_column_examples: int,
-    max_row_only_examples: int,
-    result: DiffExecutionResult,
-    phase_seconds: dict[str, float] | None = ...,
-    outcome: str | None = ...,
-) -> None: ...
-def resolve_diff_outcome(
-    *, result: DiffExecutionResult, query_row_comparison: bool = ...
-) -> tuple[str, int]: ...
+def run_diff_command(*, request: DiffCommandRequest) -> int: ...
+def execute_query_diff(
+    *, request: DiffCommandRequest, preparation: QueryDiffPreparation
+) -> DiffExecutionResult: ...
 def machine_output_mode(args: CliNamespace, /) -> bool: ...
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 

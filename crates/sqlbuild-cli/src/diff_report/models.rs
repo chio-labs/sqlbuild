@@ -130,3 +130,76 @@ pub(crate) struct RenderedValue {
     pub(crate) suppressed: bool,
     pub(crate) first_difference: Option<usize>,
 }
+
+/// The `sqb diff` flags that request validation reads.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DiffRequestFacts {
+    pub from_name: Option<String>,
+    pub to_name: Option<String>,
+    pub full: bool,
+    pub schema_only: bool,
+    pub bounded: Option<String>,
+    pub max_column_examples: Option<i64>,
+    pub max_row_only_examples: Option<i64>,
+    pub sample_rows: Option<i64>,
+    pub sample_seed: Option<i64>,
+    pub exhaustive: bool,
+    pub max_models: Option<i64>,
+    pub max_columns: Option<i64>,
+    pub max_value_length: Option<i64>,
+    pub full_example_values: bool,
+    pub suppress_example_values: bool,
+    pub select: Vec<String>,
+    pub exclude: Vec<String>,
+    pub selected_target: Option<String>,
+    pub left_query: bool,
+    pub left_query_file: bool,
+    pub right_query: bool,
+    pub right_query_file: bool,
+    pub left_label: Option<String>,
+    pub right_label: Option<String>,
+    pub unique_key_override: Vec<String>,
+    pub unkeyed: bool,
+    pub excluded_columns_override: Vec<String>,
+    pub tolerance_overrides: Vec<String>,
+    /// `json.dumps(cli_vars, sort_keys=True)` when variables were passed.
+    pub cli_vars_json: Option<String>,
+    pub project_dir: Option<String>,
+}
+
+/// One side of a model the default full diff refused to compare.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FullDiffSideFacts {
+    pub target: String,
+    pub relation: String,
+    pub row_count: Option<i64>,
+    pub max_rows: Option<i64>,
+    pub exceeds_limit: bool,
+    pub detail: Option<String>,
+}
+
+/// One model blocked by the default full diff size guard.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FullDiffModelFacts {
+    pub name: String,
+    pub has_cursor: bool,
+    pub left: FullDiffSideFacts,
+    pub right: FullDiffSideFacts,
+}
+
+/// The C270 size-guard error: message, help and machine-readable details.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SizeGuardReport {
+    pub message: String,
+    pub help: String,
+    pub details: JsonValue,
+}
+
+/// The parsed shape of one raw diff query: expression kinds, lowercased, and write clauses.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct QueryShapeFacts {
+    pub root_key: String,
+    pub node_keys: Vec<String>,
+    /// The root expression has an `INTO` target or row-locking clauses.
+    pub writes_or_locks: bool,
+}

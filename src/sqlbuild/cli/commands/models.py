@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, TextIO
 
 from sqlbuild.cli.commands.types import (
     PlaygroundTemplate,
@@ -62,7 +62,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
     from sqlbuild.compiler.refactoring.models import RefactorProject
     from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-    from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
     from sqlbuild.executor.janitor.models import JanitorPlan
     from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
     from sqlbuild.integrations.dbt.models import DbtInitRequest
@@ -408,30 +407,6 @@ class DiffCommandRequest:
 
 
 @dataclass(frozen=True)
-class DiffInvocation:
-    """Resolved project discovery and mode for diff."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-
-
-@dataclass(frozen=True)
-class DirectDiffPreparation:
-    """Resolved direct diff adapter and compiled target projects."""
-
-    from_target: str
-    to_target: str
-    adapter: BaseAdapter
-    left_project: Any
-    right_project: Any
-    selected_names: tuple[str, ...]
-    connection_config: dict[str, object]
-    effective_max_column_examples: int
-    effective_max_row_only_examples: int
-    full_size_limits: FullDiffSizeLimits | None = None
-
-
-@dataclass(frozen=True)
 class QueryDiffPreparation:
     """Resolved raw-query diff adapter, connection, SQL, and limits."""
 
@@ -448,16 +423,6 @@ class QueryDiffPreparation:
     artifact_ttl: str
     effective_max_column_examples: int
     effective_max_row_only_examples: int
-
-
-@dataclass(frozen=True)
-class QueryDiffRunOutcome:
-    """Raw-query result plus measured lifecycle phase durations."""
-
-    result: DiffExecutionResult
-    phase_seconds: dict[str, float]
-    outcome: str
-    exit_code: int
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,6 @@ use pyo3::prelude::{
     wrap_pyfunction,
 };
 use pyo3::types::{PyDict, PyDictMethods};
-use sqlbuild_cli::diff_report::main::diff_exit_code::diff_exit_code;
 use sqlbuild_cli::diff_report::main::render_diff_error_json::render_diff_error_json as error_document;
 use sqlbuild_cli::diff_report::main::render_diff_json::render_diff_json;
 use sqlbuild_cli::diff_report::main::render_diff_text::render_diff_text;
@@ -14,8 +13,12 @@ use sqlbuild_cli::diff_report::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::diff_report::command::{
+    execute_prepared_query_diff, run_diff_command,
+};
 use crate::bindings::_helpers::diff_report::facts::{diff_facts, json_of};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
+use sqlbuild_cli::diff_report::types::PhaseSeconds;
 
 const DEFAULT_MAX_VALUE_LENGTH: usize = 160;
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
@@ -32,29 +35,8 @@ const TEXT_OPTIONS: (&[&str], &[&str]) = (
     ],
     &["max_value_length", "suppress_example_values", "outcome"],
 );
-const JSON_OPTIONS: (&[&str], &[&str]) = (
-    &["result", "from_label", "to_label"],
-    &[
-        "max_value_length",
-        "suppress_example_values",
-        "phase_seconds",
-        "outcome",
-    ],
-);
 const ERROR_OPTIONS: (&[&str], &[&str]) =
     (&["status", "code", "message"], &["help_text", "size_guard"]);
-const WRITE_OPTIONS: (&[&str], &[&str]) = (
-    &[
-        "request",
-        "from_label",
-        "to_label",
-        "max_column_examples",
-        "max_row_only_examples",
-        "result",
-    ],
-    &["phase_seconds", "outcome"],
-);
-const EXIT_OPTIONS: (&[&str], &[&str]) = (&["result"], &["query_row_comparison"]);
 
 fn optional_string(value: Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if value.is_none() {
@@ -132,19 +114,6 @@ fn render_diff_output(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyR
     ))
 }
 
-/// Render one stable structured diff document.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn render_diff_json_output(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
-    let arguments: KeywordArguments<'_> =
-        KeywordArguments::read(py, "render_diff_json_output", options, JSON_OPTIONS)?;
-    let models: Vec<DiffModelFacts> = diff_facts(&arguments.value("result")?)?;
-    json_text(
-        &models,
-        &document_options(&arguments, example_options(&arguments)?)?,
-    )
-}
-
 /// Render a machine-readable incomplete or execution-failure outcome.
 #[pyfunction]
 #[pyo3(signature = (**options))]
@@ -183,12 +152,13 @@ fn write_stdout(py: Python<'_>, text: &str) -> PyResult<()> {
 }
 
 /// Write the requested JSON file, then print the JSON document or the terminal summary.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn write_diff_output(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
-    let arguments: KeywordArguments<'_> =
-        KeywordArguments::read(py, "write_diff_output", options, WRITE_OPTIONS)?;
-    let request: Bound<'_, PyAny> = arguments.value("request")?;
+pub(crate) fn publish_diff_output(
+    request: &Bound<'_, PyAny>,
+    (from_label, to_label): (&str, &str),
+    (max_column_examples, max_row_only_examples): (i64, i64),
+    (models, phase_seconds, outcome): (&[DiffModelFacts], Option<PhaseSeconds>, Option<String>),
+) -> PyResult<()> {
+    let py: Python<'_> = request.py();
     let max_value_length: Bound<'_, PyAny> = request.getattr("max_value_length")?;
     let examples: DiffExampleOptions = DiffExampleOptions {
         max_value_length: if request.getattr("full_example_values")?.is_truthy()? {
@@ -200,8 +170,13 @@ fn write_diff_output(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRe
         },
         suppress_values: request.getattr("suppress_example_values")?.is_truthy()?,
     };
-    let document: DiffDocumentOptions = document_options(&arguments, examples)?;
-    let models: Vec<DiffModelFacts> = diff_facts(&arguments.value("result")?)?;
+    let document: DiffDocumentOptions = DiffDocumentOptions {
+        from_label: from_label.to_owned(),
+        to_label: to_label.to_owned(),
+        examples,
+        outcome,
+        phase_seconds,
+    };
     let path: Bound<'_, PyAny> = request.getattr("json_output_path")?;
     if !path.is_none() {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
@@ -213,12 +188,12 @@ fn write_diff_output(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRe
         encoding.set_item("encoding", "utf-8")?;
         path.call_method(
             "write_text",
-            (format!("{}\n", json_text(&models, &document)?),),
+            (format!("{}\n", json_text(models, &document)?),),
             Some(&encoding),
         )?;
     }
     if request.getattr("json_output")?.is_truthy()? {
-        return write_stdout(py, &json_text(&models, &document)?);
+        return write_stdout(py, &json_text(models, &document)?);
     }
     let use_color: bool = !request.getattr("no_color")?.is_truthy()?
         && imported(py, COLOR_MODULE, "supports_color")?
@@ -227,39 +202,22 @@ fn write_diff_output(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRe
     write_stdout(
         py,
         &render_diff_text(
-            &models,
+            models,
             &document,
             &DiffTextOptions {
-                mode_label: mode_label(&request)?,
+                mode_label: mode_label(request)?,
                 use_color,
                 verbose: request.getattr("verbose")?.is_truthy()?,
-                max_column_examples: arguments.value("max_column_examples")?.extract()?,
-                max_row_only_examples: arguments.value("max_row_only_examples")?.extract()?,
+                max_column_examples: usize::try_from(max_column_examples).unwrap_or_default(),
+                max_row_only_examples: usize::try_from(max_row_only_examples).unwrap_or_default(),
             },
         ),
     )
 }
 
-/// `(outcome, exit_code)` of a finished diff, with query row-comparison semantics on request.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn resolve_diff_outcome(
-    py: Python<'_>,
-    options: Option<Bound<'_, PyDict>>,
-) -> PyResult<(String, i32)> {
-    let arguments: KeywordArguments<'_> =
-        KeywordArguments::read(py, "resolve_diff_outcome", options, EXIT_OPTIONS)?;
-    let models: Vec<DiffModelFacts> = diff_facts(&arguments.value("result")?)?;
-    Ok(diff_exit_code(
-        &models,
-        arguments.flag("query_row_comparison")?,
-    ))
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(render_diff_output, module)?)?;
-    module.add_function(wrap_pyfunction!(render_diff_json_output, module)?)?;
     module.add_function(wrap_pyfunction!(render_diff_error_json, module)?)?;
-    module.add_function(wrap_pyfunction!(write_diff_output, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_diff_outcome, module)?)
+    module.add_function(wrap_pyfunction!(run_diff_command, module)?)?;
+    module.add_function(wrap_pyfunction!(execute_prepared_query_diff, module)?)
 }

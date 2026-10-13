@@ -1,6 +1,6 @@
 use sqlbuild_core::json::errors::JsonEmitError;
 
-use crate::diff_report::models::{DiffExampleOptions, DiffModelFacts};
+use crate::diff_report::models::{DiffExampleOptions, DiffModelFacts, DiffRequestFacts};
 
 /// Two unequal values, how they render, and what the rendering reports.
 pub(crate) struct EvidenceTestCase {
@@ -41,4 +41,36 @@ pub(crate) struct JsonTestCase {
     pub(crate) description: &'static str,
     pub(crate) document: Result<String, JsonEmitError>,
     pub(crate) expected_fragment: &'static str,
+}
+
+/// A positional target range and its parsed targets or error code.
+pub(crate) struct NameRangeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) range: &'static str,
+    pub(crate) expected_targets: Result<(String, Option<String>), String>,
+}
+
+/// Request flags and the code of the first rule they violate.
+pub(crate) struct RequestTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) request: DiffRequestFacts,
+    pub(crate) expected_code: Option<&'static str>,
+}
+
+/// A blocked model's request scope and the guard's replacement commands.
+pub(crate) struct SizeGuardTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) request: DiffRequestFacts,
+    pub(crate) has_cursor: bool,
+    pub(crate) expected_full: &'static str,
+    pub(crate) expected_bounded: Option<&'static str>,
+    pub(crate) expected_fragments: &'static [&'static str],
+}
+
+/// Query columns, a column limit and the preflight error code.
+pub(crate) struct ColumnsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) columns: &'static [&'static str],
+    pub(crate) max_columns: Option<i64>,
+    pub(crate) expected_outcome: Result<(), (&'static str, &'static str)>,
 }

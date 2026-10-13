@@ -1,8 +1,10 @@
 //! `sqb` command dispatch: the native route table applied to a parsed namespace.
 
+use crate::bindings::_helpers::diff_report::support::cli_error;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use sqlbuild_cli::diff_report::main::parse_diff_name_range::parse_diff_name_range;
 use sqlbuild_cli::dispatch::main::command_dispatch::command_dispatch;
 use sqlbuild_cli::dispatch::main::unavailable_handler::unavailable_handler;
 use sqlbuild_cli::dispatch::models::{
@@ -17,7 +19,6 @@ const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
 const WAREHOUSES_MODULE: &str = "sqlbuild._native";
 const WAREHOUSE_SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const LAUNCH_RECORD_MODULE: &str = "sqlbuild.cli.entry.main._withhold_launch_record";
-const DIFF_VALIDATION_MODULE: &str = "sqlbuild.cli.commands._helpers.diff.validation";
 const FORMAT_PATHS_MODULE: &str = "sqlbuild.cli.commands._helpers.lint.positional_paths";
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";
@@ -121,13 +122,13 @@ impl<'py> Invocation<'py> {
         if range.is_none() {
             return Ok(range);
         }
-        let parsed: Bound<'py, PyAny> =
-            imported(self.py(), DIFF_VALIDATION_MODULE, "parse_diff_name_range")?
-                .call1((range,))?;
-        parsed.get_item(match side {
-            DiffSide::From => 0,
-            DiffSide::To => 1,
-        })
+        let py: Python<'py> = self.py();
+        let (from_name, to_name) = parse_diff_name_range(&range.extract::<String>()?)
+            .map_err(|error| cli_error(py, "CliUserError", &error))?;
+        match side {
+            DiffSide::From => from_name.into_bound_py_any(py),
+            DiffSide::To => to_name.into_bound_py_any(py),
+        }
     }
 
     fn fields(&self, fields: &[Field]) -> PyResult<Bound<'py, PyDict>> {

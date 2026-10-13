@@ -1,3 +1,5 @@
+#[path = "tests/test_command.rs"]
+mod command;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_render.rs"]

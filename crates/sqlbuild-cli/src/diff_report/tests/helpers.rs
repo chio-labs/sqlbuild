@@ -1,8 +1,8 @@
 use sqlbuild_core::json::models::JsonValue;
 
 use crate::diff_report::models::{
-    DiffColumnFacts, DiffDocumentOptions, DiffExampleOptions, DiffModelFacts, DiffRowFacts,
-    DiffValue,
+    DiffColumnFacts, DiffDocumentOptions, DiffExampleOptions, DiffModelFacts, DiffRequestFacts,
+    DiffRowFacts, DiffValue, FullDiffModelFacts, FullDiffSideFacts,
 };
 
 pub(crate) fn changed_rows(unequal: i64) -> DiffRowFacts {
@@ -61,4 +61,37 @@ pub(crate) fn cursor_rows() -> DiffRowFacts {
         }),
         ..changed_rows(1)
     }
+}
+
+pub(crate) fn request(build: impl FnOnce(&mut DiffRequestFacts)) -> DiffRequestFacts {
+    let mut facts: DiffRequestFacts = DiffRequestFacts::default();
+    build(&mut facts);
+    facts
+}
+
+pub(crate) fn blocked_orders(has_cursor: bool) -> Vec<FullDiffModelFacts> {
+    vec![FullDiffModelFacts {
+        name: "orders".to_owned(),
+        has_cursor,
+        left: FullDiffSideFacts {
+            target: "prod".to_owned(),
+            relation: "prod.orders".to_owned(),
+            row_count: Some(12_500_000),
+            max_rows: Some(10_000_000),
+            exceeds_limit: true,
+            detail: None,
+        },
+        right: FullDiffSideFacts {
+            target: "dev".to_owned(),
+            relation: "dev.orders".to_owned(),
+            row_count: None,
+            max_rows: Some(10_000_000),
+            exceeds_limit: true,
+            detail: Some("no row count (view)".to_owned()),
+        },
+    }]
+}
+
+pub(crate) fn strings(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
 }
