@@ -1,8 +1,12 @@
-//! Register the native `sqb` argument parsing and command dispatch.
+//! Register the native `sqb` argument parsing, command dispatch and command handlers.
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::cli::{argv, entry, progress, progress_reporters, progress_text};
+use crate::bindings::_helpers::{
+    clone, command_runtime, cost_report, dbt_interop, debug_command, freshness, janitor, load,
+    presentation_text, result_output, workspace_commands,
+};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     argv::register(module)?;
@@ -10,5 +14,16 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     progress::register(module)?;
     progress_reporters::register(module)?;
     progress_text::register(module)?;
+    janitor::registration::register(module)?;
+    freshness::registration::register(module)?;
+    clone::registration::register(module)?;
+    load::registration::register(module)?;
+    result_output::registration::register(module)?;
+    cost_report::registration::register(module)?;
+    debug_command::registration::register(module)?;
+    dbt_interop::registration::register(module)?;
+    command_runtime::registration::register(module)?;
+    presentation_text::registration::register(module)?;
+    workspace_commands::registration::register(module)?;
     Ok(())
 }
