@@ -1080,3 +1080,12 @@ class BuildManifestTestCase:
     description: str
     model_count: int
     expected_test_type: str
+
+
+@dataclass(frozen=True)
+class SqlRuleCacheSequenceTestCase:
+    """Compiles after each `(project toml, model SQL)` step and the cache counts each reports."""
+
+    description: str
+    steps: tuple[tuple[str, str], ...]
+    expected_hits_and_misses: tuple[tuple[int, int], ...]

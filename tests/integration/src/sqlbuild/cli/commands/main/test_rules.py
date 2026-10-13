@@ -32,6 +32,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     NumericRangeDecisionIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
+    SqlRuleCacheSequenceTestCase,
     TypedContractRuleIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
@@ -40,6 +41,16 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     compile_findings,
     write_project_files,
 )
+
+_CACHE_RULES_TOML: str = 'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n'
+_CACHE_THRESHOLD_TOML: str = _CACHE_RULES_TOML + "thresholds = { max_literal_length = 7 }\n"
+_CACHE_POLICY_TOML: str = _CACHE_THRESHOLD_TOML + "allow_exceptions = false\n"
+_CACHE_SELECTION_TOML: str = _CACHE_POLICY_TOML.replace(
+    '"SQBRSQL004"', '"SQBRSQL004", "SQBRSQL001"'
+)
+_CACHE_MODEL_SQL: str = 'MODEL (description "Orders");\nSELECT order_id FROM orders LIMIT 1\n'
+_CACHE_EDITED_SQL: str = _CACHE_MODEL_SQL.replace("LIMIT 1", "LIMIT 2")
+
 
 _EARLY_LINT_STOP_TIMEOUT_S: float = 30.0
 _EARLY_LINT_FINDINGS: tuple[tuple[str, str, int | None, int | None], ...] = (
@@ -671,7 +682,6 @@ def test_given_sql_rule_cache_from_another_native_build_when_compiling_then_rule
     test_case: RulesIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
@@ -687,11 +697,10 @@ def test_given_sql_rule_cache_from_another_native_build_when_compiling_then_rule
 
     cold_exit: int = main(command)
     cold: dict[str, object] = json.loads(capsys.readouterr().out)
-    monkeypatch.setattr(
-        rules_module,
-        "_RULES_BUILD_IDENTITY",
-        f"{rules_module._RULES_BUILD_IDENTITY}-rebuilt",
-    )
+    cache_path: Path = rules_module._sql_rule_cache_path(tmp_path)
+    stored: dict[str, object] = json.loads(cache_path.read_text(encoding="utf-8"))
+    stored["build_identity"] = f"{stored['build_identity']}-rebuilt"
+    cache_path.write_text(json.dumps(stored), encoding="utf-8")
     rebuilt_exit: int = main(command)
     rebuilt: dict[str, object] = json.loads(capsys.readouterr().out)
     warm_exit: int = main(command)
@@ -976,14 +985,15 @@ def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_
     test_case: EarlyLintInputsTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_project_files(project_dir=tmp_path, files=EARLY_LINT_PROJECT_FILES)
-    with monkeypatch.context() as previous_build:
-        previous_build.setattr(rules_module, "_RULES_BUILD_IDENTITY", "previous-build")
-        previous_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
-            project_dir=tmp_path, capsys=capsys
-        )
+    previous_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
+        project_dir=tmp_path, capsys=capsys
+    )
+    cache_path: Path = rules_module._sql_rule_cache_path(tmp_path)
+    stored: dict[str, object] = json.loads(cache_path.read_text(encoding="utf-8"))
+    stored["build_identity"] = "previous-build"
+    cache_path.write_text(json.dumps(stored), encoding="utf-8")
     upgraded_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
         project_dir=tmp_path, capsys=capsys
     )
@@ -2788,3 +2798,52 @@ def required_prefix(*, model: Model, ctx: RuleContext) -> list[Finding]:
 
     assert exit_code == test_case.expected_exit_code
     assert payload["diagnostics"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlRuleCacheSequenceTestCase(
+            description="cold misses, warm hits and each SQL rule input edit misses",
+            steps=(
+                (_CACHE_RULES_TOML, _CACHE_MODEL_SQL),
+                (_CACHE_RULES_TOML, _CACHE_MODEL_SQL),
+                (_CACHE_RULES_TOML, _CACHE_EDITED_SQL),
+                (_CACHE_RULES_TOML, _CACHE_EDITED_SQL),
+                (_CACHE_THRESHOLD_TOML, _CACHE_EDITED_SQL),
+                (_CACHE_POLICY_TOML, _CACHE_EDITED_SQL),
+                (_CACHE_SELECTION_TOML, _CACHE_EDITED_SQL),
+                (_CACHE_SELECTION_TOML, _CACHE_EDITED_SQL),
+            ),
+            expected_hits_and_misses=(
+                (0, 1),
+                (1, 0),
+                (0, 1),
+                (1, 0),
+                (0, 1),
+                (0, 1),
+                (0, 1),
+                (1, 0),
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_rule_cache_when_inputs_change_then_only_unchanged_runs_hit(
+    test_case: SqlRuleCacheSequenceTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    observed: list[tuple[int, int]] = []
+    for project_toml, model_sql in test_case.steps:
+        (tmp_path / "sqlbuild_project.toml").write_text(project_toml, encoding="utf-8")
+        model.write_text(model_sql, encoding="utf-8")
+        _ = main(["--project-dir", str(tmp_path), "compile", "--json"])
+        timings: dict[str, int] = cast(
+            dict[str, int], json.loads(capsys.readouterr().out)["compile_timings"]
+        )
+        observed.append((timings["rule_cache_hits"], timings["rule_cache_misses"]))
+
+    assert tuple(observed) == test_case.expected_hits_and_misses

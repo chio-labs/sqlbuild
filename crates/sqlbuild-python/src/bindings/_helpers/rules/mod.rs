@@ -6,4 +6,5 @@ pub(crate) mod registration;
 pub(crate) mod relation_keys;
 pub(crate) mod results;
 pub(crate) mod rows;
+pub(crate) mod rule_cache;
 pub(crate) mod skills;
