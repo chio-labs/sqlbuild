@@ -144,6 +144,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(with_model_migration_json, module)?)?;
     module.add_function(wrap_pyfunction!(commit_refactor_plan_json, module)?)?;
     crate::bindings::_helpers::refactor::contract_edits::register(module)?;
+    crate::bindings::_helpers::refactor::contract_compare::register(module)?;
     crate::bindings::_helpers::refactor::python_strings::register(module)?;
     Ok(())
 }

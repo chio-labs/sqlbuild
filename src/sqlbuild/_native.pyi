@@ -8,7 +8,7 @@ from _typeshed import SupportsRichComparison
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile, RelationInfo
 from sqlbuild.adapter.contract.types import (
     AdapterExecute,
     FrameworkType,
@@ -81,6 +81,7 @@ from sqlbuild.compiler.compile.types import (
     SourceInput,
     TypedSqlValueRenderer,
 )
+from sqlbuild.compiler.contract_adoption.models import ContractEvidence, ContractFinding
 from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
@@ -1768,21 +1769,6 @@ def select_latest_fingerprints(
 def glob_name_match(name: str, pattern: str, ignore_case: bool, /) -> bool: ...
 def lone_surrogate_site(raw_values: dict[str, object], /) -> tuple[str, str, int] | None: ...
 def environment_template_names(values: list[str | None], /) -> list[str]: ...
-def contract_model_edit(
-    row: tuple[
-        str,
-        str,
-        bool,
-        list[tuple[str, str | None, str | None]],
-        list[str | None],
-        list[tuple[str, str]],
-        bool,
-    ],
-    /,
-) -> tuple[str | None, str | None, str | None]: ...
-def contract_source_edit(
-    row: tuple[str, str, str, list[tuple[str, str | None]], list[tuple[str, str]], bool], /
-) -> tuple[str | None, str | None, str | None]: ...
 def python_string_locations(
     contents: str, names: list[str], context: str | None
 ) -> list[tuple[int, int]]: ...
@@ -2122,6 +2108,32 @@ def semantic_metadata_diagnostics(
 ) -> tuple[Any, ...]: ...
 
 # Native analysis: contracts.
+def compare_contracts(
+    *,
+    adapter: BaseAdapter,
+    connection: object,
+    models: tuple[CompiledModelView, ...],
+    sources: tuple[CompiledSourceView, ...],
+) -> tuple[ContractEvidence, ...]: ...
+def compare_contract_evidence(
+    *,
+    item: ContractEvidence,
+    physical_columns: tuple[ColumnInfo, ...] | None,
+    adapter: BaseAdapter,
+) -> ContractEvidence: ...
+def edit_contract_model(
+    *, model: CompiledModelView, physical_columns: tuple[ColumnInfo, ...], overwrite: bool
+) -> tuple[str | None, str | None]: ...
+def edit_contract_source(
+    *,
+    source: CompiledSourceView,
+    physical_columns: tuple[ColumnInfo, ...],
+    overwrite: bool,
+    contents: str | None = None,
+) -> tuple[str | None, str | None]: ...
+def remaining_contract_findings(
+    *, findings: tuple[ContractFinding, ...], overwrite: bool, conflict: str | None
+) -> tuple[ContractFinding, ...]: ...
 def evaluate_model_contracts(
     *, project: CompiledProjectView, dialect: TypeDialect | str | None = None
 ) -> ContractValidationResult: ...
