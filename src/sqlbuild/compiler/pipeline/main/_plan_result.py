@@ -14,11 +14,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
-    build_deferred_locations,
-    gather_deferred_relations,
-    resolve_deferred_target_config,
-)
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline._helpers.python_plan_entries import (
     build_python_run_plan_outputs,
@@ -60,12 +55,12 @@ def build_pipeline_result(
     deferred_locations: dict[str, CompiledRelationLocation] | None = None
     deferred_relations: dict[str, RelationInfo] | None = None
     if options.defer_to is not None:
-        deferred_target_config: TargetConfig = resolve_deferred_target_config(
+        deferred_target_config: TargetConfig = _native.resolve_deferred_target_config(
             discovered_inputs=discovered_inputs,
             defer_to=options.defer_to,
             current_target_name=project.effective_target_name,
         )
-        deferred_locations = build_deferred_locations(
+        deferred_locations = _native.build_deferred_locations(
             project=project,
             deferred_target_config=deferred_target_config,
             effective_vars=project.effective_vars,
@@ -73,7 +68,7 @@ def build_pipeline_result(
             default_database=adapter.default_database(),
             render_qualified_name=adapter.render_qualified_name,
         )
-        deferred_relations = gather_deferred_relations(
+        deferred_relations = _native.gather_deferred_relations(
             adapter=adapter,
             connection=connection,
             deferred_locations=deferred_locations,

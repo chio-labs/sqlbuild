@@ -8,14 +8,14 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import (
+    resolve_model_deferral_inputs,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.main.execution.command_warehouse import apply_command_warehouse
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.resolve_model_deferral_inputs import (
-    resolve_model_deferral_inputs,
-)
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.execution.display_plan import build_display_only_sqlbuild_plan
 from sqlbuild.compiler.planner.main.execution.execution import build_execution_plan

@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import (
+    build_compiled_project,
+    discover_project_inputs,
+    resolve_diff_model_names,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline._helpers.diff import (
-    compile_project_for_diff_environment,
-    resolve_diff_model_names,
-)
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     DiffSelectorIntegrationTestCase,
 )
@@ -102,10 +102,10 @@ def test_given_compiled_project_when_resolving_diff_selectors_then_returns_expec
 ) -> None:
     write_repo_files(tmp_path, _PROJECT_FILES)
     discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
-    project: CompiledProjectView = compile_project_for_diff_environment(
+    project: CompiledProjectView = build_compiled_project(
         discovered_inputs=discovered_inputs,
         adapter=DuckDbAdapter(),
-        target_name="dev",
+        selected_target="dev",
         resolved_connection={"database": ":memory:"},
         no_sql_validation=True,
     )

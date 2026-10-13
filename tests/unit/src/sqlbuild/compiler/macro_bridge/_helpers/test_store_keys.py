@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.macro_bridge._helpers.store_keys import (
+from sqlbuild._native import (
     context_store_token,
     macro_store_token,
 )

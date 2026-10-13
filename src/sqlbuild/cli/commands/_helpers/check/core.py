@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable
 from typing import Any, TextIO
 
+from sqlbuild._native import build_python_relation_targets
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
@@ -24,7 +25,6 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
-from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector

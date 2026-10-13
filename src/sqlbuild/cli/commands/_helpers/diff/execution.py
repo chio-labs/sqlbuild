@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import run_diff_pipeline
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -37,7 +38,6 @@ from sqlbuild.compiler.compile.main.effective_runtime import build_effective_run
 from sqlbuild.compiler.compile.main.effective_target_namespace import (
     build_effective_target_namespace,
 )
-from sqlbuild.compiler.pipeline.main.diff import run_diff_pipeline
 from sqlbuild.compiler.sql_analysis.main.import_polyglot_sql import import_polyglot_sql
 from sqlbuild.cursor_algebra.models import Duration
 from sqlbuild.executor.diff.classes.query_artifact_lifecycle import QueryDiffArtifactLifecycle
