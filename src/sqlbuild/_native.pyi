@@ -212,6 +212,7 @@ from sqlbuild.spec.contracts.models import (
     ScenarioConfig,
     SchemaColumn,
     SchemaAuditInstance,
+    SchemaDynamicColumnFamily,
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
@@ -1477,6 +1478,16 @@ def validate_managed_write_schemas(
     *, adapter: BaseAdapter, project: CompiledProjectView
 ) -> None: ...
 def resolve_cursor_input_roles(*, model: CompiledModelView) -> CursorInputRoles: ...
+def model_placeholders(model_input: ModelInput, /) -> dict[str, str] | None: ...
+def model_syntax_checks(
+    *,
+    model_inputs: tuple[ModelInput, ...],
+    analysis_model_names: frozenset[str] | None,
+    analysis_succeeded: frozenset[str],
+) -> tuple[tuple[tuple[str, dict[str, str] | None], ...], ...]: ...
+def standalone_pivot_models(
+    *, model_inputs: tuple[ModelInput, ...], analysed: Mapping[str, int]
+) -> dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]]: ...
 def resolve_compile_analysis_selection(
     *, options: CompilePipelineOptions, discovered_inputs: DiscoveredProjectInputs
 ) -> CompileAnalysisSelection | None: ...

@@ -11,7 +11,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
-const SYNTAX_CHECKS_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.syntax_checks";
 const CURSOR_INTRINSICS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
@@ -51,7 +50,7 @@ pub(crate) fn compiled_models<'py>(
             CURSOR_INTRINSICS_MODULE,
             "cursor_intrinsics_analysis_sql",
         )?,
-        placeholders: imported(py, SYNTAX_CHECKS_MODULE, "model_placeholders")?,
+        placeholders: native.getattr("model_placeholders")?,
         validate_hooks: native.getattr("validate_hook_sql_syntax")?,
         validate_sql: native.getattr("validate_sql_syntax")?,
         macro_calls: imported(py, MACROS_MODULE, "find_macro_call_names")?,
