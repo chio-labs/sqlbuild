@@ -111,7 +111,7 @@ pub(crate) fn file_evidence(
     python_version: (u8, u8),
 ) -> Vec<RuleTestEvidence> {
     let Some(parsed): Option<ParsedSource> =
-        read_source(path).and_then(|source| parse_cpython_module(&source, python_version))
+        parse_cpython_module(&read_source(path), python_version)
     else {
         return Vec::new();
     };

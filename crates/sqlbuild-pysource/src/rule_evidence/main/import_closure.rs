@@ -23,9 +23,8 @@ pub fn import_closure(
     while let Some(current) = pending.pop() {
         let mut candidates: BTreeSet<PathBuf> =
             package_inits(&current, &rules_root).into_iter().collect();
-        let source: Option<String> = read_source(&current);
         let parsed: Option<ParsedSource> =
-            source.and_then(|source| parse_cpython_module(&source, python_version));
+            parse_cpython_module(&read_source(&current), python_version);
         if let Some(parsed) = &parsed {
             let roots: Vec<CpythonNode<'_>> =
                 parsed.module.body.iter().map(CpythonNode::Stmt).collect();

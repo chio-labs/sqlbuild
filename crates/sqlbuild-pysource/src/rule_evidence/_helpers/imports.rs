@@ -195,13 +195,13 @@ pub(crate) fn is_true_constant(expression: &Expr) -> bool {
     matches!(expression, Expr::BooleanLiteral(literal) if literal.value)
 }
 
-/// The UTF-8 text of the file at `path`, if it is readable.
-pub(crate) fn read_source(path: &std::path::Path) -> Option<String> {
-    match std::fs::read(path) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(text) => Some(text),
-            Err(_) => None,
-        },
-        Err(_) => None,
-    }
+/// The UTF-8 text of the file at `path`; an unreadable file reads as empty, as Python skips it.
+pub(crate) fn read_source(path: &std::path::Path) -> String {
+    let Ok(bytes) = std::fs::read(path) else {
+        return String::new();
+    };
+    let Ok(text) = String::from_utf8(bytes) else {
+        return String::new();
+    };
+    text
 }
