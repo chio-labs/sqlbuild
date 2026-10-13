@@ -7,10 +7,9 @@ const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
-const PROJECT_WITH_MODULE: &str = "sqlbuild.compiler.compiled_project.main.project_with";
-const TYPE_RECOVERY_MODULE: &str = "sqlbuild.compiler.compiled_project.main._with_type_recovery";
-const BINDING_DIAGNOSTICS_MODULE: &str =
-    "sqlbuild.compiler.compiled_project.main._with_binding_diagnostics";
+const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
+const TYPE_RECOVERY_MODULE: &str = "sqlbuild._native";
+const BINDING_DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
 const COMPLETION_INPUTS_MODULE: &str =
     "sqlbuild.compiler.compile.classes.semantic_completion_inputs";
 const SCHEMA_VALIDATION_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._schema_validation";
