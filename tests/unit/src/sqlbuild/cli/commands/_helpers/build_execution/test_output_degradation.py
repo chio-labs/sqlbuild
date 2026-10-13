@@ -19,12 +19,13 @@ from sqlbuild.cli.commands.models import (
     BuildRunOutcome,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
+from sqlbuild.cost.models import CostRunRecord
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
-from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_execution._test_types import (
     ExecutionProjectionFailureTestCase,
 )
+from tests.unit.src.sqlbuild.cli.output.main.plan.helpers import build_plan_output
 
 
 @pytest.mark.parametrize(
@@ -60,9 +61,9 @@ def test_given_completed_execution_when_json_projection_fails_then_exit_status_r
     )
     monkeypatch.setattr(outputs, "format_build_footer", Mock(return_value="completed"))
     monkeypatch.setattr(
-        outputs,
-        "format_build_execution_json",
-        Mock(side_effect=ObservabilityValidationError("injected projection failure")),
+        outputs.RunCostStore,
+        "output_payload",
+        Mock(return_value={"unserializable": object()}),
     )
 
     outputs.write_build_completion_output(
@@ -84,6 +85,7 @@ def test_given_completed_execution_when_json_projection_fails_then_exit_status_r
         ),
         outcome=outcome,
         check_results=(),
+        cost_record=cast(CostRunRecord, Mock()),
     )
 
     payload: dict[str, object] = json.loads(output_path.read_text(encoding="utf-8"))
@@ -110,7 +112,6 @@ def test_given_completed_execution_when_json_projection_fails_then_exit_status_r
 )
 def test_given_audit_history_write_failure_when_formatting_json_then_reports_bounded_degradation(
     test_case: ExecutionProjectionFailureTestCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     result: BuildExecutionResult = BuildExecutionResult(
         status=BuildStatus(test_case.build_status),
@@ -118,16 +119,10 @@ def test_given_audit_history_write_failure_when_formatting_json_then_reports_bou
         audit_result_projection_written_count=0,
         audit_result_projection_failed_count=3,
     )
-    monkeypatch.setattr(
-        outputs,
-        "format_build_execution_json",
-        Mock(return_value='{"status":"success","projection_degraded":false}\n'),
-    )
-
     payload: dict[str, object] = json.loads(
         outputs.execution_json_payload_with_degradation(
             result=result,
-            plan=Mock(),
+            plan=build_plan_output(),
             python_node_results=(),
             python_check_results=(),
             command="build",

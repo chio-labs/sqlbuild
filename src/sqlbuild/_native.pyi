@@ -1146,8 +1146,16 @@ def format_scenario_snapshot_execution_json(
     run_namespace: str | None = None,
     namespace_source: str = "unset",
 ) -> str: ...
-def degraded_execution_json(
-    *, command: str, status: str, error: Exception, execution_succeeded: bool
+def format_degradable_build_execution_json(
+    *,
+    result: BuildExecutionResult,
+    plan: PlanOutput,
+    execution_succeeded: bool,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
+    python_check_results: tuple[PythonCheckExecutionResult, ...] = (),
+    command: str = "build",
+    run_id: str | None = None,
+    cost: dict[str, object] | None = None,
 ) -> str: ...
 def write_execution_json_output(
     *, payload: str, json_output: bool, json_output_path: Path | None

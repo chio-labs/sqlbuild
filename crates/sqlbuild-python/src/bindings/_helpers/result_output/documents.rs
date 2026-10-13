@@ -36,6 +36,17 @@ const BUILD_OPTIONS: (&[&str], &[&str]) = (
         "cost",
     ],
 );
+const DEGRADABLE_BUILD_OPTIONS: (&[&str], &[&str]) = (
+    &["result", "plan", "execution_succeeded"],
+    &[
+        "python_node_results",
+        "python_check_results",
+        "command",
+        "run_id",
+        "cost",
+    ],
+);
+const OBSERVABILITY_ERRORS: &str = "sqlbuild.runtime.observability.exceptions";
 const SCENARIO_OPTIONS: (&[&str], &[&str]) = (
     &["results"],
     &["local", "run_namespace", "namespace_source", "duration_ms"],
@@ -61,6 +72,8 @@ struct Extras<'py> {
     run_id: Option<Bound<'py, PyAny>>,
     cost: Option<Bound<'py, PyAny>>,
     execution: Option<Bound<'py, PyDict>>,
+    /// Entries appended after every other section.
+    trailing: Vec<(&'static str, Bound<'py, PyAny>)>,
 }
 
 /// The document body shared by every command.
@@ -107,6 +120,9 @@ fn emitted<'py>(
     }
     if let Some(execution) = extras.execution {
         payload.set_item("execution", execution)?;
+    }
+    for (key, value) in extras.trailing {
+        payload.set_item(key, value)?;
     }
     Ok(indented_json(payload.as_any())? + "\n")
 }
@@ -172,6 +188,87 @@ fn format_build_execution_json<'py>(
 ) -> PyResult<String> {
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "format_build_execution_json", options, BUILD_OPTIONS)?;
+    build_json(py, &arguments, Vec::new())
+}
+
+/// The audit-history projection counts, flagged as degraded when any write failed.
+fn audit_projection<'py>(
+    result: &Bound<'py, PyAny>,
+) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
+    let py: Python<'py> = result.py();
+    let counts: Vec<(&str, Bound<'py, PyAny>)> = [
+        ("attempted_count", "audit_result_projection_attempted_count"),
+        ("written_count", "audit_result_projection_written_count"),
+        ("failed_count", "audit_result_projection_failed_count"),
+    ]
+    .into_iter()
+    .map(|(key, field)| Ok((key, result.getattr(field)?)))
+    .collect::<PyResult<_>>()?;
+    let failed: bool = counts[2].1.is_truthy()?;
+    let mut entries: Vec<(&'static str, Bound<'py, PyAny>)> = vec![(
+        "audit_result_projection",
+        dict(py, counts.clone())?.into_any(),
+    )];
+    if failed {
+        let mut reason: Vec<(&str, Bound<'py, PyAny>)> =
+            vec![("reason", any(py, "audit_result_projection_failure")?)];
+        reason.extend(counts);
+        entries.push(("projection_degraded", any(py, true)?));
+        entries.push((
+            "projection_degradation_reasons",
+            PyList::new(py, [dict(py, reason)?])?.into_any(),
+        ));
+    }
+    Ok(entries)
+}
+
+/// The build document with its audit-history projection, or a minimal degraded document.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn format_degradable_build_execution_json<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<String> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "format_degradable_build_execution_json",
+        options,
+        DEGRADABLE_BUILD_OPTIONS,
+    )?;
+    let execution_succeeded: bool = arguments.flag("execution_succeeded")?;
+    let rendered: PyResult<String> = audit_projection(&arguments.value("result")?)
+        .and_then(|trailing| build_json(py, &arguments, trailing));
+    let error: pyo3::PyErr = match rendered {
+        Ok(payload) => return Ok(payload),
+        Err(error) => error,
+    };
+    let degradable: bool = error.is_instance_of::<pyo3::exceptions::PyTypeError>(py)
+        || error.is_instance_of::<pyo3::exceptions::PyValueError>(py)
+        || error.is_instance(
+            py,
+            &imported(py, OBSERVABILITY_ERRORS, "ObservabilityValidationError")?,
+        );
+    if !degradable {
+        return Err(error);
+    }
+    let command: String = if arguments.passed("command")? {
+        arguments.value("command")?.extract()?
+    } else {
+        "build".to_owned()
+    };
+    degraded_document(
+        py,
+        (command, if execution_succeeded { SUCCESS } else { FAILED }),
+        error.value(py).as_any(),
+        execution_succeeded,
+    )
+}
+
+fn build_json<'py>(
+    py: Python<'py>,
+    arguments: &KeywordArguments<'py>,
+    trailing: Vec<(&'static str, Bound<'py, PyAny>)>,
+) -> PyResult<String> {
     let result: Bound<'py, PyAny> = arguments.value("result")?;
     let plan: Bound<'py, PyAny> = arguments.value("plan")?;
     let command: String = if arguments.passed("command")? {
@@ -181,9 +278,9 @@ fn format_build_execution_json<'py>(
     };
     let projection: Projection<'py> = Projection::installed(py)?;
     let python_node_results: Bound<'py, PyAny> =
-        sequence(py, passed(&arguments, "python_node_results")?);
+        sequence(py, passed(arguments, "python_node_results")?);
     let python_check_results: Bound<'py, PyAny> =
-        sequence(py, passed(&arguments, "python_check_results")?);
+        sequence(py, passed(arguments, "python_check_results")?);
     let mut retained: Vec<Vec<Bound<'py, PyAny>>> = Vec::new();
     let mut partial: bool = false;
     for field in BUILD_RESULT_FIELDS {
@@ -281,8 +378,9 @@ fn format_build_execution_json<'py>(
             checks,
         },
         Extras {
-            run_id: passed(&arguments, "run_id")?,
-            cost: passed(&arguments, "cost")?,
+            run_id: passed(arguments, "run_id")?,
+            cost: passed(arguments, "cost")?,
+            trailing,
             ..Extras::default()
         },
     )
@@ -658,19 +756,12 @@ fn format_scenario_snapshot_execution_json<'py>(
 }
 
 /// Warn about a failed result projection, then format a minimal valid document.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn degraded_execution_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
-    let arguments: KeywordArguments<'_> = KeywordArguments::read(
-        py,
-        "degraded_execution_json",
-        options,
-        (&["command", "status", "error", "execution_succeeded"], &[]),
-    )?;
-    let command: String = arguments.value("command")?.extract()?;
-    let status: String = arguments.value("status")?.extract()?;
-    let error: Bound<'_, PyAny> = arguments.value("error")?;
-    let execution_succeeded: bool = arguments.flag("execution_succeeded")?;
+fn degraded_document(
+    py: Python<'_>,
+    (command, status): (String, &str),
+    error: &Bound<'_, PyAny>,
+    execution_succeeded: bool,
+) -> PyResult<String> {
     let completion: &str = if execution_succeeded {
         "warehouse execution completed successfully"
     } else {
@@ -741,6 +832,9 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         format_scenario_snapshot_execution_json,
         module
     )?)?;
-    module.add_function(wrap_pyfunction!(degraded_execution_json, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        format_degradable_build_execution_json,
+        module
+    )?)?;
     module.add_function(wrap_pyfunction!(write_execution_json_output, module)?)
 }
