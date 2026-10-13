@@ -38,6 +38,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlScenarioInput,
     CompileSqlTestInput,
     DeclarationScopeBuild,
+    DeclarationScopeResolver,
     DynamicColumnContractProof,
     FunctionArgument,
     FunctionReturnColumn,
@@ -1385,10 +1386,11 @@ def read_scope_index_cache(path: Path, fingerprint: str, /) -> ScopeIndex | None
 def write_scope_index_cache(
     location: tuple[Path, str], fingerprint: str, index: ScopeIndex, /
 ) -> bool: ...
-def scope_schema_usages(
-    schemas: list[tuple[str, str | None, list[tuple[str, str | None]]]],
-    records: list[tuple[tuple[str, str], tuple[str, str, tuple[str, str] | None, str | None, str]]],
-) -> tuple[list[tuple[int, int]], list[tuple[list[str], str, str, str]], str | None]: ...
+def model_schema_scope_usages(
+    schema_files: Sequence[DiscoveredModelSchemaFile],
+    resolver: DeclarationScopeResolver | None,
+    /,
+) -> tuple[UsageRecord, ...]: ...
 
 class NativeConfigError:
     class_name: str
