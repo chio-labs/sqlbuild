@@ -7,10 +7,9 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, cast
 
-from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
+from sqlbuild._native import serialize_future_cursor_safety, serialize_maximum_start_safety
 from sqlbuild.cli.output._helpers.integration_identity import integration_resource_id
 from sqlbuild.cli.output._helpers.integration_validation import encode_integration_json
-from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.constants import (
     INTEGRATION_RESOURCE_FAILED_EVENT,
     INTEGRATION_RESULT_RECORD_KIND,

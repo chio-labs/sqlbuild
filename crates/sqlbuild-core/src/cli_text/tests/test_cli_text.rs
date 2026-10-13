@@ -1,12 +1,15 @@
 use crate::cli_text::_helpers::diagnostics::diagnostics_text;
 use crate::cli_text::main::format_compile_text::format_compile_text;
+use crate::cli_text::main::format_plan_completion::format_plan_completion;
+use crate::cli_text::main::format_plan_text::format_plan_text;
 use crate::cli_text::main::semantic_coverage_notice::semantic_coverage_notice;
 use crate::cli_text::models::{
-    CliStyle, CompileTextReport, DiagnosticText, LineageNote, ModelLine, RelatedText,
+    CliStyle, CompileTextReport, DiagnosticText, LineageNote, ModelLine, ModelPlanText,
+    PlanTextReport, PlanWarningText, RelatedText,
 };
-use crate::cli_text::tests::helpers::{diagnostic, location};
+use crate::cli_text::tests::helpers::{diagnostic, location, plan_report, table_model};
 use crate::cli_text::tests::test_types::{
-    CompileTextTestCase, DiagnosticsTextTestCase, NoticeTestCase,
+    CompileTextTestCase, DiagnosticsTextTestCase, NoticeTestCase, PlanTextTestCase,
 };
 
 /// Expectations recorded from the retired Python formatter.
@@ -117,6 +120,63 @@ fn given_report_when_formatting_then_lists_models_and_summary() {
         assert_eq!(
             format_compile_text(&test_case.report),
             test_case.expected_text,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_plan_report_when_rendering_then_groups_models_by_reason() {
+    let test_cases = [
+        PlanTextTestCase {
+            description: "a changed query with its diff, a routine model and a warning",
+            report: PlanTextReport {
+                warnings: vec![PlanWarningText {
+                    severity: "warning".to_owned(),
+                    message: "orders lag\nsecond line".to_owned(),
+                    model_name: Some("orders".to_owned()),
+                }],
+                ..plan_report(vec![
+                    ModelPlanText {
+                        query_diff: Some(vec![
+                            "      -SELECT 1".to_owned(),
+                            "      +SELECT 2".to_owned(),
+                        ]),
+                        ..table_model("orders", "query_changed")
+                    },
+                    table_model("customers", "no_change"),
+                    ModelPlanText {
+                        action: "skip".to_owned(),
+                        ..table_model("skipped", "no_change")
+                    },
+                ])
+            },
+            expected_text: "Plan ready  3 selected\n\nQuery changed (1)\n\u{2514}\u{2500}\u{2500} orders               full rebuild\n    \u{251c}\u{2500}\u{2500} policy  replay_on_change=full\n    \u{2514}\u{2500}\u{2500} query diff:\n      -SELECT 1\n      +SELECT 2\n\nModels (1)\n\u{2514}\u{2500}\u{2500} customers            table\n\nWarnings (1)\n\u{2514}\u{2500}\u{2500} orders\n    \u{251c}\u{2500}\u{2500} orders lag\n    \u{2514}\u{2500}\u{2500} second line",
+            expected_completion: "\u{2713} Plan complete  3 selected",
+        },
+        PlanTextTestCase {
+            description: "every active model is a full refresh",
+            report: plan_report(vec![
+                table_model("orders", "full_refresh"),
+                table_model("customers", "full_refresh"),
+                ModelPlanText {
+                    materialization_label: "view".to_owned(),
+                    ..table_model("stg_orders", "full_refresh")
+                },
+            ]),
+            expected_text: "Plan ready  full refresh, 3 selected\n\nFull refresh (3)\n    2 table\n    1 view",
+            expected_completion: "\u{2713} Plan complete  full refresh, 3 selected",
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            (
+                format_plan_text(&test_case.report).as_str(),
+                format_plan_completion(&test_case.report).as_str()
+            ),
+            (test_case.expected_text, test_case.expected_completion),
             "{}",
             test_case.description
         );

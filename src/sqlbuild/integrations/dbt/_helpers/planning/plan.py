@@ -7,7 +7,7 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 
-from sqlbuild.cli.output.main.plan import format_plan
+from sqlbuild._native import format_plan
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason

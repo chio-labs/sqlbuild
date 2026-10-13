@@ -1,4 +1,6 @@
-use crate::cli_text::models::{DiagnosticText, LocationText};
+use crate::cli_text::models::{
+    DiagnosticText, DisplayLimit, LocationText, ModelPlanText, PlanTextReport,
+};
 
 /// A location in `models/a.sql`, whose text has a CRLF line, a non-ASCII name and a vertical tab.
 pub(super) fn location(line: i64, column: i64, end: (Option<i64>, Option<i64>)) -> LocationText {
@@ -27,5 +29,43 @@ pub(super) fn diagnostic(severity: &str, code: &str, message: &str) -> Diagnosti
         affected_rules: Vec::new(),
         help: None,
         occurrences: 1,
+    }
+}
+
+/// An empty uncolored plan report that shows every entry.
+pub(super) fn plan_report(models: Vec<ModelPlanText>) -> PlanTextReport {
+    PlanTextReport {
+        use_color: false,
+        include_header: true,
+        full_refresh: false,
+        display: DisplayLimit {
+            max_entries: None,
+            overflow_flag: "--verbose".to_owned(),
+        },
+        include_freshness_diagnostics: false,
+        selection_diagnostics: None,
+        models,
+        functions: Vec::new(),
+        seeds: Vec::new(),
+        source_loads: Vec::new(),
+        python_entries: Vec::new(),
+        provider_usages: Vec::new(),
+        warnings: Vec::new(),
+        source_freshness: None,
+        remaining_stale_models: Vec::new(),
+        pruned_models: Vec::new(),
+        pre_build_lines: Vec::new(),
+    }
+}
+
+/// A planned table model with a change reason and full backfill.
+pub(super) fn table_model(name: &str, reason: &str) -> ModelPlanText {
+    ModelPlanText {
+        name: name.to_owned(),
+        action: "create_table".to_owned(),
+        reason: reason.to_owned(),
+        materialization_label: "table".to_owned(),
+        backfill_action: "full".to_owned(),
+        ..ModelPlanText::default()
     }
 }

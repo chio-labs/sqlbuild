@@ -20,6 +20,7 @@ pub(crate) mod lineage;
 pub(crate) mod macro_bridge;
 pub(crate) mod manifest;
 pub(crate) mod model_config;
+pub(crate) mod plan_output;
 pub(crate) mod project_assembly;
 pub(crate) mod python_values;
 pub(crate) mod refactor;

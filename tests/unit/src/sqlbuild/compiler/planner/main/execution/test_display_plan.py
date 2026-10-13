@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.output.main.plan import format_plan
+from sqlbuild._native import format_plan
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,

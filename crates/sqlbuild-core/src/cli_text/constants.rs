@@ -29,3 +29,51 @@ pub(crate) const OPEN_INPUT: &str = "open input: ";
 pub(crate) const INVALID_UPSTREAM: &str = "depends on invalid model ";
 pub(crate) const DEFAULT_ACTION: &str =
     "declare the input shape, then run `sqb compile --no-cache`";
+/// Names narrower than this still get a column this wide.
+pub(crate) const MIN_NAME_COLUMN_WIDTH: usize = 20;
+/// Indent of a section's entry rows before tree conversion.
+pub(crate) const ENTRY_ROW_PREFIX: &str = "  ";
+/// Indent of an entry's detail rows before tree conversion.
+pub(crate) const LEAF_ROW_PREFIX: &str = "    ";
+/// Indent of rows nested below a detail row, which keep their text.
+pub(crate) const NESTED_ROW_PREFIX: &str = "      ";
+pub(crate) const LEAF_KEY_SEPARATOR: &str = ": ";
+/// A row whose text starts with one of these after its indent is not a tree row.
+pub(crate) const TREE_EXEMPT_CHARS: [char; 2] = [' ', '.'];
+pub(crate) const STALE_INPUT_WARNING_TITLE: &str = "Stale inputs detected";
+pub(crate) const SOURCE_FRESHNESS_UNKNOWN_WARNING_TITLE: &str = "source freshness unknown";
+pub(crate) const DIFF_HEADER_MARKER: &str = "# ";
+pub(crate) const EFFECTIVE_BATCH_SIZE_TOKEN: &str = "effective";
+pub(crate) const REASON_GROUPS: [(&str, &str); 7] = [
+    ("full_refresh", "Full refresh"),
+    ("query_changed", "Query changed"),
+    ("function_changed", "Function changed"),
+    ("config_changed", "Config changed"),
+    ("schema_changed", "Schema changed"),
+    ("first_run", "First run"),
+    ("renamed", "Renamed"),
+];
+pub(crate) const SKIP_ACTION: &str = "skip";
+pub(crate) const CREATE_VIEW_ACTION: &str = "create_view";
+pub(crate) const CUSTOM_ACTION: &str = "custom";
+pub(crate) const FULL_REFRESH_REASON: &str = "full_refresh";
+pub(crate) const FIRST_RUN_REASON: &str = "first_run";
+pub(crate) const QUERY_CHANGED_REASON: &str = "query_changed";
+pub(crate) const SCHEMA_CHANGED_REASON: &str = "schema_changed";
+pub(crate) const CONFIG_CHANGED_REASON: &str = "config_changed";
+pub(crate) const NO_CHANGE_REASON: &str = "no_change";
+pub(crate) const NORMAL_INCREMENTAL_REASON: &str = "normal_incremental";
+pub(crate) const BOUNDED_BACKFILL: &str = "bounded";
+pub(crate) const FULL_BACKFILL: &str = "full";
+pub(crate) const FORWARD_BACKFILL: &str = "forward";
+pub(crate) const COLUMN_ADDED: &str = "column_added";
+pub(crate) const COLUMN_REMOVED: &str = "column_removed";
+pub(crate) const COLUMN_TYPE_CHANGED: &str = "column_type_changed";
+pub(crate) const ERROR_SEVERITY_VALUE: &str = "error";
+pub(crate) const INFO_SEVERITY_VALUE: &str = "info";
+pub(crate) const CHANGED_IDENTITY: &str = "changed";
+pub(crate) const PRE_SQL_INGRESS_PHASE: &str = "pre_sql_ingress";
+pub(crate) const READ_SIDE_PHASE: &str = "read_side";
+pub(crate) const PYTHON_INGRESS_TITLE: &str = "Python ingress";
+pub(crate) const PYTHON_READ_SIDE_TITLE: &str = "Python read-side";
+pub(crate) const PLAN_READY_TITLE: &str = "Plan ready";

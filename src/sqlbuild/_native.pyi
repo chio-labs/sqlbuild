@@ -119,7 +119,12 @@ from sqlbuild.compiler.pipeline.models import (
     PythonRunPlanOutputs,
     StaticCommandContext,
 )
-from sqlbuild.compiler.planner.models import DeferralInputs, PlanOutput
+from sqlbuild.compiler.planner.models import (
+    DeferralInputs,
+    FutureCursorSafetyEvidence,
+    MaximumStartSafetyEvidence,
+    PlanOutput,
+)
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonNodeIdentity,
@@ -156,6 +161,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import (
@@ -1022,6 +1028,26 @@ class RecordedCompileOutput:
     @property
     def stdout(self) -> str | None: ...
 
+def format_plan(
+    *,
+    plan: PlanOutput,
+    full_refresh: bool = False,
+    use_color: bool = True,
+    include_header: bool = True,
+    display_options: DisplayOptions | None = None,
+    python_plan_entries: tuple[PythonPlanEntry, ...] = (),
+    include_direct_freshness_diagnostics: bool = True,
+    include_completion: bool = False,
+) -> str: ...
+def format_plan_json(
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+) -> str: ...
+def serialize_future_cursor_safety(
+    evidence: FutureCursorSafetyEvidence | None,
+) -> dict[str, object] | None: ...
+def serialize_maximum_start_safety(
+    evidence: MaximumStartSafetyEvidence | None,
+) -> dict[str, object] | None: ...
 def write_reusable_compile(
     *,
     attempt: CompileReuseAttempt,

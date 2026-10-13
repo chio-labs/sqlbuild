@@ -13,7 +13,7 @@ from unittest.mock import Mock
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
+from sqlbuild._native import serialize_maximum_start_safety
 from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
 from sqlbuild.compiler.planner.models import MaximumStartSafetyEvidence
 from sqlbuild.integrations.dagster import (

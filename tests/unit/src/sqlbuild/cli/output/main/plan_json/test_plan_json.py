@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.output.main._plan_json import format_plan_json
+from sqlbuild._native import format_plan_json
 from sqlbuild.compiler.pipeline.models import PythonPlanEntry
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
