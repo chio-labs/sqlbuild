@@ -14,12 +14,11 @@ use sqlbuild_core::format_command::main::resolve_lint_paths::resolve_lint_paths;
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const PLANNER_ERRORS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
-const SELECTED_DISCOVERER_MODULE: &str =
-    "sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer";
+const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 const UNIT_TEST_SELECTORS_MODULE: &str =
     "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
 const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
@@ -240,6 +239,66 @@ fn combined_paths(
     Ok(Some(selected.difference(&excluded).cloned().collect()))
 }
 
+/// The contract inputs selected fixtures need, without importing Python runtime resources.
+fn selected_contract_inputs<'py>(
+    project_dir: &Bound<'py, PyAny>,
+    selected_test_paths: Bound<'py, PyAny>,
+    referenced_model_names: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = project_dir.py();
+    let native = |name: &str| imported(py, NATIVE_MODULE, name);
+    let project_config: Bound<'py, PyAny> =
+        native("load_project_config_file")?.call1((project_dir,))?;
+    let local_config: Bound<'py, PyAny> =
+        native("load_local_config_file")?.call1((project_dir,))?;
+    let disabled: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
+    let scope: Bound<'py, PyAny> = call_with(
+        &native("directory_snapshot_scope")?,
+        &[("project_dir", project_dir.clone())],
+    )?;
+    within(&scope, |_| {
+        let project_only = |name: &str| -> PyResult<Bound<'py, PyAny>> {
+            call_with(&native(name)?, &[("project_dir", project_dir.clone())])
+        };
+        call_with(
+            &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredProjectInputs")?,
+            &[
+                ("project_config", project_config),
+                ("local_config", local_config),
+                ("project_dir", project_dir.clone()),
+                (
+                    "model_files",
+                    call_with(
+                        &native("discover_model_files")?,
+                        &[
+                            ("project_dir", project_dir.clone()),
+                            ("extract_implicit_alias_columns", disabled.clone()),
+                            ("extract_output_column_locations", disabled.clone()),
+                            ("selected_model_names", referenced_model_names),
+                        ],
+                    )?,
+                ),
+                (
+                    "model_schema_files",
+                    project_only("discover_model_schema_files")?,
+                ),
+                ("schema_files", project_only("discover_schema_files")?),
+                ("source_files", project_only("discover_source_files")?),
+                (
+                    "test_files",
+                    call_with(
+                        &native("discover_test_files")?,
+                        &[
+                            ("project_dir", project_dir.clone()),
+                            ("selected_paths", selected_test_paths),
+                        ],
+                    )?,
+                ),
+            ],
+        )
+    })
+}
+
 /// Inputs for a run scoped by path selectors, discovering only the contracts fixtures need.
 fn path_scoped_inputs<'py>(
     project_dir: &Bound<'py, PyAny>,
@@ -250,24 +309,10 @@ fn path_scoped_inputs<'py>(
     validate(py, &paths)?;
     let candidates = scan_fixture_null_candidates(directory, Some(&paths)).map_err(value_error)?;
     let candidate_paths: Vec<PathBuf> = candidates.paths.into_iter().map(PathBuf::from).collect();
-    let discovered: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            SELECTED_DISCOVERER_MODULE,
-            "SelectedContractInputDiscoverer",
-        )?
-        .getattr("discover")?,
-        &[
-            ("project_dir", project_dir.clone()),
-            (
-                "selected_test_paths",
-                PyFrozenSet::new(py, candidate_paths)?.into_any(),
-            ),
-            (
-                "referenced_model_names",
-                PyFrozenSet::new(py, candidates.model_names)?.into_any(),
-            ),
-        ],
+    let discovered: Bound<'py, PyAny> = selected_contract_inputs(
+        project_dir,
+        PyFrozenSet::new(py, candidate_paths)?.into_any(),
+        PyFrozenSet::new(py, candidates.model_names)?.into_any(),
     )?;
     Ok(LintInputs {
         adapter: discovered_adapter(project_dir, &discovered)?,

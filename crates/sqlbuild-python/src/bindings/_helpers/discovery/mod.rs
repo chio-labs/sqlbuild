@@ -1,3 +1,4 @@
+pub(crate) mod configuration;
 pub(crate) mod declaration_files;
 pub(crate) mod declaration_records;
 pub(crate) mod faults;

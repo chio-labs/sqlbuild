@@ -37,7 +37,8 @@ const EVENT_EXPORTERS_MODULE: &str =
     "sqlbuild.runtime.event_exporting.main._configure_discovered_event_exporters";
 const FILESYSTEM_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.core";
 const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
-const LOADERS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.integrations.loaders";
+const INGESTR_LOADERS_MODULE: &str = "sqlbuild.integrations.ingestr.main.loaders";
+const DLT_LOADERS_MODULE: &str = "sqlbuild.integrations.dlt.main.loaders";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 
 /// Declaration file collections counted into the declaration-parse lifecycle, in field order.
@@ -455,9 +456,14 @@ fn project_inputs<'py>(
         )?
         .into_any())
     };
+    let source_files: Bound<'py, PyAny> = declarations.get_item("source_files")?;
     let integration_loaders: Bound<'py, PyAny> =
-        imported(py, LOADERS_MODULE, "build_integration_loader_functions")?
-            .call1((declarations.get_item("source_files")?,))?;
+        imported(py, INGESTR_LOADERS_MODULE, "build_ingestr_loader_functions")?
+            .call1((&source_files,))?
+            .add(
+                imported(py, DLT_LOADERS_MODULE, "build_dlt_loader_functions")?
+                    .call1((&source_files,))?,
+            )?;
     let loader_functions: Bound<'py, PyAny> = tuple_of("loaders")?.add(integration_loaders)?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("project_config", project_config.clone()),

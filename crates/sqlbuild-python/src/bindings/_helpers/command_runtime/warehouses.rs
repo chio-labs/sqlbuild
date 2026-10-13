@@ -22,14 +22,13 @@ use crate::bindings::_helpers::command_runtime::runtime_errors::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 
 const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
 const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const SESSION_WAREHOUSE_MODULE: &str = "sqlbuild.adapter.discovery.main.session_warehouse_support";
-const DISCOVER_CONFIGURATION_MODULE: &str =
-    "sqlbuild.compiler.discovery.main._discover_configuration";
 const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
 const EXPAND_TEMPLATE_MODULE: &str = "sqlbuild.compiler.compile.main.expand_template_data";
 const RESOLVE_OPTIONS: (&[&str], &[&str]) = (
@@ -304,14 +303,7 @@ fn validate_cli_warehouse(
         return Ok(());
     };
     checked_cli_warehouse(py, &cli_warehouse)?;
-    let discovered: Bound<'_, PyAny> = call_with(
-        &imported(
-            py,
-            DISCOVER_CONFIGURATION_MODULE,
-            "discover_project_configuration",
-        )?,
-        &[("project_dir", project_dir.clone())],
-    )?;
+    let discovered: Bound<'_, PyAny> = discover_project_configuration(py, &project_dir)?;
     let adapter_name: Bound<'_, PyAny> = call_with(
         &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
         &[
