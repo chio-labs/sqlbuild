@@ -49,6 +49,8 @@ const DEFAULTS_SECTION: &str = "defaults";
 
 /// One optional `(database, schema)` namespace.
 type Namespace = (Option<String>, Option<String>);
+/// A target's sorted connection identity and the namespaces its managed sources write.
+type TargetNamespaces = (Vec<(String, String)>, Vec<Namespace>);
 
 /// A `PlannerInputError` with `message`, `code` and optional `help`.
 fn planner_error(py: Python<'_>, message: String, code: &str, help: Option<String>) -> PyErr {
@@ -211,7 +213,7 @@ pub(crate) fn managed_loader_target_isolation(
         }
     }
     target_names.sort();
-    let mut targets: Vec<(Vec<(String, String)>, Vec<Namespace>)> = Vec::new();
+    let mut targets: Vec<TargetNamespaces> = Vec::new();
     for target_name in &target_names {
         targets.push(target_namespaces(
             (discovered, adapter, resolved_connection),
@@ -259,7 +261,7 @@ fn target_namespaces(
     ),
     target_name: &str,
     managed_sources: &[Bound<'_, PyAny>],
-) -> PyResult<(Vec<(String, String)>, Vec<Namespace>)> {
+) -> PyResult<TargetNamespaces> {
     let py: Python<'_> = discovered.py();
     let name: Bound<'_, PyAny> = PyString::new(py, target_name).into_any();
     let target_config: Bound<'_, PyAny> = call_with(

@@ -24,14 +24,9 @@ fn at_boundary(characters: &[char], at: usize) -> bool {
 
 /// Whether `characters[at..]` starts with `literal`.
 fn starts_with(characters: &[char], at: usize, literal: &str) -> bool {
-    let mut position: usize = at;
-    for expected in literal.chars() {
-        if characters.get(position) != Some(&expected) {
-            return false;
-        }
-        position += 1;
-    }
-    true
+    (at..)
+        .zip(literal.chars())
+        .all(|(position, expected)| characters.get(position) == Some(&expected))
 }
 
 /// The number of characters from `at` that satisfy `accepts`, at most `limit`.

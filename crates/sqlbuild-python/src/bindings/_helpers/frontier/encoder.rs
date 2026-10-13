@@ -23,6 +23,9 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::frontier::python_types::PythonTypes;
 
+/// An instance's attributes, by name in first-set order.
+type Attributes<'py> = Vec<(String, Bound<'py, PyAny>)>;
+
 /// Nesting at which encoding stops, as Python's recursion limit stops the Python encoder.
 const MAX_DEPTH: usize = 900;
 const RECURSION_MESSAGE: &str = "maximum recursion depth exceeded";
@@ -398,9 +401,7 @@ fn sorted_items(items: Vec<JsonValue>) -> PyResult<Vec<JsonValue>> {
 }
 
 /// `_instance_attributes`: the instance `__dict__` and the slots set on `value`, or `None`.
-fn instance_attributes<'py>(
-    value: &Bound<'py, PyAny>,
-) -> PyResult<Option<Vec<(String, Bound<'py, PyAny>)>>> {
+fn instance_attributes<'py>(value: &Bound<'py, PyAny>) -> PyResult<Option<Attributes<'py>>> {
     let instance_dict: Bound<'py, PyAny> = attribute_or_none(value, "__dict__")?;
     let has_dict: bool = instance_dict.is_exact_instance_of::<pyo3::types::PyDict>()
         || instance_dict.is_instance_of::<pyo3::types::PyDict>();
