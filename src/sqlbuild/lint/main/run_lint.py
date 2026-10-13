@@ -20,8 +20,8 @@ from sqlbuild.lint._helpers.expansion import (
     expand_file_bodies,
     prepare_expanded_files,
 )
-from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
+from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.models import (
     ExpandedLintFile,
     HeaderSpan,
@@ -98,13 +98,9 @@ def run_lint(
     unexpandable: dict[Path, str] = prepared.unexpandable
 
     if bodies and config.native_enabled:
-        native_violations: dict[Path, tuple[LintViolation, ...]] = run_native_sql_lint(
-            bodies=bodies,
-            contents_by_path=files,
-            config=config,
-        )
-        for entries in native_violations.values():
-            violations.extend(entries)
+        LintStopContext.check()
+        violations.extend(_native.lint_native_sql_bodies(list(bodies), files, config))
+        LintStopContext.check()
     return LintRunResult(
         files_checked=len(files),
         violations=sort_violations(

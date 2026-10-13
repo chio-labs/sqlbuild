@@ -6,16 +6,18 @@ use crate::lint_text::errors::LintTextError;
 use crate::lint_text::main::apply_suppressions::apply_suppressions;
 use crate::lint_text::main::format_sql_bodies::format_sql_bodies;
 use crate::lint_text::main::interpolation_text_at::interpolation_text_at;
+use crate::lint_text::main::lint_sql_bodies::lint_sql_bodies;
 use crate::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use crate::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
 use crate::lint_text::main::restore_interpolation::restore_interpolation;
 use crate::lint_text::models::{
-    FormatFile, RetainedViolation, SuppressibleViolation, SuppressionFinding,
+    ExpansionSpan, FormatFile, LintSqlBody, LintSqlOptions, RetainedViolation,
+    SuppressibleViolation, SuppressionFinding,
 };
 use crate::lint_text::tests::test_types::{
-    FormatBodiesTestCase, NeutralizeTestCase, ParameterTestCase, RestoreTestCase,
-    SuppressionTestCase, TokenAtTestCase,
+    Finding, FormatBodiesTestCase, LintBodiesTestCase, NeutralizeTestCase, ParameterTestCase,
+    RestoreTestCase, SuppressionTestCase, TokenAtTestCase,
 };
 
 const SUPPRESSED_FILE: &str = "-- sqb: ignore SQBRSQL005 because kept\n\n-- note\nselect 1\n-- sqb: ignore X because y\n-- sqb: ignore nope\nselect 2\n";
@@ -322,4 +324,76 @@ fn given_sql_files_when_formatting_bodies_then_sites_and_fixture_ceremony_surviv
         );
     }
     Ok(())
+}
+
+#[test]
+fn given_expanded_bodies_when_linting_then_findings_map_to_authored_lines() {
+    let test_cases = [
+        LintBodiesTestCase {
+            description: "an unused CTE after a header maps to its authored line",
+            contents: "MODEL ();\nwith dead as (select 1 as y), live as (select 1 as a)\nselect a from live\n",
+            body: LintSqlBody {
+                body_start: 10,
+                lint_text:
+                    "with dead as (select 1 as y), live as (select 1 as a)\nselect a from live"
+                        .to_string(),
+                ..LintSqlBody::default()
+            },
+            expected_findings: vec![("SQBRSQL005", 2, 6, Some((2, 10)))],
+        },
+        LintBodiesTestCase {
+            description: "a parse failure is a fault at the mapped parser position",
+            contents: "MODEL ();\n\nselect a from from t\n",
+            body: LintSqlBody {
+                body_start: 11,
+                lint_text: "select a from from t".to_string(),
+                ..LintSqlBody::default()
+            },
+            expected_findings: vec![("L003", 3, 19, None)],
+        },
+        LintBodiesTestCase {
+            description: "a finding inside generated SQL points at the interpolation token",
+            contents: "select a from t where @isnull()\n",
+            body: LintSqlBody {
+                lint_text: "select a from t where a = null".to_string(),
+                passes: vec![vec![ExpansionSpan {
+                    source_start: 22,
+                    source_end: 31,
+                    output_start: 22,
+                    output_end: 30,
+                }]],
+                ..LintSqlBody::default()
+            },
+            expected_findings: vec![("SQBRSQL001", 1, 23, Some((1, 32)))],
+        },
+    ];
+
+    for test_case in test_cases {
+        let options = LintSqlOptions {
+            dialect: "duckdb".to_string(),
+            enabled_rules: Some(vec!["SQBRSQL001".to_string(), "SQBRSQL005".to_string()]),
+            max_literal_length: 100,
+            max_ranking_order_by: 5,
+            ..LintSqlOptions::default()
+        };
+
+        let result = lint_sql_bodies(&[test_case.body], &[test_case.contents], &options);
+        let findings: Vec<Finding<'_>> = result
+            .iter()
+            .map(|finding| {
+                (
+                    finding.code.as_str(),
+                    finding.line,
+                    finding.column,
+                    finding.end,
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            findings, test_case.expected_findings,
+            "{}",
+            test_case.description
+        );
+    }
 }

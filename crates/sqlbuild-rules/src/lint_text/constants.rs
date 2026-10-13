@@ -80,3 +80,44 @@ pub(crate) const GROUPED_NAMED_ROLES: [(&[&str], bool); 9] = [
     (&["hooks", "python"], false),
     (&["_hooks", "python"], false),
 ];
+
+pub(crate) const LINT_API_VERSION: i64 = 1;
+pub(crate) const UNUSED_CTE_CODE: &str = "SQBRSQL005";
+pub(crate) const LONG_LITERAL_CODE: &str = "SQBRSQL044";
+pub(crate) const NATIVE_LINT_ERROR_CODE: &str = "L003";
+pub(crate) const PARSE_ERROR_POSITION_PATTERN: &str =
+    r"^Parse error at line (?P<line>\d+), column (?P<column>\d+):";
+pub(crate) const HARNESS_CTE_PREFIXES: [&str; 13] = [
+    "__expected__",
+    "__assert__",
+    "__ref__",
+    "__source__",
+    "__seed__",
+    "__dbt_ref__",
+    "__macro__",
+    "__macro_actual__",
+    "__macro_expected__",
+    "__udf_actual__",
+    "__udf_expected__",
+    "__table_fn_actual__",
+    "__table_fn_expected__",
+];
+pub(crate) const PARSE_FAILURE_PREFIX: &str = "Native SQL parser could not analyze this body: ";
+pub(crate) const PARSE_FAILURE_REMEDIATION: &str =
+    "Use SQL syntax supported by the native parser or report the parser gap.";
+pub(crate) const INVALID_DIAGNOSTIC: &str =
+    "native lint diagnostic has invalid code, message, or source span";
+pub(crate) const INVALID_FIX_REASON: &str =
+    "native lint diagnostic has an invalid fix refusal reason";
+pub(crate) const INVALID_FIX_OBJECT: &str = "native lint diagnostic fix must be an object";
+pub(crate) const INVALID_FIX_EDIT: &str = "native lint diagnostic has an invalid fix edit";
+pub(crate) const NOT_AN_OBJECT: &str = "native lint diagnostic must be an object";
+pub(crate) const NON_OBJECT_RESPONSE: &str = "native lint engine returned a non-object response";
+pub(crate) const UNSUPPORTED_VERSION: &str =
+    "native lint engine returned an unsupported response version";
+pub(crate) const MISSING_DIAGNOSTICS: &str = "native lint response is missing a diagnostics list";
+pub(crate) const INVALID_BATCH: &str = "native lint engine returned an invalid batch response";
+pub(crate) const NON_CONTIGUOUS_FIX: &str =
+    "fix overlaps generated SQL or a non-contiguous authored region";
+pub(crate) const GENERATED_FIX: &str = "fix overlaps generated SQL";
+pub(crate) const GENERATED_SQL_SUFFIX: &str = "(in generated SQL)";

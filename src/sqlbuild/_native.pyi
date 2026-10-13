@@ -249,7 +249,7 @@ from sqlbuild.integrations.dbt.models import (
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
+from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintViolation
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -1774,6 +1774,9 @@ def scan_fixture_typed_null_candidates(
 def format_lint_sql_bodies(
     files: list[tuple[Path, str]], project_dir: Path, config: LintConfig
 ) -> tuple[dict[Path, str], list[LintViolation]]: ...
+def lint_native_sql_bodies(
+    bodies: list[LintBody], contents_by_path: dict[Path, str], config: LintConfig
+) -> list[LintViolation]: ...
 def apply_lint_suppressions(
     violations: list[LintViolation],
     contents_by_path: dict[Path, str],

@@ -1,6 +1,7 @@
 pub mod apply_suppressions;
 pub mod format_sql_bodies;
 pub mod interpolation_text_at;
+pub mod lint_sql_bodies;
 pub mod neutralize_audit_parameters;
 pub mod neutralize_context_interpolation;
 pub mod neutralize_interpolation;

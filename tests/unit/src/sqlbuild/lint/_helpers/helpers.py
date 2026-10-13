@@ -5,13 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 
 from sqlbuild._native import (
+    lint_native_sql_bodies,
     neutralize_lint_interpolation,
     restore_lint_interpolation,
     scan_headers,
     sql_body_ranges,
 )
 from sqlbuild.lint.exceptions import InterpolationRestorationError
-from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintBody
+from sqlbuild.lint.models import (
+    HeaderSpan,
+    InterpolationSite,
+    LintBody,
+    LintConfig,
+    LintViolation,
+)
 from sqlbuild.lint.types import NativeLintPreparationRequest, NativePreparedSql
 
 
@@ -157,3 +164,14 @@ def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -
     if not restored:
         raise InterpolationRestorationError(text)
     return text
+
+
+def run_native_sql_lint(
+    *, bodies: tuple[LintBody, ...], contents_by_path: dict[Path, str], config: LintConfig
+) -> dict[Path, tuple[LintViolation, ...]]:
+    """Lint bodies natively and group the violations by file."""
+
+    grouped: dict[Path, list[LintViolation]] = {}
+    for violation in lint_native_sql_bodies(list(bodies), contents_by_path, config):
+        grouped.setdefault(violation.file_path, []).append(violation)
+    return {path: tuple(violations) for path, violations in grouped.items()}

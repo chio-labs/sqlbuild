@@ -44,3 +44,13 @@ pub(crate) struct FormatBodiesTestCase {
     pub(crate) expected_formatted: Vec<(usize, String)>,
     pub(crate) expected_fault_lines: Vec<usize>,
 }
+
+pub(crate) struct LintBodiesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) contents: &'static str,
+    pub(crate) body: crate::lint_text::models::LintSqlBody,
+    pub(crate) expected_findings: Vec<Finding<'static>>,
+}
+
+/// One mapped finding: code, line, column and optional end position.
+pub(crate) type Finding<'a> = (&'a str, i64, i64, Option<(i64, i64)>);

@@ -25,7 +25,7 @@ from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.lint._helpers.headers import lint_body_ranges, lint_file_role
-from sqlbuild.lint._helpers.native_sql import check_lint_not_stopped
+from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
     HEADER_KIND_SCENARIO,
     HEADER_KIND_TEST,
@@ -319,7 +319,7 @@ def expand_file_bodies(
 ) -> ExpandedLintFile:
     """Expand one file's bodies up to the first body that cannot be expanded."""
 
-    check_lint_not_stopped()
+    LintStopContext.check()
     bodies: list[PendingLintBody] = []
     role: LintFileRole = lint_file_role(
         file_path=file_path, project_dir=project_dir, relative_path=relative_path
@@ -372,7 +372,7 @@ def prepare_expanded_files(
 ) -> PreparedLintFiles:
     """Prepare every expanded body natively at once, then report failures in file order."""
 
-    check_lint_not_stopped()
+    LintStopContext.check()
     pending: list[PendingLintBody] = []
     for expanded in expanded_files:
         pending.extend(expanded.bodies)

@@ -93,3 +93,61 @@ pub(crate) struct PreparedBody {
     pub(crate) sites: Vec<InterpolationSite>,
     pub(crate) omits_select: bool,
 }
+
+/// One substitution of an expansion pass: authored source range and generated output range.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExpansionSpan {
+    pub source_start: i64,
+    pub source_end: i64,
+    pub output_start: i64,
+    pub output_end: i64,
+}
+
+/// One expanded, neutralized authored body to lint; offsets are character positions.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LintSqlBody {
+    pub file: usize,
+    pub body_start: i64,
+    pub lint_text: String,
+    pub passes: Vec<Vec<ExpansionSpan>>,
+    pub external_identifiers: Vec<String>,
+    pub dependency_identifiers: Vec<String>,
+    pub externally_referenced_ctes: Vec<String>,
+    pub allows_ceremonial_select: bool,
+    pub allows_dynamic_output_star: bool,
+    pub allows_empty_fixture_star: bool,
+    pub relation_keys: Vec<(String, Vec<Vec<String>>)>,
+}
+
+/// The rule selection and thresholds of one SQL lint run.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LintSqlOptions {
+    pub dialect: String,
+    pub enabled_rules: Option<Vec<String>>,
+    pub ignored_rules: Vec<String>,
+    pub max_literal_length: i64,
+    pub max_ranking_order_by: i64,
+}
+
+/// An authored-source replacement proposed by a rule; offsets are character positions.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthoredEdit {
+    pub start: i64,
+    pub end: i64,
+    pub replacement: String,
+}
+
+/// One SQL lint diagnostic mapped onto authored source.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuthoredDiagnostic {
+    pub file: usize,
+    pub line: i64,
+    pub column: i64,
+    pub code: String,
+    pub message: String,
+    pub fault: bool,
+    pub end: Option<(i64, i64)>,
+    pub remediation: String,
+    pub fix: Option<AuthoredEdit>,
+    pub fix_unavailable_reason: Option<String>,
+}
