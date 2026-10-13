@@ -16,12 +16,17 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.models import LineageCommandRequest, LineageTarget, ScopeCommandRequest
+from sqlbuild.cli.commands.models import (
+    LineageCommandRequest,
+    LineageTarget,
+    PlaygroundCommandRequest,
+    ScopeCommandRequest,
+)
 from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
-from sqlbuild.cli.output.models import WrittenTarget
+from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -1264,6 +1269,25 @@ class CliDocument:
         self, *, commands: tuple[str, ...], numbered: bool = False, style_command: bool = True
     ) -> None: ...
     def render(self, *, trailing_newline: bool = True) -> str: ...
+
+def update_sqlbuild_skills(
+    *,
+    project_dir: Path,
+    global_install: bool = False,
+    requested_targets: tuple[str, ...] = (),
+    force: bool = False,
+    home_dir: Path | None = None,
+) -> SkillUpdateResult: ...
+def maintain_sqlbuild_skills(*, project_dir: Path) -> SkillMaintenanceResult: ...
+def load_packaged_skill_files() -> dict[str, str]: ...
+def run_skills_command(
+    *,
+    project_dir: Path | None,
+    global_install: bool = False,
+    targets: tuple[str, ...] = (),
+    force: bool = False,
+) -> int: ...
+def run_playground_command(request: PlaygroundCommandRequest) -> int: ...
 
 class TerminalEventClaim:
     @property

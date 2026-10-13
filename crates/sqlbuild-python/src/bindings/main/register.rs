@@ -9,7 +9,7 @@ use crate::bindings::_helpers::{
     contracts, cost_report, dag_artifact, discovery, fingerprints, frontier, graph, lineage,
     macro_bridge, manifest, model_config, plan_output, presentation_text, project_assembly,
     refactor, references, render, result_output, rules, scopes, semantic_checks, semantic_shapes,
-    sql_test_glue, sqltext, type_system,
+    sql_test_glue, sqltext, type_system, workspace_commands,
 };
 use crate::bindings::models;
 
@@ -50,6 +50,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     result_output::registration::register(module)?;
     cost_report::registration::register(module)?;
     presentation_text::registration::register(module)?;
+    workspace_commands::registration::register(module)?;
     auditing::registration::register(module)?;
     Ok(())
 }

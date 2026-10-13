@@ -2,7 +2,7 @@
 
 from types import MappingProxyType
 
-from sqlbuild.cli.commands.types import CliCommand, PlaygroundTemplate
+from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.spec.contracts.types import WarehouseGroup
 
 C0_CONTROL_CODE_LIMIT: int = 32
@@ -26,13 +26,6 @@ RULES_SKILLS_ACTION: str = "skills"
 SQL_FILE_SUFFIX: str = ".sql"
 COLUMN_TARGET_SEPARATOR: str = "."
 COLUMN_TARGET_KIND: str = "column"
-PLAYGROUND_ORCHESTRATED_PROJECT_DIR: str = "waffle_shop"
-PLAYGROUND_ORCHESTRATED_TEMPLATES: frozenset[PlaygroundTemplate] = frozenset(
-    {PlaygroundTemplate.DAGSTER, PlaygroundTemplate.RIVERS}
-)
-PLAYGROUND_TEMPLATE_VALUES: tuple[str, ...] = tuple(
-    template.value for template in PlaygroundTemplate
-)
 SUCCESS_STATUS: str = "success"
 FAILED_STATUS: str = "failed"
 DEFAULT_MAX_SNAPSHOT_ROWS_PER_RELATION: int = 10_000

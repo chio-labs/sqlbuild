@@ -5,15 +5,11 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands._helpers.playground import (
-    completion_output as playground_completion_output,
-)
-from sqlbuild.cli.commands._helpers.playground.copy import create_playground_project
-from sqlbuild.cli.commands._helpers.skills.update import maintain_sqlbuild_skills
+from sqlbuild._native import maintain_sqlbuild_skills, run_playground_command
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.commands.main.workspace._playground import run_playground
 from sqlbuild.cli.commands.models import PlaygroundCommandRequest
 from sqlbuild.cli.output.models import SkillMaintenanceResult
+from sqlbuild.presentation.main import supports_color as playground_completion_output
 from tests.unit.src.sqlbuild.cli.commands.main.playground._test_types import (
     CreatePlaygroundProjectTestCase,
     RunPlaygroundTestCase,
@@ -228,7 +224,13 @@ def test_given_missing_target_when_creating_playground_then_it_copies_clean_temp
 ) -> None:
     target_dir: Path = tmp_path / test_case.target_relative_path
 
-    create_playground_project(target_dir=target_dir, template=test_case.template)
+    _ = run_playground_command(
+        PlaygroundCommandRequest(
+            project_dir=tmp_path,
+            target_path=str(test_case.target_relative_path),
+            template=test_case.template,
+        )
+    )
 
     expected_file: Path
     for expected_file in test_case.expected_files:
@@ -273,7 +275,11 @@ def test_given_existing_target_when_creating_playground_then_it_raises_user_erro
     target_dir.mkdir()
 
     with pytest.raises(CliUserError) as exc_info:
-        create_playground_project(target_dir=target_dir)
+        _ = run_playground_command(
+            PlaygroundCommandRequest(
+                project_dir=tmp_path, target_path=str(test_case.target_relative_path)
+            )
+        )
 
     assert test_case.expected_error_fragment in str(exc_info.value)
 
@@ -352,7 +358,7 @@ def test_given_playground_command_when_running_then_it_prints_next_steps(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    exit_code: int = run_playground(
+    exit_code: int = run_playground_command(
         PlaygroundCommandRequest(
             project_dir=tmp_path,
             target_path=test_case.target_path,
@@ -395,7 +401,7 @@ def test_given_color_terminal_when_running_playground_command_then_it_styles_key
 ) -> None:
     monkeypatch.setattr(playground_completion_output, "supports_color", lambda: True)
 
-    exit_code: int = run_playground(
+    exit_code: int = run_playground_command(
         PlaygroundCommandRequest(
             project_dir=tmp_path,
             target_path=test_case.target_path,
@@ -432,7 +438,7 @@ def test_given_wrapper_playground_when_maintaining_skills_then_nested_project_se
     test_case: WrapperPlaygroundSkillsTestCase,
     tmp_path: Path,
 ) -> None:
-    exit_code: int = run_playground(
+    exit_code: int = run_playground_command(
         PlaygroundCommandRequest(
             project_dir=tmp_path, target_path="orchestrator", template=test_case.template
         )

@@ -27,9 +27,7 @@ from sqlbuild.cli.entry.models import (  # noqa: F401
     SelectorFileSummary,
 )
 from sqlbuild.cli.output.models import (  # noqa: F401
-    SkillInstallTarget,
     SkillMaintenanceResult,
-    SkillSettings,
     SkillUpdateResult,
     WrittenTarget,
 )
@@ -852,14 +850,6 @@ class PlaygroundCommandRequest:
     project_dir: Path | None
     target_path: str
     template: str = PlaygroundTemplate.WAFFLE_SHOP.value
-
-
-@dataclass(frozen=True)
-class PlaygroundTarget:
-    """Resolved playground destination directory and template."""
-
-    target_dir: Path
-    template: PlaygroundTemplate
 
 
 @dataclass(frozen=True)

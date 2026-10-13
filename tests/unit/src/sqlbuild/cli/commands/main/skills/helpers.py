@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path, PurePosixPath
 
-from sqlbuild.cli.commands._helpers.skills.update import update_sqlbuild_skills
+from sqlbuild._native import update_sqlbuild_skills
 from sqlbuild.cli.output.models import SkillUpdateResult
 
 

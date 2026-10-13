@@ -8,4 +8,5 @@ pub mod errors;
 pub mod models;
 pub mod project;
 pub mod toml;
+pub mod workspace;
 pub mod yaml;

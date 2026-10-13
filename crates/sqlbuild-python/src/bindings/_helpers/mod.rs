@@ -38,3 +38,4 @@ pub(crate) mod semantic_shapes;
 pub(crate) mod sql_test_glue;
 pub(crate) mod sqltext;
 pub(crate) mod type_system;
+pub(crate) mod workspace_commands;

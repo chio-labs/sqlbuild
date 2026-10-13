@@ -5,11 +5,9 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.skills.update import (
-    generated_marker,
+from sqlbuild._native import (
     load_packaged_skill_files,
     maintain_sqlbuild_skills,
-    skill_entry_file,
     update_sqlbuild_skills,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
@@ -29,6 +27,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.skills.helpers import (
     write_project_files,
 )
 
+GENERATED_MARKER: str = "<!-- generated-by: sqlbuild skills -->"
+SKILL_ENTRY_FILE: str = "SKILL.md"
+
 _SKILL_DIR: Path = Path(".agents/skills/sqlbuild")
 
 
@@ -41,7 +42,7 @@ _SKILL_DIR: Path = Path(".agents/skills/sqlbuild")
         SkillDirectoryInstallTestCase(
             description="removes generated files that are no longer shipped",
             existing_files={
-                _SKILL_DIR / "references/docs/retired_page.md": f"{generated_marker}\nold\n",
+                _SKILL_DIR / "references/docs/retired_page.md": f"{GENERATED_MARKER}\nold\n",
             },
             expected_absent_paths=(_SKILL_DIR / "references/docs/retired_page.md",),
         ),
@@ -79,7 +80,7 @@ def test_given_skill_directory_when_updating_then_it_matches_the_package(
             description="custom reference file blocks the whole install",
             existing_files={_SKILL_DIR / "references/testing.md": "custom testing notes\n"},
             expected_error_fragment="references/testing.md",
-            expected_unwritten_path=_SKILL_DIR / skill_entry_file,
+            expected_unwritten_path=_SKILL_DIR / SKILL_ENTRY_FILE,
         ),
     ],
     ids=lambda case: case.description,
@@ -131,7 +132,7 @@ def test_given_stale_reference_page_when_maintaining_then_directory_is_checked(
     )
     skill_dir: Path = install_packaged_skill(project_dir=tmp_path, target="agents")
     stale_path: Path = skill_dir / test_case.stale_relative_path
-    stale_path.write_text(f"{generated_marker}\nold\n", encoding="utf-8")
+    stale_path.write_text(f"{GENERATED_MARKER}\nold\n", encoding="utf-8")
 
     result: SkillMaintenanceResult = maintain_sqlbuild_skills(project_dir=tmp_path)
 
@@ -155,6 +156,7 @@ def test_given_stale_reference_page_when_maintaining_then_directory_is_checked(
 def test_given_packaged_skill_when_reading_then_entry_is_short_and_references_resolve(
     test_case: SkillContentTestCase,
 ) -> None:
+
     packaged: dict[str, str] = load_packaged_skill_files()
     authored_paths: set[str] = set(packaged) - set(fnmatch.filter(packaged, "references/docs/*"))
     authored: dict[str, str] = {path: packaged[path] for path in authored_paths}
@@ -169,7 +171,7 @@ def test_given_packaged_skill_when_reading_then_entry_is_short_and_references_re
         *(mentioned_sqb_commands(text=text) for text in authored.values())
     )
 
-    assert packaged[skill_entry_file].count("\n") <= test_case.max_entry_lines
+    assert packaged[SKILL_ENTRY_FILE].count("\n") <= test_case.max_entry_lines
     assert len({path.casefold() for path in packaged}) == len(packaged)
     assert links - packaged.keys() == test_case.expected_broken_links
     assert commands - {command.value for command in CliCommand} == (

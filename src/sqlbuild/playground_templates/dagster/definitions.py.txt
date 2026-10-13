@@ -1,0 +1,41 @@
+"""Dagster definitions for the SQLBuild waffle shop playground."""
+
+from pathlib import Path
+
+import dagster as dg
+
+from sqlbuild.integrations.dagster import (
+    SqlBuildCliResource,
+    SqlBuildProject,
+    sqlbuild_assets,
+    sqlbuild_scenario_checks,
+)
+
+PROJECT_DIR = Path(__file__).resolve().parent / "waffle_shop"
+SQLBUILD_PROJECT = SqlBuildProject(project_dir=PROJECT_DIR)
+
+SQLBUILD_PROJECT.prepare_if_dev()
+
+
+@sqlbuild_assets(
+    project=SQLBUILD_PROJECT,
+    required_resource_keys={"sqb"},
+    include_scenario_checks=False,
+)
+def waffle_shop_assets(context: dg.AssetExecutionContext):
+    yield from context.resources.sqb.cli(["build"], context=context).stream()
+
+
+@sqlbuild_scenario_checks(
+    project=SQLBUILD_PROJECT,
+    required_resource_keys={"sqb"},
+)
+def waffle_shop_scenarios(context: dg.AssetCheckExecutionContext):
+    yield from context.resources.sqb.cli(["scenario", "test"], context=context).stream()
+
+
+defs = dg.Definitions(
+    assets=[waffle_shop_assets],
+    asset_checks=[waffle_shop_scenarios],
+    resources={"sqb": SqlBuildCliResource(project_dir=SQLBUILD_PROJECT)},
+)

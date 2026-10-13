@@ -651,10 +651,7 @@ const PLAYGROUND_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const PLAYGROUND_ROUTE: Route = routed(
     "run_playground",
-    (
-        "sqlbuild.cli.commands.main.workspace._playground",
-        "run_playground",
-    ),
+    ("sqlbuild._native", "run_playground_command"),
     &PLAYGROUND_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -667,10 +664,7 @@ const SKILLS_ARGUMENTS: [Field; 4] = [
 ];
 pub(crate) const SKILLS_ROUTE: Route = routed(
     "run_skills_update",
-    (
-        "sqlbuild.cli.commands.main.workspace._skills",
-        "run_skills_update",
-    ),
+    ("sqlbuild._native", "run_skills_command"),
     &SKILLS_ARGUMENTS,
     CallShape {
         slot_positional: 0,

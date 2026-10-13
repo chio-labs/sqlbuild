@@ -22,23 +22,6 @@ class WrittenTarget:
 
 
 @dataclass(frozen=True)
-class SkillInstallTarget:
-    """One destination for a SQLBuild skill file."""
-
-    name: str
-    path: Path
-
-
-@dataclass(frozen=True)
-class SkillSettings:
-    """Project skill installation preferences."""
-
-    targets: tuple[str, ...]
-    auto_update: bool
-    configured: bool
-
-
-@dataclass(frozen=True)
 class SkillMaintenanceResult:
     """Non-blocking generated-skill maintenance result."""
 

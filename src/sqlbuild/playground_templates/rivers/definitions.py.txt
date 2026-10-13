@@ -1,0 +1,53 @@
+"""Rivers definitions for the SQLBuild waffle shop playground."""
+
+from __future__ import annotations
+
+import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import rivers as rs
+
+from sqlbuild.integrations.rivers import SqlBuildProject, sqlbuild_assets
+
+PROJECT_DIR = Path(__file__).resolve().parent / "waffle_shop"
+SQLBUILD_PROJECT = SqlBuildProject(project_dir=PROJECT_DIR)
+
+if __name__ == "__main__":
+    SQLBUILD_PROJECT.prepare()
+else:
+    SQLBUILD_PROJECT.prepare_if_dev()
+
+
+@sqlbuild_assets(project=SQLBUILD_PROJECT)
+def waffle_shop_assets(context: Any) -> Iterator[Any]:
+    completed = subprocess.run(
+        ["sqb", "build"],
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr or completed.stdout)
+    for output_name in context.output_selection:
+        yield rs.Materialization(output_name=output_name)
+
+
+repo = rs.CodeRepository(
+    assets=[waffle_shop_assets],
+    jobs=[
+        rs.Job(
+            name="waffle_shop",
+            assets=[waffle_shop_assets],
+            executor=rs.Executor.in_process(),
+        ),
+    ],
+    default_executor=rs.Executor.in_process(),
+)
+
+
+if __name__ == "__main__":
+    result = repo.get_job("waffle_shop").execute()
+    raise SystemExit(0 if result.success else 1)

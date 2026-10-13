@@ -4,10 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.skills.update import (
-    ensure_generated_marker,
-    generated_marker,
-    load_packaged_skill_content,
+from sqlbuild._native import (
+    load_packaged_skill_files,
     maintain_sqlbuild_skills,
     update_sqlbuild_skills,
 )
@@ -27,6 +25,8 @@ from tests.unit.src.sqlbuild.cli.commands.main.skills.helpers import (
     write_git_marker,
     write_project_files,
 )
+
+GENERATED_MARKER: str = "<!-- generated-by: sqlbuild skills -->"
 
 
 @pytest.mark.parametrize(
@@ -108,7 +108,7 @@ def test_given_skill_update_options_when_updating_then_writes_expected_targets(
     for expected_path in test_case.expected_written_paths:
         contents: str = read_relative_file(project_dir=tmp_path, relative_path=expected_path)
         assert contents.startswith("---\nname: sqlbuild\n")
-        assert generated_marker in contents
+        assert GENERATED_MARKER in contents
         assert test_case.expected_content_fragment in contents
 
 
@@ -148,7 +148,7 @@ def test_given_global_skill_update_when_updating_then_writes_under_home_director
     for expected_path in test_case.expected_written_paths:
         contents: str = read_relative_file(project_dir=tmp_path, relative_path=expected_path)
         assert contents.startswith("---\nname: sqlbuild\n")
-        assert generated_marker in contents
+        assert GENERATED_MARKER in contents
 
 
 @pytest.mark.parametrize(
@@ -173,29 +173,6 @@ def test_given_non_generated_skill_file_when_updating_without_force_then_raises_
         update_sqlbuild_skills(project_dir=tmp_path, requested_targets=test_case.requested_targets)
 
     assert test_case.expected_error_fragment in str(exc_info.value)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SkillUpdateTestCase(
-            description="keeps skill frontmatter before generated marker",
-            expected_content_fragment=(
-                f"---\nname: sqlbuild\n---\n\n{generated_marker}\n# SQLBuild Skill"
-            ),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_skill_frontmatter_when_adding_generated_marker_then_marker_follows_frontmatter(
-    test_case: SkillUpdateTestCase,
-) -> None:
-    content: str = "---\nname: sqlbuild\n---\n# SQLBuild Skill\n"
-
-    updated_content: str = ensure_generated_marker(content)
-
-    assert updated_content.startswith("---\nname: sqlbuild\n")
-    assert test_case.expected_content_fragment in updated_content
 
 
 @pytest.mark.parametrize(
@@ -257,8 +234,8 @@ def test_given_project_skill_state_when_maintaining_then_reports_or_updates_owne
 
     assert test_case.expected_message_fragment in result.message
     for relative_path in test_case.expected_written_paths:
-        assert (tmp_path / relative_path).read_text(encoding="utf-8") == ensure_generated_marker(
-            load_packaged_skill_content()
+        assert (tmp_path / relative_path).read_text(encoding="utf-8") == (
+            load_packaged_skill_files()["SKILL.md"]
         )
 
 
@@ -281,6 +258,7 @@ def test_given_custom_skill_collision_when_maintaining_then_file_is_not_overwrit
     test_case: SkillMaintenanceTestCase,
     tmp_path: Path,
 ) -> None:
+
     prepare_skill_update_project(
         project_dir=tmp_path,
         project_config=test_case.project_config,
