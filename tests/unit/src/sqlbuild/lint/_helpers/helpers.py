@@ -11,7 +11,6 @@ from sqlbuild._native import (
     scan_headers,
     sql_body_ranges,
 )
-from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import (
     HeaderSpan,
     InterpolationSite,
@@ -155,15 +154,10 @@ def neutralize_interpolation(
     return neutralized, tuple(InterpolationSite(*site) for site in sites)
 
 
-def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -> str:
-    """Restore neutralized interpolation natively from lint site models."""
+def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -> tuple[bool, str]:
+    """Restore neutralized interpolation natively; returns whether it succeeded and the text."""
 
-    restored, text = restore_lint_interpolation(
-        fixed, [tuple(vars(site).values()) for site in sites]
-    )
-    if not restored:
-        raise InterpolationRestorationError(text)
-    return text
+    return restore_lint_interpolation(fixed, [tuple(vars(site).values()) for site in sites])
 
 
 def run_native_sql_lint(

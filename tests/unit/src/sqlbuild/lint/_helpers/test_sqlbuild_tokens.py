@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     DialectNeutralizeInterpolationTestCase,
@@ -50,7 +49,7 @@ def test_given_unicode_before_intrinsics_when_preparing_then_lint_preserves_sema
         == lint_sites[0].sentinel
     )
     assert len(format_sites) == 4
-    assert restore_interpolation(fixed=format_sql, sites=format_sites) == sql
+    assert restore_interpolation(fixed=format_sql, sites=format_sites) == (True, sql)
     assert all(
         sql[site.original_start : site.original_end] == site.original_text for site in format_sites
     )
@@ -366,7 +365,8 @@ def test_given_fixed_text_when_restoring_then_original_interpolation_returns(
 ) -> None:
     sites: tuple[InterpolationSite, ...]
     _neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
-    restored: str = restore_interpolation(fixed=test_case.fixed_neutralized, sites=sites)
+    succeeded, restored = restore_interpolation(fixed=test_case.fixed_neutralized, sites=sites)
+    assert succeeded
     assert restored == test_case.expected_restored
 
 
@@ -388,14 +388,14 @@ def test_given_fixed_text_when_restoring_then_original_interpolation_returns(
     ],
     ids=lambda case: case.description,
 )
-def test_given_mangled_sentinels_when_restoring_then_error_is_raised(
+def test_given_mangled_sentinels_when_restoring_then_failure_is_reported(
     test_case: RestoreFailureTestCase,
 ) -> None:
     sites: tuple[InterpolationSite, ...]
     _neutralized, sites = neutralize_interpolation(body=test_case.body, dialect="generic")
-    with pytest.raises(InterpolationRestorationError) as error:
-        _ = restore_interpolation(fixed=test_case.fixed_neutralized, sites=sites)
-    assert test_case.expected_message_fragment in str(error.value)
+    succeeded, message = restore_interpolation(fixed=test_case.fixed_neutralized, sites=sites)
+    assert not succeeded
+    assert test_case.expected_message_fragment in message
 
 
 @pytest.mark.parametrize(
@@ -455,4 +455,4 @@ def test_given_dollar_quoted_text_when_neutralizing_then_python_and_native_sites
     assert native is not None
     assert native[0] == lint_sql
     assert tuple(InterpolationSite(*site) for site in native[1]) == lint_sites
-    assert restore_interpolation(fixed=format_sql, sites=format_sites) == sql
+    assert restore_interpolation(fixed=format_sql, sites=format_sites) == (True, sql)
