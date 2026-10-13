@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
+from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands._helpers.runtime.connection import resolve_project_connection_config
 from sqlbuild.cli.commands._helpers.runtime.warehouse_scope import command_warehouse_scope
 from sqlbuild.cli.commands._helpers.runtime.warehouses import describe_connection_warehouse
 from sqlbuild.cli.commands.constants import COMMAND_WAREHOUSE_GROUPS
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.types import CliCommand
-from sqlbuild.cli.entry.models import ResolvedWarehouse
+from sqlbuild.cli.entry.models import ParsedCliInvocation, ResolvedWarehouse
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.spec.contracts.models import LocalTargetConfig, TargetWarehousesConfig
 from sqlbuild.spec.contracts.types import WarehouseGroup
@@ -312,9 +311,10 @@ def test_given_cli_command_when_checking_warehouse_groups_then_it_is_classified(
 def test_given_grouped_command_when_parsing_warehouse_flag_then_value_is_kept(
     test_case: WarehouseFlagParseTestCase,
 ) -> None:
-    parsed: argparse.Namespace = build_cli_parser().parse_args(list(test_case.argv))
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
-    assert parsed.warehouse == test_case.expected_warehouse
+    assert parsed.args is not None
+    assert parsed.args.warehouse == test_case.expected_warehouse
 
 
 @pytest.mark.parametrize(
@@ -333,9 +333,9 @@ def test_given_command_without_group_when_parsing_warehouse_flag_then_it_is_reje
     test_case: WarehouseFlagRejectedTestCase,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    with pytest.raises(SystemExit):
-        build_cli_parser().parse_args(list(test_case.argv))
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
+    assert parsed.exit_code == 2
     assert test_case.expected_error_fragment in capsys.readouterr().err
 
 

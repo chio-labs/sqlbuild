@@ -1599,6 +1599,9 @@ class SqlReferenceScanner:
 def scope_expected_model_names(
     texts: list[tuple[str, str]], scenario: bool, syntax: dict[str, object]
 ) -> list[tuple[str | None, list[str]]]: ...
+def parse_cli_arguments(
+    argv: list[str], defaults: list[tuple[str, object]], *, use_color: bool, columns: int
+) -> tuple[list[tuple[str, object]] | None, int | None]: ...
 def scope_test_ctes(
     texts: list[tuple[str, str]], syntax: dict[str, object]
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...

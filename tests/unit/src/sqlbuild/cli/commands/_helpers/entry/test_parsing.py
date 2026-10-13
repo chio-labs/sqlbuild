@@ -3,23 +3,30 @@
 from __future__ import annotations
 
 from importlib.metadata import version as installed_version
+from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
+from sqlbuild.cli.commands.types import CompileLineageMode, PlaygroundTemplate
 from sqlbuild.cli.entry.models import (
     ParsedCliInvocation,
 )
+from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.compiler.scopes.types import DeclarationKind
 from tests.unit.src.sqlbuild.cli.commands._helpers.entry._test_types import (
     AuditConcurrencyParsingTestCase,
+    ChoiceListTestCase,
     DbtProjectDirParsingTestCase,
     GlobalFlagPlacementTestCase,
+    HelpOutputTestCase,
     OutputFormatAliasTestCase,
     PositionalSelectTestCase,
     QueryDiffParsingTestCase,
     RejectedArgumentsTestCase,
+    TypedValueTestCase,
     UntypedCursorParsingTestCase,
+    VarsRejectionTestCase,
     VerboseCommandTestCase,
     VersionFlagTestCase,
 )
@@ -69,7 +76,7 @@ def test_given_raw_query_diff_arguments_when_parsing_then_inputs_remain_distinct
 ) -> None:
     parsed: ParsedCliInvocation = parse_cli_invocation(
         argv=test_case.argv,
-        parser=build_cli_parser(),
+        use_color=False,
     )
 
     assert parsed.args is not None
@@ -98,15 +105,15 @@ def test_given_output_mode_when_parsing_verbose_command_then_normalizes_consiste
 ) -> None:
     default: ParsedCliInvocation = parse_cli_invocation(
         argv=test_case.expected_argv,
-        parser=build_cli_parser(),
+        use_color=False,
     )
     verbose: ParsedCliInvocation = parse_cli_invocation(
         argv=(*test_case.expected_argv, "--verbose"),
-        parser=build_cli_parser(),
+        use_color=False,
     )
     debug: ParsedCliInvocation = parse_cli_invocation(
         argv=("--debug", *test_case.expected_argv),
-        parser=build_cli_parser(),
+        use_color=False,
     )
 
     assert default.args is not None
@@ -171,9 +178,7 @@ def test_given_audit_concurrency_sources_when_parsing_then_precedence_and_valida
 ) -> None:
     monkeypatch.setenv("SQLBUILD_CONCURRENCY", test_case.environment_value or "")
 
-    parsed: ParsedCliInvocation = parse_cli_invocation(
-        argv=test_case.argv, parser=build_cli_parser()
-    )
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
     assert parsed.exit_code == test_case.expected_exit_code
     assert getattr(parsed.args, "concurrency", None) == test_case.expected_concurrency
@@ -201,7 +206,7 @@ def test_given_version_flag_when_parsing_then_prints_version_and_exits_zero(
 ) -> None:
     invocation: ParsedCliInvocation = parse_cli_invocation(
         argv=test_case.argv,
-        parser=build_cli_parser(),
+        use_color=False,
     )
 
     assert invocation.args is None
@@ -260,9 +265,7 @@ def test_given_version_flag_when_parsing_then_prints_version_and_exits_zero(
 def test_given_global_flags_anywhere_when_parsing_then_they_apply_to_the_invocation(
     test_case: GlobalFlagPlacementTestCase,
 ) -> None:
-    parsed: ParsedCliInvocation = parse_cli_invocation(
-        argv=test_case.argv, parser=build_cli_parser()
-    )
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
     assert parsed.args is not None
     assert parsed.args.debug is test_case.expected_debug
@@ -293,9 +296,7 @@ def test_given_global_flags_anywhere_when_parsing_then_they_apply_to_the_invocat
 def test_given_dbt_project_dir_when_parsing_then_it_is_not_the_sqlbuild_project_dir(
     test_case: DbtProjectDirParsingTestCase,
 ) -> None:
-    parsed: ParsedCliInvocation = parse_cli_invocation(
-        argv=test_case.argv, parser=build_cli_parser()
-    )
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
     assert parsed.args is not None
     assert parsed.args.project_dir is None
@@ -353,9 +354,7 @@ def test_given_dbt_project_dir_when_parsing_then_it_is_not_the_sqlbuild_project_
 def test_given_positional_selectors_when_parsing_then_they_join_the_selection(
     test_case: PositionalSelectTestCase,
 ) -> None:
-    parsed: ParsedCliInvocation = parse_cli_invocation(
-        argv=test_case.argv, parser=build_cli_parser()
-    )
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
     assert parsed.args is not None
     assert tuple(parsed.args.select) == test_case.expected_select
@@ -394,9 +393,7 @@ def test_given_positional_selectors_when_parsing_then_they_join_the_selection(
 def test_given_json_alias_when_parsing_then_selects_json_format(
     test_case: OutputFormatAliasTestCase,
 ) -> None:
-    parsed: ParsedCliInvocation = parse_cli_invocation(
-        argv=test_case.argv, parser=build_cli_parser()
-    )
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
     assert parsed.args is not None
     assert getattr(parsed.args, test_case.format_attribute) == test_case.expected_format
@@ -424,9 +421,7 @@ def test_given_json_alias_when_parsing_then_selects_json_format(
 def test_given_untyped_cursor_flags_when_parsing_then_values_are_kept_raw(
     test_case: UntypedCursorParsingTestCase,
 ) -> None:
-    parsed: ParsedCliInvocation = parse_cli_invocation(
-        argv=test_case.argv, parser=build_cli_parser()
-    )
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
     assert parsed.args is not None
     assert (parsed.args.start_cursor, parsed.args.end_cursor) == (
@@ -455,6 +450,11 @@ def test_given_untyped_cursor_flags_when_parsing_then_values_are_kept_raw(
             expected_message="argument --format: not allowed with argument --json",
         ),
         RejectedArgumentsTestCase(
+            description="undecodable choice is shown escaped",
+            argv=("compile", "--lineage-mode", "\udcff"),
+            expected_message="argument --lineage-mode: invalid choice: '\\udcff'",
+        ),
+        RejectedArgumentsTestCase(
             description="untyped and typed cursor flags together",
             argv=("build", "--start-cursor", "5", "--end-cursor-int", "9"),
             expected_message=(
@@ -468,13 +468,169 @@ def test_given_conflicting_or_unknown_arguments_when_parsing_then_exits_with_usa
     test_case: RejectedArgumentsTestCase,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    parsed: ParsedCliInvocation = parse_cli_invocation(
-        argv=test_case.argv, parser=build_cli_parser()
-    )
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
 
     assert parsed.args is None
     assert parsed.exit_code == 2
     assert test_case.expected_message in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TypedValueTestCase(
+            description="path option",
+            argv=("build", "--json-output", "out/run.json"),
+            attribute="json_output",
+            expected_value=Path("out/run.json"),
+        ),
+        TypedValueTestCase(
+            description="json vars",
+            argv=("build", "--vars", '{"region": "emea", "limits": [1, 2]}'),
+            attribute="vars",
+            expected_value={"region": "emea", "limits": [1, 2]},
+        ),
+        TypedValueTestCase(
+            description="integer option",
+            argv=("build", "--concurrency", "3"),
+            attribute="concurrency",
+            expected_value=3,
+        ),
+        TypedValueTestCase(
+            description="positive integer option",
+            argv=("build", "--max-microbatches", "2"),
+            attribute="max_microbatches",
+            expected_value=2,
+        ),
+        TypedValueTestCase(
+            description="enum namespace default outside compile",
+            argv=("build",),
+            attribute="compile_lineage_mode",
+            expected_value=CompileLineageMode.FAST,
+        ),
+        TypedValueTestCase(
+            description="undecodable selector bytes survive",
+            argv=("build", "orders\udcff"),
+            attribute="select",
+            expected_value=["orders\udcff"],
+        ),
+        TypedValueTestCase(
+            description="compile lineage mode choice is a string",
+            argv=("compile", "--lineage-mode", "rich"),
+            attribute="compile_lineage_mode",
+            expected_value="rich",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_typed_options_when_parsing_then_values_have_their_python_types(
+    test_case: TypedValueTestCase,
+) -> None:
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
+
+    assert parsed.args is not None
+    value: object = getattr(parsed.args, test_case.attribute)
+    assert value == test_case.expected_value
+    assert type(value) is type(test_case.expected_value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ChoiceListTestCase(
+            description="compile lineage mode",
+            argv=("compile", "--lineage-mode"),
+            option="--lineage-mode",
+            expected_choices=tuple(mode.value for mode in CompileLineageMode),
+        ),
+        ChoiceListTestCase(
+            description="column lineage mode",
+            argv=("lineage", "orders", "--mode"),
+            option="--mode",
+            expected_choices=tuple(mode.value for mode in ColumnLineageMode),
+        ),
+        ChoiceListTestCase(
+            description="scope declaration kind",
+            argv=("scope", "orders", "--kind"),
+            option="--kind",
+            expected_choices=tuple(kind.value for kind in DeclarationKind),
+        ),
+        ChoiceListTestCase(
+            description="playground template",
+            argv=("playground", "--template"),
+            option="--template",
+            expected_choices=tuple(template.value for template in PlaygroundTemplate),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unknown_choice_when_parsing_then_error_lists_the_python_enum_values(
+    test_case: ChoiceListTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parsed: ParsedCliInvocation = parse_cli_invocation(
+        argv=(*test_case.argv, "not-a-choice"), use_color=False
+    )
+
+    choices: str = ", ".join(repr(choice) for choice in test_case.expected_choices)
+    assert parsed.exit_code == 2
+    assert (
+        f"argument {test_case.option}: invalid choice: 'not-a-choice' (choose from {choices})"
+        in capsys.readouterr().err
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        VarsRejectionTestCase(
+            description="malformed json",
+            vars_value="{orders",
+            expected_message="argument --vars: --vars must be valid JSON: Expecting property name",
+        ),
+        VarsRejectionTestCase(
+            description="json array",
+            vars_value="[1]",
+            expected_message="argument --vars: --vars must be a JSON object",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_vars_when_parsing_then_exits_with_coded_usage_error(
+    test_case: VarsRejectionTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parsed: ParsedCliInvocation = parse_cli_invocation(
+        argv=("build", "--vars", test_case.vars_value), use_color=False
+    )
+
+    error: str = capsys.readouterr().err
+    assert parsed.exit_code == 2
+    assert error.startswith("usage: sqb build")
+    assert f"sqb build: error[C900]: {test_case.expected_message}" in error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HelpOutputTestCase(description="root help", argv=("-h",), expected_usage="usage: sqb [-h]"),
+        HelpOutputTestCase(
+            description="command help", argv=("build", "--help"), expected_usage="usage: sqb build"
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_help_flag_when_parsing_then_prints_help_and_exits_zero(
+    test_case: HelpOutputTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    parsed: ParsedCliInvocation = parse_cli_invocation(argv=test_case.argv, use_color=False)
+
+    output: str = capsys.readouterr().out
+    assert parsed.args is None
+    assert parsed.exit_code == 0
+    assert output.startswith(test_case.expected_usage)
+    assert "\noptions:\n" in output
 
 
 if __name__ == "__main__":

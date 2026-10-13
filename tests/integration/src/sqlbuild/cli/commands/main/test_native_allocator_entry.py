@@ -67,7 +67,7 @@ def test_given_fresh_process_when_running_cli_entry_then_purge_delay_is_set_befo
 
     assert payload == {
         "loaded_at_import": False,
-        "loaded_by_version": False,
+        "loaded_by_version": True,
         "purge_delay": test_case.expected_purge_delay,
         "exit_code": 0,
     }

@@ -1,62 +1,19 @@
-"""CLI argument parsing with post-parse normalization."""
+"""CLI argument parsing through the native argv parser, with post-parse normalization."""
 
 from __future__ import annotations
 
-import argparse
-import os
+import shutil
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.commands.constants import (
-    DBT_PASSTHROUGH_SEPARATOR,
-    DBT_VERBOSE_OPTIONS,
-    DEBUG_OPTION,
-    EMPTY_ENV_VALUE,
-    NO_COLOR_OPTION,
-    POSITIONAL_SELECT_COMMANDS,
-    SCOPE_DEFAULT_PAGE_SIZE,
-    SCOPE_GLOBAL_SUMMARY,
-    SQLBUILD_CONCURRENCY_ENV_VAR,
-)
-from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.cli.entry.models import (
     ParsedCliInvocation,
     SelectorFileSummary,
     SelectorInputs,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind
-from sqlbuild.integrations.dbt.types import DbtInteropCommand
-
-_DBT_PASSTHROUGH_SUBCOMMANDS: frozenset[str] = frozenset(
-    {
-        "plan",
-        "run",
-        "build",
-        "debug",
-    }
-)
-
-
-def resolve_env_default_concurrency(explicit_concurrency: int | None) -> int | None:
-    """Return CLI concurrency, falling back to SQLBUILD_CONCURRENCY when unset."""
-
-    if explicit_concurrency is not None:
-        if explicit_concurrency < 1:
-            raise argparse.ArgumentTypeError("--concurrency must be >= 1")
-        return explicit_concurrency
-    raw_value: str | None = os.environ.get(SQLBUILD_CONCURRENCY_ENV_VAR)
-    if raw_value is None or raw_value == EMPTY_ENV_VALUE:
-        return None
-    try:
-        concurrency: int = int(raw_value)
-    except ValueError as error:
-        raise argparse.ArgumentTypeError(
-            f"{SQLBUILD_CONCURRENCY_ENV_VAR} must be an integer"
-        ) from error
-    if concurrency < 1:
-        raise argparse.ArgumentTypeError(f"{SQLBUILD_CONCURRENCY_ENV_VAR} must be >= 1")
-    return concurrency
 
 
 def read_selector_file_inputs(paths: list[str]) -> SelectorInputs:
@@ -77,149 +34,23 @@ def read_selector_file_inputs(paths: list[str]) -> SelectorInputs:
     return SelectorInputs(selectors=tuple(selectors), files=tuple(files))
 
 
-def parse_cli_invocation(
-    *,
-    argv: Sequence[str] | None,
-    parser: argparse.ArgumentParser,
-) -> ParsedCliInvocation:
-    """Parse CLI arguments into a namespace, resolving passthrough and env defaults."""
+def parse_cli_invocation(*, argv: Sequence[str] | None, use_color: bool) -> ParsedCliInvocation:
+    """Parse CLI arguments into a namespace; help, version and errors print and exit."""
 
-    try:
-        args: CliNamespace = CliNamespace()
-        unknown_args: list[str]
-        _, unknown_args = parser.parse_known_args(argv, namespace=args)
-        if args.command == CliCommand.DBT and args.dbt_command in _DBT_PASSTHROUGH_SUBCOMMANDS:
-            dbt_passthrough_args: list[str] = []
-            dbt_passthrough_started: bool = False
-            dbt_arg: str
-            for dbt_arg in unknown_args:
-                if dbt_arg == DBT_PASSTHROUGH_SEPARATOR:
-                    dbt_passthrough_started = True
-                    dbt_passthrough_args.append(dbt_arg)
-                    continue
-                if dbt_arg == NO_COLOR_OPTION and not dbt_passthrough_started:
-                    args.no_color = True
-                    continue
-                if dbt_arg == DEBUG_OPTION and not dbt_passthrough_started:
-                    args.debug = True
-                    continue
-                dbt_passthrough_args.append(dbt_arg)
-            args.dbt_args = dbt_passthrough_args
-        else:
-            if args.command in POSITIONAL_SELECT_COMMANDS:
-                args.select, unknown_args = _merge_positional_selectors(
-                    positional=args.positional_select,
-                    select=args.select,
-                    unknown_args=unknown_args,
-                )
-            if unknown_args:
-                parser.error(f"unrecognized arguments: {' '.join(unknown_args)}")
-        args.verbose = args.verbose or args.debug
-        if (
-            args.debug
-            and args.command == CliCommand.DBT
-            and args.dbt_command != DbtInteropCommand.DEBUG
-            and not any(option in args.dbt_args for option in DBT_VERBOSE_OPTIONS)
-        ):
-            args.dbt_args.append("--verbose")
-        if args.command in {
-            CliCommand.AUDIT,
-            CliCommand.BUILD,
-            CliCommand.LOAD,
-            CliCommand.SEED,
-            CliCommand.TEST,
-        }:
-            try:
-                args.concurrency = resolve_env_default_concurrency(args.concurrency)
-            except argparse.ArgumentTypeError as error:
-                parser.error(str(error))
-        if args.command in {CliCommand.BUILD, CliCommand.LOAD, CliCommand.PLAN}:
-            _validate_cursor_override_args(args=args, parser=parser)
-        if args.command == CliCommand.SCOPE:
-            _validate_scope_args(args=args, parser=parser)
-        if args.command == CliCommand.TEST:
-            _validate_test_args(args=args, parser=parser)
-        if args.command == CliCommand.JANITOR and args.as_target is not None and args.auto_approve:
-            parser.error(
-                "janitor --as is inspection only and cannot be combined with --auto-approve"
-            )
-    except SystemExit as error:
-        exit_code: int = error.code if isinstance(error.code, int) else 1
-        return ParsedCliInvocation(args=None, exit_code=exit_code)
-    return ParsedCliInvocation(args=args, exit_code=None)
-
-
-def _merge_positional_selectors(
-    *, positional: list[str], select: list[str], unknown_args: list[str]
-) -> tuple[list[str], list[str]]:
-    """Combine positional, trailing and --select selectors; return what is still unrecognised."""
-
-    if unknown_args and not any(arg.startswith("-") for arg in unknown_args):
-        return [*positional, *unknown_args, *select], []
-    return [*positional, *select], unknown_args
-
-
-def _validate_cursor_override_args(*, args: CliNamespace, parser: argparse.ArgumentParser) -> None:
-    has_untyped: bool = args.start_cursor is not None or args.end_cursor is not None
-    has_typed: bool = any(
-        value is not None
-        for value in (
-            args.start_cursor_ts,
-            args.end_cursor_ts,
-            args.start_cursor_int,
-            args.end_cursor_int,
-        )
+    args: CliNamespace = CliNamespace()
+    raw_args: list[str] = list(sys.argv[1:] if argv is None else argv)
+    rows: list[tuple[str, object]] | None
+    exit_code: int | None
+    rows, exit_code = _native.parse_cli_arguments(
+        raw_args,
+        list(vars(args).items()),
+        use_color=use_color,
+        columns=shutil.get_terminal_size().columns,
     )
-    if has_untyped and has_typed:
-        parser.error(
-            "--start-cursor/--end-cursor cannot be combined with the -ts or -int cursor flags"
-        )
-
-
-def _validate_scope_args(*, args: CliNamespace, parser: argparse.ArgumentParser) -> None:
-    has_target: bool = args.scope_target is not None
-    has_at: bool = args.scope_at is not None
-    if has_target == has_at:
-        parser.error("scope requires exactly one of TARGET or --at PATH")
-    if args.scope_as_path is not None and not has_target:
-        parser.error("scope --as-path requires TARGET")
-    folder_mode: bool = args.scope_browse is not None or args.scope_list is not None
-    if folder_mode and (
-        args.scope_as_path is not None
-        or args.scope_explain is not None
-        or args.scope_include_nearby
-        or args.scope_dependency_depth != 0
-    ):
-        parser.error(
-            "scope --browse/--list cannot be combined with --as-path, --explain, "
-            "--include-nearby, or --dependency-depth"
-        )
-    if args.scope_browse is not None and (
-        args.scope_defined_under is not None
-        or args.scope_kind
-        or args.scope_match is not None
-        or args.scope_used_only
-        or args.scope_globals != SCOPE_GLOBAL_SUMMARY
-        or args.scope_page_size != SCOPE_DEFAULT_PAGE_SIZE
-    ):
-        parser.error(
-            "scope --browse is folder-only; use --list for declaration filters and pagination"
-        )
-    if args.scope_page_size < 1:
-        parser.error("scope --page-size must be positive")
-    if args.scope_nearby_depth < 0 or args.scope_dependency_depth < 0:
-        parser.error("scope depth values must be nonnegative")
-    if args.scope_explain is not None:
-        prefix: str = args.scope_explain.partition(":")[0]
-        qualified_name: str = args.scope_explain.partition(":")[2]
-        try:
-            DeclarationKind(prefix)
-        except ValueError:
-            parser.error("scope --explain requires a declaration-qualified identity")
-        if not qualified_name:
-            parser.error("scope --explain requires a declaration-qualified identity")
-
-
-def _validate_test_args(*, args: CliNamespace, parser: argparse.ArgumentParser) -> None:
-    if args.inspect and (args.json or args.json_output is not None):
-        parser.error("test --inspect cannot be combined with --json or --json-output")
+    if rows is None:
+        return ParsedCliInvocation(args=None, exit_code=exit_code)
+    name: str
+    value: object
+    for name, value in rows:
+        setattr(args, name, value)
+    return ParsedCliInvocation(args=args, exit_code=None)

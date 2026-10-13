@@ -38,7 +38,6 @@ COMPILE_ONLY_MODULES: tuple[str, ...] = (
     "polyglot_sql",
     "pydantic",
     "yaml",
-    "sqlbuild._native",
     "sqlbuild.adapter.contract.classes.base_adapter",
     "sqlbuild.cli.compile.models",
     "sqlbuild.cli.output.models",
