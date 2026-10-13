@@ -8,8 +8,7 @@ from typing import Any
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild._native import write_cost_run
-from sqlbuild.cli.commands._helpers.cost.command import _parse_since_bound, run_cost_command
+from sqlbuild._native import parse_cost_since_bound, run_cost_command, write_cost_run
 from sqlbuild.cli.commands.exceptions import CliUserError
 from tests.unit.src.sqlbuild.cli.commands.main.inspection.cost._test_types import (
     CostCommandTestCase,
@@ -237,7 +236,7 @@ def test_given_supported_relative_since_duration_when_parsing_then_returns_expec
     test_case: CostRelativeSinceTestCase,
 ) -> None:
     before: datetime = datetime.now(UTC)
-    result: datetime | None = _parse_since_bound(value=test_case.value)
+    result: datetime | None = parse_cost_since_bound(value=test_case.value)
     after: datetime = datetime.now(UTC)
 
     assert result is not None
@@ -267,7 +266,7 @@ def test_given_unsupported_relative_since_duration_when_parsing_then_raises_clea
 ) -> None:
     assert test_case.expected_error_fragment is not None
     with pytest.raises(CliUserError, match=test_case.expected_error_fragment):
-        _parse_since_bound(value=test_case.value)
+        parse_cost_since_bound(value=test_case.value)
 
 
 @pytest.mark.parametrize(

@@ -480,7 +480,7 @@ const COST_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const COST_ROUTE: Route = routed(
     "run_cost",
-    ("sqlbuild.cli.commands.main.inspection._cost", "run_cost"),
+    ("sqlbuild._native", "run_cost_command"),
     &COST_ARGUMENTS,
     REQUEST_SHAPE,
 );

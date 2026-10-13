@@ -291,10 +291,6 @@ location = "cli/commands/_helpers/refactor/compile_facts.py::compile_for_refacto
 note = "Reports the Python stage errors the native compile driver propagates as refactor diagnostics; a native compiler failure is a RuntimeError and is not caught."
 
 [[handled_native_errors]]
-location = "cli/commands/_helpers/cost/refresh.py::refresh_pending_cost_run"
-note = "Best-effort cost refresh keeps its existing catch-all; discovery is now entered through the native driver, and no Python implementation runs instead."
-
-[[handled_native_errors]]
 location = "lint/_helpers/fixes.py::_FixSession._relation_keys"
 note = "A baseline that does not compile yields no relation keys, as before the compile entry became native; no Python implementation runs instead."
 
