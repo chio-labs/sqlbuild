@@ -5,9 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 
+from sqlbuild._native import normalize_query_sql
 from sqlbuild.compiler.auditing.models import AuditIdentity, MeasurementThresholdBound
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, ThresholdOperator
-from sqlbuild.compiler.fingerprints.main._normalize_query_sql import normalize_query_sql
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 
 

@@ -14,6 +14,7 @@ from typing import ClassVar
 import sqlbuild._native as _native
 from sqlbuild._native import (
     compiled_model_record,
+    compute_query_hash,
     project_with,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -61,7 +62,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
 )
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.graph.core import build_downstream_deps

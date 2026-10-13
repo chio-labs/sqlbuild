@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import compute_query_hash
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.compiler.compile.models import (
     CompiledFunction,
@@ -24,7 +25,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     FunctionLanguage,
 )
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.identity._version_identity_metadata import (
     build_version_identity_metadata_json,

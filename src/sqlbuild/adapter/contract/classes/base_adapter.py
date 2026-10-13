@@ -2110,7 +2110,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     ) -> str:
         """Render DDL that creates the fingerprint table when it is missing."""
 
-        from sqlbuild.compiler.fingerprints.main.create_table_sql import (
+        from sqlbuild._native import (
             build_create_table_sql,
         )
 
@@ -2148,7 +2148,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     ) -> str:
         """Render SQL that reads latest fingerprint rows per identity."""
 
-        from sqlbuild.compiler.fingerprints.main.read_latest_sql import (
+        from sqlbuild._native import (
             build_read_latest_sql,
         )
 

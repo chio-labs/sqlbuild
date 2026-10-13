@@ -70,6 +70,11 @@ reason = "The SQL Server backend intentionally owns behavior through its adapter
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/fingerprints/__init__.py"
+reason = "Fingerprint hashing and storage run natively; the package keeps the stored-row models, column and node-type vocabulary adapters and the executor share."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/graph/__init__.py"
 reason = "Graph algorithms and views run natively; the package keeps only the edge and view models their callers read."
 

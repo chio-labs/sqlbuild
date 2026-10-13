@@ -6,6 +6,10 @@ import hashlib
 from collections.abc import Callable
 from functools import partial
 
+from sqlbuild._native import (
+    compute_function_definition_hash,
+    compute_query_hash,
+)
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
@@ -14,10 +18,6 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_UDF,
 )
 from sqlbuild.compiler.fingerprints.exceptions import QueryFingerprintError
-from sqlbuild.compiler.fingerprints.main.compute_function_definition_hash import (
-    compute_function_definition_hash,
-)
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.planner.constants import QUERY_FINGERPRINT_FAILED
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.models import GraphNodeKey

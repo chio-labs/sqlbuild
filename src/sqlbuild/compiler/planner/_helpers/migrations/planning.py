@@ -6,12 +6,12 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from sqlbuild._native import compute_query_hash
 from sqlbuild.adapter.contract.models import ColumnInfo, MigrationStagePlan, RelationInfo
 from sqlbuild.adapter.contract.types import BuiltinAdapter, MigrationTransfer
 from sqlbuild.compiler.compile.constants import MIGRATE_FORCE_CONFIG_KEY, MIGRATE_FROM_CONFIG_KEY
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.migrations.main._newest_event import newest_migration_event_mentioning
 from sqlbuild.compiler.migrations.main.relation_for_location import migration_relation_for_location

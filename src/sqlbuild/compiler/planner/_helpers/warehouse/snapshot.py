@@ -9,7 +9,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
-from sqlbuild._native import render_source_relation, transitive_closure_many
+from sqlbuild._native import (
+    read_latest_fingerprints,
+    render_source_relation,
+    select_latest_fingerprints,
+    transitive_closure_many,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.contract.types import AdapterExecute
@@ -46,8 +51,6 @@ from sqlbuild.compiler.fingerprints.constants import (
     NODE_TYPE_MODEL,
     NODE_TYPE_SEED,
 )
-from sqlbuild.compiler.fingerprints.main._select_latest import select_latest_fingerprints
-from sqlbuild.compiler.fingerprints.main.read import read_latest_fingerprints
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.migrations.constants import MIGRATION_TABLE_NAME, OLD_NAME_VIEW_TABLE_NAME
 from sqlbuild.compiler.planner._helpers.graph.core import (

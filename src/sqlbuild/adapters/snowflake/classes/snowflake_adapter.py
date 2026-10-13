@@ -508,7 +508,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.read_latest_sql import (
+        from sqlbuild._native import (
             build_read_latest_sql,
         )
 
@@ -2723,7 +2723,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         database: str | None,
         schema: str,
     ) -> str:
-        from sqlbuild.compiler.fingerprints.main.create_table_sql import (
+        from sqlbuild._native import (
             build_create_table_sql,
         )
 

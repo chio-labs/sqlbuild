@@ -34,8 +34,7 @@ pub(crate) fn fingerprint_input_error(py: Python<'_>, message: &str) -> PyErr {
 }
 
 /// The `FingerprintSet` of fetched latest rows, a model winning a node-name collision.
-#[pyfunction]
-fn fingerprint_set_from_rows<'py>(
+pub(crate) fn fingerprint_set_from_rows<'py>(
     py: Python<'py>,
     schema: &str,
     qualified_name: &str,
@@ -61,6 +60,7 @@ fn fingerprint_set_from_rows<'py>(
 
 /// `select_latest_fingerprints`: an unfiltered latest read narrowed as a filtered read would be.
 #[pyfunction]
+#[pyo3(signature = (*, fingerprint_set, node_names, filtered_node_types = Vec::new()))]
 fn select_latest_fingerprints<'py>(
     py: Python<'py>,
     fingerprint_set: &Bound<'py, PyAny>,
@@ -252,7 +252,6 @@ fn decode_error(storage: &Bound<'_, PyString>, failure: StorageDecodeError) -> P
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(fingerprint_set_from_rows, module)?)?;
     module.add_function(wrap_pyfunction!(select_latest_fingerprints, module)?)?;
     Ok(())
 }

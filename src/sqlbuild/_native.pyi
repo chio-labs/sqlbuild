@@ -9,6 +9,7 @@ from _typeshed import SupportsRichComparison
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RelationInfo
+from sqlbuild.adapter.contract.types import AdapterExecute, FrameworkType
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
@@ -103,6 +104,7 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.fingerprints.types import FingerprintWriteProgress
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge, LineageGraphViews
 from sqlbuild.compiler.lineage.models import (
@@ -1698,32 +1700,64 @@ def resource_sql_diagnostics_of(
     profile: ExpressionInferenceProfile,
     /,
 ) -> tuple[CompilerDiagnostic, ...]: ...
-def compiler_query_hash(sql: str, dialect: str | None, /) -> str: ...
-def function_definition_hash(sql: str, language: str, dialect: str | None, /) -> str: ...
-def normalize_query_text(sql: str, /) -> str: ...
-def fingerprint_create_table_sql(qualified_name: str, column_types: tuple[str, str], /) -> str: ...
-def fingerprint_read_latest_sql(qualified_name: str, /) -> str: ...
-def fingerprint_relevant_read_sql(
-    read_sql: str,
-    node_names: Sequence[str] | None,
-    filtered_node_types: Sequence[str],
-    /,
-) -> str | None: ...
-def fingerprint_insert_sql(qualified_name: str, fingerprint: Fingerprint, /) -> str: ...
-def fingerprint_insert_batches(
-    qualified_name: str,
-    fingerprints: Sequence[Fingerprint],
-    limits: tuple[int, int],
-    /,
-) -> list[tuple[tuple[Fingerprint, ...], str]]: ...
-def fingerprint_set_from_rows(
-    schema: str, qualified_name: str, rows: Sequence[Sequence[object]], /
+def compute_query_hash(*, query_sql: str, dialect: str | None) -> str: ...
+def compute_function_definition_hash(
+    *, fingerprint_sql: str, language: str, dialect: str | None
+) -> str: ...
+def normalize_query_sql(query_sql: str, /) -> str: ...
+def build_create_table_sql(
+    *,
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+) -> str: ...
+def build_read_latest_sql(
+    *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
+) -> str: ...
+def read_latest_fingerprints(
+    *,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    table_exists: bool,
+    database: str | None,
+    schema: str,
+    render_qualified_name: Callable[..., str | None],
+    render_read_latest_sql: Callable[..., str],
+    require_table: bool = False,
+    node_names: tuple[str, ...] | None = None,
+    filtered_node_types: tuple[str, ...] = (),
 ) -> FingerprintSet: ...
+def write_fingerprint(
+    *,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    database: str | None,
+    schema: str,
+    fingerprint: Fingerprint,
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+    render_create_table_sql: Callable[..., str] | None = None,
+    render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
+) -> None: ...
+def write_fingerprints(
+    *,
+    connection: Any,
+    execute: AdapterExecute[Any, Any],
+    database: str | None,
+    schema: str,
+    fingerprints: Sequence[Fingerprint],
+    render_qualified_name: Callable[..., str | None],
+    render_framework_type: Callable[[FrameworkType], str],
+    render_create_table_sql: Callable[..., str] | None = None,
+    render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
+    on_progress: FingerprintWriteProgress | None = None,
+) -> None: ...
 def select_latest_fingerprints(
+    *,
     fingerprint_set: FingerprintSet,
-    node_names: Sequence[str],
-    filtered_node_types: Sequence[str],
-    /,
+    node_names: tuple[str, ...],
+    filtered_node_types: tuple[str, ...] = (),
 ) -> FingerprintSet: ...
 def glob_name_match(name: str, pattern: str, ignore_case: bool, /) -> bool: ...
 def lone_surrogate_site(raw_values: dict[str, object], /) -> tuple[str, str, int] | None: ...

@@ -4,11 +4,6 @@ from __future__ import annotations
 
 FINGERPRINT_TABLE_NAME: str = "_sqlbuild_fingerprints"
 
-FINGERPRINT_WRITE_ATTEMPTS: int = 5
-FINGERPRINT_WRITE_RETRY_BASE_SECONDS: float = 0.05
-FINGERPRINT_WRITE_BATCH_SIZE: int = 50
-FINGERPRINT_WRITE_BATCH_MAX_BYTES: int = 512_000
-
 COLUMN_NODE_TYPE: str = "node_type"
 COLUMN_NODE_NAME: str = "node_name"
 COLUMN_TARGET_DATABASE: str = "target_database"
@@ -31,4 +26,3 @@ NODE_TYPE_HOOK: str = "hook"
 NODE_TYPE_QUERY_DIFF_ARTIFACT: str = "query_diff_artifact"
 
 AUDIT_GATE_METADATA_KEY: str = "audit_gate"
-QUERY_FINGERPRINT_CACHE_SIZE: int = 16_384

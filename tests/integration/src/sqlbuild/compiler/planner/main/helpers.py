@@ -14,9 +14,11 @@ from typing import Any, cast
 
 from sqlbuild._native import (
     compiled_model_record,
+    compute_query_hash,
     discover_project_inputs,
     project_with,
     run_compile_pipeline,
+    write_fingerprint,
 )
 from sqlbuild.adapter.contract.models import RelationInfo, RelationReadProbe
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -47,8 +49,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSeedFile,
     DiscoveredSourceFile,
 )
-from sqlbuild.compiler.fingerprints.main.compute_query_hash import compute_query_hash
-from sqlbuild.compiler.fingerprints.main.write import write_fingerprint
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.models import CompilePipelineOptions, CompilePipelineResult
 from sqlbuild.compiler.planner._helpers.identity.functions import (
