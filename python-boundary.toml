@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 111428
+remaining_lines = 107548
 
 [[stays]]
 path = "executor"
@@ -83,6 +83,21 @@ note = "Documented SQLite and Postgres execution-history backends."
 path = "runtime/execution_limits"
 reason = "executor"
 note = "Deadline the executor scheduler and warehouse cursors enforce."
+
+[[stays]]
+path = "runtime/compute_logs"
+reason = "executor"
+note = "Captures compute logs while the executor runs models, loaders and tasks."
+
+[[stays]]
+path = "runtime/event_exporting"
+reason = "executor"
+note = "Exports execution events while the executor runs."
+
+[[stays]]
+path = "runtime/output_capture"
+reason = "executor"
+note = "Captures stdout and stderr of running Python nodes for the executor."
 
 [[stays]]
 path = "integrations/dagster"
