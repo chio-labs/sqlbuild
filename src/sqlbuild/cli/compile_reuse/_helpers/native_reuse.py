@@ -2,27 +2,21 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import sys
-import time
 from dataclasses import replace
 from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild._native import NativeReuseAttempt
-from sqlbuild.cli.compile_reuse._helpers.provider_settings import provider_settings_inputs
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import (
     invocation_identity,
     redirected_output_files,
     runtime_identity,
 )
 from sqlbuild.cli.compile_reuse._helpers.timings import elapsed_ms, reuse_timings
-from sqlbuild.cli.compile_reuse.classes.compile_artifact_writes import CompileArtifactWrites
-from sqlbuild.cli.compile_reuse.classes.recorded_compile_output import RecordedCompileOutput
 from sqlbuild.cli.compile_reuse.constants import (
-    BYTES_PER_MEBIBYTE,
     COMPILED_DIRECTORY_NAME,
     EXCLUDED_DIRECTORIES,
     EXCLUDED_ROOT_DIRECTORIES,
@@ -42,11 +36,6 @@ from sqlbuild.cli.compile_reuse.constants import (
     REUSE_LOGGER_NAME,
     REUSE_MAX_ENTRY_BYTES,
     REUSE_MAX_STORED_ENTRIES,
-    REUSE_STORE_DONE_MESSAGE,
-    REUSE_STORE_NOTICE_BYTES,
-    REUSE_STORE_NOTICE_PATHS,
-    REUSE_STORE_SKIPPED_MESSAGE,
-    REUSE_STORE_START_MESSAGE,
     TARGET_DIRECTORY_NAME,
     TOTAL_TIMING,
     TRACKED_ENVIRONMENT_PREFIXES,
@@ -55,18 +44,13 @@ from sqlbuild.cli.compile_reuse.constants import (
 from sqlbuild.cli.compile_reuse.models import (
     CompileReuseAttempt,
     CompileReuseRequest,
-    SettingsInputsResult,
 )
 from sqlbuild.cli.compile_reuse.types import CompileReuseOutcome
-from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
 from sqlbuild.compiler.compile.constants import (
     COMPILE_CACHE_DISABLE_ENV_VAR,
     COMPILE_CACHE_DISABLE_VALUE,
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.macro_bridge.main.macro_store_module_paths import (
-    macro_store_module_paths,
-)
 from sqlbuild.presentation.main.supports_color import supports_color
 
 _LOGGER: logging.Logger = logging.getLogger(REUSE_LOGGER_NAME)
@@ -152,103 +136,6 @@ def _replayed(
     return replace(missed, outcome=CompileReuseOutcome.HIT, check_ms=check_ms, exit_code=exit_code)
 
 
-def record_native(
-    *,
-    store_path: Path,
-    native: NativeReuseAttempt,
-    output: RecordedCompileOutput,
-    exit_code: int,
-    input_reads: CompileInputReads,
-    artifact_writes: CompileArtifactWrites,
-    compile_cache_enabled: bool,
-    artifacts_written: bool,
-    dag_artifact_path: Path | None,
-    json_output: bool,
-) -> bool:
-    """Store a reusable compile natively, or clear the slot; return whether it was stored."""
-
-    try:
-        return _record(
-            native=native,
-            output=output,
-            exit_code=exit_code,
-            input_reads=input_reads,
-            artifact_writes=artifact_writes,
-            compile_cache_enabled=compile_cache_enabled,
-            artifacts_written=artifacts_written,
-            dag_artifact_path=dag_artifact_path,
-            json_output=json_output,
-        )
-    except Exception:
-        _LOGGER.debug("Compile reuse did not store this compile", exc_info=True)
-        with contextlib.suppress(OSError):
-            store_path.unlink(missing_ok=True)
-        return False
-
-
-def _record(
-    *,
-    native: NativeReuseAttempt,
-    output: RecordedCompileOutput,
-    exit_code: int,
-    input_reads: CompileInputReads,
-    artifact_writes: CompileArtifactWrites,
-    compile_cache_enabled: bool,
-    artifacts_written: bool,
-    dag_artifact_path: Path | None,
-    json_output: bool,
-) -> bool:
-    settings: SettingsInputsResult = provider_settings_inputs(
-        settings_classes=input_reads.settings_classes
-    )
-    if settings.unsupported_reason is not None:
-        _LOGGER.debug("Compile reuse is off for this project: %s", settings.unsupported_reason)
-    eligible: bool = (
-        output.stdout is not None
-        and compile_cache_enabled
-        and not input_reads.read_run_id
-        and settings.unsupported_reason is None
-    )
-    notice_started: float | None = _start_notice(native=native) if eligible else None
-    outcome, digested_files = native.record(
-        {
-            "stdout": output.stdout,
-            "stderr_lines": list(output.stderr_lines),
-            "exit_code": exit_code,
-            "compile_cache_enabled": compile_cache_enabled,
-            "read_run_id": input_reads.read_run_id,
-            "settings_inputs": None
-            if settings.unsupported_reason is not None
-            else [
-                (
-                    item.case_sensitive,
-                    list(item.names),
-                    list(item.prefixes),
-                    list(item.env_files),
-                    list(item.secrets_dirs),
-                )
-                for item in settings.inputs
-            ],
-            "template_environment_names": list(input_reads.environment_names),
-            "module_paths": _module_paths(),
-            "artifacts": {
-                path: (artifact.digest, artifact.size, artifact.mtime_ns)
-                for path, artifact in artifact_writes.artifacts.items()
-            },
-            "artifacts_written": artifacts_written,
-            "dag_path": None if dag_artifact_path is None else os.path.abspath(dag_artifact_path),
-            "json_output": json_output,
-            "rules": reuse_rules(),
-        }
-    )
-    _LOGGER.debug("Compile reuse record digested %d project files", digested_files)
-    _finish_notice(
-        started=notice_started,
-        message=REUSE_STORE_SKIPPED_MESSAGE if outcome == _SKIPPED else REUSE_STORE_DONE_MESSAGE,
-    )
-    return outcome == _STORED
-
-
 def reuse_rules() -> dict[str, object]:
     """The reuse constants the native check and record share with the Python implementation."""
 
@@ -274,33 +161,3 @@ def reuse_rules() -> dict[str, object]:
         "compiled_root": os.path.join(TARGET_DIRECTORY_NAME, COMPILED_DIRECTORY_NAME),
         "retired_directories": [RETIRED_REUSE_DIRECTORY_NAME],
     }
-
-
-def _module_paths() -> list[str]:
-    """Loaded module files, then the macro store's extra module paths, as Python lists them."""
-
-    module_files: list[object] = [
-        getattr(module, "__file__", None) for module in tuple(sys.modules.values())
-    ]
-    return [
-        path
-        for path in (*module_files, *sorted(macro_store_module_paths()))
-        if isinstance(path, str)
-    ]
-
-
-def _start_notice(*, native: NativeReuseAttempt) -> float | None:
-    pending_bytes: int = native.pending_digest_bytes()
-    paths: int = native.snapshot_paths()
-    if pending_bytes < REUSE_STORE_NOTICE_BYTES and paths < REUSE_STORE_NOTICE_PATHS:
-        return None
-    print(
-        REUSE_STORE_START_MESSAGE.format(paths=paths, mebibytes=pending_bytes / BYTES_PER_MEBIBYTE),
-        file=sys.stderr,
-    )
-    return time.monotonic()
-
-
-def _finish_notice(*, started: float | None, message: str) -> None:
-    if started is not None:
-        print(message.format(seconds=time.monotonic() - started), file=sys.stderr)

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import sqlbuild._native as _native
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
+from sqlbuild.compiler.python_nodes.main._hook_identities import build_hook_identities
 
 
 def build_graph_manifest(

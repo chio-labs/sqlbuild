@@ -169,7 +169,7 @@ class RuleGatedTestPlanningTestCase:
 
 
 @dataclass(frozen=True)
-class CrossDeviceStagedPublishTestCase:
+class StagedPublishTestCase:
     description: str
     existing_files: dict[str, str]
     expected_files: dict[str, str]

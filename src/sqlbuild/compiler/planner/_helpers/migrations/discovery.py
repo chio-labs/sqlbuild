@@ -41,7 +41,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
-from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
+from sqlbuild.compiler.python_nodes.main._hook_identities import build_hook_identities
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(

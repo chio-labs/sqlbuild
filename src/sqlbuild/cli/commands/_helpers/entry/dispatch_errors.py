@@ -145,7 +145,7 @@ def _write_compile_machine_error(
 ) -> None:
     if args.command != CliCommand.COMPILE or not getattr(args, "json", False):
         return
-    from sqlbuild.cli.commands._helpers.compile.output import format_compile_error_json
+    from sqlbuild._native import format_compile_error_json
 
     code, message, help_text = expected_error_parts(error=error, fallback_code=fallback_code)
     location: object = getattr(error, "location", None)

@@ -2,7 +2,10 @@ use crate::text::main::python_casefold::python_casefold;
 use crate::text::main::python_isalnum::python_isalnum;
 use crate::text::main::python_isdigit::python_isdigit;
 use crate::text::main::python_isspace::python_isspace;
-use crate::text::tests::test_types::{CasefoldTestCase, CharacterClassTestCase};
+use crate::text::main::python_splitlines::python_splitlines;
+use crate::text::tests::test_types::{
+    CasefoldTestCase, CharacterClassTestCase, SplitlinesTestCase,
+};
 
 /// Expectations recorded from CPython 3.12.
 #[test]
@@ -119,6 +122,37 @@ fn given_characters_when_classifying_then_matches_python_str_predicates() {
         assert_eq!(
             python_isspace(test_case.character),
             test_case.expected_space,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+/// Expectations recorded from CPython 3.12.
+#[test]
+fn given_text_when_splitting_lines_then_matches_python_splitlines() {
+    let test_cases = [
+        SplitlinesTestCase {
+            description: "every Python line boundary, with CRLF as one",
+            text: "a\r\nb\rc\u{1c}d\u{2028}\n",
+            expected_lines: &["a", "b", "c", "d", ""],
+        },
+        SplitlinesTestCase {
+            description: "empty text has no lines",
+            text: "",
+            expected_lines: &[],
+        },
+        SplitlinesTestCase {
+            description: "a final newline ends the last line",
+            text: "one\n",
+            expected_lines: &["one"],
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            python_splitlines(test_case.text),
+            test_case.expected_lines,
             "{}",
             test_case.description
         );

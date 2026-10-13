@@ -9,7 +9,6 @@ import orjson
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.cli.commands._helpers.compile import output as output_module
 from tests.integration.src.sqlbuild.cli.commands.main.compile_outputs._test_types import (
     CliJsonReportTestCase,
     JsonReportErrorTestCase,
@@ -183,8 +182,6 @@ def test_given_lone_surrogate_in_full_report_when_compiling_json_then_native_wri
     assert test_case.expected_fragment in text
     assert text.isascii()
     assert text == json.dumps(json.loads(text), indent=2) + "\n"
-    assert not hasattr(output_module, "json")
-    assert not hasattr(output_module, "orjson")
 
 
 @pytest.mark.parametrize(

@@ -11,9 +11,10 @@ from typing import Any, NamedTuple, cast
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild.cli.commands.classes import prepared_compile_artifacts
+from sqlbuild._native import PreparedCompileArtifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse._helpers import native_reuse as native_reuse_module
+from sqlbuild.cli.compile_reuse._helpers import provider_settings as provider_settings_module
 from sqlbuild.cli.compile_reuse._helpers.runtime_identity import runtime_identity
 from sqlbuild.cli.compile_reuse.constants import (
     NATIVE_REUSE_DIRECTORY_NAME,
@@ -24,6 +25,14 @@ from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_DIR_ENV_VAR
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
+
+
+class _StagingEveryProject(PreparedCompileArtifacts):
+    """Stage artifacts for a project of any size."""
+
+    min_prepared_models: int = 1
+
+
 OUTPUT_MODEL_HEADER: str = (
     "MODEL (description 'Orders {name}.', materialized table, contract enforced, "
     "columns (order_id (type INTEGER)));\n"
@@ -99,7 +108,7 @@ def prepare_output_compiles(*, monkeypatch: pytest.MonkeyPatch, reuse_disabled: 
     """Stage small projects natively and settle file stamps."""
 
     monkeypatch.setenv(REUSE_DISABLE_ENV_VAR, reuse_disabled)
-    monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
+    monkeypatch.setattr(native_module, "PreparedCompileArtifacts", _StagingEveryProject)
     monkeypatch.setattr(native_reuse_module, "RACY_WINDOW_NS", 0)
 
 
@@ -226,7 +235,7 @@ def edit_then_fail_store(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> 
         raise RuntimeError("settings went away")
 
     _edit(project_dir=project_dir)
-    monkeypatch.setattr(native_reuse_module, "provider_settings_inputs", raise_error)
+    monkeypatch.setattr(provider_settings_module, "provider_settings_inputs", raise_error)
 
 
 def set_tracked_variable(project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:

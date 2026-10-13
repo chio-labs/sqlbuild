@@ -1,0 +1,1089 @@
+//! The `sqb compile` report: human text, the JSON report, and the JSON report of a stopped compile.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{
+    PyDict, PyDictMethods, PyList, PySet, PySetMethods, PyString, PyTuple, PyTupleMethods,
+};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_core::cli_text::main::format_compile_text::format_compile_text as compile_text;
+use sqlbuild_core::cli_text::main::semantic_coverage_notice::semantic_coverage_notice as notice_text;
+use sqlbuild_core::cli_text::models::{
+    CliStyle, CompileTextReport, DiagnosticText, LineageNote, LocationText, ModelLine, RelatedText,
+};
+
+use crate::bindings::_helpers::compile_command::surrogates::SurrogateText;
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+use crate::bindings::_helpers::compile_outputs::json_report::{
+    emit_json_report, emit_orjson_report,
+};
+
+const SEMANTIC_COVERAGE_MODULE: &str = "sqlbuild.compiler.compile.main._semantic_coverage";
+const HOOK_ENTRIES_MODULE: &str = "sqlbuild.compiler.discovery.main.serialize_hook_entries";
+const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
+const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const METADATA_MODULE: &str = "importlib.metadata";
+const TARGET_DIRECTORY: &str = "target";
+const COMPILED_DIRECTORY: &str = "compiled";
+const MANIFEST_ARTIFACT: &str = "target/manifest.json";
+const PACKAGE_NAME: &str = "sqlbuild";
+const UNKNOWN_VERSION: &str = "unknown";
+const MODEL_TYPE: &str = "model";
+const SEED_TYPE: &str = "seed";
+const FUNCTION_TYPES: [&str; 2] = ["udf", "table_fn"];
+const SQL_TEST_TYPE: &str = "sql_test";
+const ERROR_SEVERITY: &str = "error";
+const WARNING_SEVERITY: &str = "warning";
+const RICH_LINEAGE: &str = "rich";
+const NO_LINEAGE: &str = "none";
+const DECIMAL_KIND: &str = "decimal";
+const REPORT_OPTIONS: (&[&str], &[&str]) = (
+    &["graph", "written", "manifest", "lineage", "diagnostics"],
+    &[
+        "lineage_mode",
+        "selected_keys",
+        "sql_validation_enabled",
+        "use_color",
+        "timings_ms",
+    ],
+);
+const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
+
+/// What both compile reports are built from.
+struct ReportInputs<'py> {
+    graph: Bound<'py, PyAny>,
+    project: Bound<'py, PyAny>,
+    written: Bound<'py, PyAny>,
+    manifest: bool,
+    lineage: Bound<'py, PyAny>,
+    diagnostics: Vec<Bound<'py, PyAny>>,
+    lineage_mode: String,
+    selected_keys: Bound<'py, PyAny>,
+    sql_validation_enabled: bool,
+}
+
+impl<'py> ReportInputs<'py> {
+    fn read(arguments: &KeywordArguments<'py>) -> PyResult<Self> {
+        let graph: Bound<'py, PyAny> = arguments.value("graph")?;
+        let lineage_mode: Bound<'py, PyAny> = arguments.value("lineage_mode")?;
+        Ok(Self {
+            project: graph.getattr("project")?,
+            graph,
+            written: arguments.value("written")?,
+            manifest: arguments.flag("manifest")?,
+            lineage: arguments.value("lineage")?,
+            diagnostics: arguments
+                .value("diagnostics")?
+                .try_iter()?
+                .collect::<PyResult<_>>()?,
+            lineage_mode: if lineage_mode.is_none() {
+                "fast".to_owned()
+            } else {
+                lineage_mode.str()?.to_string()
+            },
+            selected_keys: arguments.value("selected_keys")?,
+            sql_validation_enabled: !arguments.passed("sql_validation_enabled")?
+                || arguments.flag("sql_validation_enabled")?,
+        })
+    }
+
+    fn py(&self) -> Python<'py> {
+        self.graph.py()
+    }
+
+    /// The selected keys' names of `resource_type`, or `None` when nothing was deselected.
+    fn selected_names(&self, resource_type: &str) -> PyResult<Option<Bound<'py, PySet>>> {
+        if self.selected_keys.is_none() {
+            return Ok(None);
+        }
+        let names: Bound<'py, PySet> = PySet::empty(self.py())?;
+        for key in self.selected_keys.try_iter()? {
+            let key: Bound<'py, PyAny> = key?;
+            if key.getattr("resource_type")?.eq(resource_type)? {
+                names.add(key.getattr("name")?)?;
+            }
+        }
+        Ok(Some(names))
+    }
+
+    /// The project's models, kept to the selected ones.
+    fn selected_models(&self) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        let models: Vec<Bound<'py, PyAny>> = self
+            .project
+            .getattr("models")?
+            .try_iter()?
+            .collect::<PyResult<_>>()?;
+        let Some(names) = self.selected_names(MODEL_TYPE)? else {
+            return Ok(models);
+        };
+        let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
+        for model in models {
+            if names.contains(model.getattr("name")?)? {
+                selected.push(model);
+            }
+        }
+        Ok(selected)
+    }
+
+    /// How many graph or selected resources have one of `types`.
+    fn selected_count(&self, types: &[&str]) -> PyResult<usize> {
+        let mut count: usize = 0;
+        if self.selected_keys.is_none() {
+            for key in self
+                .graph
+                .getattr("native")?
+                .call_method0("keys")?
+                .try_iter()?
+            {
+                let (kind, _): (String, Bound<'py, PyAny>) = key?.extract()?;
+                count += usize::from(types.contains(&kind.as_str()));
+            }
+            return Ok(count);
+        }
+        for key in self.selected_keys.try_iter()? {
+            let kind: String = key?.getattr("resource_type")?.str()?.to_string();
+            count += usize::from(types.contains(&kind.as_str()));
+        }
+        Ok(count)
+    }
+
+    fn severity_count(&self, severity: &str) -> PyResult<usize> {
+        let mut count: usize = 0;
+        for diagnostic in &self.diagnostics {
+            count += usize::from(diagnostic.getattr("severity")?.eq(severity)?);
+        }
+        Ok(count)
+    }
+
+    /// `selected_semantic_coverage`: each selected model's partial-check reasons.
+    fn semantic_coverage(&self) -> PyResult<Bound<'py, PyDict>> {
+        let py: Python<'py> = self.py();
+        if !self.sql_validation_enabled {
+            return Ok(PyDict::new(py));
+        }
+        let reasons: Bound<'py, PyDict> =
+            imported(py, SEMANTIC_COVERAGE_MODULE, "get_semantic_coverage")?
+                .call1((&self.project,))?
+                .downcast_into()?;
+        let Some(names) = self.selected_names(MODEL_TYPE)? else {
+            return Ok(reasons);
+        };
+        let selected: Bound<'py, PyDict> = PyDict::new(py);
+        for (name, values) in reasons.iter() {
+            if names.contains(&name)? {
+                selected.set_item(name, values)?;
+            }
+        }
+        Ok(selected)
+    }
+
+    fn semantic_notice(&self, reader: &SurrogateText) -> PyResult<Option<String>> {
+        let mut reasons: Vec<(String, Vec<String>)> = Vec::new();
+        for (name, values) in self.semantic_coverage()?.iter() {
+            let values: Vec<String> = values
+                .try_iter()?
+                .map(|value| reader.text(&value?))
+                .collect::<PyResult<_>>()?;
+            reasons.push((reader.text(&name)?, values));
+        }
+        Ok(notice_text(&reasons))
+    }
+
+    /// `written.target_dir / "compiled"` relative to its `target` directory, POSIX style.
+    fn compiled_dir(&self) -> PyResult<Bound<'py, PyAny>> {
+        let py: Python<'py> = self.py();
+        let path: Bound<'py, PyAny> = self
+            .written
+            .getattr("target_dir")?
+            .div(COMPILED_DIRECTORY)?;
+        let parts: Bound<'py, PyTuple> = path.getattr("parts")?.downcast_into()?;
+        for (index, part) in parts.iter().enumerate() {
+            if part.eq(TARGET_DIRECTORY)? {
+                let kept: Bound<'py, PyTuple> = parts.get_slice(index, parts.len());
+                return imported(py, "pathlib", "Path")?
+                    .call1(kept)?
+                    .call_method0("as_posix");
+            }
+        }
+        path.call_method0("as_posix")
+    }
+}
+
+/// `int(value)` of a location field, or `None`.
+fn optional_number(value: &Bound<'_, PyAny>) -> PyResult<Option<i64>> {
+    if value.is_none() {
+        return Ok(None);
+    }
+    value.extract().map(Some)
+}
+
+/// Each authored file's text by path: models with SQL, then sources, then SQL tests.
+fn source_texts<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let texts: Bound<'py, PyDict> = PyDict::new(project.py());
+    for model in project.getattr("models")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        let authored: Bound<'py, PyAny> = model.getattr("authored_sql")?;
+        if authored.is_truthy()? {
+            texts.set_item(model.getattr("relative_path")?, authored)?;
+        }
+    }
+    for (collection, file) in [("sources", "source_file"), ("sql_tests", "test_file")] {
+        for resource in project.getattr(collection)?.try_iter()? {
+            let file: Bound<'py, PyAny> = resource?.getattr(file)?;
+            texts.set_item(file.getattr("relative_path")?, file.getattr("contents")?)?;
+        }
+    }
+    Ok(texts)
+}
+
+fn location_text(
+    reader: &SurrogateText,
+    location: &Bound<'_, PyAny>,
+    texts: &Bound<'_, PyDict>,
+) -> PyResult<LocationText> {
+    let path: Bound<'_, PyAny> = location.getattr("path")?;
+    Ok(LocationText {
+        path: reader.text(&path)?,
+        line: location.getattr("line")?.extract()?,
+        column: location.getattr("column")?.extract()?,
+        end_line: optional_number(&location.getattr("end_line")?)?,
+        end_column: optional_number(&location.getattr("end_column")?)?,
+        source: texts
+            .get_item(path)?
+            .map(|text| reader.text(&text))
+            .transpose()?,
+    })
+}
+
+fn texts_of(reader: &SurrogateText, value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    value.try_iter()?.map(|item| reader.text(&item?)).collect()
+}
+
+fn diagnostic_text(
+    reader: &SurrogateText,
+    diagnostic: &Bound<'_, PyAny>,
+    texts: &Bound<'_, PyDict>,
+    occurrences: usize,
+) -> PyResult<DiagnosticText> {
+    let location: Bound<'_, PyAny> = diagnostic.getattr("location")?;
+    let mut related: Vec<RelatedText> = Vec::new();
+    for item in diagnostic.getattr("related_locations")?.try_iter()? {
+        let item: Bound<'_, PyAny> = item?;
+        related.push(RelatedText {
+            label: reader.text(&item.getattr("label")?)?,
+            location: location_text(reader, &item.getattr("location")?, texts)?,
+            message: reader.optional(&item.getattr("message")?)?,
+        });
+    }
+    Ok(DiagnosticText {
+        severity: reader.text(&diagnostic.getattr("severity")?)?,
+        code: reader.text(&diagnostic.getattr("code")?)?,
+        message: reader.text(&diagnostic.getattr("message")?)?,
+        resource_type: reader.optional(&diagnostic.getattr("resource_type")?)?,
+        resource_name: reader.optional(&diagnostic.getattr("resource_name")?)?,
+        location: if location.is_none() {
+            None
+        } else {
+            Some(location_text(reader, &location, texts)?)
+        },
+        path: reader.optional(&diagnostic.getattr("path")?)?,
+        related,
+        notes: texts_of(reader, &diagnostic.getattr("notes")?)?,
+        affected_rules: texts_of(reader, &diagnostic.getattr("affected_rules")?)?,
+        help: reader.optional(&diagnostic.getattr("help")?)?,
+        occurrences,
+    })
+}
+
+/// The diagnostics the human report shows, each repeated warning folded into its first.
+fn shown_diagnostics(
+    inputs: &ReportInputs<'_>,
+    reader: &SurrogateText,
+) -> PyResult<Vec<DiagnosticText>> {
+    let py: Python<'_> = inputs.py();
+    if inputs.diagnostics.is_empty() {
+        return Ok(Vec::new());
+    }
+    let texts: Bound<'_, PyDict> = source_texts(&inputs.project)?;
+    let warning_counts: Bound<'_, PyDict> = PyDict::new(py);
+    for diagnostic in &inputs.diagnostics {
+        if diagnostic.getattr("severity")?.eq(WARNING_SEVERITY)? {
+            let count: usize = warning_counts
+                .get_item(diagnostic)?
+                .map_or(Ok(0), |count| count.extract())?;
+            warning_counts.set_item(diagnostic, count + 1)?;
+        }
+    }
+    let shown_warnings: Bound<'_, PyDict> = PyDict::new(py);
+    let mut shown: Vec<DiagnosticText> = Vec::new();
+    for diagnostic in &inputs.diagnostics {
+        if shown_warnings.contains(diagnostic)? {
+            continue;
+        }
+        if diagnostic.getattr("severity")?.eq(WARNING_SEVERITY)? {
+            shown_warnings.set_item(diagnostic, true)?;
+        }
+        let occurrences: usize = warning_counts
+            .get_item(diagnostic)?
+            .map_or(Ok(1), |count| count.extract())?;
+        shown.push(diagnostic_text(reader, diagnostic, &texts, occurrences)?);
+    }
+    Ok(shown)
+}
+
+/// Each model an error diagnostic names, other than SQL tests.
+fn error_models<'py>(inputs: &ReportInputs<'py>) -> PyResult<Bound<'py, PySet>> {
+    let names: Bound<'py, PySet> = PySet::empty(inputs.py())?;
+    for diagnostic in &inputs.diagnostics {
+        let name: Bound<'_, PyAny> = diagnostic.getattr("resource_name")?;
+        if diagnostic.getattr("is_error")?.is_truthy()?
+            && !name.is_none()
+            && !diagnostic.getattr("resource_type")?.eq(SQL_TEST_TYPE)?
+        {
+            names.add(name)?;
+        }
+    }
+    Ok(names)
+}
+
+/// The human-readable compile report.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+pub(crate) fn format_compile_text<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyString>> {
+    let arguments: KeywordArguments<'py> =
+        KeywordArguments::read(py, "format_compile_text", options, REPORT_OPTIONS)?;
+    let inputs: ReportInputs<'py> = ReportInputs::read(&arguments)?;
+    let reader: SurrogateText = SurrogateText::default();
+    let failed: Bound<'py, PySet> = error_models(&inputs)?;
+    let mut models: Vec<ModelLine> = Vec::new();
+    for model in inputs.selected_models()? {
+        let name: Bound<'py, PyAny> = model.getattr("name")?;
+        models.push(ModelLine {
+            failed: failed.contains(&name)?,
+            name: reader.text(&name)?,
+            column_count: model.getattr("output_column_count")?.extract()?,
+        });
+    }
+    let lineage: LineageNote = if !inputs.lineage.is_none() && inputs.lineage_mode == RICH_LINEAGE {
+        LineageNote::Rich
+    } else if inputs.lineage.is_none()
+        && inputs
+            .project
+            .getattr("settings")?
+            .getattr("sql_analysis")?
+            .is_truthy()?
+        && inputs.lineage_mode != NO_LINEAGE
+    {
+        LineageNote::Unavailable
+    } else {
+        LineageNote::Silent
+    };
+    let report: CompileTextReport = CompileTextReport {
+        style: CliStyle {
+            use_color: arguments.flag("use_color")?,
+        },
+        models,
+        semantic_notice: inputs.semantic_notice(&reader)?,
+        diagnostics: shown_diagnostics(&inputs, &reader)?,
+        seed_count: inputs.selected_count(&[SEED_TYPE])?,
+        function_count: inputs.selected_count(&FUNCTION_TYPES)?,
+        error_count: inputs.severity_count(ERROR_SEVERITY)?,
+        warning_count: inputs.severity_count(WARNING_SEVERITY)?,
+        compiled_dir: reader.text(&inputs.compiled_dir()?)?,
+        manifest: inputs.manifest,
+        lineage,
+    };
+    reader.python(py, &compile_text(&report))
+}
+
+/// The partial semantic-check notice of the selected models, printed beside `--json` output.
+pub(crate) fn json_semantic_notice<'py>(
+    graph: &Bound<'py, PyAny>,
+    selected_keys: &Bound<'py, PyAny>,
+    sql_validation_enabled: bool,
+) -> PyResult<Option<Bound<'py, PyString>>> {
+    let py: Python<'py> = graph.py();
+    let reader: SurrogateText = SurrogateText::default();
+    let notice: Option<String> = ReportInputs {
+        project: graph.getattr("project")?,
+        graph: graph.clone(),
+        written: py.None().into_bound(py),
+        manifest: false,
+        lineage: py.None().into_bound(py),
+        diagnostics: Vec::new(),
+        lineage_mode: String::new(),
+        selected_keys: selected_keys.clone(),
+        sql_validation_enabled,
+    }
+    .semantic_notice(&reader)?;
+    notice.map(|notice| reader.python(py, &notice)).transpose()
+}
+
+fn dict<'py>(
+    py: Python<'py>,
+    entries: Vec<(&str, Bound<'py, PyAny>)>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let built: Bound<'py, PyDict> = PyDict::new(py);
+    for (key, value) in entries {
+        built.set_item(key, value)?;
+    }
+    Ok(built)
+}
+
+fn any<'py, T: IntoPyObjectExt<'py>>(py: Python<'py>, value: T) -> PyResult<Bound<'py, PyAny>> {
+    value.into_bound_py_any(py)
+}
+
+/// The installed SQLBuild version, or `unknown`.
+fn sqlbuild_version(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    match imported(py, METADATA_MODULE, "version")?.call1((PACKAGE_NAME,)) {
+        Ok(version) => Ok(version),
+        Err(error)
+            if error.is_instance(py, &imported(py, METADATA_MODULE, "PackageNotFoundError")?) =>
+        {
+            any(py, UNKNOWN_VERSION)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn location_json<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = location.py();
+    let payload: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("path", location.getattr("path")?.str()?.into_any()),
+            ("line", location.getattr("line")?),
+            ("column", location.getattr("column")?),
+        ],
+    )?;
+    for key in ["end_line", "end_column"] {
+        let value: Bound<'py, PyAny> = location.getattr(key)?;
+        if !value.is_none() {
+            payload.set_item(key, value)?;
+        }
+    }
+    Ok(payload)
+}
+
+/// `_diagnostic_to_json`: one diagnostic's JSON fields, omitting the unset ones.
+fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = diagnostic.py();
+    let payload: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("phase", diagnostic.getattr("phase")?.str()?.into_any()),
+            (
+                "severity",
+                diagnostic.getattr("severity")?.str()?.into_any(),
+            ),
+            ("code", diagnostic.getattr("code")?),
+            ("message", diagnostic.getattr("message")?),
+        ],
+    )?;
+    let resource_type: Bound<'py, PyAny> = diagnostic.getattr("resource_type")?;
+    if !resource_type.is_none() {
+        payload.set_item("resource_type", resource_type.str()?)?;
+    }
+    for key in ["resource_name", "column_name"] {
+        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        if !value.is_none() {
+            payload.set_item(key, value)?;
+        }
+    }
+    let path: Bound<'py, PyAny> = diagnostic.getattr("path")?;
+    if !path.is_none() {
+        payload.set_item("path", path.str()?)?;
+    }
+    for key in ["line", "column"] {
+        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        if !value.is_none() {
+            payload.set_item(key, value)?;
+        }
+    }
+    let location: Bound<'py, PyAny> = diagnostic.getattr("location")?;
+    if !location.is_none() {
+        payload.set_item("location", location_json(&location)?)?;
+    }
+    let related: Bound<'py, PyAny> = diagnostic.getattr("related_locations")?;
+    if related.is_truthy()? {
+        let mut items: Vec<Bound<'py, PyDict>> = Vec::new();
+        for item in related.try_iter()? {
+            let item: Bound<'py, PyAny> = item?;
+            let entry: Bound<'py, PyDict> = dict(
+                py,
+                vec![
+                    ("label", item.getattr("label")?),
+                    (
+                        "location",
+                        location_json(&item.getattr("location")?)?.into_any(),
+                    ),
+                ],
+            )?;
+            let message: Bound<'py, PyAny> = item.getattr("message")?;
+            if !message.is_none() {
+                entry.set_item("message", message)?;
+            }
+            items.push(entry);
+        }
+        payload.set_item("related_locations", PyList::new(py, items)?)?;
+    }
+    let help: Bound<'py, PyAny> = diagnostic.getattr("help")?;
+    if !help.is_none() {
+        payload.set_item("help", help)?;
+    }
+    for key in ["notes", "affected_rules"] {
+        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        if value.is_truthy()? {
+            payload.set_item(
+                key,
+                PyList::new(py, value.try_iter()?.collect::<PyResult<Vec<_>>>()?)?,
+            )?;
+        }
+    }
+    Ok(payload)
+}
+
+/// `item[key] = value.qualified_name` when the destination names a relation.
+fn qualified_name(item: &Bound<'_, PyDict>, resource: &Bound<'_, PyAny>) -> PyResult<()> {
+    let name: Bound<'_, PyAny> = resource.getattr("destination")?.getattr("qualified_name")?;
+    if !name.is_none() {
+        item.set_item("qualified_name", name)?;
+    }
+    Ok(())
+}
+
+fn lineage_summary<'py>(
+    lineage: &Bound<'py, PyAny>,
+    model: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = model.py();
+    let name: Bound<'py, PyAny> = model.getattr("name")?;
+    if lineage.is_none() || !lineage.call_method1("has_model", (&name,))?.is_truthy()? {
+        return dict(py, vec![("available", any(py, false)?)]);
+    }
+    dict(
+        py,
+        vec![
+            ("available", any(py, true)?),
+            ("column_count", model.getattr("output_column_count")?),
+            (
+                "edge_count",
+                lineage.call_method1("edge_count_targeting", (&name,))?,
+            ),
+            (
+                "has_star",
+                lineage.call_method1("model_has_star", (&name,))?,
+            ),
+        ],
+    )
+}
+
+fn model_resource<'py>(
+    inputs: &ReportInputs<'py>,
+    model: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = model.py();
+    let key: Bound<'py, PyAny> = model.getattr("key")?;
+    let mut depends_on: Vec<Bound<'py, PyDict>> = Vec::new();
+    for upstream in inputs
+        .graph
+        .getattr("native")?
+        .call_method1(
+            "upstream",
+            ((key.getattr("resource_type")?.str()?, key.getattr("name")?),),
+        )?
+        .try_iter()?
+    {
+        let (kind, name): (Bound<'py, PyAny>, Bound<'py, PyAny>) = upstream?.extract()?;
+        depends_on.push(dict(py, vec![("resource_type", kind), ("name", name)])?);
+    }
+    let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let item: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("name", model.getattr("name")?),
+            (
+                "relative_path",
+                model.getattr("relative_path")?.str()?.into_any(),
+            ),
+            (
+                "materialized",
+                values
+                    .call_method1("get", ("materialized", "view"))?
+                    .str()?
+                    .into_any(),
+            ),
+            ("column_count", model.getattr("output_column_count")?),
+            ("depends_on", PyList::new(py, depends_on)?.into_any()),
+            (
+                "lineage",
+                lineage_summary(&inputs.lineage, model)?.into_any(),
+            ),
+            ("query_sql", model.getattr("query_sql")?),
+        ],
+    )?;
+    qualified_name(&item, model)?;
+    for hook_key in HOOK_KEYS {
+        let hooks: Bound<'py, PyAny> = values.call_method1("get", (hook_key,))?;
+        if !hooks.is_none() {
+            item.set_item(
+                hook_key,
+                call_with(
+                    &imported(py, HOOK_ENTRIES_MODULE, "serialize_hook_entries")?,
+                    &[
+                        ("value", hooks),
+                        (
+                            "sql_fields",
+                            imported(py, DISCOVERY_CONSTANTS_MODULE, "SQL_HOOK_OUTPUT_FIELDS")?,
+                        ),
+                    ],
+                )?,
+            )?;
+        }
+    }
+    Ok(item)
+}
+
+fn hook_definitions<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+    let py: Python<'py> = project.py();
+    let mut definitions: Vec<Bound<'py, PyDict>> = Vec::new();
+    for hook in project.getattr("sql_hook_files")?.try_iter()? {
+        let hook: Bound<'py, PyAny> = hook?;
+        definitions.push(dict(
+            py,
+            vec![
+                ("type", any(py, "sql")?),
+                ("name", hook.getattr("name")?),
+                (
+                    "relative_path",
+                    hook.getattr("relative_path")?.call_method0("as_posix")?,
+                ),
+                ("description", hook.getattr("description")?),
+                ("sql", hook.getattr("sql_body")?),
+            ],
+        )?);
+    }
+    let functions: Bound<'py, PyAny> = project.getattr("hook_functions")?;
+    let identities: Bound<'py, PyAny> =
+        imported(py, HOOK_IDENTITIES_MODULE, "build_hook_identities")?.call1((&functions,))?;
+    for hook in functions.try_iter()? {
+        let hook: Bound<'py, PyAny> = hook?;
+        let identity: Bound<'py, PyAny> = identities.get_item(hook.getattr("name")?)?;
+        definitions.push(dict(
+            py,
+            vec![
+                ("type", any(py, "python")?),
+                ("name", hook.getattr("name")?),
+                (
+                    "relative_path",
+                    hook.getattr("relative_path")?.call_method0("as_posix")?,
+                ),
+                ("description", hook.getattr("description")?),
+                ("definition_hash", identity.getattr("definition_hash")?),
+                ("version_hash", identity.getattr("version_hash")?),
+            ],
+        )?);
+    }
+    PyList::new(py, definitions)
+}
+
+fn function_resource<'py>(function: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = function.py();
+    let return_columns: Bound<'py, PyAny> = function.getattr("return_columns")?;
+    let mut columns: Vec<Bound<'py, PyDict>> = Vec::new();
+    for column in return_columns.try_iter()? {
+        let column: Bound<'py, PyAny> = column?;
+        columns.push(dict(
+            py,
+            vec![
+                ("name", column.getattr("name")?),
+                ("type", column.getattr("type")?),
+            ],
+        )?);
+    }
+    let item: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("name", function.getattr("name")?),
+            (
+                "relative_path",
+                function.getattr("relative_path")?.str()?.into_any(),
+            ),
+            ("language", function.getattr("language")?.getattr("value")?),
+            ("description", function.getattr("description")?),
+            (
+                "return_kind",
+                any(
+                    py,
+                    if return_columns.is_truthy()? {
+                        "table"
+                    } else {
+                        "scalar"
+                    },
+                )?,
+            ),
+            ("returns", function.getattr("returns")?),
+            ("return_columns", PyList::new(py, columns)?.into_any()),
+        ],
+    )?;
+    qualified_name(&item, function)?;
+    Ok(item)
+}
+
+fn audit_resource<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = audit.py();
+    let item: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("name", audit.getattr("name")?),
+            (
+                "relative_path",
+                audit
+                    .getattr("audit_file")?
+                    .getattr("relative_path")?
+                    .str()?
+                    .into_any(),
+            ),
+        ],
+    )?;
+    let kind: Bound<'py, PyAny> = audit.getattr("attached_target_kind")?;
+    let target: Bound<'py, PyAny> = audit.getattr("attached_target_name")?;
+    if !kind.is_none() && !target.is_none() {
+        let attached: Bound<'py, PyDict> = dict(
+            py,
+            vec![("resource_type", kind.getattr("value")?), ("name", target)],
+        )?;
+        let column: Bound<'py, PyAny> = audit.getattr("attached_column_name")?;
+        if !column.is_none() {
+            attached.set_item("column_name", column)?;
+        }
+        item.set_item("attached_to", attached)?;
+    }
+    Ok(item)
+}
+
+fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = test.py();
+    let payload: Bound<'py, PyAny> = test.getattr("payload")?;
+    let expected_models: Bound<'py, PyList> = if payload.is_instance(&imported(
+        py,
+        COMPILE_MODELS_MODULE,
+        "CompiledModelSqlTestPayload",
+    )?)? {
+        PyList::new(
+            py,
+            payload
+                .getattr("expected_model_names")?
+                .try_iter()?
+                .collect::<PyResult<Vec<_>>>()?,
+        )?
+    } else {
+        PyList::empty(py)
+    };
+    let test_file_path: Bound<'py, PyAny> = test.getattr("test_file")?.getattr("relative_path")?;
+    let item: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("name", test.getattr("name")?),
+            ("relative_path", test_file_path.str()?.into_any()),
+            ("expected_models", expected_models.into_any()),
+        ],
+    )?;
+    let case_name: Bound<'py, PyAny> = test.getattr("case_name")?;
+    if case_name.is_none() {
+        return Ok(item);
+    }
+    let schema: Vec<Bound<'py, PyAny>> = test
+        .getattr("parameter_schema")?
+        .try_iter()?
+        .collect::<PyResult<_>>()?;
+    let types: Bound<'py, PyDict> = PyDict::new(py);
+    let mut parameter_schema: Vec<Bound<'py, PyDict>> = Vec::new();
+    for parameter in &schema {
+        let kind: Bound<'py, PyAny> = parameter.getattr("value_type")?.getattr("value")?;
+        types.set_item(parameter.getattr("name")?, &kind)?;
+    }
+    for parameter in &schema {
+        parameter_schema.push(dict(
+            py,
+            vec![
+                ("name", parameter.getattr("name")?),
+                ("type", parameter.getattr("value_type")?.getattr("value")?),
+                ("nullable", parameter.getattr("nullable")?),
+            ],
+        )?);
+    }
+    let mut parameters: Vec<Bound<'py, PyDict>> = Vec::new();
+    for pair in test.getattr("parameter_values")?.try_iter()? {
+        let (name, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
+        let inner: Bound<'py, PyAny> = value.getattr("value")?;
+        let shown: Bound<'py, PyAny> = if value.getattr("kind")?.eq(DECIMAL_KIND)? {
+            inner.str()?.into_any()
+        } else {
+            inner
+        };
+        let kind: Bound<'py, PyAny> = types.as_any().get_item(&name)?;
+        parameters.push(dict(
+            py,
+            vec![("name", name), ("type", kind), ("value", shown)],
+        )?);
+    }
+    let source_path: Bound<'py, PyAny> = test.getattr("source_path")?;
+    let source_path: Bound<'py, PyAny> = if source_path.is_truthy()? {
+        source_path
+    } else {
+        test_file_path
+    };
+    for (key, value) in [
+        ("source_path", source_path.call_method0("as_posix")?),
+        ("block_index", test.getattr("block_index")?),
+        ("parent_name", test.getattr("parent_name")?),
+        ("case_name", case_name),
+        ("case_index", test.getattr("case_index")?),
+        ("case_fingerprint", test.getattr("case_fingerprint")?),
+        (
+            "parameter_schema",
+            PyList::new(py, parameter_schema)?.into_any(),
+        ),
+        ("parameters", PyList::new(py, parameters)?.into_any()),
+    ] {
+        item.set_item(key, value)?;
+    }
+    Ok(item)
+}
+
+/// Each item of `project.<collection>` through `resource`.
+fn resources<'py>(
+    project: &Bound<'py, PyAny>,
+    collection: &str,
+    resource: impl Fn(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let items: Vec<Bound<'py, PyDict>> = project
+        .getattr(collection)?
+        .try_iter()?
+        .map(|item| resource(&item?))
+        .collect::<PyResult<_>>()?;
+    Ok(PyList::new(project.py(), items)?.into_any())
+}
+
+fn source_resource<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = source.py();
+    dict(
+        py,
+        vec![
+            ("name", source.getattr("name")?),
+            (
+                "relative_path",
+                source
+                    .getattr("source_file")?
+                    .getattr("relative_path")?
+                    .str()?
+                    .into_any(),
+            ),
+            (
+                "column_count",
+                any(
+                    py,
+                    source.getattr("source_entry")?.getattr("columns")?.len()?,
+                )?,
+            ),
+        ],
+    )
+}
+
+fn seed_resource<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = seed.py();
+    let item: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("name", seed.getattr("name")?),
+            (
+                "relative_path",
+                seed.getattr("seed_file")?
+                    .getattr("relative_path")?
+                    .str()?
+                    .into_any(),
+            ),
+            (
+                "column_count",
+                any(py, seed.getattr("schema_entry")?.getattr("columns")?.len()?)?,
+            ),
+        ],
+    )?;
+    qualified_name(&item, seed)?;
+    Ok(item)
+}
+
+/// The machine-readable offline compile report.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+pub(crate) fn format_compile_json(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
+    let arguments: KeywordArguments<'_> =
+        KeywordArguments::read(py, "format_compile_json", options, REPORT_OPTIONS)?;
+    let inputs: ReportInputs<'_> = ReportInputs::read(&arguments)?;
+    let project: &Bound<'_, PyAny> = &inputs.project;
+    let mut has_errors: bool = false;
+    let mut diagnostics: Vec<Bound<'_, PyDict>> = Vec::new();
+    for diagnostic in &inputs.diagnostics {
+        has_errors = has_errors || diagnostic.getattr("is_error")?.is_truthy()?;
+        diagnostics.push(diagnostic_json(diagnostic)?);
+    }
+    let length = |collection: &str| -> PyResult<usize> { project.getattr(collection)?.len() };
+    let summary: Bound<'_, PyDict> = dict(
+        py,
+        vec![
+            ("models", any(py, length("models")?)?),
+            ("selected_models", any(py, inputs.selected_models()?.len())?),
+            ("sources", any(py, length("sources")?)?),
+            ("seeds", any(py, length("seeds")?)?),
+            (
+                "selected_seeds",
+                any(py, inputs.selected_count(&[SEED_TYPE])?)?,
+            ),
+            ("functions", any(py, length("functions")?)?),
+            (
+                "selected_functions",
+                any(py, inputs.selected_count(&FUNCTION_TYPES)?)?,
+            ),
+            ("audits", any(py, length("audits")?)?),
+            ("tests", any(py, length("sql_tests")?)?),
+            (
+                "hooks",
+                any(py, length("sql_hook_files")? + length("hook_functions")?)?,
+            ),
+            (
+                "execution_layers",
+                inputs
+                    .graph
+                    .getattr("native")?
+                    .call_method0("model_layer_count")?,
+            ),
+            ("errors", any(py, inputs.severity_count(ERROR_SEVERITY)?)?),
+            (
+                "warnings",
+                any(py, inputs.severity_count(WARNING_SEVERITY)?)?,
+            ),
+        ],
+    )?;
+    let resource_lists: Bound<'_, PyDict> = dict(
+        py,
+        vec![
+            (
+                "models",
+                resources(project, "models", |model| model_resource(&inputs, model))?,
+            ),
+            ("sources", resources(project, "sources", source_resource)?),
+            ("seeds", resources(project, "seeds", seed_resource)?),
+            (
+                "functions",
+                resources(project, "functions", function_resource)?,
+            ),
+            ("audits", resources(project, "audits", audit_resource)?),
+            ("tests", resources(project, "sql_tests", test_resource)?),
+            ("hooks", hook_definitions(project)?.into_any()),
+        ],
+    )?;
+    let artifacts: Bound<'_, PyDict> = dict(
+        py,
+        vec![
+            (
+                "compiled_sql_dir",
+                inputs.compiled_dir()?.call_method1("__add__", ("/",))?,
+            ),
+            (
+                "manifest",
+                if inputs.manifest {
+                    any(py, MANIFEST_ARTIFACT)?
+                } else {
+                    py.None().into_bound(py)
+                },
+            ),
+        ],
+    )?;
+    let report: Bound<'_, PyDict> = dict(
+        py,
+        vec![
+            ("version", sqlbuild_version(py)?),
+            ("command", any(py, "compile")?),
+            ("offline", any(py, true)?),
+            ("has_errors", any(py, has_errors)?),
+            ("summary", summary.into_any()),
+            ("diagnostics", PyList::new(py, diagnostics)?.into_any()),
+            (
+                "semantic_checks_partial",
+                inputs.semantic_coverage()?.into_any(),
+            ),
+            ("compile_timings", arguments.value("timings_ms")?),
+            ("lineage_mode", any(py, inputs.lineage_mode.as_str())?),
+            ("resources", resource_lists.into_any()),
+            ("artifacts", artifacts.into_any()),
+        ],
+    )?;
+    emit_json_report(report.as_any())
+}
+
+/// A compile that stopped on a raised error, as one JSON diagnostic report.
+#[pyfunction]
+#[pyo3(signature = (*, code, message, help_text, location=None))]
+pub(crate) fn format_compile_error_json<'py>(
+    code: Bound<'py, PyAny>,
+    message: Bound<'py, PyAny>,
+    help_text: Bound<'py, PyAny>,
+    location: Option<Bound<'py, PyAny>>,
+) -> PyResult<String> {
+    let py: Python<'py> = code.py();
+    let location: Bound<'py, PyAny> = location.unwrap_or_else(|| py.None().into_bound(py));
+    let (path, line, column) = if location.is_none() {
+        (location.clone(), location.clone(), location.clone())
+    } else {
+        (
+            location.getattr("path")?,
+            location.getattr("line")?,
+            location.getattr("column")?,
+        )
+    };
+    let diagnostic: Bound<'py, PyAny> = call_with(
+        &imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?,
+        &[
+            ("phase", any(py, "compile")?),
+            ("severity", any(py, ERROR_SEVERITY)?),
+            ("code", code),
+            ("message", message),
+            ("path", path),
+            ("line", line),
+            ("column", column),
+            ("location", location),
+            ("help", help_text),
+        ],
+    )?;
+    let report: Bound<'py, PyDict> = dict(
+        py,
+        vec![
+            ("version", sqlbuild_version(py)?),
+            ("command", any(py, "compile")?),
+            ("offline", any(py, true)?),
+            ("has_errors", any(py, true)?),
+            ("stopped", any(py, true)?),
+            (
+                "diagnostics",
+                PyList::new(py, [diagnostic_json(&diagnostic)?])?.into_any(),
+            ),
+        ],
+    )?;
+    emit_orjson_report(report.as_any())
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(format_compile_text, module)?)?;
+    module.add_function(wrap_pyfunction!(format_compile_json, module)?)?;
+    module.add_function(wrap_pyfunction!(format_compile_error_json, module)?)
+}

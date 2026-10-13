@@ -31,10 +31,8 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
-import sqlbuild.cli.commands._helpers.compile.lineage as compile_lineage
-import sqlbuild.cli.commands._helpers.compile.target_writer as target_writer
 import sqlbuild.cli.compile_reuse._helpers.native_reuse as native_reuse
-import sqlbuild.cli.compile_reuse.main._write_reusable_compile as write_reusable_module
+import sqlbuild.cli.compile_reuse._helpers.provider_settings as provider_settings
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_recovery
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
@@ -44,6 +42,7 @@ import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflic
 import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
+import sqlbuild.compiler.sql_test_glue.main.plan_native_sql_test_artifacts as plan_artifacts_module
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
@@ -3355,7 +3354,7 @@ def write_before_reuse_store(
 ) -> None:
     """Let another writer change target/ once, after a compile wrote it and before it stores."""
 
-    original: Callable[..., None] = write_reusable_module.write_reusable_compile
+    original: Callable[..., None] = native_module.write_reusable_compile
     pending: list[Callable[[Path], None]] = [write]
 
     def write_then_store(**kwargs: Any) -> None:
@@ -3364,7 +3363,7 @@ def write_before_reuse_store(
         pending.clear()
         original(**kwargs)
 
-    monkeypatch.setattr(write_reusable_module, "write_reusable_compile", write_then_store)
+    monkeypatch.setattr(native_module, "write_reusable_compile", write_then_store)
 
 
 def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
@@ -3458,7 +3457,7 @@ def fail_reuse_store(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -
     def raise_error(**_kwargs: Any) -> None:
         raise error
 
-    monkeypatch.setattr(native_reuse, "provider_settings_inputs", raise_error)
+    monkeypatch.setattr(provider_settings, "provider_settings_inputs", raise_error)
 
 
 def compile_in_process_output(
@@ -4818,8 +4817,8 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (diagnostic_recovery, "complete_semantic_project"),
     (contract_validation, "evaluate_native_model_contracts"),
     (promotion_conflicts, "native_promotion_conflict_diagnostics"),
-    (compile_lineage, "build_compile_lineage"),
-    (target_writer, "plan_native_sql_test_artifacts"),
+    (native_module, "build_project_column_lineage"),
+    (plan_artifacts_module, "plan_native_sql_test_artifacts"),
 )
 
 
@@ -4837,8 +4836,8 @@ def record_analysis_seams(*, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[
 def _recorded_seam(
     *, entry: Callable[..., object], name: str, results: dict[str, list[object]]
 ) -> Callable[..., object]:
-    def recorded(**arguments: object) -> object:
-        result: object = entry(**arguments)
+    def recorded(*positional: object, **arguments: object) -> object:
+        result: object = entry(*positional, **arguments)
         results.setdefault(name, []).append(result)
         return result
 

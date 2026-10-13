@@ -1,9 +1,15 @@
 //! The `sqb compile` command: analysis, output phases, reuse recording and printed output.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyStringMethods, PyTuple};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString, PyStringMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_command::report::{
+    format_compile_json, format_compile_text, json_semantic_notice,
+};
+use crate::bindings::_helpers::compile_command::reuse_recording::{
+    CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
+};
 use crate::bindings::_helpers::compile_driver::analysis::analyze;
 use crate::bindings::_helpers::compile_driver::phases::{
     elapsed_ms, manifest_payload, monotonic, resolved_dag_path, sql_test_planning_diagnostics,
@@ -15,19 +21,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const REUSE_MODELS_MODULE: &str = "sqlbuild.cli.compile_reuse.models";
 const REUSE_TYPES_MODULE: &str = "sqlbuild.cli.compile_reuse.types";
-const RECORDED_OUTPUT_MODULE: &str = "sqlbuild.cli.compile_reuse.classes.recorded_compile_output";
-const REUSE_CONSTANTS_MODULE: &str = "sqlbuild.cli.compile_reuse.constants";
-const REUSE_TIMINGS_MODULE: &str = "sqlbuild.cli.compile_reuse.main._compile_reuse_timings";
-const WRITE_REUSABLE_MODULE: &str = "sqlbuild.cli.compile_reuse.main._write_reusable_compile";
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const STATUS_REPORTER_MODULE: &str = "sqlbuild.presentation.classes.transient_status_reporter";
 const COMPILE_CONSTANTS_MODULE: &str = "sqlbuild.compiler.compile.constants";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._collect";
-const PREPARED_ARTIFACTS_MODULE: &str = "sqlbuild.cli.commands.classes.prepared_compile_artifacts";
 const SKIPPED_RULES_MODULE: &str = "sqlbuild.rule_engine.main.render_skipped_rules";
-const SEMANTIC_NOTICE_MODULE: &str = "sqlbuild.cli.commands._helpers.compile.semantic_notice";
-const OUTPUT_MODULE: &str = "sqlbuild.cli.commands._helpers.compile.output";
 const SUPPORTS_COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 
 /// What one full compile reports for reuse recording.
@@ -42,7 +42,7 @@ struct CommandOutcome<'py> {
 struct Recorders<'py> {
     detailed_timings: Bound<'py, PyAny>,
     input_reads: Bound<'py, PyAny>,
-    artifact_writes: Bound<'py, PyAny>,
+    artifact_writes: Py<CompileArtifactWrites>,
     prepared_artifacts: Bound<'py, PyAny>,
 }
 
@@ -74,8 +74,7 @@ fn run_compile_command<'py>(
         Some(attempt) => attempt,
         None => bypass_attempt(py, &effective_request, total_start)?,
     };
-    let output: Bound<'py, PyAny> =
-        imported(py, RECORDED_OUTPUT_MODULE, "RecordedCompileOutput")?.call0()?;
+    let output: Bound<'py, PyAny> = Bound::new(py, RecordedCompileOutput::new())?.into_any();
     let status: Status<'py> = Status(compile_status(&request)?);
     let gc: Bound<'py, PyModule> = py.import("gc")?;
     let was_enabled: bool = gc.call_method0("isenabled")?.is_truthy()?;
@@ -167,41 +166,40 @@ fn recorded_compile<'py>(
                 &imported(py, COMPILE_CONSTANTS_MODULE, "COMPILE_INPUT_READS")?
                     .call_method0("recording")?,
                 |input_reads| {
-                    within(
-                        &imported(py, REUSE_CONSTANTS_MODULE, "COMPILE_ARTIFACT_WRITES")?
-                            .call_method0("recording")?,
-                        |artifact_writes| {
-                            let manager: Bound<'py, PyAny> = call_with(
-                                &imported(
-                                    py,
-                                    PREPARED_ARTIFACTS_MODULE,
-                                    "PreparedCompileArtifacts",
-                                )?,
-                                &[(
-                                    "enabled",
-                                    PyBool::new(py, !skip_write).to_owned().into_any(),
-                                )],
-                            )?;
-                            within(&manager, |prepared_artifacts| {
-                                let recorders: Recorders<'py> = Recorders {
-                                    detailed_timings: detailed_timings.clone(),
-                                    input_reads: input_reads.clone(),
-                                    artifact_writes: artifact_writes.clone(),
-                                    prepared_artifacts: prepared_artifacts.clone(),
-                                };
-                                let reuse_timings: Bound<'py, PyAny> = call_with(
-                                    &imported(py, REUSE_TIMINGS_MODULE, "compile_reuse_timings")?,
-                                    &[("attempt", attempt.clone())],
-                                )?;
-                                let outcome: CommandOutcome<'py> = compiled_with_status(
-                                    (request, &recorders),
-                                    (status, output),
-                                    (total_start, &reuse_timings),
-                                )?;
-                                Ok((outcome, recorders.input_reads, recorders.artifact_writes))
-                            })
-                        },
-                    )
+                    let artifact_writes: Py<CompileArtifactWrites> = new_artifact_recorder(py)?;
+                    let manager: Bound<'py, PyAny> = call_with(
+                        &imported(py, NATIVE_MODULE, "PreparedCompileArtifacts")?,
+                        &[
+                            (
+                                "enabled",
+                                PyBool::new(py, !skip_write).to_owned().into_any(),
+                            ),
+                            (
+                                "artifact_writes",
+                                artifact_writes.bind(py).clone().into_any(),
+                            ),
+                        ],
+                    )?;
+                    within(&manager, |prepared_artifacts| {
+                        let recorders: Recorders<'py> = Recorders {
+                            detailed_timings: detailed_timings.clone(),
+                            input_reads: input_reads.clone(),
+                            artifact_writes: artifact_writes.clone_ref(py),
+                            prepared_artifacts: prepared_artifacts.clone(),
+                        };
+                        let reuse_timings: Bound<'py, PyAny> =
+                            compile_reuse_timings(attempt)?.into_any();
+                        let outcome: CommandOutcome<'py> = compiled_with_status(
+                            (request, &recorders),
+                            (status, output),
+                            (total_start, &reuse_timings),
+                        )?;
+                        Ok((
+                            outcome,
+                            recorders.input_reads,
+                            recorders.artifact_writes.into_bound(py).into_any(),
+                        ))
+                    })
                 },
             )
         },
@@ -209,7 +207,7 @@ fn recorded_compile<'py>(
     close_status(status)?;
     let (outcome, input_reads, artifact_writes) = compiled?;
     let stored: PyResult<Bound<'py, PyAny>> = call_with(
-        &imported(py, WRITE_REUSABLE_MODULE, "write_reusable_compile")?,
+        &imported(py, NATIVE_MODULE, "write_reusable_compile")?,
         &[
             ("attempt", attempt.clone()),
             ("output", output.clone()),
@@ -273,11 +271,12 @@ fn compiled_with_status<'py>(
     } else {
         request.getattr("dag_path")?
     };
-    write_dag_artifact((&dag_path, &project_dir), &analysis, status)?;
+    let recorder: Option<&Py<CompileArtifactWrites>> = Some(&recorders.artifact_writes);
+    write_dag_artifact((&dag_path, &project_dir), (&analysis, recorder), status)?;
     let (written, write_ms): (Bound<'py, PyAny>, i64) = write_artifacts(
         (skip_write || rules_failed, &project_dir),
         (&analysis, &manifest),
-        prepared_artifacts,
+        (prepared_artifacts, recorder),
         status,
     )?;
     let timings: Bound<'py, PyDict> = timings_ms(
@@ -286,7 +285,7 @@ fn compiled_with_status<'py>(
         total_start,
     )?;
     let withheld: Bound<'py, PyAny> = if rules_failed && !skip_write {
-        sql_test_planning_diagnostics(&project_dir, &analysis, prepared_artifacts)?
+        sql_test_planning_diagnostics(&project_dir, &analysis, (prepared_artifacts, recorder))?
     } else {
         PyTuple::empty(py).into_any()
     };
@@ -450,24 +449,18 @@ fn record_output<'py>(
         ("selected_keys", selected_keys.clone()),
     ];
     let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = shared.to_vec();
-    let rendered: Bound<'py, PyAny> = if request.getattr("json_output")?.is_truthy()? {
-        let notice: Bound<'py, PyAny> = call_with(
-            &imported(py, SEMANTIC_NOTICE_MODULE, "semantic_coverage_notice")?,
-            &[
-                ("project", graph.getattr("project")?),
-                ("selected_keys", selected_keys),
-                ("sql_validation_enabled", validation_enabled.clone()),
-            ],
-        )?;
-        if notice.is_truthy()? {
+    let rendered: Bound<'py, PyString> = if request.getattr("json_output")?.is_truthy()? {
+        let notice: Option<Bound<'py, PyString>> =
+            json_semantic_notice(&graph, &selected_keys, validation_enabled.is_truthy()?)?;
+        if let Some(notice) = notice {
             output.call_method1("print_stderr_line", (notice,))?;
         }
         arguments.push(("timings_ms", timings.clone().into_any()));
         arguments.push(("sql_validation_enabled", validation_enabled));
-        call_with(
-            &imported(py, OUTPUT_MODULE, "format_compile_json")?,
-            &arguments,
-        )?
+        PyString::new(
+            py,
+            &format_compile_json(py, Some(keywords(py, &arguments)?))?,
+        )
     } else {
         let use_color: bool = !request.getattr("no_color")?.is_truthy()?
             && imported(py, SUPPORTS_COLOR_MODULE, "supports_color")?
@@ -478,10 +471,7 @@ fn record_output<'py>(
             PyBool::new(py, use_color).to_owned().into_any(),
         ));
         arguments.push(("sql_validation_enabled", validation_enabled));
-        call_with(
-            &imported(py, OUTPUT_MODULE, "format_compile_text")?,
-            &arguments,
-        )?
+        format_compile_text(py, Some(keywords(py, &arguments)?))?
     };
     output.call_method1("record_stdout", (rendered,))?;
     Ok(())

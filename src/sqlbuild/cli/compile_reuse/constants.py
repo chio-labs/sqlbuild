@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.compile_reuse.classes.compile_artifact_write_registry import (
-    CompileArtifactWriteRegistry,
-)
 from sqlbuild.compiler.frontier.constants import (
     COMPILE_REUSE_DISABLE_ENV_VAR,
     STAGE_CAPTURE_DIR_ENV_VAR,
@@ -77,7 +74,6 @@ REUSE_STORE_DONE_MESSAGE: str = "Recorded compile for reuse ({seconds:.1f} s)"
 REUSE_STORE_SKIPPED_MESSAGE: str = (
     "Did not record compile for reuse: files changed while it ran ({seconds:.1f} s)"
 )
-COMPILE_ARTIFACT_WRITES: CompileArtifactWriteRegistry = CompileArtifactWriteRegistry()
 LAUNCH_RECORD_FORMAT: int = 1
 LAUNCH_RECORD_DIRECTORY: tuple[str, ...] = (TARGET_DIRECTORY_NAME, "cache", "launcher-v1")
 LAUNCH_RECORD_LIMIT: int = 32

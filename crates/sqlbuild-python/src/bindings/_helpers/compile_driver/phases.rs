@@ -2,16 +2,19 @@
 
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyBytes, PyTuple};
+use pyo3::types::PyTuple;
 
+use crate::bindings::_helpers::compile_command::artifact_batch::ArtifactBatch;
+use crate::bindings::_helpers::compile_command::reuse_recording::ArtifactRecorder;
+use crate::bindings::_helpers::compile_command::target_writer::{
+    Prepared, planning_diagnostics, write_static_target,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{Status, call_with, imported};
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 
 const MANIFEST_MODULE: &str = "sqlbuild.compiler.manifest.main._build_graph_manifest";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const PYTHON_NODES_MODULE: &str = "sqlbuild.compiler.python_nodes.main.graph";
-const ARTIFACT_BATCH_MODULE: &str = "sqlbuild.cli.commands.classes.native_artifact_batch";
-const TARGET_WRITER_MODULE: &str = "sqlbuild.cli.commands._helpers.compile.target_writer";
 const OUTPUT_MODELS_MODULE: &str = "sqlbuild.cli.output.models";
 const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
@@ -101,7 +104,7 @@ pub(crate) fn resolved_dag_path<'py>(
 /// Write the DAG JSON artifact when a DAG path is requested.
 pub(crate) fn write_dag_artifact<'py>(
     (dag_path, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    analysis: &Bound<'py, PyAny>,
+    (analysis, recorder): (&Bound<'py, PyAny>, ArtifactRecorder<'_>),
     status: &Status<'py>,
 ) -> PyResult<()> {
     if dag_path.is_none() {
@@ -129,21 +132,9 @@ pub(crate) fn write_dag_artifact<'py>(
         &project_name,
         Some(&python_graph),
     )?;
-    let batch: Bound<'py, PyAny> = call_with(
-        &imported(py, ARTIFACT_BATCH_MODULE, "NativeArtifactBatch")?,
-        &[(
-            "check_existing",
-            PyBool::new(py, false).to_owned().into_any(),
-        )],
-    )?;
-    call_with(
-        &batch.getattr("queue")?,
-        &[
-            ("path", path),
-            ("contents", PyBytes::new(py, dag_json.as_bytes()).into_any()),
-        ],
-    )?;
-    batch.call_method0("flush")?;
+    let mut batch: ArtifactBatch = ArtifactBatch::new(false, recorder);
+    batch.queue(&path, dag_json.into_bytes())?;
+    batch.flush(py)?;
     status.complete(&format!(
         "Wrote DAG artifact. ({}s)",
         seconds_since(py, started)?
@@ -154,7 +145,7 @@ pub(crate) fn write_dag_artifact<'py>(
 pub(crate) fn sql_test_planning_diagnostics<'py>(
     project_dir: &Bound<'py, PyAny>,
     analysis: &Bound<'py, PyAny>,
-    prepared_artifacts: &Bound<'py, PyAny>,
+    (prepared_artifacts, recorder): (&Bound<'py, PyAny>, ArtifactRecorder<'_>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = analysis.py();
     let planned: PyResult<Bound<'py, PyAny>> = (|| {
@@ -165,18 +156,18 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
                 return Ok(staged);
             }
         }
-        call_with(
-            &imported(
-                py,
-                TARGET_WRITER_MODULE,
-                "static_sql_test_planning_diagnostics",
-            )?,
-            &[
-                ("target_dir", target_dir(project_dir)?),
-                ("adapter", analysis.getattr("adapter")?),
-                ("project", analysis.getattr("graph")?.getattr("project")?),
-            ],
-        )
+        Ok(planning_diagnostics(
+            &target_dir(project_dir)?,
+            (
+                &analysis.getattr("adapter")?,
+                &analysis.getattr("graph")?.getattr("project")?,
+            ),
+            Prepared {
+                planned_tests: None,
+                recorder,
+            },
+        )?
+        .into_any())
     })();
     let error = match planned {
         Ok(diagnostics) => return Ok(diagnostics),
@@ -221,7 +212,7 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
 pub(crate) fn write_artifacts<'py>(
     (skip_write, project_dir): (bool, &Bound<'py, PyAny>),
     (analysis, manifest): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    prepared_artifacts: &Bound<'py, PyAny>,
+    (prepared_artifacts, recorder): (&Bound<'py, PyAny>, ArtifactRecorder<'_>),
     status: &Status<'py>,
 ) -> PyResult<(Bound<'py, PyAny>, i64)> {
     let py: Python<'py> = analysis.py();
@@ -254,14 +245,17 @@ pub(crate) fn write_artifacts<'py>(
             )?
         };
         if staged.is_none() {
-            call_with(
-                &imported(py, TARGET_WRITER_MODULE, "write_static_compile_target")?,
-                &[
-                    ("target_dir", target),
-                    ("adapter", analysis.getattr("adapter")?),
-                    ("project", analysis.getattr("graph")?.getattr("project")?),
-                    ("manifest", manifest.clone()),
-                ],
+            write_static_target(
+                &target,
+                (
+                    &analysis.getattr("adapter")?,
+                    &analysis.getattr("graph")?.getattr("project")?,
+                ),
+                manifest,
+                Prepared {
+                    planned_tests: None,
+                    recorder,
+                },
             )?
         } else {
             staged

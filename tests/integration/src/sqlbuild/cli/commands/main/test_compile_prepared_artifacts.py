@@ -11,8 +11,6 @@ import duckdb
 import pytest
 from filelock import FileLock
 
-from sqlbuild.cli.commands.classes import prepared_compile_artifacts
-from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     AbandonedStagingCompileTestCase,
@@ -27,6 +25,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     compile_project_json,
     compile_then_edit_one_test,
     compiled_files,
+    create_owned_staging_directory,
     fail_native_planner,
     has_second_filesystem,
     keep_native_planner,
@@ -35,6 +34,8 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     skip_artifact_preparation,
     staging_directories,
     unavailable_staging_directory,
+    use_prepared_artifacts,
+    use_staging_directory_factory,
     write_prepared_artifacts_project,
     write_staging_directory,
     write_test_planning_project,
@@ -84,10 +85,7 @@ def test_given_compile_mode_when_preparing_artifacts_in_background_then_output_m
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
-    monkeypatch.setattr(
-        prepared_compile_artifacts, "_MAX_PREPARED_ARTIFACT_MODELS", test_case.max_prepared_models
-    )
+    use_prepared_artifacts(monkeypatch, model_range=(1, test_case.max_prepared_models))
     background: Path = tmp_path / "background"
     write_test_planning_project(
         project_dir=background,
@@ -103,7 +101,7 @@ def test_given_compile_mode_when_preparing_artifacts_in_background_then_output_m
         project_dir=background, compile_args=test_case.compile_args, capsys=capsys
     )
     with monkeypatch.context() as inline_patch:
-        inline_patch.setattr(PreparedCompileArtifacts, "start", skip_artifact_preparation)
+        skip_artifact_preparation(inline_patch)
         inline_result: tuple[int, dict[str, object]] = compile_project_json(
             project_dir=inline, compile_args=test_case.compile_args, capsys=capsys
         )
@@ -160,7 +158,7 @@ def test_given_background_planning_fails_when_compiling_then_error_matches_inlin
         project_dir=background, compile_args=test_case.compile_args, capsys=capsys
     )
     with monkeypatch.context() as inline_patch:
-        inline_patch.setattr(PreparedCompileArtifacts, "start", skip_artifact_preparation)
+        skip_artifact_preparation(inline_patch)
         inline_result: tuple[int, dict[str, object]] = compile_project_json(
             project_dir=inline, compile_args=test_case.compile_args, capsys=capsys
         )
@@ -178,7 +176,7 @@ def test_given_background_planning_fails_when_compiling_then_error_matches_inlin
     "test_case",
     (
         PreparedArtifactsCompileTestCase(
-            "cold staged artifacts", 128, prepared_compile_artifacts._create_staging_directory
+            "cold staged artifacts", 128, create_owned_staging_directory
         ),
         PreparedArtifactsCompileTestCase(
             "unavailable staging storage", 128, unavailable_staging_directory
@@ -192,9 +190,7 @@ def test_given_existing_artifacts_when_rules_fail_then_staged_changes_are_not_pu
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        prepared_compile_artifacts, "_create_staging_directory", test_case.staging_directory_factory
-    )
+    use_staging_directory_factory(monkeypatch, create_staging=test_case.staging_directory_factory)
     config_path: Path = tmp_path / "sqlbuild_project.toml"
     config: str = 'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL021"]\n'
     config_path.write_text(config, encoding="utf-8")

@@ -55,7 +55,7 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
-from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
+from sqlbuild.compiler.python_nodes.main._hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.spec.contracts.main.get_config_str import get_config_str

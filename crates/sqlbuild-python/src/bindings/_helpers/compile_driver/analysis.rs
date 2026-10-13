@@ -16,7 +16,12 @@ const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const SELECTED_GRAPH_MODULE: &str = "sqlbuild._native";
-const LINEAGE_MODULE: &str = "sqlbuild.cli.commands._helpers.compile.lineage";
+const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
+const RICH_LINEAGE: &str = "rich";
+const FAST_LINEAGE: &str = "fast";
+const RICH_COLUMN_LINEAGE: &str = "RICH";
+const FAST_COLUMN_LINEAGE: &str = "FAST";
+
 const CONTRACTS_MODULE: &str = "sqlbuild.compiler.contracts.main.validate";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.compiler.contracts.models";
 const SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
@@ -31,6 +36,33 @@ const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild.cli.compile.models";
 const GENERIC_DIALECT: &str = "generic";
 const TARGET_DIRECTORY: &str = "target";
+
+/// `ColumnLineageMode.<member>`.
+fn column_lineage_mode<'py>(py: Python<'py>, member: &str) -> PyResult<Bound<'py, PyAny>> {
+    imported(py, LINEAGE_TYPES_MODULE, "ColumnLineageMode")?.getattr(member)
+}
+
+/// Column lineage in the compile's mode; `none` skips the analyzer.
+fn compile_lineage<'py>(
+    graph: &Bound<'py, PyAny>,
+    dialect: &Bound<'py, PyAny>,
+    mode: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = graph.py();
+    let member: &str = if mode.eq(RICH_LINEAGE)? {
+        RICH_COLUMN_LINEAGE
+    } else if mode.eq(FAST_LINEAGE)? {
+        FAST_COLUMN_LINEAGE
+    } else {
+        return Ok(py.None().into_bound(py));
+    };
+    imported(py, "sqlbuild._native", "build_project_column_lineage")?.call1((
+        graph.getattr("project")?,
+        dialect,
+        column_lineage_mode(py, member)?,
+        py.None(),
+    ))
+}
 
 /// Milliseconds since `start`, truncated as Python's `int((monotonic() - start) * 1000)`.
 fn elapsed_ms(start: Instant) -> u64 {
@@ -335,9 +367,14 @@ impl<'py> Driver<'_, 'py> {
             (options.analysis_selection.clone(),),
             Some(&keywords(py, &[("on_inputs_ready", on_inputs_ready)])?),
         )?;
-        let lineage_mode: Bound<'py, PyAny> =
-            imported(py, LINEAGE_MODULE, "compile_analysis_lineage_mode")?
-                .call1((options.lineage_mode.clone(),))?;
+        let lineage_mode: Bound<'py, PyAny> = column_lineage_mode(
+            py,
+            if options.lineage_mode.eq(RICH_LINEAGE)? {
+                RICH_COLUMN_LINEAGE
+            } else {
+                FAST_COLUMN_LINEAGE
+            },
+        )?;
         let graph: Bound<'py, PyAny> = within(&lifecycle, |_| {
             call_with(
                 &imported(
@@ -374,14 +411,8 @@ impl<'py> Driver<'_, 'py> {
     ) -> PyResult<(Bound<'py, PyAny>, u64)> {
         let started: Instant = Instant::now();
         self.status.start("Analyzing column lineage...")?;
-        let lineage: Bound<'py, PyAny> = call_with(
-            &imported(self.py, LINEAGE_MODULE, "build_compile_lineage")?,
-            &[
-                ("graph", graph.clone()),
-                ("dialect", dialect.clone()),
-                ("mode", self.options.lineage_mode.clone()),
-            ],
-        )?;
+        let lineage: Bound<'py, PyAny> =
+            compile_lineage(graph, dialect, &self.options.lineage_mode)?;
         let lineage_ms: u64 = elapsed_ms(started);
         self.status.complete(&format!(
             "Analyzed column lineage. ({}s)",

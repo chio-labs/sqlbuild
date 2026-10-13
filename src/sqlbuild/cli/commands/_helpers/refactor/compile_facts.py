@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import analyze_compile_project
-from sqlbuild.cli.commands._helpers.compile.target_writer import (
-    static_sql_test_planning_diagnostics,
-)
+from sqlbuild._native import analyze_compile_project, static_sql_test_planning_diagnostics
 from sqlbuild.cli.commands.models import RefactorCompile
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis

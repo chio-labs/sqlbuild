@@ -9,11 +9,9 @@ import pytest
 from sqlbuild._native import (
     ProjectColumnLineage,
     compiled_model_record,
-    project_with,
-)
-from sqlbuild.cli.commands._helpers.compile.output import (
     format_compile_json,
     format_compile_text,
+    project_with,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.output.models import (
