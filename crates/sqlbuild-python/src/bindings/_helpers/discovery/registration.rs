@@ -3,8 +3,8 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::discovery::{
-    declaration_files, declaration_records, header_declarations, header_values, key_checks,
-    locations, model_records, project_files, project_validation, python_function_files,
+    declaration_files, declaration_records, guidance, header_declarations, header_values,
+    key_checks, locations, model_records, project_files, project_validation, python_function_files,
     python_hook_files, python_module_files, raised, scope_snapshot, snapshot, sql_test_records,
     yaml_entries, yaml_records,
 };
@@ -28,5 +28,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     project_validation::register(module)?;
     yaml_entries::register(module)?;
     header_values::register(module)?;
+    guidance::register(module)?;
     Ok(())
 }

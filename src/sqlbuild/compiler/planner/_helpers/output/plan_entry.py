@@ -16,6 +16,7 @@ from sqlbuild._native import (
     get_config_int,
     get_config_str,
     get_config_string_tuple,
+    microbatch_guidance,
     render_source_relation,
     resolve_cursor_input_roles,
 )
@@ -40,7 +41,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledResourceType,
     CompiledSeedView,
 )
-from sqlbuild.compiler.discovery.main.microbatch_guidance import microbatch_guidance
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (

@@ -16,6 +16,7 @@ from types import MappingProxyType, ModuleType
 from typing import cast
 
 import sqlbuild._native as _native
+from sqlbuild._native import explicit_references_help
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import report_compile_diagnostic
 from sqlbuild.compiler.compile._helpers.explicit_references.macro_arguments import (
     call_site_sql_references,
@@ -42,7 +43,6 @@ from sqlbuild.compiler.compile.models import (
     StaticMacroFault,
     StaticMacroInventory,
 )
-from sqlbuild.compiler.discovery.main.explicit_references_help import explicit_references_help
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredMacroFile,

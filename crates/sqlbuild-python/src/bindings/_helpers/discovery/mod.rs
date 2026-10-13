@@ -1,6 +1,7 @@
 pub(crate) mod declaration_files;
 pub(crate) mod declaration_records;
 pub(crate) mod faults;
+pub(crate) mod guidance;
 pub(crate) mod header_declarations;
 pub(crate) mod header_values;
 pub(crate) mod key_checks;

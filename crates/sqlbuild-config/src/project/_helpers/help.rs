@@ -57,6 +57,17 @@ pub(crate) fn setting_note(setting: &Setting<'_>) -> String {
     )
 }
 
+/// `setting_note(explicit=None)`: the current value, from the file or its default.
+pub(crate) fn current_value_note(setting: &Setting<'_>) -> String {
+    format!(
+        "the current value is [{}] {} = {} (from {} or its default)",
+        setting.section,
+        setting.key,
+        toml_value(setting.value),
+        setting.file_name
+    )
+}
+
 /// `join_helps`: one `= help:` label per paragraph.
 pub(crate) fn join_helps(helps: &[String]) -> String {
     helps.join(ADDITIONAL_HELP_SEPARATOR)

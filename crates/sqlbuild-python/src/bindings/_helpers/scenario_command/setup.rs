@@ -21,11 +21,11 @@ use sqlbuild_core::scenario_command::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
 
 pub(crate) const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const GUIDANCE_MODULE: &str = "sqlbuild.compiler.discovery.main._sql_analysis_off_guidance";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const SCENARIO_CONFIG_MODULE: &str =
     "sqlbuild.spec.contracts.main.resolve_effective_scenario_config";
@@ -180,14 +180,7 @@ pub(crate) fn require_sql_analysis(
     let guidance: Option<(String, String)> = if disabled_by_flag {
         None
     } else {
-        call_with(
-            &imported(py, GUIDANCE_MODULE, "sql_analysis_off_guidance")?,
-            &[
-                ("discovered_inputs", project.discovered.clone()),
-                ("purpose", text(py, sql_analysis_purpose(command))),
-            ],
-        )?
-        .extract()?
+        sql_analysis_guidance(&project.discovered, sql_analysis_purpose(command))?
     };
     match sql_analysis_required_error(command, disabled_by_flag, guidance) {
         Some(error) => Err(cli_user_error(py, error)),
