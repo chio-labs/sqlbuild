@@ -1,3 +1,4 @@
+pub(crate) mod custom_rule_evidence;
 pub(crate) mod dsl_headers;
 pub(crate) mod evaluation;
 pub(crate) mod lint;

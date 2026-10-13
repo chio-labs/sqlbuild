@@ -15,15 +15,13 @@ import orjson
 
 from sqlbuild._native import (
     compiled_project_record,
+    custom_rule_implementation_fingerprint,
+    custom_rule_import_closure,
 )
 from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.compiler.scopes.models import ScopeIndex
-from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
-    custom_rule_implementation_fingerprint,
-    custom_rule_import_closure,
-)
 from sqlbuild.rule_engine._helpers.engine.fact_replay import full_fact_keys, is_tree_fact
 from sqlbuild.rule_engine._helpers.host.custom_host_pool import (
     decode_readset,

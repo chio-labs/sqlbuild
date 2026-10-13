@@ -215,7 +215,7 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.rule_engine.models import Finding, RulesResult
+from sqlbuild.rule_engine.models import Finding, Rule, RulesResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
@@ -2814,6 +2814,13 @@ def _oracle_yaml_load(text: str) -> str: ...
 def _oracle_toml_load(text: str) -> str: ...
 
 # Discovery: header values and authored locations.
+def custom_rule_import_closure(*, rule: Rule, project_dir: Path) -> tuple[Path, ...]: ...
+def custom_rule_implementation_fingerprint(
+    *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
+) -> str: ...
+def custom_rule_test_evidence(
+    *, rule: Rule, project_dir: Path
+) -> list[tuple[str, int, int, str]]: ...
 def format_rules_result(*, result: RulesResult, json_output: bool) -> str: ...
 def with_duplicate_literal_hints(
     *, findings: tuple[Finding, ...], project_dir: Path

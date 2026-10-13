@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import custom_rule_import_closure
+from sqlbuild._native import custom_rule_import_closure
 from sqlbuild.rule_engine.constants import CUSTOM_RULE_IMPORT_ROOTS
 from sqlbuild.rule_engine.exceptions import NonHermeticRuleError, RulesError
 from sqlbuild.rule_engine.models import Rule
