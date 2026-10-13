@@ -4,8 +4,8 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::cli::{argv, entry, progress, progress_reporters, progress_text};
 use crate::bindings::_helpers::{
-    clone, command_runtime, cost_report, dbt_interop, debug_command, freshness, janitor, load,
-    presentation_text, result_output, workspace_commands,
+    check, clone, command_runtime, cost_report, dbt_interop, debug_command, freshness, janitor,
+    load, presentation_text, result_output, workspace_commands,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -25,5 +25,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     command_runtime::registration::register(module)?;
     presentation_text::registration::register(module)?;
     workspace_commands::registration::register(module)?;
+    check::registration::register(module)?;
     Ok(())
 }

@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod check_command;
 pub mod cli_text;
 pub mod clone_text;
 pub mod constants;

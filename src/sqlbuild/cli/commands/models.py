@@ -57,13 +57,12 @@ if TYPE_CHECKING:
         CompilerDiagnostic,
     )
     from sqlbuild.compiler.compile.types import CompiledProjectView
-    from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
+    from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.pipeline.models import (
         CompilePipelineResult,
         PythonPlanEntry,
     )
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-    from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
     from sqlbuild.compiler.refactoring.models import RefactorProject
     from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
     from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
@@ -71,7 +70,6 @@ if TYPE_CHECKING:
     from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
     from sqlbuild.integrations.dbt.models import DbtInitRequest
     from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-    from sqlbuild.python_nodes.models import SqlResourceRef
     from sqlbuild.runtime.contracts.types import NodeStartCallback
 
 
@@ -299,20 +297,6 @@ class CheckInvocation:
     progress_stream: TextIO
     connection_progress: ConnectionProgressReporter
     planning_progress: PlanningProgressReporter
-
-
-@dataclass(frozen=True)
-class CheckExecutionPreparation:
-    """Prepared Python graph, check selection, lifecycle, and relation defaults."""
-
-    python_graph: PythonNodeGraph
-    check_functions: tuple[DiscoveredCheckFunction, ...]
-    lifecycle_plan: PythonSqlRunLifecyclePlan
-    relation_targets: dict[SqlResourceRef, str]
-    relation_refs: frozenset[SqlResourceRef]
-    default_database: str | None
-    default_schema: str | None
-    project_relations: dict[SqlResourceRef, str] | None = None
 
 
 @dataclass(frozen=True)

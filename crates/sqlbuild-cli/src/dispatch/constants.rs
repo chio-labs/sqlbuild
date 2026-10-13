@@ -262,9 +262,9 @@ const CHECK_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const CHECK_ROUTE: Route = routed(
     "run_check",
-    ("sqlbuild.cli.commands.main.execution._check", "run_check"),
+    ("sqlbuild._native", "run_check_command"),
     &CHECK_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const AUDIT_FIELDS: [Field; 11] = [

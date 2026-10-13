@@ -19,6 +19,7 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
+    CheckCommandRequest,
     CloneCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
@@ -110,6 +111,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredCheckFunction,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredHookFunction,
@@ -2829,6 +2831,16 @@ def run_janitor_command(*, request: JanitorCommandRequest) -> int: ...
 def run_freshness_command(*, request: FreshnessCommandRequest) -> int: ...
 def run_clone_command(*, request: CloneCommandRequest) -> int: ...
 def run_load_command(*, request: LoadCommandRequest) -> int: ...
+def run_check_command(*, request: CheckCommandRequest) -> int: ...
+def write_check_results(
+    *,
+    stream: TextIO,
+    results: tuple[PythonCheckExecutionResult, ...],
+    use_color: bool,
+    check_functions: tuple[DiscoveredCheckFunction, ...] = (),
+    python_graph: PythonNodeGraph | None = None,
+) -> None: ...
+def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
 def select_load_entries(
     *,
     discovered_inputs: DiscoveredProjectInputs,

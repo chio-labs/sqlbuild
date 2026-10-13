@@ -5,6 +5,7 @@ pub(crate) mod auditing;
 pub(crate) mod authored_values;
 pub(crate) mod boundary;
 pub(crate) mod cache;
+pub(crate) mod check;
 pub(crate) mod cli;
 pub(crate) mod clone;
 pub(crate) mod command_runtime;
