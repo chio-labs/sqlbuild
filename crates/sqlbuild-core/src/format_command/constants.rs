@@ -26,3 +26,4 @@ pub(crate) const HELP_CONTINUATION: &str = "          ";
 pub(crate) const TAB_CHARACTER: char = '\t';
 pub(crate) const SEVERITY_FAULT: &str = "fault";
 pub(crate) const SEVERITY_WARNING: &str = "warning";
+pub(crate) const FORMAT_PATH_CODE: &str = "C113";

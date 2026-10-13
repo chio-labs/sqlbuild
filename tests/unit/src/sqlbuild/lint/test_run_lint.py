@@ -8,7 +8,6 @@ import pytest
 
 from sqlbuild._native import apply_lint_suppressions
 from sqlbuild.lint.constants import LINT_ENGINE_SQLBUILD, VIOLATION_SEVERITY_FAULT
-from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from tests.unit.src.sqlbuild.lint._test_types import (
@@ -18,6 +17,11 @@ from tests.unit.src.sqlbuild.lint._test_types import (
     FormatProjectTestCase,
     LintBehaviorTestCase,
     LintProjectTestCase,
+)
+from tests.unit.src.sqlbuild.lint.helpers import (
+    format_project_json,
+    formatted_files,
+    violation_reports,
 )
 
 CLEAN_MODEL: str = 'MODEL (\n  materialized table,\n  description "ok"\n);\nSELECT 1 AS x FROM t\n'
@@ -136,7 +140,7 @@ def test_given_synthetic_project_when_linting_then_results_match_expected(
     ids=lambda case: case.description,
 )
 def test_given_synthetic_project_when_formatting_then_results_match_expected(
-    test_case: FormatProjectTestCase, tmp_path: Path
+    test_case: FormatProjectTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
     relative_path: str
@@ -145,12 +149,14 @@ def test_given_synthetic_project_when_formatting_then_results_match_expected(
         target: Path = tmp_path / relative_path
         _ = target.parent.mkdir(parents=True, exist_ok=True)
         _ = target.write_text(contents, encoding="utf-8")
-    result: LintRunResult = run_format(project_dir=tmp_path, config=LintConfig())
-    assert len(result.formatted_files) == test_case.expected_formatted_count
-    remaining: tuple = tuple(violation.code for violation in result.faults)
+    report: dict[str, object] = format_project_json(project_dir=tmp_path, capsys=capsys)
+    assert len(formatted_files(report)) == test_case.expected_formatted_count
+    remaining: tuple = tuple(
+        (violation["code"], violation["severity"]) for violation in violation_reports(report)
+    )
     fault_code: str
     for fault_code in test_case.expected_fault_codes:
-        assert fault_code in remaining
+        assert (fault_code, "fault") in remaining
     relative_path: str
     fragment: str
     for relative_path, fragment in test_case.expected_written_fragments.items():
@@ -199,7 +205,9 @@ def test_given_synthetic_project_when_formatting_then_results_match_expected(
     ids=lambda case: case.description,
 )
 def test_given_inherited_descriptions_when_formatting_then_faults_match_compile_resolution(
-    test_case: FormatDescriptionResolutionTestCase, tmp_path: Path
+    test_case: FormatDescriptionResolutionTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _ = (tmp_path / "sqlbuild_project.toml").write_text(test_case.project_toml, encoding="utf-8")
     relative_path: str
@@ -209,11 +217,16 @@ def test_given_inherited_descriptions_when_formatting_then_faults_match_compile_
         _ = target.parent.mkdir(parents=True, exist_ok=True)
         _ = target.write_text(contents, encoding="utf-8")
 
-    result: LintRunResult = run_format(project_dir=tmp_path, config=LintConfig(), write=False)
-
-    assert tuple(sorted((fault.file_path.name, fault.code) for fault in result.faults)) == (
-        test_case.expected_description_faults
+    report: dict[str, object] = format_project_json(
+        project_dir=tmp_path, capsys=capsys, arguments=("--check",)
     )
+
+    assert tuple(
+        sorted(
+            (Path(str(violation["file"])).name, violation["code"], violation["severity"])
+            for violation in violation_reports(report)
+        )
+    ) == tuple((*fault, "fault") for fault in test_case.expected_description_faults)
 
 
 @pytest.mark.parametrize(
@@ -230,20 +243,20 @@ def test_given_inherited_descriptions_when_formatting_then_faults_match_compile_
     ids=lambda case: case.description,
 )
 def test_given_authored_newline_style_when_formatting_then_style_is_preserved(
-    test_case: FormatNewlineTestCase, tmp_path: Path
+    test_case: FormatNewlineTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     target: Path = tmp_path / "models" / "crlf.sql"
     _ = target.parent.mkdir(parents=True)
     target.write_bytes(test_case.contents)
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
 
-    _ = run_format(project_dir=tmp_path, config=LintConfig())
-    second: LintRunResult = run_format(project_dir=tmp_path, config=LintConfig())
+    _ = format_project_json(project_dir=tmp_path, capsys=capsys)
+    second: dict[str, object] = format_project_json(project_dir=tmp_path, capsys=capsys)
 
     written: bytes = target.read_bytes()
     assert test_case.expected_newline in written
     assert written.count(test_case.expected_newline) == written.count(b"\n")
-    assert second.formatted_files == ()
+    assert second["formatted_files"] == []
 
 
 @pytest.mark.parametrize(
@@ -283,6 +296,7 @@ def test_given_non_ascii_sql_when_native_linting_then_span_maps_to_authored_colu
 def test_given_comment_free_body_when_formatting_twice_then_output_is_canonical_and_idempotent(
     test_case: LintBehaviorTestCase,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _ = test_case
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
@@ -293,17 +307,11 @@ def test_given_comment_free_body_when_formatting_twice_then_output_is_canonical_
         encoding="utf-8",
     )
 
-    first: LintRunResult = run_format(
-        project_dir=tmp_path,
-        config=LintConfig(dialect="duckdb"),
-    )
-    second: LintRunResult = run_format(
-        project_dir=tmp_path,
-        config=LintConfig(dialect="duckdb"),
-    )
+    first: dict[str, object] = format_project_json(project_dir=tmp_path, capsys=capsys)
+    second: dict[str, object] = format_project_json(project_dir=tmp_path, capsys=capsys)
 
-    assert len(first.formatted_files) == test_case.expected_value
-    assert second.formatted_files == ()
+    assert len(formatted_files(first)) == test_case.expected_value
+    assert second["formatted_files"] == []
     assert "SELECT\n  a,\n  b\nFROM items\nWHERE a = 1\n" in target.read_text(encoding="utf-8")
 
 
@@ -320,6 +328,7 @@ def test_given_comment_free_body_when_formatting_twice_then_output_is_canonical_
 def test_given_commented_body_when_formatting_then_comment_is_preserved_in_canonical_output(
     test_case: LintBehaviorTestCase,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     _ = test_case
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
@@ -328,12 +337,9 @@ def test_given_commented_body_when_formatting_then_comment_is_preserved_in_canon
     target.parent.mkdir()
     _ = target.write_text(contents, encoding="utf-8")
 
-    result: LintRunResult = run_format(
-        project_dir=tmp_path,
-        config=LintConfig(dialect="duckdb"),
-    )
+    report: dict[str, object] = format_project_json(project_dir=tmp_path, capsys=capsys)
 
-    assert result.formatted_files == (target,)
+    assert report["formatted_files"] == [str(target)]
     written: str = target.read_text(encoding="utf-8")
     assert str(test_case.expected_value) in written
     assert written == (
@@ -380,17 +386,17 @@ def test_given_commented_body_when_formatting_then_comment_is_preserved_in_canon
     ids=lambda case: case.description,
 )
 def test_given_fixture_ceremony_variants_when_formatting_and_linting_then_forms_are_kept(
-    test_case: FixtureCeremonyFormatTestCase, tmp_path: Path
+    test_case: FixtureCeremonyFormatTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
     target: Path = tmp_path / test_case.relative_path
     target.parent.mkdir(parents=True)
     _ = target.write_text(test_case.contents, encoding="utf-8")
 
-    formatted: LintRunResult = run_format(project_dir=tmp_path, config=LintConfig(dialect="duckdb"))
+    formatted: dict[str, object] = format_project_json(project_dir=tmp_path, capsys=capsys)
     linted: LintRunResult = run_lint(project_dir=tmp_path, config=LintConfig(dialect="duckdb"))
 
-    assert formatted.violations == ()
+    assert formatted["violations"] == []
     assert target.read_text(encoding="utf-8") == test_case.expected_contents
     assert linted.violations == ()
 

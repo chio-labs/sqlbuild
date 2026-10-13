@@ -9,7 +9,6 @@ import pytest
 from _pytest.capture import CaptureResult
 
 import sqlbuild._native as native_module
-import sqlbuild.cli.commands._helpers.lint.selection as lint_selection_module
 import sqlbuild.compiler.planner._helpers.sql_tests.fixture_formatting as fixture_formatting_module
 from sqlbuild._native import run_cli as main
 from tests.unit.src.sqlbuild.lint._test_types import (
@@ -556,8 +555,8 @@ def test_given_test_path_selector_when_formatting_then_work_is_bounded_to_select
     project_graph: Mock = Mock(side_effect=AssertionError("project graph must not build"))
     monkeypatch.setattr(fixture_formatting_module.SqlTestCteExtractor, "extract", fixture_parse)
     monkeypatch.setattr(native_module, "format_lint_sql_bodies", native_format)
-    monkeypatch.setattr(lint_selection_module, "discover_project_inputs", full_discovery)
-    monkeypatch.setattr(lint_selection_module, "build_project_graph", project_graph)
+    monkeypatch.setattr(native_module, "discover_project_inputs", full_discovery)
+    monkeypatch.setattr(native_module, "build_project_graph", project_graph)
 
     exit_code: int = main(
         [

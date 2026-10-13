@@ -1,10 +1,10 @@
 //! Separate formatter-root paths from model selectors.
 
+use crate::format_command::_helpers::selectors::lint_path_prefixes;
 use crate::format_command::constants::{
     LINT_DIRECTORY_NAMES, PATH_SELECTOR_PREFIX, PATH_SEPARATOR, UNKNOWN_ROOT_CODE,
 };
 use crate::format_command::errors::FormatSelectorError;
-use crate::format_command::main::lint_path_prefixes::lint_path_prefixes;
 
 fn reject_unknown_root(token: &str) -> Result<(), FormatSelectorError> {
     let normalized: String = token.replace('\\', "/");
@@ -29,6 +29,7 @@ fn reject_unknown_root(token: &str) -> Result<(), FormatSelectorError> {
             roots.join(", ")
         ),
         code: UNKNOWN_ROOT_CODE,
+        help: None,
     })
 }
 

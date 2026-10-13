@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use crate::cli_text::models::CliStyle;
+use crate::format_command::_helpers::selectors::lint_path_prefixes;
 use crate::format_command::main::exact_selector_names::exact_selector_names;
-use crate::format_command::main::lint_path_prefixes::lint_path_prefixes;
 use crate::format_command::main::partition_lint_selectors::partition_lint_selectors;
 use crate::format_command::main::render_lint_json::render_lint_json;
 use crate::format_command::main::render_lint_text::render_lint_text;

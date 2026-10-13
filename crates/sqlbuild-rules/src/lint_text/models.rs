@@ -151,3 +151,15 @@ pub struct AuthoredDiagnostic {
     pub fix: Option<AuthoredEdit>,
     pub fix_unavailable_reason: Option<String>,
 }
+
+/// Format and lint settings resolved from the project and local configuration files.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormatSettings {
+    pub line_width: i64,
+    pub max_description_lines: i64,
+    pub dialect: String,
+    pub max_literal_length: i64,
+    pub max_ranking_order_by: i64,
+    /// Whether the project configuration file exists, so its rules configuration applies.
+    pub has_project_config: bool,
+}

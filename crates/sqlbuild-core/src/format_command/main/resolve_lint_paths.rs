@@ -3,9 +3,9 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use crate::format_command::_helpers::selectors::lint_path_prefixes;
 use crate::format_command::_helpers::selectors::matches_path_prefix;
 use crate::format_command::_helpers::walk::{as_posix, resolved};
-use crate::format_command::main::lint_path_prefixes::lint_path_prefixes;
 use crate::format_command::main::lint_sql_paths::lint_sql_paths;
 
 /// The selected files, or `None` when a selector needs graph resolution.

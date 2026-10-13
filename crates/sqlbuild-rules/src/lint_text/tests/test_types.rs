@@ -54,3 +54,10 @@ pub(crate) struct LintBodiesTestCase {
 
 /// One mapped finding: code, line, column and optional end position.
 pub(crate) type Finding<'a> = (&'a str, i64, i64, Option<(i64, i64)>);
+
+pub(super) struct FormatSettingsTestCase {
+    pub(super) description: &'static str,
+    pub(super) project_toml: &'static str,
+    pub(super) local_toml: &'static str,
+    pub(super) expected_settings: crate::lint_text::models::FormatSettings,
+}

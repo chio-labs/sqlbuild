@@ -14,8 +14,6 @@ from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.constants import (
-    CARRIAGE_RETURN_LINE_FEED,
-    LINE_FEED,
     LINT_ENGINE_NATIVE,
     SAFE_RULE_FIX_CODES,
     VIOLATION_SEVERITY_FAULT,
@@ -29,7 +27,6 @@ from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import (
     CompileFacts,
     FixVerdict,
-    FormatChange,
     LintConfig,
     LintEdit,
     LintRunResult,
@@ -294,45 +291,6 @@ class _FixSession:
                 *self._skipped_warnings(),
             ],
         )
-
-
-def persist_changes(
-    *, files: dict[Path, str], updated: dict[Path, str], newlines: dict[Path, str], write: bool
-) -> tuple[FormatChange, ...]:
-    changes: list[FormatChange] = []
-    for path, contents in sorted(updated.items()):
-        after: str = with_newline_style(contents=contents, newline=newlines[path])
-        before: str = with_newline_style(contents=files[path], newline=newlines[path])
-        if after == before:
-            continue
-        changes.append(FormatChange(file_path=path, before=before, after=after))
-        if write:
-            write_atomically(path=path, contents=after)
-    return tuple(changes)
-
-
-def with_newline_style(*, contents: str, newline: str) -> str:
-    """Normalize generated contents back to the authored newline convention."""
-
-    normalized: str = contents.replace(CARRIAGE_RETURN_LINE_FEED, LINE_FEED)
-    if newline == LINE_FEED:
-        return normalized
-    return normalized.replace(LINE_FEED, newline)
-
-
-def finalize_fix_reports(
-    *, reports: tuple[RuleFixResult, ...], declined_paths: set[Path]
-) -> tuple[RuleFixResult, ...]:
-    return tuple(
-        replace(
-            report,
-            status="refused",
-            reason="Final layout formatting failed; original file retained",
-        )
-        if report.status == _APPLIED and report.file_path in declined_paths
-        else report
-        for report in reports
-    )
 
 
 def write_atomically(*, path: Path, contents: str) -> None:

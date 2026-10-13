@@ -1,20 +1,16 @@
-"""Lintable body ranges of SQL files by project role, and externally resolved descriptions."""
+"""Lintable body ranges of SQL files by project role."""
 
 from __future__ import annotations
 
 from pathlib import Path, PurePath
 
 from sqlbuild._native import measurement_body_ranges, sql_body_ranges
-from sqlbuild.compiler.compile.classes.model_description_resolution import (
-    ModelDescriptionResolution,
-)
 from sqlbuild.compiler.compile.constants import HOOK_DIRECTORY_NAME
 from sqlbuild.compiler.discovery.main.named_declaration_role_kind import (
     named_declaration_role_kind,
 )
 from sqlbuild.compiler.scopes.types import DeclarationKind
-from sqlbuild.lint.constants import RULE_DESCRIPTION_PRESENT
-from sqlbuild.lint.models import HeaderSpan, LintFileRole, LintViolation
+from sqlbuild.lint.models import HeaderSpan, LintFileRole
 
 
 def lint_file_role(
@@ -54,22 +50,3 @@ def lint_body_ranges(
         if measurement_ranges:
             return measurement_ranges
     return sql_body_ranges(contents=contents, headers=headers)
-
-
-def drop_resolved_description_faults(
-    *, violations: list[LintViolation], project_dir: Path
-) -> list[LintViolation]:
-    """Drop `description-present` faults for models described outside their header."""
-
-    if not any(violation.code == RULE_DESCRIPTION_PRESENT for violation in violations):
-        return violations
-    described: frozenset[Path] = frozenset(
-        path.resolve()
-        for path in ModelDescriptionResolution.externally_described_models(project_dir=project_dir)
-    )
-    return [
-        violation
-        for violation in violations
-        if violation.code != RULE_DESCRIPTION_PRESENT
-        or violation.file_path.resolve() not in described
-    ]

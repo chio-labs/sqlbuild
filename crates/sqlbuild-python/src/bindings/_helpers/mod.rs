@@ -26,6 +26,7 @@ pub(crate) mod diagnostics;
 pub(crate) mod diff_report;
 pub(crate) mod discovery;
 pub(crate) mod fingerprints;
+pub(crate) mod format_command;
 pub(crate) mod freshness;
 pub(crate) mod frontier;
 pub(crate) mod graph;

@@ -2935,6 +2935,18 @@ def run_dag_command(
 ) -> int: ...
 def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
 def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
+def run_format_command(
+    *,
+    project_dir: Path | None,
+    select: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
+    check: bool = False,
+    diff: bool = False,
+    fixtures_only: bool = False,
+    fix: bool = False,
+    json_output: bool = False,
+    no_color: bool = False,
+) -> int: ...
 def format_parameterized_test_label(
     *,
     name: str,

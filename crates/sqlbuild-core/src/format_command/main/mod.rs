@@ -1,6 +1,6 @@
 pub mod collect_lint_files;
 pub mod exact_selector_names;
-pub mod lint_path_prefixes;
+pub mod format_path_selectors;
 pub mod lint_sql_paths;
 pub mod partition_lint_selectors;
 pub mod render_format_status;

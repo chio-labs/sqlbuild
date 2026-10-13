@@ -676,10 +676,7 @@ const FORMAT_ARGUMENTS: [Field; 9] = [
 ];
 pub(crate) const FORMAT_ROUTE: Route = routed(
     "run_format",
-    (
-        "sqlbuild.cli.commands.main.project._format",
-        "run_format_command",
-    ),
+    ("sqlbuild._native", "run_format_command"),
     &FORMAT_ARGUMENTS,
     CallShape {
         slot_positional: 1,
