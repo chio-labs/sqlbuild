@@ -215,12 +215,9 @@ const FRESHNESS_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const FRESHNESS_ROUTE: Route = routed(
     "run_freshness",
-    (
-        "sqlbuild.cli.commands.main.execution._freshness",
-        "run_freshness",
-    ),
+    ("sqlbuild._native", "run_freshness_command"),
     &FRESHNESS_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const TEST_FIELDS: [Field; 12] = [

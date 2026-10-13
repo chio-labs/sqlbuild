@@ -18,6 +18,7 @@ pub(crate) mod dag_artifact;
 pub(crate) mod debug_command;
 pub(crate) mod discovery;
 pub(crate) mod fingerprints;
+pub(crate) mod freshness;
 pub(crate) mod frontier;
 pub(crate) mod graph;
 pub(crate) mod hand_built;

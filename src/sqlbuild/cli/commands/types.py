@@ -126,17 +126,6 @@ class FormatCommandHandler(Protocol):
     ) -> int: ...
 
 
-class FreshnessSourceStatus(StrEnum):
-    """Command status for one source freshness observation."""
-
-    OBSERVED = "observed"
-    CHANGED = "changed"
-    UNCHANGED = "unchanged"
-    TOLERATED = "tolerated"
-    UNKNOWN = "unknown"
-    ERROR = "error"
-
-
 class PlaygroundTemplate(StrEnum):
     """Available `sqb playground` templates."""
 

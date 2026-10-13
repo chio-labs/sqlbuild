@@ -3,6 +3,7 @@
 from collections.abc import Callable, Iterable, Mapping, Sequence, Set
 from contextlib import AbstractContextManager
 from contextvars import Token
+from datetime import datetime
 from pathlib import Path, PurePath
 from typing import Any, Literal, TextIO, TypedDict, overload
 
@@ -17,6 +18,7 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.commands.models import (
+    FreshnessCommandRequest,
     JanitorCommandRequest,
     LineageCommandRequest,
     PlaygroundCommandRequest,
@@ -189,6 +191,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingResult,
     SqlLexicalSyntax,
@@ -2730,6 +2733,19 @@ def lineage_cache_fingerprint(
 def run_lineage_command(*, request: LineageCommandRequest) -> int: ...
 def run_refactor_command(*, request: RefactorCommandRequest) -> int: ...
 def run_janitor_command(*, request: JanitorCommandRequest) -> int: ...
+def run_freshness_command(*, request: FreshnessCommandRequest) -> int: ...
+def observe_source_freshness_json(
+    *,
+    adapter: object,
+    connection: object,
+    sources: Sequence[SourceEntry],
+    observed_at: datetime,
+    select: Sequence[str] = (),
+    exclude: Sequence[str] = (),
+    run_id: str | None = None,
+    previous_records: Mapping[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None,
+    previous_records_by_source_name: Mapping[str, SourceFreshnessRecord] | None = None,
+) -> str: ...
 def render_janitor_plan(*, plan: JanitorPlan, use_color: bool = False) -> str: ...
 def render_janitor_completion(
     *, result: JanitorExecutionResult, use_color: bool = False
