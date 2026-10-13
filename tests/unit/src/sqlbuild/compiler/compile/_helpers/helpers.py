@@ -5,7 +5,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    assemble_project,
+    build_compile_inputs,
+    discover_project_inputs,
+    infer_native_query_columns,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
@@ -13,9 +18,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
-    infer_native_query_columns,
-)
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.diagnostics.collector import (
     collect_compile_diagnostics,

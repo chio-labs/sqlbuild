@@ -1738,35 +1738,25 @@ def start_model_analysis_session(
     cache: tuple[str, str] | None = None,
     adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
 ) -> NativeModelAnalysisSession: ...
-def prove_dynamic_column_contracts(
-    request: tuple[
-        str,
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
-        list[tuple[str, list[tuple[str, str, str, str, str, str | None]]]],
-    ],
-    /,
-) -> list[_PivotContractRow]: ...
-def infer_query_columns(
-    catalog: object | None,
-    request: tuple[
-        str,
-        list[tuple[str, str]],
-        list[tuple[str, str]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[object, ...]],
-        str,
-    ],
-    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
+def infer_native_query_column_rows(
+    *,
+    queries: Sequence[Any],
+    profile: Any,
+    column_nullability_by_table: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[tuple[bool, list[tuple[str, str | None, str]] | None, bool]]: ...
-def infer_expression_source_shapes(
-    catalog: object,
-    request: tuple[str, bool, list[tuple[str, str]], list[tuple[str, str]], list[str]],
-    adapter_rules: tuple[Mapping[str, Callable[..., object]], type] | None = None,
-) -> list[list[tuple[str, str]] | None]: ...
+def infer_native_query_columns(
+    *,
+    queries: Sequence[Any],
+    profile: Any,
+    column_types_by_table: Mapping[str, Mapping[str, str]] | None = None,
+    column_nullability_by_table: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[Any, ...]: ...
+def infer_native_expression_source_shapes(
+    *, expressions: tuple[str, ...], profile: Any
+) -> tuple[dict[str, str] | None, ...]: ...
+def prove_native_dynamic_contracts(
+    *, session: NativeModelAnalysisSession | None, tables: Any, models: tuple[tuple[str, tuple[Any, ...]], ...]
+) -> tuple[Any, ...]: ...
 def _oracle_names_set_operation(sql: str, /) -> bool: ...
 def _oracle_cte_fact_recovery(
     request: tuple[

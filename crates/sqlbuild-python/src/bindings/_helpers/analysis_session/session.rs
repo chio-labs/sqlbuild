@@ -46,7 +46,7 @@ type ColumnRow = (String, Option<String>, String);
 /// `(output column, transform code, confidence code, [(resource type, resource, column)])`.
 type LineageItem = (String, u8, u8, Vec<(String, String, String)>);
 /// `(name, pivot column, value column, aggregate, type, name pattern)`.
-type FamilyRow = (String, String, String, String, String, Option<String>);
+pub(crate) type FamilyRow = (String, String, String, String, String, Option<String>);
 /// A model's name, SQL, placeholders, references, lineage, required names, flags and pivot.
 type ModelRow = (
     String,
@@ -95,7 +95,7 @@ type ProofRow = (
     bool,
 );
 /// One model's pivot SQL and declared families.
-type PivotModelRow = (String, Vec<FamilyRow>);
+pub(crate) type PivotModelRow = (String, Vec<FamilyRow>);
 /// The dialect, relation facts and families by table every proof reads, and the models.
 type PivotRequestRow = (
     String,
@@ -106,7 +106,7 @@ type PivotRequestRow = (
     Vec<PivotModelRow>,
 );
 /// `("absent" | "deferred" | "proof", proof)`.
-type ContractRow = (&'static str, Option<ProofRow>);
+pub(crate) type ContractRow = (&'static str, Option<ProofRow>);
 /// `(hits, misses, stored, why the store was not read or saved)`.
 type CacheStatsRow = (usize, usize, usize, Option<String>);
 /// `(catalog schema additions, analysis-shape names, whether each model's analysis succeeded)`.
@@ -241,7 +241,7 @@ impl NativeModelAnalysisSession {
     }
 
     /// Each model's dynamic pivot proof from the finished session's tables.
-    fn prove_dynamic_contracts(
+    pub(crate) fn prove_dynamic_contracts(
         &self,
         py: Python<'_>,
         models: Vec<PivotModelRow>,
@@ -307,7 +307,7 @@ fn start_model_analysis_session(
 /// Each expression's shape, `None` where it has none; adapter rules run as in the session.
 #[pyfunction]
 #[pyo3(signature = (catalog, request, adapter_rules=None))]
-fn infer_expression_source_shapes(
+pub(crate) fn infer_expression_source_shapes(
     py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
     request: (String, bool, Pairs, Option<Pairs>, Vec<String>),
@@ -482,7 +482,7 @@ fn outcome_row(outcome: ModelOutcome, cleaned_sql: String) -> OutcomeRow {
 
 /// Each model's dynamic pivot proof outside any session.
 #[pyfunction]
-fn prove_dynamic_column_contracts(
+pub(crate) fn prove_dynamic_column_contracts(
     py: Python<'_>,
     request: PivotRequestRow,
 ) -> PyResult<Vec<ContractRow>> {
@@ -515,7 +515,5 @@ fn pivot_model(row: PivotModelRow) -> PivotModel {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelAnalysisSession>()?;
     module.add_function(wrap_pyfunction!(start_model_analysis_session, module)?)?;
-    module.add_function(wrap_pyfunction!(infer_expression_source_shapes, module)?)?;
-    module.add_function(wrap_pyfunction!(prove_dynamic_column_contracts, module)?)?;
     Ok(())
 }

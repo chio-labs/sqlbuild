@@ -14,8 +14,6 @@ const SYNTAX_CHECKS_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.
 const CURSOR_INTRINSICS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
-const INFER_ROWS_MODULE: &str =
-    "sqlbuild.compiler.analysis_session.main._infer_native_query_column_rows";
 const HAND_BUILT_MODULE: &str = "sqlbuild.compiler.compile._helpers.assembly.hand_built_models";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
@@ -218,7 +216,7 @@ fn fallback_columns<'py>(
         ],
     )?;
     call_with(
-        &imported(py, INFER_ROWS_MODULE, "infer_native_query_column_rows")?,
+        &imported(py, NATIVE_MODULE, "infer_native_query_column_rows")?,
         &[
             ("queries", PyTuple::new(py, [query])?.into_any()),
             ("profile", context.profile.clone()),

@@ -13,10 +13,8 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
+from sqlbuild._native import infer_native_query_columns
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.analysis_session.main._infer_native_query_columns import (
-    infer_native_query_columns,
-)
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeModelAnalyses
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView

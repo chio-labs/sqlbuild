@@ -16,7 +16,12 @@ import pytest
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as semantic_recovery
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    build_compile_inputs,
+    discover_project_inputs,
+    infer_native_expression_source_shapes,
+    prove_native_dynamic_contracts,
+)
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
@@ -26,12 +31,6 @@ from sqlbuild.compiler.analysis_session.main._analyze_native_model_sql import (
 )
 from sqlbuild.compiler.analysis_session.main._dynamic_contract_proof import (
     dynamic_contract_proof as contract_proof,
-)
-from sqlbuild.compiler.analysis_session.main._infer_native_expression_source_shapes import (
-    infer_native_expression_source_shapes,
-)
-from sqlbuild.compiler.analysis_session.main._prove_native_dynamic_contracts import (
-    prove_native_dynamic_contracts,
 )
 from sqlbuild.compiler.analysis_session.main._session_outcome_analysis import (
     session_outcome_analysis,
