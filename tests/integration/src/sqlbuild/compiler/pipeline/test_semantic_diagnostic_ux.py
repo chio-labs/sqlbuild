@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 from _pytest.capture import CaptureResult
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.compiler.compile._helpers.diagnostics.help import semantic_help_catalogue
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     DiagnosticUxCase,
 )
@@ -200,7 +200,10 @@ def test_given_semantic_failure_when_compiling_cold_and_warm_then_reports_root_e
 def test_given_semantic_codes_when_explaining_then_each_code_owns_distinct_help(
     test_case: DiagnosticUxCase,
 ) -> None:
-    help_by_code: dict[str, str] = {**semantic_help_catalogue(), "B002": "did you mean 'quantity'?"}
+    help_by_code: dict[str, str] = {
+        **dict(_native.semantic_help_catalogue()),
+        "B002": "did you mean 'quantity'?",
+    }
     assert len(help_by_code) - len(set(help_by_code.values())) == test_case.expected_errors
     assert all(
         "review the SQL expression, input types, and authoritative schema" not in value

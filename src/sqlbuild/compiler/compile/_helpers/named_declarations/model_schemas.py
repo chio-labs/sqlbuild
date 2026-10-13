@@ -11,12 +11,10 @@ from sqlbuild.compiler.compile.models import CompilerDiagnostic, DeclarationScop
 from sqlbuild.compiler.compile.types import DiagnosticPhase, DiagnosticSeverity
 from sqlbuild.compiler.discovery.models import (
     DiscoveredModelSchemaFile,
-    EnumDeclaration,
     ModelSchemaDeclaration,
 )
 from sqlbuild.compiler.scopes.exceptions import InvalidScopePathError
 from sqlbuild.compiler.scopes.models import (
-    DeclarationIdentity,
     DeclarationRecord,
     ResourceIdentity,
     UsageRecord,
@@ -93,22 +91,3 @@ def _record_row(
             record.ownership_root.path,
         ),
     )
-
-
-def model_schema_enum_declarations(
-    *, schema: ModelSchemaDeclaration, resolver: DeclarationScopeResolver | None
-) -> dict[str, EnumDeclaration]:
-    """Return enum column types resolved from the schema's own location."""
-
-    if resolver is None:
-        return {}
-    enums: dict[str, EnumDeclaration] = {}
-    for column in schema.columns:
-        if column.type is None:
-            continue
-        value: object = resolver.projection.declarations.get(
-            DeclarationIdentity(DeclarationKind.ENUM, column.type)
-        )
-        if isinstance(value, EnumDeclaration):
-            enums[column.type] = value
-    return enums

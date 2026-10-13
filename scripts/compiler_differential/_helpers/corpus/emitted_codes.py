@@ -6,6 +6,7 @@ import ast
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import sqlbuild._native as _native
 from scripts.compiler_differential._helpers.comparing.comparison import (
     diagnostic_codes,
     first_diagnostic,
@@ -39,7 +40,6 @@ from scripts.compiler_differential.models import (
 )
 from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_SHADOW_CODE
 from sqlbuild.compiler.compile import constants as compile_constants
-from sqlbuild.compiler.compile._helpers.diagnostics.help import semantic_help_catalogue
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError
 from sqlbuild.compiler.resource_names.exceptions import ResourceIdentityError
@@ -118,7 +118,7 @@ def render_error_codes() -> frozenset[str]:
 def analysis_error_codes(compiler_root: Path) -> frozenset[str]:
     """Return the help-catalogue codes plus every code in the analysis-stage modules and crates."""
 
-    found: set[str] = set(semantic_help_catalogue())
+    found: set[str] = {code for code, _ in _native.semantic_help_catalogue()}
     for root in ANALYSIS_CODE_SCAN_ROOTS:
         path: Path = compiler_root / root
         for module in sorted(path.rglob("*.py")) if path.is_dir() else (path,):
