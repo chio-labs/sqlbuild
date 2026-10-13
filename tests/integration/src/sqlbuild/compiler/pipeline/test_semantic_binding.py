@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     SemanticBindingClauseIntegrationTestCase,
     SemanticBindingIntegrationTestCase,

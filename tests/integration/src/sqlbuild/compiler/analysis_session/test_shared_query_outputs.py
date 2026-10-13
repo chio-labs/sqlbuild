@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import (
     SharedQueryOutputTestCase,
 )

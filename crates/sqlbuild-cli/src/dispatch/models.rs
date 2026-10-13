@@ -107,6 +107,30 @@ pub struct CommandFacts {
     pub scenario_local: bool,
     pub scenario_retain: bool,
     pub scenario_snapshot_sync: bool,
+    /// Whether `diff` compares raw queries rather than project models.
+    pub raw_query_diff: bool,
+}
+
+/// Which invocation services run around a command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvocationPolicy {
+    /// `init`, `playground` and `dbt init` create a project, so nothing reads one first.
+    pub creates_project: bool,
+    /// Whether invocation lifecycle events and progress are published.
+    pub observed: bool,
+    /// Whether installed SQLBuild skills are checked for freshness first.
+    pub maintains_skills: bool,
+}
+
+/// What a failed command reports: its fallback error code and the debug log message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandFailure {
+    /// `CliUserError` and `RulesError`.
+    User,
+    /// `LintError`.
+    Lint,
+    /// Expected discovery, configuration, audit and execution-limit failures.
+    Command,
 }
 
 /// The route of a command, or the failure that stops it, or nothing to run.

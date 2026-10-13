@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies
+from sqlbuild._native import run_cli as _main_with_dependencies
 from sqlbuild.cli.commands.models import (
     ScopeCommandRequest,
 )

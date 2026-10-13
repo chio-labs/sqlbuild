@@ -6,7 +6,7 @@ import os
 from itertools import compress
 from pathlib import Path
 
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 
 _WARM_TARGET_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "shop"\nadapter = "duckdb"\n',

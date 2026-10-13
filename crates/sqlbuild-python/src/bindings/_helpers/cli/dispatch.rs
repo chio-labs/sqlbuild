@@ -1,10 +1,8 @@
 //! `sqb` command dispatch: the native route table applied to a parsed namespace.
 
-use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
-};
+use pyo3::IntoPyObjectExt;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
-use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::command_dispatch::command_dispatch;
 use sqlbuild_cli::dispatch::main::unavailable_handler::unavailable_handler;
 use sqlbuild_cli::dispatch::models::{
@@ -24,6 +22,13 @@ const FORMAT_PATHS_MODULE: &str = "sqlbuild.cli.commands._helpers.lint.positiona
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";
 const UTF8: &str = "utf-8";
+/// The `diff` arguments that compare raw queries instead of project models.
+const RAW_QUERY_ATTRIBUTES: [&str; 4] = [
+    "left_query",
+    "left_query_file",
+    "right_query",
+    "right_query_file",
+];
 
 /// One invocation being dispatched: its namespace and the values derived from it once.
 struct Invocation<'py> {
@@ -44,10 +49,6 @@ impl<'py> Invocation<'py> {
 
     fn flag(&self, name: &str) -> PyResult<bool> {
         self.attr(name)?.is_truthy()
-    }
-
-    fn present(&self, name: &str) -> PyResult<bool> {
-        Ok(!self.attr(name)?.is_none())
     }
 
     /// The value of one handler argument or request field.
@@ -135,30 +136,6 @@ impl<'py> Invocation<'py> {
             values.set_item(field.name, self.value(field.source)?)?;
         }
         Ok(values)
-    }
-
-    fn facts(&self) -> PyResult<CommandFacts> {
-        let command: Option<String> = optional_text(&self.attr("command")?)?;
-        let subcommand_attribute: &str = match command.as_deref() {
-            Some("dbt") => "dbt_command",
-            Some("scenario") => "scenario_command",
-            _ => "command",
-        };
-        Ok(CommandFacts {
-            subcommand: optional_text(&self.attr(subcommand_attribute)?)?,
-            command,
-            json: self.flag("json")?,
-            refactor_target: self.present("refactor_target")?,
-            from_target: self.present("from_target")?,
-            contract_ready: self.present("contract_command")? && self.present("contract_from")?,
-            format_diff: self.flag("format_diff")?,
-            format_fix: self.flag("format_fix")?,
-            format_fixtures_only: self.flag("format_fixtures_only")?,
-            scenario_local: self.flag("scenario_local")?,
-            scenario_retain: self.flag("scenario_retain")?,
-            scenario_snapshot_sync: self.flag("scenario_sync_snapshots")?
-                || self.flag("scenario_refresh")?,
-        })
     }
 }
 
@@ -304,7 +281,7 @@ fn routed_command<'py>(
         select,
         selector_files,
     };
-    match command_dispatch(&invocation.facts()?) {
+    match command_dispatch(&command_facts(args)?) {
         Dispatch::Nothing => 0.into_bound_py_any(py),
         Dispatch::Fail(failure) => Err(user_error(py, failure)),
         Dispatch::Run(route, failure) => {
@@ -329,9 +306,7 @@ fn routed_command<'py>(
 }
 
 /// Run a parsed command's handler, imported only when it runs unless `handlers` injects it.
-#[pyfunction]
-#[pyo3(signature = (*, args, handlers=None))]
-fn dispatch_cli_command<'py>(
+pub(crate) fn dispatch_command<'py>(
     args: &Bound<'py, PyAny>,
     handlers: Option<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -365,6 +340,34 @@ fn dispatch_cli_command<'py>(
     within(&scope, |_| routed_command(args, handlers.as_ref()))
 }
 
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(dispatch_cli_command, module)?)
+/// The parsed values that select a route, read from the namespace.
+pub(crate) fn command_facts(args: &Bound<'_, PyAny>) -> PyResult<CommandFacts> {
+    let attr = |name: &str| args.getattr(name);
+    let flag = |name: &str| -> PyResult<bool> { attr(name)?.is_truthy() };
+    let present = |name: &str| -> PyResult<bool> { Ok(!attr(name)?.is_none()) };
+    let command: Option<String> = optional_text(&attr("command")?)?;
+    let subcommand_attribute: &str = match command.as_deref() {
+        Some("dbt") => "dbt_command",
+        Some("scenario") => "scenario_command",
+        _ => "command",
+    };
+    let mut raw_query_diff: bool = false;
+    for name in RAW_QUERY_ATTRIBUTES {
+        raw_query_diff |= present(name)?;
+    }
+    Ok(CommandFacts {
+        subcommand: optional_text(&attr(subcommand_attribute)?)?,
+        command,
+        json: flag("json")?,
+        refactor_target: present("refactor_target")?,
+        from_target: present("from_target")?,
+        contract_ready: present("contract_command")? && present("contract_from")?,
+        format_diff: flag("format_diff")?,
+        format_fix: flag("format_fix")?,
+        format_fixtures_only: flag("format_fixtures_only")?,
+        scenario_local: flag("scenario_local")?,
+        scenario_retain: flag("scenario_retain")?,
+        scenario_snapshot_sync: flag("scenario_sync_snapshots")? || flag("scenario_refresh")?,
+        raw_query_diff,
+    })
 }

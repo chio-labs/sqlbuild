@@ -9,9 +9,9 @@ import pytest
 
 import sqlbuild._native as native
 from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView

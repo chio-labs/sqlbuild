@@ -16,7 +16,7 @@ import sqlbuild.compiler.compile._helpers.render.macros as macros_module
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
 import sqlbuild.rule_engine._helpers.host.custom_host_pool as custom_host_pool_module
 import sqlbuild.rule_engine._helpers.run.rules as rules_module
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
 from sqlbuild.compiler.discovery.models import DiscoveredMacroFile, DiscoveredProjectInputs
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax

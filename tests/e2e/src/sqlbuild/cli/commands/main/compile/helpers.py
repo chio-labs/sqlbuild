@@ -45,9 +45,9 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
 )
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.types import TypeDialect
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile_reuse.constants import (
     EXCLUDED_ROOT_DIRECTORIES,
     NATIVE_REUSE_DIRECTORY_NAME,

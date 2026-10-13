@@ -16,7 +16,6 @@ from sqlbuild.adapter.contract.types import (
     TablePromotionMode,
     TypeDialect,
 )
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
@@ -2000,7 +1999,7 @@ def scope_expected_model_names(
 def parse_cli_arguments(
     argv: list[str], defaults: list[tuple[str, object]], *, use_color: bool, columns: int
 ) -> tuple[list[tuple[str, object]] | None, int | None]: ...
-def dispatch_cli_command(*, args: CliNamespace, handlers: object | None = None) -> int: ...
+def run_cli(argv: Sequence[str] | None = None, handlers: object | None = None) -> int: ...
 def scope_test_ctes(
     texts: list[tuple[str, str]], syntax: dict[str, object]
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...

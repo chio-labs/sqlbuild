@@ -3,6 +3,14 @@
 use crate::dispatch::_helpers::routes::{attr, class, dbt_route, field, request, routed, same};
 use crate::dispatch::models::{CallShape, ClassRef, DiffSide, Field, Route, Source};
 
+/// Commands that create a project instead of reading one.
+pub(crate) const PROJECT_CREATING_COMMANDS: [&str; 2] = ["init", "playground"];
+/// Commands that never check installed skill freshness first.
+pub(crate) const SKILL_EXEMPT_COMMANDS: [&str; 3] = ["init", "playground", "skills"];
+pub(crate) const DBT_COMMAND_NAME: &str = "dbt";
+pub(crate) const DBT_INIT_SUBCOMMAND: &str = "init";
+pub(crate) const DIFF_COMMAND_NAME: &str = "diff";
+
 const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const ENTRY_MODELS: &str = "sqlbuild.cli.entry.models";
 const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";

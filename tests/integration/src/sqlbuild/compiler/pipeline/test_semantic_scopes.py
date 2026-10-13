@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main.entrypoint.entry import main
+from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import SemanticCompileCase
 from tests.integration.src.sqlbuild.compiler.pipeline.helpers import write_semantic_binding_project
 

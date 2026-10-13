@@ -7,8 +7,8 @@ from typing import Any
 import pytest
 
 from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import run_cli as main
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
-from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
