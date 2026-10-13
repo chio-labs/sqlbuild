@@ -1923,6 +1923,12 @@ def explicit_reference_report(
     owners: list[tuple[Any, int, list[tuple[str, str, int]]]],
     /,
 ) -> PythonSqlReferenceReport: ...
+def hard_coded_relation_remedy(
+    owner_kind: str, target: tuple[str, str], upstream_loaders: list[tuple[str, str]], /
+) -> str: ...
+def old_name_reference_message(
+    owner_label: str, written: str, method: str, model_name: str, /
+) -> str: ...
 def native_execution_gate_edges(
     project: Any, /
 ) -> tuple[

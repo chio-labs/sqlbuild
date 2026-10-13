@@ -8,6 +8,8 @@ use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::explicit_references::errors::ReferenceFailure;
 use sqlbuild_analysis::explicit_references::main::check_explicit_references::check_explicit_references;
 use sqlbuild_analysis::explicit_references::main::execution_gate_edges::execution_gate_edges;
+use sqlbuild_analysis::explicit_references::main::old_name_message::old_name_message;
+use sqlbuild_analysis::explicit_references::main::relation_remedy::relation_remedy;
 use sqlbuild_analysis::explicit_references::models::{
     ExecutionGateEdges, ExecutionGateRequest, GateEdge, HookEdge, HookType, LiteralSql,
     ReferenceReport, ReferenceRequest, SqlOwner,
@@ -200,6 +202,27 @@ fn python_literal_sql_calls(
     .collect()
 }
 
+/// How an owner of `owner_kind` should read `target` instead of naming its relation in SQL.
+#[pyfunction]
+fn hard_coded_relation_remedy(
+    owner_kind: &str,
+    target: ResourceKey,
+    upstream_loaders: Vec<(String, String)>,
+) -> String {
+    relation_remedy(owner_kind, &target, &upstream_loaders)
+}
+
+/// The P008 message for SQL naming a relation kept only as a compatibility view.
+#[pyfunction]
+fn old_name_reference_message(
+    owner_label: &str,
+    written: &str,
+    method: &str,
+    model_name: &str,
+) -> String {
+    old_name_message(owner_label, written, method, model_name)
+}
+
 /// `(audit name, target, gated, read)` for one attached-audit ordering edge.
 type GateRow = (String, ResourceKey, ResourceKey, ResourceKey);
 /// `(hook name, gated, read, HookReadType value, path)` for one hook-read ordering edge.
@@ -246,5 +269,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(explicit_reference_report, module)?)?;
     module.add_function(wrap_pyfunction!(python_literal_sql_calls, module)?)?;
     module.add_function(wrap_pyfunction!(native_execution_gate_edges, module)?)?;
+    module.add_function(wrap_pyfunction!(hard_coded_relation_remedy, module)?)?;
+    module.add_function(wrap_pyfunction!(old_name_reference_message, module)?)?;
     Ok(())
 }

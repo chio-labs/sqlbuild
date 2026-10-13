@@ -5,10 +5,10 @@ use std::collections::HashSet;
 use crate::explicit_references::_helpers::relations::{
     ProjectRelation, matched, project_relations,
 };
-use crate::explicit_references::constants::{
-    HARD_CODED_RELATION_CODE, HOOK_OWNER, LOADER_OWNER, SOURCE_TYPE,
-};
+use crate::explicit_references::constants::HARD_CODED_RELATION_CODE;
 use crate::explicit_references::errors::ReferenceFailure;
+use crate::explicit_references::main::old_name_message::old_name_message;
+use crate::explicit_references::main::relation_remedy::relation_remedy;
 use crate::explicit_references::models::{
     LiteralSql, ReferenceDiagnostic, ReferenceReport, ReferenceRequest, Relation, SqlOwner,
     UnmatchedRelation,
@@ -154,12 +154,7 @@ impl OwnerScan<'_> {
 
     fn message(&self, literal: &LiteralSql, written: &str, found: &ProjectRelation) -> String {
         match &found.compatibility_for {
-            Some(model) => format!(
-                "{} names '{written}' in SQL passed to ctx.{}(); it is the old name of \
-                 model:{model}, kept only as a compatibility view for consumers outside the \
-                 project",
-                self.owner.label, literal.method
-            ),
+            Some(model) => old_name_message(&self.owner.label, written, &literal.method, model),
             None => format!(
                 "{} names {}:{} as '{written}' in SQL passed to ctx.{}()",
                 self.owner.label, found.target.0, found.target.1, literal.method
@@ -178,41 +173,12 @@ impl OwnerScan<'_> {
         };
         format!(
             "{}{qualify}\n  = help: {}",
-            self.remedy(&found.target),
+            relation_remedy(
+                &self.owner.kind,
+                &found.target,
+                &self.owner.upstream_loaders
+            ),
             self.request.explicit_help
-        )
-    }
-
-    /// `hard_coded_relation_remedy_impl`.
-    fn remedy(&self, (kind, name): &ResourceKey) -> String {
-        let typed: String = format!("{kind}(\"{name}\")");
-        if self.owner.kind == LOADER_OWNER {
-            if kind != SOURCE_TYPE {
-                return format!(
-                    "loaders run before models and seeds and cannot read them; read \
-                     {kind}:{name} from a task or asset instead"
-                );
-            }
-            return match self
-                .owner
-                .upstream_loaders
-                .iter()
-                .find(|(source, _)| source == name)
-            {
-                Some((_, loader)) => {
-                    format!("use ctx.loader({loader}) instead of the relation name")
-                }
-                None => format!("use ctx.source(\"{name}\") instead of the relation name"),
-            };
-        }
-        let declaration: String = if self.owner.kind == HOOK_OWNER {
-            format!("@hook(reads={typed})")
-        } else {
-            format!("depends_on={typed}")
-        };
-        format!(
-            "declare it with {declaration} and use ctx.relation({typed}) instead of the relation \
-             name"
         )
     }
 }
