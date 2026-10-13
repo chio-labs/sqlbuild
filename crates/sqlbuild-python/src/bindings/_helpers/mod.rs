@@ -14,6 +14,7 @@ pub(crate) mod discovery;
 pub(crate) mod fingerprints;
 pub(crate) mod frontier;
 pub(crate) mod graph;
+pub(crate) mod hand_built;
 pub(crate) mod lineage;
 pub(crate) mod macro_bridge;
 pub(crate) mod manifest;
