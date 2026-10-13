@@ -11,7 +11,6 @@ from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProf
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.compiler.compile._helpers.analysis import binding_requests
-from sqlbuild.compiler.compile._helpers.assembly import source_bindings
 from sqlbuild.compiler.compile.main._source_bindings import get_source_binding_diagnostics
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledProjectView
@@ -178,7 +177,6 @@ def test_given_sql_when_case_policy_enabled_then_fused_validation_is_reused(
     def repeated_binding(**kwargs: Any) -> None:
         raise AssertionError("already validated SQL was normalized and bound again")
 
-    monkeypatch.setattr(source_bindings, "get_complete_schema_binding_request", repeated_binding)
     monkeypatch.setattr(binding_requests, "get_complete_schema_binding_request", repeated_binding)
     assert (
         main(
