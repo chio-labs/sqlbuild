@@ -7,7 +7,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from sqlbuild._native import assemble_project, extract_sql_references
+from sqlbuild._native import (
+    DbtEventStream,
+    DbtEventStreamUpdate,
+    assemble_project,
+    extract_sql_references,
+)
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -497,3 +502,15 @@ def graph_key_from_stable_id(stable_id: str) -> DbtCombinedGraphKey:
         ): sqlbuild_model_graph_key,
     }
     return factories[(owner_enum, resource_type_enum)](name)
+
+
+def consume_dbt_events(*events: dict[str, object]) -> DbtEventStreamUpdate | None:
+    """Feed dbt events to a fresh native stream and return the last update."""
+
+    stream: DbtEventStream = DbtEventStream(
+        display_total=None, detail_by_unique_id=None, use_color=False
+    )
+    updates: tuple[DbtEventStreamUpdate | None, ...] = tuple(
+        stream.consume(json.dumps(event)) for event in events
+    )
+    return updates[-1]

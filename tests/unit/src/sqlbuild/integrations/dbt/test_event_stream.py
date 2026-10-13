@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -8,15 +9,11 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import DbtEventStream, DbtEventStreamUpdate
 from sqlbuild.integrations.dbt._helpers.runtime.event_stream import (
     execute_dbt_json_event_stream,
-    parse_dbt_json_event,
-    parse_dbt_node_message,
-    parse_dbt_node_result,
-    parse_dbt_node_start_message,
-    parse_dbt_node_start_result,
 )
-from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
+from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,
@@ -29,6 +26,7 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
     DbtRuntimeCleanupTestCase,
     DbtSilentStatusRefreshTestCase,
 )
+from tests.unit.src.sqlbuild.integrations.dbt.helpers import consume_dbt_events
 
 _DBT_RESULT_LINE: str = (
     '{"data":{"execution_time":1.0,"index":1,"total":1,"status":"success",'
@@ -173,12 +171,12 @@ _DBT_RESULT_LINE: str = (
 def test_given_dbt_result_event_when_parsing_then_returns_node_execution_result(
     test_case: DbtEventParseTestCase,
 ) -> None:
-    result: DbtNodeExecutionResult | None = parse_dbt_node_result(
-        event=test_case.event,
-        messages_by_unique_id=None,
-    )
+    update: DbtEventStreamUpdate | None = consume_dbt_events(test_case.event)
 
+    assert update is not None
+    result: DbtNodeExecutionResult | None = update.result
     assert result is not None
+    assert update.finished is True
     assert result.unique_id == test_case.expected_unique_id
     assert result.resource_type == test_case.expected_resource_type
     assert result.node_name == test_case.expected_node_name
@@ -207,7 +205,7 @@ def test_given_dbt_result_event_when_parsing_then_returns_node_execution_result(
                         "unique_id": "model.demo.fact_orders",
                     },
                 },
-                "info": {"level": "error", "name": "LogModelResult", "msg": "ERROR"},
+                "info": {"level": "info", "name": "LogModelResult", "msg": "ERROR"},
             },
             expected_unique_id="model.demo.fact_orders",
             expected_resource_type="model",
@@ -221,21 +219,30 @@ def test_given_dbt_result_event_when_parsing_then_returns_node_execution_result(
 def test_given_buffered_node_message_when_parsing_result_then_attaches_message(
     test_case: DbtEventParseTestCase,
 ) -> None:
-    messages_by_unique_id: dict[str, list[DbtNodeMessage]] = {
-        test_case.expected_unique_id: [
-            DbtNodeMessage(level="error", message="relation raw.orders does not exist")
-        ]
+    message_event: dict[str, object] = {
+        "data": {
+            "msg": " relation raw.orders does not exist\n",
+            "node_info": {"unique_id": test_case.expected_unique_id},
+        },
+        "info": {"level": "error", "name": "RunResultError"},
     }
-
-    result: DbtNodeExecutionResult | None = parse_dbt_node_result(
-        event=test_case.event,
-        messages_by_unique_id=messages_by_unique_id,
+    stream: DbtEventStream = DbtEventStream(
+        display_total=None, detail_by_unique_id=None, use_color=False
     )
 
+    message_update: DbtEventStreamUpdate | None = stream.consume(json.dumps(message_event))
+    update: DbtEventStreamUpdate | None = stream.consume(json.dumps(test_case.event))
+    repeated: DbtEventStreamUpdate | None = stream.consume(json.dumps(test_case.event))
+
+    assert message_update is None
+    assert repeated is None
+    assert update is not None
+    result: DbtNodeExecutionResult | None = update.result
     assert result is not None
     assert len(result.messages) == test_case.expected_message_count
     assert result.messages[0].message == "relation raw.orders does not exist"
-    assert messages_by_unique_id == {}
+    assert update.row is not None
+    assert "error     relation raw.orders does not exist" in update.row
 
 
 @pytest.mark.parametrize(
@@ -266,14 +273,21 @@ def test_given_buffered_node_message_when_parsing_result_then_attaches_message(
     ],
     ids=lambda case: case.description,
 )
-def test_given_node_scoped_error_event_when_parsing_then_returns_node_message(
+def test_given_node_scoped_error_event_when_parsing_then_attaches_node_message(
     test_case: DbtEventParseTestCase,
 ) -> None:
-    message: DbtNodeMessage | None = parse_dbt_node_message(event=test_case.event)
+    result_event: dict[str, object] = {
+        "data": {"status": "error", "node_info": {"unique_id": test_case.expected_unique_id}},
+        "info": {"level": "info", "name": "LogModelResult"},
+    }
 
-    assert message is not None
-    assert message.level == test_case.expected_status
-    assert "Database Error" in message.message
+    update: DbtEventStreamUpdate | None = consume_dbt_events(test_case.event, result_event)
+
+    assert update is not None
+    result: DbtNodeExecutionResult | None = update.result
+    assert result is not None
+    assert result.messages[0].level == test_case.expected_status
+    assert "Database Error" in result.messages[0].message
 
 
 @pytest.mark.parametrize(
@@ -296,14 +310,12 @@ def test_given_node_scoped_error_event_when_parsing_then_returns_node_message(
 def test_given_non_result_event_when_parsing_then_returns_none(
     test_case: DbtEventParseTestCase,
 ) -> None:
-    non_json_event: dict[str, object] | None = parse_dbt_json_event(line="not json")
-    result: DbtNodeExecutionResult | None = parse_dbt_node_result(
-        event=test_case.event,
-        messages_by_unique_id=None,
+    stream: DbtEventStream = DbtEventStream(
+        display_total=None, detail_by_unique_id=None, use_color=False
     )
 
-    assert non_json_event is None
-    assert result is None
+    assert stream.consume("not json") is None
+    assert consume_dbt_events(test_case.event) is None
     assert test_case.expected_unique_id == ""
     assert test_case.expected_status == ""
 
@@ -839,7 +851,7 @@ def test_given_cleanup_failures_when_parse_raises_then_original_exception_is_pre
         lambda *args, **kwargs: FailingThread(),
     )
     monkeypatch.setattr(
-        "sqlbuild.integrations.dbt._helpers.runtime.event_stream.parse_dbt_json_event",
+        "sqlbuild.integrations.dbt._helpers.runtime.event_stream._handle_dbt_output_line",
         lambda **kwargs: (_ for _ in ()).throw(RuntimeError(test_case.expected_error)),
     )
 
@@ -975,9 +987,10 @@ def test_given_active_dbt_node_when_dbt_stream_is_silent_then_status_elapsed_upd
 def test_given_node_started_event_when_parsing_then_returns_progress_message(
     test_case: DbtEventParseTestCase,
 ) -> None:
-    message: str | None = parse_dbt_node_start_message(event=test_case.event)
+    update: DbtEventStreamUpdate | None = consume_dbt_events(test_case.event)
 
-    assert message == test_case.expected_status
+    assert update is not None
+    assert update.status_message == test_case.expected_status
 
 
 @pytest.mark.parametrize(
@@ -1009,9 +1022,12 @@ def test_given_node_started_event_when_parsing_then_returns_progress_message(
 def test_given_node_started_event_when_parsing_then_returns_start_result(
     test_case: DbtEventParseTestCase,
 ) -> None:
-    result: DbtNodeExecutionResult | None = parse_dbt_node_start_result(event=test_case.event)
+    update: DbtEventStreamUpdate | None = consume_dbt_events(test_case.event)
 
+    assert update is not None
+    result: DbtNodeExecutionResult | None = update.result
     assert result is not None
+    assert update.finished is False
     assert result.unique_id == test_case.expected_unique_id
     assert result.resource_type == test_case.expected_resource_type
     assert result.node_name == test_case.expected_node_name

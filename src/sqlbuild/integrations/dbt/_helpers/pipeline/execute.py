@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
 
-from sqlbuild._native import format_summary_footer
+from sqlbuild._native import format_summary_footer, render_dbt_node_result
 from sqlbuild.integrations.dbt._helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
@@ -28,7 +28,6 @@ from sqlbuild.integrations.dbt.main.cli._parse_ls_json_lines import parse_dbt_ls
 from sqlbuild.integrations.dbt.main.runtime._execute_json_event_stream import (
     execute_dbt_json_event_stream,
 )
-from sqlbuild.integrations.dbt.main.runtime._render_node_result import render_dbt_node_result
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,
     DbtCombinedGraph,
@@ -127,13 +126,15 @@ def execute_dbt_commands(
     )
     streamed_result_count: int = len(results) - len(appended_results)
     for offset, result in enumerate(appended_results, start=1):
-        render_dbt_node_result(
-            stream=stdout_stream,
-            style=style,
-            result=result,
-            display_index=streamed_result_count + offset,
-            display_total=expected_total if expected_total is not None else len(results),
+        stdout_stream.write(
+            render_dbt_node_result(
+                result=result,
+                use_color=style.use_color,
+                display_index=streamed_result_count + offset,
+                display_total=expected_total if expected_total is not None else len(results),
+            )
         )
+        stdout_stream.flush()
         if on_node_result is not None:
             on_node_result(result)
     if on_progress is not None:

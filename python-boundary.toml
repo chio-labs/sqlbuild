@@ -175,6 +175,16 @@ reason = "user-code"
 note = "Loader runtime that runs inside the executor load phase."
 
 [[stays]]
+path = "integrations/dbt/_helpers/runtime/event_stream.py"
+reason = "user-code"
+note = "Runs the dbt subprocess over the user's dbt project and drives its progress threads."
+
+[[stays]]
+path = "integrations/dbt/main/runtime/_execute_json_event_stream.py"
+reason = "user-code"
+note = "Entry point of the dbt subprocess runner."
+
+[[stays]]
 path = "compiler/python_nodes/_helpers/identity.py"
 reason = "user-code"
 note = "Identity hashing over live user functions (source and globals)."

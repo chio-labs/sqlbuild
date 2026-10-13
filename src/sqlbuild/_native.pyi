@@ -265,6 +265,7 @@ from sqlbuild.integrations.dbt.models import (
     DbtLsNode,
     DbtManifestIndex,
     DbtManifestModel,
+    DbtNodeExecutionResult,
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
@@ -1592,6 +1593,38 @@ class ConnectionProgressReporter:
     def on_connection_start(self, connection_count: int) -> None: ...
     def on_connection_complete(self, *, connection_count: int, elapsed_seconds: float) -> None: ...
     def on_connection_error(self, *, connection_count: int, elapsed_seconds: float) -> None: ...
+
+class DbtEventStreamUpdate:
+    @property
+    def status_message(self) -> str | None: ...
+    @property
+    def result(self) -> DbtNodeExecutionResult | None: ...
+    @property
+    def row(self) -> str | None: ...
+    @property
+    def finished(self) -> bool: ...
+
+class DbtEventStream:
+    def __init__(
+        self,
+        *,
+        display_total: int | None,
+        detail_by_unique_id: Mapping[str, str] | None,
+        use_color: bool,
+    ) -> None: ...
+    def consume(self, line: str) -> DbtEventStreamUpdate | None: ...
+
+def render_dbt_node_result(
+    *,
+    result: DbtNodeExecutionResult,
+    use_color: bool,
+    display_index: int | None = None,
+    display_total: int | None = None,
+    detail: str = "",
+) -> str: ...
+def format_dbt_active_node_status(
+    *, active_nodes: Sequence[tuple[str, float]], now: float
+) -> str: ...
 
 class PlanningProgressReporter:
     def __init__(self, *, stream: TextIO, use_color: bool = False) -> None: ...
