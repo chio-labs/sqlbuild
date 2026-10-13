@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import sqlbuild._native as _native
+from sqlbuild._native import complete_semantic_project
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.types import DiagnosticRow
 from sqlbuild.compiler.compile.types import CompiledProjectView
@@ -20,7 +20,7 @@ def complete_semantic_diagnostics(
 ) -> CompiledProjectView:
     """Recover type facts before metadata checks, then explain retained root diagnostics."""
 
-    return _native.complete_semantic_project(
+    return complete_semantic_project(
         project=project,
         profile=profile,
         binding_results=binding_results,

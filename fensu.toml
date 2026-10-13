@@ -74,6 +74,11 @@ path = "src/sqlbuild/compiler/lineage/__init__.py"
 reason = "Column lineage is built natively; the package keeps only the lineage models, enums and errors the native graph and its callers share."
 
 [[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/compiler/analysis_session/__init__.py"
+reason = "Model analysis runs natively; the package keeps only the request and result models, row types and constants the native session and its callers share."
+
+[[targets.python.rule_exceptions]]
 rule = "FFR601"
 path = "src/sqlbuild/adapter/contract/classes/base_adapter.py"
 reason = "The adapter contract intentionally keeps its overrideable methods on one class."

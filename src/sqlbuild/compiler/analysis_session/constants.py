@@ -1,12 +1,4 @@
 """Native model analysis session constants."""
 
 LINEAGE_NATIVE: str = "native"
-LINEAGE_FACTS: str = "facts"
-NATIVE_ANALYSIS_FAILURE_MESSAGE: str = "native compact query analysis failed"
-NULLABILITY_RULE_FIRST_ARG: str = "first_arg"
-NULLABILITY_RULE_CONDITIONAL_RESULT: str = "conditional_result"
-NULLABILITY_RULE_SAFE_CAST: str = "safe_cast"
-NULLABILITY_RULE_ADAPTER: str = "python"
 NATIVE_ANALYSIS_STORE_FILE_NAME: str = "model-analyses.bin"
-NATIVE_ANALYSIS_STORE_VERSION: str = "native-model-analysis-store-v1"
-NATIVE_ANALYSIS_STORE_FAILURE_MESSAGE: str = "native model analysis cache not read or saved"

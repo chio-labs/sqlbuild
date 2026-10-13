@@ -4815,7 +4815,7 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_stages, "infer_native_expression_source_shapes"),
     (native_stages, "analyze_native_model_sql"),
     (native_sql_test_stage, "assemble_native_sql_tests"),
-    (diagnostic_recovery, "complete_native_semantic_diagnostics"),
+    (diagnostic_recovery, "complete_semantic_project"),
     (contract_validation, "evaluate_native_model_contracts"),
     (promotion_conflicts, "native_promotion_conflict_diagnostics"),
     (compile_lineage, "build_compile_lineage"),
