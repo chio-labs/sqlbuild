@@ -45,6 +45,9 @@ const MODEL_TEST_FIELDS: [&str; 5] = [
     "reference_target_model_names",
 ];
 
+/// Keyword arguments of one Python constructor call, in order.
+type Fields<'py> = Vec<(&'static str, Bound<'py, PyAny>)>;
+
 /// The Python classes a compiled test is built from.
 struct Classes<'py> {
     models: Bound<'py, PyModule>,
@@ -126,7 +129,7 @@ fn copied<'py>(
 fn compiled_payload<'py>(
     classes: &Classes<'py>,
     payload: &Bound<'py, PyAny>,
-) -> PyResult<(Bound<'py, PyAny>, Vec<(&'static str, Bound<'py, PyAny>)>)> {
+) -> PyResult<(Bound<'py, PyAny>, Fields<'py>)> {
     let py: Python<'py> = classes.py();
     if payload.is_instance(&classes.direct_input)? {
         let compiled: Bound<'py, PyAny> = keyword_call(

@@ -56,10 +56,7 @@ pub(crate) fn hash_payload(payload: &JsonValue) -> String {
         sort_keys: true,
         ..StdlibJsonOptions::new(None).with_separators(",", ":")
     };
-    let encoded: String = match dumps(payload, &JsonDialect::Stdlib(options)) {
-        Ok(encoded) => encoded,
-        Err(_unencodable) => String::new(),
-    };
+    let encoded: String = dumps(payload, &JsonDialect::Stdlib(options)).unwrap_or_default();
     format!("{:x}", Sha256::digest(encoded.as_bytes()))
 }
 

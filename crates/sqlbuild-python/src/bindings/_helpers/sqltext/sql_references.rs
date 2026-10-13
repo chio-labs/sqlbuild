@@ -26,6 +26,8 @@ const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 type ReferenceRow = (&'static str, String, Option<String>, Option<usize>);
 /// `(kind, call, start, message, help, corrected_call)` for one rejected call.
 type InvalidCallRow = (&'static str, String, usize, String, String, String);
+/// Python references and rejected calls of one scan.
+type ScannedObjects<'py> = (Vec<Bound<'py, PyAny>>, Vec<Bound<'py, PyAny>>);
 /// The references and rejected calls, or the scan error and its start.
 type ExtractionRow = (
     Option<(Vec<ReferenceRow>, Vec<InvalidCallRow>)>,
@@ -98,7 +100,7 @@ fn scanned<'py>(
     py: Python<'py>,
     sql: &str,
     syntax: &Bound<'py, PyAny>,
-) -> PyResult<(Vec<Bound<'py, PyAny>>, Vec<Bound<'py, PyAny>>)> {
+) -> PyResult<ScannedObjects<'py>> {
     let input: LexicalSyntaxInput = syntax.getattr("native_mapping")?.extract()?;
     let syntax: LexicalSyntax = input.into();
     let scan = match compiler_guard(|| Ok(extract_sql_references(sql, &syntax)))? {
