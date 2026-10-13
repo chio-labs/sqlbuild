@@ -179,11 +179,11 @@ from sqlbuild.compiler.sql_analysis.models import (
 )
 from sqlbuild.compiler.sql_analysis.types import NativeProjectCatalog
 from sqlbuild.compiler.sql_test_glue.models import (
-    NativeSqlTestAssemblyRequest,
+    NativeSqlTestAssembly,
     NativeSqlTestChainRequest,
     NativeSqlTestPlanningRequest,
 )
-from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
+from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.clone.models import CloneExecutionResult
@@ -2362,9 +2362,9 @@ def plan_compiled_sql_tests(
     request: NativeSqlTestPlanningRequest, /
 ) -> tuple[list[NativeSqlTestPlanRow], int, int]: ...
 def resolve_compiled_sql_test_chains(request: NativeSqlTestChainRequest, /) -> list[list[str]]: ...
-def assemble_compiled_sql_tests(
-    request: NativeSqlTestAssemblyRequest, /
-) -> list[NativeSqlTestAssemblyRow]: ...
+def assemble_native_sql_tests(
+    *, inputs: CompileInputsView
+) -> tuple[NativeSqlTestAssembly, ...]: ...
 
 # Native analysis: compiled project assembly.
 def sql_syntax_error(

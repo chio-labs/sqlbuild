@@ -12,7 +12,6 @@ from typing import cast
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import build_project_graph, discover_project_inputs
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.native_stages import sql_tests as sql_test_stage
@@ -20,13 +19,7 @@ from sqlbuild.compiler.compile.models import (
     CompiledSqlTest,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
-from sqlbuild.compiler.sql_test_glue.models import (
-    NativeSqlTestAssembly,
-    NativeSqlTestAssemblyRequest,
-)
-from sqlbuild.compiler.sql_test_glue.types import (
-    NativeSqlTestAssemblyRow,
-)
+from sqlbuild.compiler.sql_test_glue.models import NativeSqlTestAssembly, NativeSqlTestFailure
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 
@@ -470,21 +463,14 @@ def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]
     """
 
     answers: Counter[str] = Counter()
-    assemble: Callable[[NativeSqlTestAssemblyRequest], list[NativeSqlTestAssemblyRow]] = (
-        native_module.assemble_compiled_sql_tests
-    )
     seam: Callable[..., tuple[NativeSqlTestAssembly, ...]] = (
         sql_test_stage.assemble_native_sql_tests
     )
 
-    def counted_failures(request: NativeSqlTestAssemblyRequest) -> list[NativeSqlTestAssemblyRow]:
-        rows: list[NativeSqlTestAssemblyRow] = assemble(request)
-        failures: list[tuple[str, str] | None] = [failure for _, failure in rows]
-        answers.update(f"failed_{failure[0]}" for failure in filter(None, failures))
-        return rows
-
     def counted_assemblies(*, inputs: CompileInputsView) -> tuple[NativeSqlTestAssembly, ...]:
         assemblies: tuple[NativeSqlTestAssembly, ...] = seam(inputs=inputs)
+        failures: list[NativeSqlTestFailure | None] = [item.failure for item in assemblies]
+        answers.update(f"failed_{failure.kind}" for failure in filter(None, failures))
         tests: list[CompiledSqlTest | None] = [item.test for item in assemblies]
         native: list[CompiledSqlTest] = list(filter(None, tests))
         answers["native_assembled"] += len(native)
@@ -494,7 +480,6 @@ def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]
         )
         return assemblies
 
-    monkeypatch.setattr(native_module, "assemble_compiled_sql_tests", counted_failures)
     monkeypatch.setattr(sql_test_stage, "assemble_native_sql_tests", counted_assemblies)
     return answers
 

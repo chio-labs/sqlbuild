@@ -39,7 +39,6 @@ import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
-import sqlbuild.compiler.sql_test_glue.main.plan_native_sql_test_artifacts as plan_artifacts_module
 from scripts.cold_compile_performance.main.read_compile_measurement import read_compile_measurement
 from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
     semantic_compile_fingerprint,
@@ -69,6 +68,9 @@ from sqlbuild.compiler.frontier.constants import (
 )
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
+from sqlbuild.compiler.planner.main.execution import (
+    _plan_compiled_sql_test_artifacts as plan_artifacts_module,
+)
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     FreshProcessCompileCachePerformanceGuardTestCase,
@@ -4815,7 +4817,7 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_module, "evaluate_model_contracts"),
     (native_module, "promotion_conflict_diagnostics"),
     (native_module, "build_project_column_lineage"),
-    (plan_artifacts_module, "plan_native_sql_test_artifacts"),
+    (plan_artifacts_module, "plan_compiled_sql_test_artifacts"),
 )
 
 

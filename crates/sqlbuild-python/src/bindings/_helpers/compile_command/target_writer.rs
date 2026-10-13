@@ -49,7 +49,7 @@ const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
 const MODEL_CHAIN_MODULE: &str = "sqlbuild.compiler.planner.main.execution.sql_test_model_chain";
 const PLAN_ARTIFACTS_MODULE: &str =
-    "sqlbuild.compiler.sql_test_glue.main.plan_native_sql_test_artifacts";
+    "sqlbuild.compiler.planner.main.execution._plan_compiled_sql_test_artifacts";
 const COMPARISON_SQL_MODULE: &str = "sqlbuild.executor.testing.main.comparison_sql";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const TARGET_OPTIONS: (&[&str], &[&str]) = (&["target_dir", "adapter", "project"], &["manifest"]);
@@ -370,7 +370,11 @@ fn planned_artifacts<'py>(
     )?;
     within(&lifecycle, |entered| {
         let artifacts: Vec<Py<PyAny>> = call_with(
-            &imported(py, PLAN_ARTIFACTS_MODULE, "plan_native_sql_test_artifacts")?,
+            &imported(
+                py,
+                PLAN_ARTIFACTS_MODULE,
+                "plan_compiled_sql_test_artifacts",
+            )?,
             &[
                 ("project", project.clone()),
                 ("tests", PyTuple::new(py, tests)?.into_any()),

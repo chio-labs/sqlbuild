@@ -37,7 +37,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                 "evaluate_native_model_contracts": [ANY],
                 "native_promotion_conflict_diagnostics": [()],
                 "build_project_column_lineage": [ANY],
-                "plan_native_sql_test_artifacts": [ANY],
+                "plan_compiled_sql_test_artifacts": [ANY],
             },
         )
     ],
@@ -71,7 +71,7 @@ def test_given_project_when_compiling_then_native_seams_answer(
         assert isinstance(assembled_tests, tuple)
         assert assembled_tests
         assert all(isinstance(assembled, NativeSqlTestAssembly) for assembled in assembled_tests)
-        planned_artifacts: object = seams["plan_native_sql_test_artifacts"][0]
+        planned_artifacts: object = seams["plan_compiled_sql_test_artifacts"][0]
         assert isinstance(planned_artifacts, tuple)
         assert planned_artifacts
         assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)

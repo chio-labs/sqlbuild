@@ -85,6 +85,11 @@ reason = "Refactorings are planned natively; the package keeps the request, plan
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/sql_test_glue/__init__.py"
+reason = "SQL test assembly and planning run natively; the package keeps the request, result and row shapes the planner and compile stage read."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/graph/__init__.py"
 reason = "Graph algorithms and views run natively; the package keeps only the edge and view models their callers read."
 

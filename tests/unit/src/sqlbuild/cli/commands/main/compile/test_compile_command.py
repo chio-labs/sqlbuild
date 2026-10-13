@@ -16,8 +16,8 @@ from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.main.run import run_compile
 from sqlbuild.cli.entry.models import CompileCommandRequest
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.sql_test_glue.main import (
-    plan_native_sql_test_artifacts as plan_artifacts_module,
+from sqlbuild.compiler.planner.main.execution import (
+    _plan_compiled_sql_test_artifacts as plan_artifacts_module,
 )
 from sqlbuild.presentation.classes import transient_status_reporter
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -597,7 +597,7 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
         tmp_path, test_header=test_case.test_header
     )
     planning_on_main_thread: list[bool] = []
-    plan_artifacts: Callable[..., object] = plan_artifacts_module.plan_native_sql_test_artifacts
+    plan_artifacts: Callable[..., object] = plan_artifacts_module.plan_compiled_sql_test_artifacts
 
     def counted_inline_planning(**kwargs: Any) -> object:
         planning_on_main_thread.append(threading.current_thread() is threading.main_thread())
@@ -610,7 +610,7 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
         runtime_adapters, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
     )
     monkeypatch.setattr(
-        plan_artifacts_module, "plan_native_sql_test_artifacts", counted_inline_planning
+        plan_artifacts_module, "plan_compiled_sql_test_artifacts", counted_inline_planning
     )
     monkeypatch.setattr(discovery_entry, "PreparedCompileArtifacts", Prepared)
 
