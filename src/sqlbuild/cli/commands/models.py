@@ -49,13 +49,11 @@ if TYPE_CHECKING:
         DirectPythonLifecycleState,
     )
     from sqlbuild.compiler.compile.models import (
-        CompiledSqlScenario,
         CompilerDiagnostic,
     )
     from sqlbuild.compiler.compile.types import CompiledProjectView
     from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.pipeline.models import (
-        CompilePipelineResult,
         PythonPlanEntry,
     )
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
@@ -64,7 +62,6 @@ if TYPE_CHECKING:
     from sqlbuild.executor.janitor.models import JanitorPlan
     from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
     from sqlbuild.integrations.dbt.models import DbtInitRequest
-    from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
     from sqlbuild.runtime.contracts.types import NodeStartCallback
 
 
@@ -568,35 +565,6 @@ class AdapterConnectionContext:
 
 
 @dataclass(frozen=True)
-class ScenarioRunNamespace:
-    """Effective artifact namespace and its configuration source."""
-
-    value: str | None = None
-    source: str = "unset"
-
-
-@dataclass(frozen=True)
-class ScenarioRunOutputContext:
-    """Progress stream and JSON output settings for one scenario CLI run."""
-
-    progress_stream: TextIO
-    use_color: bool
-    namespace: ScenarioRunNamespace = ScenarioRunNamespace()
-    json_output: bool = False
-    json_output_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class ScenarioRunPresentation:
-    """Live status and timing shared by one scenario test run's progress output."""
-
-    scenario_status: TransientStatusReporter
-    status_is_tty: bool
-    activity: str
-    started: float
-
-
-@dataclass(frozen=True)
 class ScenarioSnapshotLimitInputs:
     """CLI snapshot capture-limit overrides for one scenario run."""
 
@@ -640,24 +608,6 @@ class ScenarioCaptureCommandRequest:
     exclude: tuple[str, ...] = ()
     retain: bool = False
     limit_inputs: ScenarioSnapshotLimitInputs = ScenarioSnapshotLimitInputs()
-
-
-@dataclass(frozen=True)
-class LocalSnapshotSyncInputs:
-    """Resolved project, adapters, and scenarios for a local snapshot sync run."""
-
-    project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    local_pipeline_result: CompilePipelineResult
-    local_scenarios: tuple[CompiledSqlScenario, ...]
-    local_adapter: BaseAdapter
-    project_adapter: BaseAdapter
-    project_adapter_name: str
-    capture_dialect: str
-    project_connection_config: dict[str, object]
-    project_name: str
-    no_sql_validation: bool
-    refresh: bool
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,7 @@ use crate::bindings::_helpers::cli::{argv, entry, progress, progress_reporters, 
 use crate::bindings::_helpers::{
     audit_command, check, clone, command_runtime, cost_report, dbt_interop, debug_command,
     diff_report, freshness, janitor, load, presentation_text, query_command, result_output,
-    seed_command, sql_test_command, workspace_commands,
+    scenario_command, seed_command, sql_test_command, workspace_commands,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -32,5 +32,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     seed_command::registration::register(module)?;
     audit_command::registration::register(module)?;
     query_command::registration::register(module)?;
+    scenario_command::registration::register(module)?;
     Ok(())
 }

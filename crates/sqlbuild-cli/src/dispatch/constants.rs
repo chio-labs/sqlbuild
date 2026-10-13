@@ -786,12 +786,9 @@ const SCENARIO_TEST_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SCENARIO_TEST_ROUTE: Route = routed(
     "run_scenario",
-    (
-        "sqlbuild.cli.commands.main.execution._scenario",
-        "run_scenario",
-    ),
+    ("sqlbuild._native", "run_scenario_test_command"),
     &SCENARIO_TEST_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const SCENARIO_CAPTURE_FIELDS: [Field; 8] = [
@@ -810,10 +807,7 @@ const SCENARIO_CAPTURE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SCENARIO_CAPTURE_ROUTE: Route = routed(
     "run_scenario_capture",
-    (
-        "sqlbuild.cli.commands._helpers.scenario_capture.capture",
-        "run_scenario_capture",
-    ),
+    ("sqlbuild._native", "run_scenario_capture_command"),
     &SCENARIO_CAPTURE_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );

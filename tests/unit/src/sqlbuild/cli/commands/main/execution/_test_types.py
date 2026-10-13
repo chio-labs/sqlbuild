@@ -20,3 +20,12 @@ class BuildPartialTimingOutputTestCase:
     execution_seconds: float | None
     expected_fragments: tuple[str, ...]
     expected_absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioCompilePresentationTestCase:
+    description: str
+    tty: bool
+    expected_fragment: str
+    unexpected_fragment: str
+    expected_terminal: str

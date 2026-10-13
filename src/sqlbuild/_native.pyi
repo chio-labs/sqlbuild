@@ -35,6 +35,8 @@ from sqlbuild.cli.commands.models import (
     PlaygroundCommandRequest,
     QueryDiffPreparation,
     RefactorCommandRequest,
+    ScenarioCaptureCommandRequest,
+    ScenarioTestCommandRequest,
     ScopeCommandRequest,
     SeedCommandRequest,
     TestCommandRequest,
@@ -2928,6 +2930,8 @@ def run_dag_command(
     json_output: bool = False,
     cli_vars: dict[str, object] | None = None,
 ) -> int: ...
+def run_scenario_test_command(*, request: ScenarioTestCommandRequest) -> int: ...
+def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
 def format_parameterized_test_label(
     *,
     name: str,
