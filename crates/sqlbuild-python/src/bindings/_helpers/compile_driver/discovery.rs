@@ -22,7 +22,7 @@ use crate::bindings::_helpers::discovery::yaml_records::{
     discover_schema_files, discover_source_files,
 };
 
-const FRONTIER_MODULE: &str = "sqlbuild.compiler.frontier.main._compile_frontier";
+const FRONTIER_MODULE: &str = "sqlbuild._native";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const PROJECT_YAML_MODULE: &str = "sqlbuild.compiler.discovery._helpers.yml.project";

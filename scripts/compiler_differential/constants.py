@@ -544,7 +544,6 @@ RENDER_CONFIG_ONLY_KINDS: dict[str, str] = {}
 DIAGNOSTIC_CODE_PATTERN: re.Pattern[str] = re.compile(r"[A-Z][0-9]{3}")
 RENDER_RAISED_CODES: frozenset[str] = frozenset({"C214", "C216", "K012", "P004", "P010", "P011"})
 RENDER_CODE_SCAN_EXCLUDED: dict[str, str] = {
-    "_helpers/assembly": "semantic and metadata validation of the assembled CompiledProject (M4)",
     "_helpers/analysis": "SQL analysis of rendered SQL, after the CompileProjectInputs frontier",
 }
 _SCOPE_QUERY_ONLY: str = "reported only by sqb scope queries, never by compile"
@@ -659,17 +658,16 @@ ANALYSIS_INDIRECT_KINDS: dict[str, str] = {
     ),
 }
 ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
-    "compile/_helpers/assembly",
     "compile/_helpers/analysis",
     "compile/_helpers/diagnostics",
     "contracts",
-    "pipeline/_helpers/target_validation.py",
     "sql_analysis",
 )
 ANALYSIS_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "crates/sqlbuild-analysis/src/semantic_checks/constants.rs",
     "crates/sqlbuild-analysis/src/semantic_checks/_helpers/resource_sql/diagnostics.rs",
     "crates/sqlbuild-analysis/src/contracts/constants.rs",
+    "crates/sqlbuild-analysis/src/assembly/target_checks/constants.rs",
     "crates/sqlbuild-python/src/bindings/_helpers/compiled_project/model_loop.rs",
 )
 NATIVE_CODE_TEST_DIRECTORY: str = "tests"

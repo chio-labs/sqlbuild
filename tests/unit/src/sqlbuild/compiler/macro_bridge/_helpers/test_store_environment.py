@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
+from sqlbuild._native import (
     digest_module_files,
     module_digests_metadata,
-    module_sources,
     unchanged_module_digests,
 )
+from sqlbuild.compiler.macro_bridge._helpers.store_environment import module_sources
 from sqlbuild.compiler.macro_bridge.models import ModuleSources
 from tests.unit.src.sqlbuild.compiler.macro_bridge._helpers._test_types import (
     ModuleDigestsRoundTripTestCase,

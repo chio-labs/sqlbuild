@@ -5,11 +5,19 @@ use pyo3::types::{PyBool, PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::project_graph;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::compile_driver::target_defaults::{
+    TargetDefaults, apply_target_defaults,
+};
+use crate::bindings::_helpers::compile_driver::targets::{
+    managed_loader_target_isolation, managed_write_schemas, named_target_schema_strategy,
+    project_targets,
+};
 
-const FRONTIER_MODULE: &str = "sqlbuild.compiler.frontier.main._compile_frontier";
+const FRONTIER_MODULE: &str = "sqlbuild._native";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
 const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
 const ASSEMBLE_MODULE: &str = "sqlbuild._native";
@@ -19,9 +27,6 @@ const PROMOTION_MODULE: &str = "sqlbuild.compiler.contracts.main.promotion_confl
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.analysis_selection";
-const TARGET_DEFAULTS_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.target_defaults";
-const TARGET_VALIDATION_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.target_validation";
-const GRAPH_HELPERS_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.graph";
 const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main.record";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const COLLECTION_RENDERING_MODULE: &str =
@@ -143,33 +148,8 @@ fn python_compiled_project<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let discovered: &Bound<'py, PyAny> = request.discovered_inputs.bind(py);
     let adapter: &Bound<'py, PyAny> = request.adapter.bind(py);
-    call_with(
-        &imported(
-            py,
-            TARGET_VALIDATION_MODULE,
-            "validate_named_target_schema_strategy",
-        )?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("adapter", adapter.clone()),
-            ("selected_target", request.selected_target.bind(py).clone()),
-        ],
-    )?;
-    call_with(
-        &imported(
-            py,
-            TARGET_VALIDATION_MODULE,
-            "validate_managed_loader_target_isolation",
-        )?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("adapter", adapter.clone()),
-            (
-                "resolved_connection",
-                request.resolved_connection.bind(py).clone(),
-            ),
-        ],
-    )?;
+    named_target_schema_strategy(discovered, adapter, request.selected_target.bind(py))?;
+    managed_loader_target_isolation(discovered, adapter, request.resolved_connection.bind(py))?;
     let selection: &Bound<'py, PyAny> = request.analysis_selection.bind(py);
     let no_cache: bool = !selection.is_none() && selection.getattr("no_cache")?.is_truthy()?;
     let timing: Bound<'py, PyAny> =
@@ -227,39 +207,21 @@ fn targeted_project<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let discovered: &Bound<'py, PyAny> = request.discovered_inputs.bind(py);
     let adapter: &Bound<'py, PyAny> = request.adapter.bind(py);
-    call_with(
-        &imported(
-            py,
-            TARGET_VALIDATION_MODULE,
-            "validate_managed_write_schemas",
-        )?,
-        &[("adapter", adapter.clone()), ("project", project.clone())],
-    )?;
+    managed_write_schemas(adapter, project)?;
     let effective_schema: Bound<'py, PyAny> = project.getattr("effective_target_schema")?;
     let default_schema: Bound<'py, PyAny> = if effective_schema.is_truthy()? {
         effective_schema
     } else {
         adapter.call_method0("default_schema")?
     };
-    let project: Bound<'py, PyAny> = call_with(
-        &imported(py, TARGET_DEFAULTS_MODULE, "apply_target_defaults")?,
-        &[
-            ("project", project.clone()),
-            ("default_schema", default_schema),
-            (
-                "default_database",
-                adapter.call_method0("default_database")?,
-            ),
-            (
-                "render_qualified_name",
-                adapter.getattr("render_qualified_name")?,
-            ),
-            (
-                "python_functions_inherit_default_namespace",
-                adapter.call_method0("python_functions_inherit_default_namespace")?,
-            ),
-        ],
-    )?;
+    let defaults: TargetDefaults<'py> = TargetDefaults {
+        default_schema,
+        default_database: adapter.call_method0("default_database")?,
+        render_qualified_name: adapter.getattr("render_qualified_name")?,
+        python_functions_inherit_default_namespace: adapter
+            .call_method0("python_functions_inherit_default_namespace")?,
+    };
+    let project: Bound<'py, PyAny> = apply_target_defaults(project, &defaults)?;
     let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
     let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
     let adapter_name: Bound<'py, PyAny> = call_with(
@@ -269,10 +231,7 @@ fn targeted_project<'py>(
             ("local_config", local_config.clone()),
         ],
     )?;
-    call_with(
-        &imported(py, TARGET_VALIDATION_MODULE, "validate_project_targets")?,
-        &[("adapter_name", adapter_name), ("project", project.clone())],
-    )?;
+    project_targets(&adapter_name, &project)?;
     let promotion_key: Bound<'py, PyAny> = imported(
         py,
         DISCOVERY_CONSTANTS_MODULE,
@@ -444,7 +403,7 @@ fn selected_graph<'py>(
         let elapsed: f64 = monotonic(py)? - started;
         on_progress.call1((format!("Compiled project. ({elapsed:.2}s)"),))?;
     }
-    imported(py, GRAPH_HELPERS_MODULE, "build_project_graph_impl")?.call1((project,))
+    project_graph(&project)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

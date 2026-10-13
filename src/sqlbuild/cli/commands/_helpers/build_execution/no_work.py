@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 
+from sqlbuild._native import plan_has_executable_work
 from sqlbuild.cli.commands._helpers.build_execution.outputs import write_no_work_build_json
 from sqlbuild.cli.commands._helpers.build_execution.run_context import (
     write_build_run_context,
@@ -13,7 +14,6 @@ from sqlbuild.cli.commands.models import (
     BuildInvocation,
     BuildRunContext,
 )
-from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.cost.models import CostRunRecord
 

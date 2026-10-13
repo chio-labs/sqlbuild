@@ -3,7 +3,9 @@
 use ruff_python_ast::{Expr, ExprContext, ModModule, StmtFunctionDef};
 use std::collections::{HashMap, HashSet};
 
-use crate::macro_modules::_helpers::python_nodes::PyNode;
+use crate::cpython_tree::main::child_nodes::child_nodes;
+use crate::cpython_tree::main::walk_breadth_first::walk_breadth_first;
+use crate::cpython_tree::models::CpythonNode;
 
 /// The identity of an `ast.Name` node: its address in the parsed tree.
 pub(crate) type NodeId = *const Expr;
@@ -23,20 +25,20 @@ pub(crate) struct FunctionCalls {
 }
 
 /// The nodes of a function body, depth first, without entering nested scopes.
-pub(crate) fn runtime_nodes(function: &StmtFunctionDef) -> Vec<PyNode<'_>> {
-    let mut nodes: Vec<PyNode<'_>> = Vec::new();
-    let mut pending: Vec<PyNode<'_>> = function.body.iter().rev().map(PyNode::Stmt).collect();
+pub(crate) fn runtime_nodes(function: &StmtFunctionDef) -> Vec<CpythonNode<'_>> {
+    let mut nodes: Vec<CpythonNode<'_>> = Vec::new();
+    let mut pending: Vec<CpythonNode<'_>> =
+        function.body.iter().rev().map(CpythonNode::Stmt).collect();
     while let Some(node) = pending.pop() {
-        nodes.push(node);
-        if node.opens_scope() {
-            continue;
+        if !node.opens_scope() {
+            pending.extend(child_nodes(&node).into_iter().rev());
         }
-        pending.extend(node.children().into_iter().rev());
+        nodes.push(node);
     }
     nodes
 }
 
-fn bound_names(function: &StmtFunctionDef, nodes: &[PyNode<'_>]) -> HashSet<String> {
+fn bound_names(function: &StmtFunctionDef, nodes: &[CpythonNode<'_>]) -> HashSet<String> {
     let parameters = &function.parameters;
     let mut names: HashSet<String> = parameters
         .posonlyargs
@@ -66,9 +68,9 @@ fn first_sorted<'a>(names: impl Iterator<Item = &'a String>) -> Option<&'a Strin
     names.min()
 }
 
-fn direct_call_name(node: PyNode<'_>) -> Option<&Expr> {
+fn direct_call_name<'a>(node: &CpythonNode<'a>) -> Option<&'a Expr> {
     match node {
-        PyNode::Expr(Expr::Call(call)) if call.func.is_name_expr() => Some(&call.func),
+        CpythonNode::Expr(Expr::Call(call)) if call.func.is_name_expr() => Some(&call.func),
         _ => None,
     }
 }
@@ -76,7 +78,7 @@ fn direct_call_name(node: PyNode<'_>) -> Option<&Expr> {
 /// The calls of one function, or the message of the first misuse Python reports.
 pub(crate) fn function_calls(
     function: &StmtFunctionDef,
-    nodes: &[PyNode<'_>],
+    nodes: &[CpythonNode<'_>],
     names: &CallNames<'_>,
 ) -> Result<FunctionCalls, String> {
     let display: &str = names.display;
@@ -93,13 +95,13 @@ pub(crate) fn function_calls(
     }
     let direct_calls: HashSet<NodeId> = nodes
         .iter()
-        .filter_map(|node| direct_call_name(*node))
+        .filter_map(direct_call_name)
         .map(std::ptr::from_ref)
         .collect();
     let mut dependencies: Vec<String> = Vec::new();
     let mut helpers: Vec<String> = Vec::new();
     for node in nodes {
-        if let PyNode::Expr(expression @ Expr::Name(name)) = node {
+        if let CpythonNode::Expr(expression @ Expr::Name(name)) = node {
             let direct: bool = direct_calls.contains(&std::ptr::from_ref(*expression));
             if !direct && names.imported.contains_key(name.id.as_str()) {
                 return Err(format!(
@@ -116,7 +118,7 @@ pub(crate) fn function_calls(
                 ));
             }
         }
-        let Some(Expr::Name(called)) = direct_call_name(*node) else {
+        let Some(Expr::Name(called)) = direct_call_name(node) else {
             continue;
         };
         let called: &str = called.id.as_str();
@@ -154,17 +156,17 @@ pub(crate) fn validate_use_locations(
     runtime: &HashSet<NodeId>,
 ) -> Result<(), String> {
     let display: &str = names.display;
-    let outside: Vec<(&str, NodeId)> = PyNode::Module(module)
-        .walk()
-        .into_iter()
-        .filter_map(|node| match node {
-            PyNode::Expr(expression @ Expr::Name(name)) => {
-                Some((name.id.as_str(), std::ptr::from_ref(expression)))
-            }
-            _ => None,
-        })
-        .filter(|(_, id)| !runtime.contains(id))
-        .collect();
+    let outside: Vec<(&str, NodeId)> =
+        walk_breadth_first(module.body.iter().map(CpythonNode::Stmt).collect())
+            .into_iter()
+            .filter_map(|node| match node {
+                CpythonNode::Expr(expression @ Expr::Name(name)) => {
+                    Some((name.id.as_str(), std::ptr::from_ref(expression)))
+                }
+                _ => None,
+            })
+            .filter(|(_, id)| !runtime.contains(id))
+            .collect();
     if let Some((name, _)) = outside
         .iter()
         .find(|(name, _)| names.imported.contains_key(*name))

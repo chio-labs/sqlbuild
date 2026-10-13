@@ -1,7 +1,7 @@
 //! CPython `ast` nodes mirrored over the ruff tree, and the line starts of a source.
 
 use ruff_python_ast::{
-    Comprehension, ElifElseClause, ExceptHandler, Expr, InterpolatedElement,
+    Comprehension, ElifElseClause, ExceptHandler, Expr, ExprName, InterpolatedElement,
     InterpolatedStringFormatSpec, Keyword, MatchCase, ModModule, Parameter, Parameters, Pattern,
     Stmt, TypeParam, WithItem,
 };
@@ -29,6 +29,24 @@ pub(crate) enum CpythonNode<'a> {
     Interpolation(&'a InterpolatedElement),
     /// The `JoinedStr` of a format spec.
     FormatSpec(&'a InterpolatedStringFormatSpec),
+}
+
+impl<'a> CpythonNode<'a> {
+    /// The `ExprName` this node is, if it is a `Name`.
+    pub(crate) fn name(&self) -> Option<&'a ExprName> {
+        match self {
+            Self::Expr(Expr::Name(name)) => Some(name),
+            _ => None,
+        }
+    }
+
+    /// Whether a depth-first walk of runtime nodes stops here: nested functions, lambdas, classes.
+    pub(crate) fn opens_scope(&self) -> bool {
+        matches!(
+            self,
+            Self::Stmt(Stmt::FunctionDef(_) | Stmt::ClassDef(_)) | Self::Expr(Expr::Lambda(_))
+        )
+    }
 }
 
 /// A merged string constant and the offset CPython locates it at.

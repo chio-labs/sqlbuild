@@ -21,7 +21,6 @@ from sqlbuild.compiler.macro_bridge.constants import (
     MACRO_CALL_STORE_ENVIRONMENT_VERSION,
     MAIN_MODULE_NAME,
     MISSING_SEARCH_PATH_STAMP,
-    MODULE_DIGEST_ROW_FIELDS,
     PROJECT_ROOT_SEARCH_PATH_STAMP,
     STORE_TRACKED_ENVIRONMENT_PREFIXES,
     STORE_UNTRACKED_ENVIRONMENT_NAMES,
@@ -67,48 +66,6 @@ def module_sources(modules: Iterable[object]) -> ModuleSources:
         if path is not None and not _covered_without_content(path):
             paths.append(path)
     return ModuleSources(paths=tuple(paths), complete=True)
-
-
-def digest_module_files(paths: Iterable[str]) -> dict[str, str] | None:
-    """Content digest of each module file, or None when any file cannot be read."""
-
-    ordered: list[str] = list(dict.fromkeys(paths))
-    digests: list[str | None] = _native.digest_files(ordered)
-    if any(digest is None for digest in digests):
-        return None
-    return {path: digest for path, digest in zip(ordered, digests, strict=True) if digest}
-
-
-def module_digests_metadata(digests: dict[str, str]) -> bytes:
-    """Encode module file digests for the store's metadata."""
-
-    return json.dumps(sorted([path, digest] for path, digest in digests.items())).encode()
-
-
-def unchanged_module_digests(*, metadata: bytes, known: dict[str, str]) -> dict[str, str] | None:
-    """Return the stored module digests when every module file still has them, else None."""
-
-    try:
-        rows: object = json.loads(metadata)
-    except ValueError:
-        return None
-    if not isinstance(rows, list) or not all(map(_is_digest_row, rows)):
-        return None
-    stored: dict[str, str] = {row[0]: row[1] for row in rows}
-    unknown: list[str] = [path for path in stored if path not in known]
-    current: dict[str, str] | None = digest_module_files(unknown)
-    if current is None:
-        return None
-    current.update((path, known[path]) for path in stored if path in known)
-    return stored if current == stored else None
-
-
-def _is_digest_row(row: object) -> bool:
-    return (
-        isinstance(row, list)
-        and len(row) == MODULE_DIGEST_ROW_FIELDS
-        and all(isinstance(field, str) for field in row)
-    )
 
 
 def _backing_file(module: object) -> tuple[str | None, bool]:

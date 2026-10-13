@@ -65,9 +65,6 @@ def test_given_slow_planning_connection_when_compiling_then_direct_phases_are_di
     adapter: Mock = Mock()
     monkeypatch.setattr(time, "monotonic", monotonic)
     monkeypatch.setattr(_native, "build_compiled_project", Mock(return_value=project))
-    monkeypatch.setattr(
-        analysis_selection, "resolve_compile_analysis_selection", Mock(return_value=None)
-    )
     monkeypatch.setattr(open_connection, "open_connection_with_hooks", Mock(return_value=object()))
     monkeypatch.setattr(plan_result, "build_pipeline_result", Mock(return_value=pipeline_result))
     monkeypatch.setattr(load_config, "load_rules_config", Mock(return_value=RulesConfig()))

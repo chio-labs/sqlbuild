@@ -8,13 +8,13 @@ use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     ANALYSIS_MODELS_MODULE, AnalysisContext, model_stem, selected_for_analysis,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const SYNTAX_CHECKS_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.syntax_checks";
 const CURSOR_INTRINSICS_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
 const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.macros";
-const HAND_BUILT_MODULE: &str = "sqlbuild.compiler.compile._helpers.assembly.hand_built_models";
 const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
@@ -189,14 +189,11 @@ fn compiled_model<'py>(
             ),
         ],
     )?;
-    call_with(
-        &imported(py, HAND_BUILT_MODULE, "hand_built_compiled_model")?,
-        &[
-            ("model_input", model_input.clone()),
-            ("deps", native_model.getattr("deps")?),
-            ("analysis", analysis),
-            ("macro_deps", macro_deps),
-        ],
+    hand_built_model(
+        model_input,
+        &native_model.getattr("deps")?,
+        &analysis,
+        &macro_deps,
     )
 }
 

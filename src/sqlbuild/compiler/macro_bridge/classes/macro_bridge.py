@@ -7,13 +7,15 @@ import sys
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
+from sqlbuild._native import (
     digest_module_files,
     module_digests_metadata,
+    unchanged_module_digests,
+)
+from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     module_sources,
     project_fingerprint,
     store_environment,
-    unchanged_module_digests,
 )
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.compiler.macro_bridge.models import (
@@ -72,19 +74,21 @@ class MacroBridge:
             return
         project_dir, model_paths, fingerprint = self._project_inputs
         try:
-            if (
-                not self.observe_modules()
-                or digest_module_files(self._module_digests) != self._module_digests
-                or project_fingerprint(project_dir=project_dir, model_paths=model_paths)
-                != fingerprint
-            ):
+            observed: bool = self.observe_modules()
+        except (OSError, RuntimeError) as error:
+            logging.getLogger(__name__).debug("Macro call store not saved: %s", error)
+            return
+        if not observed or digest_module_files(self._module_digests) != self._module_digests:
+            logging.getLogger(__name__).debug("Macro call store not saved: code or files changed")
+            return
+        metadata: bytes = module_digests_metadata(self._module_digests)
+        try:
+            if project_fingerprint(project_dir=project_dir, model_paths=model_paths) != fingerprint:
                 logging.getLogger(__name__).debug(
                     "Macro call store not saved: code or files changed"
                 )
                 return
-            _ = self.memo.save_store(
-                str(self._store_path), module_digests_metadata(self._module_digests)
-            )
+            _ = self.memo.save_store(str(self._store_path), metadata)
         except (OSError, RuntimeError) as error:
             logging.getLogger(__name__).debug("Macro call store not saved: %s", error)
 

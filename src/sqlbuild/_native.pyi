@@ -1,13 +1,13 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Hashable, Mapping, Sequence, Set
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence, Set
 from pathlib import Path, PurePath
 from typing import Any, Literal, TypedDict, overload
 
 from _typeshed import SupportsRichComparison
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
+from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RelationInfo
 from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
@@ -40,6 +40,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
+    DeclarationResolutionContext,
     DeclarationScopeBuild,
     DeclarationScopeResolver,
     DynamicColumnContractProof,
@@ -100,6 +101,7 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
     DirectSemanticColumnUse,
@@ -112,9 +114,17 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
     ProjectGraph,
+    PythonPlanEntry,
+    PythonRunPlanOutputs,
+    StaticCommandContext,
 )
-from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
+from sqlbuild.compiler.planner.models import DeferralInputs, PlanOutput
+from sqlbuild.compiler.python_nodes.models import (
+    PythonNodeGraph,
+    PythonNodeIdentity,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+)
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -145,6 +155,7 @@ from sqlbuild.compiler.sql_test_glue.models import (
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
+from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
@@ -161,6 +172,7 @@ from sqlbuild.spec.contracts.models import (
 from sqlbuild.sql_values.models import SqlValue
 
 BUILD_IDENTITY: str
+STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
 
 class NativeCompilerError(RuntimeError):
     """An internal native compiler failure: a panic or a broken native invariant."""
@@ -1111,6 +1123,25 @@ def build_compiled_project(
     resolved_connection: dict[str, object] | None = None,
     analysis_selection: CompileAnalysisSelection | None = None,
 ) -> CompiledProjectView: ...
+def compile_frontier[T](
+    *,
+    until: CompilerStage,
+    python_stage: Callable[[], T],
+    native_stage: Callable[[], T] | None = None,
+) -> T: ...
+def render_stage_capture(value: object) -> str: ...
+def digest_module_files(paths: Iterable[str], /) -> dict[str, str] | None: ...
+def module_digests_metadata(digests: dict[str, str], /) -> bytes: ...
+def unchanged_module_digests(
+    *, metadata: bytes, known: dict[str, str]
+) -> dict[str, str] | None: ...
+def macro_store_token(
+    *, loaded: LoadedMacro, identity: DeclarationIdentity | None
+) -> str | None: ...
+def context_store_token(
+    *, macro_context: MacroContext, declarations: DeclarationResolutionContext | None
+) -> str | None: ...
+def mask_capture_noise(text: str) -> str: ...
 def assemble_project(
     *,
     inputs: CompileInputsView,
@@ -1160,6 +1191,104 @@ def build_discovered_project_inputs(
     sql_analysis_enabled: bool,
     extract_output_column_locations: bool = True,
 ) -> DiscoveredProjectInputs: ...
+def validate_named_target_schema_strategy(
+    *, discovered_inputs: DiscoveredProjectInputs, adapter: BaseAdapter, selected_target: str | None
+) -> None: ...
+def validate_managed_loader_target_isolation(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    resolved_connection: dict[str, object] | None = None,
+) -> None: ...
+def validate_project_targets(*, adapter_name: str, project: CompiledProjectView) -> None: ...
+def validate_managed_write_schemas(
+    *, adapter: BaseAdapter, project: CompiledProjectView
+) -> None: ...
+def resolve_compile_analysis_selection(
+    *, options: CompilePipelineOptions, discovered_inputs: DiscoveredProjectInputs
+) -> CompileAnalysisSelection | None: ...
+def build_project_graph_from_compiled_project(*, project: CompiledProjectView) -> ProjectGraph: ...
+def plan_has_executable_work(
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+) -> bool: ...
+def build_static_pipeline_result(
+    *, context: StaticCommandContext, plan_output: PlanOutput
+) -> CompilePipelineResult: ...
+def run_compile_only_pipeline(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    options: CompilePipelineOptions,
+    on_progress: Callable[[str], None] | None = None,
+) -> CompilePipelineResult: ...
+def build_deferred_locations(
+    *,
+    project: CompiledProjectView,
+    deferred_target_config: TargetConfig,
+    effective_vars: dict[str, object],
+    default_schema: str | None,
+    default_database: str | None,
+    render_qualified_name: Callable[..., str | None],
+) -> dict[str, CompiledRelationLocation]: ...
+def resolve_deferred_target_config(
+    *, discovered_inputs: DiscoveredProjectInputs, defer_to: str, current_target_name: str | None
+) -> TargetConfig: ...
+def gather_deferred_relations(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    deferred_locations: dict[str, CompiledRelationLocation],
+) -> dict[str, RelationInfo]: ...
+def resolve_model_deferral_inputs(
+    *,
+    project: CompiledProjectView,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    connection: Any,
+    defer_to: str | None,
+) -> DeferralInputs: ...
+def build_python_relation_targets(
+    *,
+    adapter: BaseAdapter,
+    project: CompiledProjectView,
+    plan_output: PlanOutput,
+    required_refs: frozenset[SqlResourceRef] | None = None,
+) -> dict[SqlResourceRef, str]: ...
+def build_project_relation_targets(
+    *, adapter: BaseAdapter, plan_output: PlanOutput
+) -> dict[SqlResourceRef, str] | None: ...
+def resolve_diff_model_names(
+    *, project: CompiledProjectView, select: tuple[str, ...], exclude: tuple[str, ...]
+) -> tuple[str, ...]: ...
+def run_diff_pipeline(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    from_target: str,
+    to_target: str,
+    resolved_connection: dict[str, object],
+    no_sql_validation: bool,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    cli_vars: dict[str, object] | None = None,
+    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
+) -> tuple[CompiledProjectView, CompiledProjectView, tuple[str, ...]]: ...
+def python_read_source_names_for(
+    *, discovered_inputs: DiscoveredProjectInputs, python_node_names: frozenset[str]
+) -> frozenset[str]: ...
+def build_python_run_plan_outputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    plan_output: PlanOutput,
+    run_selection: PythonSqlRunSelection | None,
+    selected_python_node_names: frozenset[str],
+) -> PythonRunPlanOutputs: ...
+def build_python_plan_entries(
+    *,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    python_graph: PythonNodeGraph,
+    previous_identities: dict[tuple[str, str], Fingerprint] | None = None,
+) -> tuple[PythonPlanEntry, ...]: ...
 def compile_project_phase(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -1426,9 +1555,6 @@ def normalize_typed_sql_value(
 def model_header_declarations(
     header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
 ) -> tuple[tuple[object, ...], tuple[object, ...]]: ...
-def deferred_target_segments(
-    template: str, logical: str, context_keys: list[str], variables: list[str], /
-) -> list[tuple[bool, str]]: ...
 def unknown_mapping_keys(
     keys: list[tuple[str, bool]], allowed: list[str], /
 ) -> tuple[str, str] | None: ...
@@ -1783,6 +1909,22 @@ def _oracle_cte_fact_recovery(
 ) -> tuple[str | None, list[tuple[str, str]], list[tuple[str, str]], list[str], list[str]]: ...
 
 # Native analysis: semantic completion.
+def semantic_shapes(*, project: Any, profile: Any | None = None) -> dict[str, dict[str, str]]: ...
+def published_model_shape(
+    *, model: Any, columns: dict[str, str], inputs: dict[str, dict[str, str]], profile: Any
+) -> dict[str, str]: ...
+def model_binding_inputs(
+    model: Any, shapes: dict[str, dict[str, str]], /
+) -> dict[str, dict[str, str]]: ...
+def binding_relation_names(references: Sequence[Any], /) -> frozenset[str]: ...
+def semantic_coverage(project: Any, /) -> dict[str, tuple[str, ...]]: ...
+def source_binding_diagnostics(
+    *, project: Any, columns: Mapping[str, Any], profile: Any, selected_keys: frozenset[Any]
+) -> tuple[Any, ...]: ...
+def known_function_names(functions: Sequence[Any], /) -> tuple[str, ...]: ...
+def known_declared_types(
+    *, functions: Sequence[Any], column_types: Mapping[str, Mapping[str, str]]
+) -> tuple[str, ...]: ...
 def complete_semantic_project(
     *,
     project: Any,

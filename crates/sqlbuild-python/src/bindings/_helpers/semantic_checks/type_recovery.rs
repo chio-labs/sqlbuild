@@ -15,10 +15,12 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
+use crate::bindings::_helpers::semantic_checks::inputs::revalidation_request;
 use crate::bindings::_helpers::semantic_checks::session_facts::{
     column_names, session_model_facts,
 };
 use crate::bindings::_helpers::semantic_checks::stage_objects::StageClasses;
+use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 use crate::bindings::types::CompilerDetach;
 
 const UNCHANGED: &str = "unchanged";
@@ -283,7 +285,7 @@ fn revalidated<'py>(
         return Ok(Vec::new());
     }
     let py: Python<'py> = classes.py();
-    let shapes: Bound<'py, PyAny> = classes.inputs.call_method1("shapes", (project,))?;
+    let shapes: Bound<'py, PyDict> = project_shapes(project, None)?;
     let unknown: Bound<'py, PyDict> = PyDict::new(py);
     for item in shapes.call_method0("items")?.try_iter()? {
         let (name, columns): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
@@ -301,14 +303,8 @@ fn revalidated<'py>(
     let project_models: Bound<'py, PyAny> = project.getattr("models")?;
     let mut revised: Vec<Vec<RevisedBinding>> = Vec::with_capacity(models.len());
     for index in models {
-        let request: Bound<'py, PyAny> = classes.call(
-            &classes.inputs.getattr("revalidation_request")?,
-            &[
-                ("project", project),
-                ("model", &project_models.get_item(*index)?),
-                ("shapes", &unknown.clone().into_any()),
-            ],
-        )?;
+        let request: Bound<'py, PyAny> =
+            revalidation_request(project, &project_models.get_item(*index)?, &unknown)?;
         let result: Bound<'py, PyAny> = classes
             .call(
                 &classes.schema_validations,

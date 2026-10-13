@@ -6,6 +6,10 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any, TextIO
 
+from sqlbuild._native import (
+    build_project_relation_targets,
+    build_python_relation_targets,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_lifecycle_selection import (
     python_node_result_names,
@@ -22,10 +26,6 @@ from sqlbuild.cli.commands.models import DirectLifecycleCallbacks
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.pipeline.main.project_relation_targets import (
-    build_project_relation_targets,
-)
-from sqlbuild.compiler.pipeline.main.relation_targets import build_python_relation_targets
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.selection.loader_dag import build_intermediate_source_map
 from sqlbuild.compiler.planner.models import PlanOutput

@@ -4,7 +4,8 @@ use ruff_python_ast::{Expr, ModModule, Stmt, StmtFunctionDef};
 use ruff_text_size::Ranged;
 use std::collections::HashSet;
 
-use crate::macro_modules::_helpers::python_nodes::PyNode;
+use crate::cpython_tree::main::walk_breadth_first::walk_breadth_first;
+use crate::cpython_tree::models::CpythonNode;
 use crate::macro_modules::constants::PRIVATE_PREFIX;
 
 /// The first public name a non-function top-level statement declares, if any.
@@ -18,8 +19,8 @@ pub(crate) fn public_non_function_declaration(statement: &Stmt) -> Option<String
         Stmt::Assign(assign) => assign
             .targets
             .iter()
-            .flat_map(|target| PyNode::Expr(target).walk())
-            .filter_map(PyNode::name)
+            .flat_map(|target| walk_breadth_first(vec![CpythonNode::Expr(target)]))
+            .filter_map(|node| node.name())
             .map(|name| name.id.as_str().to_owned())
             .collect(),
         Stmt::AnnAssign(assign) => match assign.target.as_ref() {

@@ -1,6 +1,6 @@
 """Public semantic-check coverage report."""
 
-from sqlbuild.compiler.compile._helpers.assembly.semantic_coverage import semantic_coverage
+from sqlbuild._native import semantic_coverage
 from sqlbuild.compiler.compile.types import CompiledProjectView
 
 

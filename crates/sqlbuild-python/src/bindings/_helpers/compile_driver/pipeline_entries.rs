@@ -1,0 +1,217 @@
+//! Small pipeline entry points: analysis selection, project graphs and pipeline results.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyFloat};
+use pyo3::{pyfunction, wrap_pyfunction};
+
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
+const PLANNER_MODELS_MODULE: &str = "sqlbuild.compiler.planner.models";
+const NATIVE_MODULE: &str = "sqlbuild._native";
+/// Discovered Python node functions whose selectors need the Python graph.
+const PYTHON_NODE_FUNCTIONS: [&str; 4] = [
+    "loader_functions",
+    "task_functions",
+    "asset_functions",
+    "check_functions",
+];
+/// Plan entry lists that are runtime work.
+const PLAN_WORK_ENTRIES: [&str; 6] = [
+    "model_entries",
+    "seed_entries",
+    "source_load_entries",
+    "function_entries",
+    "audit_entries",
+    "test_entries",
+];
+
+/// Limit analysis when selectors cannot resolve through Python graph nodes.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn resolve_compile_analysis_selection<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "resolve_compile_analysis_selection",
+        options,
+        (&["options", "discovered_inputs"], &[]),
+    )?;
+    compile_analysis_selection(
+        &arguments.value("options")?,
+        &arguments.value("discovered_inputs")?,
+    )
+}
+
+/// `resolve_compile_analysis_selection` with its arguments.
+pub(crate) fn compile_analysis_selection<'py>(
+    options: &Bound<'py, PyAny>,
+    discovered: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = options.py();
+    let mut has_python_nodes: bool = false;
+    for name in PYTHON_NODE_FUNCTIONS {
+        if discovered.getattr(name)?.is_truthy()? {
+            has_python_nodes = true;
+            break;
+        }
+    }
+    let selection: Bound<'py, PyAny> =
+        imported(py, COMPILE_MODELS_MODULE, "CompileAnalysisSelection")?;
+    let no_cache: Bound<'py, PyAny> = options.getattr("no_cache")?;
+    if (options
+        .getattr("resolve_python_run_selectors")?
+        .is_truthy()?
+        && has_python_nodes)
+        || options
+            .getattr("sql_test_selection")?
+            .getattr("names")?
+            .is_truthy()?
+    {
+        return call_with(&selection, &[("no_cache", no_cache)]);
+    }
+    call_with(
+        &selection,
+        &[
+            ("select", options.getattr("select")?),
+            ("exclude", options.getattr("exclude")?),
+            ("auto_load_sources", options.getattr("auto_load_sources")?),
+            ("no_cache", no_cache),
+        ],
+    )
+}
+
+/// Build a static dependency graph for an already-compiled project.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn build_project_graph_from_compiled_project<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "build_project_graph_from_compiled_project",
+        options,
+        (&["project"], &[]),
+    )?;
+    project_graph(&arguments.value("project")?)
+}
+
+/// The project's natively held graph; dict views are built only when a boundary reads them.
+pub(crate) fn project_graph<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &imported(project.py(), PIPELINE_MODELS_MODULE, "ProjectGraph")?,
+        &[
+            ("project", project.clone()),
+            ("native", project.getattr("lineage_graph")?),
+        ],
+    )
+}
+
+/// Return whether a planned build has runtime work to execute.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn plan_has_executable_work<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<bool> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "plan_has_executable_work",
+        options,
+        (&["plan"], &["python_plan_entries"]),
+    )?;
+    let plan: Bound<'py, PyAny> = arguments.value("plan")?;
+    for name in PLAN_WORK_ENTRIES {
+        if plan.getattr(name)?.is_truthy()? {
+            return Ok(true);
+        }
+    }
+    if !arguments.passed("python_plan_entries")? {
+        return Ok(false);
+    }
+    arguments.value("python_plan_entries")?.is_truthy()
+}
+
+/// Wrap a focused command projection in the established pipeline envelope.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn build_static_pipeline_result<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "build_static_pipeline_result",
+        options,
+        (&["context", "plan_output"], &[]),
+    )?;
+    let context: Bound<'py, PyAny> = arguments.value("context")?;
+    call_with(
+        &imported(py, PIPELINE_MODELS_MODULE, "CompilePipelineResult")?,
+        &[
+            ("project", context.getattr("project")?),
+            ("plan_output", arguments.value("plan_output")?),
+            ("compile_seconds", context.getattr("compile_seconds")?),
+            ("planning_seconds", PyFloat::new(py, 0.0).into_any()),
+        ],
+    )
+}
+
+/// Compile a project for consumers that construct their own focused plans.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn run_compile_only_pipeline<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "run_compile_only_pipeline",
+        options,
+        (
+            &["discovered_inputs", "adapter", "options"],
+            &["on_progress"],
+        ),
+    )?;
+    let compiled: Bound<'py, PyAny> = call_with(
+        &imported(py, NATIVE_MODULE, "compile_project_phase")?,
+        &[
+            ("discovered_inputs", arguments.value("discovered_inputs")?),
+            ("adapter", arguments.value("adapter")?),
+            ("options", arguments.value("options")?),
+            ("on_progress", arguments.value("on_progress")?),
+        ],
+    )?;
+    call_with(
+        &imported(py, PIPELINE_MODELS_MODULE, "CompilePipelineResult")?,
+        &[
+            ("project", compiled.getattr("project")?),
+            (
+                "plan_output",
+                imported(py, PLANNER_MODELS_MODULE, "PlanOutput")?.call0()?,
+            ),
+            ("compile_seconds", compiled.getattr("compile_seconds")?),
+            ("planning_seconds", PyFloat::new(py, 0.0).into_any()),
+        ],
+    )
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(
+        resolve_compile_analysis_selection,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        build_project_graph_from_compiled_project,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(plan_has_executable_work, module)?)?;
+    module.add_function(wrap_pyfunction!(build_static_pipeline_result, module)?)?;
+    module.add_function(wrap_pyfunction!(run_compile_only_pipeline, module)?)
+}

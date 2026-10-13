@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from sqlbuild._native import build_project_relation_targets
 from sqlbuild.cli.commands._helpers.check.core import (
     build_check_relation_targets,
     load_results_by_loader_name,
@@ -23,7 +24,6 @@ from sqlbuild.cli.progress.classes.native_progress_projector import (
     current_native_progress_projector,
 )
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
-from sqlbuild.compiler.pipeline.main.project_relation_targets import build_project_relation_targets
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.python_nodes.main.graph import build_discovered_python_node_graph

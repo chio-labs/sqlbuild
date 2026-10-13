@@ -2,3 +2,4 @@
 
 pub mod analysis_session;
 pub mod project;
+pub mod target_checks;

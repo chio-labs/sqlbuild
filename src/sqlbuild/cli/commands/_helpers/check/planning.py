@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import build_static_pipeline_result
 from sqlbuild.cli.commands._helpers.check.core import (
     check_dependency_closure,
     resolve_selected_check_names,
@@ -15,7 +16,6 @@ from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
 from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_unit_test_selectors
 from sqlbuild.compiler.pipeline.main.static_command import compile_static_command_context
-from sqlbuild.compiler.pipeline.main.static_result import build_static_pipeline_result
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,

@@ -51,7 +51,6 @@ from sqlbuild.compiler.discovery.models import (
 from sqlbuild.compiler.macro_bridge.constants import (
     GENERATED_REFERENCE_MARKERS,
 )
-from sqlbuild.compiler.macro_bridge.main._macro_store_tokens import macro_store_tokens
 from sqlbuild.compiler.macro_bridge.main.active_macro_bridge import active_macro_bridge
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
@@ -530,7 +529,10 @@ def macro_expansion_classes() -> dict[str, object]:
         "ref_functions": {
             kind.value: function for function, kind in typed_reference_kinds().items()
         },
-        "store_tokens": macro_store_tokens(),
+        "store_tokens": {
+            "macro_token": _native.macro_store_token,
+            "context_token": _native.context_store_token,
+        },
         "relation_renderer": RELATION_RENDERER,
         "invocation_context": macro_invocation_context,
         "generated": {

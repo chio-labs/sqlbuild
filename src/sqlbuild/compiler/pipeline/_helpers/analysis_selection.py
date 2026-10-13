@@ -49,31 +49,6 @@ def apply_unit_test_selectors(
     )
 
 
-def resolve_compile_analysis_selection(
-    *,
-    options: CompilePipelineOptions,
-    discovered_inputs: DiscoveredProjectInputs,
-) -> CompileAnalysisSelection | None:
-    """Limit analysis when selectors cannot resolve through Python graph nodes."""
-
-    has_python_nodes: bool = bool(
-        discovered_inputs.loader_functions
-        or discovered_inputs.task_functions
-        or discovered_inputs.asset_functions
-        or discovered_inputs.check_functions
-    )
-    if (
-        options.resolve_python_run_selectors and has_python_nodes
-    ) or options.sql_test_selection.names:
-        return CompileAnalysisSelection(no_cache=options.no_cache)
-    return CompileAnalysisSelection(
-        select=options.select,
-        exclude=options.exclude,
-        auto_load_sources=options.auto_load_sources,
-        no_cache=options.no_cache,
-    )
-
-
 def resolve_configured_rule_selection(
     *,
     options: CompilePipelineOptions,
@@ -84,9 +59,11 @@ def resolve_configured_rule_selection(
 
     if not options.sql_test_selection.models_selected:
         return frozenset()
-    analysis_selection: CompileAnalysisSelection | None = resolve_compile_analysis_selection(
-        options=options,
-        discovered_inputs=discovered_inputs,
+    analysis_selection: CompileAnalysisSelection | None = (
+        _native.resolve_compile_analysis_selection(
+            options=options,
+            discovered_inputs=discovered_inputs,
+        )
     )
     if analysis_selection is None or (
         not analysis_selection.select and not analysis_selection.exclude

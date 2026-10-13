@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
+from typing import Any, cast
 
-from sqlbuild.compiler.compile.models import CompactLineageFacts
+from sqlbuild.compiler.compile.models import CompactLineageFacts, DeclarationScopeBuild
 from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
 
 HELPERS_MODULE: str = "tests.unit.src.sqlbuild.compiler.frontier.helpers"
@@ -119,3 +120,14 @@ def order_line() -> OrderLine:
     """Return one neutral order line."""
 
     return OrderLine(order_id=7, status=OrderStatus.PLACED, path=PurePosixPath("models/a.sql"))
+
+
+def declaration_scope_build() -> DeclarationScopeBuild:
+    """Return a declaration scope build whose process-local scan cache is not captured."""
+
+    return DeclarationScopeBuild(
+        loaded_macros={},
+        index=cast(Any, "orders_index"),
+        resolver=cast(Any, "orders_resolver"),
+        sql_test_scans=cast(Any, object()),
+    )

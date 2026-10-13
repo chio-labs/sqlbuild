@@ -44,7 +44,6 @@ from sqlbuild.compiler.compile._helpers.analysis.syntax_checks import model_plac
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
 )
-from sqlbuild.compiler.compile.classes.python_model_analysis import PythonModelAnalysis
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     AnalysisCacheContext,
@@ -663,15 +662,14 @@ def analyse_natively(
 def duplicate_analysed_model_names(*, monkeypatch: pytest.MonkeyPatch) -> None:
     """Name every analysed model after the first, an invariant discovery guarantees (D007)."""
 
-    original: Callable[[PythonModelAnalysis], list[tuple[object, ...]]] = (
-        PythonModelAnalysis.model_rows
-    )
+    original: Callable[..., Any] = native_module.start_model_analysis_session
 
-    def renamed(analysis: PythonModelAnalysis) -> list[tuple[object, ...]]:
-        rows: list[tuple[object, ...]] = original(analysis)
-        return [(rows[0][0], *row[1:]) for row in rows]
+    def renamed(catalog: object, request: tuple[object, ...], *options: Any) -> Any:
+        rows: list[tuple[object, ...]] = cast(list[tuple[object, ...]], request[-1])
+        named: list[tuple[object, ...]] = [(rows[0][0], *row[1:]) for row in rows]
+        return original(catalog, (*request[:-1], named), *options)
 
-    monkeypatch.setattr(PythonModelAnalysis, "model_rows", renamed)
+    monkeypatch.setattr(native_module, "start_model_analysis_session", renamed)
 
 
 def custom_nullability_rule(arguments: tuple[InferredNullability, ...]) -> InferredNullability:

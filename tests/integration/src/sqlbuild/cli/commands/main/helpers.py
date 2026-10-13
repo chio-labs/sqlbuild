@@ -13,6 +13,7 @@ from typing import Any, cast
 import duckdb
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
@@ -27,7 +28,6 @@ from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCom
 from sqlbuild.cli.commands.main.entrypoint.entry import main
 from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.compiler.analysis_session.models import NativeQueryColumns
-from sqlbuild.compiler.compile._helpers.assembly import source_bindings as source_bindings_module
 from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_SUFFIX
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
@@ -636,15 +636,19 @@ def record_source_rebinding_analyses(monkeypatch: pytest.MonkeyPatch) -> list[st
 
     analysed: list[str] = []
     original: Callable[..., tuple[NativeQueryColumns, ...]] = (
-        source_bindings_module.infer_native_query_columns
+        native_module.infer_native_query_columns
     )
 
     def recording(**kwargs: Any) -> tuple[NativeQueryColumns, ...]:
-        analysed.extend(query.sql for query in kwargs["queries"])
+        analysed.extend(query.sql for query in filter(_reanalysis, kwargs["queries"]))
         return original(**kwargs)
 
-    monkeypatch.setattr(source_bindings_module, "infer_native_query_columns", recording)
+    monkeypatch.setattr(native_module, "infer_native_query_columns", recording)
     return analysed
+
+
+def _reanalysis(query: Any) -> bool:
+    return query.mode == "reanalysis"
 
 
 def eager_output_column_scans(*, capture_dir: Path) -> tuple[int, int]:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.pipeline.main.plan_work import plan_has_executable_work
+from sqlbuild._native import plan_has_executable_work
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
     build_failed_sqlbuild_model_names,

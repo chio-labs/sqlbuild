@@ -13,7 +13,10 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
-const PYTHON_ANALYSIS_MODULE: &str = "sqlbuild.compiler.compile.classes.python_model_analysis";
+const ANALYSIS_CACHE_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.cache";
+const CURSOR_INTRINSICS_MODULE: &str =
+    "sqlbuild.compiler.compile._helpers.render.cursor_intrinsics";
+const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const CODE_IDENTITY_MODULE: &str = "sqlbuild.compiler.frontier.main.compiled_code_identity";
 const LOG_DEBUG_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
@@ -46,18 +49,7 @@ fn analyze_native_model_sql<'py>(
     }
     let profile: Bound<'py, PyAny> = request.getattr("inference_profile")?;
     let catalog: Bound<'py, PyAny> = profile.getattr("binding_catalog")?;
-    let python: Bound<'py, PyAny> = {
-        let arguments: Bound<'py, PyDict> = PyDict::new(py);
-        arguments.set_item("model_inputs", &model_inputs)?;
-        arguments.set_item("inference_profile", &profile)?;
-        arguments.set_item(
-            "complete_binding_schemas",
-            request.getattr("complete_binding_schemas")?,
-        )?;
-        py.import(PYTHON_ANALYSIS_MODULE)?
-            .getattr("PythonModelAnalysis")?
-            .call((), Some(&arguments))?
-    };
+    let python: Vec<Bound<'py, PyAny>> = model_inputs.try_iter()?.collect::<PyResult<_>>()?;
     let (rules, adapter_rules) = nullability_rules(&profile)?;
     let session_request: Bound<'py, PyAny> = session_request(&request, &python, &catalog, rules)?;
     let (cache, adapter): (Bound<'py, PyAny>, Bound<'py, PyAny>) = match adapter_rules {
@@ -84,7 +76,7 @@ fn analyze_native_model_sql<'py>(
 /// The session request row, in the order the native session reads it.
 fn session_request<'py>(
     request: &Bound<'py, PyAny>,
-    python: &Bound<'py, PyAny>,
+    python: &[Bound<'py, PyAny>],
     catalog: &Bound<'py, PyAny>,
     rules: Vec<(String, String)>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -111,7 +103,7 @@ fn session_request<'py>(
         shape_rows(&request.getattr("complete_binding_schemas")?)?.into_bound_py_any(py)?,
         shape_rows(&catalog.getattr("schemas")?)?.into_bound_py_any(py)?,
         families.into_bound_py_any(py)?,
-        python.call_method0("model_rows")?,
+        model_rows(py, python)?,
     ];
     Ok(PyTuple::new(py, items)?.into_any())
 }
@@ -151,7 +143,7 @@ fn analysis_store<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
 /// Run and finish the session, leaving Python's catalog and metrics as its analysis did.
 fn run_session<'py>(
     request: &Bound<'py, PyAny>,
-    (python, catalog): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (python, catalog): (&[Bound<'py, PyAny>], &Bound<'py, PyAny>),
     session: &Bound<'py, PyAny>,
     analyses_class: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -186,9 +178,8 @@ fn run_session<'py>(
     record_cache(python, session)?;
     let positions: Bound<'py, PyDict> = PyDict::new(py);
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for analysed in python.getattr("requests")?.try_iter()? {
-        let name: Bound<'py, PyAny> = analysed?
-            .getattr("model_input")?
+    for model_input in python {
+        let name: Bound<'py, PyAny> = model_input
             .getattr("model_file")?
             .getattr("file_path")?
             .getattr("stem")?;
@@ -252,32 +243,111 @@ fn record_catalog_changes<'py>(
     Ok(())
 }
 
-fn record_cache(python: &Bound<'_, PyAny>, session: &Bound<'_, PyAny>) -> PyResult<()> {
+fn record_cache(python: &[Bound<'_, PyAny>], session: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py: Python<'_> = session.py();
     let stats: Bound<'_, PyAny> = session.getattr("cache_stats")?;
     if stats.is_none() {
-        python.call_method0("record_uncached")?;
-        return Ok(());
+        return record_metrics(py, (0, 0, python.len()));
     }
-    let (hits, misses, _, failure): (
-        Bound<'_, PyAny>,
-        Bound<'_, PyAny>,
-        Bound<'_, PyAny>,
-        Bound<'_, PyAny>,
-    ) = stats.extract()?;
+    let (hits, misses, _, failure): (usize, usize, usize, Bound<'_, PyAny>) = stats.extract()?;
     if !failure.is_none() {
-        log_debug(python.py(), STORE_FAILURE_MESSAGE, &failure)?;
+        log_debug(py, STORE_FAILURE_MESSAGE, &failure)?;
     }
-    if hits.add(&misses)?.eq(0)? {
-        python.call_method0("record_uncached")?;
-        return Ok(());
+    if hits + misses == 0 {
+        return record_metrics(py, (0, 0, python.len()));
     }
-    let arguments: Bound<'_, PyDict> = PyDict::new(python.py());
-    arguments.set_item("hits", hits)?;
+    record_metrics(py, (hits, misses, 0))
+}
+
+/// Record the analysis cache entries a native session read, missed and bypassed.
+fn record_metrics(py: Python<'_>, (hits, misses, bypasses): (usize, usize, usize)) -> PyResult<()> {
+    let arguments: Bound<'_, PyDict> = PyDict::new(py);
+    arguments.set_item("batch_hits", 0)?;
+    arguments.set_item("entry_hits", hits)?;
     arguments.set_item("misses", misses)?;
-    python
-        .getattr("record_cached")?
+    arguments.set_item("bypasses", bypasses)?;
+    py.import(ANALYSIS_CACHE_MODULE)?
+        .getattr("record_analysis_cache_metrics")?
         .call((), Some(&arguments))?;
     Ok(())
+}
+
+/// Each model's native request row, in analysis order.
+fn model_rows<'py>(
+    py: Python<'py>,
+    model_inputs: &[Bound<'py, PyAny>],
+) -> PyResult<Bound<'py, PyAny>> {
+    let cursor_sql: Bound<'py, PyAny> = py
+        .import(CURSOR_INTRINSICS_MODULE)?
+        .getattr("cursor_intrinsics_analysis_sql")?;
+    let planner = py.import(PLANNER_TYPES_MODULE)?;
+    let enforced: Bound<'py, PyAny> = planner.getattr("ContractPolicy")?.getattr("ENFORCED")?;
+    let snapshot: Bound<'py, PyAny> = planner
+        .getattr("MaterializationType")?
+        .getattr("SNAPSHOT")?;
+    let mut rows: Vec<Bound<'py, PyAny>> = Vec::with_capacity(model_inputs.len());
+    for model_input in model_inputs {
+        let values: Bound<'py, PyAny> = model_input.getattr("config")?.getattr("values")?;
+        let get = |key: &str| values.call_method1("get", (key,));
+        let arguments: Bound<'py, PyDict> = PyDict::new(py);
+        arguments.set_item("sql", model_input.getattr("query_sql")?)?;
+        arguments.set_item("cursor_type", get("cursor_type")?)?;
+        let query_sql: Bound<'py, PyAny> = cursor_sql.call((), Some(&arguments))?;
+        let mut placeholders: Vec<(String, String)> = Vec::new();
+        let raw: Bound<'py, PyAny> = get("placeholders")?;
+        if raw.is_instance_of::<PyDict>() {
+            for item in raw.call_method0("items")?.try_iter()? {
+                let (key, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
+                placeholders.push((key.str()?.extract()?, value.str()?.extract()?));
+            }
+        }
+        let mut references: Vec<(String, String)> = Vec::new();
+        for row in model_input.getattr("reference_rows")?.try_iter()? {
+            let row: Bound<'py, PyAny> = row?;
+            references.push((
+                row.get_item(0)?.str()?.extract()?,
+                row.get_item(1)?.extract()?,
+            ));
+        }
+        let entry: Bound<'py, PyAny> = model_input.getattr("schema_entry")?;
+        let recovers: bool = get("contract")?.eq(&enforced)?
+            || (!entry.is_none() && entry.getattr("type_enforcement")?.is_truthy()?);
+        let snapshot_columns: Option<(String, String)> = if get("materialized")?.eq(&snapshot)? {
+            Some((
+                or_default(&get("valid_from_column")?, "valid_from")?,
+                or_default(&get("valid_to_column")?, "valid_to")?,
+            ))
+        } else {
+            None
+        };
+        let families = if entry.is_none() {
+            Vec::new()
+        } else {
+            family_rows(&entry.getattr("dynamic_columns")?)?
+        };
+        let row: Vec<Bound<'py, PyAny>> = vec![
+            model_input
+                .getattr("model_file")?
+                .getattr("file_path")?
+                .getattr("stem")?,
+            query_sql,
+            placeholders.into_bound_py_any(py)?,
+            references.into_bound_py_any(py)?,
+            recovers.into_bound_py_any(py)?,
+            snapshot_columns.into_bound_py_any(py)?,
+            families.into_bound_py_any(py)?,
+        ];
+        rows.push(PyTuple::new(py, row)?.into_any());
+    }
+    Ok(PyList::new(py, rows)?.into_any())
+}
+
+/// `str(value or default)`.
+fn or_default(value: &Bound<'_, PyAny>, default: &str) -> PyResult<String> {
+    if value.is_truthy()? {
+        return value.str()?.extract();
+    }
+    Ok(default.to_owned())
 }
 
 fn log_debug(py: Python<'_>, message: &str, failure: &Bound<'_, PyAny>) -> PyResult<()> {

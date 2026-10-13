@@ -4,6 +4,12 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import (
+    validate_managed_loader_target_isolation,
+    validate_managed_write_schemas,
+    validate_named_target_schema_strategy,
+    validate_project_targets,
+)
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
@@ -17,12 +23,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSourceFile
-from sqlbuild.compiler.pipeline._helpers.target_validation import (
-    validate_managed_loader_target_isolation,
-    validate_managed_write_schemas,
-    validate_named_target_schema_strategy,
-    validate_project_targets,
-)
 from sqlbuild.spec.contracts.models import (
     LocalConfig,
     LocalTargetConfig,

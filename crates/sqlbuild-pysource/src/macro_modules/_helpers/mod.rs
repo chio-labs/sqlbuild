@@ -3,4 +3,3 @@ pub(crate) mod function_calls;
 pub(crate) mod module_analysis;
 pub(crate) mod module_names;
 pub(crate) mod project_analysis;
-pub(crate) mod python_nodes;

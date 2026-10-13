@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 124254
+remaining_lines = 120834
 
 [[stays]]
 path = "executor"
@@ -211,14 +211,6 @@ note = "Tolerant scope discovery records a failing declaration category as a fau
 [[handled_native_errors]]
 location = "compiler/planner/_helpers/sql_tests/fixture_formatting.py::format_redundant_fixture_nulls"
 note = "A test file that no longer parses is left unformatted, as before; no Python implementation runs."
-
-[[handled_native_errors]]
-location = "compiler/macro_bridge/_helpers/store_keys.py::macro_store_token"
-note = "A macro without a stable key is not stored; no Python implementation runs."
-
-[[handled_native_errors]]
-location = "compiler/macro_bridge/_helpers/store_keys.py::context_store_token"
-note = "A context without a stable key is not stored; no Python implementation runs."
 
 [[handled_native_errors]]
 location = "lint/_helpers/native_sql.py::_native_responses"

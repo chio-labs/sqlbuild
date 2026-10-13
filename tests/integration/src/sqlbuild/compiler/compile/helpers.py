@@ -14,7 +14,13 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    build_compile_inputs,
+    compile_frontier,
+    discover_project_inputs,
+    mask_capture_noise,
+    render_stage_capture,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile._helpers.render.macros import expand_sql_macros_result
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -26,12 +32,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
-from sqlbuild.compiler.frontier.constants import (
-    STAGE_CAPTURE_INVOCATION_ID_MASK,
-    STAGE_CAPTURE_INVOCATION_ID_PATTERN,
-)
-from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.macro_bridge.classes.macro_bridge import MacroBridge
 from sqlbuild.compiler.macro_bridge.constants import ACTIVE_MACRO_BRIDGE
@@ -255,9 +255,8 @@ def render_compile_inputs(*, project_dir: Path) -> CompileInputsView:
 def comparable_capture(inputs: CompileInputsView) -> str:
     """Render compile inputs as canonical JSON without the per-run identifier."""
 
-    return STAGE_CAPTURE_INVOCATION_ID_PATTERN.sub(
-        STAGE_CAPTURE_INVOCATION_ID_MASK,
-        _RUN_ID_PATTERN.sub('"run_id": "<run>"', render_stage_capture(inputs)),
+    return mask_capture_noise(
+        _RUN_ID_PATTERN.sub('"run_id": "<run>"', render_stage_capture(inputs))
     )
 
 

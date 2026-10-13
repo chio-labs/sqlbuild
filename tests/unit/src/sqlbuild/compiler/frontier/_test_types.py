@@ -28,23 +28,11 @@ class StageCaptureOrderTestCase:
 
 
 @dataclass(frozen=True)
-class UnorderedAttributeTestCase:
-    """Two fill orders for a memo map and an ordered map, and whether captures match."""
-
-    description: str
-    first_memo_keys: tuple[str, ...]
-    second_memo_keys: tuple[str, ...]
-    first_ordered_keys: tuple[str, ...]
-    second_ordered_keys: tuple[str, ...]
-    expected_identical: bool
-
-
-@dataclass(frozen=True)
 class OmittedFieldTestCase:
-    """Dataclass fields left out of a capture, and the capture that remains."""
+    """A dataclass value, and its capture without the fields declared omitted."""
 
     description: str
-    omitted: frozenset[str]
+    value: Callable[[], object]
     expected_capture: object
 
 

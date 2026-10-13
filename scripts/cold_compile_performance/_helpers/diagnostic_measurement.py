@@ -9,12 +9,8 @@ from typing import Any, cast
 
 import sqlbuild._native as _native
 from scripts.cold_compile_performance.exceptions import CompileBenchmarkFixtureError
-from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
-    get_authored_binding_location,
-)
 from sqlbuild.compiler.sql_analysis.models import SqlBindingDiagnostic
 from sqlbuild.compiler.sql_analysis.types import NativeDiagnosticRow, NativePositionsModule
-from sqlbuild.spec.contracts.models import SourceLocation
 
 
 def measure_diagnostic_compile(
@@ -63,16 +59,24 @@ def measure_position_mapping(*, count: int, lines: int = 4000) -> float:
     diagnostic: SqlBindingDiagnostic = SqlBindingDiagnostic(
         code="B217", message="Incompatible comparison", start=offset, end=offset + len("amount > 5")
     )
+    mapper: Any = cast(NativePositionsModule, _native).BindingPositions(
+        {
+            "authored": original,
+            "query": original,
+            "expanded": original,
+            "cleaned": normalized,
+            "passes": [],
+        }
+    )
     started: float = perf_counter()
     for _ in range(count):
-        location: SourceLocation | None = get_authored_binding_location(
-            path=Path("models/orders.sql"),
-            authored_sql=original,
-            authored_query_sql=original,
-            cleaned_sql=normalized,
-            diagnostic=diagnostic,
+        line, _column = mapper.position(
+            start=diagnostic.start,
+            line=diagnostic.line,
+            column=diagnostic.column,
+            message=diagnostic.message,
         )
-        if location is None or location.line != lines + 2:
+        if line != lines + 2:
             raise CompileBenchmarkFixtureError(
                 "mapping must preserve the authored comparison location"
             )
