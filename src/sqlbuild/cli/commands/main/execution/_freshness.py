@@ -10,6 +10,7 @@ from typing import Any
 from sqlbuild._native import (
     build_project_graph,
     discover_project_inputs,
+    resolve_project_connection_config,
     write_execution_json_output,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -25,9 +26,6 @@ from sqlbuild.cli.commands._helpers.freshness.state import (
     read_direct_freshness_state_for_command,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands._helpers.runtime.connection import (
-    resolve_project_connection_config,
-)
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import (
     FreshnessCommandRequest,

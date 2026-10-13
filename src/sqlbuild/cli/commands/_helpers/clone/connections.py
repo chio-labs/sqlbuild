@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from sqlbuild._native import PlanningProgressReporter
-from sqlbuild.cli.commands._helpers.runtime.connection import (
+from sqlbuild._native import (
+    PlanningProgressReporter,
     resolve_target_connection_config,
 )
 from sqlbuild.cli.commands.models import (

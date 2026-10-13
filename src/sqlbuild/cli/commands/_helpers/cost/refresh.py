@@ -7,12 +7,10 @@ from sqlbuild._native import (
     discover_project_inputs,
     read_cost_run,
     resolve_cost_run,
+    resolve_project_connection_config,
     write_cost_run,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands._helpers.runtime.connection import (
-    resolve_project_connection_config,
-)
 from sqlbuild.cli.commands.constants import COST_HISTORY_SELECTOR, COST_LATEST_SELECTOR
 from sqlbuild.cli.commands.models import CostCommandRequest
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config

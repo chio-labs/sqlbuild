@@ -8,7 +8,7 @@ from io import StringIO
 import pytest
 
 from sqlbuild._native import run_scope_command
-from sqlbuild.cli.commands._helpers.runtime import adapter_context, connection
+from sqlbuild.cli.commands._helpers.runtime import adapter_context
 from sqlbuild.cli.commands.models import ScopeCommandRequest
 from sqlbuild.compiler.scopes.models import ScopeCompleteness, ScopeIndex
 from sqlbuild.presentation.main import supports_color as color_support
@@ -25,7 +25,6 @@ def test_given_offline_index_loader_when_running_then_connection_runtime_is_not_
     def fail(**_kwargs: object) -> None:
         pytest.fail("scope must not resolve adapters or warehouse credentials")
 
-    monkeypatch.setattr(connection, "resolve_project_connection_config", fail)
     monkeypatch.setattr(adapter_context, "resolve_adapter_connection_context", fail)
     exit_code: int = run_scope_command(
         request=ScopeCommandRequest(target="model:orders", json_output=True),

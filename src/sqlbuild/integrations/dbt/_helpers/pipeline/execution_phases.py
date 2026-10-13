@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild._native import ConnectionProgressReporter
+from sqlbuild._native import ConnectionProgressReporter, apply_command_warehouse
 from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
-from sqlbuild.cli.commands.main.execution.command_warehouse import apply_command_warehouse
 from sqlbuild.cli.commands.main.execution.connection_progress import (
     build_connection_progress_reporter,
 )

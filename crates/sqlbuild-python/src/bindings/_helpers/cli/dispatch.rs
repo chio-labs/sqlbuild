@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 
 const EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const ENTRY_MODELS_MODULE: &str = "sqlbuild.cli.entry.models";
-const WAREHOUSES_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouses";
+const WAREHOUSES_MODULE: &str = "sqlbuild._native";
 const WAREHOUSE_SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const LAUNCH_RECORD_MODULE: &str = "sqlbuild.cli.entry.main._withhold_launch_record";
 const DIFF_VALIDATION_MODULE: &str = "sqlbuild.cli.commands._helpers.diff.validation";

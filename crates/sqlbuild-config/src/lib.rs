@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod command_connection;
 pub(crate) mod constants;
 pub mod effective;
 pub mod errors;

@@ -26,7 +26,12 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
-from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
+from sqlbuild.cli.entry.models import (
+    AuthoredTargetWarehouse,
+    CompileCommandRequest,
+    CompileProfileFlags,
+    ResolvedWarehouse,
+)
 from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
@@ -233,6 +238,7 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
+from sqlbuild.spec.contracts.types import WarehouseGroup
 from sqlbuild.sql_values.models import SqlValue
 
 BUILD_IDENTITY: str
@@ -1290,6 +1296,63 @@ def run_skills_command(
     force: bool = False,
 ) -> int: ...
 def run_playground_command(request: PlaygroundCommandRequest) -> int: ...
+def validate_cli_warehouse(*, cli_warehouse: str | None, project_dir: Path) -> None: ...
+def find_target_group_warehouse(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    group: WarehouseGroup,
+) -> AuthoredTargetWarehouse | None: ...
+def resolve_command_warehouse(
+    *,
+    discovered_inputs: DiscoveredProjectInputs | None,
+    selected_target: str | None,
+    group: WarehouseGroup | None,
+    cli_warehouse: str | None,
+    connection_config: dict[str, object],
+    cli_vars: dict[str, object] | None = None,
+) -> ResolvedWarehouse: ...
+def apply_command_warehouse(
+    *,
+    config: dict[str, object],
+    adapter_name: str,
+    project_dir: Path | None,
+    discovered_inputs: DiscoveredProjectInputs | None,
+    selected_target: str | None,
+) -> dict[str, object]: ...
+def describe_connection_warehouse(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    connection_config: dict[str, object],
+) -> ResolvedWarehouse: ...
+def resolve_connection_config(
+    *,
+    raw_config: dict[str, object],
+    project_dir: Path,
+    adapter_name: str,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    cli_vars: dict[str, object] | None = None,
+    selected_target: str | None = None,
+) -> dict[str, object]: ...
+def resolve_project_connection_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+    require_connection: bool = True,
+) -> dict[str, object]: ...
+def resolve_target_connection_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+    target_name: str,
+    cli_vars: dict[str, object] | None = None,
+) -> dict[str, object]: ...
+def validate_preview_target(
+    *, discovered_inputs: DiscoveredProjectInputs, as_target: str | None, command_name: str
+) -> None: ...
 def run_debug_command(
     *,
     project_dir: Path | None = None,

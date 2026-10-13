@@ -21,18 +21,21 @@ use sqlbuild_core::debug_report::models::{
     DebugReport, DebugRuntime, WarehouseCheck,
 };
 
+use crate::bindings::_helpers::command_runtime::connection::project_connection_config;
+use crate::bindings::_helpers::command_runtime::runtime_errors::{
+    expected_resolution_error, resolution_message,
+};
+use crate::bindings::_helpers::command_runtime::warehouses::{
+    CommandScope, WarehouseInputs, apply_warehouse, command_scope, find_authored, resolve_warehouse,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
-const CONNECTION_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.connection";
-const WAREHOUSES_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouses";
 const SCOPE_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.warehouse_scope";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
-const CLI_ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild.compiler.compile.exceptions";
 const CONTRACT_TYPES_MODULE: &str = "sqlbuild.spec.contracts.types";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (
@@ -52,19 +55,6 @@ struct DebugContext<'py> {
     discovered_inputs: Bound<'py, PyAny>,
     selected_target: Bound<'py, PyAny>,
     adapter: Bound<'py, PyAny>,
-}
-
-/// Whether `error` is a `CompileInputError` or a `CliUserError`, and its shown message.
-fn expected_error_message(py: Python<'_>, error: &PyErr) -> PyResult<Option<String>> {
-    let cli_error: Bound<'_, PyAny> = imported(py, CLI_ERRORS_MODULE, "CliUserError")?;
-    let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
-    if value.is_instance(&cli_error)? {
-        return Ok(Some(value.getattr("message")?.str()?.extract()?));
-    }
-    if value.is_instance(&imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?)? {
-        return Ok(Some(value.str()?.extract()?));
-    }
-    Ok(None)
 }
 
 fn runtime(py: Python<'_>) -> PyResult<DebugRuntime> {
@@ -116,7 +106,7 @@ fn optional_string(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 
 fn warehouse_checks(
     context: &DebugContext<'_>,
-    (command_scope, base_connection): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    (command_scope, base_connection): (&CommandScope<'_>, &Bound<'_, PyAny>),
 ) -> PyResult<Vec<WarehouseCheck>> {
     let py: Python<'_> = context.adapter.py();
     let supports_session_warehouse: bool = context
@@ -124,56 +114,40 @@ fn warehouse_checks(
         .getattr("supports_session_warehouse")?
         .is_truthy()?;
     let adapter_name: String = context.adapter.getattr("adapter_name")?.str()?.extract()?;
-    let find_authored: Bound<'_, PyAny> =
-        imported(py, WAREHOUSES_MODULE, "find_target_group_warehouse")?;
-    let resolve: Bound<'_, PyAny> = imported(py, WAREHOUSES_MODULE, "resolve_command_warehouse")?;
+    let inputs: WarehouseInputs<'_, '_> = WarehouseInputs {
+        discovered_inputs: &context.discovered_inputs,
+        selected_target: &context.selected_target,
+    };
     let mut checks: Vec<WarehouseCheck> = Vec::new();
     for group in imported(py, CONTRACT_TYPES_MODULE, "WarehouseGroup")?.try_iter()? {
         let group: Bound<'_, PyAny> = group?;
         let group_name: String = group.getattr("value")?.str()?.extract()?;
         if !supports_session_warehouse {
-            let authored: Bound<'_, PyAny> = call_with(
-                &find_authored,
-                &[
-                    ("discovered_inputs", context.discovered_inputs.clone()),
-                    ("selected_target", context.selected_target.clone()),
-                    ("group", group.clone()),
-                ],
-            )?;
-            if !authored.is_none() {
+            if let Some(found) = find_authored(inputs, &group)? {
                 checks.push(WarehouseCheck::NotUsed {
                     group: group_name,
                     adapter_name: adapter_name.clone(),
-                    source: authored.getattr("source")?.str()?.extract()?,
+                    source: found.authored.source(),
                 });
             }
             continue;
         }
-        let resolved: PyResult<Bound<'_, PyAny>> = call_with(
-            &resolve,
-            &[
-                ("discovered_inputs", context.discovered_inputs.clone()),
-                ("selected_target", context.selected_target.clone()),
-                ("group", group.clone()),
-                ("cli_warehouse", command_scope.getattr("cli_warehouse")?),
-                ("connection_config", base_connection.clone()),
-                ("cli_vars", command_scope.getattr("cli_vars")?),
-            ],
+        let resolved: PyResult<(Option<String>, String)> = resolve_warehouse(
+            Some(inputs),
+            (&group, command_scope.cli_warehouse.as_deref()),
+            (base_connection, &command_scope.cli_vars),
         );
         checks.push(match resolved {
-            Ok(resolved) => WarehouseCheck::Resolved {
+            Ok((warehouse, source)) => WarehouseCheck::Resolved {
                 group: group_name,
-                warehouse: optional_string(&resolved.getattr("warehouse")?)?
-                    .filter(|warehouse| !warehouse.is_empty()),
-                source: resolved.getattr("source")?.str()?.extract()?,
+                warehouse: warehouse.filter(|warehouse| !warehouse.is_empty()),
+                source,
             },
-            Err(error) => match expected_error_message(py, &error)? {
-                Some(message) => WarehouseCheck::Unresolved {
-                    group: group_name,
-                    error: message,
-                },
-                None => return Err(error),
+            Err(error) if expected_resolution_error(py, &error)? => WarehouseCheck::Unresolved {
+                group: group_name,
+                error: resolution_message(py, &error)?,
             },
+            Err(error) => return Err(error),
         });
     }
     Ok(checks)
@@ -262,22 +236,17 @@ fn effective_connection<'py>(
     (adapter_name, base_connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter_name.py();
-    let applied: PyResult<Bound<'py, PyAny>> = call_with(
-        &imported(py, WAREHOUSES_MODULE, "apply_command_warehouse")?,
-        &[
-            ("config", base_connection.clone()),
-            ("adapter_name", adapter_name.clone()),
-            ("project_dir", context.project_dir.clone()),
-            ("discovered_inputs", context.discovered_inputs.clone()),
-            ("selected_target", context.selected_target.clone()),
-        ],
+    let applied: PyResult<Bound<'py, PyAny>> = apply_warehouse(
+        base_connection,
+        (adapter_name, &context.project_dir),
+        Some(WarehouseInputs {
+            discovered_inputs: &context.discovered_inputs,
+            selected_target: &context.selected_target,
+        }),
     );
     match applied {
-        Ok(config) => Ok(config),
-        Err(error) => match expected_error_message(py, &error)? {
-            Some(_) => Ok(base_connection.clone()),
-            None => Err(error),
-        },
+        Err(error) if expected_resolution_error(py, &error)? => Ok(base_connection.clone()),
+        applied => applied,
     }
 }
 
@@ -316,8 +285,7 @@ fn build_report(
         selected_target,
         adapter,
     };
-    let command_scope: Bound<'_, PyAny> =
-        imported(py, SCOPE_MODULE, "current_command_warehouse_scope")?.call0()?;
+    let command_scope: CommandScope<'_> = command_scope(py)?;
     let unscoped: Bound<'_, PyAny> = call_with(
         &imported(py, SCOPE_MODULE, "command_warehouse_scope")?,
         &[
@@ -326,13 +294,10 @@ fn build_report(
         ],
     )?;
     let base_connection: Bound<'_, PyAny> = within(&unscoped, |_| {
-        call_with(
-            &imported(py, CONNECTION_MODULE, "resolve_project_connection_config")?,
-            &[
-                ("discovered_inputs", context.discovered_inputs.clone()),
-                ("project_dir", context.project_dir.clone()),
-                ("selected_target", context.selected_target.clone()),
-            ],
+        project_connection_config(
+            &context.discovered_inputs,
+            (&context.project_dir, &context.selected_target),
+            (&py.None().into_bound(py), true),
         )
     })?;
     let connection_config: Bound<'_, PyDict> =

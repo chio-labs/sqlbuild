@@ -12,6 +12,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     format_scenario_snapshot_execution_json,
     format_summary_footer,
+    resolve_project_connection_config,
     run_compile_only_pipeline,
     write_execution_header,
     write_execution_json_output,
@@ -22,9 +23,6 @@ from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands._helpers.runtime.connection import (
-    resolve_project_connection_config,
-)
 from sqlbuild.cli.commands._helpers.scenario_capture.capture_run import (
     build_scenario_capture_settings,
 )

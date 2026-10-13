@@ -8,7 +8,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import run_diff_pipeline
+from sqlbuild._native import (
+    resolve_project_connection_config,
+    resolve_target_connection_config,
+    run_diff_pipeline,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.contract.types import BuiltinAdapter
@@ -21,10 +25,6 @@ from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands._helpers.runtime.connection import (
-    resolve_project_connection_config,
-    resolve_target_connection_config,
-)
 from sqlbuild.cli.commands.constants import READ_ONLY_QUERY_ROOT_KEYS
 from sqlbuild.cli.commands.exceptions import CliUserError, QueryDiffExecutionError
 from sqlbuild.cli.commands.models import (
