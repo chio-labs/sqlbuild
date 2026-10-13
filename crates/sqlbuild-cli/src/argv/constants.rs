@@ -1,7 +1,7 @@
 //! The `sqb` command table, `argparse` vocabulary and the post-parse rules' names.
 
 /// The exported `sqb` parser tree: every parser, group and action in `add_argument` order.
-pub(crate) const COMMAND_TABLE: &str = include_str!("data/commands.json");
+pub(crate) const COMMAND_TABLE: &str = include_str!("command_table.json");
 /// `argparse.SUPPRESS` as a destination.
 pub(crate) const SUPPRESS_DEST: &str = "==SUPPRESS==";
 /// The placeholder of the installed version in the `--version` text.

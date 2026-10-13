@@ -1,0 +1,6716 @@
+{
+ "prog": "sqb",
+ "groups": [
+  {
+   "title": "positional arguments"
+  },
+  {
+   "title": "options"
+  }
+ ],
+ "actions": [
+  {
+   "kind": "help",
+   "options": [
+    "-h",
+    "--help"
+   ],
+   "dest": "help",
+   "nargs": 0,
+   "default": {
+    "suppress": true
+   },
+   "help": "show this help message and exit",
+   "group": 1
+  },
+  {
+   "kind": "version",
+   "options": [
+    "--version",
+    "-V"
+   ],
+   "dest": "version",
+   "nargs": 0,
+   "default": {
+    "suppress": true
+   },
+   "help": "show program's version number and exit",
+   "group": 1,
+   "version": "sqb {version}"
+  },
+  {
+   "kind": "store",
+   "options": [
+    "--project-dir",
+    "--sqb-project-dir"
+   ],
+   "dest": "project_dir",
+   "help": "SQLBuild project directory (default: the current directory)",
+   "group": 1
+  },
+  {
+   "kind": "store_true",
+   "options": [
+    "--no-color"
+   ],
+   "dest": "no_color",
+   "nargs": 0,
+   "const": true,
+   "default": false,
+   "help": "disable colored output",
+   "group": 1
+  },
+  {
+   "kind": "store_true",
+   "options": [
+    "--debug"
+   ],
+   "dest": "debug",
+   "nargs": 0,
+   "const": true,
+   "default": false,
+   "help": "enable verbose output and mirror internal diagnostics to stderr",
+   "group": 1
+  },
+  {
+   "kind": "parsers",
+   "dest": "command",
+   "nargs": "A...",
+   "group": 0,
+   "parsers": [
+    {
+     "name": "compile",
+     "parser": {
+      "prog": "sqb compile",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-cache"
+        ],
+        "dest": "no_cache",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Bypass the compile analysis cache for this invocation",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defer-to"
+        ],
+        "dest": "defer_to",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--manifest"
+        ],
+        "dest": "manifest",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dag"
+        ],
+        "dest": "dag",
+        "nargs": "?",
+        "const": "",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--lineage-mode"
+        ],
+        "dest": "compile_lineage_mode",
+        "default": "fast",
+        "choices": [
+         "fast",
+         "rich",
+         "none"
+        ],
+        "help": "Column lineage mode: fast (default), rich (slower), or none",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--profile-skip-discovery-sql-analysis"
+        ],
+        "dest": "profile_skip_discovery_sql_analysis",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Diagnostic: skip SQL analysis-assisted discovery parsing",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--profile-skip-column-inference"
+        ],
+        "dest": "profile_skip_column_inference",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Diagnostic: skip compile-time column inference",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--profile-skip-contracts"
+        ],
+        "dest": "profile_skip_contracts",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Diagnostic: skip offline contract validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--profile-skip-write"
+        ],
+        "dest": "profile_skip_write",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Diagnostic: skip writing target/compiled artifacts",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "dag",
+     "parser": {
+      "prog": "sqb dag",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "plan",
+     "parser": {
+      "prog": "sqb plan",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "mutex_groups": [
+       false
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-cache"
+        ],
+        "dest": "no_cache",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Bypass the compile analysis cache for this invocation",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defer-to"
+        ],
+        "dest": "defer_to",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defer-sources-to"
+        ],
+        "dest": "defer_sources_to",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--as"
+        ],
+        "dest": "as_target",
+        "help": "Preview the plan as another configured target through the active target's connection; inspection only",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--full-refresh"
+        ],
+        "dest": "full_refresh",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--selection-diagnostics"
+        ],
+        "dest": "selection_diagnostics",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Include direct-mode stale-out-of-selection diagnostics.",
+        "group": 1
+       },
+       {
+        "kind": "store_false",
+        "options": [
+         "--no-python"
+        ],
+        "dest": "include_python",
+        "nargs": 0,
+        "const": false,
+        "default": true,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--verbose",
+         "-v"
+        ],
+        "dest": "verbose",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--load"
+        ],
+        "dest": "load_sources",
+        "nargs": 0,
+        "const": true,
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store_false",
+        "options": [
+         "--no-load"
+        ],
+        "dest": "load_sources",
+        "nargs": 0,
+        "const": false,
+        "default": true,
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor"
+        ],
+        "dest": "start_cursor",
+        "help": "override the start cursor, typed from the selected models' cursor type",
+        "metavar": "VALUE",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor"
+        ],
+        "dest": "end_cursor",
+        "help": "override the end cursor, typed from the selected models' cursor type",
+        "metavar": "VALUE",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor-ts"
+        ],
+        "dest": "start_cursor_ts",
+        "help": "timestamp start cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor-ts"
+        ],
+        "dest": "end_cursor_ts",
+        "help": "timestamp end cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor-int"
+        ],
+        "dest": "start_cursor_int",
+        "help": "integer start cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor-int"
+        ],
+        "dest": "end_cursor_int",
+        "help": "integer end cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--max-microbatches"
+        ],
+        "dest": "max_microbatches",
+        "type": "_positive_integer",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "build",
+     "parser": {
+      "prog": "sqb build",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "mutex_groups": [
+       false
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-cache"
+        ],
+        "dest": "no_cache",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Bypass the compile analysis cache for this invocation",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defer-to"
+        ],
+        "dest": "defer_to",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defer-clone-from"
+        ],
+        "dest": "defer_clone_from",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defer-sources-to"
+        ],
+        "dest": "defer_sources_to",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--selection-diagnostics"
+        ],
+        "dest": "selection_diagnostics",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Include direct-mode stale-out-of-selection diagnostics.",
+        "group": 1
+       },
+       {
+        "kind": "store_false",
+        "options": [
+         "--no-python"
+        ],
+        "dest": "include_python",
+        "nargs": 0,
+        "const": false,
+        "default": true,
+        "group": 1
+       },
+       {
+        "kind": "store_false",
+        "options": [
+         "--no-tests"
+        ],
+        "dest": "run_tests",
+        "nargs": 0,
+        "const": false,
+        "default": true,
+        "group": 1
+       },
+       {
+        "kind": "store_false",
+        "options": [
+         "--no-audits"
+        ],
+        "dest": "run_audits",
+        "nargs": 0,
+        "const": false,
+        "default": true,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--manifest"
+        ],
+        "dest": "manifest",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--event-output"
+        ],
+        "dest": "event_output",
+        "type": "Path",
+        "help": {
+         "suppress": true
+        },
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor"
+        ],
+        "dest": "start_cursor",
+        "help": "override the start cursor, typed from the selected models' cursor type",
+        "metavar": "VALUE",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor"
+        ],
+        "dest": "end_cursor",
+        "help": "override the end cursor, typed from the selected models' cursor type",
+        "metavar": "VALUE",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor-ts"
+        ],
+        "dest": "start_cursor_ts",
+        "help": "timestamp start cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor-ts"
+        ],
+        "dest": "end_cursor_ts",
+        "help": "timestamp end cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor-int"
+        ],
+        "dest": "start_cursor_int",
+        "help": "integer start cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor-int"
+        ],
+        "dest": "end_cursor_int",
+        "help": "integer end cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--max-microbatches"
+        ],
+        "dest": "max_microbatches",
+        "type": "_positive_integer",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--load"
+        ],
+        "dest": "load_sources",
+        "nargs": 0,
+        "const": true,
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store_false",
+        "options": [
+         "--no-load"
+        ],
+        "dest": "load_sources",
+        "nargs": 0,
+        "const": false,
+        "default": true,
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--reload"
+        ],
+        "dest": "reload",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--fail-fast"
+        ],
+        "dest": "fail_fast",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--full-refresh"
+        ],
+        "dest": "full_refresh",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--allow-snapshot-full-refresh"
+        ],
+        "dest": "allow_snapshot_full_refresh",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--allow-table-type-downgrade"
+        ],
+        "dest": "allow_table_type_downgrade",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--allow-retention-decrease"
+        ],
+        "dest": "allow_retention_decrease",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--allow-missing-migration-origin"
+        ],
+        "dest": "allow_missing_migration_origin",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--allow-snapshot-schema-change"
+        ],
+        "dest": "allow_snapshot_schema_change",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--concurrency"
+        ],
+        "dest": "concurrency",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--verbose",
+         "-v"
+        ],
+        "dest": "verbose",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "freshness",
+     "parser": {
+      "prog": "sqb freshness",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--state"
+        ],
+        "dest": "state",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--fail-on-error"
+        ],
+        "dest": "fail_on_error",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--fail-on-stale"
+        ],
+        "dest": "fail_on_stale",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "test",
+     "parser": {
+      "prog": "sqb test",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--concurrency"
+        ],
+        "dest": "concurrency",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--case"
+        ],
+        "dest": "case",
+        "help": "Run one named parameter case",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--inspect"
+        ],
+        "dest": "inspect",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "Show the resolved test plan",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "check",
+     "parser": {
+      "prog": "sqb check",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "audit",
+     "parser": {
+      "prog": "sqb audit",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defer-to"
+        ],
+        "dest": "defer_to",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--concurrency"
+        ],
+        "dest": "concurrency",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "format",
+     "parser": {
+      "prog": "sqb format",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--check"
+        ],
+        "dest": "format_check",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--diff"
+        ],
+        "dest": "format_diff",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--fix"
+        ],
+        "dest": "format_fix",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "apply compiler-verified meaning-preserving Rule fixes",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--fixtures-only"
+        ],
+        "dest": "format_fixtures_only",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "only remove redundant typed-null SQL test fixture columns",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "format_paths",
+        "nargs": "*",
+        "default": [],
+        "help": "SQL files or folders to format, relative to the current directory",
+        "metavar": "PATH",
+        "group": 0
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "load",
+     "parser": {
+      "prog": "sqb load",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--reload"
+        ],
+        "dest": "reload",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--concurrency"
+        ],
+        "dest": "concurrency",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor"
+        ],
+        "dest": "start_cursor",
+        "help": "override the start cursor, typed from the selected models' cursor type",
+        "metavar": "VALUE",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor"
+        ],
+        "dest": "end_cursor",
+        "help": "override the end cursor, typed from the selected models' cursor type",
+        "metavar": "VALUE",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor-ts"
+        ],
+        "dest": "start_cursor_ts",
+        "help": "timestamp start cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor-ts"
+        ],
+        "dest": "end_cursor_ts",
+        "help": "timestamp end cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--start-cursor-int"
+        ],
+        "dest": "start_cursor_int",
+        "help": "integer start cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--end-cursor-int"
+        ],
+        "dest": "end_cursor_int",
+        "help": "integer end cursor override",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "seed",
+     "parser": {
+      "prog": "sqb seed",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--concurrency"
+        ],
+        "dest": "concurrency",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "clone",
+     "parser": {
+      "prog": "sqb clone",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--from"
+        ],
+        "dest": "from_target",
+        "required": true,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--to"
+        ],
+        "dest": "to_target",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--hard-copy"
+        ],
+        "dest": "hard_copy",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--verbose",
+         "-v"
+        ],
+        "dest": "verbose",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-project-dir"
+        ],
+        "dest": "dbt_project_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-profiles-dir"
+        ],
+        "dest": "dbt_profiles_dir",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target"
+        ],
+        "dest": "dbt_target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dbt-target-path"
+        ],
+        "dest": "dbt_target_path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--event-output"
+        ],
+        "dest": "event_output",
+        "type": "Path",
+        "help": {
+         "suppress": true
+        },
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "diff",
+     "parser": {
+      "prog": "sqb diff",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "target_range",
+        "nargs": "?",
+        "metavar": "FROM[:TO]",
+        "group": 0
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--full"
+        ],
+        "dest": "full",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--schema-only"
+        ],
+        "dest": "schema_only",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--bounded"
+        ],
+        "dest": "bounded",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--verbose",
+         "-v"
+        ],
+        "dest": "verbose",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--max-column-examples"
+        ],
+        "dest": "max_column_examples",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--max-row-only-examples"
+        ],
+        "dest": "max_row_only_examples",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--sample-rows"
+        ],
+        "dest": "sample_rows",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--sample-seed"
+        ],
+        "dest": "sample_seed",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--exhaustive"
+        ],
+        "dest": "exhaustive",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--max-models"
+        ],
+        "dest": "max_models",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--max-columns"
+        ],
+        "dest": "max_columns",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "help": "target connection for raw-query diff (defaults to the active target)",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--left-query"
+        ],
+        "dest": "left_query",
+        "help": "literal left-side SQL query",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--left-query-file"
+        ],
+        "dest": "left_query_file",
+        "type": "Path",
+        "help": "path to left-side SQL query",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--right-query"
+        ],
+        "dest": "right_query",
+        "help": "literal right-side SQL query",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--right-query-file"
+        ],
+        "dest": "right_query_file",
+        "type": "Path",
+        "help": "path to right-side SQL query",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--left-label"
+        ],
+        "dest": "left_label",
+        "help": "display label for the left query",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--right-label"
+        ],
+        "dest": "right_label",
+        "help": "display label for the right query",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--key"
+        ],
+        "dest": "key",
+        "nargs": "+",
+        "default": [],
+        "help": "row identity columns; several values or repeated flags form a composite key",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--unkeyed"
+        ],
+        "dest": "unkeyed",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "compare exact full-row multiplicities without a key",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude-column"
+        ],
+        "dest": "exclude_column",
+        "nargs": "+",
+        "default": [],
+        "help": "columns to omit from row comparison; takes several values or repeated flags",
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--tolerance"
+        ],
+        "dest": "tolerance",
+        "default": [],
+        "help": "numeric tolerance as COLUMN:absolute=VALUE or COLUMN:relative=VALUE",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--max-value-length"
+        ],
+        "dest": "max_value_length",
+        "type": "int",
+        "help": "maximum rendered characters per example value",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-example-values"
+        ],
+        "dest": "no_example_values",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "show example keys and counts without values",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--full-example-values"
+        ],
+        "dest": "full_example_values",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "explicitly render complete example values",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "write structured diff output to stdout",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "scope",
+     "parser": {
+      "prog": "sqb scope",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "mutex_groups": [
+       false
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "scope_target",
+        "nargs": "?",
+        "metavar": "TARGET",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--at"
+        ],
+        "dest": "scope_at",
+        "metavar": "PATH",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--as-path"
+        ],
+        "dest": "scope_as_path",
+        "metavar": "PATH",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--browse"
+        ],
+        "dest": "scope_browse",
+        "metavar": "PATH",
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--list"
+        ],
+        "dest": "scope_list",
+        "metavar": "PATH",
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--defined-under"
+        ],
+        "dest": "scope_defined_under",
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--kind"
+        ],
+        "dest": "scope_kind",
+        "default": [],
+        "choices": [
+         "macro",
+         "enum",
+         "constant",
+         "audit",
+         "singular_audit",
+         "schema",
+         "sql_hook",
+         "python_hook"
+        ],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--match"
+        ],
+        "dest": "scope_match",
+        "metavar": "GLOB",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--used-only"
+        ],
+        "dest": "scope_used_only",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--include-nearby"
+        ],
+        "dest": "scope_include_nearby",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--nearby-depth"
+        ],
+        "dest": "scope_nearby_depth",
+        "default": 1,
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--dependency-depth"
+        ],
+        "dest": "scope_dependency_depth",
+        "default": 0,
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--explain"
+        ],
+        "dest": "scope_explain",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--globals"
+        ],
+        "dest": "scope_globals",
+        "default": "summary",
+        "choices": [
+         "summary",
+         "used",
+         "all"
+        ],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--page-size"
+        ],
+        "dest": "scope_page_size",
+        "default": 100,
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--after"
+        ],
+        "dest": "scope_after",
+        "metavar": "CURSOR",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--paths"
+        ],
+        "dest": "scope_paths",
+        "default": "relative",
+        "choices": [
+         "relative",
+         "compact",
+         "none"
+        ],
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-cache"
+        ],
+        "dest": "no_cache",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--verbose",
+         "-v"
+        ],
+        "dest": "verbose",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "debug",
+     "parser": {
+      "prog": "sqb debug",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-connection"
+        ],
+        "dest": "no_connection",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "cost",
+     "parser": {
+      "prog": "sqb cost",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "cost_selector",
+        "nargs": "?",
+        "default": "latest",
+        "metavar": "latest|history|run_id",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--limit"
+        ],
+        "dest": "cost_limit",
+        "type": "int",
+        "help": "limit returned rows",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-limit"
+        ],
+        "dest": "cost_no_limit",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "return all matching rows",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--sort"
+        ],
+        "dest": "cost_sort",
+        "help": "metric used to sort results",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--order"
+        ],
+        "dest": "cost_order",
+        "choices": [
+         "asc",
+         "desc"
+        ],
+        "help": "sort direction",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--since"
+        ],
+        "dest": "cost_since",
+        "help": "inclusive ISO date/datetime or relative duration such as 7d",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--until"
+        ],
+        "dest": "cost_until",
+        "help": "inclusive ISO date or timezone-aware datetime",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "write stable JSON to stdout",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--json-output"
+        ],
+        "dest": "json_output",
+        "type": "Path",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "query",
+     "parser": {
+      "prog": "sqb query",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "mutex_groups": [
+       false
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "query_sql",
+        "nargs": "?",
+        "metavar": "sql",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--file"
+        ],
+        "dest": "query_file",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--format"
+        ],
+        "dest": "query_format",
+        "default": "long",
+        "choices": [
+         "long",
+         "table",
+         "json",
+         "csv"
+        ],
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store_const",
+        "options": [
+         "--json"
+        ],
+        "dest": "query_format",
+        "nargs": 0,
+        "const": "json",
+        "help": "shorthand for --format json",
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--limit"
+        ],
+        "dest": "query_limit",
+        "default": 20,
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-limit"
+        ],
+        "dest": "query_no_limit",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "lineage",
+     "parser": {
+      "prog": "sqb lineage",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "mutex_groups": [
+       false
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "lineage_targets",
+        "nargs": "*",
+        "default": [],
+        "help": "models, sources or seeds (optionally kind-prefixed, e.g. model:orders), or one model.column",
+        "metavar": "target",
+        "group": 0
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--format"
+        ],
+        "dest": "lineage_format",
+        "default": "tree",
+        "choices": [
+         "tree",
+         "json",
+         "list"
+        ],
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store_const",
+        "options": [
+         "--json"
+        ],
+        "dest": "lineage_format",
+        "nargs": 0,
+        "const": "json",
+        "help": "shorthand for --format json",
+        "mutex_group": 0,
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--include-uses"
+        ],
+        "dest": "lineage_include_uses",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "include direct filter, join, grouping, window, and ordering column uses",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--direction"
+        ],
+        "dest": "lineage_direction",
+        "choices": [
+         "upstream",
+         "downstream",
+         "both"
+        ],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--depth"
+        ],
+        "dest": "lineage_depth",
+        "default": "all",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--mode"
+        ],
+        "dest": "lineage_mode",
+        "default": "rich",
+        "choices": [
+         "rich",
+         "fast"
+        ],
+        "help": "Column lineage mode: rich (default) or fast",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--select-file"
+        ],
+        "dest": "select_file",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--exclude"
+        ],
+        "dest": "exclude",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "contract",
+     "parser": {
+      "prog": "sqb contract",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "parsers",
+        "dest": "contract_command",
+        "nargs": "A...",
+        "required": true,
+        "group": 0,
+        "parsers": [
+         {
+          "name": "diff",
+          "parser": {
+           "prog": "sqb contract diff",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--from"
+             ],
+             "dest": "contract_from",
+             "required": true,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--json"
+             ],
+             "dest": "json",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--select",
+              "-s"
+             ],
+             "dest": "select",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "append",
+             "options": [
+              "--select-file"
+             ],
+             "dest": "select_file",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--exclude"
+             ],
+             "dest": "exclude",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--vars"
+             ],
+             "dest": "vars",
+             "default": {
+              "dict": {}
+             },
+             "type": "parse_cli_vars",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--warehouse"
+             ],
+             "dest": "warehouse",
+             "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         },
+         {
+          "name": "generate",
+          "parser": {
+           "prog": "sqb contract generate",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--from"
+             ],
+             "dest": "contract_from",
+             "required": true,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--json"
+             ],
+             "dest": "json",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--select",
+              "-s"
+             ],
+             "dest": "select",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "append",
+             "options": [
+              "--select-file"
+             ],
+             "dest": "select_file",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--exclude"
+             ],
+             "dest": "exclude",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--vars"
+             ],
+             "dest": "vars",
+             "default": {
+              "dict": {}
+             },
+             "type": "parse_cli_vars",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--write"
+             ],
+             "dest": "contract_write",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--overwrite"
+             ],
+             "dest": "overwrite",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--warehouse"
+             ],
+             "dest": "warehouse",
+             "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         }
+        ],
+        "choices_help": []
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "rename",
+     "parser": {
+      "prog": "sqb rename",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "refactor_target",
+        "required": true,
+        "help": "<model> or <model>.<column>; the model: and column: prefixes are optional",
+        "metavar": "TARGET",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "dest": "refactor_new_name",
+        "required": true,
+        "metavar": "NEW_NAME",
+        "group": 0
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--cascade"
+        ],
+        "dest": "refactor_cascade",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "rename a column through every downstream model that passes it through",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--dry-run"
+        ],
+        "dest": "dry_run",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "print every edit and verify it compiles, without writing files",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "print the result as JSON on stdout; progress goes to stderr",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "mv",
+     "parser": {
+      "prog": "sqb mv",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "refactor_target",
+        "required": true,
+        "help": "<model>; the model: prefix is optional",
+        "metavar": "TARGET",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "dest": "refactor_destination",
+        "required": true,
+        "help": "new .sql path or folder/",
+        "metavar": "DESTINATION",
+        "group": 0
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--dry-run"
+        ],
+        "dest": "dry_run",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "print every edit and verify it compiles, without writing files",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "print the result as JSON on stdout; progress goes to stderr",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "clean",
+     "parser": {
+      "prog": "sqb clean",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "janitor",
+     "parser": {
+      "prog": "sqb janitor",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--auto-approve"
+        ],
+        "dest": "auto_approve",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--retention-days"
+        ],
+        "dest": "retention_days",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--direct-state-history-versions"
+        ],
+        "dest": "direct_state_history_versions",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--drop-old-name-view"
+        ],
+        "dest": "drop_old_name_views",
+        "default": [],
+        "metavar": "NAME",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--as"
+        ],
+        "dest": "as_target",
+        "help": "Preview the janitor plan as another configured target through the active target's connection; inspection only",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "init",
+     "parser": {
+      "prog": "sqb init",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "playground",
+     "parser": {
+      "prog": "sqb playground",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "playground_path",
+        "nargs": "?",
+        "default": "sqlbuild-playground",
+        "metavar": "path",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--template"
+        ],
+        "dest": "playground_template",
+        "default": "waffle_shop",
+        "choices": [
+         "waffle_shop",
+         "loader_waffle_shop",
+         "dagster",
+         "rivers",
+         "python_nodes"
+        ],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "scenario",
+     "parser": {
+      "prog": "sqb scenario",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "parsers",
+        "dest": "scenario_command",
+        "nargs": "A...",
+        "group": 0,
+        "parsers": [
+         {
+          "name": "test",
+          "parser": {
+           "prog": "sqb scenario test",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "mutex_groups": [
+            false
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--scenario-namespace"
+             ],
+             "dest": "scenario_namespace",
+             "metavar": "NAMESPACE",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "dest": "scenario_selector",
+             "nargs": "*",
+             "metavar": "scenario",
+             "group": 0
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--retain"
+             ],
+             "dest": "scenario_retain",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--local"
+             ],
+             "dest": "scenario_local",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--strict"
+             ],
+             "dest": "scenario_strict",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--concurrency"
+             ],
+             "dest": "concurrency",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--json"
+             ],
+             "dest": "json",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--json-output"
+             ],
+             "dest": "json_output",
+             "type": "Path",
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--select",
+              "-s"
+             ],
+             "dest": "select",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "append",
+             "options": [
+              "--select-file"
+             ],
+             "dest": "select_file",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--exclude"
+             ],
+             "dest": "exclude",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--sync-snapshots"
+             ],
+             "dest": "scenario_sync_snapshots",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "mutex_group": 0,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--refresh"
+             ],
+             "dest": "scenario_refresh",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "mutex_group": 0,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--force"
+             ],
+             "dest": "scenario_force",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-rows"
+             ],
+             "dest": "scenario_max_snapshot_rows",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-total-rows"
+             ],
+             "dest": "scenario_max_snapshot_total_rows",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-bytes"
+             ],
+             "dest": "scenario_max_snapshot_bytes",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-total-bytes"
+             ],
+             "dest": "scenario_max_snapshot_total_bytes",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--warehouse"
+             ],
+             "dest": "warehouse",
+             "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         },
+         {
+          "name": "capture",
+          "parser": {
+           "prog": "sqb scenario capture",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--scenario-namespace"
+             ],
+             "dest": "scenario_namespace",
+             "metavar": "NAMESPACE",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "dest": "scenario_selector",
+             "nargs": "*",
+             "metavar": "scenario",
+             "group": 0
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--retain"
+             ],
+             "dest": "scenario_retain",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--select",
+              "-s"
+             ],
+             "dest": "select",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "append",
+             "options": [
+              "--select-file"
+             ],
+             "dest": "select_file",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--exclude"
+             ],
+             "dest": "exclude",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--force"
+             ],
+             "dest": "scenario_force",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-rows"
+             ],
+             "dest": "scenario_max_snapshot_rows",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-total-rows"
+             ],
+             "dest": "scenario_max_snapshot_total_rows",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-bytes"
+             ],
+             "dest": "scenario_max_snapshot_bytes",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--max-snapshot-total-bytes"
+             ],
+             "dest": "scenario_max_snapshot_total_bytes",
+             "type": "int",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--warehouse"
+             ],
+             "dest": "warehouse",
+             "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         }
+        ],
+        "choices_help": []
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "dbt",
+     "parser": {
+      "prog": "sqb dbt",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "parsers",
+        "dest": "dbt_command",
+        "nargs": "A...",
+        "group": 0,
+        "parsers": [
+         {
+          "name": "plan",
+          "parser": {
+           "prog": "sqb dbt plan",
+           "add_help": false,
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": []
+          }
+         },
+         {
+          "name": "run",
+          "parser": {
+           "prog": "sqb dbt run",
+           "add_help": false,
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": []
+          }
+         },
+         {
+          "name": "build",
+          "parser": {
+           "prog": "sqb dbt build",
+           "add_help": false,
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": []
+          }
+         },
+         {
+          "name": "debug",
+          "parser": {
+           "prog": "sqb dbt debug",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            }
+           ]
+          }
+         },
+         {
+          "name": "init",
+          "parser": {
+           "prog": "sqb dbt init",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir"
+             ],
+             "dest": "dbt_project_dir",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--profiles-dir"
+             ],
+             "dest": "dbt_profiles_dir",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--profile"
+             ],
+             "dest": "dbt_profile",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--target"
+             ],
+             "dest": "dbt_target",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--sqb-output-dir"
+             ],
+             "dest": "sqb_output_dir",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--dry-run"
+             ],
+             "dest": "dry_run",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--overwrite"
+             ],
+             "dest": "overwrite",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--skip-dbt-debug"
+             ],
+             "dest": "skip_dbt_debug",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            }
+           ]
+          }
+         }
+        ],
+        "choices_help": []
+       }
+      ]
+     }
+    },
+    {
+     "name": "skills",
+     "parser": {
+      "prog": "sqb skills",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--global"
+        ],
+        "dest": "skills_global",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "append",
+        "options": [
+         "--target"
+        ],
+        "dest": "skills_target",
+        "default": [],
+        "choices": [
+         "opencode",
+         "claude",
+         "agents"
+        ],
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--force"
+        ],
+        "dest": "skills_force",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
+     "name": "rules",
+     "parser": {
+      "prog": "sqb rules",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "parsers",
+        "dest": "rules_command",
+        "nargs": "A...",
+        "required": true,
+        "group": 0,
+        "parsers": [
+         {
+          "name": "list",
+          "parser": {
+           "prog": "sqb rules list",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         },
+         {
+          "name": "show",
+          "parser": {
+           "prog": "sqb rules show",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "dest": "rules_rule_selector",
+             "required": true,
+             "group": 0
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         },
+         {
+          "name": "run",
+          "parser": {
+           "prog": "sqb rules run",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "dest": "rules_rule_selector",
+             "required": true,
+             "group": 0
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--select",
+              "-s"
+             ],
+             "dest": "select",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "append",
+             "options": [
+              "--select-file"
+             ],
+             "dest": "select_file",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "extend",
+             "options": [
+              "--exclude"
+             ],
+             "dest": "exclude",
+             "nargs": "+",
+             "default": [],
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         },
+         {
+          "name": "skills",
+          "parser": {
+           "prog": "sqb rules skills",
+           "groups": [
+            {
+             "title": "positional arguments"
+            },
+            {
+             "title": "options"
+            }
+           ],
+           "actions": [
+            {
+             "kind": "help",
+             "options": [
+              "-h",
+              "--help"
+             ],
+             "dest": "help",
+             "nargs": 0,
+             "default": {
+              "suppress": true
+             },
+             "help": "show this help message and exit",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--check"
+             ],
+             "dest": "rules_skills_check",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--project-dir",
+              "--sqb-project-dir"
+             ],
+             "dest": "project_dir",
+             "default": {
+              "suppress": true
+             },
+             "help": "SQLBuild project directory (default: the current directory)",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--no-color"
+             ],
+             "dest": "no_color",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "disable colored output",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--debug"
+             ],
+             "dest": "debug",
+             "nargs": 0,
+             "const": true,
+             "default": {
+              "suppress": true
+             },
+             "help": "enable verbose output and mirror internal diagnostics to stderr",
+             "group": 1
+            }
+           ]
+          }
+         }
+        ],
+        "choices_help": []
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    }
+   ],
+   "choices_help": [
+    {
+     "dest": "cost",
+     "metavar": "cost",
+     "help": "show persisted Snowflake busy-compute estimates"
+    },
+    {
+     "dest": "rename",
+     "metavar": "rename",
+     "help": "rename a model or column and update every reference"
+    },
+    {
+     "dest": "mv",
+     "metavar": "mv",
+     "help": "move a model file, optionally renaming it, and update references"
+    }
+   ]
+  }
+ ]
+}
