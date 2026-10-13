@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands.main.project import _dag as dag_command
-from sqlbuild.cli.commands.main.project._dag import run_dag
+from sqlbuild._native import run_dag_command
+from sqlbuild.cli.commands._helpers.runtime import adapters as adapter_resolution
 from tests.unit.src.sqlbuild.cli.commands.main.dag._test_types import (
     DagCommandTestCase,
     PythonDagCommandTestCase,
@@ -40,12 +40,12 @@ def test_given_advisory_over_broad_global_when_running_dag_then_outputs_static_g
 ) -> None:
     project_dir: Path = prepare_advisory_placement_dag_project(tmp_path)
     monkeypatch.setattr(
-        dag_command,
+        adapter_resolution,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_dag(
+    exit_code: int = run_dag_command(
         project_dir=project_dir,
         no_sql_validation=True,
         json_output=True,
@@ -80,12 +80,12 @@ def test_given_local_project_when_running_dag_json_then_outputs_static_graph_wit
 ) -> None:
     project_dir: Path = prepare_static_dag_project(tmp_path)
     monkeypatch.setattr(
-        dag_command,
+        adapter_resolution,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_dag(
+    exit_code: int = run_dag_command(
         project_dir=project_dir,
         no_sql_validation=True,
         json_output=True,
@@ -171,12 +171,12 @@ def test_given_python_nodes_when_running_dag_json_then_outputs_artifact_metadata
 ) -> None:
     project_dir: Path = prepare_python_dag_project(tmp_path)
     monkeypatch.setattr(
-        dag_command,
+        adapter_resolution,
         "resolve_adapter",
         lambda *args, **kwargs: NoConnectDuckDbAdapter(),
     )
 
-    exit_code: int = run_dag(
+    exit_code: int = run_dag_command(
         project_dir=project_dir,
         no_sql_validation=True,
         json_output=True,

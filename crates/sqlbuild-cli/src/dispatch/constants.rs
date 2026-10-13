@@ -108,7 +108,7 @@ pub(crate) const SCOPE_ROUTE: Route = routed(
 const DAG_ARGUMENTS: [Field; 4] = [PROJECT_DIR, NO_SQL_VALIDATION, JSON_OUTPUT, CLI_VARS];
 pub(crate) const DAG_ROUTE: Route = routed(
     "run_dag",
-    ("sqlbuild.cli.commands.main.project._dag", "run_dag"),
+    ("sqlbuild._native", "run_dag_command"),
     &DAG_ARGUMENTS,
     CallShape {
         slot_positional: 0,

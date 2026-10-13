@@ -1,4 +1,4 @@
-//! `sqb query` result rendering.
+//! `sqb query` result rendering and `sqb dag` summary text.
 
 pub(crate) mod _helpers;
 pub(crate) mod constants;

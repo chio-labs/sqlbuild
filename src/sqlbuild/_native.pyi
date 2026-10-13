@@ -2921,6 +2921,13 @@ def run_query_command(
     limit: int | None = 20,
 ) -> int: ...
 def render_query_result(*, result: QueryResult, output_format: str, limit: int | None) -> str: ...
+def run_dag_command(
+    *,
+    project_dir: Path | None,
+    no_sql_validation: bool = False,
+    json_output: bool = False,
+    cli_vars: dict[str, object] | None = None,
+) -> int: ...
 def format_parameterized_test_label(
     *,
     name: str,

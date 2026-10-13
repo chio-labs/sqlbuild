@@ -21,3 +21,9 @@ pub(super) struct JsonTestCase {
     pub(super) rows: Vec<Vec<JsonValue>>,
     pub(super) expected_json: &'static str,
 }
+
+pub(super) struct DagTestCase {
+    pub(super) description: &'static str,
+    pub(super) counts: (usize, usize, usize),
+    pub(super) expected_text: &'static str,
+}
