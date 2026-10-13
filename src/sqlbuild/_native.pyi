@@ -27,6 +27,7 @@ from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     CheckCommandRequest,
     CloneCommandRequest,
+    ContractCommandRequest,
     DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
@@ -2913,6 +2914,7 @@ def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str
 def run_test_command(*, request: TestCommandRequest) -> int: ...
 def run_seed_command(*, request: SeedCommandRequest) -> int: ...
 def run_audit_command(*, request: AuditCommandRequest) -> int: ...
+def run_contract_command(*, request: ContractCommandRequest) -> int: ...
 def run_query_command(
     *,
     project_dir: Path | None,

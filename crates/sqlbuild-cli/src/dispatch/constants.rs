@@ -571,12 +571,9 @@ pub(crate) const CONTRACT_ROUTE: Route = Route {
     unavailable_code: Some("C470"),
     ..routed(
         "run_contract",
-        (
-            "sqlbuild.cli.commands.main.inspection._contract",
-            "run_contract",
-        ),
+        ("sqlbuild._native", "run_contract_command"),
         &CONTRACT_ARGUMENTS,
-        REQUEST_SHAPE,
+        REQUEST_KEYWORD_SHAPE,
     )
 };
 

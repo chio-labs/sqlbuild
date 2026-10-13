@@ -7,6 +7,7 @@ pub mod check_command;
 pub mod cli_text;
 pub mod clone_text;
 pub mod constants;
+pub mod contract_command;
 pub mod cost_report;
 pub mod debug_report;
 pub mod freshness_text;
