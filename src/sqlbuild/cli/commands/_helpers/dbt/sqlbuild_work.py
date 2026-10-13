@@ -6,17 +6,24 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild._native import ConnectionProgressReporter, format_execution_header
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.build_planning.plan_policies import (
-    dbt_interop_plan_safety_gates,
+from sqlbuild._native import (
+    ConnectionProgressReporter,
     enforce_plan_safety_policies,
+    format_execution_header,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     BuildProgressCallbacks,
     format_build_footer,
 )
-from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
+from sqlbuild.cli.commands.constants import (
+    EXECUTION_LIMIT_DBT_NOTE,
+    MISSING_ORIGIN_DBT_HELP,
+    RETENTION_DECREASE_DBT_HELP,
+    SNAPSHOT_FULL_REFRESH_DBT_HELP,
+    TABLE_TYPE_DOWNGRADE_DBT_HELP,
+)
+from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext, PlanSafetyGates
 from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.models import (
@@ -33,6 +40,22 @@ from sqlbuild.executor.pipeline.main.run import (
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.presentation.classes.cli_style import CliStyle
+
+
+def dbt_interop_plan_safety_gates() -> PlanSafetyGates:
+    """Gates for sqb dbt, which has no allow flags and confirms only on a terminal."""
+
+    return PlanSafetyGates(
+        allow_missing_migration_origin=False,
+        allow_snapshot_full_refresh=False,
+        allow_table_type_downgrade=False,
+        allow_retention_decrease=False,
+        missing_origin_help=MISSING_ORIGIN_DBT_HELP,
+        snapshot_full_refresh_help=SNAPSHOT_FULL_REFRESH_DBT_HELP,
+        table_type_downgrade_help=TABLE_TYPE_DOWNGRADE_DBT_HELP,
+        retention_decrease_help=RETENTION_DECREASE_DBT_HELP,
+        execution_limit_note=EXECUTION_LIMIT_DBT_NOTE,
+    )
 
 
 def execute_sqlbuild_build_work(

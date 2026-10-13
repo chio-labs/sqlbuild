@@ -34,6 +34,7 @@ from sqlbuild.cli.commands.models import (
     JanitorCommandRequest,
     LineageCommandRequest,
     LoadCommandRequest,
+    PlanSafetyGates,
     PlaygroundCommandRequest,
     QueryDiffPreparation,
     RefactorCommandRequest,
@@ -272,6 +273,7 @@ from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
+    ExecutionLimitsConfig,
     LocalConfig,
     ProjectConfig,
     ScenarioConfig,
@@ -281,6 +283,7 @@ from sqlbuild.spec.contracts.models import (
     SchemaModelEntry,
     SchemaSeedEntry,
     SettingsConfig,
+    SnapshotsConfig,
     SourceEntry,
     SourceFreshnessAgePolicy,
     SourceLocation,
@@ -2915,6 +2918,22 @@ def write_check_results(
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
 def run_test_command(*, request: TestCommandRequest) -> int: ...
 def run_seed_command(*, request: SeedCommandRequest) -> int: ...
+def enforce_plan_safety_policies(
+    *,
+    plan: PlanOutput,
+    gates: PlanSafetyGates,
+    snapshots_config: SnapshotsConfig,
+    target_name: str | None,
+    execution_limits: ExecutionLimitsConfig,
+    streams: tuple[TextIO, TextIO],
+) -> None: ...
+def enforce_model_execution_limit(
+    *,
+    model_count: int,
+    target_name: str | None,
+    limits: ExecutionLimitsConfig,
+    refusal_note: str,
+) -> None: ...
 def run_audit_command(*, request: AuditCommandRequest) -> int: ...
 def run_contract_command(*, request: ContractCommandRequest) -> int: ...
 def run_init_command(project_dir: Path | None = None) -> int: ...

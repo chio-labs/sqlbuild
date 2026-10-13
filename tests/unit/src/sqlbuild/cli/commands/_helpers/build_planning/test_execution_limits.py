@@ -2,9 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
-    enforce_model_execution_limit,
-)
+from sqlbuild._native import enforce_model_execution_limit
 from sqlbuild.cli.commands._helpers.build_planning.invocation import resolve_build_invocation
 from sqlbuild.cli.commands.constants import EXECUTION_LIMIT_BUILD_NOTE
 from sqlbuild.cli.commands.exceptions import CliUserError

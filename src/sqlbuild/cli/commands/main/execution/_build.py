@@ -7,6 +7,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild._native import enforce_plan_safety_policies
 from sqlbuild.cli.commands._helpers.build_execution.checks import run_post_build_python_checks
 from sqlbuild.cli.commands._helpers.build_execution.completion import complete_direct_build
 from sqlbuild.cli.commands._helpers.build_execution.execution import (
@@ -26,12 +27,16 @@ from sqlbuild.cli.commands._helpers.build_planning.defer_clone import (
     run_defer_clone_boundary_prephase,
 )
 from sqlbuild.cli.commands._helpers.build_planning.invocation import resolve_build_invocation
-from sqlbuild.cli.commands._helpers.build_planning.plan_policies import (
-    enforce_build_plan_policies,
-)
 from sqlbuild.cli.commands._helpers.build_planning.planning import compile_build_plan
 from sqlbuild.cli.commands._helpers.cost.collection import (
     finalize_build_cost,
+)
+from sqlbuild.cli.commands.constants import (
+    EXECUTION_LIMIT_BUILD_NOTE,
+    MISSING_ORIGIN_BUILD_HELP,
+    RETENTION_DECREASE_BUILD_HELP,
+    SNAPSHOT_FULL_REFRESH_BUILD_HELP,
+    TABLE_TYPE_DOWNGRADE_BUILD_HELP,
 )
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
@@ -39,6 +44,7 @@ from sqlbuild.cli.commands.models import (
     BuildExecutionPreparation,
     BuildInvocation,
     BuildRunOutcome,
+    PlanSafetyGates,
 )
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.cost.classes.cost_context import CostContext
@@ -108,10 +114,23 @@ def _run_build(
             invocation=invocation,
             pipeline_result=pipeline_result,
         )
-        enforce_build_plan_policies(
-            request=request,
-            invocation=invocation,
+        enforce_plan_safety_policies(
             plan=pipeline_result.plan_output,
+            gates=PlanSafetyGates(
+                allow_missing_migration_origin=request.allow_missing_migration_origin,
+                allow_snapshot_full_refresh=request.allow_snapshot_full_refresh,
+                allow_table_type_downgrade=request.allow_table_type_downgrade,
+                allow_retention_decrease=request.allow_retention_decrease,
+                missing_origin_help=MISSING_ORIGIN_BUILD_HELP,
+                snapshot_full_refresh_help=SNAPSHOT_FULL_REFRESH_BUILD_HELP,
+                table_type_downgrade_help=TABLE_TYPE_DOWNGRADE_BUILD_HELP,
+                retention_decrease_help=RETENTION_DECREASE_BUILD_HELP,
+                execution_limit_note=EXECUTION_LIMIT_BUILD_NOTE,
+            ),
+            snapshots_config=invocation.discovered_inputs.project_config.snapshots,
+            target_name=invocation.effective_target_name,
+            execution_limits=invocation.execution_limits,
+            streams=(sys.stdin, sys.stdout),
         )
         write_build_compile_target(
             request=request,

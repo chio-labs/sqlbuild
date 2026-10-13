@@ -4,6 +4,14 @@ from pathlib import Path
 
 from sqlbuild.adapter.contract.models import RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
+from sqlbuild.cli.commands.constants import (
+    EXECUTION_LIMIT_BUILD_NOTE,
+    MISSING_ORIGIN_BUILD_HELP,
+    RETENTION_DECREASE_BUILD_HELP,
+    SNAPSHOT_FULL_REFRESH_BUILD_HELP,
+    TABLE_TYPE_DOWNGRADE_BUILD_HELP,
+)
+from sqlbuild.cli.commands.models import PlanSafetyGates
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
 from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.compiler.planner.models import (
@@ -95,4 +103,23 @@ def build_retention_entry(
         phase=RetentionPlanPhase.POST,
         statements=("SELECT 1",),
         decrease_policy=policy,
+    )
+
+
+def build_policy_gates(
+    *,
+    allow_snapshot_full_refresh: bool = False,
+    allow_table_type_downgrade: bool = False,
+    allow_retention_decrease: bool = False,
+) -> PlanSafetyGates:
+    return PlanSafetyGates(
+        allow_missing_migration_origin=False,
+        allow_snapshot_full_refresh=allow_snapshot_full_refresh,
+        allow_table_type_downgrade=allow_table_type_downgrade,
+        allow_retention_decrease=allow_retention_decrease,
+        missing_origin_help=MISSING_ORIGIN_BUILD_HELP,
+        snapshot_full_refresh_help=SNAPSHOT_FULL_REFRESH_BUILD_HELP,
+        table_type_downgrade_help=TABLE_TYPE_DOWNGRADE_BUILD_HELP,
+        retention_decrease_help=RETENTION_DECREASE_BUILD_HELP,
+        execution_limit_note=EXECUTION_LIMIT_BUILD_NOTE,
     )

@@ -6,17 +6,15 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.build_planning.full_refresh import (
-    enforce_snapshot_full_refresh_policy,
-)
-from sqlbuild.cli.commands.constants import SNAPSHOT_FULL_REFRESH_BUILD_HELP
+from sqlbuild._native import enforce_plan_safety_policies
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.spec.contracts.models import SnapshotsConfig
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, SnapshotsConfig
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning._test_types import (
     SnapshotFullRefreshPolicyTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning.helpers import (
+    build_policy_gates,
     build_snapshot_full_refresh_entry,
 )
 
@@ -79,13 +77,18 @@ def test_given_unsafe_snapshot_full_refresh_when_enforcing_policy_then_raises_us
     test_case: SnapshotFullRefreshPolicyTestCase,
 ) -> None:
     with pytest.raises(CliUserError) as exc_info:
-        enforce_snapshot_full_refresh_policy(
+        enforce_plan_safety_policies(
             plan=test_case.plan_output,
+            gates=build_policy_gates(
+                allow_snapshot_full_refresh=test_case.allow_snapshot_full_refresh
+            ),
             snapshots_config=test_case.snapshots_config,
-            allow_snapshot_full_refresh=test_case.allow_snapshot_full_refresh,
-            non_interactive_help=SNAPSHOT_FULL_REFRESH_BUILD_HELP,
-            input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
-            output_stream=StringIO(),
+            target_name="dev",
+            execution_limits=ExecutionLimitsConfig(),
+            streams=(
+                _InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
+                StringIO(),
+            ),
         )
 
     error: CliUserError = exc_info.value
@@ -138,13 +141,16 @@ def test_given_safe_or_confirmed_snapshot_full_refresh_when_enforcing_policy_the
 ) -> None:
     output_stream: StringIO = StringIO()
 
-    enforce_snapshot_full_refresh_policy(
+    enforce_plan_safety_policies(
         plan=test_case.plan_output,
+        gates=build_policy_gates(allow_snapshot_full_refresh=test_case.allow_snapshot_full_refresh),
         snapshots_config=test_case.snapshots_config,
-        allow_snapshot_full_refresh=test_case.allow_snapshot_full_refresh,
-        non_interactive_help=SNAPSHOT_FULL_REFRESH_BUILD_HELP,
-        input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
-        output_stream=output_stream,
+        target_name="dev",
+        execution_limits=ExecutionLimitsConfig(),
+        streams=(
+            _InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
+            output_stream,
+        ),
     )
 
     assert output_stream.getvalue() == test_case.expected_output

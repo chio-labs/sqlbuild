@@ -4,16 +4,15 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.build_planning.table_type import (
-    enforce_table_type_downgrade_policy,
-)
-from sqlbuild.cli.commands.constants import TABLE_TYPE_DOWNGRADE_BUILD_HELP
+from sqlbuild._native import enforce_plan_safety_policies
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.planner.models import PlanOutput
+from sqlbuild.spec.contracts.models import ExecutionLimitsConfig, SnapshotsConfig
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning._test_types import (
     TableTypeDowngradePolicyTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands._helpers.build_planning.helpers import (
+    build_policy_gates,
     build_table_type_entry,
 )
 
@@ -63,12 +62,18 @@ def test_given_unsafe_table_type_downgrade_when_enforcing_then_raises_user_error
     test_case: TableTypeDowngradePolicyTestCase,
 ) -> None:
     with pytest.raises(CliUserError) as exc_info:
-        enforce_table_type_downgrade_policy(
+        enforce_plan_safety_policies(
             plan=test_case.plan_output,
-            allow_table_type_downgrade=test_case.allow_table_type_downgrade,
-            non_interactive_help=TABLE_TYPE_DOWNGRADE_BUILD_HELP,
-            input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
-            output_stream=StringIO(),
+            gates=build_policy_gates(
+                allow_table_type_downgrade=test_case.allow_table_type_downgrade
+            ),
+            snapshots_config=SnapshotsConfig(),
+            target_name="dev",
+            execution_limits=ExecutionLimitsConfig(),
+            streams=(
+                _InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
+                StringIO(),
+            ),
         )
 
     error: CliUserError = exc_info.value
@@ -123,12 +128,16 @@ def test_given_safe_or_confirmed_table_type_change_when_enforcing_then_allows_ex
 ) -> None:
     output: StringIO = StringIO()
 
-    enforce_table_type_downgrade_policy(
+    enforce_plan_safety_policies(
         plan=test_case.plan_output,
-        allow_table_type_downgrade=test_case.allow_table_type_downgrade,
-        non_interactive_help=TABLE_TYPE_DOWNGRADE_BUILD_HELP,
-        input_stream=_InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
-        output_stream=output,
+        gates=build_policy_gates(allow_table_type_downgrade=test_case.allow_table_type_downgrade),
+        snapshots_config=SnapshotsConfig(),
+        target_name="dev",
+        execution_limits=ExecutionLimitsConfig(),
+        streams=(
+            _InputStream(test_case.input_text, is_tty=test_case.input_is_tty),
+            output,
+        ),
     )
 
     assert output.getvalue() == test_case.expected_output

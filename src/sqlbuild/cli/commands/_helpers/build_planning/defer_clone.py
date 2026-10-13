@@ -6,11 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sqlbuild._native import build_compiled_project
+from sqlbuild._native import build_compiled_project, enforce_model_execution_limit
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.cli.commands._helpers.build_planning.execution_limits import (
-    enforce_model_execution_limit,
-)
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
