@@ -1,3 +1,4 @@
+pub(crate) mod builtin_catalogue;
 pub(crate) mod custom_rule_cache;
 pub(crate) mod custom_rule_evidence;
 pub(crate) mod dsl_headers;

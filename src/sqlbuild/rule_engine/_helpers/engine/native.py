@@ -44,24 +44,6 @@ def finalize_native_findings(
     )
 
 
-def native_catalogue() -> tuple[dict[str, object], ...]:
-    """Return native-owned built-in rule metadata."""
-
-    try:
-        payload: object = json.loads(_native.catalogue_json())
-    except (ValueError, TypeError) as error:
-        raise RulesError(str(error)) from error
-    if not isinstance(payload, dict) or not isinstance(payload.get("rules"), list):
-        raise RulesError("native rules engine returned an invalid catalogue")
-    rules: list[object] = payload["rules"]
-    if any(not isinstance(value, dict) for value in rules):
-        raise RulesError("native rules engine returned invalid rule metadata")
-    normalized: list[dict[str, object]] = []
-    for value in rules:
-        normalized.append({str(key): item for key, item in value.items()})
-    return tuple(normalized)
-
-
 def native_selected_codes(
     *,
     config: RulesConfig,

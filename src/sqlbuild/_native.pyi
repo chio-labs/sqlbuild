@@ -254,6 +254,7 @@ from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
+from sqlbuild.rule_engine.types import RuleCheck
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
@@ -307,7 +308,8 @@ class LintPreparationRequest(TypedDict):
     dialect: str
 
 def analyze_column_references_json(request_json: str) -> str: ...
-def catalogue_json() -> str: ...
+def builtin_rules(*, check: RuleCheck) -> list[Rule]: ...
+def selected_sql_rule_codes(*, select: list[str], ignore: list[str]) -> list[str]: ...
 
 class NativeRulesRequest:
     """A natively built rules request held until it is evaluated once."""

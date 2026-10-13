@@ -9,18 +9,14 @@ from dataclasses import replace
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import cast
 
+from sqlbuild._native import builtin_rules
 from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
-from sqlbuild.rule_engine._helpers.engine.native import native_catalogue, native_selected_codes
+from sqlbuild.rule_engine._helpers.engine.native import native_selected_codes
 from sqlbuild.rule_engine.constants import (
-    CONTRACT_BOOLEAN_NAME_CODE,
-    CONTRACT_DATE_NAME_CODE,
-    CONTRACT_TIMESTAMP_NAME_CODE,
-    EMPTY_INPUT_TEST_CODE,
     INIT_MODULE_NAME,
     RULE_DECORATOR_TOKEN,
 )
@@ -28,11 +24,9 @@ from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import (
     Finding,
     Rule,
-    RuleGuidance,
     RuleOption,
     RulesConfig,
 )
-from sqlbuild.rule_engine.types import RuleSubject
 
 
 def build_catalogue(
@@ -65,107 +59,7 @@ def build_catalogue(
 
 
 def _builtins() -> tuple[Rule, ...]:
-    return tuple(
-        Rule(
-            code=str(item["code"]),
-            family=str(item["code"])[:-3],
-            slug=str(item["slug"]),
-            message=str(item["message"]),
-            remediation=str(item["remediation"]),
-            check=_native_builtin,
-            options=_builtin_options(str(item["code"])),
-            enabled_by_default=bool(item["enabled_by_default"]),
-            subject=(RuleSubject.PROJECT if bool(item["project_wide"]) else RuleSubject.MODEL),
-            guidance=_guidance(item.get("guidance")),
-        )
-        for item in native_catalogue()
-    )
-
-
-def _builtin_options(code: str) -> tuple[RuleOption[object], ...]:
-    if code == CONTRACT_BOOLEAN_NAME_CODE:
-        return (
-            cast(
-                RuleOption[object],
-                RuleOption.boolean(
-                    name="allow_numeric_indicators",
-                    default=False,
-                    description="Accept numeric is_/has_/can_ indicator columns.",
-                ),
-            ),
-        )
-    if code == CONTRACT_TIMESTAMP_NAME_CODE:
-        return (
-            cast(
-                RuleOption[object],
-                RuleOption.boolean(
-                    name="allow_date_for_at",
-                    default=False,
-                    description="Accept DATE for columns ending in _at.",
-                ),
-            ),
-            cast(
-                RuleOption[object],
-                RuleOption.boolean(
-                    name="allow_numeric_epoch",
-                    default=False,
-                    description="Accept numeric epoch values for timestamp-named columns.",
-                ),
-            ),
-            cast(
-                RuleOption[object],
-                RuleOption.boolean(
-                    name="allow_encoded_values",
-                    default=False,
-                    description="Accept string or variant encoded timestamp values.",
-                ),
-            ),
-        )
-    if code == CONTRACT_DATE_NAME_CODE:
-        return (
-            cast(
-                RuleOption[object],
-                RuleOption.boolean(
-                    name="allow_timestamps",
-                    default=False,
-                    description="Accept timestamp types for columns ending in _date.",
-                ),
-            ),
-            cast(
-                RuleOption[object],
-                RuleOption.boolean(
-                    name="allow_encoded_values",
-                    default=False,
-                    description="Accept string or variant encoded date values.",
-                ),
-            ),
-        )
-    if code == EMPTY_INPUT_TEST_CODE:
-        return (
-            cast(
-                RuleOption[object],
-                RuleOption.string_list(
-                    name="allowed_tests",
-                    default=(),
-                    description=(
-                        "Reviewed SQL test names that may assert only that empty inputs produce "
-                        "no rows; listed tests count toward min_tests_per_model."
-                    ),
-                ),
-            ),
-        )
-    return ()
-
-
-def _guidance(value: object) -> RuleGuidance | None:
-    if not isinstance(value, dict):
-        return None
-    payload: dict[str, object] = {str(key): item for key, item in value.items()}
-    return RuleGuidance(
-        good_example=str(payload["good_example"]),
-        anti_tautology=str(payload["anti_tautology"]),
-        mutation_check=str(payload["mutation_check"]),
-    )
+    return tuple(builtin_rules(check=_native_builtin))
 
 
 def _native_builtin(*, model: object, ctx: object) -> list[Finding]:

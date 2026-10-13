@@ -12,6 +12,7 @@ from sqlbuild._native import (
     load_sql_rule_cache,
     lookup_sql_rule_cache,
     project_with,
+    selected_sql_rule_codes,
     sql_file_rule_key,
     sql_model_rule_keys,
     sql_rule_lint_key,
@@ -54,7 +55,6 @@ from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
 from sqlbuild.rule_engine._helpers.engine.native import (
     custom_rule_payloads,
     finalize_native_findings,
-    native_catalogue,
 )
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from sqlbuild.rule_engine._helpers.run.findings import group_unevaluated_findings
@@ -339,16 +339,7 @@ def _selection_rules_config(
 
 
 def _selected_sql_codes(config: RulesConfig) -> tuple[str, ...]:
-    codes: list[str] = []
-    for rule in native_catalogue():
-        code: str = str(rule["code"])
-        if not code.startswith("SQBRSQL"):
-            continue
-        selected: bool = any(code.startswith(selector) for selector in config.select)
-        ignored: bool = any(code.startswith(selector) for selector in config.ignore)
-        if selected and not ignored:
-            codes.append(code)
-    return tuple(codes)
+    return tuple(selected_sql_rule_codes(select=list(config.select), ignore=list(config.ignore)))
 
 
 def _selected_project(
