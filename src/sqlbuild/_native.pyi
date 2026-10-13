@@ -66,6 +66,7 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigInputs,
     NativeModelConfigSession,
     PythonSqlReferenceReport,
+    SqlReferenceScan,
     StaticMacroExport,
 )
 from sqlbuild.compiler.compile.types import (
@@ -2009,6 +2010,11 @@ class SqlCodeScanner:
     def __init__(self, sql: str, syntax: dict[str, object] | None, context: str) -> None: ...
     def non_code_end(self, index: int) -> int | None: ...
     def matching_paren(self, open: int) -> int: ...
+
+def scan_sql_reference_calls(*, sql: str, syntax: SqlLexicalSyntax) -> SqlReferenceScan: ...
+def extract_sql_references(
+    *, sql: str, syntax: SqlLexicalSyntax
+) -> tuple[CompileSqlReference, ...]: ...
 
 class SqlReferenceScanner:
     def __init__(self, syntax: dict[str, object]) -> None: ...

@@ -16,11 +16,11 @@ from sqlbuild._native import (
     compiled_model_record,
     compute_query_hash,
     project_with,
+    scan_sql_reference_calls,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.auditing.types import AuditSeverity
-from sqlbuild.compiler.compile._helpers.refs.references import scan_sql_reference_calls
 from sqlbuild.compiler.compile.models import (
     CompiledAudit,
     CompiledDirectLogicSqlTestPayload,

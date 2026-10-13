@@ -19,12 +19,12 @@ from sqlbuild._native import (
     build_compile_inputs,
     build_compiled_project,
     discover_project_inputs,
+    extract_sql_references,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.auditing.models import MeasurementThresholdBound, MeasurementThresholds
 from sqlbuild.compiler.compile import models as compile_models
-from sqlbuild.compiler.compile._helpers.refs.references import extract_sql_references
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompileModelConfig,
