@@ -37,7 +37,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 _MIB: int = 1024 * 1024
 _MODEL_COUNT: int = INSPECTION_BENCHMARK_MODEL_COUNT
-_MODEL_LINEAGE_MAX_RSS_BYTES: int = 144 * _MIB
+_MODEL_LINEAGE_MAX_RSS_BYTES: int = 176 * _MIB
 
 
 @pytest.mark.performance

@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
+from sqlbuild._native import cursor_min_bound as min_bound
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
 from sqlbuild.compiler.planner._helpers.resolve.cursor import apply_typed_cursor_replay_policy
 from sqlbuild.compiler.planner.exceptions import MaximumAutomaticStartError
 from sqlbuild.compiler.planner.models import (
@@ -19,11 +24,6 @@ from sqlbuild.compiler.planner.types import (
     CursorType,
     IncrementalStrategy,
 )
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-from sqlbuild.cursor_algebra.main.min_bound import min_bound
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.models import DateValue, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION

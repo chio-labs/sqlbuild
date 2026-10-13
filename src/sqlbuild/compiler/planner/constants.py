@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy
 

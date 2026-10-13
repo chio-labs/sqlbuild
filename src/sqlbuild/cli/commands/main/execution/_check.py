@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import write_execution_header
 from sqlbuild.cli.commands._helpers.check.execution import (
     execute_check_plan,
     prepare_check_execution,
@@ -17,7 +18,6 @@ from sqlbuild.cli.commands.models import (
     CheckExecutionPreparation,
     CheckInvocation,
 )
-from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.provider.classes.session import ProviderSession

@@ -8,6 +8,8 @@ from typing import cast
 import duckdb
 import pytest
 
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey, CompiledRelationLocation
@@ -28,8 +30,6 @@ from sqlbuild.compiler.planner.types import (
     PlanAction,
     PlanReason,
 )
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
     build_runtime_cursor_spec,

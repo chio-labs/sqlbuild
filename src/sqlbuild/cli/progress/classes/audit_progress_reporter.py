@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable
 from typing import TextIO
 
-from sqlbuild.cli.progress.classes.native_progress_projector import (
+from sqlbuild._native import (
     NativeProgressProjector,
     current_native_progress_projector,
 )

@@ -100,7 +100,7 @@ const SCOPE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SCOPE_ROUTE: Route = routed(
     "run_scope",
-    ("sqlbuild.cli.commands.main.inspection._scope", "run_scope"),
+    ("sqlbuild._native", "run_scope_command"),
     &SCOPE_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -215,12 +215,9 @@ const FRESHNESS_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const FRESHNESS_ROUTE: Route = routed(
     "run_freshness",
-    (
-        "sqlbuild.cli.commands.main.execution._freshness",
-        "run_freshness",
-    ),
+    ("sqlbuild._native", "run_freshness_command"),
     &FRESHNESS_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const TEST_FIELDS: [Field; 12] = [
@@ -365,12 +362,9 @@ const LINEAGE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const LINEAGE_ROUTE: Route = routed(
     "run_lineage",
-    (
-        "sqlbuild.cli.commands.main.inspection._lineage",
-        "run_lineage",
-    ),
+    ("sqlbuild._native", "run_lineage_command"),
     &LINEAGE_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const CLONE_FIELDS: [Field; 12] = [
@@ -500,7 +494,7 @@ const DEBUG_ARGUMENTS: [Field; 5] = [
 ];
 pub(crate) const DEBUG_ROUTE: Route = routed(
     "run_debug",
-    ("sqlbuild.cli.commands.main.inspection._debug", "run_debug"),
+    ("sqlbuild._native", "run_debug_command"),
     &DEBUG_ARGUMENTS,
     CallShape {
         slot_positional: 0,
@@ -527,9 +521,9 @@ const JANITOR_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const JANITOR_ROUTE: Route = routed(
     "run_janitor",
-    ("sqlbuild.cli.commands.main.state._janitor", "run_janitor"),
+    ("sqlbuild._native", "run_janitor_command"),
     &JANITOR_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const REFACTOR_FIELDS: [Field; 9] = [
@@ -551,10 +545,7 @@ pub(crate) const REFACTOR_ROUTE: Route = Route {
     unavailable_code: Some("C950"),
     ..routed(
         "run_refactor",
-        (
-            "sqlbuild.cli.commands.main.project._refactor",
-            "run_refactor",
-        ),
+        ("sqlbuild._native", "run_refactor_command"),
         &REFACTOR_ARGUMENTS,
         REQUEST_KEYWORD_SHAPE,
     )
@@ -654,10 +645,7 @@ const PLAYGROUND_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const PLAYGROUND_ROUTE: Route = routed(
     "run_playground",
-    (
-        "sqlbuild.cli.commands.main.workspace._playground",
-        "run_playground",
-    ),
+    ("sqlbuild._native", "run_playground_command"),
     &PLAYGROUND_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -670,10 +658,7 @@ const SKILLS_ARGUMENTS: [Field; 4] = [
 ];
 pub(crate) const SKILLS_ROUTE: Route = routed(
     "run_skills_update",
-    (
-        "sqlbuild.cli.commands.main.workspace._skills",
-        "run_skills_update",
-    ),
+    ("sqlbuild._native", "run_skills_command"),
     &SKILLS_ARGUMENTS,
     CallShape {
         slot_positional: 0,

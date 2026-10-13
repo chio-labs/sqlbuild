@@ -9,16 +9,19 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from sqlbuild._native import (
+    ExecutionEventWriter,
+    NativeProgressProjector,
+    current_native_progress_projector,
+    format_completion_line,
+    format_expectation_detail,
+    format_expectation_name,
+    format_status_cell,
+    format_summary_footer,
+)
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.progress.classes.native_progress_projector import (
-    NativeProgressProjector,
-    current_native_progress_projector,
-)
-from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
-from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType
@@ -56,10 +59,7 @@ from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
-from sqlbuild.presentation.main.completion_line import format_completion_line
 from sqlbuild.presentation.main.inline_error_lines import format_inline_error_lines
-from sqlbuild.presentation.main.status_cell import format_status_cell
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.terminal_columns import terminal_columns
 from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.presentation.main.tree_connector import tree_connector

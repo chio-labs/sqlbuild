@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.presentation.main.count_noun import format_count_noun
+from sqlbuild._native import format_count_noun
 from tests.unit.src.sqlbuild.presentation.main._test_types import CountNounTestCase
 
 

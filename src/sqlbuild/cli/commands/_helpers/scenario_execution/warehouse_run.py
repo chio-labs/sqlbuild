@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import ConnectionProgressReporter
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.scenario_output.result_output import complete_scenario_run
 from sqlbuild.cli.commands._helpers.scenario_output.run_presentation import (
@@ -12,7 +13,6 @@ from sqlbuild.cli.commands._helpers.scenario_output.run_presentation import (
 )
 from sqlbuild.cli.commands.constants import SUCCESS_STATUS
 from sqlbuild.cli.commands.models import ScenarioRunOutputContext, ScenarioRunPresentation
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.pipeline.main.run import run_scenario_test_pipeline

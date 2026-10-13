@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import json
 
-from sqlbuild._native import format_audit_execution_json, write_execution_json_output
+from sqlbuild._native import (
+    format_audit_execution_json,
+    format_summary_footer,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.models import AuditCommandRequest, AuditInvocation
 from sqlbuild.compiler.auditing.types import AuditOutcome
 from sqlbuild.executor.auditing.main.current_audit_result_projection import (
     current_audit_result_projection,
 )
 from sqlbuild.executor.auditing.models import AuditExecutionResult, AuditResultProjection
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 
 def write_audit_completion_output(

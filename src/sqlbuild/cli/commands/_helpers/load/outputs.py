@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import format_load_execution_json, write_execution_json_output
+from sqlbuild._native import (
+    format_completion_line,
+    format_load_execution_json,
+    format_summary_footer,
+    write_execution_header,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.classes.load_progress_reporter import format_load_footer
 from sqlbuild.cli.commands.models import (
     LoadCommandRequest,
@@ -10,10 +16,7 @@ from sqlbuild.cli.commands.models import (
     LoadInvocation,
     LoadRunOutcome,
 )
-from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.completion_line import format_completion_line
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.surface_header import format_surface_header
 from sqlbuild.presentation.main.tree_connector import tree_connector
 from sqlbuild.presentation.types import CompletionState

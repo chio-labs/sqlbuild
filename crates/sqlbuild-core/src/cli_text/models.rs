@@ -36,6 +36,21 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn section(self, text: &str) -> String {
+        self.apply(BOLD, text)
+    }
+
+    #[must_use]
+    pub fn command(self, text: &str) -> String {
+        self.apply(DIM, text)
+    }
+
+    #[must_use]
+    pub fn value(self, text: &str) -> String {
+        self.apply(BLUE, text)
+    }
+
+    #[must_use]
     pub fn accent(self, text: &str) -> String {
         self.apply(BLUE, text)
     }
@@ -61,6 +76,11 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn success_strong(self, text: &str) -> String {
+        self.apply(&format!("{GREEN}{BOLD}"), text)
+    }
+
+    #[must_use]
     pub fn warning(self, text: &str) -> String {
         self.apply(YELLOW, text)
     }
@@ -71,6 +91,11 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn error_muted(self, text: &str) -> String {
+        self.apply(&format!("{RED}{DIM}"), text)
+    }
+
+    #[must_use]
     pub fn error_strong(self, text: &str) -> String {
         self.apply(&format!("{RED}{BOLD}"), text)
     }
@@ -78,20 +103,26 @@ impl CliStyle {
     /// `CliStyle.status`: the status word styled by what it reports.
     #[must_use]
     pub fn status(self, status: &str) -> String {
+        self.status_text(status, status)
+    }
+
+    /// `CliStyle.status(status=..., text=...)`: `text` styled by the status word it reports.
+    #[must_use]
+    pub fn status_text(self, status: &str, text: &str) -> String {
         let normalized: String = status.to_uppercase();
         if SUCCESS_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.success(status);
+            return self.success(text);
         }
         if WARNING_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.warning(status);
+            return self.warning(text);
         }
         if ERROR_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.error(status);
+            return self.error(text);
         }
         if SKIPPED_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.muted(status);
+            return self.muted(text);
         }
-        status.to_owned()
+        text.to_owned()
     }
 }
 
@@ -361,4 +392,117 @@ pub(crate) enum RowKind {
     Leaf,
     Nested,
     Other,
+}
+
+/// Overall outcome of a completion summary line (`CompletionState`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompletionState {
+    Ok,
+    Warn,
+    Fail,
+}
+
+/// One summary count: its label and value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SummaryCount {
+    pub label: String,
+    pub value: i64,
+}
+
+/// One aligned name/value row: the plain name sets the width, the styled name is shown.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AlignedRow {
+    pub plain_name: String,
+    pub styled_name: String,
+    pub value: String,
+    pub name_column_width: usize,
+    pub prefix: String,
+}
+
+/// Simple static CLI output built line by line with semantic styling (`CliDocument`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CliDocument {
+    pub style: CliStyle,
+    pub lines: Vec<String>,
+}
+
+impl CliDocument {
+    #[must_use]
+    pub fn new(style: CliStyle) -> Self {
+        Self {
+            style,
+            lines: Vec::new(),
+        }
+    }
+
+    pub fn header(&mut self, text: &str, suffix: Option<&str>) {
+        let title: String = self.style.title(text);
+        self.lines.push(match suffix {
+            Some(suffix) => format!("{title}  {suffix}"),
+            None => title,
+        });
+    }
+
+    pub fn field(&mut self, label: &str, (value, padding): (&str, &str)) {
+        self.lines
+            .push(format!("  {}:{padding}{value}", self.style.value(label)));
+    }
+
+    /// Rows of `label value`, labels left-justified to `label_width` when given.
+    pub fn fields(&mut self, rows: &[(String, String)], label_width: Option<usize>) {
+        for (label, value) in rows {
+            let label: String = match label_width {
+                Some(width) => format!("{label:<width$}"),
+                None => label.clone(),
+            };
+            self.lines
+                .push(format!("  {} {value}", self.style.value(&label)));
+        }
+    }
+
+    pub fn section(&mut self, text: &str) {
+        self.lines.push(format!("{}:", self.style.section(text)));
+    }
+
+    pub fn title_section(&mut self, text: &str) {
+        self.lines.push(format!("{}:", self.style.title(text)));
+    }
+
+    pub fn items(&mut self, values: &[String]) {
+        for value in values {
+            self.lines
+                .push(format!("  {}", self.style.object_name(value)));
+        }
+    }
+
+    pub fn command_line(&mut self, prefix: &str, (command, styled): (&str, bool)) {
+        let command: String = if styled {
+            self.style.command(command)
+        } else {
+            command.to_owned()
+        };
+        self.lines.push(format!("{prefix}{command}"));
+    }
+
+    /// Commands, numbered `  1. ` or under a dim indent.
+    pub fn commands(&mut self, commands: &[String], (numbered, styled): (bool, bool)) {
+        for (index, command) in commands.iter().enumerate() {
+            let prefix: String = if numbered {
+                format!("  {}. ", index + 1)
+            } else {
+                self.style.command("  ")
+            };
+            self.command_line(&prefix, (command, styled));
+        }
+    }
+
+    /// The lines joined, with a trailing newline when asked.
+    #[must_use]
+    pub fn render(&self, trailing_newline: bool) -> String {
+        let rendered: String = self.lines.join("\n");
+        if trailing_newline {
+            return rendered + "\n";
+        }
+        rendered
+    }
 }

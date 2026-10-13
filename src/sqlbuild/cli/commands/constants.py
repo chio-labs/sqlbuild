@@ -2,13 +2,12 @@
 
 from types import MappingProxyType
 
-from sqlbuild.cli.commands.types import CliCommand, PlaygroundTemplate
+from sqlbuild.cli.commands.types import CliCommand
 from sqlbuild.spec.contracts.types import WarehouseGroup
 
 C0_CONTROL_CODE_LIMIT: int = 32
 C1_CONTROL_CODE_START: int = 127
 C1_CONTROL_CODE_LIMIT: int = 160
-RICH_LINEAGE_STATUS_MODEL_THRESHOLD: int = 100
 EMPTY_DAG_PATH: str = ""
 TARGET_DIRECTORY_NAME: str = "target"
 SQLBUILD_CONCURRENCY_ENV_VAR: str = "SQLBUILD_CONCURRENCY"
@@ -16,13 +15,8 @@ NO_COLOR_OPTION: str = "--no-color"
 DBT_INIT_COMMAND: str = "init"
 SCENARIO_TEST_COMMAND: str = "test"
 SCENARIO_CAPTURE_COMMAND: str = "capture"
-UNLIMITED_DEPTH_VALUE: str = "all"
-UPSTREAM_DIRECTION: str = "upstream"
-DOWNSTREAM_DIRECTION: str = "downstream"
-BOTH_DIRECTIONS: str = "both"
 JSON_OUTPUT_FORMAT: str = "json"
 CSV_OUTPUT_FORMAT: str = "csv"
-LIST_OUTPUT_FORMAT: str = "list"
 DEBUG_COMMAND: str = "debug"
 LINEAGE_COMMAND: str = "lineage"
 QUERY_COMMAND: str = "query"
@@ -30,16 +24,6 @@ RULES_LIST_ACTION: str = "list"
 RULES_SHOW_ACTION: str = "show"
 RULES_SKILLS_ACTION: str = "skills"
 SQL_FILE_SUFFIX: str = ".sql"
-SELECTOR_INTERSECTION_MARKER: str = ","
-COLUMN_TARGET_SEPARATOR: str = "."
-COLUMN_TARGET_KIND: str = "column"
-PLAYGROUND_ORCHESTRATED_PROJECT_DIR: str = "waffle_shop"
-PLAYGROUND_ORCHESTRATED_TEMPLATES: frozenset[PlaygroundTemplate] = frozenset(
-    {PlaygroundTemplate.DAGSTER, PlaygroundTemplate.RIVERS}
-)
-PLAYGROUND_TEMPLATE_VALUES: tuple[str, ...] = tuple(
-    template.value for template in PlaygroundTemplate
-)
 SUCCESS_STATUS: str = "success"
 FAILED_STATUS: str = "failed"
 DEFAULT_MAX_SNAPSHOT_ROWS_PER_RELATION: int = 10_000
@@ -159,32 +143,3 @@ COMMAND_WAREHOUSE_GROUPS: MappingProxyType[CliCommand, WarehouseGroup | None] = 
         CliCommand.SKILLS: None,
     }
 )
-LAYER_FOLDER_RULE_CODES: frozenset[str] = frozenset({"SQBRPROJECT102", "SQBRPROJECT105"})
-MODEL_NAME_LAYER_SEPARATOR: str = "__"
-MODEL_NAME_LAYER_INDEX: int = 1
-MODEL_NAME_PART_COUNTS: frozenset[int] = frozenset({3, 4})
-LAYER_FOLDERS: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
-    {
-        "stg": ("staging",),
-        "stg_v": ("staging",),
-        "int_clean": ("intermediate", "clean"),
-        "int_enriched": ("intermediate", "enriched"),
-        "int_v": ("intermediate", "enriched"),
-        "mart": ("mart",),
-        "mart_v": ("mart",),
-    }
-)
-CONTIGUOUS_LAYER_FOLDERS: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
-    {
-        "stg": ("staging",),
-        "stg_v": ("staging",),
-        "int_clean": ("intermediate", "clean"),
-        "int_enriched": ("intermediate", "enriched"),
-        "int_v": ("intermediate",),
-        "mart": ("mart",),
-        "mart_v": ("mart",),
-    }
-)
-WINDOWS_OS_NAME: str = "nt"
-FOLDER_PLACEHOLDER: str = "<folder>"
-PROJECT_DIR_OPTION: str = "--project-dir"

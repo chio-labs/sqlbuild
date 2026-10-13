@@ -6,6 +6,7 @@ pub(crate) mod registration;
 pub(crate) mod relationship_names;
 pub(crate) mod relationship_scan;
 pub(crate) mod scope_cache;
+pub(crate) mod scope_command;
 pub(crate) mod scope_errors;
 pub(crate) mod scope_index;
 pub(crate) mod scope_loading;

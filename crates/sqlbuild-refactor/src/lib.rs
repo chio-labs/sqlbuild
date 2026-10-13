@@ -2,4 +2,5 @@
 
 #![forbid(unsafe_code)]
 
+pub mod refactor_command;
 pub mod refactoring;

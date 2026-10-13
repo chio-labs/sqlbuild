@@ -3,16 +3,18 @@
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands._helpers.runtime.connection import (
+from sqlbuild._native import (
+    discover_project_inputs,
+    read_cost_run,
+    resolve_cost_run,
     resolve_project_connection_config,
+    write_cost_run,
 )
+from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.cli.commands.constants import COST_HISTORY_SELECTOR, COST_LATEST_SELECTOR
 from sqlbuild.cli.commands.models import CostCommandRequest
 from sqlbuild.compiler.compile.main.effective_target import build_effective_target_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.constants import LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX
 from sqlbuild.cost.models import CostRunRecord, RunCostSummary
 from sqlbuild.cost.types import CostAwareAdapter, CostCapability, CostStatus
@@ -84,18 +86,18 @@ def refresh_pending_cost_run(request: CostCommandRequest) -> None:
             rate_source=record.cost.rate_source,
         )
         if _is_non_destructive_refresh(current=record.cost, candidate=summary):
-            RunCostStore.write(project_dir=project_dir, record=replace(record, cost=summary))
+            write_cost_run(project_dir=project_dir, record=replace(record, cost=summary))
     except BaseException:
         return
 
 
 def _resolve_refresh_record(*, project_dir: Path, selector: str) -> CostRunRecord | None:
     if selector == COST_LATEST_SELECTOR:
-        return RunCostStore.resolve(project_dir=project_dir, selector=selector)
-    exact: CostRunRecord | None = RunCostStore.read(project_dir=project_dir, run_id=selector)
+        return resolve_cost_run(project_dir=project_dir, selector=selector)
+    exact: CostRunRecord | None = read_cost_run(project_dir=project_dir, run_id=selector)
     if exact is not None:
         return exact
-    return RunCostStore.resolve(project_dir=project_dir, selector=selector)
+    return resolve_cost_run(project_dir=project_dir, selector=selector)
 
 
 def _is_non_destructive_refresh(*, current: RunCostSummary, candidate: RunCostSummary) -> bool:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.cursor_algebra.main.render import render
+from sqlbuild._native import cursor_render as render
 
 
 class PlannerInputError(ValueError):

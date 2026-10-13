@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
+from sqlbuild._native import ConnectionProgressReporter
 
 
 def build_connection_progress_reporter(

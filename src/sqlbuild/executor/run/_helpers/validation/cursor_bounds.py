@@ -8,6 +8,20 @@ from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
+from sqlbuild._native import cursor_clamp as clamp
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import (
+    cursor_exclusive_end_from_observed_max as exclusive_end_from_observed_max,
+)
+from sqlbuild._native import cursor_exclusive_to_inclusive as exclusive_to_inclusive
+from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
+from sqlbuild._native import cursor_inclusive_to_exclusive as inclusive_to_exclusive
+from sqlbuild._native import cursor_max_bound as max_bound
+from sqlbuild._native import cursor_min_bound as min_bound
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_from_token as sentinel_from_token
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
@@ -43,20 +57,6 @@ from sqlbuild.compiler.planner.types import (
     MicrobatchStrategy,
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
-from sqlbuild.cursor_algebra.main.clamp import clamp
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.exclusive_end_from_observed_max import (
-    exclusive_end_from_observed_max,
-)
-from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
-from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
-from sqlbuild.cursor_algebra.main.max_bound import max_bound
-from sqlbuild.cursor_algebra.main.min_bound import min_bound
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.sentinel_from_token import sentinel_from_token
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.models import (
     AlignedInterval,
     DateValue,

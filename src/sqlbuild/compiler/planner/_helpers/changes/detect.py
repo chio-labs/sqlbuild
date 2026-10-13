@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from sqlbuild._native import get_config_str
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
@@ -58,7 +59,6 @@ from sqlbuild.compiler.planner.types import BackfillAction, ChangeKind
 from sqlbuild.compiler.python_nodes.main._hook_identities import build_hook_identities
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 
 def detect_changes(

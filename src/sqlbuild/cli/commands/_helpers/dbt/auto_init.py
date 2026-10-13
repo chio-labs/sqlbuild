@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import CliDocument
 from sqlbuild.cli.commands.classes.dbt_init_progress_reporter import DbtInitProgressReporter
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
 from sqlbuild.integrations.dbt.main.profile.profile_init import run_dbt_profile_init
 from sqlbuild.integrations.dbt.models import DbtInitProgressCallbacks, DbtInitRequest, DbtInitResult
-from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.supports_color import supports_color
 

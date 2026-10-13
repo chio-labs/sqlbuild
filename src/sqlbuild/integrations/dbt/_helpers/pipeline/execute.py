@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO, cast
 
+from sqlbuild._native import format_summary_footer
 from sqlbuild.integrations.dbt._helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
@@ -48,7 +49,6 @@ from sqlbuild.integrations.dbt.types import (
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 _COMMAND_AND_SUBCOMMAND_ARGUMENT_COUNT: int = 2
 _DBT_LS_EXCLUDED_EXECUTION_FLAGS: frozenset[str] = frozenset({"--full-refresh", "--fail-fast"})

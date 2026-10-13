@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sqlbuild._native import CliDocument, update_sqlbuild_skills
 from sqlbuild.cli.commands._helpers.init.scaffold import scaffold_blank_project
-from sqlbuild.cli.commands._helpers.skills.update import update_sqlbuild_skills
-from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.supports_color import supports_color
 

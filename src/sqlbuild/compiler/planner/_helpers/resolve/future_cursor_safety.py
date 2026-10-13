@@ -5,6 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
+from sqlbuild._native import cursor_next_boundary as next_boundary
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.compiler.planner.exceptions import FutureCursorSafetyError
 from sqlbuild.compiler.planner.models import (
     CursorBounds,
@@ -13,11 +18,6 @@ from sqlbuild.compiler.planner.models import (
     FutureCursorSafetyEvidence,
 )
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-from sqlbuild.cursor_algebra.main.next_boundary import next_boundary
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.models import DateValue, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.spec.contracts.constants import ZERO_DAY_CURSOR_DURATION

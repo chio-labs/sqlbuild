@@ -1,13 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-
-
-@dataclass(frozen=True)
-class FreshnessClockTestCase:
-    description: str
-    expected_observed_at: datetime
 
 
 @dataclass(frozen=True)

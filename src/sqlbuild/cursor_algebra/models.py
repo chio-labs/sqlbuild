@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-import calendar
-import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import ClassVar
 
+from sqlbuild._native import (
+    parse_cursor_duration,
+    shift_by_cursor_duration,
+    validate_cursor_interval,
+)
 from sqlbuild.compiler.planner.types import CursorGrain
 from sqlbuild.cursor_algebra.constants import (
     DURATION_DAY_UNIT,
@@ -17,7 +20,6 @@ from sqlbuild.cursor_algebra.constants import (
     DURATION_SECOND_UNIT,
     DURATION_YEAR_UNIT,
 )
-from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -51,28 +53,13 @@ class AlignedInterval:
     grain: CursorGrain | None
 
     def __post_init__(self) -> None:
-        from sqlbuild.cursor_algebra.main.compare import compare
-        from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-
-        if compare(left=self.start, right=self.end) >= 0:
-            raise CursorAlgebraError("cursor interval start must be less than end")
-        if self.grain is None:
-            if not isinstance(self.start, IntegerValue) or not isinstance(self.end, IntegerValue):
-                raise CursorAlgebraError("temporal cursor intervals require a grain")
-            return
-        if floor_to_grain(value=self.start, grain=self.grain) != self.start:
-            raise CursorAlgebraError("cursor interval start must be grain-aligned")
-        if floor_to_grain(value=self.end, grain=self.grain) != self.end:
-            raise CursorAlgebraError("cursor interval end must be grain-aligned")
+        validate_cursor_interval(start=self.start, end=self.end, grain=self.grain)
 
 
 @dataclass(frozen=True)
 class Duration:
     """A calendar-aware duration (years/months plus fixed time units)."""
 
-    _PATTERN: ClassVar[re.Pattern[str]] = re.compile(
-        r"^(?:(\d+)y)?(?:(\d+)mo)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$"
-    )
     _MONTHS_PER_YEAR: ClassVar[int] = 12
     _SECONDS_PER_DAY: ClassVar[int] = 86_400
     _SECONDS_PER_HOUR: ClassVar[int] = 3_600
@@ -89,20 +76,13 @@ class Duration:
     def parse(cls, value: str) -> Duration | None:
         """Parse a string like '1mo', '1y6mo', '30d', or '6h' into a duration."""
 
-        match: re.Match[str] | None = cls._PATTERN.match(value)
-        if match is None:
+        parts: tuple[int, int, int, int, int, int] | None = parse_cursor_duration(value)
+        if parts is None:
             return None
-        duration: Duration = cls(
-            years=int(match.group(1) or 0),
-            months=int(match.group(2) or 0),
-            days=int(match.group(3) or 0),
-            hours=int(match.group(4) or 0),
-            minutes=int(match.group(5) or 0),
-            seconds=int(match.group(6) or 0),
+        years, months, days, hours, minutes, seconds = parts
+        return cls(
+            years=years, months=months, days=days, hours=hours, minutes=minutes, seconds=seconds
         )
-        if duration.is_zero:
-            return None
-        return duration
 
     @property
     def is_zero(self) -> bool:
@@ -152,33 +132,12 @@ class Duration:
 
         return self.years * self._MONTHS_PER_YEAR + self.months
 
-    @property
-    def _fixed_timedelta(self) -> timedelta:
-        return timedelta(
-            days=self.days, hours=self.hours, minutes=self.minutes, seconds=self.seconds
-        )
-
     def add_to(self, moment: datetime) -> datetime:
         """Return the moment advanced by this duration."""
 
-        return (
-            self._shift_months(moment=moment, months_delta=self.total_months)
-            + self._fixed_timedelta
-        )
+        return shift_by_cursor_duration(moment=moment, duration=self, direction=1)
 
     def subtract_from(self, moment: datetime) -> datetime:
         """Return the moment moved back by this duration."""
 
-        return (
-            self._shift_months(moment=moment, months_delta=-self.total_months)
-            - self._fixed_timedelta
-        )
-
-    def _shift_months(self, *, moment: datetime, months_delta: int) -> datetime:
-        if months_delta == 0:
-            return moment
-        total: int = (moment.year * self._MONTHS_PER_YEAR + (moment.month - 1)) + months_delta
-        year: int = total // self._MONTHS_PER_YEAR
-        month: int = total % self._MONTHS_PER_YEAR + 1
-        day: int = min(moment.day, calendar.monthrange(year, month)[1])
-        return moment.replace(year=year, month=month, day=day)
+        return shift_by_cursor_duration(moment=moment, duration=self, direction=-1)

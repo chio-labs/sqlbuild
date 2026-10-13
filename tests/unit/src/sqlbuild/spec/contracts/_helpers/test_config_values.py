@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import (
+    get_config_bool,
+    get_config_cursor_bound,
+    get_config_int,
+    get_config_str,
+    get_config_string_tuple,
+)
 from sqlbuild.spec.contracts.exceptions import ConfigValueTypeError
-from sqlbuild.spec.contracts.main.get_config_bool import get_config_bool
-from sqlbuild.spec.contracts.main.get_config_cursor_bound import get_config_cursor_bound
-from sqlbuild.spec.contracts.main.get_config_int import get_config_int
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
-from sqlbuild.spec.contracts.main.get_config_string_tuple import get_config_string_tuple
 from tests.unit.src.sqlbuild.spec.contracts._helpers._test_types import (
     ConfigValueErrorTestCase,
     ConfigValueSuccessTestCase,

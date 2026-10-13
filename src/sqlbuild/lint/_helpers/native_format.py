@@ -9,13 +9,14 @@ from pathlib import Path
 from typing import Any
 
 import sqlbuild._native as _native
+from sqlbuild._native import scan_headers
 from sqlbuild.compiler.compile.constants import OMITTED_CEREMONIAL_SELECT_SQL
 from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
     omitted_ceremonial_select_offset,
 )
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_MAX_FUNCTION_CALL_DEPTH
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.lint._helpers.headers import lint_body_ranges, scan_headers
+from sqlbuild.lint._helpers.headers import lint_body_ranges
 from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, restore_interpolation
 from sqlbuild.lint.constants import (
     CARRIAGE_RETURN_LINE_FEED,

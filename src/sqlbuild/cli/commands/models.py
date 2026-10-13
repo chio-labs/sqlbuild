@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
 from sqlbuild.cli.commands.types import (
-    DebugCheckStatus,
-    FreshnessSourceStatus,
     PlaygroundTemplate,
 )
 from sqlbuild.cli.compile.models import (  # noqa: F401
@@ -27,15 +25,12 @@ from sqlbuild.cli.entry.models import (  # noqa: F401
     SelectorFileSummary,
 )
 from sqlbuild.cli.output.models import (  # noqa: F401
-    SkillInstallTarget,
     SkillMaintenanceResult,
-    SkillSettings,
     SkillUpdateResult,
     WrittenTarget,
 )
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts  # noqa: F401
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.source_freshness.types import SourceFreshnessAgeStatus
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.spec.contracts.models import (
     CostConfig,
@@ -45,27 +40,25 @@ from sqlbuild.spec.contracts.models import (
 )
 
 if TYPE_CHECKING:
+    from sqlbuild._native import (
+        ConnectionProgressReporter,
+        PlanningProgressReporter,
+    )
     from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
     from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
     from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
         DirectPythonLifecycleState,
     )
     from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
-    from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-        ConnectionProgressReporter,
-    )
     from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
         NestedCommandProgressCallbacks,
     )
-    from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
     from sqlbuild.compiler.compile.models import (
-        CompiledObjectKey,
         CompiledSqlScenario,
         CompilerDiagnostic,
     )
     from sqlbuild.compiler.compile.types import CompiledProjectView
     from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
-    from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
     from sqlbuild.compiler.pipeline.models import (
         ClonePipelineResult,
         CompilePipelineResult,
@@ -433,30 +426,6 @@ class DbtInitInvocation:
 
 
 @dataclass(frozen=True)
-class DebugLine:
-    label: str
-    message: str
-    status: DebugCheckStatus | None = None
-    status_message: str | None = None
-
-
-@dataclass(frozen=True)
-class DebugResult:
-    runtime: tuple[DebugLine, ...]
-    configuration: tuple[DebugLine, ...]
-    providers: tuple[DebugLine, ...]
-    connection: tuple[DebugLine, ...]
-
-    @property
-    def success(self) -> bool:
-        return all(line.status != DebugCheckStatus.ERROR for line in self.lines)
-
-    @property
-    def lines(self) -> tuple[DebugLine, ...]:
-        return self.runtime + self.configuration + self.providers + self.connection
-
-
-@dataclass(frozen=True)
 class DiffCommandRequest:
     """CLI inputs for one diff command invocation."""
 
@@ -588,79 +557,6 @@ class FreshnessCommandRequest:
 
 
 @dataclass(frozen=True)
-class FreshnessSourceResult:
-    """Freshness observation result for one source."""
-
-    name: str
-    status: FreshnessSourceStatus
-    strategy: str | None = None
-    value_kind: str | None = None
-    current_data_version: str | None = None
-    previous_data_version: str | None = None
-    lag_tolerance: str | None = None
-    target_database: str | None = None
-    target_schema: str | None = None
-    target_name: str | None = None
-    message: str | None = None
-    age_status: SourceFreshnessAgeStatus | None = None
-
-
-@dataclass(frozen=True)
-class FreshnessCommandResult:
-    """Source freshness command output payload."""
-
-    sources: tuple[FreshnessSourceResult, ...] = field(default_factory=tuple)
-
-    @property
-    def observed_count(self) -> int:
-        return sum(1 for source in self.sources if source.status == FreshnessSourceStatus.OBSERVED)
-
-    @property
-    def changed_count(self) -> int:
-        return sum(1 for source in self.sources if source.status == FreshnessSourceStatus.CHANGED)
-
-    @property
-    def unchanged_count(self) -> int:
-        return sum(1 for source in self.sources if source.status == FreshnessSourceStatus.UNCHANGED)
-
-    @property
-    def tolerated_count(self) -> int:
-        return sum(1 for source in self.sources if source.status == FreshnessSourceStatus.TOLERATED)
-
-    @property
-    def unknown_count(self) -> int:
-        return sum(1 for source in self.sources if source.status == FreshnessSourceStatus.UNKNOWN)
-
-    @property
-    def error_count(self) -> int:
-        return sum(1 for source in self.sources if source.status == FreshnessSourceStatus.ERROR)
-
-    @property
-    def age_pass_count(self) -> int:
-        return sum(
-            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.PASS
-        )
-
-    @property
-    def age_warn_count(self) -> int:
-        return sum(
-            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.WARN
-        )
-
-    @property
-    def age_error_count(self) -> int:
-        return sum(
-            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.ERROR
-        )
-
-    @property
-    def age_unknown_count(self) -> int:
-        return sum(
-            1 for source in self.sources if source.age_status == SourceFreshnessAgeStatus.UNKNOWN
-        )
-
-
-@dataclass(frozen=True)
 class JanitorCommandRequest:
     """CLI inputs for one janitor command invocation."""
 
@@ -718,70 +614,6 @@ class JanitorPlanningResult:
     """Built janitor plan."""
 
     plan: JanitorPlan
-
-
-@dataclass(frozen=True)
-class LineageNode:
-    """One displayable lineage graph node."""
-
-    key: CompiledObjectKey
-    relative_path: str | None = None
-    qualified_name: str | None = None
-
-
-@dataclass(frozen=True)
-class LineageGraph:
-    """Selected lineage graph slice."""
-
-    nodes: tuple[LineageNode, ...]
-    edges: tuple[tuple[CompiledObjectKey, CompiledObjectKey], ...]
-    focus_keys: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
-    direction: str | None = None
-
-
-@dataclass(frozen=True)
-class RelationLineageIndex:
-    """Cacheable structural graph used by relation-level lineage inspection."""
-
-    nodes: dict[CompiledObjectKey, LineageNode]
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    tag_index: dict[str, frozenset[CompiledObjectKey]]
-    path_index: dict[CompiledObjectKey, str]
-    all_keys: dict[str, CompiledObjectKey]
-
-
-@dataclass(frozen=True)
-class LineageSelectionAnchors:
-    """Selector anchors used for optional post-selection depth trimming."""
-
-    upstream: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
-    downstream: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
-    retained: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
-
-
-@dataclass(frozen=True)
-class LineageTarget:
-    """One positional target, `[kind:]<name>` or `[kind:]<model>.<column>`, resolved by name."""
-
-    kind: str | None
-    name: str
-    key: CompiledObjectKey | None
-    column_name: str | None
-    kind_matches: bool
-
-
-@dataclass(frozen=True)
-class ColumnLineageTrace:
-    """Selected column-level lineage trace."""
-
-    target: QualifiedLineageColumn
-    trace: tuple[ColumnLineageEdge, ...]
-    direction: str
-    mode: ColumnLineageMode = ColumnLineageMode.RICH
-    max_depth: int | None = None
-    analyzed_model_count: int = 0
-    truncated: bool = False
 
 
 @dataclass(frozen=True)
@@ -906,14 +738,6 @@ class PlaygroundCommandRequest:
     project_dir: Path | None
     target_path: str
     template: str = PlaygroundTemplate.WAFFLE_SHOP.value
-
-
-@dataclass(frozen=True)
-class PlaygroundTarget:
-    """Resolved playground destination directory and template."""
-
-    target_dir: Path
-    template: PlaygroundTemplate
 
 
 @dataclass(frozen=True)
@@ -1093,16 +917,6 @@ class RefactorCommandRequest:
     dry_run: bool = False
     json_output: bool = False
     no_color: bool = False
-
-
-@dataclass(frozen=True)
-class LayerMoveSuggestion:
-    """The one-step `sqb mv` for a rename refused only by the layer-folder rules."""
-
-    new_name: str
-    folder: str | None
-    layer_folder: str | None
-    command: str
 
 
 @dataclass(frozen=True)

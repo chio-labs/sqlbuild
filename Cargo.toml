@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/sqlbuild-core",
+    "crates/sqlbuild-cursor",
     "crates/sqlbuild-pysource",
     "crates/sqlbuild-cache",
     "crates/sqlbuild-sqltext",
@@ -24,6 +25,7 @@ resolver = "2"
 [workspace.metadata.native-layers]
 order = [
     "sqlbuild-core",
+    "sqlbuild-cursor",
     "sqlbuild-pysource",
     "sqlbuild-cache",
     "sqlbuild-sqltext",
@@ -93,6 +95,7 @@ sqlbuild-cache = { path = "crates/sqlbuild-cache" }
 sqlbuild-cli = { path = "crates/sqlbuild-cli" }
 sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
+sqlbuild-cursor = { path = "crates/sqlbuild-cursor" }
 sqlbuild-discovery = { path = "crates/sqlbuild-discovery" }
 sqlbuild-render = { path = "crates/sqlbuild-render" }
 sqlbuild-refactor = { path = "crates/sqlbuild-refactor" }

@@ -4,6 +4,8 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
 from sqlbuild.compiler.planner._helpers.resolve.cursor import cursor_inputs_without_rows
 from sqlbuild.compiler.planner._helpers.warehouse import snapshot as snapshot_module
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
@@ -17,8 +19,6 @@ from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
 )
 from sqlbuild.compiler.planner.models import EmptyCursorInputDecision, ModelCursorSnapshot
 from sqlbuild.compiler.planner.types import CursorType
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CursorFetchFailureTestCase,

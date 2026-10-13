@@ -1,20 +1,15 @@
 //! Structured future-cursor and maximum-start safety evidence for plan and result JSON.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::cursor::scalars::render_value;
 use crate::bindings::_helpers::plan_output::values::{dict, enum_value, items};
-
-const RENDER_MODULE: &str = "sqlbuild.cursor_algebra.main.render";
 
 /// `render(value=value)`.
 fn render<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(value.py(), RENDER_MODULE, "render")?,
-        &[("value", value)],
-    )
+    Ok(PyString::new(value.py(), &render_value(&value)?).into_any())
 }
 
 /// `render(value=value)` when set, else `None`.

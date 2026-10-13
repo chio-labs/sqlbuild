@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.lint._helpers.headers import scan_headers, sql_body_ranges
+from sqlbuild._native import scan_headers, sql_body_ranges
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     HeaderSpanTextTestCase,
     ScanHeadersTestCase,

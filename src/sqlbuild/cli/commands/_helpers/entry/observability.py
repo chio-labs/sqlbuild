@@ -11,6 +11,7 @@ from functools import partial
 from pathlib import Path
 
 from sqlbuild._native import (
+    NativeProgressProjector,
     TerminalEventIndex,
     terminal_event_index_scope,
 )
@@ -26,7 +27,6 @@ from sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture import 
     configured_output_capture_scope,
 )
 from sqlbuild.cli.entry.main._withhold_launch_record import withhold_launch_record
-from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.discovery.main.runtime_extensions import discover_runtime_extensions
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,

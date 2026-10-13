@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from typing import Any, cast
+import json
+from typing import Any
 
 import pytest
 
-from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.cli.commands._helpers.freshness.observe import (
-    observe_source_freshness_for_command,
-)
-from sqlbuild.cli.commands.models import FreshnessCommandResult
+from sqlbuild._native import observe_source_freshness_json
 from tests.unit.src.sqlbuild.cli.commands._helpers.freshness._test_types import (
     FreshnessObservationTestCase,
 )
@@ -114,35 +110,31 @@ def test_given_sources_when_observing_freshness_then_classifies_sources(
 ) -> None:
     adapter: FreshnessRecordingAdapter = FreshnessRecordingAdapter()
 
-    result: FreshnessCommandResult = observe_source_freshness_for_command(
-        adapter=cast(StrictAdapter, adapter),
-        connection=object(),
-        sources=freshness_sources(),
-        select=test_case.select,
-        exclude=test_case.exclude,
-        observed_at=test_case.observed_at,
-        previous_records=test_case.previous_records,
+    payload: dict[str, Any] = json.loads(
+        observe_source_freshness_json(
+            adapter=adapter,
+            connection=object(),
+            sources=freshness_sources(),
+            select=test_case.select,
+            exclude=test_case.exclude,
+            observed_at=test_case.observed_at,
+            previous_records=test_case.previous_records,
+        )
     )
+    sources: list[dict[str, Any]] = payload["sources"]
 
-    statuses: dict[str, str] = {source.name: source.status for source in result.sources}
+    statuses: dict[str, str] = {source["name"]: source["status"] for source in sources}
     versions: dict[str, str] = {
-        source.name: source.current_data_version or "" for source in result.sources
+        source["name"]: source["current_data_version"] or "" for source in sources
     }
     assert statuses == test_case.expected_statuses
     assert {
         name: versions[name] for name in test_case.expected_versions
     } == test_case.expected_versions
-    sources_by_age_status_presence: defaultdict[bool, list[str]] = defaultdict(list)
-    for source in result.sources:
-        sources_by_age_status_presence[source.age_status is not None].append(source.name)
-    expected_age_statuses: dict[str, str] = test_case.expected_age_statuses or {}
-    assert set(sources_by_age_status_presence[True]) == set(expected_age_statuses)
-    sources_by_name: dict[str, Any] = {source.name: source for source in result.sources}
-    assert len(sources_by_name) == len(result.sources)
-    for name, expected_age_status in expected_age_statuses.items():
-        age_status: Any = sources_by_name[name].age_status
-        assert age_status is not None
-        assert age_status.value == expected_age_status
+    age_statuses: dict[str, str | None] = {
+        source["name"]: source["age_status"] for source in sources
+    }
+    assert age_statuses == dict.fromkeys(statuses) | test_case.expected_age_statuses
 
 
 @pytest.mark.parametrize(
@@ -163,19 +155,22 @@ def test_given_adapter_metadata_source_when_observing_freshness_then_uses_table_
 ) -> None:
     adapter: FreshnessRecordingAdapter = FreshnessRecordingAdapter(table_metadata_supported=True)
 
-    result: FreshnessCommandResult = observe_source_freshness_for_command(
-        adapter=cast(StrictAdapter, adapter),
-        connection=object(),
-        sources=adapter_metadata_sources(),
-        select=test_case.select,
-        exclude=test_case.exclude,
-        observed_at=test_case.observed_at,
-        previous_records=test_case.previous_records,
+    payload: dict[str, Any] = json.loads(
+        observe_source_freshness_json(
+            adapter=adapter,
+            connection=object(),
+            sources=adapter_metadata_sources(),
+            select=test_case.select,
+            exclude=test_case.exclude,
+            observed_at=test_case.observed_at,
+            previous_records=test_case.previous_records,
+        )
     )
+    sources: list[dict[str, Any]] = payload["sources"]
 
-    statuses: dict[str, str] = {source.name: source.status for source in result.sources}
+    statuses: dict[str, str] = {source["name"]: source["status"] for source in sources}
     versions: dict[str, str] = {
-        source.name: source.current_data_version or "" for source in result.sources
+        source["name"]: source["current_data_version"] or "" for source in sources
     }
     assert statuses == test_case.expected_statuses
     assert versions == test_case.expected_versions

@@ -2,7 +2,7 @@
 
 import pytest
 
-from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
+from sqlbuild._native import format_expectation_detail
 from sqlbuild.executor.testing.models import (
     SqlTestColumnDifference,
     SqlTestDifferenceSample,

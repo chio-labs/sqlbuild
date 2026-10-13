@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RetentionRequest
 from sqlbuild.adapter.contract.types import MigrationTransfer
@@ -72,7 +73,6 @@ from sqlbuild.compiler.source_freshness.models import (
     DirectSourceFreshnessPlanningResult,
 )
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.models import (
     DateValue,
     IntegerValue,

@@ -10,18 +10,23 @@ from unittest.mock import patch
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
-from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
-from sqlbuild.cli.progress.classes.native_progress_projector import (
+from sqlbuild._native import (
     NativeProgressProjector,
     current_native_progress_projector,
 )
+from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
+from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
 from sqlbuild.observability import OperationLifecycle
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MachineProgressRoutingCase,
     NoExporterFastPathTestCase,
     ObservabilityCleanupCase,
+)
+from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import CloseFailingProjector
+
+_PROJECTOR_FACTORY: str = (
+    "sqlbuild.cli.commands._helpers.entry.observability.NativeProgressProjector"
 )
 
 
@@ -44,11 +49,7 @@ def test_given_projector_close_failure_when_command_fails_then_original_error_an
     outer_token: Token[NativeProgressProjector | None] = outer.install()
 
     with (
-        patch.object(
-            NativeProgressProjector,
-            "close",
-            side_effect=OSError("controlled projector close failure"),
-        ),
+        patch(_PROJECTOR_FACTORY, CloseFailingProjector),
         pytest.raises(ValueError, match=test_case.expected_original_error),
     ):
         with cli_observability_scope(args=args, project_dir=tmp_path):
@@ -203,11 +204,7 @@ def test_given_projector_close_failure_when_scope_succeeds_then_cleanup_does_not
 ) -> None:
     args: CliNamespace = CliNamespace()
 
-    with patch.object(
-        NativeProgressProjector,
-        "close",
-        side_effect=OSError("controlled projector close failure"),
-    ):
+    with patch(_PROJECTOR_FACTORY, CloseFailingProjector):
         with cli_observability_scope(args=args, project_dir=tmp_path):
             result: str = "command result"
 

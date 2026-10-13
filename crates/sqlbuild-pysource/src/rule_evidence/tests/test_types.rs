@@ -1,0 +1,7 @@
+pub(crate) struct EvidenceTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) project: &'static str,
+    pub(crate) test_source: &'static str,
+    pub(crate) expected_closure: Vec<&'static str>,
+    pub(crate) expected_cases: Vec<(usize, usize, &'static str)>,
+}

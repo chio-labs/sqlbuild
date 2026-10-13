@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import run_cli as main
-from sqlbuild.cli.commands._helpers.skills.update import generated_marker
 from tests.e2e.src.sqlbuild.cli.commands.main.skills._test_types import (
     SkillsCliOverwriteTestCase,
     SkillsCliTestCase,
@@ -14,6 +13,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.skills.helpers import (
     existing_file_paths,
     write_existing_skill_file,
 )
+
+GENERATED_MARKER: str = "<!-- generated-by: sqlbuild skills -->"
 
 
 @pytest.mark.parametrize(
@@ -55,7 +56,7 @@ def test_given_skills_update_cli_when_running_then_writes_expected_skill_files(
     for expected_file in test_case.expected_files:
         contents: str = (tmp_path / expected_file).read_text(encoding="utf-8")
         assert contents.startswith("---\nname: sqlbuild\n")
-        assert generated_marker in contents
+        assert GENERATED_MARKER in contents
         assert test_case.expected_content_fragment in contents
     assert (
         existing_file_paths(project_dir=tmp_path, relative_paths=test_case.unexpected_files) == ()

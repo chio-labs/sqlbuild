@@ -6,9 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.cli.output.models import IntegrationCheckResult, IntegrationResultEnvelope
-from sqlbuild.cli.output.types import IntegrationOutputKind
-from sqlbuild.compiler.auditing.types import AuditSeverity
+from sqlbuild._native import IntegrationResultEnvelope
 
 
 def assert_exhaustive_enum_partition[EnumT: StrEnum](
@@ -61,46 +59,57 @@ def integration_result_payload(
 
 
 def build_check_integration_envelope(
-    *, check_id: str, name: str, event_id: str, attempt_id: str, event_sequence: int
+    *,
+    check_id: str,
+    name: str,
+    event_id: str,
+    attempt_id: str,
+    event_sequence: int,
+    command: str = "audit",
+    check_overrides: Mapping[str, object] | None = None,
 ) -> IntegrationResultEnvelope:
-    return IntegrationResultEnvelope(
-        schema_version=1,
-        record_kind="integration_result",
-        event_id=event_id,
-        event_sequence=event_sequence,
-        event_type="resource_attempt_completed",
-        occurred_at="2026-09-02T12:00:00+00:00",
-        invocation_id="invocation-1",
-        run_id="run-1",
-        resource_id=check_id,
-        resource_attempt_id=attempt_id,
-        operation_id=None,
-        statement_id=None,
-        resource_kind="audit",
-        resource_name=name,
-        attempt_number=1,
-        duration_ms=1,
-        output_kind=IntegrationOutputKind.CHECK,
-        command="audit",
-        checks=(
-            IntegrationCheckResult(
-                kind="audit",
-                audit_definition_name="test_audit",
-                name=name,
-                check_id=check_id,
-                dag_check_id=check_id,
-                passed=True,
-                status="pass",
-                severity=AuditSeverity.ERROR,
-                asset_name="orders",
-                attachment_kind="model",
-                attached_column_name="order_id",
-                attached_target_name="orders",
-                run_scope_phase="final",
-                row_count=0,
-                reused=False,
-            ),
-        ),
+    check: dict[str, object] = {
+        "kind": "audit",
+        "audit_definition_name": "test_audit",
+        "name": name,
+        "check_id": check_id,
+        "dag_check_id": check_id,
+        "passed": True,
+        "status": "pass",
+        "severity": "error",
+        "asset_name": "orders",
+        "attachment_kind": "model",
+        "attached_column_name": "order_id",
+        "attached_target_name": "orders",
+        "run_scope_phase": "final",
+        "row_count": 0,
+        "reused": False,
+        **(check_overrides or {}),
+    }
+    return IntegrationResultEnvelope.from_json(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "record_kind": "integration_result",
+                "event_id": event_id,
+                "event_sequence": event_sequence,
+                "event_type": "resource_attempt_completed",
+                "occurred_at": "2026-09-02T12:00:00+00:00",
+                "invocation_id": "invocation-1",
+                "run_id": "run-1",
+                "resource_id": check_id,
+                "resource_attempt_id": attempt_id,
+                "operation_id": None,
+                "statement_id": None,
+                "resource_kind": "audit",
+                "resource_name": name,
+                "attempt_number": 1,
+                "duration_ms": 1,
+                "output_kind": "check",
+                "command": command,
+                "checks": [check],
+            }
+        )
     )
 
 
@@ -442,7 +451,7 @@ def write_blocking_audit_event_command(*, root: Path, release_path: Path) -> lis
         attempt_id="attempt-live-audit",
         event_sequence=1,
     )
-    event_payload: str = envelope.to_json() + "\n"
+    event_payload: str = envelope.to_json()
     execution_payload: str = json.dumps(
         {
             "version": 1,

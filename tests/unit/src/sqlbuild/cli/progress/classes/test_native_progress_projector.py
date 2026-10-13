@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
+from sqlbuild._native import NativeProgressProjector
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,

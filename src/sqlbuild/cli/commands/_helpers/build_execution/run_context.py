@@ -6,7 +6,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.runtime.warehouses import describe_connection_warehouse
+from sqlbuild._native import CliDocument, describe_connection_warehouse
 from sqlbuild.cli.commands.constants import (
     C0_CONTROL_CODE_LIMIT,
     C1_CONTROL_CODE_LIMIT,
@@ -14,7 +14,6 @@ from sqlbuild.cli.commands.constants import (
 )
 from sqlbuild.cli.commands.models import BuildRunContext
 from sqlbuild.cli.entry.models import ResolvedWarehouse
-from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
 

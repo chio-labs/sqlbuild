@@ -223,7 +223,7 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
         debug_dbt_from_project,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt_debug.run_sqlbuild_debug", run_sqlbuild_debug
+        "sqlbuild.cli.commands.main.dbt._dbt_debug.run_debug_command", run_sqlbuild_debug
     )
 
     def ensure_existing_sqlbuild_project(

@@ -6,6 +6,9 @@ from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
+from sqlbuild._native import cursor_observed_partition as observed_partition
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
 from sqlbuild.compiler.planner._helpers.resolve.cursor import (
     apply_typed_cursor_replay_policy,
     compute_cursor_bounds,
@@ -20,9 +23,6 @@ from sqlbuild.compiler.planner.types import (
     CursorType,
     CursorWatermarkMode,
 )
-from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers.resolve._test_types import (

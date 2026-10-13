@@ -6,7 +6,7 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from sqlbuild._native import compute_query_hash
+from sqlbuild._native import compute_query_hash, get_config_str
 from sqlbuild.adapter.contract.models import ColumnInfo, MigrationStagePlan, RelationInfo
 from sqlbuild.adapter.contract.types import BuiltinAdapter, MigrationTransfer
 from sqlbuild.compiler.compile.constants import MIGRATE_FORCE_CONFIG_KEY, MIGRATE_FROM_CONFIG_KEY
@@ -68,7 +68,6 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.models import SnapshotsConfig
 from sqlbuild.spec.contracts.types import MissingMigrationOriginPolicy, TableType
 

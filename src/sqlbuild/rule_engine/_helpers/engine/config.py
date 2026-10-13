@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import format_count_noun
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.constants import PROJECT_CONFIG_FILENAME
@@ -14,7 +15,6 @@ from sqlbuild.compiler.planner.models import PlannerScope
 from sqlbuild.errors.setting_help.main.join_helps import join_helps
 from sqlbuild.errors.setting_help.main.setting_help import setting_help
 from sqlbuild.errors.setting_help.main.setting_note import setting_note
-from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.rule_engine._helpers.engine.native import load_native_config
 from sqlbuild.rule_engine.constants import (
     ALLOW_EXCEPTIONS_KEY,

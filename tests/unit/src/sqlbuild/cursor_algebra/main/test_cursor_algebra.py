@@ -4,27 +4,27 @@ from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
-from sqlbuild.compiler.planner.types import CursorGrain, CursorType
-from sqlbuild.cursor_algebra.main.cap_from_end import cap_from_end
-from sqlbuild.cursor_algebra.main.cap_from_start import cap_from_start
-from sqlbuild.cursor_algebra.main.clamp import clamp
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.exclusive_end_from_observed_max import (
-    exclusive_end_from_observed_max,
+from sqlbuild._native import cursor_cap_from_end as cap_from_end
+from sqlbuild._native import cursor_cap_from_start as cap_from_start
+from sqlbuild._native import cursor_clamp as clamp
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import (
+    cursor_exclusive_end_from_observed_max as exclusive_end_from_observed_max,
 )
-from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
-from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
-from sqlbuild.cursor_algebra.main.max_bound import max_bound
-from sqlbuild.cursor_algebra.main.merge import merge
-from sqlbuild.cursor_algebra.main.min_bound import min_bound
-from sqlbuild.cursor_algebra.main.next_boundary import next_boundary
-from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.sentinel_from_token import sentinel_from_token
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
-from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
+from sqlbuild._native import cursor_exclusive_to_inclusive as exclusive_to_inclusive
+from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
+from sqlbuild._native import cursor_inclusive_to_exclusive as inclusive_to_exclusive
+from sqlbuild._native import cursor_max_bound as max_bound
+from sqlbuild._native import cursor_merge as merge
+from sqlbuild._native import cursor_min_bound as min_bound
+from sqlbuild._native import cursor_next_boundary as next_boundary
+from sqlbuild._native import cursor_observed_partition as observed_partition
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_from_token as sentinel_from_token
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
+from sqlbuild._native import cursor_split_into_batches as split_into_batches
+from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from tests.unit.src.sqlbuild.cursor_algebra.main._test_types import (

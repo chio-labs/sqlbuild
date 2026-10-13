@@ -7,9 +7,14 @@ from pathlib import Path
 from typing import TextIO
 
 from sqlbuild._native import (
+    ConnectionProgressReporter,
+    PlanningProgressReporter,
     discover_project_inputs,
     format_scenario_snapshot_execution_json,
+    format_summary_footer,
+    resolve_project_connection_config,
     run_compile_only_pipeline,
+    write_execution_header,
     write_execution_json_output,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -18,9 +23,6 @@ from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
-from sqlbuild.cli.commands._helpers.runtime.connection import (
-    resolve_project_connection_config,
-)
 from sqlbuild.cli.commands._helpers.scenario_capture.capture_run import (
     build_scenario_capture_settings,
 )
@@ -51,9 +53,6 @@ from sqlbuild.cli.commands.models import (
     ScenarioSnapshotLimitInputs,
     ScenarioTestCommandRequest,
 )
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
-from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.compile.main.effective_settings import build_effective_settings_config
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.discovery.main.sql_analysis_off_guidance import sql_analysis_off_guidance
@@ -75,7 +74,6 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle

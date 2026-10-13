@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import re
 
+from sqlbuild._native import format_completion_line, format_summary_footer
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.completion_line import format_completion_line
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.types import CompletionState
 
 _QUOTED_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(

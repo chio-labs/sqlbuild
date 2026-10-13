@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+from sqlbuild._native import append_overflow_line, count_header_style, visible_entries
 from sqlbuild.compiler.migrations.types import (
     ColumnMigrationDecision,
     MigrationCompatibility,
@@ -20,10 +21,7 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
-from sqlbuild.presentation.main.count_header import count_header_style
 from sqlbuild.presentation.main.tree_connector import tree_connector
-from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 
 

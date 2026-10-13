@@ -4,13 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
-from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
-    _RuleTestEvidence,
+from sqlbuild._native import (
     custom_rule_implementation_fingerprint,
     custom_rule_test_evidence,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.main._evaluate import evaluate
 from sqlbuild.rule_engine.models import Rule, RulesConfig, RulesResult
@@ -256,13 +255,13 @@ def test_given_rule_and_test_source_when_collecting_evidence_then_only_exact_sta
     test_path.write_text(test_case.test_source, encoding="utf-8")
     rule: Rule = load_custom_rule(root=tmp_path, configured_path=configured_path)
 
-    evidence: tuple[_RuleTestEvidence, ...] = custom_rule_test_evidence(
+    evidence: list[tuple[str, int, int, str]] = custom_rule_test_evidence(
         rule=rule, project_dir=tmp_path
     )
 
     assert len(evidence) == test_case.expected_count
-    assert all(item.owner == "tests/test_custom.py:test_exact" for item in evidence)
-    assert all(item.line > 0 and item.column > 0 for item in evidence)
+    assert all(owner == "tests/test_custom.py:test_exact" for _, _, _, owner in evidence)
+    assert all(line > 0 and column > 0 for _, line, column, _ in evidence)
 
 
 @pytest.mark.parametrize(

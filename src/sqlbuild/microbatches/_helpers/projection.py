@@ -5,11 +5,11 @@ from __future__ import annotations
 import heapq
 from datetime import datetime
 
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.cursor_sort_key import cursor_sort_key
-from sqlbuild.cursor_algebra.main.max_bound import max_bound
-from sqlbuild.cursor_algebra.main.min_bound import min_bound
-from sqlbuild.cursor_algebra.main.parse import parse
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_max_bound as max_bound
+from sqlbuild._native import cursor_min_bound as min_bound
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_sort_key
 from sqlbuild.microbatches.models import (
     MicrobatchCoverageProjection,
     MicrobatchEvent,

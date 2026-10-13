@@ -1,7 +1,7 @@
 //! The text plan: planner objects read by attribute into the native plan report.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::main::format_plan_completion::format_plan_completion;
 use sqlbuild_core::cli_text::main::format_plan_text::format_plan_text;
@@ -14,6 +14,7 @@ use sqlbuild_core::cli_text::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::plan_output::cursor_details::{
     CursorDetails, DEFERRED, RESOLVED, cursor_details, runtime_inputs_clause,
 };
@@ -32,7 +33,6 @@ const INCLUSIVE_END_MODULE: &str = "sqlbuild.compiler.planner.main.execution.inc
 const MATERIALIZATION_LABEL_MODULE: &str =
     "sqlbuild.compiler.planner.main.execution._model_materialization_label";
 const PRE_BUILD_MODULE: &str = "sqlbuild.compiler.planner.main.pre_build.pre_build_work_display";
-const SENTINEL_TOKEN_MODULE: &str = "sqlbuild.cursor_algebra.main.sentinel_to_token";
 const DISPLAY_MODELS_MODULE: &str = "sqlbuild.presentation.models";
 const SKIP_ACTION: &str = "skip";
 const QUERY_CHANGED: &str = "query_changed";
@@ -65,10 +65,7 @@ pub(crate) fn query_diff(
 }
 
 fn token<'py>(bound: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(bound.py(), SENTINEL_TOKEN_MODULE, "sentinel_to_token")?,
-        &[("sentinel", bound)],
-    )
+    Ok(PyString::new(bound.py(), &sentinel_to_token(&bound)?).into_any())
 }
 
 /// `start → inclusive end` of resolved bounds, in the model's cursor display.

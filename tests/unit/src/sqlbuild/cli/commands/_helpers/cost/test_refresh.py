@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import read_cost_run, write_cost_run
 from sqlbuild.cli.commands._helpers.cost.refresh import refresh_pending_cost_run
 from sqlbuild.cli.commands.models import CostCommandRequest
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.constants import LEDGER_PERSISTENCE_FAILURE_LIMITATION_PREFIX
 from sqlbuild.cost.models import CostRunRecord, RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
@@ -79,7 +79,7 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
 ) -> None:
     now: datetime = datetime(2026, 8, 23, tzinfo=UTC)
     record: CostRunRecord = build_cost_run_record(run_id="run-pending", completed_at=now)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=replace(record, cost=replace(record.cost, status=test_case.initial_status)),
     )
@@ -119,7 +119,7 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
 
     refresh_pending_cost_run(request)
 
-    refreshed: CostRunRecord | None = RunCostStore.read(project_dir=tmp_path, run_id="run-pending")
+    refreshed: CostRunRecord | None = read_cost_run(project_dir=tmp_path, run_id="run-pending")
     assert refreshed is not None
     assert refreshed.cost.status.value == test_case.expected_status
     assert refreshed.cost.estimated_usd == Decimal("0.03")
@@ -175,7 +175,7 @@ def test_given_useful_partial_when_refresh_degrades_then_persisted_summary_is_pr
         observed_statement_count=17,
         query_count=2,
     )
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=replace(record, cost=useful_partial),
     )
@@ -219,7 +219,7 @@ def test_given_useful_partial_when_refresh_degrades_then_persisted_summary_is_pr
 
     refresh_pending_cost_run(request)
 
-    refreshed: CostRunRecord | None = RunCostStore.read(project_dir=tmp_path, run_id="run-partial")
+    refreshed: CostRunRecord | None = read_cost_run(project_dir=tmp_path, run_id="run-partial")
     assert refreshed is not None
     assert refreshed.cost.status == test_case.expected_status
     assert refreshed.cost.observed_statement_count == test_case.expected_observed_statement_count
@@ -258,7 +258,7 @@ def test_given_persisted_ledger_failure_when_refresh_has_no_coverage_then_failur
         limitations=(failure_limitation,),
         message="Cost telemetry was only partially persisted.",
     )
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=replace(record, cost=persisted_failure),
     )
@@ -302,7 +302,7 @@ def test_given_persisted_ledger_failure_when_refresh_has_no_coverage_then_failur
 
     refresh_pending_cost_run(request)
 
-    refreshed: CostRunRecord | None = RunCostStore.read(
+    refreshed: CostRunRecord | None = read_cost_run(
         project_dir=tmp_path, run_id="run-ledger-failure"
     )
     assert refreshed is not None

@@ -7,8 +7,7 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.scope.command import run_scope_command
-from sqlbuild.cli.commands._helpers.scope.output import render_scope_result
+from sqlbuild._native import render_scope_result, run_scope_command
 from sqlbuild.cli.commands.models import ScopeCommandRequest
 from tests.unit.src.sqlbuild.cli.commands._helpers.scope._test_types import (
     ScopeColourCase,

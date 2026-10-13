@@ -6,11 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.lineage.cache import (
-    _INTERRUPTED_LISTING_UNCACHEABLE,
-    _fingerprint_prefix,
-    relation_lineage_fingerprint,
-)
+from sqlbuild._native import lineage_cache_fingerprint
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
     FingerprintedFilesTestCase,
     InterruptedListingFingerprintTestCase,
@@ -20,6 +16,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.lineage._test_types import (
 )
 from tests.unit.src.sqlbuild.cli.commands._helpers.lineage.helpers import (
     expected_fingerprint,
+    fingerprint_prefix,
     interrupt_listing,
 )
 
@@ -93,10 +90,10 @@ def test_given_referenced_environment_change_when_fingerprinting_then_invalidate
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(test_case.config, encoding="utf-8")
     monkeypatch.setenv(test_case.environment_name, test_case.first_value)
-    first: str | None = relation_lineage_fingerprint(project_dir=tmp_path, cli_vars=None)
+    first: str | None = lineage_cache_fingerprint(project_dir=tmp_path, cli_vars=None)
     monkeypatch.setenv(test_case.environment_name, test_case.second_value)
 
-    second: str | None = relation_lineage_fingerprint(project_dir=tmp_path, cli_vars=None)
+    second: str | None = lineage_cache_fingerprint(project_dir=tmp_path, cli_vars=None)
 
     assert (first == second) is test_case.expected_equal
 
@@ -141,7 +138,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
     authored_path.parent.mkdir(parents=True, exist_ok=True)
     authored_path.write_text(test_case.config, encoding="utf-8")
 
-    observed: str | None = relation_lineage_fingerprint(project_dir=tmp_path, cli_vars=None)
+    observed: str | None = lineage_cache_fingerprint(project_dir=tmp_path, cli_vars=None)
 
     assert (observed is not None) is test_case.expected_available
 
@@ -165,7 +162,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             links={},
             unreadable_directories=("models/locked",),
             environment={"ORDERS_SCHEMA": "orders_dev"},
-            cli_vars=None,
+            cli_vars={},
             expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES
             + (("models/locked/hidden.sql",) if sys.platform == "win32" else ()),
             expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
@@ -180,7 +177,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             links={},
             unreadable_directories=(),
             environment={"ORDERS_SCHEMA": "orders_dev"},
-            cli_vars=None,
+            cli_vars={},
             expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES,
             expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
@@ -190,7 +187,7 @@ def test_given_dynamic_invocation_context_when_fingerprinting_then_disables_cach
             links={},
             unreadable_directories=(),
             environment={"ORDERS_SCHEMA": "orders_dev"},
-            cli_vars=None,
+            cli_vars={},
             expected_hashed_files=_LAYOUT_UNLINKED_HASHED_FILES,
             expected_environment_names=_LAYOUT_ENVIRONMENT_NAMES,
         ),
@@ -214,7 +211,7 @@ def test_given_authored_files_when_fingerprinting_then_hashes_exactly_the_expect
         monkeypatch.setenv(name, value)
     monkeypatch.delenv("ORDERS_REGION", raising=False)
 
-    observed: str | None = relation_lineage_fingerprint(
+    observed: str | None = lineage_cache_fingerprint(
         project_dir=tmp_path, cli_vars=test_case.cli_vars
     )
 
@@ -222,7 +219,7 @@ def test_given_authored_files_when_fingerprinting_then_hashes_exactly_the_expect
         (tmp_path / relative_path).chmod(0o755)
     assert observed == expected_fingerprint(
         project_dir=tmp_path,
-        prefix=_fingerprint_prefix(cli_vars=test_case.cli_vars),
+        prefix=fingerprint_prefix(cli_vars=test_case.cli_vars),
         hashed_files=test_case.expected_hashed_files,
         environment_names=test_case.expected_environment_names,
     )
@@ -272,7 +269,7 @@ def test_given_unhashable_inputs_when_fingerprinting_then_the_cache_is_disabled(
         path.parent.mkdir(parents=True, exist_ok=True)
         _ = path.write_text(contents, encoding="utf-8")
 
-    observed: str | None = relation_lineage_fingerprint(project_dir=tmp_path, cli_vars=None)
+    observed: str | None = lineage_cache_fingerprint(project_dir=tmp_path, cli_vars=None)
 
     assert observed is test_case.expected_fingerprint
 
@@ -305,4 +302,3 @@ def test_given_interrupted_listing_when_python_globs_then_native_policy_matches_
         listed = list(tmp_path.rglob("*"))
 
     assert (not listed) is (sys.version_info < test_case.expected_uncacheable_before)
-    assert (not listed) is _INTERRUPTED_LISTING_UNCACHEABLE

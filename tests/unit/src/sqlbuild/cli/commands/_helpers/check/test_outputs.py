@@ -10,10 +10,10 @@ from typing import Any, cast
 import pytest
 
 import sqlbuild.cli.commands._helpers.check.execution as check_execution
+from sqlbuild._native import NativeProgressProjector
 from sqlbuild.cli.commands._helpers.check.core import write_check_results
 from sqlbuild.cli.commands._helpers.check.execution import execute_check_plan
 from sqlbuild.cli.commands.models import CheckExecutionPreparation, CheckInvocation
-from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.python_nodes.classes.run_state import PythonNodeRunState
 from sqlbuild.executor.python_nodes.models import (

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.compiler.compile.models import (
     CompiledModel,
     CompiledObjectKey,
@@ -28,7 +29,6 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     AuthoritativeCursorOverrideTestCase,
     MicrobatchCursorEndPlanTestCase,

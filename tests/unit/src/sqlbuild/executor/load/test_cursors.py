@@ -7,9 +7,9 @@ from decimal import Decimal
 
 import pytest
 
+from sqlbuild._native import cursor_render as render
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError

@@ -15,12 +15,12 @@ from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar, Protocol
 
-from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
-from sqlbuild.adapter.contract.types import TablePromotionMode
-from sqlbuild.cli.progress.classes.native_progress_projector import (
+from sqlbuild._native import (
     NativeProgressProjector,
     current_native_progress_projector,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.models import CompiledSqlScenario
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.scenarios.scenario import build_scenario_plan

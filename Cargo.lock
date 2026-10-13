@@ -1212,6 +1212,13 @@ name = "sqlbuild-core"
 version = "0.156.1"
 
 [[package]]
+name = "sqlbuild-cursor"
+version = "0.156.1"
+dependencies = [
+ "sqlbuild-core",
+]
+
+[[package]]
 name = "sqlbuild-discovery"
 version = "0.156.1"
 dependencies = [
@@ -1258,6 +1265,7 @@ dependencies = [
  "sqlbuild-cli",
  "sqlbuild-config",
  "sqlbuild-core",
+ "sqlbuild-cursor",
  "sqlbuild-discovery",
  "sqlbuild-model-config",
  "sqlbuild-pysource",

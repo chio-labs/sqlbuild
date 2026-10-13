@@ -6,6 +6,7 @@ import json
 from collections import defaultdict
 from typing import Any
 
+from sqlbuild._native import get_config_str
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
@@ -42,7 +43,6 @@ from sqlbuild.compiler.planner.models import (
 )
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
 from sqlbuild.compiler.python_nodes.main._hook_identities import build_hook_identities
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 
 _HISTORY_MATERIALIZATIONS: frozenset[str] = frozenset(
     {MaterializationType.INCREMENTAL, MaterializationType.SNAPSHOT}

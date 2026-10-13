@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, cast
 
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
@@ -24,8 +26,6 @@ from sqlbuild.compiler.planner.models import (
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.compiler.python_nodes.types import SkipMode
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError

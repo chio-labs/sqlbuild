@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from sqlbuild._native import (
+    ConnectionProgressReporter,
+    ExecutionEventWriter,
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.cli.commands._helpers.test.sql_progress import (
     build_test_expectation_rows,
     format_parameterized_test_label,
@@ -14,14 +20,6 @@ from sqlbuild.cli.commands.models import (
     TestCommandRequest,
     TestExecutionPreparation,
     TestInvocation,
-)
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-    ConnectionProgressReporter,
-)
-from sqlbuild.cli.progress.classes.native_progress_projector import (
-    NativeProgressProjector,
-    current_native_progress_projector,
 )
 from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
     NestedCommandProgressCallbacks,

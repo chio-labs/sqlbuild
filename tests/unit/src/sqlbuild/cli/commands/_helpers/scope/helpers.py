@@ -65,3 +65,9 @@ def bare_target_scope_lookup() -> ScopeLookup:
         ),
     )
     return build_scope_lookup(index=replace(index, resources=(*index.resources, *extra)))
+
+
+def bare_target_scope_index(**_options: object) -> ScopeIndex:
+    """Load the bare-target fixture index as `sqb scope` loads an offline index."""
+
+    return bare_target_scope_lookup().index

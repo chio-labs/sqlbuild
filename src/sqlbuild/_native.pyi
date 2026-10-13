@@ -1,11 +1,11 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence, Set
+from collections.abc import Callable, Iterable, Mapping, Sequence, Set
 from contextlib import AbstractContextManager
+from contextvars import Token
+from datetime import date, datetime
 from pathlib import Path, PurePath
-from typing import Any, Literal, TypedDict, overload
-
-from _typeshed import SupportsRichComparison
+from typing import Any, Literal, TextIO, TypedDict, overload
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -16,11 +16,25 @@ from sqlbuild.adapter.contract.types import (
     TablePromotionMode,
     TypeDialect,
 )
-from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.adapter.relations.models import InspectionQueryRecord
+from sqlbuild.cli.commands.models import (
+    FreshnessCommandRequest,
+    JanitorCommandRequest,
+    LineageCommandRequest,
+    PlaygroundCommandRequest,
+    RefactorCommandRequest,
+    ScopeCommandRequest,
+)
+from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
-from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
-from sqlbuild.cli.output.models import WrittenTarget
+from sqlbuild.cli.entry.models import (
+    AuthoredTargetWarehouse,
+    CompileCommandRequest,
+    CompileProfileFlags,
+    ResolvedWarehouse,
+)
+from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -123,7 +137,6 @@ from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
     DirectSemanticColumnUse,
     ModelColumnLineage,
-    QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.pipeline.models import (
@@ -142,6 +155,7 @@ from sqlbuild.compiler.planner.models import (
     MaximumStartSafetyEvidence,
     PlanOutput,
 )
+from sqlbuild.compiler.planner.types import CursorGrain
 from sqlbuild.compiler.python_nodes.models import (
     PythonNodeGraph,
     PythonNodeIdentity,
@@ -178,6 +192,7 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
+from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingResult,
     SqlLexicalSyntax,
@@ -190,20 +205,28 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
+from sqlbuild.cost.models import CostRunRecord
+from sqlbuild.cursor_algebra.models import AlignedInterval, Duration
+from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
     PythonNodeExecutionResult,
 )
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
-from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
 from sqlbuild.lint.types import RelationKeyRow
+from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.models import DisplayOptions
+from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
+from sqlbuild.rule_engine.models import Finding, Rule, RulesResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
@@ -221,6 +244,7 @@ from sqlbuild.spec.contracts.models import (
     SourceLocation,
     TargetConfig,
 )
+from sqlbuild.spec.contracts.types import WarehouseGroup
 from sqlbuild.sql_values.models import SqlValue
 
 BUILD_IDENTITY: str
@@ -1099,6 +1123,251 @@ def format_plan(
     include_completion: bool = False,
 ) -> str: ...
 
+class IntegrationAssetResult:
+    kind: str
+    name: str
+    status: str
+    action: str | None
+    target: str | None
+    origin_relation: str | None
+    staging_relation: str | None
+    failed_phase: str | None
+    loader: str | None
+    rows_loaded: int | None
+    materialized: bool | None
+    future_cursor_safety: dict[str, object]
+    maximum_start_safety: dict[str, object]
+    microbatch: dict[str, object]
+    def as_dict(self) -> dict[str, Any]: ...
+
+class IntegrationCheckResult:
+    kind: str
+    name: str
+    check_id: str
+    passed: bool
+    status: str
+    dag_check_id: str | None
+    severity: str | None
+    asset_name: str | None
+    attachment_kind: str | None
+    attached_column_name: str | None
+    attached_target_name: str | None
+    run_scope_phase: str | None
+    row_count: int | None
+    reused: bool | None
+    evaluation_mode: str | None
+    measured_value: float | None
+    sample_count: int | None
+    sample_unit: str | None
+    minimum_samples: int | None
+    thresholds: dict[str, object] | None
+    evidence_count: int | None
+    evidence_truncated: bool | None
+    audit_definition_name: str | None
+    audit_description: str | None
+    def as_dict(self) -> dict[str, Any]: ...
+
+class IntegrationResultEnvelope:
+    schema_version: int
+    record_kind: str
+    event_id: str
+    event_sequence: int
+    event_type: str
+    occurred_at: str
+    invocation_id: str
+    run_id: str
+    resource_id: str
+    resource_attempt_id: str
+    operation_id: str | None
+    statement_id: str | None
+    resource_kind: str
+    resource_name: str
+    attempt_number: int
+    duration_ms: int | float | None
+    output_kind: str
+    command: str
+    error_code: str | None
+    error_type: str | None
+    skip_code: str | None
+    skip_mode: str | None
+    projection_degraded: bool
+    @property
+    def asset(self) -> IntegrationAssetResult | None: ...
+    @property
+    def checks(self) -> tuple[IntegrationCheckResult, ...]: ...
+    @staticmethod
+    def from_json(value: str) -> IntegrationResultEnvelope: ...
+    @staticmethod
+    def from_json_without_optional_enrichment(value: str) -> IntegrationResultEnvelope: ...
+    def to_json(self) -> str: ...
+
+class ExecutionEventWriter:
+    def __init__(self, *, path: Path | None = None) -> None: ...
+    def write_build_result(
+        self, *, result: object, plan: PlanOutput | None, command: str = "build"
+    ) -> None: ...
+    def write_clone_result(self, *, item: CloneItemResult, resource_type: str) -> None: ...
+    def close(self) -> None: ...
+
+def write_cost_run(*, project_dir: Path, record: CostRunRecord) -> Path: ...
+def read_cost_run(*, project_dir: Path, run_id: str) -> CostRunRecord | None: ...
+def list_cost_runs(*, project_dir: Path) -> tuple[CostRunRecord, ...]: ...
+def resolve_cost_run(*, project_dir: Path, selector: str) -> CostRunRecord | None: ...
+def format_cost_json(record: CostRunRecord) -> str: ...
+def persist_cost_run(
+    *, project_dir: Path, record: CostRunRecord, output_stream: TextIO, stage: str
+) -> None: ...
+def write_build_cost_breakdown(
+    *, record: CostRunRecord, output_stream: TextIO, use_color: bool
+) -> None: ...
+def format_cost_history_json(
+    *, records: tuple[CostRunRecord, ...], matching_count: int | None = None
+) -> str: ...
+def cost_output_payload(*, record: CostRunRecord) -> dict[str, object]: ...
+def format_cost_breakdown(
+    *,
+    record: CostRunRecord,
+    use_color: bool,
+    limit: int | None = None,
+    terminal_width: int | None = None,
+    show_run_id: bool = True,
+) -> str: ...
+def format_cost_history(
+    *, records: tuple[CostRunRecord, ...], matching_count: int, use_color: bool
+) -> str: ...
+def format_summary_footer(
+    *, counts: tuple[tuple[str, int], ...], use_color: bool, elapsed: str | None = None
+) -> str: ...
+def format_count_noun(*, count: int, singular: str, plural: str | None = None) -> str: ...
+def format_completion_line(
+    *, style: CliStyle, state: CompletionState, label: str, summary: str | None = None
+) -> str: ...
+def format_status_cell(*, style: CliStyle, status: str, width: int = 6) -> str: ...
+def format_aligned_name_value(
+    *,
+    plain_name: str,
+    styled_name: str,
+    value: str,
+    name_column_width: int,
+    prefix: str = "  ",
+) -> str: ...
+def resolve_name_column_width(
+    *, names: list[str] | tuple[str, ...], min_width: int = 20
+) -> int: ...
+def append_overflow_line(
+    *, lines: list[str], total_count: int, visible_count: int, indent: str, options: DisplayOptions
+) -> list[str]: ...
+def visible_entries[T](*, entries: Sequence[T], options: DisplayOptions) -> Sequence[T]: ...
+
+class CountHeaderStyle:
+    def __call__(self, text: str) -> str: ...
+
+def count_header_style(
+    *, style: CliStyle, title_style: Callable[[str], str] | None = None
+) -> CountHeaderStyle: ...
+
+class CliDocument:
+    def __init__(self, style: CliStyle) -> None: ...
+    def header(self, *, text: str, suffix: str | None = None) -> None: ...
+    def blank(self) -> None: ...
+    def field(self, *, label: str, value: str, value_padding: str = " ") -> None: ...
+    def fields(
+        self, *, rows: tuple[tuple[str, str], ...], label_width: int | None = None
+    ) -> None: ...
+    def section(self, text: str) -> None: ...
+    def title_section(self, text: str) -> None: ...
+    def line(self, text: str) -> None: ...
+    def items(self, values: tuple[str, ...]) -> None: ...
+    def command_line(self, *, prefix: str, command: str, style_command: bool = True) -> None: ...
+    def commands(
+        self, *, commands: tuple[str, ...], numbered: bool = False, style_command: bool = True
+    ) -> None: ...
+    def render(self, *, trailing_newline: bool = True) -> str: ...
+
+def update_sqlbuild_skills(
+    *,
+    project_dir: Path,
+    global_install: bool = False,
+    requested_targets: tuple[str, ...] = (),
+    force: bool = False,
+    home_dir: Path | None = None,
+) -> SkillUpdateResult: ...
+def maintain_sqlbuild_skills(*, project_dir: Path) -> SkillMaintenanceResult: ...
+def load_packaged_skill_files() -> dict[str, str]: ...
+def run_skills_command(
+    *,
+    project_dir: Path | None,
+    global_install: bool = False,
+    targets: tuple[str, ...] = (),
+    force: bool = False,
+) -> int: ...
+def run_playground_command(request: PlaygroundCommandRequest) -> int: ...
+def validate_cli_warehouse(*, cli_warehouse: str | None, project_dir: Path) -> None: ...
+def find_target_group_warehouse(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    group: WarehouseGroup,
+) -> AuthoredTargetWarehouse | None: ...
+def resolve_command_warehouse(
+    *,
+    discovered_inputs: DiscoveredProjectInputs | None,
+    selected_target: str | None,
+    group: WarehouseGroup | None,
+    cli_warehouse: str | None,
+    connection_config: dict[str, object],
+    cli_vars: dict[str, object] | None = None,
+) -> ResolvedWarehouse: ...
+def apply_command_warehouse(
+    *,
+    config: dict[str, object],
+    adapter_name: str,
+    project_dir: Path | None,
+    discovered_inputs: DiscoveredProjectInputs | None,
+    selected_target: str | None,
+) -> dict[str, object]: ...
+def describe_connection_warehouse(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None,
+    connection_config: dict[str, object],
+) -> ResolvedWarehouse: ...
+def resolve_connection_config(
+    *,
+    raw_config: dict[str, object],
+    project_dir: Path,
+    adapter_name: str,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    cli_vars: dict[str, object] | None = None,
+    selected_target: str | None = None,
+) -> dict[str, object]: ...
+def resolve_project_connection_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+    require_connection: bool = True,
+) -> dict[str, object]: ...
+def resolve_target_connection_config(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    project_dir: Path,
+    target_name: str,
+    cli_vars: dict[str, object] | None = None,
+) -> dict[str, object]: ...
+def validate_preview_target(
+    *, discovered_inputs: DiscoveredProjectInputs, as_target: str | None, command_name: str
+) -> None: ...
+def run_debug_command(
+    *,
+    project_dir: Path | None = None,
+    no_color: bool = False,
+    no_connection: bool = False,
+    selected_target: str | None = None,
+    json_output: bool = False,
+) -> int: ...
+
 class TerminalEventClaim:
     @property
     def terminal(self) -> LifecycleEvent: ...
@@ -1129,6 +1398,72 @@ class TerminalEventIndexScope:
 
 def current_terminal_event_index() -> TerminalEventIndex | None: ...
 def terminal_event_index_scope(index: TerminalEventIndex) -> TerminalEventIndexScope: ...
+
+class NativeProgressProjector:
+    def __init__(self, *, stream: TextIO, use_color: bool, debug: bool = False) -> None: ...
+    def install(self) -> Token[NativeProgressProjector | None]: ...
+    def restore(self, token: Token[NativeProgressProjector | None]) -> None: ...
+    def configure_resources(self, *, ordinals: Mapping[str, int], total: int) -> None: ...
+    def expect_resource_enrichment(self, *, resource_name: str) -> None: ...
+    def is_operation_active(self, *, operation_name: str) -> bool: ...
+    def consume(self, event: LifecycleEvent) -> None: ...
+    def consume_resource_terminal(
+        self,
+        *,
+        resource_name: str,
+        resource_id: str | None = None,
+        resource_attempt_id: str | None = None,
+        attempt_number: int | None = None,
+    ) -> float | None: ...
+    def resource_terminal_duration(
+        self,
+        *,
+        resource_name: str,
+        resource_id: str | None = None,
+        resource_attempt_id: str | None = None,
+        attempt_number: int | None = None,
+    ) -> float | None: ...
+    def close(self) -> None: ...
+
+def current_native_progress_projector() -> NativeProgressProjector | None: ...
+
+class ConnectionProgressReporter:
+    def __init__(
+        self,
+        *,
+        adapter_name: str,
+        stream: TextIO,
+        blank_line_before_start: bool = False,
+        blank_line_after_complete: bool = False,
+        use_color: bool = False,
+    ) -> None: ...
+    def on_connection_start(self, connection_count: int) -> None: ...
+    def on_connection_complete(self, *, connection_count: int, elapsed_seconds: float) -> None: ...
+    def on_connection_error(self, *, connection_count: int, elapsed_seconds: float) -> None: ...
+
+class PlanningProgressReporter:
+    def __init__(self, *, stream: TextIO, use_color: bool = False) -> None: ...
+    def on_progress(self, message: str) -> None: ...
+    def start(self, message: str) -> None: ...
+    def update(self, message: str) -> None: ...
+    def complete(self, message: str) -> None: ...
+    def complete_styled(self, message: str) -> None: ...
+    def error(self, message: str) -> None: ...
+    def finish(self, *, blank_line_after: bool = False) -> None: ...
+
+class VerboseInspectionWriter:
+    def __init__(self) -> None: ...
+    def write(self, record: InspectionQueryRecord) -> None: ...
+    def write_total(self) -> None: ...
+    @staticmethod
+    def format_record(*, record: InspectionQueryRecord) -> str: ...
+
+def format_execution_header(*, command: str, target: str | None, concurrency: int) -> str: ...
+def write_execution_header(
+    *, stream: TextIO, command: str, target: str | None, concurrency: int, use_color: bool
+) -> None: ...
+def format_expectation_name(model_name: str) -> str: ...
+def format_expectation_detail(step_result: StepResult) -> str: ...
 def format_build_execution_json(
     *,
     result: BuildExecutionResult,
@@ -1810,6 +2145,18 @@ def scope_move_preview(
     lookup: ScopeLookup, resource: str | ResourceIdentity, destination: str | PurePath
 ) -> tuple[MovePreview | None, tuple[ScopeDiagnostic, ...]]: ...
 def serialize_scope_report(report: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str: ...
+def run_scope_command(
+    *,
+    request: ScopeCommandRequest,
+    load_scope_index: ScopeIndexLoader | None = None,
+    output_stream: TextIO | None = None,
+) -> int: ...
+def render_scope_result(
+    *,
+    result: ScopeReport | ScopeBrowseResult | ScopeListResult,
+    request: ScopeCommandRequest,
+    use_color: bool = False,
+) -> str: ...
 def scope_metadata_projection(index: ScopeIndex) -> dict[str, JsonValue]: ...
 def effective_config_target_name(
     project_config: object, local_config: object, selected: str | None, /
@@ -2349,42 +2696,6 @@ def build_direct_semantic_uses(
     model_names: frozenset[str],
     /,
 ) -> tuple[DirectSemanticColumnUse, ...]: ...
-def render_dependency_tree[Node: Hashable](
-    *,
-    focus: Node,
-    deps: dict[Node, list[Node]],
-    seen: set[Node],
-    format_node: Callable[[Node], str],
-    sort_key: Callable[[Node], SupportsRichComparison],
-    branch_style: Callable[[str], str],
-    already_shown: Callable[[], str],
-) -> list[str]: ...
-def render_column_trace_tree[Column, Edge](
-    *,
-    target: Column,
-    deps: dict[str, list[Edge]],
-    total: int,
-    limit: int,
-    column_id: Callable[[Column], str],
-    related_column: Callable[[Edge], Column],
-    format_related: Callable[[Edge], str],
-    branch_style: Callable[[str], str],
-    already_shown: Callable[[], str],
-    note_style: Callable[[str], str],
-) -> list[str]: ...
-def render_column_trace_limit_note(
-    *, total: int, limit: int, note_style: Callable[[str], str]
-) -> list[str]: ...
-def serialize_column(
-    *,
-    column: QualifiedLineageColumn,
-    render_resource_type: Callable[[QualifiedLineageColumn], str],
-) -> dict[str, object]: ...
-def serialize_column_edge(
-    *,
-    edge: ColumnLineageEdge,
-    render_resource_type: Callable[[QualifiedLineageColumn], str],
-) -> dict[str, object]: ...
 
 class ProjectColumnLineage:
     """Project-level column lineage graph with lazily materialized public views."""
@@ -2419,6 +2730,29 @@ class ProjectColumnLineage:
 def relation_lineage_fingerprint(
     project_dir: Path, prefix: bytes, interrupted_listing_uncacheable: bool, /
 ) -> str | None: ...
+def lineage_cache_fingerprint(
+    *, project_dir: Path, cli_vars: dict[str, object] | None
+) -> str | None: ...
+def run_lineage_command(*, request: LineageCommandRequest) -> int: ...
+def run_refactor_command(*, request: RefactorCommandRequest) -> int: ...
+def run_janitor_command(*, request: JanitorCommandRequest) -> int: ...
+def run_freshness_command(*, request: FreshnessCommandRequest) -> int: ...
+def observe_source_freshness_json(
+    *,
+    adapter: object,
+    connection: object,
+    sources: Sequence[SourceEntry],
+    observed_at: datetime,
+    select: Sequence[str] = (),
+    exclude: Sequence[str] = (),
+    run_id: str | None = None,
+    previous_records: Mapping[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None,
+    previous_records_by_source_name: Mapping[str, SourceFreshnessRecord] | None = None,
+) -> str: ...
+def render_janitor_plan(*, plan: JanitorPlan, use_color: bool = False) -> str: ...
+def render_janitor_completion(
+    *, result: JanitorExecutionResult, use_color: bool = False
+) -> str: ...
 
 # Native analysis: SQL test planning glue.
 def plan_compiled_sql_tests(
@@ -2570,6 +2904,82 @@ def _oracle_yaml_load(text: str) -> str: ...
 def _oracle_toml_load(text: str) -> str: ...
 
 # Discovery: header values and authored locations.
+def cursor_parse(*, raw: object, cursor_type: str) -> CursorScalar: ...
+def cursor_try_parse(*, raw: object, cursor_type: str) -> CursorScalar | None: ...
+def cursor_render(*, value: CursorScalar) -> str: ...
+def cursor_sentinel_to_token(*, sentinel: Bound) -> str: ...
+def cursor_sentinel_from_token(*, token: str) -> BoundSentinel | None: ...
+def cursor_compare(*, left: CursorScalar, right: CursorScalar) -> int: ...
+def cursor_sort_key(*, raw: object, cursor_type: str) -> datetime | int: ...
+def cursor_max_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...
+def cursor_min_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...
+def cursor_floor_to_grain(*, value: CursorScalar, grain: CursorGrain) -> CursorScalar: ...
+def cursor_next_boundary(*, value: CursorScalar, grain: CursorGrain) -> CursorScalar: ...
+def cursor_inclusive_to_exclusive(
+    *, value: CursorScalar, grain: CursorGrain | None
+) -> CursorScalar: ...
+def cursor_exclusive_to_inclusive(
+    *, value: CursorScalar, grain: CursorGrain | None
+) -> CursorScalar: ...
+def cursor_exclusive_end_from_observed_max(
+    *, value: CursorScalar, grain: CursorGrain | None
+) -> CursorScalar: ...
+def cursor_observed_partition(
+    *, value: CursorScalar, grain: CursorGrain | None
+) -> AlignedInterval: ...
+def cursor_clamp(
+    *, interval: AlignedInterval, bounds: AlignedInterval
+) -> AlignedInterval | None: ...
+def cursor_merge(*, intervals: tuple[AlignedInterval, ...]) -> tuple[AlignedInterval, ...]: ...
+def cursor_split_into_batches(
+    *, interval: AlignedInterval, step: int
+) -> tuple[AlignedInterval, ...]: ...
+def cursor_cap_from_start[T](*, intervals: tuple[T, ...], count: int) -> tuple[T, ...]: ...
+def cursor_cap_from_end[T](*, intervals: tuple[T, ...], count: int) -> tuple[T, ...]: ...
+def validate_cursor_interval(
+    *, start: CursorScalar, end: CursorScalar, grain: CursorGrain | None
+) -> None: ...
+def parse_cursor_duration(value: str) -> tuple[int, int, int, int, int, int] | None: ...
+def shift_by_cursor_duration[M: date](*, moment: M, duration: Duration, direction: int) -> M: ...
+def get_config_str(*, values: Mapping[str, object], key: str) -> str | None: ...
+def get_config_bool(*, values: Mapping[str, object], key: str) -> bool | None: ...
+def get_config_int(*, values: Mapping[str, object], key: str) -> int | None: ...
+def get_config_string_tuple(
+    *, values: Mapping[str, object], key: str
+) -> tuple[str, ...] | None: ...
+def get_config_cursor_bound(*, values: Mapping[str, object], key: str) -> str | None: ...
+def custom_rule_import_closure(*, rule: Rule, project_dir: Path) -> tuple[Path, ...]: ...
+def custom_rule_implementation_fingerprint(
+    *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
+) -> str: ...
+def custom_rule_test_evidence(
+    *, rule: Rule, project_dir: Path
+) -> list[tuple[str, int, int, str]]: ...
+def format_rules_result(*, result: RulesResult, json_output: bool) -> str: ...
+def with_duplicate_literal_hints(
+    *, findings: tuple[Finding, ...], project_dir: Path
+) -> tuple[Finding, ...]: ...
+def scan_headers(*, contents: str, first_only: bool = False) -> tuple[HeaderSpan, ...]: ...
+def sql_body_ranges(
+    *, contents: str, headers: tuple[HeaderSpan, ...]
+) -> tuple[tuple[int, int], ...]: ...
+def measurement_body_ranges(*, contents: str) -> tuple[tuple[int, int], ...]: ...
+def lint_native_headers(
+    *, contents: str, file_path: Path, headers: tuple[HeaderSpan, ...], config: LintConfig
+) -> tuple[LintViolation, ...]: ...
+def format_native_headers(
+    *, contents: str, file_path: Path, config: LintConfig
+) -> tuple[str, tuple[LintViolation, ...]]: ...
+def prepare_native_header_cache(*, files: dict[Path, str]) -> None: ...
+def safe_format_files(
+    *, files: dict[Path, str], config: LintConfig
+) -> tuple[dict[Path, str], dict[Path, str]]: ...
+def reject_unparseable_header_rewrites(
+    *, updated: dict[Path, str], config: LintConfig, faults: list[LintViolation]
+) -> tuple[dict[Path, str], list[LintViolation]]: ...
+def external_identifiers_for_headers(
+    *, contents: str, headers: tuple[HeaderSpan, ...]
+) -> tuple[str, ...]: ...
 def prepare_model_header_tokens(headers: Sequence[str], /) -> None: ...
 def parse_header_values(
     *,

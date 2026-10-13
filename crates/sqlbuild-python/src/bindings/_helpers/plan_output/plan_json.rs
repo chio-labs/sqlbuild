@@ -4,8 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_outputs::json_report::indented_json;
+use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::plan_output::cursor_details::{
     CursorDetails, cursor_details, owner,
 };
@@ -17,7 +18,6 @@ use crate::bindings::_helpers::plan_output::values::{
     any, dict, enum_value, iso, items, list, mapped, optional_enum_value, relation_name, text,
 };
 
-const SENTINEL_TOKEN_MODULE: &str = "sqlbuild.cursor_algebra.main.sentinel_to_token";
 const MICROBATCH_MODE: &str = "microbatch";
 const RENAMED_REASON: &str = "renamed";
 const RENAMED_DECISION: &str = "renamed";
@@ -25,10 +25,7 @@ const VIEW_MATERIALIZATION: &str = "view";
 const CHANGED_IDENTITY: &str = "changed";
 
 fn token<'py>(bound: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = bound.py();
-    let keywords: Bound<'py, PyDict> = PyDict::new(py);
-    keywords.set_item("sentinel", bound)?;
-    imported(py, SENTINEL_TOKEN_MODULE, "sentinel_to_token")?.call((), Some(&keywords))
+    Ok(PyString::new(bound.py(), &sentinel_to_token(&bound)?).into_any())
 }
 
 fn token_bounds<'py>(bounds: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {

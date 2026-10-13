@@ -2,10 +2,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod command_connection;
 pub(crate) mod constants;
 pub mod effective;
 pub mod errors;
 pub mod models;
 pub mod project;
 pub mod toml;
+pub mod workspace;
 pub mod yaml;

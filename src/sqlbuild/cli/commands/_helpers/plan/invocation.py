@@ -6,11 +6,10 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import discover_project_inputs, validate_preview_target
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
-from sqlbuild.cli.commands._helpers.runtime.preview_target import validate_preview_target
 from sqlbuild.cli.commands.models import (
     AdapterConnectionContext,
     PlanCommandRequest,

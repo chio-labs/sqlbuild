@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild._native import resolve_cursor_input_roles
+from sqlbuild._native import get_config_str, resolve_cursor_input_roles
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
@@ -21,7 +21,6 @@ from sqlbuild.compiler.planner.models import CursorBounds, Duration
 from sqlbuild.compiler.planner.types import CursorType, IncrementalMode
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
 from sqlbuild.spec.contracts.types import MicrobatchLimitAction
 
 _CAP_ACTIONS: frozenset[MicrobatchLimitAction] = frozenset(

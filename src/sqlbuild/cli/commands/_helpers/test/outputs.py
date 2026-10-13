@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import format_test_execution_json, write_execution_json_output
+from sqlbuild._native import (
+    format_summary_footer,
+    format_test_execution_json,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.commands.models import TestCommandRequest, TestInvocation
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.coded_error_text import format_coded_error
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 _ERROR_LABEL_WIDTH: int = 10
 

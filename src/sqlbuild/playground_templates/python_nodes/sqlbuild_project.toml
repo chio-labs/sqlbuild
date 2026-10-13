@@ -1,0 +1,16 @@
+name = "python_nodes_demo"
+adapter = "duckdb"
+default_target = "dev"
+
+[connections.developer]
+database = "python_nodes_demo.duckdb"
+
+[settings]
+default_audit_severity = "warn"
+
+[defaults]
+materialized = "table"
+
+[targets.dev]
+connection = "developer"
+schema = "main"

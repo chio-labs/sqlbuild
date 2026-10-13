@@ -2,6 +2,7 @@ pub(crate) mod authored_nodes;
 pub(crate) mod column_migrations;
 pub(crate) mod config_errors;
 pub(crate) mod config_templates;
+pub(crate) mod config_values;
 pub(crate) mod described_models;
 pub(crate) mod errors;
 pub(crate) mod header_columns;

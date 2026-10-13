@@ -12,6 +12,18 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlbuild._native import compute_query_hash
+from sqlbuild._native import cursor_cap_from_end as cap_from_end
+from sqlbuild._native import cursor_cap_from_start as cap_from_start
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import (
+    cursor_exclusive_end_from_observed_max as exclusive_end_from_observed_max,
+)
+from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
+from sqlbuild._native import cursor_next_boundary as next_boundary
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
+from sqlbuild._native import cursor_split_into_batches as split_into_batches
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -50,18 +62,6 @@ from sqlbuild.compiler.planner.types import (
     MicrobatchStrategy,
     OnSchemaChange,
 )
-from sqlbuild.cursor_algebra.main.cap_from_end import cap_from_end
-from sqlbuild.cursor_algebra.main.cap_from_start import cap_from_start
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.exclusive_end_from_observed_max import (
-    exclusive_end_from_observed_max,
-)
-from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-from sqlbuild.cursor_algebra.main.next_boundary import next_boundary
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
-from sqlbuild.cursor_algebra.main.split_into_batches import split_into_batches
 from sqlbuild.cursor_algebra.models import AlignedInterval, DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context

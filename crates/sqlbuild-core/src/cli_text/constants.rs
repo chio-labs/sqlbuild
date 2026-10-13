@@ -77,3 +77,10 @@ pub(crate) const READ_SIDE_PHASE: &str = "read_side";
 pub(crate) const PYTHON_INGRESS_TITLE: &str = "Python ingress";
 pub(crate) const PYTHON_READ_SIDE_TITLE: &str = "Python read-side";
 pub(crate) const PLAN_READY_TITLE: &str = "Plan ready";
+pub(crate) const FOOTER_SUCCESS_LABELS: [&str; 5] =
+    ["PASS", "OK", "SYNC_PASS", "REFRESH_PASS", "UNCHANGED"];
+pub(crate) const FOOTER_WARNING_LABELS: [&str; 3] = ["WARN", "TOLERATED", "UNKNOWN"];
+pub(crate) const FOOTER_ERROR_LABELS: [&str; 4] = ["FAIL", "ERROR", "SYNC_FAIL", "REFRESH_FAIL"];
+pub(crate) const FOOTER_SKIP_LABELS: [&str; 1] = ["SKIP"];
+pub(crate) const COUNT_HEADER_OPENING: &str = " (";
+pub(crate) const COUNT_HEADER_CLOSING: &str = ")";

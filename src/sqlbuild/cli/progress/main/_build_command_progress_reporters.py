@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TextIO
 
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
+from sqlbuild._native import ConnectionProgressReporter, PlanningProgressReporter
 from sqlbuild.cli.progress.models import CommandProgressReporters
 
 

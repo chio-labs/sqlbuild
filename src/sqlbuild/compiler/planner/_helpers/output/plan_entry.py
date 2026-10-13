@@ -7,7 +7,18 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlbuild._native import render_source_relation, resolve_cursor_input_roles
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
+from sqlbuild._native import (
+    get_config_bool,
+    get_config_cursor_bound,
+    get_config_int,
+    get_config_str,
+    get_config_string_tuple,
+    render_source_relation,
+    resolve_cursor_input_roles,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.compiler.compile.constants import CURSOR_INPUTS_CONFIG_KEY
@@ -141,16 +152,8 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.models import TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel
-from sqlbuild.spec.contracts.main.get_config_bool import get_config_bool
-from sqlbuild.spec.contracts.main.get_config_cursor_bound import get_config_cursor_bound
-from sqlbuild.spec.contracts.main.get_config_int import get_config_int
-from sqlbuild.spec.contracts.main.get_config_str import get_config_str
-from sqlbuild.spec.contracts.main.get_config_string_tuple import get_config_string_tuple
 from sqlbuild.spec.contracts.models import (
     FutureCursorsConfig,
     LocalConfig,

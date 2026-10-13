@@ -30,6 +30,11 @@ reason = "The TYPE_CHECKING block contains annotation-only imports, avoiding exe
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/cursor_algebra/__init__.py"
+reason = "The native cursor algebra in sqlbuild-cursor owns cursor behavior; this package only declares the cursor value models, sentinels and grain metadata callers import."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/dag/types.py"
 reason = "The native DAG builder owns DAG behavior; this package only declares the node kinds integrations read from the artifact."
 
@@ -81,7 +86,7 @@ reason = "Fingerprint hashing and storage run natively; the package keeps the st
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
 path = "src/sqlbuild/compiler/refactoring/__init__.py"
-reason = "Refactorings are planned natively; the package keeps the request, plan and error models the refactor commands read."
+reason = "Refactorings run natively; the package keeps the compiled-project input, manual-location model and error classes the native command reads and raises."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -354,6 +359,7 @@ crate_names = [
     "sqlbuild-cli",
     "sqlbuild-config",
     "sqlbuild-core",
+    "sqlbuild-cursor",
     "sqlbuild-discovery",
     "sqlbuild-model-config",
     "sqlbuild-pysource",

@@ -11,13 +11,13 @@ from functools import partial
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
-from sqlbuild.rule_engine._helpers.engine.custom_rule_evidence import (
+from sqlbuild._native import (
     custom_rule_implementation_fingerprint,
     custom_rule_import_closure,
     custom_rule_test_evidence,
 )
+from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.frontier.main.compiled_code_identity import compiled_code_identity
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.run.native_rows import (
     build_rules_request,

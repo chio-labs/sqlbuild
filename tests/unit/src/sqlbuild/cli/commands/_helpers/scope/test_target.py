@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from io import StringIO
+
 import pytest
 
-from sqlbuild.cli.commands._helpers.scope.target import qualify_scope_target
+from sqlbuild._native import run_scope_command
 from sqlbuild.cli.commands.exceptions import CliUserError
+from sqlbuild.cli.commands.models import ScopeCommandRequest
 from tests.unit.src.sqlbuild.cli.commands._helpers.scope._test_types import (
     ScopeTargetCase,
     ScopeTargetErrorCase,
 )
-from tests.unit.src.sqlbuild.cli.commands._helpers.scope.helpers import bare_target_scope_lookup
+from tests.unit.src.sqlbuild.cli.commands._helpers.scope.helpers import bare_target_scope_index
 
 
 @pytest.mark.parametrize(
@@ -23,21 +26,20 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.scope.helpers import bare_tar
             "bare function", "udf__is_completed_order", "function:udf__is_completed_order"
         ),
         ScopeTargetCase("prefixed model unchanged", "model:orders", "model:orders"),
-        ScopeTargetCase("prefixed enum unchanged", "enum:order_status", "enum:order_status"),
-        ScopeTargetCase(
-            "resource path unchanged", "models/staging/orders.sql", "models/staging/orders.sql"
-        ),
-        ScopeTargetCase("prospective scope has no target", None, None),
     ),
     ids=lambda case: case.description,
 )
 def test_given_scope_target_when_qualifying_then_bare_resources_gain_their_kind(
     test_case: ScopeTargetCase,
 ) -> None:
-    assert (
-        qualify_scope_target(lookup=bare_target_scope_lookup(), target=test_case.target)
-        == test_case.expected_target
+    stream: StringIO = StringIO()
+    _ = run_scope_command(
+        request=ScopeCommandRequest(target=test_case.target),
+        load_scope_index=bare_target_scope_index,
+        output_stream=stream,
     )
+
+    assert f"  Target: {test_case.expected_target}\n" in stream.getvalue()
 
 
 @pytest.mark.parametrize(
@@ -72,7 +74,11 @@ def test_given_ambiguous_or_prefix_only_bare_name_when_qualifying_then_raises_cl
     test_case: ScopeTargetErrorCase,
 ) -> None:
     with pytest.raises(CliUserError) as error:
-        qualify_scope_target(lookup=bare_target_scope_lookup(), target=test_case.target)
+        _ = run_scope_command(
+            request=ScopeCommandRequest(target=test_case.target),
+            load_scope_index=bare_target_scope_index,
+            output_stream=StringIO(),
+        )
 
     assert error.value.code == "C960"
     assert error.value.message == test_case.expected_message

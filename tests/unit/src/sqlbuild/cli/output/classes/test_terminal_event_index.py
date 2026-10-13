@@ -8,25 +8,17 @@ from dataclasses import replace
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, cast
-from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild._native import (
+    ExecutionEventWriter,
+    IntegrationAssetResult,
+    IntegrationResultEnvelope,
     TerminalEventClaim,
     TerminalEventIndex,
     current_terminal_event_index,
     terminal_event_index_scope,
-)
-from sqlbuild.cli.output.classes import execution_event_writer
-from sqlbuild.cli.output.classes.execution_event_writer import ExecutionEventWriter
-from sqlbuild.cli.output.constants import (
-    MAX_INTEGRATION_NESTING_DEPTH,
-    MAX_INTEGRATION_STRING_CHARS,
-)
-from sqlbuild.cli.output.models import (
-    IntegrationAssetResult,
-    IntegrationResultEnvelope,
 )
 from sqlbuild.executor.clone.types import CloneAction
 from sqlbuild.executor.run.models import ModelExecutionResult
@@ -46,8 +38,12 @@ from tests.unit.src.sqlbuild.cli.output.classes._test_types import (
 from tests.unit.src.sqlbuild.cli.output.classes.helpers import (
     build_integration_asset_with_maximum_start,
     build_valid_integration_payload,
+    decode_asset,
 )
 from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_event
+
+MAX_INTEGRATION_STRING_CHARS: int = 2_048
+MAX_INTEGRATION_NESTING_DEPTH: int = 6
 
 
 @pytest.mark.parametrize(
@@ -140,7 +136,7 @@ def test_given_unknown_check_severity_when_decoding_then_lists_allowed_values(
 @pytest.mark.parametrize(
     "test_case",
     (
-        StructuralMetadataValidationTestCase("non-string key", {1: "value"}, "keys"),
+        StructuralMetadataValidationTestCase("non-string key", {1: "value"}, "unknown fields"),
         StructuralMetadataValidationTestCase("non-finite value", {"limit": float("inf")}, "finite"),
         StructuralMetadataValidationTestCase(
             "unknown key", {"user_metadata": "secret"}, "unknown fields"
@@ -162,12 +158,7 @@ def test_given_unsafe_structural_metadata_when_constructing_asset_then_validatio
     test_case: StructuralMetadataValidationTestCase,
 ) -> None:
     with pytest.raises(ObservabilityValidationError, match=test_case.expected_error):
-        _ = IntegrationAssetResult(
-            kind="model",
-            name="orders",
-            status="success",
-            microbatch=cast(Mapping[str, Any], test_case.value),
-        )
+        _ = decode_asset({"microbatch": cast(Mapping[str, Any], test_case.value)})
 
 
 @pytest.mark.parametrize(
@@ -181,9 +172,7 @@ def test_given_unsafe_structural_metadata_when_constructing_asset_then_validatio
 def test_given_canonical_clone_action_when_constructing_asset_then_integration_contract_accepts_it(
     test_case: IntegrationActionContractTestCase,
 ) -> None:
-    asset: IntegrationAssetResult = IntegrationAssetResult(
-        kind="model", name="orders", status="success", action=test_case.expected_action
-    )
+    asset: IntegrationAssetResult = decode_asset({"action": test_case.expected_action})
 
     assert asset.action == test_case.expected_action
 
@@ -217,11 +206,8 @@ def test_given_canonical_maximum_start_action_when_constructing_asset_then_contr
 def test_given_canonical_microbatch_action_when_constructing_asset_then_contract_accepts_it(
     test_case: IntegrationActionContractTestCase,
 ) -> None:
-    asset: IntegrationAssetResult = IntegrationAssetResult(
-        kind="model",
-        name="orders",
-        status="success",
-        microbatch={"action": test_case.expected_action},
+    asset: IntegrationAssetResult = decode_asset(
+        {"microbatch": {"action": test_case.expected_action}}
     )
 
     assert asset.microbatch["action"] == test_case.expected_action
@@ -443,7 +429,7 @@ def test_given_terminal_and_result_when_writing_then_canonical_envelope_is_flush
         ProjectionDegradationTestCase(
             description="successful execution with invalid optional projection",
             expected_warning=(
-                "warning: integration output degraded: injected projection failure; "
+                "warning: integration output degraded: integration staging_relation is invalid; "
                 "warehouse execution completed successfully"
             ),
             expected_degraded=True,
@@ -454,7 +440,6 @@ def test_given_terminal_and_result_when_writing_then_canonical_envelope_is_flush
 def test_given_successful_execution_when_integration_projection_fails_then_degraded_record_is_written(
     test_case: ProjectionDegradationTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     path: Path = tmp_path / "events.jsonl"
@@ -468,16 +453,14 @@ def test_given_successful_execution_when_integration_projection_fails_then_degra
             payload={"resource_kind": "model", "resource_name": "orders", "attempt_number": 1},
         )
     )
-    monkeypatch.setattr(
-        execution_event_writer,
-        "build_integration_result",
-        Mock(side_effect=ObservabilityValidationError("injected projection failure")),
-    )
-
     with terminal_event_index_scope(index):
         writer: ExecutionEventWriter = ExecutionEventWriter(path=path)
         writer.write_build_result(
-            result=ModelExecutionResult(model_name="orders", status=ExecutionStatus.SUCCESS),
+            result=ModelExecutionResult(
+                model_name="orders",
+                status=ExecutionStatus.SUCCESS,
+                staging_relation="x" * 513,
+            ),
             plan=None,
         )
         writer.close()

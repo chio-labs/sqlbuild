@@ -5,15 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from sqlbuild._native import (
+    format_expectation_detail,
+    format_expectation_name,
+    resolve_name_column_width,
+)
 from sqlbuild.cli.progress.constants import NESTED_CHILD_NAME_INDENT
-from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
-from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.discovery.models import SqlTestParameterDeclaration
 from sqlbuild.compiler.planner.models import SqlTestPlanEntry
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
-from sqlbuild.presentation.main.resolve_name_column_width import resolve_name_column_width
 from sqlbuild.sql_values.models import SqlValue
 from sqlbuild.sql_values.types import SqlValueKind
 
