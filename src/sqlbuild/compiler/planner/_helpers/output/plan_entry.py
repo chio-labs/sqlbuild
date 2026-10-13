@@ -18,7 +18,9 @@ from sqlbuild._native import (
     get_config_string_tuple,
     microbatch_guidance,
     render_source_relation,
+    resolve_bounded_cursor_override,
     resolve_cursor_input_roles,
+    resolve_effective_microbatch_batch_size,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo
@@ -45,9 +47,6 @@ from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner._helpers.graph.source_load_nodes import build_source_load_map
 from sqlbuild.compiler.planner._helpers.output.cursor_type_check import (
     check_cursor_type_consistency,
-)
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
-    resolve_bounded_cursor_override,
 )
 from sqlbuild.compiler.planner._helpers.output.microbatch_bounds import (
     cap_microbatch_bounds,
@@ -100,9 +99,6 @@ from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.main.changes._model_changes import detect_model_changes
 from sqlbuild.compiler.planner.main.changes.relation_replacement import (
     replaces_incremental_relation,
-)
-from sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size import (
-    resolve_effective_microbatch_batch_size,
 )
 from sqlbuild.compiler.planner.main.execution.future_cursor_safety import apply_future_cursor_safety
 from sqlbuild.compiler.planner.main.execution.future_cursor_warning import future_cursor_cap_warning

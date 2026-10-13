@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import cursor_bound_display
+from sqlbuild._native import cursor_bound_display
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from tests.unit.src.sqlbuild.compiler.planner.main._test_types import (
     CursorBoundDisplayTestCase,

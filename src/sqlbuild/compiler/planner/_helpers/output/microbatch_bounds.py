@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild._native import get_config_str, resolve_cursor_input_roles
+from sqlbuild._native import aligned_timestamp_bounds, get_config_str, resolve_cursor_input_roles
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
 )
 from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
 from sqlbuild.compiler.planner._helpers.resolve.lineage import resolve_lineage_reference
-from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
-    aligned_timestamp_bounds,
-)
 from sqlbuild.compiler.planner.main.execution.microbatch_limit import (
     _resolve_microbatch_limit_config,
 )

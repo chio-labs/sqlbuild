@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds import (
-    aligned_timestamp_bounds,
-)
+from sqlbuild._native import aligned_timestamp_bounds
 from sqlbuild.compiler.planner.models import CursorBounds, Duration
 from sqlbuild.compiler.planner.types import CursorType
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue

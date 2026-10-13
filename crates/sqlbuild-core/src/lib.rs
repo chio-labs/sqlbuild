@@ -22,6 +22,7 @@ pub mod json;
 pub mod load_command;
 pub mod models;
 pub mod panics;
+pub mod plan_display;
 pub mod posix_path;
 pub mod progress;
 pub mod query_command;

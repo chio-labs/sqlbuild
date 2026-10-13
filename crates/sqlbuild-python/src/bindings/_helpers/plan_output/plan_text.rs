@@ -18,20 +18,16 @@ use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::plan_output::cursor_details::{
     CursorDetails, DEFERRED, RESOLVED, cursor_details, runtime_inputs_clause,
 };
+use crate::bindings::_helpers::plan_output::display::{
+    cursor_bound_display, format_no_input_rows, format_waiting_on_empty_inputs,
+    inclusive_cursor_end, model_materialization_label,
+};
 use crate::bindings::_helpers::plan_output::python_identity::{
     definition_source_text, dependency_source_text,
 };
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
 
 const QUERY_DIFF_MODULE: &str = "sqlbuild.compiler.planner.main.changes._query_diff";
-const NO_INPUT_ROWS_MODULE: &str =
-    "sqlbuild.compiler.planner.main.cursor_window.no_input_rows_display";
-const WAITING_MODULE: &str =
-    "sqlbuild.compiler.planner.main.cursor_window.waiting_on_empty_inputs_display";
-const BOUND_DISPLAY_MODULE: &str = "sqlbuild.compiler.planner.main.execution.cursor_bound_display";
-const INCLUSIVE_END_MODULE: &str = "sqlbuild.compiler.planner.main.execution.inclusive_cursor_end";
-const MATERIALIZATION_LABEL_MODULE: &str =
-    "sqlbuild.compiler.planner.main.execution._model_materialization_label";
 const PRE_BUILD_MODULE: &str = "sqlbuild.compiler.planner.main.pre_build.pre_build_work_display";
 const DISPLAY_MODELS_MODULE: &str = "sqlbuild.presentation.models";
 const SKIP_ACTION: &str = "skip";
@@ -70,45 +66,27 @@ fn token<'py>(bound: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 
 /// `start → inclusive end` of resolved bounds, in the model's cursor display.
 fn cursor_range(entry: &Bound<'_, PyAny>, bounds: &Bound<'_, PyAny>) -> PyResult<String> {
-    let py: Python<'_> = entry.py();
-    let typing: [(&str, Bound<'_, PyAny>); 2] = [
-        ("cursor_type", entry.getattr("cursor_type")?),
-        ("cursor_grain", entry.getattr("cursor_grain")?),
-    ];
-    let start: String = call_with(
-        &imported(py, BOUND_DISPLAY_MODULE, "cursor_bound_display")?,
-        &[
-            ("value", token(bounds.getattr("start")?)?),
-            typing[0].clone(),
-            typing[1].clone(),
-        ],
-    )?
-    .extract()?;
-    let end: String = call_with(
-        &imported(py, INCLUSIVE_END_MODULE, "inclusive_cursor_end")?,
-        &[
-            ("end", token(bounds.getattr("end")?)?),
-            typing[0].clone(),
-            typing[1].clone(),
-        ],
-    )?
-    .extract()?;
+    let (cursor_type, cursor_grain) = (
+        entry.getattr("cursor_type")?,
+        entry.getattr("cursor_grain")?,
+    );
+    let start: String = cursor_bound_display(
+        &token(bounds.getattr("start")?)?,
+        &cursor_type,
+        &cursor_grain,
+    )?;
+    let end: String =
+        inclusive_cursor_end(&token(bounds.getattr("end")?)?, &cursor_type, &cursor_grain)?;
     Ok(format!("{start} \u{2192} {end}"))
 }
 
 fn cursor_text(entry: &Bound<'_, PyAny>, details: CursorDetails<'_>) -> PyResult<CursorPlanText> {
-    let py: Python<'_> = entry.py();
     let empty_inputs_window: Option<String> = if details.empty_inputs.is_truthy()? {
-        let (module, function) = if details.waiting_on_empty_inputs {
-            (WAITING_MODULE, "format_waiting_on_empty_inputs")
+        Some(if details.waiting_on_empty_inputs {
+            format_waiting_on_empty_inputs(&details.empty_inputs)?
         } else {
-            (NO_INPUT_ROWS_MODULE, "format_no_input_rows")
-        };
-        Some(
-            imported(py, module, function)?
-                .call1((&details.empty_inputs,))?
-                .extract()?,
-        )
+            format_no_input_rows(&details.empty_inputs)?
+        })
     } else {
         None
     };
@@ -185,7 +163,6 @@ fn config_diff(entry: &Bound<'_, PyAny>, reason: &str) -> PyResult<Option<Vec<St
 }
 
 fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
-    let py: Python<'_> = entry.py();
     let action: String = text(&entry.getattr("action")?.getattr("value")?)?;
     let reason: String = text(&entry.getattr("reason")?.getattr("value")?)?;
     let name: String = text(&entry.getattr("name")?)?;
@@ -226,13 +203,7 @@ fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
         )?)
     };
     Ok(ModelPlanText {
-        materialization_label: imported(
-            py,
-            MATERIALIZATION_LABEL_MODULE,
-            "model_materialization_label",
-        )?
-        .call1((entry,))?
-        .extract()?,
+        materialization_label: model_materialization_label(entry)?,
         custom_materialization_name: optional_text(&entry.getattr("custom_materialization_name")?)?,
         backfill_action: text(&backfill.getattr("action")?.getattr("value")?)?,
         backfill_duration: optional_text(&backfill.getattr("duration")?)?,

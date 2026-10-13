@@ -177,9 +177,11 @@ from sqlbuild.compiler.pipeline.models import (
 )
 from sqlbuild.compiler.planner.models import (
     AuditPlanEntry,
+    CursorBounds,
     DeferralInputs,
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
+    ModelPlanEntry,
     PlanOutput,
     SqlTestPlanEntry,
 )
@@ -238,7 +240,12 @@ from sqlbuild.compiler.sql_test_glue.models import (
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestPlanRow
 from sqlbuild.cost.models import CostRunRecord
-from sqlbuild.cursor_algebra.models import AlignedInterval, Duration
+from sqlbuild.cursor_algebra.models import (
+    AlignedInterval,
+    DateValue,
+    Duration,
+    TimestampValue,
+)
 from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
@@ -272,6 +279,7 @@ from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
 from sqlbuild.rule_engine.types import RuleCheck
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
@@ -3416,3 +3424,24 @@ def parse_header_values(
 def model_output_column_locations(
     *, contents: str, relative_path: object, extract_implicit_alias_columns: bool = True
 ) -> dict[str, Any]: ...
+def inclusive_cursor_end(*, end: str, cursor_type: str | None, cursor_grain: str | None) -> str: ...
+def resolve_bounded_cursor_override(
+    *,
+    start_cursor_override: str | None,
+    end_cursor_override: str | None,
+    cursor_type: str | None,
+    cursor_grain: str | None,
+) -> CursorBounds | None: ...
+def cursor_bound_display(
+    *, value: str, cursor_type: str | None, cursor_grain: str | None
+) -> str: ...
+def model_materialization_label(entry: ModelPlanEntry) -> str: ...
+def model_resource_type(entry: ModelPlanEntry | None) -> str: ...
+def model_execution_annotation(entry: ModelPlanEntry | None) -> str: ...
+def materialization_type_display(resource_kind: ExecutionResourceKind) -> str: ...
+def format_no_input_rows(input_names: tuple[str, ...]) -> str: ...
+def format_waiting_on_empty_inputs(input_names: tuple[str, ...]) -> str: ...
+def resolve_effective_microbatch_batch_size(*, batch_size: str, effective_grain: str) -> str: ...
+def aligned_timestamp_bounds(
+    *, start: DateValue | TimestampValue, end: DateValue | TimestampValue
+) -> tuple[datetime, datetime]: ...

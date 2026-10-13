@@ -9,6 +9,7 @@ from sqlbuild._native import (
     assert_no_unresolved_sql_markers,
     get_config_cursor_bound,
     get_config_str,
+    resolve_bounded_cursor_override,
     resolve_cursor_input_roles,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -20,9 +21,6 @@ from sqlbuild.compiler.compile.models import (
 )
 from sqlbuild.compiler.compile.types import CompiledFunctionView, CompiledModelView
 from sqlbuild.compiler.discovery.models import SqlHookEntry
-from sqlbuild.compiler.planner._helpers.output.inclusive_cursor_end import (
-    resolve_bounded_cursor_override,
-)
 from sqlbuild.compiler.planner._helpers.resolve.config import (
     get_config_append_cursor_inclusive,
 )

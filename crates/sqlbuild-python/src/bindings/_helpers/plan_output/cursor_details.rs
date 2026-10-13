@@ -2,15 +2,14 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::plan_output::display::{
+    aligned_timestamp_bounds, resolve_effective_microbatch_batch_size,
+};
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
 
 const BOUND_TYPES_MODULE: &str = "sqlbuild.cursor_algebra.types";
 const CURSOR_MODELS_MODULE: &str = "sqlbuild.cursor_algebra.models";
-const ALIGNED_BOUNDS_MODULE: &str =
-    "sqlbuild.compiler.planner.main.execution.aligned_timestamp_bounds";
-const BATCH_SIZE_MODULE: &str =
-    "sqlbuild.compiler.planner.main.execution.effective_microbatch_batch_size";
 const MICROBATCH_MODE: &str = "microbatch";
 const TIMESTAMP_CURSOR: &str = "timestamp";
 const INTEGER_CURSOR: &str = "integer";
@@ -99,11 +98,8 @@ fn count_batches(
         if !temporal(&start)? || !temporal(&end)? {
             return Ok(None);
         }
-        let (mut current, end): (Bound<'_, PyAny>, Bound<'_, PyAny>) = call_with(
-            &imported(py, ALIGNED_BOUNDS_MODULE, "aligned_timestamp_bounds")?,
-            &[("start", start), ("end", end)],
-        )?
-        .extract()?;
+        let (mut current, end): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+            aligned_timestamp_bounds(&start, &end)?.extract()?;
         let minimum: Bound<'_, PyAny> = py.import("builtins")?.getattr("min")?;
         let mut count: i64 = 0;
         while current.lt(&end)? {
@@ -167,23 +163,9 @@ pub(crate) fn cursor_details<'py>(
     let effective_grain: Option<String> = effective_grain(entry)?;
     let declared_batch_size: Option<String> = optional_text(&entry.getattr("batch_size")?)?;
     let effective_batch_size: Option<String> = match (&declared_batch_size, &effective_grain) {
-        (Some(batch_size), Some(grain)) => Some(text(&call_with(
-            &imported(
-                py,
-                BATCH_SIZE_MODULE,
-                "resolve_effective_microbatch_batch_size",
-            )?,
-            &[
-                (
-                    "batch_size",
-                    pyo3::types::PyString::new(py, batch_size).into_any(),
-                ),
-                (
-                    "effective_grain",
-                    pyo3::types::PyString::new(py, grain).into_any(),
-                ),
-            ],
-        )?)?),
+        (Some(batch_size), Some(grain)) => Some(resolve_effective_microbatch_batch_size(
+            py, batch_size, grain,
+        )?),
         (batch_size, _) => batch_size.clone(),
     };
     let cursor_type: Option<String> = optional_text(&entry.getattr("cursor_type")?)?;
