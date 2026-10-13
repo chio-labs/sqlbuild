@@ -1760,7 +1760,10 @@ def infer_native_expression_source_shapes(
     *, expressions: tuple[str, ...], profile: Any
 ) -> tuple[dict[str, str] | None, ...]: ...
 def prove_native_dynamic_contracts(
-    *, session: NativeModelAnalysisSession | None, tables: Any, models: tuple[tuple[str, tuple[Any, ...]], ...]
+    *,
+    session: NativeModelAnalysisSession | None,
+    tables: Any,
+    models: tuple[tuple[str, tuple[Any, ...]], ...],
 ) -> tuple[Any, ...]: ...
 def _oracle_names_set_operation(sql: str, /) -> bool: ...
 def _oracle_cte_fact_recovery(
@@ -1781,7 +1784,9 @@ def complete_semantic_project(
     *,
     project: Any,
     profile: Any,
-    binding_results: dict[str, list[tuple[str, str, int | None, int | None, int | None, int | None, str]]],
+    binding_results: dict[
+        str, list[tuple[str, str, int | None, int | None, int | None, int | None, str]]
+    ],
     resource_sql_analysis: bool,
     session: NativeModelAnalysisSession | None = None,
 ) -> Any: ...
