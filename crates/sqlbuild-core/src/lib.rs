@@ -11,6 +11,7 @@ pub mod contract_command;
 pub mod cost_report;
 pub mod debug_report;
 pub mod freshness_text;
+pub mod init_command;
 pub mod integration_results;
 pub mod janitor_text;
 pub mod json;

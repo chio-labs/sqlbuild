@@ -626,7 +626,7 @@ pub(crate) const COMPILE_ROUTE: Route = routed(
 const INIT_ARGUMENTS: [Field; 1] = [PROJECT_DIR];
 pub(crate) const INIT_ROUTE: Route = routed(
     "run_init",
-    ("sqlbuild.cli.commands.main.workspace._init", "run_init"),
+    ("sqlbuild._native", "run_init_command"),
     &INIT_ARGUMENTS,
     REQUEST_SHAPE,
 );

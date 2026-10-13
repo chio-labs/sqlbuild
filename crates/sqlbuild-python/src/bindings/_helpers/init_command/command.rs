@@ -1,0 +1,76 @@
+//! `sqb init`: scaffold a blank SQLBuild project and its agent skills.
+
+use std::path::PathBuf;
+
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyString};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_core::init_command::constants::PROJECT_FILE;
+use sqlbuild_core::init_command::main::init_project_name::init_project_name;
+use sqlbuild_core::init_command::main::init_project_toml::init_project_toml;
+use sqlbuild_core::init_command::main::render_init_summary::render_init_summary;
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::init_command::scaffold::scaffold_blank_project;
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
+const EXISTS_MESSAGE: &str = "sqlbuild_project.toml already exists in this directory";
+
+fn exists_error(py: Python<'_>) -> PyErr {
+    let raised = (|| {
+        let options: Bound<'_, PyDict> = PyDict::new(py);
+        options.set_item("code", "C900")?;
+        imported(py, ERRORS_MODULE, "CliUserError")?.call((EXISTS_MESSAGE,), Some(&options))
+    })();
+    match raised {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+/// Create a minimal SQLBuild project in the project directory.
+#[pyfunction]
+#[pyo3(signature = (project_dir = None))]
+fn run_init_command(py: Python<'_>, project_dir: Option<Bound<'_, PyAny>>) -> PyResult<i32> {
+    let base_dir: Bound<'_, PyAny> = match project_dir.filter(|path| !path.is_none()) {
+        Some(path) => path,
+        None => imported(py, "pathlib", "Path")?.call_method0("cwd")?,
+    };
+    if base_dir
+        .call_method1("__truediv__", (PROJECT_FILE,))?
+        .call_method0("exists")?
+        .is_truthy()?
+    {
+        return Err(exists_error(py));
+    }
+    let project_name: String = init_project_name(&base_dir.getattr("name")?.extract::<String>()?);
+    let base_path: PathBuf = base_dir.extract()?;
+    scaffold_blank_project(py, &base_path, &init_project_toml(&project_name))?;
+    call_with(
+        &imported(py, NATIVE_MODULE, "update_sqlbuild_skills")?,
+        &[("project_dir", base_dir)],
+    )?;
+    let style: CliStyle = CliStyle {
+        use_color: imported(py, COLOR_MODULE, "supports_color")?
+            .call0()?
+            .is_truthy()?,
+    };
+    py.import("sys")?.getattr("stdout")?.call_method1(
+        "write",
+        (PyString::new(
+            py,
+            &render_init_summary(&project_name, style),
+        ),),
+    )?;
+    Ok(0)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(run_init_command, module)?)?;
+    Ok(())
+}

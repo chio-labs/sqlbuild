@@ -30,6 +30,7 @@ pub(crate) mod freshness;
 pub(crate) mod frontier;
 pub(crate) mod graph;
 pub(crate) mod hand_built;
+pub(crate) mod init_command;
 pub(crate) mod janitor;
 pub(crate) mod lineage;
 pub(crate) mod load;
