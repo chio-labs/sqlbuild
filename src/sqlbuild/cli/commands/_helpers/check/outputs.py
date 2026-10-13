@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import write_execution_json_output
+from sqlbuild._native import format_summary_footer, write_execution_json_output
 from sqlbuild.cli.commands._helpers.check.core import format_check_json, write_check_results
 from sqlbuild.cli.commands.models import (
     CheckCommandRequest,
@@ -13,7 +13,6 @@ from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target impor
     write_python_check_runtime_target,
 )
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 
 def write_check_completion_output(

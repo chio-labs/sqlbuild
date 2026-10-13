@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import read_cost_run
 from sqlbuild.cli.commands._helpers.cost.collection import finalize_build_cost
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.models import CostRunRecord, RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from tests.unit.src.sqlbuild.cli.commands._helpers.cost._test_types import (
@@ -136,7 +136,7 @@ def test_given_collection_exception_when_finalizing_then_warning_is_written_with
     assert record is not None
     assert record.cost.status == CostStatus.COLLECTION_FAILED
     assert record.build_status == "success"
-    assert RunCostStore.read(project_dir=tmp_path, run_id="run-1") == record
+    assert read_cost_run(project_dir=tmp_path, run_id="run-1") == record
     assert "Cost telemetry failed during collection (RuntimeError)" in output.getvalue()
     assert "build result unchanged" in output.getvalue()
 
@@ -194,7 +194,7 @@ def test_given_successful_collection_when_finalizing_then_record_and_default_war
     )
 
     assert (record is not None) is test_case.expected_record_present
-    assert RunCostStore.read(project_dir=tmp_path, run_id="run-1") == record
+    assert read_cost_run(project_dir=tmp_path, run_id="run-1") == record
     assert "Cost  $0.0300 estimated" in output.getvalue()
     assert "default $3.00/credit" in output.getvalue()
     assert "Configure cost.usd_per_credit" in output.getvalue()
@@ -214,27 +214,18 @@ def test_given_successful_collection_when_finalizing_then_record_and_default_war
 def test_given_persistence_failure_when_finalizing_then_warning_does_not_escape(
     test_case: CostCollectionTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output: StringIO = StringIO()
 
-    def fail_write(**kwargs: Any) -> None:
-        del kwargs
-        raise OSError("disk full")
-
-    monkeypatch.setattr(
-        RunCostStore,
-        "write",
-        fail_write,
-    )
+    (tmp_path / "target").write_text("not a directory", encoding="utf-8")
 
     record: CostRunRecord | None = finalize_build_cost(
         build_cost_finalization(tmp_path=tmp_path, adapter=_CostAdapter(), output_stream=output)
     )
 
     assert (record is not None) is test_case.expected_record_present
-    assert RunCostStore.read(project_dir=tmp_path, run_id="run-1") is None
-    assert "OSError" in output.getvalue()
+    assert read_cost_run(project_dir=tmp_path, run_id="run-1") is None
+    assert "Cost telemetry failed during artifact persistence" in output.getvalue()
     assert "build result unchanged" in output.getvalue()
 
 
@@ -261,7 +252,7 @@ def test_given_output_failure_when_finalizing_then_record_is_preserved_without_r
     )
 
     assert (record is not None) is test_case.expected_record_present
-    assert RunCostStore.read(project_dir=tmp_path, run_id="run-1") == record
+    assert read_cost_run(project_dir=tmp_path, run_id="run-1") == record
 
 
 @pytest.mark.parametrize(

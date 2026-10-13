@@ -6,6 +6,7 @@ import sys
 from typing import TextIO
 
 from sqlbuild._native import (
+    cost_output_payload,
     format_build_execution_json,
     format_degradable_build_execution_json,
     format_plan,
@@ -28,7 +29,6 @@ from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target impor
 from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import PlanOutput
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.models import CostRunRecord
 from sqlbuild.executor.build.models import BuildExecutionResult
 from sqlbuild.executor.build.types import BuildStatus
@@ -138,7 +138,7 @@ def execution_json_payload_with_degradation(
         python_check_results=python_check_results,
         command=command,
         run_id=run_id,
-        cost=(None if cost_record is None else RunCostStore.output_payload(record=cost_record)),
+        cost=(None if cost_record is None else cost_output_payload(record=cost_record)),
         execution_succeeded=execution_succeeded,
     )
 
@@ -156,7 +156,7 @@ def write_no_work_build_json(
             result=BuildExecutionResult(status=BuildStatus.SUCCESS),
             plan=pipeline_result.plan_output,
             run_id=(None if cost_record is None else pipeline_result.project.run_id),
-            cost=(None if cost_record is None else RunCostStore.output_payload(record=cost_record)),
+            cost=(None if cost_record is None else cost_output_payload(record=cost_record)),
         ),
         json_output=request.json_output,
         json_output_path=request.json_output_path,

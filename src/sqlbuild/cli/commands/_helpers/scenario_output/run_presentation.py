@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import time
 
-from sqlbuild._native import format_scenario_execution_json, write_execution_json_output
+from sqlbuild._native import (
+    format_scenario_execution_json,
+    format_summary_footer,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands._helpers.scenario_output.namespace import (
     scenario_activity_message,
     write_namespace_completion,
@@ -13,7 +17,6 @@ from sqlbuild.cli.commands.models import ScenarioRunOutputContext, ScenarioRunPr
 from sqlbuild.executor.scenario.models import ScenarioRunResult
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 
 
 def begin_scenario_run(

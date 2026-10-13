@@ -8,6 +8,8 @@ from typing import TextIO
 from sqlbuild._native import (
     NativeProgressProjector,
     current_native_progress_projector,
+    format_completion_line,
+    format_summary_footer,
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
@@ -15,8 +17,6 @@ from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_line_coordinator import TransientLineCoordinator
-from sqlbuild.presentation.main.completion_line import format_completion_line
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.transient_line_coordinator import shared_transient_line_coordinator
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.spec.contracts.models import SourceEntry

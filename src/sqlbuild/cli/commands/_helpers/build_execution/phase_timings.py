@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from typing import TextIO
 
+from sqlbuild._native import CliDocument
 from sqlbuild.cli.commands._helpers.build_execution.exceptional_cost import (
     finalize_exceptional_direct_cost,
 )
@@ -20,7 +21,6 @@ from sqlbuild.cli.commands.models import (
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.diagnostics.classes.build_phase_timing_tracker import BuildPhaseTimingTracker
 from sqlbuild.diagnostics.models import PartialBuildPhaseTimings
-from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
 

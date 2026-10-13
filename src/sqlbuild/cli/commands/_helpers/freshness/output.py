@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild._native import format_summary_footer
 from sqlbuild.cli.commands.models import (
     FreshnessCommandResult,
     FreshnessSourceResult,
 )
 from sqlbuild.cli.commands.types import FreshnessSourceStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.tree_connector import tree_connector
 
 _FRESHNESS_GROUPS: tuple[tuple[FreshnessSourceStatus, str], ...] = (

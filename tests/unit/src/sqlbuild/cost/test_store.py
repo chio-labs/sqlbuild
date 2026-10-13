@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
+from sqlbuild._native import list_cost_runs, read_cost_run, resolve_cost_run, write_cost_run
 from sqlbuild.cost.exceptions import CostArtifactError
 from sqlbuild.cost.models import CostRunRecord
 from tests.unit.src.sqlbuild.cost._test_types import (
@@ -35,10 +35,10 @@ def test_given_cost_run_when_writing_then_record_round_trips_exact_decimals(
         completed_at=datetime(2026, 8, 23, tzinfo=UTC),
     )
 
-    path: Path = RunCostStore.write(project_dir=tmp_path, record=record)
+    path: Path = write_cost_run(project_dir=tmp_path, record=record)
 
     assert path == (tmp_path / "target" / "executions" / test_case.expected_run_ids[0] / "run.json")
-    assert RunCostStore.read(project_dir=tmp_path, run_id=test_case.expected_run_ids[0]) == record
+    assert read_cost_run(project_dir=tmp_path, run_id=test_case.expected_run_ids[0]) == record
     assert not (path.parent / ".run.json.tmp").exists()
 
 
@@ -60,15 +60,15 @@ def test_given_multiple_cost_runs_when_listing_then_latest_completion_is_first(
     latest: CostRunRecord = build_cost_run_record(
         run_id="run-new", completed_at=origin + timedelta(minutes=1)
     )
-    RunCostStore.write(project_dir=tmp_path, record=older)
-    RunCostStore.write(project_dir=tmp_path, record=latest)
+    write_cost_run(project_dir=tmp_path, record=older)
+    write_cost_run(project_dir=tmp_path, record=latest)
 
-    records: tuple[CostRunRecord, ...] = RunCostStore.list(project_dir=tmp_path)
+    records: tuple[CostRunRecord, ...] = list_cost_runs(project_dir=tmp_path)
 
     assert tuple(record.run_id for record in records) == test_case.expected_run_ids
     assert records == (latest, older)
-    assert RunCostStore.resolve(project_dir=tmp_path, selector="latest") == latest
-    assert RunCostStore.resolve(project_dir=tmp_path, selector="run-o") == older
+    assert resolve_cost_run(project_dir=tmp_path, selector="latest") == latest
+    assert resolve_cost_run(project_dir=tmp_path, selector="run-o") == older
 
 
 @pytest.mark.parametrize(
@@ -94,11 +94,11 @@ def test_given_invalid_artifact_when_listing_then_valid_history_remains_availabl
     tmp_path: Path,
 ) -> None:
     completed_at: datetime = datetime(2026, 8, 23, tzinfo=UTC)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(run_id="run-valid", completed_at=completed_at),
     )
-    invalid_path: Path = RunCostStore.write(
+    invalid_path: Path = write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(run_id="run-invalid", completed_at=completed_at),
     )
@@ -111,7 +111,7 @@ def test_given_invalid_artifact_when_listing_then_valid_history_remains_availabl
         encoding="utf-8",
     )
 
-    records: tuple[CostRunRecord, ...] = RunCostStore.list(project_dir=tmp_path)
+    records: tuple[CostRunRecord, ...] = list_cost_runs(project_dir=tmp_path)
 
     assert tuple(record.run_id for record in records) == test_case.expected_run_ids
 
@@ -137,7 +137,7 @@ def test_given_unsafe_run_id_when_reading_then_path_escape_is_rejected(
     tmp_path: Path,
 ) -> None:
     with pytest.raises(CostArtifactError, match=test_case.expected_error_fragment):
-        RunCostStore.read(project_dir=tmp_path, run_id=test_case.run_id)
+        read_cost_run(project_dir=tmp_path, run_id=test_case.run_id)
 
 
 @pytest.mark.parametrize(
@@ -155,11 +155,11 @@ def test_given_ambiguous_run_prefix_when_resolving_then_none_is_returned(
     test_case: CostStoreTestCase, tmp_path: Path
 ) -> None:
     origin: datetime = datetime(2026, 8, 23, tzinfo=UTC)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(run_id=test_case.expected_run_ids[0], completed_at=origin),
     )
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id=test_case.expected_run_ids[1],
@@ -167,7 +167,7 @@ def test_given_ambiguous_run_prefix_when_resolving_then_none_is_returned(
         ),
     )
 
-    resolved: CostRunRecord | None = RunCostStore.resolve(project_dir=tmp_path, selector="run-")
+    resolved: CostRunRecord | None = resolve_cost_run(project_dir=tmp_path, selector="run-")
     assert (resolved is not None) is test_case.expected_resolved
 
 
@@ -193,10 +193,10 @@ def test_given_newer_running_record_when_resolving_latest_then_terminal_run_is_r
         build_cost_run_record(run_id="run-running", completed_at=origin + timedelta(minutes=1)),
         build_status="running",
     )
-    RunCostStore.write(project_dir=tmp_path, record=completed)
-    RunCostStore.write(project_dir=tmp_path, record=running)
+    write_cost_run(project_dir=tmp_path, record=completed)
+    write_cost_run(project_dir=tmp_path, record=running)
 
-    resolved: CostRunRecord | None = RunCostStore.resolve(project_dir=tmp_path, selector="latest")
+    resolved: CostRunRecord | None = resolve_cost_run(project_dir=tmp_path, selector="latest")
 
     assert resolved == completed
 
@@ -222,13 +222,13 @@ def test_given_malformed_decimal_artifact_when_listing_then_valid_runs_remain_av
     invalid: CostRunRecord = build_cost_run_record(
         run_id="run-invalid", completed_at=origin + timedelta(minutes=1)
     )
-    RunCostStore.write(project_dir=tmp_path, record=valid)
-    invalid_path: Path = RunCostStore.write(project_dir=tmp_path, record=invalid)
+    write_cost_run(project_dir=tmp_path, record=valid)
+    invalid_path: Path = write_cost_run(project_dir=tmp_path, record=invalid)
     invalid_path.write_text(
         invalid_path.read_text(encoding="utf-8").replace('"3.00"', '"not-a-decimal"', 1),
         encoding="utf-8",
     )
 
-    records: tuple[CostRunRecord, ...] = RunCostStore.list(project_dir=tmp_path)
+    records: tuple[CostRunRecord, ...] = list_cost_runs(project_dir=tmp_path)
 
     assert tuple(record.run_id for record in records) == test_case.expected_run_ids

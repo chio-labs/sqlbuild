@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
+from sqlbuild._native import format_summary_footer
 from tests.unit.src.sqlbuild.presentation.main._test_types import SummaryFooterTestCase
 
 

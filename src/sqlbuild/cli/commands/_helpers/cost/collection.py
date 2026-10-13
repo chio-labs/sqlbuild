@@ -5,9 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TextIO
 
-from sqlbuild.cli.commands._helpers.cost.output import format_cost_breakdown
+from sqlbuild._native import persist_cost_run, write_build_cost_breakdown
 from sqlbuild.cli.commands.models import BuildCostFinalization
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.constants import DEFAULT_RATE_SOURCE
 from sqlbuild.cost.models import CostRunRecord, RunCostSummary
 from sqlbuild.cost.types import CostAwareAdapter, CostCapability, CostStatus
@@ -76,23 +75,16 @@ def finalize_build_cost(finalization: BuildCostFinalization) -> CostRunRecord | 
         cost=summary,
         had_executable_work=finalization.had_executable_work,
     )
-    try:
-        RunCostStore.write(project_dir=finalization.project_dir, record=record)
-    except BaseException as error:
-        _LOGGER.exception("automatic run-cost persistence failed")
-        _write_warning(
-            output_stream=finalization.output_stream,
-            message=(
-                "Cost telemetry failed during artifact persistence "
-                f"({type(error).__name__}); build result unchanged."
-            ),
-        )
-    if not finalization.render:
-        return record
-    _render_build_cost(
+    persist_cost_run(
+        project_dir=finalization.project_dir,
         record=record,
         output_stream=finalization.output_stream,
-        use_color=finalization.use_color,
+        stage="artifact persistence",
+    )
+    if not finalization.render:
+        return record
+    write_build_cost_breakdown(
+        record=record, output_stream=finalization.output_stream, use_color=finalization.use_color
     )
     return record
 
@@ -104,31 +96,7 @@ def render_build_cost(
 
     if record is None:
         return
-    _render_build_cost(record=record, output_stream=output_stream, use_color=use_color)
-
-
-def _render_build_cost(*, record: CostRunRecord, output_stream: TextIO, use_color: bool) -> None:
-    try:
-        output_stream.write(
-            "\n"
-            + format_cost_breakdown(
-                record=record,
-                use_color=use_color,
-                limit=5,
-                show_run_id=False,
-            )
-            + "\n"
-        )
-        output_stream.flush()
-    except Exception as error:
-        _LOGGER.exception("automatic run-cost output failed")
-        _write_warning(
-            output_stream=output_stream,
-            message=(
-                "Cost telemetry failed during output rendering "
-                f"({type(error).__name__}); build result unchanged."
-            ),
-        )
+    write_build_cost_breakdown(record=record, output_stream=output_stream, use_color=use_color)
 
 
 def _write_warning(*, output_stream: TextIO, message: str) -> None:
@@ -167,15 +135,10 @@ def _persist_collection_failure(
         ),
         had_executable_work=finalization.had_executable_work,
     )
-    try:
-        RunCostStore.write(project_dir=finalization.project_dir, record=record)
-    except BaseException as persistence_error:
-        _LOGGER.exception("automatic run-cost failure artifact persistence failed")
-        _write_warning(
-            output_stream=finalization.output_stream,
-            message=(
-                "Cost telemetry failed during failure artifact persistence "
-                f"({type(persistence_error).__name__}); build result unchanged."
-            ),
-        )
+    persist_cost_run(
+        project_dir=finalization.project_dir,
+        record=record,
+        output_stream=finalization.output_stream,
+        stage="failure artifact persistence",
+    )
     return record

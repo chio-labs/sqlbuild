@@ -11,6 +11,7 @@ from sqlbuild._native import (
     PlanningProgressReporter,
     discover_project_inputs,
     format_scenario_snapshot_execution_json,
+    format_summary_footer,
     run_compile_only_pipeline,
     write_execution_header,
     write_execution_json_output,
@@ -75,7 +76,6 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.presentation.main.supports_color import supports_color
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sys
 
+from sqlbuild._native import CliDocument
 from sqlbuild.cli.commands.models import DbtInitCommandRequest
 from sqlbuild.integrations.dbt.models import DbtInitResult
-from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 
 

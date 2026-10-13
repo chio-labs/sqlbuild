@@ -12,11 +12,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO, cast
 
+from sqlbuild._native import format_aligned_name_value
 from sqlbuild.integrations.dbt.exceptions import DbtInteropRuntimeError
 from sqlbuild.integrations.dbt.models import DbtNodeExecutionResult, DbtNodeMessage
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.aligned_name_value import format_aligned_name_value
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 _DBT_ERROR_LEVEL: str = "error"

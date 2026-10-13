@@ -61,9 +61,7 @@ def test_given_completed_execution_when_json_projection_fails_then_exit_status_r
     )
     monkeypatch.setattr(outputs, "format_build_footer", Mock(return_value="completed"))
     monkeypatch.setattr(
-        outputs.RunCostStore,
-        "output_payload",
-        Mock(return_value={"unserializable": object()}),
+        outputs, "cost_output_payload", Mock(return_value={"unserializable": object()})
     )
 
     outputs.write_build_completion_output(

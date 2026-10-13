@@ -9,9 +9,13 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
-from sqlbuild.cli.commands._helpers.cost.output import (
+from sqlbuild._native import (
     format_cost_breakdown,
     format_cost_history,
+    format_cost_history_json,
+    format_cost_json,
+    list_cost_runs,
+    resolve_cost_run,
 )
 from sqlbuild.cli.commands.constants import (
     COST_DEFAULT_DETAIL_SORT,
@@ -24,7 +28,6 @@ from sqlbuild.cli.commands.constants import (
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import CostCommandRequest
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from sqlbuild.cost.models import CostRunRecord, ResourceCost
 from sqlbuild.cost.types import CostStatus
 from sqlbuild.cursor_algebra.constants import MINUTE_TO_DAY_DURATION_UNITS
@@ -74,7 +77,7 @@ def _run_history(*, request: CostCommandRequest, project_dir: Path) -> int:
     until_is_date: bool = request.until is not None and len(request.until) == ISO_DATE_LENGTH
     matching_records: tuple[CostRunRecord, ...] = tuple(
         record
-        for record in RunCostStore.list(project_dir=project_dir)
+        for record in list_cost_runs(project_dir=project_dir)
         if (since is None or record.completed_at >= since)
         and (
             until is None
@@ -95,9 +98,7 @@ def _run_history(*, request: CostCommandRequest, project_dir: Path) -> int:
     )
     if limit is not None:
         records = records[:limit]
-    payload: str = RunCostStore.format_history_json(
-        records=records, matching_count=len(matching_records)
-    )
+    payload: str = format_cost_history_json(records=records, matching_count=len(matching_records))
     _write_json_output(payload=payload, path=request.json_output_path)
     if request.json_output:
         sys.stdout.write(payload + "\n")
@@ -142,7 +143,7 @@ def _run_detail(*, request: CostCommandRequest, project_dir: Path) -> int:
         if limit is None
         else replace(record, cost=replace(record.cost, resources=resources[:limit]))
     )
-    payload: str = RunCostStore.format_json(json_record)
+    payload: str = format_cost_json(json_record)
     _write_json_output(payload=payload, path=request.json_output_path)
     if request.json_output:
         sys.stdout.write(payload + "\n")
@@ -159,9 +160,9 @@ def _run_detail(*, request: CostCommandRequest, project_dir: Path) -> int:
 
 
 def _resolve_run(*, project_dir: Path, selector: str) -> CostRunRecord:
-    records: tuple[CostRunRecord, ...] = RunCostStore.list(project_dir=project_dir)
+    records: tuple[CostRunRecord, ...] = list_cost_runs(project_dir=project_dir)
     if selector == COST_LATEST_SELECTOR:
-        latest: CostRunRecord | None = RunCostStore.resolve(
+        latest: CostRunRecord | None = resolve_cost_run(
             project_dir=project_dir,
             selector=selector,
         )

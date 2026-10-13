@@ -7,7 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild._native import ConnectionProgressReporter
+from sqlbuild._native import ConnectionProgressReporter, format_summary_footer
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.scenario_output.namespace import (
     scenario_activity_message,
@@ -31,7 +31,6 @@ from sqlbuild.executor.scenario.models import (
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.summary_footer import format_summary_footer
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 
 _SCENARIO_NAME_WIDTH: int = 64

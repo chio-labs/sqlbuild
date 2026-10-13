@@ -7,15 +7,13 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 
-from sqlbuild._native import format_plan
+from sqlbuild._native import append_overflow_line, format_plan, visible_entries
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
 from sqlbuild.integrations.dbt.types import DbtInteropCommand, DbtInteropSkipReason
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.append_overflow_line import append_overflow_line
 from sqlbuild.presentation.main.surface_header import format_surface_header
 from sqlbuild.presentation.main.tree_connector import tree_connector
-from sqlbuild.presentation.main.visible_entries import visible_entries
 from sqlbuild.presentation.models import DisplayOptions
 
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\033\[[0-9;]*m")

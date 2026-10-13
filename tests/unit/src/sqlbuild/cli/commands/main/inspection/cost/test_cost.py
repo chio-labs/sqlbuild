@@ -8,9 +8,9 @@ from typing import Any
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild._native import write_cost_run
 from sqlbuild.cli.commands._helpers.cost.command import _parse_since_bound, run_cost_command
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cost.classes.run_cost_store import RunCostStore
 from tests.unit.src.sqlbuild.cli.commands.main.inspection.cost._test_types import (
     CostCommandTestCase,
     CostRelativeSinceTestCase,
@@ -37,11 +37,11 @@ def test_given_latest_selector_when_running_cost_then_latest_record_is_rendered(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     now: datetime = datetime(2026, 8, 23, tzinfo=UTC)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(run_id="run-old", completed_at=now, usd="1"),
     )
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id="run-new", completed_at=now + timedelta(minutes=1), usd="2"
@@ -70,7 +70,7 @@ def test_given_history_date_range_when_running_json_then_until_date_is_inclusive
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id="run-included",
@@ -78,7 +78,7 @@ def test_given_history_date_range_when_running_json_then_until_date_is_inclusive
             usd="1",
         ),
     )
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id="run-excluded",
@@ -139,11 +139,11 @@ def test_given_ambiguous_prefix_when_running_cost_then_user_error_is_raised(
     tmp_path: Path,
 ) -> None:
     now: datetime = datetime(2026, 8, 23, tzinfo=UTC)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(run_id="run-123", completed_at=now, usd="1"),
     )
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id="run-456", completed_at=now + timedelta(seconds=1), usd="2"
@@ -170,13 +170,13 @@ def test_given_relative_since_bound_when_running_history_then_old_runs_are_exclu
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     now: datetime = datetime.now(UTC)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id="run-recent", completed_at=now - timedelta(days=6), usd="1"
         ),
     )
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id="run-old", completed_at=now - timedelta(days=8), usd="2"
@@ -287,7 +287,7 @@ def test_given_json_detail_request_when_running_cost_then_stable_schema_is_emitt
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     now: datetime = datetime(2026, 8, 23, tzinfo=UTC)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id=test_case.expected_run_ids[0], completed_at=now, usd="2"
@@ -328,7 +328,7 @@ def test_given_json_detail_limit_when_running_cost_then_models_only_are_truncate
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     now: datetime = datetime(2026, 8, 23, tzinfo=UTC)
-    RunCostStore.write(
+    write_cost_run(
         project_dir=tmp_path,
         record=build_cost_run_record(
             run_id=test_case.expected_run_ids[0], completed_at=now, usd="2"
@@ -370,7 +370,7 @@ def test_given_equal_history_metrics_when_sorting_then_completion_and_run_id_bre
         ("run-a", origin),
         ("run-new", origin + timedelta(minutes=1)),
     ):
-        RunCostStore.write(
+        write_cost_run(
             project_dir=tmp_path,
             record=build_cost_run_record(
                 run_id=run_id,

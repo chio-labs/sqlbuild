@@ -9,6 +9,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import format_count_noun
 from sqlbuild.cli.commands._helpers.refactor.compile_facts import compile_for_refactor
 from sqlbuild.cli.commands._helpers.refactor.layer_move import layer_move_suggestion
 from sqlbuild.cli.commands._helpers.refactor.native import (
@@ -29,7 +30,6 @@ from sqlbuild.compiler.refactoring.exceptions import RefactorInputError
 from sqlbuild.compiler.refactoring.models import RefactorPlan, RefactorRequest
 from sqlbuild.compiler.refactoring.types import RefactorOperation, RefactorStatus
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.presentation.main.supports_color import supports_color
 
 _STAGING_PREFIX: str = "sqb-refactor-"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from sqlbuild._native import format_count_noun
 from sqlbuild.cli.commands.constants import FOLDER_PLACEHOLDER
 from sqlbuild.cli.commands.models import LayerMoveSuggestion
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
@@ -17,7 +18,6 @@ from sqlbuild.compiler.refactoring.models import (
 )
 from sqlbuild.compiler.refactoring.types import RefactorOperation, RefactorStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.count_noun import format_count_noun
 from sqlbuild.presentation.main.tree_connector import tree_connector
 
 _CONTINUE: str = "\u2502   "

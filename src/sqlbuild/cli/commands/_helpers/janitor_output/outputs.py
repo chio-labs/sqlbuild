@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 
+from sqlbuild._native import format_count_noun
 from sqlbuild.cli.commands._helpers.janitor_output.output import (
     confirmation_text,
     environment_label,
@@ -17,7 +18,6 @@ from sqlbuild.cli.commands.models import (
 )
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.presentation.classes.cli_style import CliStyle
-from sqlbuild.presentation.main.count_noun import format_count_noun
 
 
 def write_janitor_disabled(*, invocation: JanitorInvocation) -> None:

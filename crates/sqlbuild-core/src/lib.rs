@@ -4,6 +4,7 @@
 
 pub mod cli_text;
 pub mod constants;
+pub mod cost_report;
 pub mod integration_results;
 pub mod json;
 pub mod models;

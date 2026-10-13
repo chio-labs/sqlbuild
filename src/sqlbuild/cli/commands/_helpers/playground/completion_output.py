@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import CliDocument
 from sqlbuild.cli.commands.constants import (
     PLAYGROUND_ORCHESTRATED_PROJECT_DIR,
     PLAYGROUND_ORCHESTRATED_TEMPLATES,
@@ -11,7 +12,6 @@ from sqlbuild.cli.commands.models import (
     PlaygroundTarget,
 )
 from sqlbuild.cli.commands.types import PlaygroundTemplate
-from sqlbuild.presentation.classes.cli_document import CliDocument
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.main.supports_color import supports_color
 
