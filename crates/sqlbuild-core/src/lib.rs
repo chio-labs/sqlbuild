@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod cli_text;
+pub mod clone_text;
 pub mod constants;
 pub mod cost_report;
 pub mod debug_report;

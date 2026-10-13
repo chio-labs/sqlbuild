@@ -387,9 +387,9 @@ const CLONE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const CLONE_ROUTE: Route = routed(
     "run_clone",
-    ("sqlbuild.cli.commands.main.inspection._clone", "run_clone"),
+    ("sqlbuild._native", "run_clone_command"),
     &CLONE_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const DIFF_FIELDS: [Field; 35] = [

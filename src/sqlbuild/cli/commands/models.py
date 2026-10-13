@@ -60,7 +60,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.compile.types import CompiledProjectView
     from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
     from sqlbuild.compiler.pipeline.models import (
-        ClonePipelineResult,
         CompilePipelineResult,
         PythonPlanEntry,
     )
@@ -68,7 +67,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
     from sqlbuild.compiler.refactoring.models import RefactorProject
     from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-    from sqlbuild.executor.clone.models import CloneExecutionResult
     from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
     from sqlbuild.executor.janitor.models import JanitorPlan
     from sqlbuild.executor.load.models import LoadExecutionResult
@@ -335,42 +333,6 @@ class CloneCommandRequest:
     cli_vars: dict[str, object] | None = None
     json_output_path: Path | None = None
     event_output_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class CloneInvocation:
-    """Resolved project, adapter, and output context for clone."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter_name: str
-    adapter: BaseAdapter
-    destination_target_name: str
-    use_color: bool
-    progress_stream: TextIO
-
-
-@dataclass(frozen=True)
-class CloneConnectionContext:
-    """Destination connection configuration and handle for a clone."""
-
-    destination_connection_config: dict[str, object]
-    destination_connection: Any
-
-
-@dataclass(frozen=True)
-class CloneExecutionPreparation:
-    """Prepared direct clone pipeline and selected destination entries."""
-
-    pipeline_result: ClonePipelineResult
-
-
-@dataclass(frozen=True)
-class CloneRunOutcome:
-    """Direct clone execution result and elapsed time."""
-
-    result: CloneExecutionResult
-    elapsed: float
 
 
 @dataclass(frozen=True)

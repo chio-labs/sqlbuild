@@ -6,6 +6,7 @@ pub(crate) mod authored_values;
 pub(crate) mod boundary;
 pub(crate) mod cache;
 pub(crate) mod cli;
+pub(crate) mod clone;
 pub(crate) mod command_runtime;
 pub(crate) mod compile_attachment;
 pub(crate) mod compile_command;
