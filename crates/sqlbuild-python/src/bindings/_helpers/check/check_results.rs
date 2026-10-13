@@ -40,7 +40,15 @@ fn metadata_json(metadata: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
         .ok_or_else(|| PyValueError::new_err("check metadata is not JSON serializable"))
 }
 
-/// One executor `PythonCheckExecutionResult` as the command renders it.
+/// One executor `PythonCheckExecutionResult` as the JSON output renders it, metadata included.
+fn check_result_json_text(result: &Bound<'_, PyAny>) -> PyResult<CheckResultText> {
+    Ok(CheckResultText {
+        metadata: metadata_json(&result.getattr("metadata")?)?,
+        ..check_result_text(result)?
+    })
+}
+
+/// One executor `PythonCheckExecutionResult` as the rows and summary render it, without metadata.
 pub(crate) fn check_result_text(result: &Bound<'_, PyAny>) -> PyResult<CheckResultText> {
     let severity: String = result.getattr("severity")?.getattr("value")?.extract()?;
     let status: CheckStatus = if result.getattr("passed")?.is_truthy()? {
@@ -56,7 +64,7 @@ pub(crate) fn check_result_text(result: &Bound<'_, PyAny>) -> PyResult<CheckResu
         severity,
         message: optional_text(result.getattr("message")?)?,
         error_message: optional_text(result.getattr("error_message")?)?,
-        metadata: metadata_json(&result.getattr("metadata")?)?,
+        metadata: JsonValue::Null,
         warning_messages: result.getattr("warning_messages")?.extract()?,
     })
 }
@@ -179,7 +187,7 @@ pub(crate) fn results_json(results: &[Bound<'_, PyAny>]) -> PyResult<String> {
                 continue;
             }
         }
-        texts.push(check_result_text(result)?);
+        texts.push(check_result_json_text(result)?);
     }
     check_json(&texts).map_err(|error| PyValueError::new_err(format!("{error:?}")))
 }
