@@ -13,15 +13,13 @@ from pathlib import Path
 from sqlbuild._native import (
     NativeProgressProjector,
     TerminalEventIndex,
+    machine_output_mode,
     terminal_event_index_scope,
 )
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import (
-    CSV_OUTPUT_FORMAT,
     DEBUG_COMMAND,
-    JSON_OUTPUT_FORMAT,
     LINEAGE_COMMAND,
-    QUERY_COMMAND,
 )
 from sqlbuild.cli.commands.main.entrypoint._dispatch_with_output_capture import (
     configured_output_capture_scope,
@@ -78,14 +76,7 @@ def cli_observability_scope(*, args: CliNamespace, project_dir: Path) -> Iterato
         subscriber=terminal_index.consume,
         accepts_opaque=False,
     )
-    machine_output: bool = (
-        args.json
-        or (args.command == LINEAGE_COMMAND and args.lineage_format == JSON_OUTPUT_FORMAT)
-        or (
-            args.command == QUERY_COMMAND
-            and args.query_format in {CSV_OUTPUT_FORMAT, JSON_OUTPUT_FORMAT}
-        )
-    )
+    machine_output: bool = machine_output_mode(args)
     projector: NativeProgressProjector = NativeProgressProjector(
         stream=sys.stderr
         if machine_output or args.debug or args.command == DEBUG_COMMAND

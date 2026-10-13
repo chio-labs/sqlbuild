@@ -135,6 +135,34 @@ def test_given_no_public_sink_when_observability_runs_then_provider_import_is_sk
             expected_stdout_fragment="",
             expected_stderr_fragment="Project compile  START",
         ),
+        MachineProgressRoutingCase(
+            description="plan json mode keeps stdout free of progress",
+            json=True,
+            json_output=None,
+            expected_stdout_fragment="",
+            expected_stderr_fragment="Project compile  START",
+            command="plan",
+            expected_stdout_excludes="Project compile",
+        ),
+        MachineProgressRoutingCase(
+            description="dbt plan json flag routes progress to stderr",
+            json=False,
+            json_output=None,
+            expected_stdout_fragment="",
+            expected_stderr_fragment="Project compile  START",
+            command="dbt",
+            dbt_args=("--json", "--select", "orders"),
+            expected_stdout_excludes="Project compile",
+        ),
+        MachineProgressRoutingCase(
+            description="dbt plan without json keeps human stdout progress",
+            json=False,
+            json_output=None,
+            expected_stdout_fragment="Project compile  START",
+            expected_stderr_fragment="",
+            command="dbt",
+            dbt_args=("--select", "orders"),
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -146,6 +174,8 @@ def test_given_json_routing_options_when_operation_runs_then_human_stream_contra
     args: CliNamespace = CliNamespace()
     args.json = test_case.json
     args.json_output = test_case.json_output
+    args.command = test_case.command
+    args.dbt_args = list(test_case.dbt_args)
 
     with cli_observability_scope(args=args, project_dir=tmp_path):
         with OperationLifecycle(operation_kind="project", operation_name="project_compile"):
@@ -154,6 +184,7 @@ def test_given_json_routing_options_when_operation_runs_then_human_stream_contra
     captured: CaptureResult[str] = capsys.readouterr()
     assert test_case.expected_stdout_fragment in captured.out
     assert test_case.expected_stderr_fragment in captured.err
+    assert test_case.expected_stdout_excludes not in captured.out
 
 
 @pytest.mark.parametrize(

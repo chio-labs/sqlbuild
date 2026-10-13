@@ -34,3 +34,9 @@ pub(super) struct ProgressLineTestCase {
     pub(super) line: String,
     pub(super) expected_line: &'static str,
 }
+
+pub(super) struct OutputModeTestCase {
+    pub(super) description: &'static str,
+    pub(super) facts: crate::progress::models::OutputModeFacts,
+    pub(super) expected_machine_output: bool,
+}

@@ -9,4 +9,5 @@ pub mod format_expectation_detail;
 pub mod format_expectation_name;
 pub mod format_inspection_record;
 pub mod is_planning_completion_message;
+pub mod machine_output_mode;
 pub mod progress_terminal_duration;

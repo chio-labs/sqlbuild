@@ -17,6 +17,7 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
     CloneCommandRequest,
     FreshnessCommandRequest,
@@ -1513,6 +1514,7 @@ class NativeProgressProjector:
     ) -> float | None: ...
     def close(self) -> None: ...
 
+def machine_output_mode(args: CliNamespace, /) -> bool: ...
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 
 class ConnectionProgressReporter:

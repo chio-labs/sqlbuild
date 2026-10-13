@@ -6,12 +6,13 @@ use crate::progress::main::format_expectation_detail::format_expectation_detail;
 use crate::progress::main::format_expectation_name::format_expectation_name;
 use crate::progress::main::format_inspection_record::format_inspection_record;
 use crate::progress::main::is_planning_completion_message::is_planning_completion_message;
-use crate::progress::models::{ExpectationStep, InspectionRecord};
+use crate::progress::main::machine_output_mode::machine_output_mode;
+use crate::progress::models::{ExpectationStep, InspectionRecord, OutputModeFacts};
 
 const PLAIN: CliStyle = CliStyle { use_color: false };
 use crate::progress::tests::test_types::{
     CompletionMessageTestCase, ExpectationDetailTestCase, InspectionRecordTestCase,
-    ProgressLineTestCase,
+    OutputModeTestCase, ProgressLineTestCase,
 };
 
 #[test]
@@ -193,6 +194,60 @@ fn given_inspection_record_when_formatting_then_sql_is_collapsed_and_cut() {
         assert_eq!(
             format_inspection_record(&test_case.record),
             test_case.expected_line,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_parsed_options_when_choosing_output_mode_then_machine_output_is_detected() {
+    let facts = |command: &str, dbt_args: &[&str]| OutputModeFacts {
+        command: Some(command.to_owned()),
+        dbt_args: dbt_args.iter().map(|arg| (*arg).to_owned()).collect(),
+        ..OutputModeFacts::default()
+    };
+    let test_cases = [
+        OutputModeTestCase {
+            description: "dbt plan with --json",
+            facts: facts("dbt", &["--select", "orders", "--json"]),
+            expected_machine_output: true,
+        },
+        OutputModeTestCase {
+            description: "dbt plan without --json",
+            facts: facts("dbt", &["--select", "orders"]),
+            expected_machine_output: false,
+        },
+        OutputModeTestCase {
+            description: "plan --json",
+            facts: OutputModeFacts {
+                json: true,
+                ..facts("plan", &[])
+            },
+            expected_machine_output: true,
+        },
+        OutputModeTestCase {
+            description: "query csv",
+            facts: OutputModeFacts {
+                query_format: Some("csv".to_owned()),
+                ..facts("query", &[])
+            },
+            expected_machine_output: true,
+        },
+        OutputModeTestCase {
+            description: "lineage text",
+            facts: OutputModeFacts {
+                lineage_format: Some("text".to_owned()),
+                ..facts("lineage", &[])
+            },
+            expected_machine_output: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            machine_output_mode(&test_case.facts),
+            test_case.expected_machine_output,
             "{}",
             test_case.description
         );
