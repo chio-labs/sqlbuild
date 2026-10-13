@@ -3,7 +3,7 @@
 use ruff_python_ast::{Expr, ExprContext, ModModule, StmtFunctionDef};
 use std::collections::{HashMap, HashSet};
 
-use crate::cpython_tree::_helpers::children::children;
+use crate::cpython_tree::main::child_nodes::child_nodes;
 use crate::cpython_tree::main::walk_breadth_first::walk_breadth_first;
 use crate::cpython_tree::models::CpythonNode;
 
@@ -31,7 +31,7 @@ pub(crate) fn runtime_nodes(function: &StmtFunctionDef) -> Vec<CpythonNode<'_>> 
         function.body.iter().rev().map(CpythonNode::Stmt).collect();
     while let Some(node) = pending.pop() {
         if !node.opens_scope() {
-            pending.extend(children(&node).into_iter().rev());
+            pending.extend(child_nodes(&node).into_iter().rev());
         }
         nodes.push(node);
     }

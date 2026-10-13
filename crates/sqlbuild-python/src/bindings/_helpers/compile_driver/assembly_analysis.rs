@@ -12,8 +12,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-const NATIVE_DECLARATIONS_MODULE: &str =
-    "sqlbuild.compiler.compile._helpers.assembly.native_declarations";
 const IDENTIFIER_CASE_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._identifier_case";
 const BINDING_CATALOG_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._binding_catalog";
 pub(crate) const NATIVE_STAGES_MODULE: &str =
@@ -147,10 +145,9 @@ pub(crate) fn declared_names<'py>(
     let py: Python<'py> = inputs.py();
     let functions: Bound<'py, PyAny> = inputs.getattr("sql_function_inputs")?;
     let names: Bound<'py, PyAny> =
-        imported(py, NATIVE_DECLARATIONS_MODULE, "known_function_names")?
-            .call1((functions.clone(),))?;
+        imported(py, NATIVE_MODULE, "known_function_names")?.call1((functions.clone(),))?;
     let types: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_DECLARATIONS_MODULE, "known_declared_types")?,
+        &imported(py, NATIVE_MODULE, "known_declared_types")?,
         &[
             ("functions", functions),
             ("column_types", column_types.clone()),

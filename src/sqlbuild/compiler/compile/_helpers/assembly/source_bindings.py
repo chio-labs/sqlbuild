@@ -6,7 +6,14 @@ from dataclasses import replace
 from graphlib import TopologicalSorter
 from typing import Any
 
-from sqlbuild._native import infer_native_query_columns
+from sqlbuild._native import (
+    infer_native_query_columns,
+    known_declared_types,
+    known_function_names,
+    model_binding_inputs,
+    published_model_shape,
+    semantic_shapes,
+)
 from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile
 from sqlbuild.compiler.analysis_session.models import NativeColumnQuery, NativeQueryColumns
 from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
@@ -14,15 +21,6 @@ from sqlbuild.compiler.compile._helpers.analysis.binding_requests import (
 )
 from sqlbuild.compiler.compile._helpers.assembly.binding_positions import (
     get_authored_binding_position,
-)
-from sqlbuild.compiler.compile._helpers.assembly.native_declarations import (
-    known_declared_types,
-    known_function_names,
-)
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import (
-    binding_relation_row_names,
-    published_model_shape,
-    semantic_shapes,
 )
 from sqlbuild.compiler.compile._helpers.render.cursor_intrinsics import (
     cursor_intrinsics_analysis_sql,
@@ -49,12 +47,6 @@ from sqlbuild.compiler.sql_analysis.constants import (
 from sqlbuild.compiler.sql_analysis.main._identifier_case import ignores_quoted_case
 from sqlbuild.compiler.sql_analysis.main._schema_validation import get_schema_validations
 from sqlbuild.compiler.sql_analysis.models import SqlBindingResult, SqlSchemaValidationRequest
-
-
-def _model_shapes(
-    *, model: CompiledModelView, shapes: dict[str, dict[str, str]]
-) -> dict[str, dict[str, str]]:
-    return {name: shapes.get(name, {}) for name in binding_relation_row_names(model.reference_rows)}
 
 
 def get_source_binding_diagnostics(
@@ -120,7 +112,7 @@ def get_source_binding_diagnostics(
         ):
             models.append(model)
             affected.add(model.name)
-            inputs: dict[str, dict[str, str]] = _model_shapes(model=model, shapes=shapes)
+            inputs: dict[str, dict[str, str]] = model_binding_inputs(model, shapes)
             nullability: dict[str, dict[str, InferredNullability]] = {
                 table: dict.fromkeys(shape, InferredNullability.UNKNOWN)
                 for table, shape in inputs.items()
@@ -140,11 +132,10 @@ def get_source_binding_diagnostics(
             )[0]
             if analysis.columns and (not analysis.has_star or all(inputs.values())):
                 shapes[model.name] = published_model_shape(
-                    sql=model.query_sql,
+                    model=model,
                     profile=profile,
                     inputs=inputs,
                     columns={column.name: column.type or "UNKNOWN" for column in analysis.columns},
-                    config_values=model.config.values,
                 )
             else:
                 shapes.pop(model.name, None)
@@ -162,7 +153,7 @@ def get_source_binding_diagnostics(
                 ),
                 placeholders=_placeholders(model),
                 dialect=profile.sql_analysis_dialect,
-                binding_schema=_model_shapes(model=model, shapes=shapes),
+                binding_schema=model_binding_inputs(model, shapes),
             ),
             catalog=physical_catalog,
             quoted_identifiers_ignore_case=ignores_quoted_case(

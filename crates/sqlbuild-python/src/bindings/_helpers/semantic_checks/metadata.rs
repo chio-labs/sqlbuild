@@ -14,8 +14,12 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
+use crate::bindings::_helpers::semantic_checks::inputs::{
+    column_names, resource_sql_diagnostics, sql_test_columns,
+};
 use crate::bindings::_helpers::semantic_checks::stage_objects::StageClasses;
 use crate::bindings::_helpers::semantic_checks::type_recovery::items;
+use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 use crate::bindings::types::CompilerDetach;
 
 const METADATA_CONFIG_KEYS: [&str; 4] = [
@@ -93,14 +97,8 @@ pub(crate) fn metadata_diagnostics<'py>(
         )?);
     }
     if resource_sql_analysis {
-        let resource: Bound<'py, PyAny> = classes.call(
-            &classes.inputs.getattr("resource_sql_diagnostics")?,
-            &[
-                ("project", project),
-                ("shapes", &inputs.shapes),
-                ("profile", profile),
-            ],
-        )?;
+        let resource: Bound<'py, PyAny> =
+            resource_sql_diagnostics(project, &inputs.shapes, profile)?;
         diagnostics.extend(items(&resource)?);
     }
     Ok(diagnostics)
@@ -111,10 +109,7 @@ fn metadata_request<'py>(
     project: &Bound<'py, PyAny>,
     profile: &Bound<'py, PyAny>,
 ) -> PyResult<(MetadataInputs<'py>, MetadataRequest)> {
-    let shapes: Bound<'py, PyAny> = classes.call(
-        &classes.inputs.getattr("metadata_shapes")?,
-        &[("project", project), ("profile", profile)],
-    )?;
+    let shapes: Bound<'py, PyAny> = project_shapes(project, Some(profile.clone()))?.into_any();
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::new();
     for test in project.getattr("sql_tests")?.try_iter()? {
         let test: Bound<'py, PyAny> = test?;
@@ -125,10 +120,8 @@ fn metadata_request<'py>(
             tests.push(test);
         }
     }
-    let columns_by_sql: Bound<'py, PyAny> = classes.call(
-        &classes.inputs.getattr("sql_test_columns")?,
-        &[("project", project), ("profile", profile)],
-    )?;
+    let columns_by_sql: Bound<'py, PyAny> =
+        sql_test_columns(project, profile, &classes.model_test_payload)?.into_any();
     let functions: Vec<MetadataFunction> = metadata_functions(project)?;
     let sources: Vec<Bound<'py, PyAny>> = items(&project.getattr("sources")?)?;
     let (files, contents) = file_contents(classes.py(), &sources, &tests)?;
@@ -423,29 +416,17 @@ fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     Ok(None)
 }
 
-fn column_names(classes: &StageClasses<'_>, value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    classes
-        .inputs
-        .call_method1("column_names", (value,))?
-        .try_iter()?
-        .map(|name| name?.extract())
-        .collect()
-}
-
 fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyResult<MetadataModel> {
     let values: Bound<'_, PyAny> = model.getattr("config")?.getattr("values")?;
     let get = |key: &str| values.call_method1("get", (key,));
     let mut references: Vec<NamesRow> = Vec::new();
     for key in METADATA_CONFIG_KEYS {
-        references.push((key.to_owned(), column_names(classes, &get(key)?)?));
+        references.push((key.to_owned(), column_names(&get(key)?)?));
     }
     let custom: Bound<'_, PyAny> = get("config")?;
     if custom.is_instance_of::<PyDict>() {
         let partition: Bound<'_, PyAny> = custom.call_method1("get", ("partition_column",))?;
-        references.push((
-            "partition_column".to_owned(),
-            column_names(classes, &partition)?,
-        ));
+        references.push(("partition_column".to_owned(), column_names(&partition)?));
     }
     let tolerances: Bound<'_, PyAny> = get("row_diff_tolerances")?;
     if tolerances.is_instance_of::<PyDict>() {
@@ -463,7 +444,7 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
     if cursor_inputs.is_instance_of::<PyDict>() {
         for item in cursor_inputs.call_method0("items")?.try_iter()? {
             let (upstream, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
-            upstreams.push((upstream.str()?.extract()?, column_names(classes, &columns)?));
+            upstreams.push((upstream.str()?.extract()?, column_names(&columns)?));
         }
     }
     let mut calls_functions: bool = false;

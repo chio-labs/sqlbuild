@@ -19,6 +19,7 @@ use crate::bindings::_helpers::semantic_checks::type_recovery::{
     LineageInput, StageShared, diagnostic_ids, id_of, inferred_names, items, lineage_outputs,
     lineage_payload,
 };
+use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 use crate::bindings::types::CompilerDetach;
 
 const RECOVERED_CODE: &str = "B002";
@@ -43,7 +44,7 @@ pub(crate) fn completed_diagnostics<'py>(
     let shapes: ShapeRows = if diagnostics.is_empty() {
         Vec::new()
     } else {
-        shape_rows(&classes.inputs.call_method1("shapes", (project,))?)?
+        shape_rows(project_shapes(project, None)?.as_any())?
     };
     let mut semantic: Vec<SemanticDiagnostic> = Vec::with_capacity(diagnostics.len());
     for item in &diagnostics {

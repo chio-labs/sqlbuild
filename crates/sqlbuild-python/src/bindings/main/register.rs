@@ -7,7 +7,8 @@ use crate::bindings::_helpers::{
     analysis, analysis_session, attachments, boundary, cache, cli, compile_attachment,
     compile_driver, compile_outputs, compiled_project, contracts, dag_artifact, discovery,
     fingerprints, frontier, graph, lineage, macro_bridge, manifest, model_config, project_assembly,
-    refactor, render, rules, scopes, semantic_checks, sql_test_glue, sqltext, type_system,
+    refactor, render, rules, scopes, semantic_checks, semantic_shapes, sql_test_glue, sqltext,
+    type_system,
 };
 use crate::bindings::models;
 
@@ -51,6 +52,7 @@ fn register_analysis_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     type_system::registration::register(module)?;
     analysis_session::registration::register(module)?;
     semantic_checks::registration::register(module)?;
+    semantic_shapes::registration::register(module)?;
     contracts::registration::register(module)?;
     lineage::registration::register(module)?;
     fingerprints::registration::register(module)?;

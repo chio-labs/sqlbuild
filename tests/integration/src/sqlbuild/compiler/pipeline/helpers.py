@@ -8,19 +8,19 @@ from typing import Any
 
 import pytest
 
-import sqlbuild.compiler.compile._helpers.assembly.semantic_shapes as semantic_shapes_module
+import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stage_assembly
 from sqlbuild._native import (
     build_compile_inputs,
     build_compiled_project,
     discover_project_inputs,
     run_compile_pipeline,
+    semantic_shapes,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
-from sqlbuild.compiler.compile._helpers.assembly.semantic_shapes import semantic_shapes
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
     CompiledLineageColumnFact,
@@ -218,7 +218,7 @@ def traced_shape_batches(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...
     """Record each shape request's expressions the binding catalog's shape cache misses."""
 
     batches: list[tuple[str, ...]] = []
-    for module in (native_stage_assembly, semantic_shapes_module):
+    for module in (native_stage_assembly, native_module):
         original: Callable[..., Any] = module.infer_native_expression_source_shapes
         monkeypatch.setattr(
             module,

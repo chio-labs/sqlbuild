@@ -10,8 +10,6 @@ const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
 const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
 const TYPE_RECOVERY_MODULE: &str = "sqlbuild._native";
 const BINDING_DIAGNOSTICS_MODULE: &str = "sqlbuild._native";
-const COMPLETION_INPUTS_MODULE: &str =
-    "sqlbuild.compiler.compile.classes.semantic_completion_inputs";
 const SCHEMA_VALIDATION_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._schema_validation";
 const NORMALIZE_TYPE_MODULE: &str = "sqlbuild.adapter.type_system.main.normalize_type";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -34,7 +32,6 @@ pub(crate) struct StageClasses<'py> {
     pub(crate) project_with: Bound<'py, PyAny>,
     pub(crate) with_type_recovery: Bound<'py, PyAny>,
     pub(crate) with_binding_diagnostics: Bound<'py, PyAny>,
-    pub(crate) inputs: Bound<'py, PyAny>,
     pub(crate) schema_validations: Bound<'py, PyAny>,
     pub(crate) normalize_type: Bound<'py, PyAny>,
     pub(crate) sql_analysis_key: Bound<'py, PyAny>,
@@ -74,9 +71,6 @@ impl<'py> StageClasses<'py> {
             with_binding_diagnostics: py
                 .import(BINDING_DIAGNOSTICS_MODULE)?
                 .getattr("with_binding_diagnostics")?,
-            inputs: py
-                .import(COMPLETION_INPUTS_MODULE)?
-                .getattr("SemanticCompletionInputs")?,
             schema_validations: py
                 .import(SCHEMA_VALIDATION_MODULE)?
                 .getattr("get_schema_validations")?,
