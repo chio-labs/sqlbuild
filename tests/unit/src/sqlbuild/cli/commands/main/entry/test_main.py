@@ -4,12 +4,11 @@ import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands._helpers.entry.parsing import read_selector_file_inputs
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies, main
 from sqlbuild.cli.commands.models import (
@@ -158,18 +157,12 @@ def test_given_root_help_arguments_when_running_main_then_it_returns_expected_ex
     test_case: MainTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    command_importer: Mock = Mock(
-        side_effect=AssertionError("root help must not import command implementations")
-    )
-    monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.entry.lazy_handlers.import_module",
-        command_importer,
-    )
+    monkeypatch.delitem(sys.modules, "sqlbuild.cli.compile.main.run", raising=False)
 
     exit_code: int = main(test_case.argv)
 
     assert exit_code == test_case.expected_exit_code
-    command_importer.assert_not_called()
+    assert "sqlbuild.cli.compile.main.run" not in sys.modules
 
 
 @pytest.mark.parametrize(
@@ -2041,10 +2034,6 @@ def test_given_plan_select_file_when_running_then_dispatches_file_selectors(
 
     assert exit_code == test_case.expected_exit_code
     assert received_selects == [test_case.expected_select]
-    assert read_selector_file_inputs([str(tmp_path / "selectors.txt")]).selectors == (
-        "customers",
-        "payments",
-    )
 
 
 @pytest.mark.parametrize(

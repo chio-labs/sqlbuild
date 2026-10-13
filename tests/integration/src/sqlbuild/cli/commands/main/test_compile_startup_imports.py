@@ -91,7 +91,6 @@ expected_modules = {
     "CliEntrypointHandlers": entry_models,
     "ParsedCliInvocation": entry_models,
     "SelectorFileSummary": entry_models,
-    "SelectorInputs": entry_models,
     "SkillInstallTarget": output_models,
     "SkillMaintenanceResult": output_models,
     "SkillSettings": output_models,

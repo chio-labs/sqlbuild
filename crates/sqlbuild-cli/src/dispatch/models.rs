@@ -1,0 +1,120 @@
+//! How one parsed `sqb` invocation becomes a call of its Python command handler.
+
+/// A Python class by module path and name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClassRef {
+    pub module: &'static str,
+    pub name: &'static str,
+}
+
+/// Where one handler argument or request field takes its value from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// A parsed namespace attribute, as is.
+    Attr(&'static str),
+    /// `tuple(<attribute>)`.
+    TupleOf(&'static str),
+    /// `str(<attribute>)`.
+    Text(&'static str),
+    /// `<attribute> or <default>`.
+    OrDefault(&'static str, &'static str),
+    /// `None`, or `Path(<attribute>)`.
+    OptionalPath(&'static str),
+    /// A constant boolean.
+    Flag(bool),
+    /// `<class>(<attribute>)`: an enum member from a parsed value.
+    Member(ClassRef, &'static str),
+    /// `<class>(<value>)`: an enum member from a constant value.
+    Constant(ClassRef, &'static str),
+    /// `<class>(**fields)`.
+    Nested(ClassRef, &'static [Field]),
+    /// The resolved `--project-dir`, or `None`.
+    ProjectDir,
+    /// The resolved `--project-dir`, or the working directory.
+    EffectiveProjectDir,
+    /// `--select` followed by the selectors read from `--select-file`.
+    Select,
+    /// The selector files read, with how many selectors each held.
+    SelectorFiles,
+    /// `None` with `--no-limit`, else `--limit`.
+    QueryLimit,
+    /// One side of the parsed `diff` target range, `None` without a range.
+    DiffName(DiffSide),
+    /// The selection plus the `format` positional paths as selectors.
+    FormatSelect,
+    /// The scenario selectors followed by the selection.
+    ScenarioSelect,
+}
+
+/// Which name of a `from..to` diff range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffSide {
+    From,
+    To,
+}
+
+/// One keyword argument of a handler call or request class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Field {
+    pub name: &'static str,
+    pub source: Source,
+}
+
+/// How the handler is called with its arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CallShape {
+    /// How many leading arguments an injected handler slot receives positionally.
+    pub slot_positional: usize,
+    /// Whether the command implementation receives every argument by keyword.
+    pub implementation_keywords: bool,
+}
+
+/// One command's handler slot, implementation and arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Route {
+    /// The `CliEntrypointHandlers` attribute tests may inject.
+    pub slot: &'static str,
+    /// The command implementation: module path and function name.
+    pub implementation: (&'static str, &'static str),
+    pub arguments: &'static [Field],
+    pub shape: CallShape,
+    /// A keyword the implementation alone receives, such as the dbt command.
+    pub implementation_extra: Option<Field>,
+    /// The code an injected handler set without this slot fails with, if it may lack it.
+    pub unavailable_code: Option<&'static str>,
+}
+
+/// A user error the dispatcher raises before calling a handler.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DispatchFailure {
+    pub message: String,
+    pub code: &'static str,
+    pub help: Option<&'static str>,
+}
+
+/// The parsed values that select a route or reject the invocation before it runs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CommandFacts {
+    pub command: Option<String>,
+    pub subcommand: Option<String>,
+    pub json: bool,
+    pub refactor_target: bool,
+    pub from_target: bool,
+    pub contract_ready: bool,
+    pub format_diff: bool,
+    pub format_fix: bool,
+    pub format_fixtures_only: bool,
+    pub scenario_local: bool,
+    pub scenario_retain: bool,
+    pub scenario_snapshot_sync: bool,
+}
+
+/// The route of a command, or the failure that stops it, or nothing to run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Dispatch {
+    /// The route, and the failure raised once an injected handler is known to exist.
+    Run(&'static Route, Option<DispatchFailure>),
+    Fail(DispatchFailure),
+    /// Commands with no handler exit successfully.
+    Nothing,
+}

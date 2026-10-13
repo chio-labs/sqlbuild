@@ -18,7 +18,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     rules::evaluation::register(module)?;
     rules::lint::register(module)?;
     rules::skills::register(module)?;
-    cli::argv::register(module)?;
+    cli::registration::register(module)?;
     module.add(
         "NativeCompilerError",
         module.py().get_type::<NativeCompilerError>(),

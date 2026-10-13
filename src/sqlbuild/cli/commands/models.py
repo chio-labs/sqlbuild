@@ -25,7 +25,6 @@ from sqlbuild.cli.entry.models import (  # noqa: F401
     CompileProfileFlags,
     ParsedCliInvocation,
     SelectorFileSummary,
-    SelectorInputs,
 )
 from sqlbuild.cli.output.models import (  # noqa: F401
     SkillInstallTarget,

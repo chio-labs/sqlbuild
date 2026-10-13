@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import sys
-
 import pytest
 
-from sqlbuild.cli.commands._helpers.entry.lazy_handlers import build_lazy_cli_handlers
 from sqlbuild.cli.commands.main.entrypoint.entry import _main_with_dependencies
 from sqlbuild.cli.commands.models import (
     ScopeCommandRequest,
-)
-from sqlbuild.cli.entry.models import (
-    CliEntrypointHandlers,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     ScopeArgumentMisuseCase,
@@ -128,21 +122,6 @@ def test_given_scope_argument_misuse_when_parsing_then_returns_argparse_exit(
         _main_with_dependencies(argv=test_case.argv, handlers=build_handlers())
         == test_case.expected_exit_code
     )
-
-
-@pytest.mark.parametrize(
-    "test_case", (ScopeEntryCase("lazy", 0),), ids=lambda case: case.description
-)
-def test_given_lazy_handlers_when_built_then_scope_implementation_is_not_imported(
-    test_case: ScopeEntryCase,
-) -> None:
-    sys.modules.pop("sqlbuild.cli.commands.main.inspection._scope", None)
-
-    handlers: CliEntrypointHandlers = build_lazy_cli_handlers()
-
-    assert callable(handlers.run_scope)
-    assert "sqlbuild.cli.commands.main.inspection._scope" not in sys.modules
-    assert test_case.expected_exit_code == 0
 
 
 if __name__ == "__main__":

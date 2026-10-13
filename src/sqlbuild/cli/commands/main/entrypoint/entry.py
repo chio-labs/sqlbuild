@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from sqlbuild.cli.commands._helpers.entry.errors import cli_error_use_color
-from sqlbuild.cli.commands._helpers.entry.lazy_handlers import build_lazy_cli_handlers
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.entry.models import (
@@ -27,13 +26,13 @@ from sqlbuild.runtime.output_capture.main.invocation_context import (
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI entrypoint."""
 
-    return _main_with_dependencies(argv=argv, handlers=build_lazy_cli_handlers())
+    return _main_with_dependencies(argv=argv, handlers=None)
 
 
 def _main_with_dependencies(
     *,
     argv: Sequence[str] | None = None,
-    handlers: CliEntrypointHandlers,
+    handlers: CliEntrypointHandlers | None,
 ) -> int:
     """Run the CLI entrypoint with injected handlers for testing."""
 

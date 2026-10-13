@@ -1,0 +1,116 @@
+use crate::dispatch::constants::{
+    CLONE_ROUTE, COMPILE_ROUTE, DBT_PLAN_ROUTE, FORMAT_ROUTE, REFACTOR_ROUTE,
+    SCENARIO_CAPTURE_ROUTE,
+};
+use crate::dispatch::main::command_dispatch::command_dispatch;
+use crate::dispatch::models::{CommandFacts, Dispatch, DispatchFailure};
+use crate::dispatch::tests::helpers::{facts, failure, runs};
+use crate::dispatch::tests::test_types::CommandDispatchTestCase;
+
+#[test]
+fn given_parsed_command_when_dispatching_then_selects_python_dispatcher_route() {
+    let test_cases = [
+        CommandDispatchTestCase {
+            description: "compile runs the compile handler",
+            facts: facts("compile", None),
+            expected_dispatch: runs(&COMPILE_ROUTE),
+        },
+        CommandDispatchTestCase {
+            description: "dbt plan runs the dbt plan slot",
+            facts: facts("dbt", Some("plan")),
+            expected_dispatch: runs(&DBT_PLAN_ROUTE),
+        },
+        CommandDispatchTestCase {
+            description: "dbt without a subcommand fails",
+            facts: facts("dbt", None),
+            expected_dispatch: Dispatch::Fail(failure(
+                "dbt requires a subcommand such as 'plan'",
+                "C237",
+            )),
+        },
+        CommandDispatchTestCase {
+            description: "clone without --from fails",
+            facts: CommandFacts {
+                from_target: false,
+                ..facts("clone", None)
+            },
+            expected_dispatch: Dispatch::Run(
+                &CLONE_ROUTE,
+                Some(failure("clone requires --from", "C406")),
+            ),
+        },
+        CommandDispatchTestCase {
+            description: "format --diff with --json fails",
+            facts: CommandFacts {
+                format_diff: true,
+                json: true,
+                ..facts("format", None)
+            },
+            expected_dispatch: Dispatch::Run(
+                &FORMAT_ROUTE,
+                Some(failure(
+                    "format --diff cannot be combined with --json",
+                    "C112",
+                )),
+            ),
+        },
+        CommandDispatchTestCase {
+            description: "scenario test --local --retain fails",
+            facts: CommandFacts {
+                scenario_local: true,
+                scenario_retain: true,
+                ..facts("scenario", Some("test"))
+            },
+            expected_dispatch: Dispatch::Fail(DispatchFailure {
+                message: "scenario test --local does not support --retain".to_owned(),
+                code: "C452",
+                help: Some(
+                    "Local scenario DuckDB files are always kept under target/run/scenarios/.",
+                ),
+            }),
+        },
+        CommandDispatchTestCase {
+            description: "scenario sync flags need --local",
+            facts: CommandFacts {
+                scenario_snapshot_sync: true,
+                ..facts("scenario", Some("test"))
+            },
+            expected_dispatch: Dispatch::Fail(DispatchFailure {
+                message: "scenario snapshot sync flags require --local".to_owned(),
+                code: "C454",
+                help: Some(
+                    "Use sqb scenario test --local --sync-snapshots or sqb scenario test --local --refresh.",
+                ),
+            }),
+        },
+        CommandDispatchTestCase {
+            description: "scenario capture runs the capture slot",
+            facts: facts("scenario", Some("capture")),
+            expected_dispatch: runs(&SCENARIO_CAPTURE_ROUTE),
+        },
+        CommandDispatchTestCase {
+            description: "mv without a target fails",
+            facts: CommandFacts {
+                refactor_target: false,
+                ..facts("mv", None)
+            },
+            expected_dispatch: Dispatch::Run(
+                &REFACTOR_ROUTE,
+                Some(failure("mv command handler is unavailable", "C950")),
+            ),
+        },
+        CommandDispatchTestCase {
+            description: "clean has no handler",
+            facts: facts("clean", None),
+            expected_dispatch: Dispatch::Nothing,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            command_dispatch(&test_case.facts),
+            test_case.expected_dispatch,
+            "{}",
+            test_case.description
+        );
+    }
+}

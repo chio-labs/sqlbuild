@@ -36,7 +36,7 @@ def dispatch_and_handle_errors(
     *,
     args: CliNamespace,
     invocation: ParsedCliInvocation,
-    handlers: CliEntrypointHandlers,
+    handlers: CliEntrypointHandlers | None,
     use_color: bool,
 ) -> int:
     """Dispatch once and preserve the CLI's established error projection."""
@@ -86,7 +86,7 @@ def dispatch_and_handle_errors(
 
 
 def _dispatch_clearing_transient_line(
-    *, args: CliNamespace, handlers: CliEntrypointHandlers
+    *, args: CliNamespace, handlers: CliEntrypointHandlers | None
 ) -> int:
     """Stop a status line a failed command left running before its error is reported."""
 

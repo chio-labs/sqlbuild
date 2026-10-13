@@ -4,5 +4,6 @@
 
 pub mod argv;
 pub mod compute_logs;
+pub mod dispatch;
 pub mod launcher;
 pub mod replay;

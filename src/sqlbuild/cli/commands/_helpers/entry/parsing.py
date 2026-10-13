@@ -5,33 +5,10 @@ from __future__ import annotations
 import shutil
 import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
-from sqlbuild.cli.entry.models import (
-    ParsedCliInvocation,
-    SelectorFileSummary,
-    SelectorInputs,
-)
-
-
-def read_selector_file_inputs(paths: list[str]) -> SelectorInputs:
-    """Read newline-delimited selectors while retaining file provenance."""
-
-    selectors: list[str] = []
-    files: list[SelectorFileSummary] = []
-    for raw_path in paths:
-        path: Path = Path(raw_path)
-        file_selector_count: int = 0
-        for line in path.read_text(encoding="utf-8").splitlines():
-            stripped: str = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            selectors.append(stripped)
-            file_selector_count += 1
-        files.append(SelectorFileSummary(path=path, selector_count=file_selector_count))
-    return SelectorInputs(selectors=tuple(selectors), files=tuple(files))
+from sqlbuild.cli.entry.models import ParsedCliInvocation
 
 
 def parse_cli_invocation(*, argv: Sequence[str] | None, use_color: bool) -> ParsedCliInvocation:

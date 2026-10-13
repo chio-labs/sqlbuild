@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from sqlbuild.cli.commands._helpers.entry.dispatch import dispatch_cli_command
+import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.entry.observability import cli_observability_scope
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.constants import DBT_INIT_COMMAND
@@ -16,11 +16,13 @@ from sqlbuild.cli.entry.models import (
 from sqlbuild.runtime.observability.main.create_lifecycle_event import create_lifecycle_event
 
 
-def dispatch_with_observability(*, args: CliNamespace, handlers: CliEntrypointHandlers) -> int:
+def dispatch_with_observability(
+    *, args: CliNamespace, handlers: CliEntrypointHandlers | None
+) -> int:
     """Dispatch once while publishing canonical invocation and nested run facts."""
 
     if _creates_project(args=args) or _is_raw_query_diff(args=args):
-        return dispatch_cli_command(args=args, handlers=handlers)
+        return _native.dispatch_cli_command(args=args, handlers=handlers)
     project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
     command: str = "unknown" if args.command is None else str(args.command)
     started: float = time.monotonic()
@@ -32,7 +34,7 @@ def dispatch_with_observability(*, args: CliNamespace, handlers: CliEntrypointHa
             create_lifecycle_event(event_type="invocation_started", payload={"command": command})
         )
         try:
-            exit_code: int = dispatch_cli_command(args=args, handlers=handlers)
+            exit_code: int = _native.dispatch_cli_command(args=args, handlers=handlers)
         except BaseException as error:
             dispatcher.publish_lifecycle(
                 create_lifecycle_event(
