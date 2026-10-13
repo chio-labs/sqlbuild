@@ -8,12 +8,9 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
+from sqlbuild._native import parse_header_values, prepare_model_header_tokens
 from sqlbuild.compiler.compile.classes.model_description_resolution import (
     ModelDescriptionResolution,
-)
-from sqlbuild.compiler.discovery._helpers.sql.model_files import (
-    parse_header_values,  # noqa: FFL102 - the compiler owns the canonical native header grammar
-    prepare_model_header_tokens,
 )
 from sqlbuild.compiler.discovery.exceptions import DiscoveryError, ModelSqlParseError
 from sqlbuild.lint.constants import (

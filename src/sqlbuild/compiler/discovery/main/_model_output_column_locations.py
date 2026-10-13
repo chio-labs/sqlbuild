@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild.compiler.discovery._helpers.sql.model_files import (
-    model_output_column_locations,
-)
+from sqlbuild._native import model_output_column_locations
 from sqlbuild.spec.contracts.models import SourceLocation
 
 

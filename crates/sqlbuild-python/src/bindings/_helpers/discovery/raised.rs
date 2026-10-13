@@ -18,7 +18,7 @@ const OS_MODULE: &str = "os";
 const DECODE_ENCODING: &str = "utf-8";
 
 /// The exception class of each native failure kind.
-const FAILURE_CLASSES: [(&str, &str, &str); 12] = [
+const FAILURE_CLASSES: [(&str, &str, &str); 13] = [
     ("model_sql", DISCOVERY_ERRORS_MODULE, "ModelSqlParseError"),
     (
         "declaration",
@@ -47,6 +47,11 @@ const FAILURE_CLASSES: [(&str, &str, &str); 12] = [
         "DiscoveryConflictError",
     ),
     ("seed", DISCOVERY_ERRORS_MODULE, "SeedDiscoveryError"),
+    (
+        "python_path",
+        DISCOVERY_ERRORS_MODULE,
+        "ProjectPythonPathError",
+    ),
 ];
 
 fn raised(result: PyResult<Bound<'_, PyAny>>) -> PyErr {

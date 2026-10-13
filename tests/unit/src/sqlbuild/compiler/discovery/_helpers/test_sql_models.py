@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
 from sqlbuild._native import (
     discover_model_files,
+    model_output_column_locations,
 )
-from sqlbuild.compiler.discovery._helpers.sql import model_files as model_file_helpers
-from sqlbuild.compiler.discovery._helpers.sql.model_files import model_output_column_locations
 from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlModelFile,
     DiscoveryFileFault,
@@ -87,10 +87,10 @@ def test_given_native_pool_construction_error_when_preparing_headers_then_error_
     def rejecting_tokenize(_headers: list[str]) -> object:
         raise ValueError("MODEL header worker pool construction failed")
 
-    monkeypatch.setattr(model_file_helpers._native, "parse_model_headers", rejecting_tokenize)
+    monkeypatch.setattr(native_module, "parse_model_headers", rejecting_tokenize)
 
     with pytest.raises(ValueError, match=test_case.expected_message):
-        model_file_helpers.prepare_model_header_tokens(["pool_error_marker value"])
+        native_module.prepare_model_header_tokens(["pool_error_marker value"])
 
 
 @pytest.mark.parametrize(

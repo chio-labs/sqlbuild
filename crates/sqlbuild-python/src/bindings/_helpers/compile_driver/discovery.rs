@@ -15,6 +15,7 @@ use crate::bindings::_helpers::discovery::declaration_records::{
 use crate::bindings::_helpers::discovery::model_records::{
     ModelFileSelection, discovered_model_files,
 };
+use crate::bindings::_helpers::discovery::python_paths::reject_unsupported_python_paths;
 use crate::bindings::_helpers::discovery::sql_test_records::{
     discover_scenario_files, discover_test_files,
 };
@@ -28,7 +29,6 @@ const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation
 const PROJECT_YAML_MODULE: &str = "sqlbuild.compiler.discovery._helpers.yml.project";
 const TARGET_CONNECTIONS_MODULE: &str =
     "sqlbuild.compiler.discovery._helpers.validation.target_connections";
-const PYTHON_PATHS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.python_paths";
 const VALIDATION_MODULE: &str = "sqlbuild.compiler.discovery._helpers.validation.discovery";
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const EVENT_EXPORTERS_MODULE: &str =
@@ -240,10 +240,7 @@ fn assembled_inputs<'py>(
     ] {
         call_with(&imported(py, module, name)?, &configured)?;
     }
-    call_with(
-        &imported(py, PYTHON_PATHS_MODULE, "validate_project_python_paths")?,
-        &directory,
-    )?;
+    reject_unsupported_python_paths(project_dir)?;
     let sql_analysis_override: &Bound<'py, PyAny> = request.sql_analysis_enabled_override.bind(py);
     let sql_analysis_enabled: Bound<'py, PyAny> = if !sql_analysis_override.is_none() {
         sql_analysis_override.clone()
