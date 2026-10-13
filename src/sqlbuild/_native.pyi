@@ -113,6 +113,8 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
     ProjectGraph,
+    PythonPlanEntry,
+    StaticCommandContext,
 )
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
@@ -1170,6 +1172,36 @@ def build_discovered_project_inputs(
     sql_analysis_enabled: bool,
     extract_output_column_locations: bool = True,
 ) -> DiscoveredProjectInputs: ...
+def validate_named_target_schema_strategy(
+    *, discovered_inputs: DiscoveredProjectInputs, adapter: BaseAdapter, selected_target: str | None
+) -> None: ...
+def validate_managed_loader_target_isolation(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    resolved_connection: dict[str, object] | None = None,
+) -> None: ...
+def validate_project_targets(*, adapter_name: str, project: CompiledProjectView) -> None: ...
+def validate_managed_write_schemas(
+    *, adapter: BaseAdapter, project: CompiledProjectView
+) -> None: ...
+def resolve_compile_analysis_selection(
+    *, options: CompilePipelineOptions, discovered_inputs: DiscoveredProjectInputs
+) -> CompileAnalysisSelection | None: ...
+def build_project_graph_from_compiled_project(*, project: CompiledProjectView) -> ProjectGraph: ...
+def plan_has_executable_work(
+    *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
+) -> bool: ...
+def build_static_pipeline_result(
+    *, context: StaticCommandContext, plan_output: PlanOutput
+) -> CompilePipelineResult: ...
+def run_compile_only_pipeline(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    adapter: BaseAdapter,
+    options: CompilePipelineOptions,
+    on_progress: Callable[[str], None] | None = None,
+) -> CompilePipelineResult: ...
 def compile_project_phase(
     *,
     discovered_inputs: DiscoveredProjectInputs,

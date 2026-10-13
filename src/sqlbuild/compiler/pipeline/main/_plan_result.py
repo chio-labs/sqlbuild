@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+import sqlbuild._native as _native
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.models import (
@@ -18,7 +19,6 @@ from sqlbuild.compiler.pipeline._helpers.deferred_locations import (
     gather_deferred_relations,
     resolve_deferred_target_config,
 )
-from sqlbuild.compiler.pipeline._helpers.graph import build_project_graph_impl
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
 from sqlbuild.compiler.pipeline._helpers.python_plan_entries import (
     build_python_run_plan_outputs,
@@ -89,7 +89,7 @@ def build_pipeline_result(
         run_selection = resolve_python_sql_run_selection_from_inputs(
             select=select,
             exclude=exclude,
-            project_graph=build_project_graph_impl(project),
+            project_graph=_native.build_project_graph_from_compiled_project(project=project),
             discovered_inputs=discovered_inputs,
         )
         selected_sql_keys = run_selection.sql_keys

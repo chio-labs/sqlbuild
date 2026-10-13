@@ -5,6 +5,9 @@ use pyo3::types::{PyDict, PySet, PySetMethods};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::{
+    compile_analysis_selection, project_graph,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
@@ -16,7 +19,6 @@ const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.analysis_selection";
 const PIPELINE_MODELS_MODULE: &str = "sqlbuild.compiler.pipeline.models";
 const TIMING_TRACKER_MODULE: &str = "sqlbuild.diagnostics.classes.build_phase_timing_tracker";
-const GRAPH_HELPERS_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.graph";
 const RULE_EXCEPTIONS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const RULES_CONFIG_MODULE: &str = "sqlbuild.rule_engine.main.load_config";
 const RULES_PROGRESS_MODULE: &str = "sqlbuild.rule_engine.main.render_rules_progress";
@@ -99,17 +101,7 @@ fn compiled_phase<'py>(
     progress(on_progress, "Compiling project...")?;
     let started: f64 = monotonic(py)?;
     let compiled: PyResult<Bound<'py, PyAny>> = (|| {
-        let selection: Bound<'py, PyAny> = call_with(
-            &imported(
-                py,
-                ANALYSIS_SELECTION_MODULE,
-                "resolve_compile_analysis_selection",
-            )?,
-            &[
-                ("options", options.clone()),
-                ("discovered_inputs", discovered.clone()),
-            ],
-        )?;
+        let selection: Bound<'py, PyAny> = compile_analysis_selection(&options, discovered)?;
         call_with(
             &imported(py, NATIVE_MODULE, "build_compiled_project")?,
             &[
@@ -243,8 +235,7 @@ fn run_compile_pipeline<'py>(
     let compiled: Bound<'py, PyAny> =
         compiled_phase((&discovered, &adapter), &options, &on_progress)?;
     let project: Bound<'py, PyAny> = compiled.getattr("project")?;
-    let graph: Bound<'py, PyAny> =
-        imported(py, GRAPH_HELPERS_MODULE, "build_project_graph_impl")?.call1((&project,))?;
+    let graph: Bound<'py, PyAny> = project_graph(&project)?;
     run_rules_gate(
         (&discovered, &adapter),
         (&options, &on_progress),

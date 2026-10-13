@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlbuild._native import build_static_pipeline_result
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -16,7 +17,6 @@ from sqlbuild.cli.progress.classes.connection_progress_reporter import Connectio
 from sqlbuild.compiler.compile.types import CompiledSeedView
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.pipeline.main.static_command import compile_static_command_context
-from sqlbuild.compiler.pipeline.main.static_result import build_static_pipeline_result
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
