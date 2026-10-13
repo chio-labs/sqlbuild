@@ -224,9 +224,9 @@ fn old_name_reference_message(
 }
 
 /// `(audit name, target, gated, read)` for one attached-audit ordering edge.
-type GateRow = (String, ResourceKey, ResourceKey, ResourceKey);
+pub(crate) type GateRow = (String, ResourceKey, ResourceKey, ResourceKey);
 /// `(hook name, gated, read, HookReadType value, path)` for one hook-read ordering edge.
-type HookRow = (
+pub(crate) type HookRow = (
     String,
     ResourceKey,
     ResourceKey,
@@ -235,8 +235,7 @@ type HookRow = (
 );
 
 /// The attached-audit gate edges and hook-read edges of one project, in Python's order.
-#[pyfunction]
-fn native_execution_gate_edges(
+pub(crate) fn native_execution_gate_edges(
     project: &Bound<'_, PyAny>,
 ) -> PyResult<(Vec<GateRow>, Vec<HookRow>)> {
     let facts: ProjectFacts = project_facts(project, false)?;
@@ -268,7 +267,6 @@ fn hook_row(edge: HookEdge) -> HookRow {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(explicit_reference_report, module)?)?;
     module.add_function(wrap_pyfunction!(python_literal_sql_calls, module)?)?;
-    module.add_function(wrap_pyfunction!(native_execution_gate_edges, module)?)?;
     module.add_function(wrap_pyfunction!(hard_coded_relation_remedy, module)?)?;
     module.add_function(wrap_pyfunction!(old_name_reference_message, module)?)?;
     Ok(())

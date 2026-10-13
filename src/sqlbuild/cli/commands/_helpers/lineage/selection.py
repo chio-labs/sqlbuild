@@ -6,7 +6,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 import sqlbuild._native as _native
-from sqlbuild._native import ProjectColumnLineage
+from sqlbuild._native import (
+    ProjectColumnLineage,
+    path_nodes,
+    transitive_closure,
+    transitive_closure_many,
+)
 from sqlbuild.cli.commands.constants import (
     BOTH_DIRECTIONS,
     COLUMN_TARGET_KIND,
@@ -30,9 +35,6 @@ from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.graph.main.path_nodes import path_nodes
-from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
     QualifiedLineageColumn,

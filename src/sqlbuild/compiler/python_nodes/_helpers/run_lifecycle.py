@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import transitive_closure
 from sqlbuild.compiler.discovery.types import LoaderConnectionMode
-from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
 from sqlbuild.compiler.python_nodes.models import (
     DiscoveredPythonLoaderMetadata,
     PythonNodeGraph,

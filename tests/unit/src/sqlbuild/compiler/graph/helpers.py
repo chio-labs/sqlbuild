@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
+from sqlbuild._native import native_graph_from_views
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.graph.main._native_graph_from_views import native_graph_from_views
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 
 

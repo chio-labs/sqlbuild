@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import transitive_closure_many
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 
 
 def build_downstream_model_name_closure(

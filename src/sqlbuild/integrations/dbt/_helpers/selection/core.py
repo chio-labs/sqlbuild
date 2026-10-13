@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from sqlbuild._native import path_nodes
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.graph.main.path_nodes import path_nodes
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,

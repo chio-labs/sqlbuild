@@ -5,11 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
 
+from sqlbuild._native import sql_ref_key, transitive_closure, transitive_closure_many
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.compile.types import CompiledResourceType
-from sqlbuild.compiler.graph.main.sql_ref_key import sql_ref_key
-from sqlbuild.compiler.graph.main.transitive_closure import transitive_closure
-from sqlbuild.compiler.graph.main.transitive_closure_many import transitive_closure_many
 from sqlbuild.compiler.pipeline.main.project_graph_selection import select_project_graph
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.constants import (

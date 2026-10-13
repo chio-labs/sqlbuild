@@ -10,6 +10,7 @@ from sqlbuild._native import (
     build_compile_inputs,
     discover_project_inputs,
     infer_native_query_columns,
+    project_lineage_views,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
@@ -55,7 +56,6 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMacroFile,
     DiscoveredProjectInputs,
 )
-from sqlbuild.compiler.graph.main.project_lineage_views import project_lineage_views
 from sqlbuild.compiler.lineage.types import (
     ColumnLineageConfidence,
     ColumnTransformKind,

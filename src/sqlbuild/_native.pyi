@@ -103,6 +103,7 @@ from sqlbuild.compiler.discovery.models import (
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.frontier.types import CompilerStage
+from sqlbuild.compiler.graph.models import AttachedAuditGateEdge, HookReadEdge, LineageGraphViews
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
     DirectSemanticColumnUse,
@@ -2227,12 +2228,47 @@ def hard_coded_relation_remedy(
 def old_name_reference_message(
     owner_label: str, written: str, method: str, model_name: str, /
 ) -> str: ...
-def native_execution_gate_edges(
-    project: Any, /
-) -> tuple[
-    list[tuple[str, tuple[str, str], tuple[str, str], tuple[str, str]]],
-    list[tuple[str, tuple[str, str], tuple[str, str], str, str | None]],
-]: ...
+def transitive_closure[K](
+    *, start: K, edges: Mapping[K, Iterable[K]], max_depth: int | None = None
+) -> frozenset[K]: ...
+def transitive_closure_many[K](
+    *,
+    starts: Iterable[K],
+    edges: Mapping[K, Iterable[K]],
+    include_starts: bool,
+    max_depth: int | None = None,
+) -> frozenset[K]: ...
+def invert_edges[K](
+    *, edges: Mapping[K, Iterable[K]], sort_key: Callable[[K], Any] | None = None
+) -> dict[K, tuple[K, ...]]: ...
+def path_nodes[K](
+    *, start: K, end: K, downstream: Mapping[K, Iterable[K]]
+) -> frozenset[K] | None: ...
+def attached_audit_gate_edges(
+    *, project: CompiledProjectView
+) -> tuple[AttachedAuditGateEdge, ...]: ...
+def hook_read_edges(*, project: CompiledProjectView) -> tuple[HookReadEdge, ...]: ...
+def model_python_hook_names(*, model: CompiledModelView) -> tuple[str, ...]: ...
+def sql_ref_key(reference: SqlResourceRef, /) -> CompiledObjectKey: ...
+def native_graph_key(key: CompiledObjectKey, /) -> tuple[str, str]: ...
+def native_graph_keys(keys: Iterable[CompiledObjectKey], /) -> list[tuple[str, str]]: ...
+def compiled_graph_keys(keys: Iterable[tuple[str, str]], /) -> frozenset[CompiledObjectKey]: ...
+def lineage_graph_names(graph: NativeProjectGraph, /) -> dict[str, CompiledObjectKey]: ...
+def lineage_graph_views(graph: NativeProjectGraph, /) -> LineageGraphViews: ...
+def project_lineage_views(project: CompiledProjectView, /) -> LineageGraphViews: ...
+def native_graph_from_views(
+    *,
+    all_keys: Mapping[str, CompiledObjectKey],
+    upstream: Mapping[CompiledObjectKey, Iterable[CompiledObjectKey]],
+    downstream: Mapping[CompiledObjectKey, Iterable[CompiledObjectKey]],
+    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
+    path_index: Mapping[CompiledObjectKey, str],
+) -> NativeProjectGraph: ...
+def native_graph_from_edges(
+    *,
+    upstream: Mapping[CompiledObjectKey, Iterable[CompiledObjectKey]],
+    downstream: Mapping[CompiledObjectKey, Iterable[CompiledObjectKey]],
+) -> NativeProjectGraph: ...
 
 class BindingCatalog:
     schemas: dict[str, Mapping[str, str]]
