@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.integrations.dbt._helpers.manifest.core import (
+from sqlbuild._native import (
     build_dbt_manifest_index,
     resolve_dbt_manifest_model,
 )
+from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.integrations.dbt.models import (
     DbtManifestIndex,
     DbtManifestModel,

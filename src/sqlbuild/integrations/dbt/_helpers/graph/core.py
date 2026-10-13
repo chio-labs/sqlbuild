@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import invert_edges, transitive_closure
+from sqlbuild._native import invert_edges, resolve_sqlbuild_model_dbt_refs, transitive_closure
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
 )
@@ -10,9 +10,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
     CompiledResourceType,
-)
-from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
-    resolve_sqlbuild_model_dbt_refs,
 )
 from sqlbuild.integrations.dbt.models import (
     DbtCombinedGraph,

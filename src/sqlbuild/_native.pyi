@@ -230,6 +230,8 @@ from sqlbuild.integrations.dbt.models import (
     DbtInteropPlan,
     DbtInteropSelectionResult,
     DbtLsNode,
+    DbtManifestIndex,
+    DbtManifestModel,
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
@@ -1395,6 +1397,36 @@ def build_dbt_init_project_toml(
     target_schema: str | None,
     target_database: str | None,
 ) -> str: ...
+def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex: ...
+def build_compile_dbt_manifest_index(
+    *, manifest_contents: str | None
+) -> DbtManifestIndex | None: ...
+def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex: ...
+def resolve_dbt_manifest_model(
+    *, manifest: DbtManifestIndex, name: str, package_name: str | None = None
+) -> DbtManifestModel: ...
+def validate_compile_dbt_model_names(
+    *, known_model_names: Iterable[str], dbt_manifest: DbtManifestIndex | None
+) -> None: ...
+def validate_compile_dbt_model_reference(
+    *,
+    reference: CompileSqlReference,
+    model_relative_path: Path,
+    dbt_manifest: DbtManifestIndex | None,
+) -> None: ...
+def resolve_sqlbuild_model_dbt_refs(
+    *,
+    project: CompiledProjectView,
+    manifest: DbtManifestIndex,
+    selected_model_names: Iterable[str] | None = None,
+) -> tuple[tuple[CompiledModelView, DbtManifestModel], ...]: ...
+def resolve_dbt_reference_relation(
+    *,
+    manifest: DbtManifestIndex | None,
+    ref_kind: str,
+    ref_name: str,
+    ref_package: str | None,
+) -> str | None: ...
 def build_dbt_interop_plan(
     *,
     command: DbtInteropCommand | str,
