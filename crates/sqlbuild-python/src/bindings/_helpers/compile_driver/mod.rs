@@ -8,6 +8,7 @@ pub(crate) mod command;
 pub(crate) mod deferral;
 pub(crate) mod diff;
 pub(crate) mod discovery;
+pub(crate) mod input_reads;
 pub(crate) mod inputs;
 pub(crate) mod phases;
 pub(crate) mod pipeline;

@@ -1,6 +1,8 @@
+pub(crate) mod cursor_roles;
 pub(crate) mod declaration_scope;
 pub(crate) mod effective_config;
 pub(crate) mod model_config;
 pub(crate) mod model_inputs;
 pub(crate) mod registration;
+mod storage_policies;
 pub(crate) mod target;

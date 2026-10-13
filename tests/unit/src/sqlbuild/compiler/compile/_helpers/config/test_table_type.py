@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.compile._helpers.config.table_type import resolve_table_type
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileModelConfig
 from sqlbuild.spec.contracts.models import (
+    DefaultsConfig,
     MaterializationDefaultsConfig,
     MaterializationRetentionDefaults,
     ResolvedTableType,
@@ -17,7 +17,10 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config._test_types import
     TableTypeResolutionTestCase,
     TableTypeValidationErrorTestCase,
 )
-from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import validate_natively
+from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import (
+    build_config_natively,
+    validate_natively,
+)
 
 
 @pytest.mark.parametrize(
@@ -25,8 +28,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import val
     [
         TableTypeResolutionTestCase(
             description="model overrides materialization and target",
-            materialized="table",
-            model_value="transient",
+            header_values={"materialized": "table", "table_type": "transient"},
             materialization_defaults=MaterializationDefaultsConfig(
                 table=MaterializationRetentionDefaults(table_type=TableType.PERMANENT)
             ),
@@ -37,8 +39,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import val
         ),
         TableTypeResolutionTestCase(
             description="materialization overrides target",
-            materialized="table",
-            model_value=None,
+            header_values={"materialized": "table"},
             materialization_defaults=MaterializationDefaultsConfig(
                 table=MaterializationRetentionDefaults(table_type=TableType.TRANSIENT)
             ),
@@ -49,8 +50,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import val
         ),
         TableTypeResolutionTestCase(
             description="inherit preserves materialization value",
-            materialized="table",
-            model_value="inherit",
+            header_values={"materialized": "table", "table_type": "inherit"},
             materialization_defaults=MaterializationDefaultsConfig(
                 table=MaterializationRetentionDefaults(table_type=TableType.PERMANENT)
             ),
@@ -61,8 +61,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import val
         ),
         TableTypeResolutionTestCase(
             description="target supplies value without overrides",
-            materialized="table",
-            model_value=None,
+            header_values={"materialized": "table"},
             materialization_defaults=MaterializationDefaultsConfig(),
             target_config=TargetConfig(default_table_type=TableType.PERMANENT),
             expected_value=TableType.PERMANENT,
@@ -71,8 +70,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import val
         ),
         TableTypeResolutionTestCase(
             description="undeclared value defaults transient",
-            materialized="table",
-            model_value=None,
+            header_values={"materialized": "table"},
             materialization_defaults=MaterializationDefaultsConfig(),
             target_config=None,
             expected_value=TableType.TRANSIENT,
@@ -81,8 +79,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import val
         ),
         TableTypeResolutionTestCase(
             description="target default does not apply to view",
-            materialized="view",
-            model_value=None,
+            header_values={"materialized": "view"},
             materialization_defaults=MaterializationDefaultsConfig(),
             target_config=TargetConfig(default_table_type=TableType.PERMANENT),
             expected_value=TableType.TRANSIENT,
@@ -95,13 +92,14 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers.config.helpers import val
 def test_given_layered_table_type_when_resolving_then_effective_value_tracks_source(
     test_case: TableTypeResolutionTestCase,
 ) -> None:
-    result: ResolvedTableType = resolve_table_type(
-        materialized=test_case.materialized,
-        model_value=test_case.model_value,
-        materialization_defaults=test_case.materialization_defaults,
+    result: ResolvedTableType = build_config_natively(
+        defaults=DefaultsConfig(),
+        path_defaults={},
+        matched_path_default=None,
+        model_header_values=test_case.header_values,
         target_config=test_case.target_config,
-        model_name="orders",
-    )
+        materialization_defaults=test_case.materialization_defaults,
+    ).table_type
 
     assert result.value is test_case.expected_value
     assert result.source is test_case.expected_source
@@ -128,12 +126,12 @@ def test_given_invalid_model_table_type_when_resolving_then_raises_compile_error
     test_case: TableTypeResolutionErrorTestCase,
 ) -> None:
     with pytest.raises(CompileInputError, match=test_case.expected_error_fragment):
-        resolve_table_type(
-            materialized="table",
-            model_value=test_case.model_value,
-            materialization_defaults=MaterializationDefaultsConfig(),
+        build_config_natively(
+            defaults=DefaultsConfig(),
+            path_defaults={},
+            matched_path_default=None,
+            model_header_values={"materialized": "table", "table_type": test_case.model_value},
             target_config=None,
-            model_name="orders",
         )
 
 

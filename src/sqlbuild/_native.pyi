@@ -27,7 +27,6 @@ from sqlbuild.compiler.auditing.models import (
     MeasurementThresholds,
 )
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditSeverity
-from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -53,6 +52,7 @@ from sqlbuild.compiler.compile.models import (
     CompileSqlReference,
     CompileSqlScenarioInput,
     CompileSqlTestInput,
+    CursorInputRoles,
     DeclarationResolutionContext,
     DeclarationScopeBuild,
     DeclarationScopeResolver,
@@ -223,6 +223,20 @@ from sqlbuild.sql_values.models import SqlValue
 
 BUILD_IDENTITY: str
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
+
+class CompileInputReads:
+    """Environment, settings, and run-identity reads observed during one compile."""
+
+    def __init__(self) -> None: ...
+    def add_environment_name(self, name: str) -> None: ...
+    def add_settings_class(self, settings_class: type) -> None: ...
+    def mark_run_id_read(self) -> None: ...
+    @property
+    def environment_names(self) -> tuple[str, ...]: ...
+    @property
+    def settings_classes(self) -> tuple[type, ...]: ...
+    @property
+    def read_run_id(self) -> bool: ...
 
 class NativeCompilerError(RuntimeError):
     """An internal native compiler failure: a panic or a broken native invariant."""
@@ -1462,6 +1476,7 @@ def validate_project_targets(*, adapter_name: str, project: CompiledProjectView)
 def validate_managed_write_schemas(
     *, adapter: BaseAdapter, project: CompiledProjectView
 ) -> None: ...
+def resolve_cursor_input_roles(*, model: CompiledModelView) -> CursorInputRoles: ...
 def resolve_compile_analysis_selection(
     *, options: CompilePipelineOptions, discovered_inputs: DiscoveredProjectInputs
 ) -> CompileAnalysisSelection | None: ...

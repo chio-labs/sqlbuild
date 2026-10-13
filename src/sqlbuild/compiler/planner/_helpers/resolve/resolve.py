@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 
-from sqlbuild._native import assert_no_unresolved_sql_markers
+from sqlbuild._native import assert_no_unresolved_sql_markers, resolve_cursor_input_roles
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
-from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.compile.models import (
     CompiledRelationLocation,

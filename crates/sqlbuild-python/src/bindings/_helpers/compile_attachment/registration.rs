@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::compile_attachment::{
-    declaration_scope, effective_config, model_config, model_inputs, target,
+    cursor_roles, declaration_scope, effective_config, model_config, model_inputs, target,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -39,6 +39,10 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(
         declaration_scope::rebind_declaration_scope,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(
+        cursor_roles::resolve_cursor_input_roles,
         module
     )?)?;
     Ok(())

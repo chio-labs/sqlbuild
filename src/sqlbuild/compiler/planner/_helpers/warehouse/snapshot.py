@@ -12,6 +12,7 @@ from typing import Any
 from sqlbuild._native import (
     read_latest_fingerprints,
     render_source_relation,
+    resolve_cursor_input_roles,
     select_latest_fingerprints,
     transitive_closure_many,
 )
@@ -31,7 +32,6 @@ from sqlbuild.adapter.relations.main.run_recorded_inspection_query import (
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.compiler.compile.constants import MIGRATE_FROM_CONFIG_KEY
-from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
 from sqlbuild.compiler.compile.models import (
     CompiledObjectKey,
     CompiledRelationLocation,
