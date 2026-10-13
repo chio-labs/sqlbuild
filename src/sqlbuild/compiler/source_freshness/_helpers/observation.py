@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlbuild._native import render_source_relation
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.models import (
     QueryResult,
@@ -12,7 +13,6 @@ from sqlbuild.adapter.contract.models import (
     TableFreshnessRequest,
 )
 from sqlbuild.adapter.contract.types import TableFreshnessStatus
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.source_freshness._helpers.datetime import normalize_presumed_utc_datetime
 from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObservationError
 from sqlbuild.compiler.source_freshness.models import (

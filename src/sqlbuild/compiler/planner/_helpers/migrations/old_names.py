@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime
 
+from sqlbuild._native import (
+    hard_coded_relation_remedy,
+    match_project_relation,
+    old_name_reference_message,
+)
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import RelationType
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
@@ -40,13 +45,6 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import MaterializationType, WarningSeverity
-from sqlbuild.compiler.references.main._old_name_reference_message import (
-    old_name_reference_message,
-)
-from sqlbuild.compiler.references.main.hard_coded_relation_remedy import (
-    hard_coded_relation_remedy,
-)
-from sqlbuild.compiler.references.main.match_project_relation import match_project_relation
 from sqlbuild.compiler.references.models import (
     LiteralSqlRelation,
     ProjectRelation,

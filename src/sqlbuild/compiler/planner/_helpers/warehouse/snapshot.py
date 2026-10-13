@@ -9,7 +9,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
-from sqlbuild._native import transitive_closure_many
+from sqlbuild._native import render_source_relation, transitive_closure_many
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapter.contract.types import AdapterExecute
@@ -85,7 +85,6 @@ from sqlbuild.compiler.planner.types import (
     MaterializationType,
     MicrobatchStrategy,
 )
-from sqlbuild.compiler.references.main.render_source_relation import render_source_relation
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
-    assert_no_unresolved_sql_markers,
-)
+from sqlbuild._native import assert_no_unresolved_sql_markers
 from tests.unit.src.sqlbuild.compiler.references.main._test_types import (
     AssertNoUnresolvedSqlMarkersTestCase,
 )

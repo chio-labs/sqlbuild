@@ -97,7 +97,6 @@ fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> P
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::bindings::_helpers::analysis::binding_catalog::register(module)?;
-    crate::bindings::_helpers::analysis::relation_names::register(module)?;
     crate::bindings::_helpers::analysis::required_columns::register(module)?;
     crate::bindings::_helpers::analysis::explicit_references::register(module)?;
     crate::bindings::_helpers::analysis::binding_locations::register(module)?;

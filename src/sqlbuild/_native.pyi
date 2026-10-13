@@ -7,6 +7,7 @@ from typing import Any, Literal, TypedDict, overload
 from _typeshed import SupportsRichComparison
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RelationInfo
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
@@ -132,8 +133,16 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
-from sqlbuild.compiler.references.models import LiteralSqlRelation
-from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
+from sqlbuild.compiler.references.models import (
+    LiteralSqlRelation,
+    ProjectRelation,
+    ProjectRelationIndex,
+    RelationName,
+)
+from sqlbuild.compiler.references.types import (
+    ExternalSqlReferenceResolver,
+    HardCodedRelationOwnerKind,
+)
 from sqlbuild.compiler.scopes.models import (
     DeclarationExplanation,
     DeclarationIdentity,
@@ -1670,9 +1679,7 @@ class NamePattern:
     def __init__(self, pattern: str) -> None: ...
     def matches(self, column_name: str) -> bool: ...
 
-def unresolved_reference_marker_kind(
-    sql: str, context: str, /
-) -> tuple[int | None, str | None]: ...
+def assert_no_unresolved_sql_markers(*, sql: str, context: str) -> None: ...
 def normalize_typed_sql_value(
     raw_value: object, typing: tuple[str, str | None], limits: tuple[int, int, int], /
 ) -> object: ...
@@ -1889,9 +1896,20 @@ def scan_macro_call_sites(
     list[tuple[int, int, int, str, list[str] | None, bool]],
     tuple[int | None, str | None, str] | None,
 ]: ...
-def extract_sql_relation_names(
-    sql: str, dialect: str | None
-) -> tuple[list[tuple[str, str | None, str | None]], list[str]] | None: ...
+def extract_relation_names(
+    *, sql: str, dialect: str | None
+) -> tuple[tuple[RelationName, ...], frozenset[str]] | None: ...
+def match_project_relation(
+    *,
+    index: ProjectRelationIndex,
+    relation: RelationName,
+    default_database: str | None = None,
+    default_schema: str | None = None,
+) -> ProjectRelation | None: ...
+def runtime_project_relations(
+    *, relations: Mapping[SqlResourceRef, str], dialect: str | None
+) -> ProjectRelationIndex: ...
+def render_source_relation(*, entry: SourceEntry, adapter: StrictAdapter | None = None) -> str: ...
 def substitute_placeholder_defaults(sql: str, placeholders: list[tuple[str, str]], /) -> str: ...
 def fixture_projection_facts(
     sql: str, dialect: str | None, /
@@ -2223,10 +2241,13 @@ def explicit_reference_report(
     /,
 ) -> PythonSqlReferenceReport: ...
 def hard_coded_relation_remedy(
-    owner_kind: str, target: tuple[str, str], upstream_loaders: list[tuple[str, str]], /
+    *,
+    owner_kind: HardCodedRelationOwnerKind,
+    ref: SqlResourceRef,
+    upstream_loader_by_source: Mapping[str, str] | None = None,
 ) -> str: ...
 def old_name_reference_message(
-    owner_label: str, written: str, method: str, model_name: str, /
+    *, owner_label: str, written: str, method: str, model_name: str
 ) -> str: ...
 def transitive_closure[K](
     *, start: K, edges: Mapping[K, Iterable[K]], max_depth: int | None = None

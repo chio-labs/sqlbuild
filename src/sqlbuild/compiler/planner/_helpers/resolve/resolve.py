@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 
+from sqlbuild._native import assert_no_unresolved_sql_markers
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
 from sqlbuild.compiler.compile.main._cursor_roles import resolve_cursor_input_roles
@@ -61,9 +62,6 @@ from sqlbuild.compiler.planner.models import (
     WarehouseSnapshot,
 )
 from sqlbuild.compiler.planner.types import BackfillAction, IncrementalMode, MaterializationType
-from sqlbuild.compiler.references.main.assert_no_unresolved_sql_markers import (
-    assert_no_unresolved_sql_markers,
-)
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.main.get_config_cursor_bound import get_config_cursor_bound

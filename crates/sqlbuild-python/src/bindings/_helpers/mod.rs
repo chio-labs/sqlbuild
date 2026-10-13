@@ -24,6 +24,7 @@ pub(crate) mod plan_output;
 pub(crate) mod project_assembly;
 pub(crate) mod python_values;
 pub(crate) mod refactor;
+pub(crate) mod references;
 pub(crate) mod render;
 pub(crate) mod rules;
 pub(crate) mod scopes;
