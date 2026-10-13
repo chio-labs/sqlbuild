@@ -180,6 +180,21 @@ reason = "user-code"
 note = "Identity hashing over live user functions (source and globals)."
 
 [[stays]]
+path = "compiler/discovery/_helpers/filesystem/core.py"
+reason = "user-code"
+note = "Imports project Python node, provider, sink and materialization modules and reads their definitions."
+
+[[stays]]
+path = "compiler/discovery/_helpers/validation/discovery.py"
+reason = "user-code"
+note = "Reads decorator definitions from loaded project Python node functions."
+
+[[stays]]
+path = "compiler/discovery/main/runtime_extensions.py"
+reason = "user-code"
+note = "Binds imported project providers to event exporter and sink declarations."
+
+[[stays]]
 path = "compiler/discovery/_helpers/filesystem/command_output_sinks.py"
 reason = "user-code"
 note = "Inspects loaded user sink functions."
