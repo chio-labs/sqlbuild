@@ -14,6 +14,7 @@ pub(crate) mod pipeline;
 pub(crate) mod pipeline_entries;
 pub(crate) mod project;
 pub(crate) mod python_calls;
+pub(crate) mod python_plan_entries;
 pub(crate) mod registration;
 pub(crate) mod relation_targets;
 pub(crate) mod target_defaults;

@@ -40,7 +40,7 @@ fn type_name(kind: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 /// A Python `str` as JSON text; one holding a lone surrogate as UTF-16 code units.
-fn text(value: &Bound<'_, PyString>) -> PyResult<JsonValue> {
+pub(crate) fn text(value: &Bound<'_, PyString>) -> PyResult<JsonValue> {
     if let Ok(text) = value.to_str() {
         return Ok(JsonValue::String(text.to_owned()));
     }

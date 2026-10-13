@@ -15,10 +15,6 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline._helpers.materializations import load_custom_materializations
-from sqlbuild.compiler.pipeline._helpers.python_plan_entries import (
-    build_python_run_plan_outputs,
-    python_read_source_names_for,
-)
 from sqlbuild.compiler.pipeline.models import (
     CompilePipelineOptions,
     CompilePipelineResult,
@@ -89,7 +85,7 @@ def build_pipeline_result(
         )
         selected_sql_keys = run_selection.sql_keys
         selected_python_node_names = run_selection.python_node_names
-        python_read_source_names = python_read_source_names_for(
+        python_read_source_names = _native.python_read_source_names_for(
             discovered_inputs=discovered_inputs, python_node_names=selected_python_node_names
         )
 
@@ -129,7 +125,7 @@ def build_pipeline_result(
     custom_materializations: dict[str, Any] = load_custom_materializations(
         discovered_inputs.materialization_files
     )
-    python_outputs: PythonRunPlanOutputs = build_python_run_plan_outputs(
+    python_outputs: PythonRunPlanOutputs = _native.build_python_run_plan_outputs(
         discovered_inputs=discovered_inputs,
         plan_output=plan_output,
         run_selection=run_selection,

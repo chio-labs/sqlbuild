@@ -24,7 +24,6 @@ MACRO_CALL_STORE_ENVIRONMENT_VERSION: str = "macro-call-store-v2"
 VALUE_RENDERER_FIELD: str = "_value_renderer"
 PROJECT_ROOT_SEARCH_PATH_STAMP: int = -2
 MISSING_SEARCH_PATH_STAMP: int = -1
-MODULE_DIGEST_ROW_FIELDS: int = 2
 INSTALLED_PACKAGE_DIRECTORY_NAMES: frozenset[str] = frozenset({"site-packages", "dist-packages"})
 INSTALLED_DISTRIBUTION_SUFFIX: str = ".dist-info"
 INSTALLED_RECORD_FILE_NAME: str = "RECORD"

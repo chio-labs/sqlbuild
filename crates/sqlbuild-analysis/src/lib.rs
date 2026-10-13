@@ -17,6 +17,7 @@ pub mod graph;
 pub mod lineage;
 pub mod lineage_graph;
 pub mod manifest;
+pub mod python_plan;
 pub mod python_values;
 pub mod query_analysis;
 pub mod relation_names;

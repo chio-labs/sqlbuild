@@ -1,6 +1,6 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Hashable, Mapping, Sequence, Set
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence, Set
 from pathlib import Path, PurePath
 from typing import Any, Literal, TypedDict, overload
 
@@ -115,10 +115,16 @@ from sqlbuild.compiler.pipeline.models import (
     CompilePipelineResult,
     ProjectGraph,
     PythonPlanEntry,
+    PythonRunPlanOutputs,
     StaticCommandContext,
 )
 from sqlbuild.compiler.planner.models import DeferralInputs, PlanOutput
-from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonNodeIdentity
+from sqlbuild.compiler.python_nodes.models import (
+    PythonNodeGraph,
+    PythonNodeIdentity,
+    PythonSqlRunLifecyclePlan,
+    PythonSqlRunSelection,
+)
 from sqlbuild.compiler.references.models import LiteralSqlRelation
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver
 from sqlbuild.compiler.scopes.models import (
@@ -1124,6 +1130,11 @@ def compile_frontier[T](
     native_stage: Callable[[], T] | None = None,
 ) -> T: ...
 def render_stage_capture(value: object) -> str: ...
+def digest_module_files(paths: Iterable[str], /) -> dict[str, str] | None: ...
+def module_digests_metadata(digests: dict[str, str], /) -> bytes: ...
+def unchanged_module_digests(
+    *, metadata: bytes, known: dict[str, str]
+) -> dict[str, str] | None: ...
 def macro_store_token(
     *, loaded: LoadedMacro, identity: DeclarationIdentity | None
 ) -> str | None: ...
@@ -1262,6 +1273,22 @@ def run_diff_pipeline(
     cli_vars: dict[str, object] | None = None,
     external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
 ) -> tuple[CompiledProjectView, CompiledProjectView, tuple[str, ...]]: ...
+def python_read_source_names_for(
+    *, discovered_inputs: DiscoveredProjectInputs, python_node_names: frozenset[str]
+) -> frozenset[str]: ...
+def build_python_run_plan_outputs(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    plan_output: PlanOutput,
+    run_selection: PythonSqlRunSelection | None,
+    selected_python_node_names: frozenset[str],
+) -> PythonRunPlanOutputs: ...
+def build_python_plan_entries(
+    *,
+    lifecycle_plan: PythonSqlRunLifecyclePlan,
+    python_graph: PythonNodeGraph,
+    previous_identities: dict[tuple[str, str], Fingerprint] | None = None,
+) -> tuple[PythonPlanEntry, ...]: ...
 def compile_project_phase(
     *,
     discovered_inputs: DiscoveredProjectInputs,

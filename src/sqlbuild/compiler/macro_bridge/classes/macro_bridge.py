@@ -7,13 +7,15 @@ import sys
 from pathlib import Path
 
 import sqlbuild._native as _native
-from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
+from sqlbuild._native import (
     digest_module_files,
     module_digests_metadata,
+    unchanged_module_digests,
+)
+from sqlbuild.compiler.macro_bridge._helpers.store_environment import (
     module_sources,
     project_fingerprint,
     store_environment,
-    unchanged_module_digests,
 )
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.compiler.macro_bridge.models import (

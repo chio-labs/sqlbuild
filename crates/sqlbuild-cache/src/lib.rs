@@ -5,6 +5,7 @@
 pub mod artifacts;
 pub mod digest;
 pub mod macro_store_keys;
+pub mod module_digests;
 pub mod project_reuse;
 pub mod project_snapshot;
 pub mod stage_capture;
