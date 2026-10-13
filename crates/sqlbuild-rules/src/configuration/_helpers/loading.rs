@@ -2,11 +2,6 @@ use crate::models::RulesConfig;
 use fensu_policy::policy::types::RuleCodeGrammar;
 use std::path::Path;
 
-pub(crate) fn load_config_json(project_dir: &Path) -> Result<String, String> {
-    let config = load(project_dir)?;
-    serde_json::to_string(&config).map_err(|error| error.to_string())
-}
-
 pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, String> {
     let path = project_dir.join("sqlbuild_project.toml");
     let source = std::fs::read_to_string(&path).map_err(|error| {

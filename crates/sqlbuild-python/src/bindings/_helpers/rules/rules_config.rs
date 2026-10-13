@@ -1,0 +1,263 @@
+//! Rules configuration loaded natively and returned as the Python configuration models.
+
+use std::path::PathBuf;
+
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::{IntoPyObjectExt, Py, pyfunction, wrap_pyfunction};
+use serde_json::Value;
+use sqlbuild_rules::configuration::main::forbidden_exceptions::forbidden_exceptions;
+use sqlbuild_rules::configuration::main::load_rules_config::load_rules_config as load_config;
+use sqlbuild_rules::models::RulesConfig;
+
+use crate::bindings::_helpers::boundary::panics::compiler_guard;
+
+const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
+
+struct Models<'py> {
+    module: Bound<'py, PyModule>,
+}
+
+impl<'py> Models<'py> {
+    fn build(
+        &self,
+        class: &str,
+        fields: &[(&str, Bound<'py, PyAny>)],
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let arguments: Bound<'py, PyDict> = PyDict::new(self.module.py());
+        for (name, value) in fields {
+            arguments.set_item(name, value)?;
+        }
+        self.module.getattr(class)?.call((), Some(&arguments))
+    }
+}
+
+fn strings<'py>(py: Python<'py>, values: &[String]) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyTuple::new(py, values)?.into_any())
+}
+
+fn text<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyAny>> {
+    value.into_bound_py_any(py)
+}
+
+fn integers<'py>(
+    py: Python<'py>,
+    values: &std::collections::BTreeMap<String, u32>,
+) -> PyResult<Bound<'py, PyAny>> {
+    values.into_bound_py_any(py)
+}
+
+/// A scalar option as Python reads it from JSON; floats, tables and nulls are dropped.
+fn option_scalar<'py>(py: Python<'py>, value: &Value) -> PyResult<Option<Bound<'py, PyAny>>> {
+    match value {
+        Value::Bool(flag) => Ok(Some(flag.into_bound_py_any(py)?)),
+        Value::String(item) => Ok(Some(item.into_bound_py_any(py)?)),
+        Value::Number(number) => match (number.as_i64(), number.as_u64()) {
+            (Some(integer), _) => Ok(Some(integer.into_bound_py_any(py)?)),
+            (None, Some(integer)) => Ok(Some(integer.into_bound_py_any(py)?)),
+            (None, None) => Ok(None),
+        },
+        _ => Ok(None),
+    }
+}
+
+/// A list option item as JSON decoding yields it.
+fn option_item<'py>(py: Python<'py>, value: &Value) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        Value::Array(items) => {
+            let values: Vec<Bound<'py, PyAny>> = items
+                .iter()
+                .map(|item| option_item(py, item))
+                .collect::<PyResult<_>>()?;
+            Ok(pyo3::types::PyList::new(py, values)?.into_any())
+        }
+        Value::Object(entries) => {
+            let table: Bound<'py, PyDict> = PyDict::new(py);
+            for (key, item) in entries {
+                table.set_item(key, option_item(py, item)?)?;
+            }
+            Ok(table.into_any())
+        }
+        Value::Null => Ok(py.None().into_bound(py)),
+        Value::Number(number) if number.as_i64().is_none() && number.as_u64().is_none() => {
+            number.as_f64().unwrap_or(f64::NAN).into_bound_py_any(py)
+        }
+        other => Ok(option_scalar(py, other)?.unwrap_or_else(|| py.None().into_bound(py))),
+    }
+}
+
+fn rule_options<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'py, PyAny>> {
+    let result: Bound<'py, PyDict> = PyDict::new(py);
+    for (code, options) in &config.rule_options {
+        let values: Bound<'py, PyDict> = PyDict::new(py);
+        for (name, value) in options {
+            if let Value::Array(items) = value {
+                let tuple: Vec<Bound<'py, PyAny>> = items
+                    .iter()
+                    .map(|item| option_item(py, item))
+                    .collect::<PyResult<_>>()?;
+                values.set_item(name, PyTuple::new(py, tuple)?)?;
+            } else if let Some(scalar) = option_scalar(py, value)? {
+                values.set_item(name, scalar)?;
+            }
+        }
+        result.set_item(code, values)?;
+    }
+    Ok(result.into_any())
+}
+
+fn tables<'py, T>(
+    py: Python<'py>,
+    items: &[T],
+    build: impl Fn(&T) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let values: Vec<Bound<'py, PyAny>> = items.iter().map(build).collect::<PyResult<_>>()?;
+    Ok(PyTuple::new(py, values)?.into_any())
+}
+
+fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'py, PyAny>> {
+    let models = Models {
+        module: py.import(MODELS_MODULE)?,
+    };
+    let threshold_overrides = tables(py, &config.threshold_overrides, |item| {
+        models.build(
+            "ThresholdOverride",
+            &[
+                ("paths", strings(py, &item.paths)?),
+                ("thresholds", integers(py, &item.thresholds)?),
+                ("reason", text(py, &item.reason)?),
+            ],
+        )
+    })?;
+    let rule_exceptions = tables(py, &config.rule_exceptions, |item| {
+        models.build(
+            "RuleExemption",
+            &[
+                ("rule", text(py, &item.rule)?),
+                ("path", text(py, &item.path)?),
+                ("reason", text(py, &item.reason)?),
+            ],
+        )
+    })?;
+    let graph_edge_exceptions = tables(py, &config.graph_edge_exceptions, |item| {
+        models.build(
+            "GraphEdgeExclusion",
+            &[
+                ("consumer", text(py, &item.consumer)?),
+                ("dependency", text(py, &item.dependency)?),
+                ("reason", text(py, &item.reason)?),
+            ],
+        )
+    })?;
+    let rule_ignores = tables(py, &config.rule_ignores, |item| {
+        models.build(
+            "RuleIgnore",
+            &[
+                ("rules", strings(py, &item.rules)?),
+                ("paths", strings(py, &item.paths)?),
+                ("reason", text(py, &item.reason)?),
+                ("selectors", strings(py, &item.selectors)?),
+            ],
+        )
+    })?;
+    let select_star_allow = tables(py, &config.select_star_allow, |item| {
+        models.build(
+            "SelectStarAllow",
+            &[
+                ("paths", strings(py, &item.paths)?),
+                ("reason", text(py, &item.reason)?),
+            ],
+        )
+    })?;
+    let mut layout: Vec<(&str, Bound<'py, PyAny>)> =
+        vec![("domain_roots", strings(py, &config.layout.domain_roots)?)];
+    if !config.layout.levels.is_empty() {
+        layout.push(("levels", strings(py, &config.layout.levels)?));
+    }
+    models.build(
+        "RulesConfig",
+        &[
+            ("select", strings(py, &config.select)?),
+            ("ignore", strings(py, &config.ignore)?),
+            ("thresholds", integers(py, &config.thresholds)?),
+            ("threshold_overrides", threshold_overrides),
+            ("rule_options", rule_options(py, config)?),
+            ("rule_exceptions", rule_exceptions),
+            ("graph_edge_exceptions", graph_edge_exceptions),
+            ("rule_ignores", rule_ignores),
+            (
+                "allow_exceptions",
+                config.allow_exceptions.into_bound_py_any(py)?,
+            ),
+            ("select_star_allow", select_star_allow),
+            ("domains", strings(py, &config.domains)?),
+            (
+                "approved_source_tokens",
+                strings(py, &config.approved_source_tokens)?,
+            ),
+            (
+                "retired_source_tokens",
+                config.retired_source_tokens.clone().into_bound_py_any(py)?,
+            ),
+            (
+                "sql_tests",
+                models.build(
+                    "SqlTestRulesConfig",
+                    &[(
+                        "pipeline_directory",
+                        text(py, &config.sql_tests.pipeline_directory)?,
+                    )],
+                )?,
+            ),
+            ("layout", models.build("LayoutConfig", &layout)?),
+            (
+                "cache",
+                models.build(
+                    "RulesCacheConfig",
+                    &[("enabled", config.cache.enabled.into_bound_py_any(py)?)],
+                )?,
+            ),
+        ],
+    )
+}
+
+fn rules_error(py: Python<'_>, class: &str, message: String, help: Option<String>) -> PyErr {
+    let raised = || -> PyResult<PyErr> {
+        let error_class: Bound<'_, PyAny> = py.import(ERRORS_MODULE)?.getattr(class)?;
+        let error: Bound<'_, PyAny> = match help {
+            Some(help) => {
+                let arguments: Bound<'_, PyDict> = PyDict::new(py);
+                arguments.set_item("help", help)?;
+                error_class.call((message,), Some(&arguments))?
+            }
+            None => error_class.call1((message,))?,
+        };
+        Ok(PyErr::from_value(error))
+    };
+    raised().unwrap_or_else(|error| error)
+}
+
+/// The project's validated rules configuration as `RulesConfig`.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir))]
+fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Py<PyAny>> {
+    let config: RulesConfig = compiler_guard(|| Ok(load_config(&project_dir)))?
+        .map_err(|message| rules_error(py, "RulesError", message, None))?;
+    if let Some(error) = forbidden_exceptions(&config) {
+        return Err(rules_error(
+            py,
+            "RulesConfigError",
+            error.message,
+            Some(error.help),
+        ));
+    }
+    Ok(config_object(py, &config)?.unbind())
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(load_rules_config, module)?)?;
+    Ok(())
+}

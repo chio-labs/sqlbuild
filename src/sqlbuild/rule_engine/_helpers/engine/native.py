@@ -229,18 +229,6 @@ def _finding_identity(finding: Finding) -> tuple[str, str, int, int, str]:
     )
 
 
-def load_native_config(project_dir: Path) -> dict[str, object]:
-    """Load strict rules TOML through the native configuration owner."""
-
-    try:
-        payload: object = json.loads(_native.load_config_json(str(project_dir.resolve())))
-    except (ValueError, TypeError) as error:
-        raise RulesError(str(error)) from error
-    if not isinstance(payload, dict):
-        raise RulesError("native rules engine returned invalid configuration")
-    return {str(key): value for key, value in payload.items()}
-
-
 def native_catalogue() -> tuple[dict[str, object], ...]:
     """Return native-owned built-in rule metadata."""
 
