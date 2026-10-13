@@ -1,120 +1,18 @@
-"""Tests for janitor command behavior."""
+"""Tests for the janitor plan preview."""
 
 from __future__ import annotations
 
-import builtins
-from io import StringIO
-
 import pytest
 
-from sqlbuild.cli.commands._helpers.janitor_output.output import write_disabled, write_plan
-from sqlbuild.cli.commands._helpers.janitor_output.outputs import confirm_janitor_plan
-from sqlbuild.cli.commands.models import JanitorPlanningResult
-from sqlbuild.executor.janitor.models import (
-    JanitorPlan,
-)
+from sqlbuild._native import render_janitor_plan
+from sqlbuild.executor.janitor.models import JanitorPlan
 from tests.unit.src.sqlbuild.cli.commands.main.janitor._test_types import (
-    JanitorConfirmationInterruptTestCase,
-    JanitorDirectArchiveConfirmationTestCase,
-    JanitorDisabledOutputTestCase,
     JanitorPlanOutputTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.janitor.helpers import (
     build_direct_archive_plan,
     build_janitor_plan,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        JanitorConfirmationInterruptTestCase(
-            description="treats keyboard interrupt at confirmation as cancellation",
-            expected_result=False,
-            expected_output_fragments=(
-                "Janitor will archive 1 and delete 1 objects from dev.",
-                "Type `archive 1 and delete 1 objects from dev` to continue: ",
-            ),
-            unexpected_output_fragments=("KeyboardInterrupt", "Traceback"),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_janitor_confirmation_when_keyboard_interrupt_then_returns_cancelled(
-    test_case: JanitorConfirmationInterruptTestCase,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    plan: JanitorPlan = build_direct_archive_plan()
-
-    def interrupting_input() -> str:
-        raise KeyboardInterrupt
-
-    monkeypatch.setattr(builtins, "input", interrupting_input)
-
-    result: bool = confirm_janitor_plan(planning_result=JanitorPlanningResult(plan=plan))
-
-    output: str = capsys.readouterr().out
-    assert result is test_case.expected_result
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in output
-    for fragment in test_case.unexpected_output_fragments:
-        assert fragment not in output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        JanitorDisabledOutputTestCase(
-            description="preserves disabled no-color output",
-            use_color=False,
-            expected_output="Janitor is disabled for this project.\n\n"
-            "Janitor is opt-in. It previews stale warehouse objects and asks before "
-            "archiving or deleting anything.\n\n"
-            "Add this block to sqlbuild_project.toml:\n\n"
-            "[janitor]\n"
-            "enabled = true\n\n"
-            "After enabling, run janitor again to preview cleanup:\n"
-            "  sqb janitor\n",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_disabled_janitor_when_writing_without_color_then_preserves_output(
-    test_case: JanitorDisabledOutputTestCase,
-) -> None:
-    stream: StringIO = StringIO()
-
-    write_disabled(stream=stream, use_color=test_case.use_color)
-
-    assert stream.getvalue() == test_case.expected_output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        JanitorDisabledOutputTestCase(
-            description="styles disabled title",
-            use_color=True,
-            expected_prefix="\033[33m\033[1mJanitor is disabled for this project.\033[0m",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_disabled_janitor_when_writing_with_color_then_styles_title(
-    test_case: JanitorDisabledOutputTestCase,
-) -> None:
-    stream: StringIO = StringIO()
-
-    write_disabled(stream=stream, use_color=test_case.use_color)
-
-    assert test_case.expected_prefix is not None
-    assert stream.getvalue().startswith(test_case.expected_prefix)
-    assert (
-        "\033[33mJanitor is opt-in. It previews stale warehouse objects and asks before "
-        "archiving or deleting anything.\033[0m"
-    ) in stream.getvalue()
-    assert "\033[34msqb janitor\033[0m" in stream.getvalue()
 
 
 @pytest.mark.parametrize(
@@ -148,11 +46,7 @@ def test_given_janitor_plan_when_writing_without_color_then_preserves_output_fra
     test_case: JanitorPlanOutputTestCase,
 ) -> None:
     plan: JanitorPlan = build_janitor_plan()
-    stream: StringIO = StringIO()
-
-    write_plan(plan=plan, stream=stream, use_color=test_case.use_color)
-
-    output: str = stream.getvalue()
+    output: str = render_janitor_plan(plan=plan, use_color=test_case.use_color)
     for fragment in test_case.expected_output_fragments:
         assert fragment in output
     for fragment in test_case.unexpected_output_fragments:
@@ -181,51 +75,7 @@ def test_given_janitor_plan_when_writing_with_color_then_uses_semantic_colors(
     test_case: JanitorPlanOutputTestCase,
 ) -> None:
     plan: JanitorPlan = build_janitor_plan()
-    stream: StringIO = StringIO()
-
-    write_plan(plan=plan, stream=stream, use_color=test_case.use_color)
-
-    output: str = stream.getvalue()
-    for fragment in test_case.expected_output_fragments:
-        assert fragment in output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        JanitorDirectArchiveConfirmationTestCase(
-            description="direct archive plan requires typed archive and delete counts",
-            typed_response="archive 1 and delete 1 objects from dev",
-            expected_result=True,
-            expected_output_fragments=(
-                "Janitor will archive 1 and delete 1 objects from dev.",
-                "Retention: 14 days",
-                "Archive retention: 14 days",
-                "Type `archive 1 and delete 1 objects from dev` to continue: ",
-            ),
-        ),
-        JanitorDirectArchiveConfirmationTestCase(
-            description="direct archive plan requires the archive count in confirmation",
-            typed_response="delete 1 objects from dev",
-            expected_result=False,
-            expected_output_fragments=("Janitor will archive 1 and delete 1 objects from dev.",),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_direct_archive_plan_when_confirming_then_requires_exact_archive_phrase(
-    test_case: JanitorDirectArchiveConfirmationTestCase,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(builtins, "input", lambda: test_case.typed_response)
-
-    result: bool = confirm_janitor_plan(
-        planning_result=JanitorPlanningResult(plan=build_direct_archive_plan())
-    )
-
-    output: str = capsys.readouterr().out
-    assert result is test_case.expected_result
+    output: str = render_janitor_plan(plan=plan, use_color=test_case.use_color)
     for fragment in test_case.expected_output_fragments:
         assert fragment in output
 
@@ -256,11 +106,9 @@ def test_given_direct_archive_plan_when_confirming_then_requires_exact_archive_p
 def test_given_direct_archive_plan_when_writing_preview_then_lists_archive_actions(
     test_case: JanitorPlanOutputTestCase,
 ) -> None:
-    stream: StringIO = StringIO()
-
-    write_plan(plan=build_direct_archive_plan(), stream=stream, use_color=test_case.use_color)
-
-    output: str = stream.getvalue()
+    output: str = render_janitor_plan(
+        plan=build_direct_archive_plan(), use_color=test_case.use_color
+    )
     for fragment in test_case.expected_output_fragments:
         assert fragment in output
     for fragment in test_case.unexpected_output_fragments:

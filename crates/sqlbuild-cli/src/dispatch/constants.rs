@@ -524,9 +524,9 @@ const JANITOR_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const JANITOR_ROUTE: Route = routed(
     "run_janitor",
-    ("sqlbuild.cli.commands.main.state._janitor", "run_janitor"),
+    ("sqlbuild._native", "run_janitor_command"),
     &JANITOR_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const REFACTOR_FIELDS: [Field; 9] = [

@@ -17,6 +17,7 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.commands.models import (
+    JanitorCommandRequest,
     LineageCommandRequest,
     PlaygroundCommandRequest,
     RefactorCommandRequest,
@@ -199,6 +200,7 @@ from sqlbuild.cost.models import CostRunRecord
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
     PythonCheckExecutionResult,
@@ -2656,6 +2658,11 @@ def lineage_cache_fingerprint(
 ) -> str | None: ...
 def run_lineage_command(*, request: LineageCommandRequest) -> int: ...
 def run_refactor_command(*, request: RefactorCommandRequest) -> int: ...
+def run_janitor_command(*, request: JanitorCommandRequest) -> int: ...
+def render_janitor_plan(*, plan: JanitorPlan, use_color: bool = False) -> str: ...
+def render_janitor_completion(
+    *, result: JanitorExecutionResult, use_color: bool = False
+) -> str: ...
 
 # Native analysis: SQL test planning glue.
 def plan_compiled_sql_tests(

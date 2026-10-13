@@ -91,6 +91,11 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn error_muted(self, text: &str) -> String {
+        self.apply(&format!("{RED}{DIM}"), text)
+    }
+
+    #[must_use]
     pub fn error_strong(self, text: &str) -> String {
         self.apply(&format!("{RED}{BOLD}"), text)
     }
