@@ -1,4 +1,6 @@
 pub(crate) mod bounded_sections;
+pub(crate) mod dbt_plan;
+pub(crate) mod dbt_plan_json;
 pub(crate) mod diagnostics;
 pub(crate) mod layout;
 pub(crate) mod plan_document;

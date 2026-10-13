@@ -1,7 +1,10 @@
+pub mod dbt_interop_plan_warnings;
 pub mod format_aligned_name_value;
 pub mod format_compile_text;
 pub mod format_completion_line;
 pub mod format_count_noun;
+pub mod format_dbt_interop_plan;
+pub mod format_dbt_interop_plan_json;
 pub mod format_overflow_line;
 pub mod format_phase_line;
 pub mod format_plan_completion;

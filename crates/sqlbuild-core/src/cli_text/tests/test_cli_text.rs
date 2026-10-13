@@ -1,15 +1,17 @@
 use crate::cli_text::_helpers::diagnostics::diagnostics_text;
 use crate::cli_text::main::format_compile_text::format_compile_text;
+use crate::cli_text::main::format_dbt_interop_plan::format_dbt_interop_plan;
 use crate::cli_text::main::format_plan_completion::format_plan_completion;
 use crate::cli_text::main::format_plan_text::format_plan_text;
 use crate::cli_text::main::semantic_coverage_notice::semantic_coverage_notice;
 use crate::cli_text::models::{
-    CliStyle, CompileTextReport, DiagnosticText, LineageNote, ModelLine, ModelPlanText,
-    PlanTextReport, PlanWarningText, RelatedText,
+    CliStyle, CompileTextReport, DbtInteropPlanText, DbtLsNodeText, DiagnosticText, DisplayLimit,
+    LineageNote, ModelLine, ModelPlanText, PlanTextReport, PlanWarningText, RelatedText,
 };
 use crate::cli_text::tests::helpers::{diagnostic, location, plan_report, table_model};
 use crate::cli_text::tests::test_types::{
-    CompileTextTestCase, DiagnosticsTextTestCase, NoticeTestCase, PlanTextTestCase,
+    CompileTextTestCase, DbtPlanTextTestCase, DiagnosticsTextTestCase, NoticeTestCase,
+    PlanTextTestCase,
 };
 
 /// Expectations recorded from the retired Python formatter.
@@ -177,6 +179,54 @@ fn given_plan_report_when_rendering_then_groups_models_by_reason() {
                 format_plan_completion(&test_case.report).as_str()
             ),
             (test_case.expected_text, test_case.expected_completion),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+/// Expectations recorded from the retired Python formatter.
+#[test]
+fn given_dbt_interop_plan_when_formatting_then_matches_python_text() {
+    let node = |unique_id: &str, resource_type: Option<&str>| DbtLsNodeText {
+        unique_id: unique_id.to_owned(),
+        resource_type: resource_type.map(str::to_owned),
+        name: None,
+        fqn: Vec::new(),
+    };
+    let test_cases = [DbtPlanTextTestCase {
+        description: "grouped nodes with overflow, required ids, anchors and warnings",
+        plan: DbtInteropPlanText {
+            command: "plan".to_owned(),
+            dbt_argv: vec!["dbt".to_owned(), "ls".to_owned()],
+            dbt_nodes: vec![
+                node("model.a.b", Some("model")),
+                node("model.a.a", Some("model")),
+                node("x", None),
+            ],
+            dbt_selected_unique_ids: vec![
+                "model.a.a".to_owned(),
+                "model.a.b".to_owned(),
+                "x".to_owned(),
+            ],
+            dbt_required_unique_ids: vec!["model.a.r".to_owned()],
+            sqlbuild_models: vec!["orders".to_owned()],
+            anchors: vec![("a+".to_owned(), vec!["u".to_owned()])],
+            warnings: vec!["careful".to_owned()],
+            ..DbtInteropPlanText::default()
+        },
+        max_entries: Some(1),
+        expected_text: "Plan ready  5 selected resources\n\ndbt (3 selected, 1 required)\n  command: dbt ls\n\n  model (2)\n  ├── model.a.a\n    ... and 1 more (use --verbose to show all)\n\n  resource (1)\n  └── x\n\n  required (1)\n  └── model.a.r\n\nSQLBuild (1)\n  orders\n\ndbt selector anchors\n  a+: 1 dbt resources\n\nWarnings\n  careful",
+    }];
+
+    for test_case in test_cases {
+        let display: DisplayLimit = DisplayLimit {
+            max_entries: test_case.max_entries,
+            overflow_flag: "--verbose".to_owned(),
+        };
+        assert_eq!(
+            format_dbt_interop_plan(&test_case.plan, None, (&display, false)),
+            test_case.expected_text,
             "{}",
             test_case.description
         );

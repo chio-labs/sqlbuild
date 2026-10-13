@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from sqlbuild._native import ConnectionProgressReporter, apply_command_warehouse
+from sqlbuild._native import (
+    ConnectionProgressReporter,
+    apply_command_warehouse,
+    render_dbt_interop_plan,
+)
 from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
 from sqlbuild.cli.commands.main.execution.connection_progress import (
     build_connection_progress_reporter,
@@ -18,7 +22,6 @@ from sqlbuild.integrations.dbt._helpers.pipeline.execute import (
     render_dbt_execution_summary_footer,
 )
 from sqlbuild.integrations.dbt._helpers.pipeline.plan_output import build_sqlbuild_plan_output
-from sqlbuild.integrations.dbt.main.pipeline.render_plan import render_dbt_interop_plan
 from sqlbuild.integrations.dbt.main.profile._resolve_connection_config import (
     resolve_connection_config,
 )

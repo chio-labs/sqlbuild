@@ -25,3 +25,10 @@ pub(super) struct PlanTextTestCase {
     pub(super) expected_text: &'static str,
     pub(super) expected_completion: &'static str,
 }
+
+pub(super) struct DbtPlanTextTestCase {
+    pub(super) description: &'static str,
+    pub(super) plan: crate::cli_text::models::DbtInteropPlanText,
+    pub(super) max_entries: Option<usize>,
+    pub(super) expected_text: &'static str,
+}

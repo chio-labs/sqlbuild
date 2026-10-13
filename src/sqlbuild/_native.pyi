@@ -227,9 +227,13 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.integrations.dbt.models import (
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtLsNode,
     NormalizedDbtProfileConnection,
     ResolvedDbtProfileOutput,
 )
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -1390,6 +1394,25 @@ def build_dbt_init_project_toml(
     target_path: str,
     target_schema: str | None,
     target_database: str | None,
+) -> str: ...
+def build_dbt_interop_plan(
+    *,
+    command: DbtInteropCommand | str,
+    dbt_command_argv: Sequence[str],
+    dbt_ls_nodes: Sequence[DbtLsNode],
+    sqlbuild_command_argvs: Sequence[Sequence[str]],
+    selection: DbtInteropSelectionResult,
+    dbt_required_selector_terms: Sequence[str] = (),
+    supplemental_dbt_command_argvs: Sequence[Sequence[str]] = (),
+    warnings: Sequence[str] = (),
+    sqlbuild_plan_output: PlanOutput | None = None,
+) -> DbtInteropPlan: ...
+def render_dbt_interop_plan(
+    *,
+    plan: DbtInteropPlan,
+    json_output: bool,
+    use_color: bool,
+    display_options: DisplayOptions | None = None,
 ) -> str: ...
 def run_debug_command(
     *,
