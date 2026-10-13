@@ -9,7 +9,12 @@ from typing import Any, Literal, TextIO, TypedDict, overload
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
-from sqlbuild.adapter.contract.models import ColumnInfo, ExpressionInferenceProfile, RelationInfo
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    ExpressionInferenceProfile,
+    QueryResult,
+    RelationInfo,
+)
 from sqlbuild.adapter.contract.types import (
     AdapterExecute,
     FrameworkType,
@@ -2906,6 +2911,16 @@ def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str
 def run_test_command(*, request: TestCommandRequest) -> int: ...
 def run_seed_command(*, request: SeedCommandRequest) -> int: ...
 def run_audit_command(*, request: AuditCommandRequest) -> int: ...
+def run_query_command(
+    *,
+    project_dir: Path | None,
+    sql: str | None,
+    query_file: Path | None = None,
+    selected_target: str | None = None,
+    output_format: str = "long",
+    limit: int | None = 20,
+) -> int: ...
+def render_query_result(*, result: QueryResult, output_format: str, limit: int | None) -> str: ...
 def format_parameterized_test_label(
     *,
     name: str,

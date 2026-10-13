@@ -453,7 +453,7 @@ const QUERY_ARGUMENTS: [Field; 6] = [
 ];
 pub(crate) const QUERY_ROUTE: Route = routed(
     "run_query",
-    ("sqlbuild.cli.commands.main.inspection._query", "run_query"),
+    ("sqlbuild._native", "run_query_command"),
     &QUERY_ARGUMENTS,
     CallShape {
         slot_positional: 0,

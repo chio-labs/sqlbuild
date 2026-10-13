@@ -18,6 +18,7 @@ pub mod models;
 pub mod panics;
 pub mod posix_path;
 pub mod progress;
+pub mod query_command;
 pub mod redaction;
 pub mod seed_command;
 pub mod terminal_events;
