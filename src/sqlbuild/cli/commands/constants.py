@@ -2,25 +2,20 @@
 
 from types import MappingProxyType
 
-from sqlbuild.cli.commands.types import CliCommand, CompileLineageMode, PlaygroundTemplate
-from sqlbuild.compiler.lineage.types import ColumnLineageMode
+from sqlbuild.cli.commands.types import CliCommand, PlaygroundTemplate
 from sqlbuild.spec.contracts.types import WarehouseGroup
 
 C0_CONTROL_CODE_LIMIT: int = 32
 C1_CONTROL_CODE_START: int = 127
 C1_CONTROL_CODE_LIMIT: int = 160
-COMPILE_LINEAGE_MODE_VALUES: tuple[str, ...] = tuple(mode.value for mode in CompileLineageMode)
 RICH_LINEAGE_STATUS_MODEL_THRESHOLD: int = 100
 EMPTY_DAG_PATH: str = ""
 TARGET_DIRECTORY_NAME: str = "target"
 SQLBUILD_CONCURRENCY_ENV_VAR: str = "SQLBUILD_CONCURRENCY"
-EMPTY_ENV_VALUE: str = ""
 NO_COLOR_OPTION: str = "--no-color"
-DEBUG_OPTION: str = "--debug"
 DBT_INIT_COMMAND: str = "init"
 SCENARIO_TEST_COMMAND: str = "test"
 SCENARIO_CAPTURE_COMMAND: str = "capture"
-COLUMN_LINEAGE_MODE_VALUES: tuple[str, ...] = tuple(mode.value for mode in ColumnLineageMode)
 UNLIMITED_DEPTH_VALUE: str = "all"
 UPSTREAM_DIRECTION: str = "upstream"
 DOWNSTREAM_DIRECTION: str = "downstream"
@@ -64,7 +59,6 @@ SQL_ANALYSIS_CONFIG_KEY: str = "sql_analysis"
 GRAPH_SELECTOR_EXPANSION_MARKER: str = "+"
 GRAPH_SELECTOR_PATH_MARKER: str = "~"
 DBT_JSON_OUTPUT_OPTION: str = "--json"
-DBT_PASSTHROUGH_SEPARATOR: str = "--"
 DBT_VERBOSE_OPTIONS: frozenset[str] = frozenset({"--verbose", "-v"})
 DBT_CLI_OUTPUT_OPTIONS: frozenset[str] = frozenset({DBT_JSON_OUTPUT_OPTION, *DBT_VERBOSE_OPTIONS})
 DBT_NO_CONNECTION_OPTION: str = "--no-connection"
@@ -132,18 +126,6 @@ QUERY_DIFF_INCOMPLETE_EXECUTION_CODES: frozenset[str] = frozenset({"C237", "C238
 CLI_WAREHOUSE_SOURCE: str = "--warehouse"
 CONNECTION_WAREHOUSE_SOURCE: str = "connection warehouse"
 CONNECTION_DEFAULT_WAREHOUSE_SOURCE: str = "connection default"
-POSITIONAL_SELECT_COMMANDS: frozenset[str] = frozenset(
-    {
-        CliCommand.AUDIT,
-        CliCommand.BUILD,
-        CliCommand.CHECK,
-        CliCommand.COMPILE,
-        CliCommand.FRESHNESS,
-        CliCommand.PLAN,
-        CliCommand.SEED,
-        CliCommand.TEST,
-    }
-)
 COMMAND_WAREHOUSE_GROUPS: MappingProxyType[CliCommand, WarehouseGroup | None] = MappingProxyType(
     {
         CliCommand.AUDIT: WarehouseGroup.BUILD,

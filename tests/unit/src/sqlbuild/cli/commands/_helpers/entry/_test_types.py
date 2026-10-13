@@ -112,3 +112,41 @@ class HiddenOptionTestCase:
     description: str
     option: str
     expected_listed: bool
+
+
+@dataclass(frozen=True)
+class ChoiceListTestCase:
+    """One option whose choices come from a Python enum."""
+
+    description: str
+    argv: tuple[str, ...]
+    option: str
+    expected_choices: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VarsRejectionTestCase:
+    """One invalid --vars value and the error it reports."""
+
+    description: str
+    vars_value: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class TypedValueTestCase:
+    """One accepted command line and the typed value an attribute ends with."""
+
+    description: str
+    argv: tuple[str, ...]
+    attribute: str
+    expected_value: object
+
+
+@dataclass(frozen=True)
+class HelpOutputTestCase:
+    """One help request and how its output starts."""
+
+    description: str
+    argv: tuple[str, ...]
+    expected_usage: str

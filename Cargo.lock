@@ -1254,6 +1254,7 @@ dependencies = [
  "sqlbuild-analysis",
  "sqlbuild-attachments",
  "sqlbuild-cache",
+ "sqlbuild-cli",
  "sqlbuild-config",
  "sqlbuild-core",
  "sqlbuild-discovery",

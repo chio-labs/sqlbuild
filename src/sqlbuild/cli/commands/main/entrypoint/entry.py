@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import argparse
 from collections.abc import Mapping, Sequence
 
 from sqlbuild.cli.commands._helpers.entry.errors import cli_error_use_color
 from sqlbuild.cli.commands._helpers.entry.lazy_handlers import build_lazy_cli_handlers
-from sqlbuild.cli.commands._helpers.entry.parser import build_cli_parser
 from sqlbuild.cli.commands._helpers.entry.parsing import parse_cli_invocation
 from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.entry.models import (
@@ -49,8 +47,7 @@ def _main_with_dependencies(
     ):
         with diagnostics_context(sqlbuild_invocation_id=identity.invocation_id):
             use_color: bool = cli_error_use_color(argv=argv, supports_color=supports_color)
-            parser: argparse.ArgumentParser = build_cli_parser(use_color=use_color)
-            invocation: ParsedCliInvocation = parse_cli_invocation(argv=argv, parser=parser)
+            invocation: ParsedCliInvocation = parse_cli_invocation(argv=argv, use_color=use_color)
             if invocation.args is None:
                 return invocation.exit_code if invocation.exit_code is not None else 1
             args: CliNamespace = invocation.args
