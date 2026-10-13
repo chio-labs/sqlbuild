@@ -136,8 +136,10 @@ pub(crate) fn escaped(text: &Bound<'_, PyString>) -> PyResult<String> {
         .call_method1("encode", (UTF16_ENCODING, SURROGATE_PASS))?
         .extract()?;
     let units = encoded
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]));
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair));
     Ok(char::decode_utf16(units)
         .map(|decoded| match decoded {
             Ok(character) => character.to_string(),

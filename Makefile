@@ -33,11 +33,14 @@ type:
 dev-native:
 	uv run --no-sync maturin develop --profile dev --skip-install
 
-rust-check:
-	cargo fmt --all --check
-	cargo clippy --workspace --all-targets --all-features -- -D warnings
+rust-check: rust-lint
 	uv run fensu check
 	cargo test --workspace --all-features
+
+.PHONY: rust-lint
+rust-lint:
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 
 test:
@@ -604,7 +607,7 @@ verify-quick:
 	exit $$status
 
 
-check-ci: check-e2e-shards check-native-layering check-python-boundary
+check-ci: check-e2e-shards check-native-layering check-python-boundary rust-lint
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
