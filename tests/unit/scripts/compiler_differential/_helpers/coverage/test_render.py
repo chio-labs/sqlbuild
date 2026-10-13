@@ -17,7 +17,7 @@ from scripts.compiler_differential._helpers.coverage.render import (
 from scripts.compiler_differential.constants import RENDER_NON_COLLECTION_FIELDS
 from sqlbuild.compiler.compile.models import CompileProjectInputs
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
+from sqlbuild._native import render_stage_capture
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.scripts.compiler_differential._helpers.coverage._test_types import (

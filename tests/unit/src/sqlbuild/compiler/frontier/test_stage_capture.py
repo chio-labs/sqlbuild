@@ -9,15 +9,12 @@ from pathlib import Path
 import pytest
 
 from scripts.compiler_differential.classes.capture_file import expand_capture_text
-from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
-from sqlbuild.compiler.frontier.classes.stage_capture_encoder import StageCaptureEncoder
+from sqlbuild._native import render_stage_capture
 from sqlbuild.compiler.frontier.constants import (
     STAGE_CAPTURE_DIR_ENV_VAR,
-    STAGE_CAPTURE_OMITTED_ATTRIBUTES,
     STAGE_CAPTURE_SHARED_NODES_KEY,
-    STAGE_CAPTURE_UNORDERED_ATTRIBUTES,
 )
-from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
+from sqlbuild._native import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerStage
 from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     FrontierCaptureTestCase,
@@ -25,10 +22,10 @@ from tests.unit.src.sqlbuild.compiler.frontier._test_types import (
     SharedCaptureTestCase,
     StageCaptureOrderTestCase,
     StageCaptureTestCase,
-    UnorderedAttributeTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.frontier.helpers import (
     HELPERS_MODULE,
+    declaration_scope_build,
     linked_customer,
     memo_catalog,
     order_line,
@@ -193,6 +190,12 @@ def test_given_frontier_value_when_rendering_capture_then_json_is_canonical(
             expected_identical=True,
         ),
         StageCaptureOrderTestCase(
+            description="undeclared_attribute_map_order_stays_visible",
+            first=lambda: memo_catalog(memo_keys=("orders", "customers"), ordered_keys=()),
+            second=lambda: memo_catalog(memo_keys=("customers", "orders"), ordered_keys=()),
+            expected_identical=False,
+        ),
+        StageCaptureOrderTestCase(
             description="binding_catalog_relations_stay_visible",
             first=lambda: orders_binding_catalog(
                 shared_analyses=(), relations=("orders", "customers")
@@ -214,58 +217,19 @@ def test_given_reordered_value_when_rendering_capture_then_only_unordered_collec
 @pytest.mark.parametrize(
     "test_case",
     [
-        UnorderedAttributeTestCase(
-            description="memo_fill_order_is_not_visible",
-            first_memo_keys=("orders", "customers"),
-            second_memo_keys=("customers", "orders"),
-            first_ordered_keys=("orders", "customers"),
-            second_ordered_keys=("orders", "customers"),
-            expected_identical=True,
-        ),
-        UnorderedAttributeTestCase(
-            description="other_attribute_order_stays_visible",
-            first_memo_keys=("orders", "customers"),
-            second_memo_keys=("orders", "customers"),
-            first_ordered_keys=("orders", "customers"),
-            second_ordered_keys=("customers", "orders"),
-            expected_identical=False,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_declared_memo_attribute_when_rendering_capture_then_only_it_is_sorted(
-    test_case: UnorderedAttributeTestCase, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setitem(
-        STAGE_CAPTURE_UNORDERED_ATTRIBUTES, f"{HELPERS_MODULE}:MemoCatalog", frozenset({"memo"})
-    )
-    first: str = render_stage_capture(
-        memo_catalog(memo_keys=test_case.first_memo_keys, ordered_keys=test_case.first_ordered_keys)
-    )
-    second: str = render_stage_capture(
-        memo_catalog(
-            memo_keys=test_case.second_memo_keys, ordered_keys=test_case.second_ordered_keys
-        )
-    )
-
-    assert (first == second) is test_case.expected_identical
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         OmittedFieldTestCase(
             description="declared_process_handle_field_is_left_out",
-            omitted=frozenset({"status"}),
+            value=declaration_scope_build,
             expected_capture={
-                "__type__": f"{HELPERS_MODULE}:OrderLine",
-                "order_id": 7,
-                "path": {"__path__": "models/a.sql"},
+                "__type__": f"{_COMPILE_MODELS}:DeclarationScopeBuild",
+                "loaded_macros": {},
+                "index": "orders_index",
+                "resolver": "orders_resolver",
             },
         ),
         OmittedFieldTestCase(
             description="undeclared_dataclass_keeps_every_field",
-            omitted=frozenset(),
+            value=order_line,
             expected_capture={
                 "__type__": f"{HELPERS_MODULE}:OrderLine",
                 "order_id": 7,
@@ -277,13 +241,9 @@ def test_given_declared_memo_attribute_when_rendering_capture_then_only_it_is_so
     ids=lambda case: case.description,
 )
 def test_given_declared_omitted_field_when_rendering_dataclass_capture_then_it_is_left_out(
-    test_case: OmittedFieldTestCase, monkeypatch: pytest.MonkeyPatch
+    test_case: OmittedFieldTestCase,
 ) -> None:
-    monkeypatch.setitem(
-        STAGE_CAPTURE_OMITTED_ATTRIBUTES, f"{HELPERS_MODULE}:OrderLine", test_case.omitted
-    )
-
-    capture: object = json.loads(render_stage_capture(order_line()))
+    capture: object = json.loads(render_stage_capture(test_case.value()))
 
     assert capture == test_case.expected_capture
 
@@ -306,7 +266,7 @@ def test_given_repeated_large_subtrees_when_rendering_capture_then_each_is_store
 
     shared: dict[str, object] = json.loads(text)[STAGE_CAPTURE_SHARED_NODES_KEY]
     assert len(shared) == test_case.expected_shared_nodes
-    assert expand_capture_text(text) == StageCaptureEncoder().encode(test_case.value())
+    assert expand_capture_text(text) == test_case.value()
     assert {
         hashlib.sha256(
             json.dumps(node, ensure_ascii=False, separators=(",", ":")).encode()

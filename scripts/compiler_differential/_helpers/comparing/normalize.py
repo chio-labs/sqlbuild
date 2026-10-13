@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from scripts.compiler_differential.constants import ELAPSED_TIME_MASK, ELAPSED_TIME_PATTERN
-from sqlbuild.compiler.frontier.classes.stage_capture_encoder import mask_capture_noise
+from sqlbuild._native import mask_capture_noise
 
 
 def normalize_artifact_text(text: str) -> str:

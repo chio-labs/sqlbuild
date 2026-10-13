@@ -12,6 +12,7 @@ pub(crate) mod contracts;
 pub(crate) mod dag_artifact;
 pub(crate) mod discovery;
 pub(crate) mod fingerprints;
+pub(crate) mod frontier;
 pub(crate) mod graph;
 pub(crate) mod lineage;
 pub(crate) mod manifest;

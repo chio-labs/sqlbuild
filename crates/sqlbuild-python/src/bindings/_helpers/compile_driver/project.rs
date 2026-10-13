@@ -9,7 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
 
-const FRONTIER_MODULE: &str = "sqlbuild.compiler.frontier.main._compile_frontier";
+const FRONTIER_MODULE: &str = "sqlbuild._native";
 const FRONTIER_TYPES_MODULE: &str = "sqlbuild.compiler.frontier.types";
 const BUILD_INPUTS_MODULE: &str = "sqlbuild._native";
 const ASSEMBLE_MODULE: &str = "sqlbuild._native";

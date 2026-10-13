@@ -16,7 +16,7 @@ from scripts.compiler_differential._helpers.coverage.discovery import (
 )
 from scripts.compiler_differential.constants import DISCOVERY_NON_COLLECTION_FIELDS
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
+from sqlbuild._native import render_stage_capture
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.scripts.compiler_differential._helpers.coverage._test_types import (
     AuthoredByteKindsTestCase,

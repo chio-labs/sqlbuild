@@ -1,0 +1,44 @@
+//! The capture document, written as shared nodes followed by its root.
+
+use sqlbuild_core::json::errors::JsonEmitError;
+use sqlbuild_core::json::main::dumps::dumps;
+use sqlbuild_core::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
+
+use crate::stage_capture::constants::{ROOT_KEY, SHARED_NODES_KEY};
+
+/// One capture document: each shared node and then the root, each on its own line.
+#[derive(Debug, Default)]
+pub struct CaptureDocument {
+    shared: bool,
+}
+
+/// `json.dumps(value, ensure_ascii=False, allow_nan=False, ...)` with `indent` and separators.
+pub(crate) fn capture_dialect(indent: Option<usize>, separators: (&str, &str)) -> JsonDialect {
+    JsonDialect::Stdlib(StdlibJsonOptions {
+        ensure_ascii: false,
+        allow_nan: false,
+        ..StdlibJsonOptions::new(indent).with_separators(separators.0, separators.1)
+    })
+}
+
+impl CaptureDocument {
+    /// The text that appends one shared node, given as compact JSON.
+    pub fn shared_chunk(&mut self, digest: &str, text: &str) -> String {
+        let prefix: String = if self.shared {
+            ",\n".to_owned()
+        } else {
+            format!("{{\"{SHARED_NODES_KEY}\": {{\n")
+        };
+        self.shared = true;
+        format!("{prefix}\"{digest}\": {text}")
+    }
+
+    /// The text that writes the root and closes the document.
+    pub fn final_chunk(&self, root: &JsonValue) -> Result<String, JsonEmitError> {
+        if !self.shared {
+            return Ok(dumps(root, &capture_dialect(Some(1), (",", ": ")))? + "\n");
+        }
+        let compact: String = dumps(root, &capture_dialect(None, (",", ":")))?;
+        Ok(format!("\n}},\n\"{ROOT_KEY}\": {compact}\n}}\n"))
+    }
+}

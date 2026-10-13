@@ -14,7 +14,7 @@ from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
 from sqlbuild.compiler.compile.models import CompileAdapterContext
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier.main._compile_frontier import compile_frontier
+from sqlbuild._native import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.scopes._helpers.builder import build_tolerant_scope_index
 from sqlbuild.compiler.scopes._helpers.cache import (

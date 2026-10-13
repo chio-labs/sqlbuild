@@ -37,7 +37,7 @@ from scripts.compiler_differential.constants import (
 )
 from sqlbuild.adapter.discovery.constants import BUILTIN_ADAPTER_IMPORTS
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_OMITTED_ATTRIBUTES
+from sqlbuild._native import STAGE_CAPTURE_OMITTED_ATTRIBUTES
 
 _OMITTED_DISCOVERY_FIELDS: frozenset[str] = STAGE_CAPTURE_OMITTED_ATTRIBUTES.get(
     f"{DiscoveredProjectInputs.__module__}:{DiscoveredProjectInputs.__qualname__}", frozenset()

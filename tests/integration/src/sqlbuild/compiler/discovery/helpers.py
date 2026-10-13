@@ -52,7 +52,7 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
     TolerantScopeDiscovery,
 )
-from sqlbuild.compiler.frontier._helpers.stage_capture import render_stage_capture
+from sqlbuild._native import render_stage_capture
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,

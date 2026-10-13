@@ -100,6 +100,7 @@ from sqlbuild.compiler.discovery.models import (
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
+from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
     DirectSemanticColumnUse,
@@ -161,6 +162,7 @@ from sqlbuild.spec.contracts.models import (
 from sqlbuild.sql_values.models import SqlValue
 
 BUILD_IDENTITY: str
+STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
 
 class NativeCompilerError(RuntimeError):
     """An internal native compiler failure: a panic or a broken native invariant."""
@@ -1111,6 +1113,14 @@ def build_compiled_project(
     resolved_connection: dict[str, object] | None = None,
     analysis_selection: CompileAnalysisSelection | None = None,
 ) -> CompiledProjectView: ...
+def compile_frontier[T](
+    *,
+    until: CompilerStage,
+    python_stage: Callable[[], T],
+    native_stage: Callable[[], T] | None = None,
+) -> T: ...
+def render_stage_capture(value: object) -> str: ...
+def mask_capture_noise(text: str) -> str: ...
 def assemble_project(
     *,
     inputs: CompileInputsView,

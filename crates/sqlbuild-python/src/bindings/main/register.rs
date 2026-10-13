@@ -6,8 +6,8 @@ use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::{
     analysis, analysis_session, attachments, boundary, cache, cli, compile_attachment,
     compile_driver, compile_outputs, compiled_project, contracts, dag_artifact, discovery,
-    fingerprints, graph, lineage, manifest, model_config, project_assembly, refactor, render,
-    rules, scopes, semantic_checks, sql_test_glue, sqltext, type_system,
+    fingerprints, frontier, graph, lineage, manifest, model_config, project_assembly, refactor,
+    render, rules, scopes, semantic_checks, sql_test_glue, sqltext, type_system,
 };
 use crate::bindings::models;
 
@@ -61,6 +61,7 @@ fn register_analysis_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     compiled_project::registration::register(module)?;
     compile_attachment::registration::register(module)?;
     compile_driver::registration::register(module)?;
+    frontier::registration::register(module)?;
     dag_artifact::registration::register(module)?;
     manifest::registration::register(module)?;
     Ok(())

@@ -32,7 +32,7 @@ from scripts.compiler_differential.constants import (
 )
 from sqlbuild.compiler.auditing.constants import BUILT_IN_AUDIT_NAMES
 from sqlbuild.compiler.compile.models import CompileProjectInputs
-from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_OMITTED_ATTRIBUTES
+from sqlbuild._native import STAGE_CAPTURE_OMITTED_ATTRIBUTES
 
 _MACRO_CALL: re.Pattern[str] = re.compile(r"@([A-Za-z_]\w*)\(")
 _REFERENCE_CALL: re.Pattern[str] = re.compile(r"__(ref|source|seed)\(\s*\"([^\"]+)\"\s*\)")
