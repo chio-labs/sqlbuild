@@ -33,6 +33,10 @@ type:
 dev-native:
 	uv run --no-sync maturin develop --profile dev --skip-install
 
+.PHONY: fast-native
+fast-native:
+	uv run --no-sync maturin develop --profile fast --skip-install
+
 rust-check: rust-lint
 	uv run fensu check
 	cargo test --workspace --all-features

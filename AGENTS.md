@@ -204,7 +204,7 @@
 ## Rust and Native Builds
 
 - Python imports the native extension built from `crates/sqlbuild-python`. After changing any
-  Rust, rebuild it incrementally with `uv run --no-sync maturin develop --release --skip-install`
+  Rust, rebuild it incrementally with `make fast-native` (release optimisation, incremental)
   before running Python tests. Use one profile consistently within a worktree.
 - Always run Python commands with `uv run --no-sync`. A syncing `uv run` or `uv sync` can replace
   the locally built extension with a packaged one; if that happens, rebuild with maturin rather
