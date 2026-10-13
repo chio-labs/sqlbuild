@@ -162,7 +162,7 @@ fn record<'py>(
         observation.getattr("value_kind")?.getattr("value")?,
     )?;
     fields.set_item("data_version", &data_version)?;
-    fields.set_item(NATIVE, data_version_hash)?;
+    fields.set_item("data_version_hash", data_version_hash)?;
     fields.set_item("observed_at", observation.getattr("observed_at")?)?;
     py.import(FRESHNESS_MODELS)?
         .getattr("SourceFreshnessRecord")?
