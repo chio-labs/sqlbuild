@@ -440,9 +440,9 @@ class NativeRulesEvaluation:
 
 @dataclass(frozen=True)
 class CustomRulesOutcome:
-    """Custom-rule finding payloads in canonical order and their cache accounting."""
+    """Custom-rule findings in canonical order and their cache accounting."""
 
-    findings: tuple[dict[str, object], ...]
+    findings: tuple[Finding, ...]
     cache_hits: int
     cache_misses: int
     custom_ms: int

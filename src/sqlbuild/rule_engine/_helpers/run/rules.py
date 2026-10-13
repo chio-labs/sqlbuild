@@ -57,7 +57,6 @@ from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_sele
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
 from sqlbuild.rule_engine._helpers.engine.native import (
     custom_rule_payloads,
-    decode_rule_finding,
     evaluate_native,
     finalize_native_findings,
     native_catalogue,
@@ -742,15 +741,8 @@ def _cached_sql_findings(
 ) -> dict[str, tuple[Finding, ...]]:
     """Decoded stored findings of each path whose key still matches; undecodable ones miss."""
 
-    hits: dict[str, str]
-    hits, _ = lookup_sql_rule_cache(entries=bucket, keys=list(keys.items()))
-    decoded: dict[str, tuple[Finding, ...]] = {}
-    for path, payload in hits.items():
-        try:
-            decoded[path] = tuple(decode_rule_finding(value) for value in json.loads(payload))
-        except (KeyError, RulesError, TypeError, ValueError):
-            continue
-    return decoded
+    hits: dict[str, list[Finding]] = lookup_sql_rule_cache(entries=bucket, keys=list(keys.items()))
+    return {path: tuple(findings) for path, findings in hits.items()}
 
 
 def _selected_model_paths(

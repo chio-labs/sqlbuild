@@ -4,9 +4,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
-use pyo3::{IntoPyObjectExt, Py, pyclass, pyfunction, pymethods, wrap_pyfunction};
-use serde_json::Value;
+use pyo3::types::{PyDict, PyTuple};
+use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_rules::custom_rule_cache::main::custom_rule_cache_text::custom_rule_cache_text;
 use sqlbuild_rules::custom_rule_cache::main::lookup_custom_rule_cache::lookup_custom_rule_cache;
 use sqlbuild_rules::custom_rule_cache::main::ordered_custom_findings::ordered_custom_findings;
@@ -24,6 +23,7 @@ use sqlbuild_rules::custom_rule_cache::types::{ReadSet, StoredRules, SubjectResu
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::rules::findings::{FindingClasses, invalid_finding};
 
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const RULES_ERROR: &str = "RulesError";
@@ -55,33 +55,6 @@ fn custom_rule_identity(request: Option<&Bound<'_, PyDict>>) -> PyResult<String>
         dialect: request.get("dialect")?.extract()?,
         project_dir: request.get("project_dir")?.extract()?,
     }))
-}
-
-fn python_value(py: Python<'_>, value: &Value) -> PyResult<Py<PyAny>> {
-    match value {
-        Value::Null => Ok(py.None()),
-        Value::Bool(flag) => flag.into_py_any(py),
-        Value::Number(number) => match (number.as_i64(), number.as_u64()) {
-            (Some(integer), _) => integer.into_py_any(py),
-            (None, Some(integer)) => integer.into_py_any(py),
-            (None, None) => number.as_f64().unwrap_or(f64::NAN).into_py_any(py),
-        },
-        Value::String(text) => text.into_py_any(py),
-        Value::Array(items) => {
-            let values: Vec<Py<PyAny>> = items
-                .iter()
-                .map(|item| python_value(py, item))
-                .collect::<PyResult<_>>()?;
-            PyList::new(py, values)?.into_py_any(py)
-        }
-        Value::Object(entries) => {
-            let dictionary: Bound<'_, PyDict> = PyDict::new(py);
-            for (key, item) in entries {
-                dictionary.set_item(key, python_value(py, item)?)?;
-            }
-            dictionary.into_py_any(py)
-        }
-    }
 }
 
 fn readset_tuple<'py>(py: Python<'py>, readset: &ReadSet) -> PyResult<Bound<'py, PyTuple>> {
@@ -232,11 +205,16 @@ impl CustomRuleCache {
         Ok(())
     }
 
-    /// Every finding payload in rule code, then subject order.
-    fn findings(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+    /// Every finding in rule code, then subject order; a malformed payload is a `RulesError`.
+    fn findings<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        let classes = FindingClasses::new(py)?;
         ordered_custom_findings(&self.rules, &self.results)
             .iter()
-            .map(|finding| python_value(py, finding))
+            .map(|finding| {
+                classes
+                    .finding_of_payload(finding)?
+                    .ok_or_else(|| invalid_finding(py))
+            })
             .collect()
     }
 

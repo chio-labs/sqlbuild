@@ -4,7 +4,9 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
@@ -12,6 +14,7 @@ use serde_json::{Value, json};
 use sqlbuild_rules::rule_cache::main::file_rule_key::file_rule_key;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::rules::findings::FindingClasses;
 use sqlbuild_rules::rule_cache::main::lint_key::lint_key;
 use sqlbuild_rules::rule_cache::main::lookup_rule_cache::lookup_rule_cache;
 use sqlbuild_rules::rule_cache::main::model_rule_key::model_rule_key;
@@ -117,20 +120,27 @@ fn cached_entries(entries: &StoredEntries) -> PyResult<CachedEntries> {
         .collect()
 }
 
-/// `(hits, misses)`: stored findings JSON of paths whose key matches, and every other path.
+/// The stored findings of each path whose key matches; undecodable stored findings miss.
 #[pyfunction]
 #[pyo3(signature = (*, entries, keys))]
-fn lookup_sql_rule_cache(
+fn lookup_sql_rule_cache<'py>(
+    py: Python<'py>,
     entries: StoredEntries,
     keys: Vec<(String, String)>,
-) -> PyResult<(BTreeMap<String, String>, Vec<String>)> {
+) -> PyResult<BTreeMap<String, Vec<Bound<'py, PyAny>>>> {
     let lookup: CacheLookup = lookup_rule_cache(&cached_entries(&entries)?, &keys);
-    let hits: BTreeMap<String, String> = lookup
-        .hits
-        .into_iter()
-        .map(|(path, findings)| Ok((path, serde_json::to_string(&findings).map_err(invalid)?)))
-        .collect::<PyResult<_>>()?;
-    Ok((hits, lookup.misses))
+    let classes = FindingClasses::new(py)?;
+    let mut hits: BTreeMap<String, Vec<Bound<'py, PyAny>>> = BTreeMap::new();
+    for (path, findings) in lookup.hits {
+        let decoded: Option<Vec<Bound<'py, PyAny>>> = findings
+            .iter()
+            .map(|finding| classes.finding_of_payload(finding))
+            .collect::<PyResult<_>>()?;
+        if let Some(decoded) = decoded {
+            hits.insert(path, decoded);
+        }
+    }
+    Ok(hits)
 }
 
 fn finding_payload(finding: &Bound<'_, PyAny>) -> PyResult<Value> {

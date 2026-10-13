@@ -3,8 +3,8 @@
 use sqlbuild_analysis::contracts::main::join_helps::join_helps;
 use sqlbuild_core::cli_text::main::format_count_noun::format_count_noun;
 
-use crate::configuration::main::setting_help::setting_help;
 use crate::configuration::errors::ConfigPolicyError;
+use crate::configuration::main::setting_help::setting_help;
 use crate::constants::PROJECT_CONFIG_FILE;
 use crate::models::RulesConfig;
 

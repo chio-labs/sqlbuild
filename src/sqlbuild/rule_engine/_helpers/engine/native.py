@@ -6,7 +6,7 @@ import inspect
 import json
 from collections.abc import Callable
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from functools import partial
 from pathlib import Path
 
@@ -117,7 +117,7 @@ def _evaluate_native_rows(
         )
     findings: tuple[Finding, ...] = (
         *native.findings,
-        *(decode_rule_finding(value) for value in custom.findings),
+        *custom.findings,
     )
     if not defer_suppressions:
         findings = finalize_native_findings(
@@ -196,36 +196,11 @@ def finalize_native_findings(
 ) -> tuple[Finding, ...]:
     """Apply exception policy once to completed SQL, native, and custom findings."""
 
-    return _with_fixable(
-        original=findings,
-        finalized=finalize_rules_rows(
-            config=config,
-            project_dir=project_dir,
-            evaluated_codes=evaluated_codes,
-            findings=findings,
-        ),
-    )
-
-
-def _with_fixable(
-    *, original: tuple[Finding, ...], finalized: tuple[Finding, ...]
-) -> tuple[Finding, ...]:
-    fixable: frozenset[tuple[str, str, int, int, str]] = frozenset(
-        _finding_identity(finding) for finding in original if finding.fixable
-    )
-    return tuple(
-        replace(finding, fixable=True) if _finding_identity(finding) in fixable else finding
-        for finding in finalized
-    )
-
-
-def _finding_identity(finding: Finding) -> tuple[str, str, int, int, str]:
-    return (
-        finding.code,
-        finding.path.as_posix(),
-        finding.line,
-        finding.column,
-        finding.message,
+    return finalize_rules_rows(
+        config=config,
+        project_dir=project_dir,
+        evaluated_codes=evaluated_codes,
+        findings=findings,
     )
 
 
@@ -377,47 +352,4 @@ def _custom_rule_source_payload(*, rule: Rule, project_dir: Path) -> dict[str, o
         "source_line": source_line,
         "source_column": 1,
         "owner": f"{source or 'rules'}:{check_owner}",
-    }
-
-
-def decode_rule_finding(value: object) -> Finding:
-    if not isinstance(value, dict):
-        raise RulesError("native rules engine returned an invalid finding")
-    payload: dict[str, object] = {str(key): item for key, item in value.items()}
-    code: object = payload.get("code")
-    path: object = payload.get("path")
-    line: object = payload.get("line")
-    column: object = payload.get("column")
-    message: object = payload.get("message")
-    remediation: object = payload.get("remediation")
-    if (
-        not isinstance(code, str)
-        or not isinstance(path, str)
-        or not isinstance(line, int)
-        or not isinstance(column, int)
-        or not isinstance(message, str)
-        or not isinstance(remediation, str)
-    ):
-        raise RulesError("native rules engine returned an invalid finding")
-    return Finding(
-        code=code,
-        path=Path(path),
-        line=line,
-        column=column,
-        message=message,
-        remediation=remediation,
-        unevaluated=payload.get("unevaluated") is True,
-        fixable=payload.get("fixable") is True,
-    )
-
-
-def _finding_payload(finding: Finding) -> dict[str, object]:
-    return {
-        "unevaluated": finding.unevaluated,
-        "code": finding.code,
-        "path": finding.path.as_posix(),
-        "line": finding.line,
-        "column": finding.column,
-        "message": finding.message,
-        "remediation": finding.remediation,
     }

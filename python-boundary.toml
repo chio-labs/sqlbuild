@@ -276,10 +276,6 @@ location = "lint/_helpers/native_sql.py::_native_responses"
 note = "A native lint failure is reported as a lint error result, not recomputed in Python."
 
 [[handled_native_errors]]
-location = "rule_engine/_helpers/run/rules.py::_cached_sql_findings"
-note = "An undecodable cached finding is a cache miss; the rules run again natively."
-
-[[handled_native_errors]]
 location = "cli/commands/_helpers/refactor/compile_facts.py::compile_for_refactor"
 note = "Reports the Python stage errors the native compile driver propagates as refactor diagnostics; a native compiler failure is a RuntimeError and is not caught."
 
