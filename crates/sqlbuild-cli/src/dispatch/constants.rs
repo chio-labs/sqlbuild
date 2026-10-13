@@ -100,7 +100,7 @@ const SCOPE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SCOPE_ROUTE: Route = routed(
     "run_scope",
-    ("sqlbuild.cli.commands.main.inspection._scope", "run_scope"),
+    ("sqlbuild._native", "run_scope_command"),
     &SCOPE_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );

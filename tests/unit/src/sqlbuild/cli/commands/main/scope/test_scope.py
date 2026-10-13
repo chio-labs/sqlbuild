@@ -7,11 +7,11 @@ from io import StringIO
 
 import pytest
 
+from sqlbuild._native import run_scope_command
 from sqlbuild.cli.commands._helpers.runtime import adapter_context, connection
-from sqlbuild.cli.commands._helpers.scope import command as scope_command
-from sqlbuild.cli.commands._helpers.scope.command import run_scope_command
 from sqlbuild.cli.commands.models import ScopeCommandRequest
 from sqlbuild.compiler.scopes.models import ScopeCompleteness, ScopeIndex
+from sqlbuild.presentation.main import supports_color as color_support
 from tests.unit.src.sqlbuild.cli.commands.main.scope._test_types import ScopeCommandCase
 from tests.unit.src.sqlbuild.compiler.scopes.helpers import report_scope_lookup
 
@@ -100,7 +100,7 @@ def test_given_no_color_flag_when_rendering_text_to_color_terminal_then_output_i
     capsys: pytest.CaptureFixture[str],
     test_case: ScopeCommandCase,
 ) -> None:
-    monkeypatch.setattr(scope_command, "supports_color", lambda: True)
+    monkeypatch.setattr(color_support, "supports_color", lambda: True)
     index: ScopeIndex = report_scope_lookup().index
     outputs: list[str] = []
     for no_color in (False, True):

@@ -18,7 +18,8 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.types import CompileLineageMode
+from sqlbuild.cli.commands.models import ScopeCommandRequest
+from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
@@ -1964,6 +1965,18 @@ def scope_move_preview(
     lookup: ScopeLookup, resource: str | ResourceIdentity, destination: str | PurePath
 ) -> tuple[MovePreview | None, tuple[ScopeDiagnostic, ...]]: ...
 def serialize_scope_report(report: ScopeReport | ScopeBrowseResult | ScopeListResult) -> str: ...
+def run_scope_command(
+    *,
+    request: ScopeCommandRequest,
+    load_scope_index: ScopeIndexLoader | None = None,
+    output_stream: TextIO | None = None,
+) -> int: ...
+def render_scope_result(
+    *,
+    result: ScopeReport | ScopeBrowseResult | ScopeListResult,
+    request: ScopeCommandRequest,
+    use_color: bool = False,
+) -> str: ...
 def scope_metadata_projection(index: ScopeIndex) -> dict[str, JsonValue]: ...
 def effective_config_target_name(
     project_config: object, local_config: object, selected: str | None, /

@@ -41,6 +41,11 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn section(self, text: &str) -> String {
+        self.apply(BOLD, text)
+    }
+
+    #[must_use]
     pub fn plan_section(self, text: &str) -> String {
         self.apply(BOLD, text)
     }
