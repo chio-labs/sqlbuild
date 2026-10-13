@@ -142,6 +142,7 @@ from sqlbuild.compiler.python_nodes.models import (
     PythonSqlRunLifecyclePlan,
     PythonSqlRunSelection,
 )
+from sqlbuild.compiler.refactoring.models import ManualLocation
 from sqlbuild.compiler.references.models import (
     LiteralSqlRelation,
     ProjectRelation,
@@ -1769,9 +1770,14 @@ def select_latest_fingerprints(
 def glob_name_match(name: str, pattern: str, ignore_case: bool, /) -> bool: ...
 def lone_surrogate_site(raw_values: dict[str, object], /) -> tuple[str, str, int] | None: ...
 def environment_template_names(values: list[str | None], /) -> list[str]: ...
-def python_string_locations(
-    contents: str, names: list[str], context: str | None
-) -> list[tuple[int, int]]: ...
+def find_python_string_locations(
+    *,
+    project_dir: Path,
+    discovered: DiscoveredProjectInputs,
+    names: tuple[str, ...],
+    reason: str,
+    context: str | None = None,
+) -> tuple[ManualLocation, ...]: ...
 def resource_identity_suggestion(
     name: str, private_identity: bool, /
 ) -> tuple[str, str] | None: ...
