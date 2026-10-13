@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild._native import lint_native_headers, scan_headers
 from sqlbuild.compiler.compile.constants import MODEL_DIRECTORY_NAME
 from sqlbuild.compiler.compile.models import CompiledSqlExpansion, SqlExpansionContext
@@ -21,7 +22,6 @@ from sqlbuild.lint._helpers.expansion import (
 )
 from sqlbuild.lint._helpers.native_sql import run_native_sql_lint
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
-from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.models import (
     ExpandedLintFile,
     HeaderSpan,
@@ -108,10 +108,10 @@ def run_lint(
     return LintRunResult(
         files_checked=len(files),
         violations=sort_violations(
-            apply_suppressions(
-                violations=violations,
-                contents_by_path=files,
-                allow_suppressions=config.allow_suppressions,
+            _native.apply_lint_suppressions(
+                violations,
+                files,
+                config.allow_suppressions,
             )
         ),
         formatted_files=(),

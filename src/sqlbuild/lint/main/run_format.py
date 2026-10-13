@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild._native import (
     format_native_headers,
     lint_native_headers,
@@ -20,7 +21,6 @@ from sqlbuild.lint._helpers.fixes import finalize_fix_reports, persist_changes, 
 from sqlbuild.lint._helpers.headers import drop_resolved_description_faults
 from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
-from sqlbuild.lint._helpers.suppressions import apply_suppressions
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.lint.models import (
     FormatChange,
@@ -97,10 +97,10 @@ def run_format(
     return LintRunResult(
         files_checked=len(files),
         violations=sort_violations(
-            apply_suppressions(
-                violations=violations,
-                contents_by_path=final_contents,
-                allow_suppressions=config.allow_suppressions,
+            _native.apply_lint_suppressions(
+                violations,
+                final_contents,
+                config.allow_suppressions,
             )
         ),
         formatted_files=tuple(change.file_path for change in changes),

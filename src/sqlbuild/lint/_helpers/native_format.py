@@ -17,7 +17,6 @@ from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
 from sqlbuild.compiler.sql_analysis.constants import POLYGLOT_MAX_FUNCTION_CALL_DEPTH
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint._helpers.headers import lint_body_ranges
-from sqlbuild.lint._helpers.sqlbuild_tokens import neutralize_interpolation, restore_interpolation
 from sqlbuild.lint.constants import (
     CARRIAGE_RETURN_LINE_FEED,
     HEADER_KIND_SCENARIO,
@@ -27,7 +26,7 @@ from sqlbuild.lint.constants import (
     RULE_FORMAT_UNSAFE,
     VIOLATION_SEVERITY_FAULT,
 )
-from sqlbuild.lint.exceptions import InterpolationRestorationError, NativeLintError
+from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintConfig, LintViolation
 
 _NATIVE_FORMAT_API_VERSION: int = 1
@@ -95,8 +94,11 @@ def format_native_sql_bodies(
             if omitted_select_offset is not None:
                 trailing = core[omitted_select_offset:] + trailing
                 core = core[:omitted_select_offset]
-            neutralized_core, sites = neutralize_interpolation(
-                body=core, dialect=config.dialect, for_formatting=True
+            neutralized_core, raw_sites = _native.neutralize_lint_interpolation(
+                core, config.dialect, for_formatting=True
+            )
+            sites: tuple[InterpolationSite, ...] = tuple(
+                InterpolationSite(*site) for site in raw_sites
             )
             neutralized: str = (
                 neutralized_core
@@ -176,18 +178,29 @@ def format_native_sql_bodies(
                 changed = True
             if not changed:
                 continue
-            try:
-                restored: str = restore_interpolation(
-                    fixed=raw_sql,
-                    sites=prepared.interpolation_sites,
-                )
-            except InterpolationRestorationError as error:
+            restored_ok: bool
+            restored: str
+            restored_ok, restored = _native.restore_lint_interpolation(
+                raw_sql,
+                [
+                    (
+                        site.sentinel,
+                        site.neutralized_start,
+                        site.neutralized_end,
+                        site.original_start,
+                        site.original_end,
+                        site.original_text,
+                    )
+                    for site in prepared.interpolation_sites
+                ],
+            )
+            if not restored_ok:
                 faults.append(
                     _format_fault(
                         file_path=file_path,
                         contents=contents,
                         start=prepared.start,
-                        reason=str(error),
+                        reason=restored,
                     )
                 )
                 continue

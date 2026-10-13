@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import build_project_graph, discover_project_inputs
+from sqlbuild._native import (
+    build_project_graph,
+    discover_project_inputs,
+    scan_fixture_typed_null_candidates,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.runtime.adapters import resolve_adapter
 from sqlbuild.compiler.compile.models import CompiledObjectKey
@@ -18,10 +22,6 @@ from sqlbuild.compiler.pipeline.main.reject_unit_test_selectors import reject_un
 from sqlbuild.compiler.pipeline.models import ProjectGraph
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.lint.constants import LINT_DIRECTORY_NAMES, PARENT_PATH_SEGMENT, SQL_FILE_SUFFIX
-from sqlbuild.lint.main.scan_fixture_typed_null_candidates import (
-    scan_fixture_typed_null_candidates,
-)
-from sqlbuild.lint.models import FixtureNullCandidateScan
 from sqlbuild.spec.contracts.main.resolve_effective_adapter_name import (
     resolve_effective_adapter_name,
 )
@@ -42,14 +42,13 @@ def resolve_lint_inputs(
     )
     if lint_paths is not None:
         _validate_selected_paths(paths=lint_paths)
-        candidates: FixtureNullCandidateScan = scan_fixture_typed_null_candidates(
-            project_dir=project_dir,
-            selected_paths=lint_paths,
-        )
+        candidate_paths: frozenset[Path]
+        model_names: frozenset[str]
+        candidate_paths, model_names = scan_fixture_typed_null_candidates(project_dir, lint_paths)
         discovered: DiscoveredProjectInputs = SelectedContractInputDiscoverer.discover(
             project_dir=project_dir,
-            selected_test_paths=candidates.paths,
-            referenced_model_names=candidates.model_names,
+            selected_test_paths=candidate_paths,
+            referenced_model_names=model_names,
         )
         adapter: BaseAdapter = _resolve_discovered_adapter(
             project_dir=project_dir,

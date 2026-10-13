@@ -33,7 +33,6 @@ from sqlbuild.compiler.discovery.main.omitted_ceremonial_select import (
     omitted_ceremonial_select_offset,
 )
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.lint._helpers.sqlbuild_tokens import interpolation_text_at
 from sqlbuild.lint.classes.stop_context import LintStopContext
 from sqlbuild.lint.constants import (
     GENERATED_SQL_MESSAGE_SUFFIX,
@@ -477,9 +476,7 @@ def _authored_end_position(
     """Map a native exclusive end offset only when authored continuity is provable."""
 
     if mapped_start.generated:
-        token: str | None = interpolation_text_at(
-            body=contents, start=absolute_start, dialect=dialect
-        )
+        token: str | None = _native.lint_interpolation_text_at(contents, absolute_start, dialect)
         if token is None:
             return None
         return source_position(offset=absolute_start + len(token), line_starts=line_starts)
@@ -497,7 +494,7 @@ def _violation_message(
 ) -> str:
     if not mapped.generated:
         return message
-    token: str | None = interpolation_text_at(body=contents, start=absolute_offset, dialect=dialect)
+    token: str | None = _native.lint_interpolation_text_at(contents, absolute_offset, dialect)
     if token is None:
         return f"{message} {GENERATED_SQL_MESSAGE_SUFFIX}"
     return f"{message} {GENERATED_SQL_MESSAGE_TEMPLATE.format(token=token)}"

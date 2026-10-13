@@ -8,7 +8,7 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild._native import discover_project_inputs
+from sqlbuild._native import discover_project_inputs, scan_fixture_typed_null_candidates
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.lint.runs import (
     prepare_lint_run,
@@ -18,9 +18,6 @@ from sqlbuild.cli.commands._helpers.lint.runs import (
 from sqlbuild.cli.commands._helpers.lint.selection import resolve_lint_inputs
 from sqlbuild.compiler.discovery.constants import SQL_ANALYSIS_SETTING_KEY
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.lint.main.has_fixture_typed_null_candidates import (
-    has_fixture_typed_null_candidates,
-)
 from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.models import LintConfig, LintRunResult
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -49,7 +46,7 @@ def run_format_command(
     discovered_inputs: DiscoveredProjectInputs | None = None
     has_fixture_candidates: bool = False
     if not select and not exclude:
-        has_fixture_candidates = has_fixture_typed_null_candidates(project_dir=base_dir)
+        has_fixture_candidates = bool(scan_fixture_typed_null_candidates(base_dir)[0])
     if select or exclude or has_fixture_candidates or fix:
         try:
             value_renderer, selected_paths, discovered_inputs = resolve_lint_inputs(

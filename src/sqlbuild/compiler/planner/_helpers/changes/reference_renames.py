@@ -6,11 +6,9 @@ import re
 from datetime import UTC, datetime
 from itertools import islice, product
 
-from sqlbuild._native import compute_query_hash
+from sqlbuild._native import compute_query_hash, neutralize_lint_interpolation
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.models import ReferenceRename
-from sqlbuild.lint.main.scan_interpolation_sites import scan_interpolation_sites
-from sqlbuild.lint.models import InterpolationSite
 
 _REF_CALL: re.Pattern[str] = re.compile(
     r"^__ref\s*\(\s*(?P<quote>['\"])(?P<name>[^'\"]+)(?P=quote)\s*\)$"
@@ -61,14 +59,17 @@ def _ref_name_spans(
     *, query_sql: str, dialect: str, names: frozenset[str]
 ) -> tuple[_NameSpan, ...]:
     spans: list[_NameSpan] = []
-    site: InterpolationSite
-    for site in scan_interpolation_sites(body=query_sql, dialect=dialect):
-        match: re.Match[str] | None = _REF_CALL.match(site.original_text)
+    original_start: int
+    original_text: str
+    for _, _, _, original_start, _, original_text in neutralize_lint_interpolation(
+        query_sql, dialect
+    )[1]:
+        match: re.Match[str] | None = _REF_CALL.match(original_text)
         if match is not None and match.group("name") in names:
             spans.append(
                 (
-                    site.original_start + match.start("name"),
-                    site.original_start + match.end("name"),
+                    original_start + match.start("name"),
+                    original_start + match.end("name"),
                     match.group("name"),
                 )
             )

@@ -5,10 +5,6 @@ from __future__ import annotations
 import pytest
 
 import sqlbuild._native as _native
-from sqlbuild.lint._helpers.sqlbuild_tokens import (
-    neutralize_interpolation,
-    restore_interpolation,
-)
 from sqlbuild.lint.exceptions import InterpolationRestorationError
 from sqlbuild.lint.models import InterpolationSite
 from tests.unit.src.sqlbuild.lint._helpers._test_types import (
@@ -18,6 +14,10 @@ from tests.unit.src.sqlbuild.lint._helpers._test_types import (
     RestoreFailureTestCase,
     RestoreInterpolationTestCase,
     UnicodePreparationTestCase,
+)
+from tests.unit.src.sqlbuild.lint._helpers.helpers import (
+    neutralize_interpolation,
+    restore_interpolation,
 )
 
 

@@ -1,0 +1,34 @@
+//! `neutralize_interpolation`: SQLBuild references, macros and templates replaced by sentinels.
+
+use regex::Regex;
+
+use crate::lint_text::_helpers::sites::{
+    ByteSite, assemble, lint_policy, sentinel, site_end, site_pattern, site_starts,
+};
+use crate::lint_text::constants::LINT_SENTINEL_PREFIX;
+use crate::lint_text::errors::LintTextError;
+use crate::lint_text::models::Neutralized;
+use crate::sql_lint::main::backtick_identifiers::backtick_identifiers;
+
+/// Neutralize references for lint, or every intrinsic spelling in any case for formatting.
+pub fn neutralize_interpolation(
+    body: &str,
+    dialect: &str,
+    formatting: bool,
+) -> Result<Neutralized, LintTextError> {
+    let pattern: &Regex = site_pattern(formatting)?;
+    let policy = lint_policy(backtick_identifiers(dialect));
+    let mut byte_sites: Vec<ByteSite> = Vec::new();
+    let mut copied_to: usize = 0;
+    for start in site_starts(body, pattern, policy) {
+        if start < copied_to {
+            continue;
+        }
+        let Some(end) = site_end(body, start, policy) else {
+            continue;
+        };
+        byte_sites.push((start, end, sentinel(LINT_SENTINEL_PREFIX, byte_sites.len())));
+        copied_to = end;
+    }
+    Ok(assemble(body, byte_sites))
+}

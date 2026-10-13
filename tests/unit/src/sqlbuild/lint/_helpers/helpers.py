@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlbuild._native import scan_headers, sql_body_ranges
-from sqlbuild.lint.models import HeaderSpan, LintBody
+from sqlbuild._native import (
+    neutralize_lint_interpolation,
+    restore_lint_interpolation,
+    scan_headers,
+    sql_body_ranges,
+)
+from sqlbuild.lint.exceptions import InterpolationRestorationError
+from sqlbuild.lint.models import HeaderSpan, InterpolationSite, LintBody
 from sqlbuild.lint.types import NativeLintPreparationRequest, NativePreparedSql
 
 
@@ -131,3 +137,23 @@ def files_resolving_to(*, files: dict[Path, str], selected: frozenset[Path]) -> 
     """Return the files whose fully resolved path is one of the selected paths."""
 
     return dict(filter(lambda item: item[0].resolve() in selected, files.items()))
+
+
+def neutralize_interpolation(
+    *, body: str, dialect: str, for_formatting: bool = False
+) -> tuple[str, tuple[InterpolationSite, ...]]:
+    """Neutralize interpolation natively and return the sites as lint models."""
+
+    neutralized, sites = neutralize_lint_interpolation(body, dialect, for_formatting=for_formatting)
+    return neutralized, tuple(InterpolationSite(*site) for site in sites)
+
+
+def restore_interpolation(*, fixed: str, sites: tuple[InterpolationSite, ...]) -> str:
+    """Restore neutralized interpolation natively from lint site models."""
+
+    restored, text = restore_lint_interpolation(
+        fixed, [tuple(vars(site).values()) for site in sites]
+    )
+    if not restored:
+        raise InterpolationRestorationError(text)
+    return text

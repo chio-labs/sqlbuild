@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.lint._helpers.suppressions import apply_suppressions
+from sqlbuild._native import apply_lint_suppressions
 from sqlbuild.lint.constants import LINT_ENGINE_SQLBUILD, VIOLATION_SEVERITY_FAULT
 from sqlbuild.lint.main.run_format import run_format
 from sqlbuild.lint.main.run_lint import run_lint
@@ -525,8 +525,6 @@ def test_given_header_fault_suppression_when_linting_then_mandatory_fault_remain
         engine=LINT_ENGINE_SQLBUILD,
     )
 
-    result: list[LintViolation] = apply_suppressions(
-        violations=[mandatory], contents_by_path={target: contents}, allow_suppressions=True
-    )
+    result: list[LintViolation] = apply_lint_suppressions([mandatory], {target: contents}, True)
 
     assert {item.code for item in result} == test_case.expected_value
