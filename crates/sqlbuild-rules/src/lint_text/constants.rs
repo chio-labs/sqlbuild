@@ -49,3 +49,34 @@ pub(crate) const IGNORED_SEARCH_DIRECTORIES: [&str; 4] =
     [".git", ".venv", "target", "node_modules"];
 pub(crate) const UNIT_TEST_ROOT: [&str; 2] = ["tests", "unit"];
 pub(crate) const SQL_SUFFIX: &str = ".sql";
+
+pub(crate) const FORMAT_API_VERSION: u32 = 1;
+pub(crate) const MAX_FUNCTION_CALL_DEPTH: usize = 512;
+pub(crate) const OMITTED_CEREMONIAL_SELECT_SQL: &str = "\nSELECT 1";
+pub(crate) const OMITTED_SELECT_SUFFIX_PATTERN: &str = r"(?i)\s*\bSELECT\s+1\s*\z";
+pub(crate) const FIXTURE_HEADER_KINDS: [&str; 2] = ["TEST", "SCENARIO"];
+pub(crate) const LINE_COMMENT_PREFIX: &str = "--";
+pub(crate) const DECLINED_WITHOUT_REASON: &str = "native formatter declined without a reason";
+pub(crate) const MOVED_OMITTED_SELECT: &str =
+    "native formatter moved the omitted ceremonial SELECT 1";
+pub(crate) const DECLARATION_GROUP_DIRECTORY: &str = "_sqlbuild";
+/// `GLOBAL_NAMED_DECLARATION_ROOTS`, in Python's dict order, with whether each holds audits.
+pub(crate) const GLOBAL_NAMED_ROOTS: [(&[&str], bool); 5] = [
+    (&["audits", "generic"], true),
+    (&["audits", "singular"], true),
+    (&["schemas"], false),
+    (&["hooks", "sql"], false),
+    (&["hooks", "python"], false),
+];
+/// `GROUPED_NAMED_DECLARATION_ROLES`, in Python's dict order, with whether each holds audits.
+pub(crate) const GROUPED_NAMED_ROLES: [(&[&str], bool); 9] = [
+    (&["audits", "generic"], true),
+    (&["_audits", "generic"], true),
+    (&["audits", "singular"], true),
+    (&["schemas"], false),
+    (&["_schemas"], false),
+    (&["hooks", "sql"], false),
+    (&["_hooks", "sql"], false),
+    (&["hooks", "python"], false),
+    (&["_hooks", "python"], false),
+];

@@ -19,7 +19,6 @@ from sqlbuild.compiler.planner.classes.fixture_null_autofix import FixtureNullAu
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.lint._helpers.fixes import finalize_fix_reports, persist_changes, plan_rule_fixes
 from sqlbuild.lint._helpers.headers import drop_resolved_description_faults
-from sqlbuild.lint._helpers.native_format import format_native_sql_bodies
 from sqlbuild.lint._helpers.project_files import collect_project_files, sort_violations
 from sqlbuild.lint.exceptions import LintError
 from sqlbuild.lint.models import (
@@ -157,10 +156,8 @@ def _apply_fixes(
     current_files = {
         file_path: updated.get(file_path, contents) for file_path, contents in files.items()
     }
-    native_formatted, native_faults = format_native_sql_bodies(
-        files=current_files,
-        config=config,
-        project_dir=project_dir,
+    native_formatted, native_faults = _native.format_lint_sql_bodies(
+        sorted(current_files.items()), project_dir, config
     )
     faults.extend(native_faults)
     updated.update(native_formatted)
@@ -178,10 +175,8 @@ def _apply_fixes(
         else {}
     )
     if fixture_formatted:
-        final_native, final_faults = format_native_sql_bodies(
-            files=fixture_formatted,
-            config=config,
-            project_dir=project_dir,
+        final_native, final_faults = _native.format_lint_sql_bodies(
+            sorted(fixture_formatted.items()), project_dir, config
         )
         faults.extend(final_faults)
         updated.update(fixture_formatted)

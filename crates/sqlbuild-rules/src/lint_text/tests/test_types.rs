@@ -36,3 +36,11 @@ pub(crate) struct SuppressionTestCase {
     pub(crate) allow: bool,
     pub(crate) expected_retained: Vec<RetainedViolation>,
 }
+
+pub(crate) struct FormatBodiesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) relative_parts: Option<Vec<String>>,
+    pub(crate) contents: &'static str,
+    pub(crate) expected_formatted: Vec<(usize, String)>,
+    pub(crate) expected_fault_lines: Vec<usize>,
+}

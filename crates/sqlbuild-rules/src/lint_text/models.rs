@@ -60,3 +60,36 @@ pub struct FixtureNullCandidates {
     pub paths: Vec<String>,
     pub model_names: Vec<String>,
 }
+
+/// One SQL file to format: its project-relative path when inside the project, and its text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormatFile {
+    pub relative_parts: Option<Vec<String>>,
+    pub contents: String,
+}
+
+/// A body the formatter declined, by file index, one-based line and reason.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FormatFault {
+    pub file: usize,
+    pub line: usize,
+    pub reason: String,
+}
+
+/// Formatted file texts by file index, and the bodies left unchanged.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FormattedBodies {
+    pub formatted: Vec<(usize, String)>,
+    pub faults: Vec<FormatFault>,
+}
+
+/// One authored body prepared for batched formatting; offsets are character positions.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PreparedBody {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) trailing: String,
+    pub(crate) request: usize,
+    pub(crate) sites: Vec<InterpolationSite>,
+    pub(crate) omits_select: bool,
+}

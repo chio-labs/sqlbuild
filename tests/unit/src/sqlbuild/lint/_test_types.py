@@ -85,7 +85,7 @@ class FormatSelectionWorkTestCase:
     selected_file_count: int
     expected_fixture_parse_count: int
     expected_native_batch_count: int
-    expected_native_request_count: int
+    expected_native_file_count: int
 
 
 @dataclass(frozen=True)

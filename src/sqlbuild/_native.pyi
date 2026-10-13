@@ -1771,6 +1771,9 @@ def lint_interpolation_text_at(body: str, start: int, dialect: str) -> str | Non
 def scan_fixture_typed_null_candidates(
     project_dir: Path, selected_paths: frozenset[Path] | None = None
 ) -> tuple[frozenset[Path], frozenset[str]]: ...
+def format_lint_sql_bodies(
+    files: list[tuple[Path, str]], project_dir: Path, config: LintConfig
+) -> tuple[dict[Path, str], list[LintViolation]]: ...
 def apply_lint_suppressions(
     violations: list[LintViolation],
     contents_by_path: dict[Path, str],

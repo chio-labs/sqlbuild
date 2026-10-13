@@ -4,14 +4,18 @@ use crate::lint_text::constants::{
 };
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::main::apply_suppressions::apply_suppressions;
+use crate::lint_text::main::format_sql_bodies::format_sql_bodies;
 use crate::lint_text::main::interpolation_text_at::interpolation_text_at;
 use crate::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use crate::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
 use crate::lint_text::main::restore_interpolation::restore_interpolation;
-use crate::lint_text::models::{RetainedViolation, SuppressibleViolation, SuppressionFinding};
+use crate::lint_text::models::{
+    FormatFile, RetainedViolation, SuppressibleViolation, SuppressionFinding,
+};
 use crate::lint_text::tests::test_types::{
-    NeutralizeTestCase, ParameterTestCase, RestoreTestCase, SuppressionTestCase, TokenAtTestCase,
+    FormatBodiesTestCase, NeutralizeTestCase, ParameterTestCase, RestoreTestCase,
+    SuppressionTestCase, TokenAtTestCase,
 };
 
 const SUPPRESSED_FILE: &str = "-- sqb: ignore SQBRSQL005 because kept\n\n-- note\nselect 1\n-- sqb: ignore X because y\n-- sqb: ignore nope\nselect 2\n";
@@ -252,6 +256,67 @@ fn given_suppression_directives_when_applying_then_matching_findings_are_removed
 
         assert_eq!(
             retained, test_case.expected_retained,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_sql_files_when_formatting_bodies_then_sites_and_fixture_ceremony_survive()
+-> Result<(), LintTextError> {
+    let test_cases = [
+        FormatBodiesTestCase {
+            description: "a model body with a reference and a macro",
+            relative_parts: Some(vec!["models".to_string(), "orders.sql".to_string()]),
+            contents: "MODEL (description \"d\");\nselect a, @m('x') as m from __ref('o')\n",
+            expected_formatted: vec![(
+                0,
+                "MODEL (description \"d\");\nSELECT\n  a,\n  @m('x') AS m\nFROM __ref('o')\n"
+                    .to_string(),
+            )],
+            expected_fault_lines: vec![],
+        },
+        FormatBodiesTestCase {
+            description: "a fixture body keeps its omitted ceremonial select",
+            relative_parts: Some(vec![
+                "tests".to_string(),
+                "unit".to_string(),
+                "t.sql".to_string(),
+            ]),
+            contents: "TEST();\nwith __ref__o as (select 1 as a)\n",
+            expected_formatted: vec![(
+                0,
+                "TEST();\nWITH __ref__o AS (\n  SELECT 1 AS a\n)\n".to_string(),
+            )],
+            expected_fault_lines: vec![],
+        },
+        FormatBodiesTestCase {
+            description: "an unparseable body is a fault on its first line",
+            relative_parts: None,
+            contents: "MODEL ();\n\nSELECT FROM WHERE (((\n",
+            expected_formatted: vec![],
+            expected_fault_lines: vec![3],
+        },
+    ];
+
+    for test_case in test_cases {
+        let files = [FormatFile {
+            relative_parts: test_case.relative_parts.clone(),
+            contents: test_case.contents.to_string(),
+        }];
+
+        let result = format_sql_bodies(&files, "duckdb", 100)?;
+        let fault_lines: Vec<usize> = result.faults.iter().map(|fault| fault.line).collect();
+
+        assert_eq!(
+            result.formatted, test_case.expected_formatted,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            fault_lines, test_case.expected_fault_lines,
             "{}",
             test_case.description
         );

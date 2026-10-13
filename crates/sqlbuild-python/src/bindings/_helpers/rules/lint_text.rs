@@ -9,6 +9,7 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_rules::lint_text::constants::SUPPRESSION_CODE;
 use sqlbuild_rules::lint_text::errors::LintTextError;
 use sqlbuild_rules::lint_text::main::apply_suppressions::apply_suppressions;
+use sqlbuild_rules::lint_text::main::format_sql_bodies::format_sql_bodies;
 use sqlbuild_rules::lint_text::main::interpolation_text_at::interpolation_text_at;
 use sqlbuild_rules::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use sqlbuild_rules::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
@@ -16,15 +17,19 @@ use sqlbuild_rules::lint_text::main::neutralize_interpolation::neutralize_interp
 use sqlbuild_rules::lint_text::main::restore_interpolation::restore_interpolation;
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 use sqlbuild_rules::lint_text::models::{
-    InterpolationSite, Neutralized, RetainedViolation, SuppressibleViolation, SuppressionFinding,
+    FormatFile, FormattedBodies, InterpolationSite, Neutralized, RetainedViolation,
+    SuppressibleViolation, SuppressionFinding,
 };
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::types::CompilerDetach;
 
 const LINT_MODELS_MODULE: &str = "sqlbuild.lint.models";
 const LINT_TYPES_MODULE: &str = "sqlbuild.lint.types";
 const NATIVE_ENGINE: &str = "native";
+const FORMAT_UNSAFE_CODE: &str = "format-unsafe";
+const FORMAT_UNSAFE_REMEDIATION: &str = "Rewrite the unsupported SQL shape or report a minimal formatter reproduction. No header, SQL body, or fixture changes were written to this file.";
 
 /// One interpolation site as `InterpolationSite` fields.
 type SiteTuple = (String, usize, usize, usize, usize, String);
@@ -229,6 +234,85 @@ impl<'py> FindingClasses<'py> {
     }
 }
 
+/// The parts of `path` below `project_dir`, or `None` outside the project.
+fn relative_parts(path: &std::path::Path, project_dir: &std::path::Path) -> Option<Vec<String>> {
+    match path.strip_prefix(project_dir) {
+        Ok(relative) => Some(
+            relative
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                .collect(),
+        ),
+        Err(_) => None,
+    }
+}
+
+/// Format the SQL bodies of `files`; return changed texts by path and declined-body faults.
+#[pyfunction]
+fn format_lint_sql_bodies<'py>(
+    py: Python<'py>,
+    files: Vec<(Bound<'py, PyAny>, String)>,
+    project_dir: PathBuf,
+    config: &Bound<'py, PyAny>,
+) -> PyResult<(Bound<'py, PyDict>, Vec<Bound<'py, PyAny>>)> {
+    let inputs: Vec<FormatFile> = files
+        .iter()
+        .map(|(path, contents)| {
+            Ok(FormatFile {
+                relative_parts: relative_parts(&path.extract::<PathBuf>()?, &project_dir),
+                contents: contents.clone(),
+            })
+        })
+        .collect::<PyResult<_>>()?;
+    let dialect: String = config.getattr("dialect")?.extract()?;
+    let line_width: usize = config.getattr("line_width")?.extract()?;
+    let result: FormattedBodies = py
+        .compiler_detach(|| {
+            format_sql_bodies(&inputs, &dialect, line_width).map_err(|error| error.to_string())
+        })
+        .map_err(value_error)?;
+    let formatted: Bound<'py, PyDict> = PyDict::new(py);
+    for (index, text) in result.formatted {
+        formatted.set_item(&files[index].0, text)?;
+    }
+    let violation: Bound<'py, PyAny> = imported(py, LINT_MODELS_MODULE, "LintViolation")?;
+    let fault: Bound<'py, PyAny> =
+        imported(py, LINT_TYPES_MODULE, "LintSeverity")?.getattr("FAULT")?;
+    let faults: Vec<Bound<'py, PyAny>> = result
+        .faults
+        .into_iter()
+        .map(|item| {
+            call_with(
+                &violation,
+                &[
+                    ("file_path", files[item.file].0.clone()),
+                    ("line", item.line.into_pyobject(py)?.into_any()),
+                    ("column", 1_usize.into_pyobject(py)?.into_any()),
+                    ("code", PyString::new(py, FORMAT_UNSAFE_CODE).into_any()),
+                    (
+                        "message",
+                        PyString::new(
+                            py,
+                            &format!(
+                                "File left unchanged because its SQL body could not be formatted: {}",
+                                item.reason
+                            ),
+                        )
+                        .into_any(),
+                    ),
+                    ("severity", fault.clone()),
+                    ("engine", PyString::new(py, NATIVE_ENGINE).into_any()),
+                    (
+                        "remediation",
+                        PyString::new(py, FORMAT_UNSAFE_REMEDIATION).into_any(),
+                    ),
+                ],
+            )
+        })
+        .collect::<PyResult<_>>()?;
+    Ok((formatted, faults))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(neutralize_lint_interpolation, module)?)?;
     module.add_function(wrap_pyfunction!(
@@ -242,5 +326,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         scan_fixture_typed_null_candidates,
         module
     )?)?;
+    module.add_function(wrap_pyfunction!(format_lint_sql_bodies, module)?)?;
     module.add_function(wrap_pyfunction!(apply_lint_suppressions, module)?)
 }

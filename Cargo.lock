@@ -1317,6 +1317,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlbuild-analysis",
+ "sqlbuild-attachments",
  "sqlbuild-core",
  "sqlbuild-sqltext",
  "sqlparser",

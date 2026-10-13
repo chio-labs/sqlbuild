@@ -13,8 +13,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.types import CompiledProjectView, TypedSqlValueRenderer
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild.lint._helpers.native_format import with_newline_style
 from sqlbuild.lint.constants import (
+    CARRIAGE_RETURN_LINE_FEED,
+    LINE_FEED,
     LINT_ENGINE_NATIVE,
     SAFE_RULE_FIX_CODES,
     VIOLATION_SEVERITY_FAULT,
@@ -308,6 +309,15 @@ def persist_changes(
         if write:
             write_atomically(path=path, contents=after)
     return tuple(changes)
+
+
+def with_newline_style(*, contents: str, newline: str) -> str:
+    """Normalize generated contents back to the authored newline convention."""
+
+    normalized: str = contents.replace(CARRIAGE_RETURN_LINE_FEED, LINE_FEED)
+    if newline == LINE_FEED:
+        return normalized
+    return normalized.replace(LINE_FEED, newline)
 
 
 def finalize_fix_reports(
