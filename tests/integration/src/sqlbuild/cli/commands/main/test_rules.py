@@ -29,6 +29,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     EarlyLintInputsTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
     ImplicitAliasRuleIntegrationTestCase,
+    CustomRuleCacheSequenceTestCase,
     NumericRangeDecisionIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
@@ -50,7 +51,22 @@ _CACHE_SELECTION_TOML: str = _CACHE_POLICY_TOML.replace(
 )
 _CACHE_MODEL_SQL: str = 'MODEL (description "Orders");\nSELECT order_id FROM orders LIMIT 1\n'
 _CACHE_EDITED_SQL: str = _CACHE_MODEL_SQL.replace("LIMIT 1", "LIMIT 2")
+_CUSTOM_CACHE_TOML: str = (
+    'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["XSQBRCACHE001"]\n'
+)
+_CUSTOM_CACHE_RULE: str = """from sqlbuild.rules import Finding, Model, RuleContext, rule
 
+@rule(
+    code="XSQBRCACHE001",
+    message="Models must live in the final directory",
+    remediation="Move this model beneath models/final/.",
+)
+def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    return [] if "final" in model.path.parts else [ctx.finding(subject=model)]
+"""
+_CUSTOM_CACHE_EDITED_RULE: str = _CUSTOM_CACHE_RULE.replace('"final" in', '"staging" in')
+_CUSTOM_CACHE_MODEL_SQL: str = 'MODEL (description "Orders");\nSELECT 1 AS order_id\n'
+_CUSTOM_CACHE_EDITED_SQL: str = _CUSTOM_CACHE_MODEL_SQL.replace("SELECT 1", "SELECT 2")
 
 _EARLY_LINT_STOP_TIMEOUT_S: float = 30.0
 _EARLY_LINT_FINDINGS: tuple[tuple[str, str, int | None, int | None], ...] = (
@@ -2839,6 +2855,50 @@ def test_given_sql_rule_cache_when_inputs_change_then_only_unchanged_runs_hit(
     observed: list[tuple[int, int]] = []
     for project_toml, model_sql in test_case.steps:
         (tmp_path / "sqlbuild_project.toml").write_text(project_toml, encoding="utf-8")
+        model.write_text(model_sql, encoding="utf-8")
+        _ = main(["--project-dir", str(tmp_path), "compile", "--json"])
+        timings: dict[str, int] = cast(
+            dict[str, int], json.loads(capsys.readouterr().out)["compile_timings"]
+        )
+        observed.append((timings["rule_cache_hits"], timings["rule_cache_misses"]))
+
+    assert tuple(observed) == test_case.expected_hits_and_misses
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CustomRuleCacheSequenceTestCase(
+            description=(
+                "the custom rule misses cold and after a source edit, and hits through a model "
+                "SQL edit it never read; the built-in model rules add one count per run"
+            ),
+            steps=(
+                (_CUSTOM_CACHE_RULE, _CUSTOM_CACHE_MODEL_SQL),
+                (_CUSTOM_CACHE_RULE, _CUSTOM_CACHE_MODEL_SQL),
+                (_CUSTOM_CACHE_RULE, _CUSTOM_CACHE_EDITED_SQL),
+                (_CUSTOM_CACHE_EDITED_RULE, _CUSTOM_CACHE_EDITED_SQL),
+                (_CUSTOM_CACHE_EDITED_RULE, _CUSTOM_CACHE_EDITED_SQL),
+                (_CUSTOM_CACHE_RULE, _CUSTOM_CACHE_EDITED_SQL),
+            ),
+            expected_hits_and_misses=((0, 2), (2, 0), (1, 1), (0, 2), (2, 0), (0, 2)),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_custom_rule_cache_when_inputs_change_then_only_unchanged_runs_hit(
+    test_case: CustomRuleCacheSequenceTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(_CUSTOM_CACHE_TOML, encoding="utf-8")
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    rule_file: Path = tmp_path / "rules" / "layout.py"
+    rule_file.parent.mkdir()
+    observed: list[tuple[int, int]] = []
+    for rule_source, model_sql in test_case.steps:
+        rule_file.write_text(rule_source, encoding="utf-8")
         model.write_text(model_sql, encoding="utf-8")
         _ = main(["--project-dir", str(tmp_path), "compile", "--json"])
         timings: dict[str, int] = cast(

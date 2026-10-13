@@ -1089,3 +1089,12 @@ class SqlRuleCacheSequenceTestCase:
     description: str
     steps: tuple[tuple[str, str], ...]
     expected_hits_and_misses: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class CustomRuleCacheSequenceTestCase:
+    """Compiles after each `(rule source, model SQL)` step and the cache counts each reports."""
+
+    description: str
+    steps: tuple[tuple[str, str], ...]
+    expected_hits_and_misses: tuple[tuple[int, int], ...]

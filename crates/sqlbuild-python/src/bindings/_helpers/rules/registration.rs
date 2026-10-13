@@ -3,7 +3,8 @@
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::rules::{
-    custom_rule_evidence, dsl_headers, evaluation, lint, results, rule_cache, skills,
+    custom_rule_cache, custom_rule_evidence, dsl_headers, evaluation, lint, results, rule_cache,
+    skills,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -12,6 +13,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     dsl_headers::register(module)?;
     custom_rule_evidence::register(module)?;
     rule_cache::register(module)?;
+    custom_rule_cache::register(module)?;
     results::register(module)?;
     skills::register(module)
 }

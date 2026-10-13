@@ -253,7 +253,7 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.rule_engine.models import Finding, Rule, RulesResult
+from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
@@ -3218,6 +3218,53 @@ def custom_rule_import_closure(*, rule: Rule, project_dir: Path) -> tuple[Path, 
 def custom_rule_implementation_fingerprint(
     *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
 ) -> str: ...
+def custom_rule_identity(
+    *,
+    code_identity: str,
+    runtime_version: str,
+    code: str,
+    family: str,
+    slug: str,
+    message: str,
+    remediation: str,
+    subject: str | None,
+    implementation_fingerprint: str,
+    config: RulesConfig,
+    dialect: str,
+    project_dir: str,
+) -> str: ...
+
+class CustomRuleCache:
+    """One custom-rule run's subjects, reused and new results, and its cache file."""
+
+    def __init__(
+        self,
+        *,
+        path: Path | None,
+        rules: list[tuple[str, str | None, str | None]],
+        target_name: str | None,
+        models: list[tuple[str, str, str | None]],
+    ) -> None: ...
+    def pending_readsets(self) -> list[tuple[tuple[str, ...], ...]]: ...
+    def plan(self, *, digests: list[str | None]) -> dict[str, list[str] | None]: ...
+    def record(
+        self,
+        *,
+        evaluated: list[
+            tuple[
+                str,
+                str,
+                tuple[tuple[tuple[str, ...], ...], str | None] | None,
+                list[dict[str, object]],
+            ]
+        ],
+    ) -> None: ...
+    def findings(self) -> list[dict[str, object]]: ...
+    @property
+    def hits(self) -> int: ...
+    @property
+    def misses(self) -> int: ...
+
 def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...
