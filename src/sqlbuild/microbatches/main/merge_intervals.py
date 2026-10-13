@@ -1,11 +1,11 @@
 """Merge canonical microbatch intervals."""
 
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_merge as merge
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sort_key
 from sqlbuild.compiler.planner.types import CursorType
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.cursor_sort_key import cursor_sort_key
-from sqlbuild.cursor_algebra.main.merge import merge
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.models import AlignedInterval, IntegerValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.microbatches.exceptions import MicrobatchStateError

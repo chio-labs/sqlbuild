@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
 from sqlbuild._native import get_config_str
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -16,10 +20,6 @@ from sqlbuild.compiler.planner._helpers.resolve.cursor_intrinsics import (
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.types import CursorScalar
 
 _DEFAULT_TIMESTAMP_START: str = "1900-01-01 00:00:00"

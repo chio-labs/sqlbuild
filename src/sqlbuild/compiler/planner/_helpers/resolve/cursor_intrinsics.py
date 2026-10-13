@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.main.cursor_intrinsics import resolve_cursor_intrinsics
 from sqlbuild.compiler.planner.models import CursorBounds
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
 
 def render_cursor_intrinsic_bounds(

@@ -7,6 +7,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild._native import (
     get_config_bool,
     get_config_cursor_bound,
@@ -149,9 +152,6 @@ from sqlbuild.compiler.planner.types import (
     WarningSeverity,
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 from sqlbuild.cursor_algebra.models import TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel
 from sqlbuild.spec.contracts.models import (

@@ -1,7 +1,5 @@
 """Canonical cursor grain metadata."""
 
-from datetime import timedelta
-
 from sqlbuild.compiler.planner.types import CursorGrain
 
 GRAIN_ORDER: dict[CursorGrain, int] = {
@@ -20,15 +18,6 @@ GRAIN_BATCH_SIZE: dict[CursorGrain, str] = {
     CursorGrain.DAY: "1d",
     CursorGrain.MONTH: "1mo",
     CursorGrain.YEAR: "1y",
-}
-
-GRAIN_FIXED_STEP: dict[CursorGrain, timedelta | None] = {
-    CursorGrain.SECOND: timedelta(seconds=1),
-    CursorGrain.MINUTE: timedelta(minutes=1),
-    CursorGrain.HOUR: timedelta(hours=1),
-    CursorGrain.DAY: timedelta(days=1),
-    CursorGrain.MONTH: None,
-    CursorGrain.YEAR: None,
 }
 
 DURATION_YEAR_UNIT: str = "y"

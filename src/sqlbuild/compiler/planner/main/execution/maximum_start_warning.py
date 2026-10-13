@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import cursor_render as render
 from sqlbuild.compiler.planner.models import CursorBounds, MaximumStartSafetyEvidence
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.types import CursorScalar
 
 

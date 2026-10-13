@@ -7,6 +7,13 @@ from collections.abc import Iterable
 from dataclasses import replace
 from datetime import datetime
 
+from sqlbuild._native import cursor_floor_to_grain as floor_to_grain
+from sqlbuild._native import cursor_inclusive_to_exclusive as inclusive_to_exclusive
+from sqlbuild._native import cursor_max_bound as max_bound
+from sqlbuild._native import cursor_min_bound as min_bound
+from sqlbuild._native import cursor_observed_partition as observed_partition
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_try_parse as try_parse
 from sqlbuild._native import get_config_str
 from sqlbuild.compiler.compile.types import CompiledModelView
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
@@ -27,13 +34,6 @@ from sqlbuild.compiler.planner.types import (
 )
 from sqlbuild.cursor_algebra.constants import GRAIN_ORDER
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.main.floor_to_grain import floor_to_grain
-from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
-from sqlbuild.cursor_algebra.main.max_bound import max_bound
-from sqlbuild.cursor_algebra.main.min_bound import min_bound
-from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.try_parse import try_parse
 from sqlbuild.cursor_algebra.models import DateValue, IntegerValue, TimestampValue
 from sqlbuild.cursor_algebra.types import BoundSentinel, CursorScalar
 

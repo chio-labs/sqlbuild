@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable, Iterator
 
 import sqlbuild._native as _native
+from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
@@ -34,7 +35,6 @@ from sqlbuild.compiler.references.main._reference_call_prefix_pattern_text impor
 )
 from sqlbuild.compiler.references.types import ExternalSqlReferenceResolver, SqlReferenceKind
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
-from sqlbuild.cursor_algebra.main.sentinel_to_token import sentinel_to_token
 
 _REF_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.REF)
 _SEED_PATTERN: re.Pattern[str] = quoted_reference_call_pattern(SqlReferenceKind.SEED)

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlbuild._native import cursor_exclusive_to_inclusive as exclusive_to_inclusive
+from sqlbuild._native import cursor_inclusive_to_exclusive as inclusive_to_exclusive
+from sqlbuild._native import cursor_render as render
+from sqlbuild._native import cursor_try_parse as try_parse
 from sqlbuild.compiler.planner.constants import WHOLE_DAY_CURSOR_GRAINS
 from sqlbuild.compiler.planner.models import CursorBounds
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
-from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
-from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
-from sqlbuild.cursor_algebra.main.render import render
-from sqlbuild.cursor_algebra.main.try_parse import try_parse
 from sqlbuild.cursor_algebra.types import CursorScalar
 
 

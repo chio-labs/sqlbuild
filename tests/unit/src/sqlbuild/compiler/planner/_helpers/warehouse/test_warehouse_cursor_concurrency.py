@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import pytest
 
+from sqlbuild._native import cursor_parse as parse
 from sqlbuild.adapter.relations.main.open_inspection_catalog import open_inspection_catalog
 from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
     _CursorModelInfo,
@@ -16,7 +17,6 @@ from sqlbuild.compiler.planner._helpers.warehouse.snapshot import (
 )
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
 from sqlbuild.compiler.planner.types import CursorType
-from sqlbuild.cursor_algebra.main.parse import parse
 from sqlbuild.cursor_algebra.types import CursorScalar
 from tests.unit.src.sqlbuild.compiler.planner._helpers.warehouse._test_types import (
     ConcurrentCursorBoundsTestCase,

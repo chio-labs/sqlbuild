@@ -9,6 +9,11 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_exclusive_to_inclusive as exclusive_to_inclusive
+from sqlbuild._native import cursor_observed_partition as observed_partition
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
 from sqlbuild._native import (
     get_config_cursor_bound,
     get_config_str,
@@ -93,11 +98,6 @@ from sqlbuild.compiler.planner.types import (
 from sqlbuild.compiler.references.types import SqlReferenceKind
 from sqlbuild.compiler.source_freshness.constants import SOURCE_FRESHNESS_TABLE_NAME
 from sqlbuild.cursor_algebra.exceptions import CursorAlgebraError
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.exclusive_to_inclusive import exclusive_to_inclusive
-from sqlbuild.cursor_algebra.main.observed_partition import observed_partition
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.models import DateValue
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event

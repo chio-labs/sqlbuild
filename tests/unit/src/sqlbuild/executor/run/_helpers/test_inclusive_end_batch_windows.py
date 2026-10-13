@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import cursor_compare as compare
+from sqlbuild._native import cursor_inclusive_to_exclusive as inclusive_to_exclusive
+from sqlbuild._native import cursor_parse as parse
+from sqlbuild._native import cursor_render as render
 from sqlbuild.compiler.planner.types import CursorGrain, CursorType
-from sqlbuild.cursor_algebra.main.compare import compare
-from sqlbuild.cursor_algebra.main.inclusive_to_exclusive import inclusive_to_exclusive
-from sqlbuild.cursor_algebra.main.parse import parse
-from sqlbuild.cursor_algebra.main.render import render
 from sqlbuild.cursor_algebra.types import CursorScalar
 from sqlbuild.executor.run._helpers.materializations.microbatch import compute_batch_windows
 from sqlbuild.executor.run.models import BatchWindow
