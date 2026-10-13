@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.refactor.command import run_refactor_command
+from sqlbuild._native import run_refactor_command
 from sqlbuild.cli.commands.models import RefactorCommandRequest
 from sqlbuild.cli.commands.types import CliCommand
 from tests.integration.src.sqlbuild.cli.commands._helpers.refactor._test_types import (

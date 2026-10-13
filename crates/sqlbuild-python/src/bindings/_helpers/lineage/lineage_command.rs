@@ -21,27 +21,23 @@ use sqlbuild_analysis::lineage_command::main::normalize_lineage_target::normaliz
 use sqlbuild_analysis::lineage_command::main::parse_lineage_depth::parse_lineage_depth;
 use sqlbuild_analysis::lineage_command::main::render_column_trace::render_column_trace;
 use sqlbuild_analysis::lineage_command::main::render_lineage_graph::render_lineage_graph;
-use sqlbuild_analysis::lineage_command::main::resolve_lineage_target::resolve_lineage_target;
 use sqlbuild_analysis::lineage_command::main::select_anchored_lineage::select_anchored_lineage;
 use sqlbuild_analysis::lineage_command::main::select_directional_lineage::select_directional_lineage;
 use sqlbuild_analysis::lineage_command::main::select_target_lineage::select_target_lineage;
 use sqlbuild_analysis::lineage_command::main::validate_lineage_request::validate_lineage_request;
 use sqlbuild_analysis::lineage_command::models::{
     ColumnCandidates, ColumnTrace, LineageAnchors, LineageColumn, LineageColumnEdge, LineageIndex,
-    LineageKey, LineageRendering, LineageRequestShape, LineageTarget, SemanticUse,
+    LineageKey, LineageRendering, LineageRequestShape, SemanticUse,
 };
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::bindings::_helpers::lineage::lineage_cache::{
     lineage_fingerprint, read_lineage_cache, write_lineage_cache,
 };
-use crate::bindings::_helpers::lineage::lineage_index::{
-    graph_index, index_views, lineage_key, lineage_keys,
-};
+use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
-const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const STATUS_MODULE: &str = "sqlbuild.presentation.main._maybe_status";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
@@ -711,34 +707,6 @@ fn run_lineage_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i
     Ok(0)
 }
 
-/// Read a `[kind:]<name>` or `[kind:]<model>.<column>` target against selector names.
-#[pyfunction]
-#[pyo3(name = "resolve_lineage_target", signature = (*, all_keys, target))]
-fn resolve_lineage_target_object<'py>(
-    py: Python<'py>,
-    all_keys: &Bound<'py, PyAny>,
-    target: &str,
-) -> PyResult<Bound<'py, PyAny>> {
-    let mut names: HashMap<String, LineageKey> = HashMap::new();
-    for item in all_keys.call_method0("items")?.try_iter()? {
-        let (name, key): (String, Bound<'py, PyAny>) = item?.extract()?;
-        names.insert(name, lineage_key(&key)?);
-    }
-    let lookup = |name: &str| names.get(name).cloned();
-    let resolved: LineageTarget = resolve_lineage_target(target, &lookup);
-    let resource_name: &str = resolved
-        .name
-        .split_once(COLUMN_TARGET_SEPARATOR)
-        .map_or(resolved.name.as_str(), |(resource, _)| resource);
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item("kind", &resolved.kind)?;
-    options.set_item("name", &resolved.name)?;
-    options.set_item("key", all_keys.call_method1("get", (resource_name,))?)?;
-    options.set_item("column_name", &resolved.column_name)?;
-    options.set_item("kind_matches", resolved.kind_matches)?;
-    imported(py, COMMAND_MODELS, "LineageTarget")?.call((), Some(&options))
-}
-
 /// The relation lineage cache key, or `None` when the inputs cannot be hashed.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, cli_vars))]
@@ -751,7 +719,6 @@ fn lineage_cache_fingerprint(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(run_lineage_command, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_lineage_target_object, module)?)?;
     module.add_function(wrap_pyfunction!(lineage_cache_fingerprint, module)?)?;
     Ok(())
 }

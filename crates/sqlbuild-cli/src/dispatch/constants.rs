@@ -548,10 +548,7 @@ pub(crate) const REFACTOR_ROUTE: Route = Route {
     unavailable_code: Some("C950"),
     ..routed(
         "run_refactor",
-        (
-            "sqlbuild.cli.commands.main.project._refactor",
-            "run_refactor",
-        ),
+        ("sqlbuild._native", "run_refactor_command"),
         &REFACTOR_ARGUMENTS,
         REQUEST_KEYWORD_SHAPE,
     )

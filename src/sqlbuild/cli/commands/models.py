@@ -57,7 +57,6 @@ if TYPE_CHECKING:
         NestedCommandProgressCallbacks,
     )
     from sqlbuild.compiler.compile.models import (
-        CompiledObjectKey,
         CompiledSqlScenario,
         CompilerDiagnostic,
     )
@@ -718,17 +717,6 @@ class JanitorPlanningResult:
 
 
 @dataclass(frozen=True)
-class LineageTarget:
-    """One positional target, `[kind:]<name>` or `[kind:]<model>.<column>`, resolved by name."""
-
-    kind: str | None
-    name: str
-    key: CompiledObjectKey | None
-    column_name: str | None
-    kind_matches: bool
-
-
-@dataclass(frozen=True)
 class LoadCommandRequest:
     """CLI inputs for one load command invocation."""
 
@@ -1029,16 +1017,6 @@ class RefactorCommandRequest:
     dry_run: bool = False
     json_output: bool = False
     no_color: bool = False
-
-
-@dataclass(frozen=True)
-class LayerMoveSuggestion:
-    """The one-step `sqb mv` for a rename refused only by the layer-folder rules."""
-
-    new_name: str
-    folder: str | None
-    layer_folder: str | None
-    command: str
 
 
 @dataclass(frozen=True)

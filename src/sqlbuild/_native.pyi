@@ -18,8 +18,8 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
 from sqlbuild.cli.commands.models import (
     LineageCommandRequest,
-    LineageTarget,
     PlaygroundCommandRequest,
+    RefactorCommandRequest,
     ScopeCommandRequest,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
@@ -2655,9 +2655,7 @@ def lineage_cache_fingerprint(
     *, project_dir: Path, cli_vars: dict[str, object] | None
 ) -> str | None: ...
 def run_lineage_command(*, request: LineageCommandRequest) -> int: ...
-def resolve_lineage_target(
-    *, all_keys: Mapping[str, CompiledObjectKey], target: str
-) -> LineageTarget: ...
+def run_refactor_command(*, request: RefactorCommandRequest) -> int: ...
 
 # Native analysis: SQL test planning glue.
 def plan_compiled_sql_tests(

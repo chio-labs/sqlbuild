@@ -76,6 +76,11 @@ impl CliStyle {
     }
 
     #[must_use]
+    pub fn success_strong(self, text: &str) -> String {
+        self.apply(&format!("{GREEN}{BOLD}"), text)
+    }
+
+    #[must_use]
     pub fn warning(self, text: &str) -> String {
         self.apply(YELLOW, text)
     }

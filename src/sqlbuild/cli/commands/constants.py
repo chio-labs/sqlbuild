@@ -24,8 +24,6 @@ RULES_LIST_ACTION: str = "list"
 RULES_SHOW_ACTION: str = "show"
 RULES_SKILLS_ACTION: str = "skills"
 SQL_FILE_SUFFIX: str = ".sql"
-COLUMN_TARGET_SEPARATOR: str = "."
-COLUMN_TARGET_KIND: str = "column"
 SUCCESS_STATUS: str = "success"
 FAILED_STATUS: str = "failed"
 DEFAULT_MAX_SNAPSHOT_ROWS_PER_RELATION: int = 10_000
@@ -145,32 +143,3 @@ COMMAND_WAREHOUSE_GROUPS: MappingProxyType[CliCommand, WarehouseGroup | None] = 
         CliCommand.SKILLS: None,
     }
 )
-LAYER_FOLDER_RULE_CODES: frozenset[str] = frozenset({"SQBRPROJECT102", "SQBRPROJECT105"})
-MODEL_NAME_LAYER_SEPARATOR: str = "__"
-MODEL_NAME_LAYER_INDEX: int = 1
-MODEL_NAME_PART_COUNTS: frozenset[int] = frozenset({3, 4})
-LAYER_FOLDERS: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
-    {
-        "stg": ("staging",),
-        "stg_v": ("staging",),
-        "int_clean": ("intermediate", "clean"),
-        "int_enriched": ("intermediate", "enriched"),
-        "int_v": ("intermediate", "enriched"),
-        "mart": ("mart",),
-        "mart_v": ("mart",),
-    }
-)
-CONTIGUOUS_LAYER_FOLDERS: MappingProxyType[str, tuple[str, ...]] = MappingProxyType(
-    {
-        "stg": ("staging",),
-        "stg_v": ("staging",),
-        "int_clean": ("intermediate", "clean"),
-        "int_enriched": ("intermediate", "enriched"),
-        "int_v": ("intermediate",),
-        "mart": ("mart",),
-        "mart_v": ("mart",),
-    }
-)
-WINDOWS_OS_NAME: str = "nt"
-FOLDER_PLACEHOLDER: str = "<folder>"
-PROJECT_DIR_OPTION: str = "--project-dir"
