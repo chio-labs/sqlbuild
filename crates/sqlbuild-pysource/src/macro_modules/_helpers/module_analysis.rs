@@ -5,6 +5,7 @@ use ruff_python_ast::{ModModule, Stmt, StmtFunctionDef, StmtImportFrom};
 use std::collections::{HashMap, HashSet};
 use std::iter::once;
 
+use crate::cpython_tree::models::CpythonNode;
 use crate::macro_modules::_helpers::declarations::module_exports;
 use crate::macro_modules::_helpers::function_calls::{
     CallNames, NodeId, function_calls, runtime_nodes, unique, validate_use_locations,
@@ -12,7 +13,6 @@ use crate::macro_modules::_helpers::function_calls::{
 use crate::macro_modules::_helpers::module_names::{
     import_visible, imported_module_names, is_project_macro_import, resolve_import_from,
 };
-use crate::macro_modules::_helpers::python_nodes::PyNode;
 use crate::macro_modules::constants::{CYCLE_SEPARATOR, STAR_IMPORT_NAME};
 use crate::macro_modules::models::MacroModuleSource;
 
@@ -121,9 +121,9 @@ pub(crate) fn analyze_module(
     let mut runtime: HashSet<NodeId> = HashSet::new();
     for name in &function_order {
         let function: &StmtFunctionDef = functions[name];
-        let nodes: Vec<PyNode<'_>> = runtime_nodes(function);
+        let nodes: Vec<CpythonNode<'_>> = runtime_nodes(function);
         runtime.extend(nodes.iter().filter_map(|node| match node {
-            PyNode::Expr(expression) => Some(std::ptr::from_ref(*expression)),
+            CpythonNode::Expr(expression) => Some(std::ptr::from_ref(*expression)),
             _ => None,
         }));
         let calls = function_calls(function, &nodes, &names)?;
