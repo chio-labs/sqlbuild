@@ -541,33 +541,6 @@ class DiscoveredPythonNodeFunctions:
 
 
 @dataclass(frozen=True)
-class DiscoveredDeclarationFiles:
-    """Project files discovery parses without importing any project Python."""
-
-    source_files: tuple[DiscoveredSourceFile, ...]
-    model_files: tuple[DiscoveredSqlModelFile, ...]
-    enum_files: tuple[DiscoveredEnumFile, ...]
-    constant_files: tuple[DiscoveredConstantFile, ...]
-    model_schema_files: tuple[DiscoveredModelSchemaFile, ...]
-    sql_function_files: tuple[DiscoveredSqlFunctionFile, ...]
-    sql_hook_files: tuple[DiscoveredSqlHookFile, ...]
-    python_function_files: tuple[DiscoveredPythonFunctionFile, ...]
-    schema_files: tuple[DiscoveredSchemaFile, ...]
-    seed_files: tuple[DiscoveredSeedFile, ...]
-    test_files: tuple[DiscoveredSqlTestFile, ...]
-    scenario_files: tuple[DiscoveredSqlScenarioFile, ...]
-    audit_files: tuple[DiscoveredAuditFile, ...]
-    macro_files: tuple[DiscoveredMacroFile, ...]
-    adapter_file: DiscoveredAdapterFile | None
-    native_session: NativeDiscoverySession | None = field(default=None, compare=False, repr=False)
-    """The native session that read these declaration files, for later native stages.
-
-    `None` means no session: readers must use the Python objects. Any copy that changes a
-    discovered collection must set it to `None` so it never describes other files.
-    """
-
-
-@dataclass(frozen=True)
 class DiscoveredProjectInputs:
     """All raw project inputs discovered from disk before semantic resolution."""
 
