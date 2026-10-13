@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TextIO
 
+import sqlbuild._native as _native
 from sqlbuild.cli.commands._helpers.scope.output import render_scope_result
 from sqlbuild.cli.commands._helpers.scope.target import qualify_scope_target
 from sqlbuild.cli.commands.models import ScopeCommandRequest
@@ -15,7 +16,6 @@ from sqlbuild.compiler.scopes.main.browse_scope_folders import browse_scope_fold
 from sqlbuild.compiler.scopes.main.build_scope_lookup import build_scope_lookup
 from sqlbuild.compiler.scopes.main.explain_scope_declaration import explain_scope_declaration
 from sqlbuild.compiler.scopes.main.list_scope_declarations import list_scope_declarations
-from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.main.preview_scope_move import preview_scope_move
 from sqlbuild.compiler.scopes.main.query_scope_report import query_scope_report
 from sqlbuild.compiler.scopes.main.serialize_scope_report import serialize_scope_report
@@ -35,7 +35,7 @@ from sqlbuild.presentation.main.supports_color import supports_color
 def run_scope_command(
     *,
     request: ScopeCommandRequest,
-    load_scope_index: ScopeIndexLoader = load_or_build_scope_index,
+    load_scope_index: ScopeIndexLoader = _native.load_or_build_scope_index,
     output_stream: TextIO | None = None,
 ) -> int:
     """Load offline compiler facts, run one pure query, and present its result."""

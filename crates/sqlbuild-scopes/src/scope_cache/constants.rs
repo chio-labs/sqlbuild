@@ -36,3 +36,14 @@ pub(crate) const COMPLETENESS_KEYS: [&str; 6] = [
     "placement",
     "promotion_impact",
 ];
+/// Config files the project fingerprint hashes when present.
+pub(crate) const FINGERPRINT_CONFIG_FILES: [&str; 4] = [
+    "sqlbuild_project.toml",
+    "sqlbuild_local.toml",
+    ".sqlbuildignore",
+    ".gitignore",
+];
+/// Project-wide named declaration folders, sorted.
+pub(crate) const NAMED_DECLARATION_DIRECTORIES: [&str; 3] = ["audits", "hooks", "schemas"];
+/// Source roots outside the declaration layout whose files feed the fingerprint.
+pub(crate) const EXTRA_SOURCE_ROOTS: [&str; 2] = ["python", "seeds"];

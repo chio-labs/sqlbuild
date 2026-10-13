@@ -225,10 +225,6 @@ location = "cli/commands/_helpers/cost/refresh.py::refresh_pending_cost_run"
 note = "Best-effort cost refresh keeps its existing catch-all; discovery is now entered through the native driver, and no Python implementation runs instead."
 
 [[handled_native_errors]]
-location = "compiler/scopes/main/load_or_build_scope_index.py::load_or_build_scope_index"
-note = "Project input errors from discovery and compile-input stages select the tolerant scope index as before; a native compiler failure is a RuntimeError and is not caught."
-
-[[handled_native_errors]]
 location = "lint/_helpers/fixes.py::_FixSession._relation_keys"
 note = "A baseline that does not compile yields no relation keys, as before the compile entry became native; no Python implementation runs instead."
 

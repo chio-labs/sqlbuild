@@ -62,7 +62,6 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigSession,
     PythonSqlReferenceReport,
     StaticMacroExport,
-    StaticMacroFault,
 )
 from sqlbuild.compiler.compile.types import (
     AttachedAuditTargetKind,
@@ -1629,12 +1628,6 @@ def open_native_scope_index(
     static_macros: tuple[StaticMacroExport, ...],
     /,
 ) -> NativeScopeIndex: ...
-def scope_tolerant_index(
-    index: ScopeIndex,
-    snapshot: TolerantScopeDiscovery,
-    faults: tuple[tuple[StaticMacroFault, ...], tuple[tuple[Path, str], ...]],
-    /,
-) -> ScopeIndex: ...
 def scope_placement_validated_index(
     index: ScopeIndex,
     enforce_placement: bool,
@@ -1809,15 +1802,8 @@ def sql_test_cte_span(
     contents: str, sql_body: str, cte_name: str, call: str | None, /
 ) -> tuple[int, int, int, int]: ...
 def scope_normalize_path(path: str, /) -> tuple[str | None, str | None]: ...
-def scope_index_fingerprint(
-    project_dir: Path,
-    inputs: tuple[list[str], list[str], list[str], list[str], str],
-    /,
-) -> str | None: ...
-def read_scope_index_cache(path: Path, fingerprint: str, /) -> ScopeIndex | None: ...
-def write_scope_index_cache(
-    location: tuple[Path, str], fingerprint: str, index: ScopeIndex, /
-) -> bool: ...
+def scope_index_fingerprint(*, project_dir: Path) -> str | None: ...
+def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> ScopeIndex: ...
 def model_schema_scope_usages(
     schema_files: Sequence[DiscoveredModelSchemaFile],
     resolver: DeclarationScopeResolver | None,

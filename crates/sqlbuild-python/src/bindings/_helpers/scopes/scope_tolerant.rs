@@ -1,8 +1,7 @@
 //! The partial scope index of a project that failed strict discovery, with its fault diagnostics.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::placement::main::diagnostic_order::diagnostic_order;
 use sqlbuild_scopes::placement::models::DiagnosticOrderKey;
 use sqlbuild_scopes::scope_index::models::{
@@ -160,8 +159,7 @@ fn tolerant_resources<'py>(
 }
 
 /// The tolerant index: fault diagnostics, prospective resources and partial completeness.
-#[pyfunction]
-fn scope_tolerant_index(
+pub(crate) fn scope_tolerant_index(
     py: Python<'_>,
     index: &Bound<'_, PyAny>,
     snapshot: &Bound<'_, PyAny>,
@@ -231,9 +229,4 @@ fn scope_tolerant_index(
         ],
     )?
     .unbind())
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(scope_tolerant_index, module)?)?;
-    Ok(())
 }

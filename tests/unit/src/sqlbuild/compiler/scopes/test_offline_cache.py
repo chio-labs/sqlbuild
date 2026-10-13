@@ -9,10 +9,9 @@ from typing import cast
 
 import pytest
 
+from sqlbuild._native import load_or_build_scope_index, scope_index_fingerprint
 from sqlbuild.compiler.frontier.main.compiler_cache_directory import compiler_cache_directory
-from sqlbuild.compiler.scopes._helpers.cache import scope_index_fingerprint
 from sqlbuild.compiler.scopes.constants import SCOPE_CACHE_DIRECTORY_NAME, SCOPE_CACHE_FILENAME
-from sqlbuild.compiler.scopes.main.load_or_build_scope_index import load_or_build_scope_index
 from sqlbuild.compiler.scopes.models import DeclarationIdentity, ScopeIndex
 from sqlbuild.compiler.scopes.types import (
     DeclarationKind,
