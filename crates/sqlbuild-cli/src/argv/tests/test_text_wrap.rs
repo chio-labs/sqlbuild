@@ -1,4 +1,6 @@
-use crate::argv::_helpers::text_wrap::{normalize_whitespace, wrap};
+use sqlbuild_core::text::main::text_wrap::text_wrap;
+
+use crate::argv::_helpers::text_wrap::normalize_whitespace;
 use crate::argv::tests::test_types::WrapTestCase;
 
 #[test]
@@ -29,10 +31,10 @@ fn given_help_text_when_wrapping_then_lines_match_python_textwrap() {
 
     for test_case in test_cases {
         assert_eq!(
-            wrap(
+            text_wrap(
                 &normalize_whitespace(test_case.text),
                 test_case.width,
-                test_case.indent
+                (test_case.indent, test_case.indent)
             ),
             test_case.expected_lines,
             "{}",

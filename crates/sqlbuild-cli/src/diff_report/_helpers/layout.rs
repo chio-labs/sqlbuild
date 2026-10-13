@@ -1,6 +1,8 @@
 //! The subset of Rich's console layout the diff summary uses: text, groups, tables and columns.
 
-use crate::diff_report::_helpers::text_cells::{cell_len, wrap_line};
+use sqlbuild_core::text::main::cell_len::cell_len;
+
+use crate::diff_report::_helpers::text_cells::wrap_line;
 
 /// Text attributes and one standard foreground color, as Rich renders them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

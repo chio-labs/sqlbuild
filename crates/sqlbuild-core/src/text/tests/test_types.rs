@@ -65,3 +65,17 @@ pub(super) struct SplitlinesTestCase {
     pub(super) text: &'static str,
     pub(super) expected_lines: &'static [&'static str],
 }
+
+pub(super) struct TextWrapTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) width: usize,
+    pub(super) indents: (&'static str, &'static str),
+    pub(super) expected_lines: &'static [&'static str],
+}
+
+pub(super) struct CellLenTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_cells: usize,
+}
