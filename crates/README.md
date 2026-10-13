@@ -57,6 +57,21 @@ The same check fails when the workspace version, the `pyproject.toml` version an
 `fensu check` applies the Rust structure rules inside each crate: other crates use items through
 `main/` entry points, `models.rs`, `types.rs` and `constants.rs`, not through `_helpers/`.
 
+## Python module paths
+
+`sqlbuild-python` and `sqlbuild-cli` import Python by module path strings. The repository test
+`tests/unit/scripts/native_module_paths` (`scripts/native_module_paths`) keeps them honest:
+
+- every `"sqlbuild...."` literal must be a complete dotted path that imports as a module or
+  resolves as a module attribute; constants whose name contains `LOGGER` hold `logging`
+  logger names and are not imported;
+- attributes are checked where a literal module, or a module constant defined in the same file,
+  is passed with a literal name to an import helper (`imported(py, MODULE, "name")`), to
+  `import(MODULE)?.getattr("name")`, or written as a `("sqlbuild.module", "name")` pair;
+- module paths are never built at runtime: a `format!` or `concat!` template may not start with
+  `sqlbuild.` or with a `{..PACKAGE..}.`/`{..MODULE..}.` constant. Write the complete module
+  path as a constant instead.
+
 ## Compiler
 
 The compiler runs discovery, rendering and analysis natively. Generic compiler stages do not
