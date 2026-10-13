@@ -19,7 +19,7 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule._test_types import (
             imported_module="sqlbuild.rules",
             checked_modules=(
                 "sqlbuild.rule_engine._helpers.engine.rule_harness",
-                "sqlbuild.compiler.pipeline.main.project",
+                "sqlbuild.compiler.discovery._helpers.filesystem.core",
                 "sqlbuild.adapters.duckdb.classes.duckdb_adapter",
             ),
             expected_loaded_modules=(),
@@ -29,7 +29,7 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule._test_types import (
             imported_module="sqlbuild.rule_engine._helpers.host.custom_host",
             checked_modules=(
                 "sqlbuild.rule_engine._helpers.engine.rule_harness",
-                "sqlbuild.compiler.pipeline.main.project",
+                "sqlbuild.compiler.discovery._helpers.filesystem.core",
             ),
             expected_loaded_modules=(),
         ),
