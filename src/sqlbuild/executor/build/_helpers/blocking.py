@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild._native import transitive_closure
+from sqlbuild.compiler.compile.models import CompiledObjectKey
 
 
 def downstream_blocked_keys(

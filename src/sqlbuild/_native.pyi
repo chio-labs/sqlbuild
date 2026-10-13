@@ -9,7 +9,12 @@ from _typeshed import SupportsRichComparison
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RelationInfo
-from sqlbuild.adapter.contract.types import AdapterExecute, FrameworkType
+from sqlbuild.adapter.contract.types import (
+    AdapterExecute,
+    FrameworkType,
+    TablePromotionMode,
+    TypeDialect,
+)
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
@@ -76,6 +81,7 @@ from sqlbuild.compiler.compile.types import (
     SourceInput,
     TypedSqlValueRenderer,
 )
+from sqlbuild.compiler.contracts.models import ContractValidationResult
 from sqlbuild.compiler.discovery.models import (
     ConstantDeclaration,
     DiscoveredAdapterFile,
@@ -2116,23 +2122,12 @@ def semantic_metadata_diagnostics(
 ) -> tuple[Any, ...]: ...
 
 # Native analysis: contracts.
-type _ContractDiagnosticRow = tuple[
-    str, bool, str, str | None, int | None, str | None, tuple[str, str] | None, str
-]
-
-def evaluate_project_model_contracts(
-    settings: tuple[str, bool], project: NativeCompiledProject
-) -> list[
-    tuple[
-        str,
-        list[
-            tuple[str, bool, str, str | None, int | None, str | None, tuple[str, str] | None, str]
-        ],
-    ]
-]: ...
-def project_promotion_conflicts(
-    settings: tuple[str | None, str, str], project: NativeCompiledProject
-) -> list[tuple[str, str, str, str, str]]: ...
+def evaluate_model_contracts(
+    *, project: CompiledProjectView, dialect: TypeDialect | str | None = None
+) -> ContractValidationResult: ...
+def promotion_conflict_diagnostics(
+    *, project: CompiledProjectView, adapter_default: TablePromotionMode, settings_file: str
+) -> tuple[CompilerDiagnostic, ...]: ...
 def build_project_column_lineage(
     project: CompiledProjectView,
     dialect: str | None,

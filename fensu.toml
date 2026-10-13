@@ -70,6 +70,11 @@ reason = "The SQL Server backend intentionally owns behavior through its adapter
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/compiler/contracts/__init__.py"
+reason = "Model contracts are evaluated natively; the package keeps only the validation result model its callers read."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/compiler/fingerprints/__init__.py"
 reason = "Fingerprint hashing and storage run natively; the package keeps the stored-row models, column and node-type vocabulary adapters and the executor share."
 

@@ -51,9 +51,9 @@ fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
     })
 }
 
-type ColumnLocation = (String, usize, usize, usize, usize);
+pub(crate) type ColumnLocation = (String, usize, usize, usize, usize);
 
-fn location_rows(
+pub(crate) fn location_rows(
     locations: Vec<(String, sqlbuild_sqltext::compiler::models::TextLocation)>,
 ) -> Vec<ColumnLocation> {
     locations

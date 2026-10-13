@@ -37,9 +37,6 @@ import sqlbuild.compiler.compile._helpers.diagnostics.recovery as diagnostic_rec
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
 import sqlbuild.compiler.compile._helpers.native_stages.assembly as native_stages
 import sqlbuild.compiler.compile._helpers.native_stages.sql_tests as native_sql_test_stage
-import sqlbuild.compiler.contracts.main._evaluate_native_model_contracts as contract_entry
-import sqlbuild.compiler.contracts.main.promotion_conflicts as promotion_conflicts
-import sqlbuild.compiler.contracts.main.validate as contract_validation
 import sqlbuild.compiler.frontier.main.compiled_code_identity as compiled_code_identity_module
 import sqlbuild.compiler.macro_bridge.classes.macro_bridge as macro_bridge_class
 import sqlbuild.compiler.sql_test_glue.main.plan_native_sql_test_artifacts as plan_artifacts_module
@@ -4815,8 +4812,8 @@ _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_stages, "analyze_native_model_sql"),
     (native_sql_test_stage, "assemble_native_sql_tests"),
     (diagnostic_recovery, "complete_semantic_project"),
-    (contract_validation, "evaluate_native_model_contracts"),
-    (promotion_conflicts, "native_promotion_conflict_diagnostics"),
+    (native_module, "evaluate_model_contracts"),
+    (native_module, "promotion_conflict_diagnostics"),
     (native_module, "build_project_column_lineage"),
     (plan_artifacts_module, "plan_native_sql_test_artifacts"),
 )
@@ -4883,7 +4880,7 @@ def type_system_compile(
     statuses: Counter[str] = Counter()
     normalize: Callable[[str, str], object] = native_module.normalize_type
     evaluate_contracts: Callable[..., ContractValidationResult] = (
-        contract_entry.native_model_contracts
+        native_module.evaluate_model_contracts
     )
 
     def recorded(type_sql: str, dialect: str) -> object:
@@ -4901,7 +4898,7 @@ def type_system_compile(
     type_normalization.normalize_type.cache_clear()
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
-        patch.setattr(contract_entry, "native_model_contracts", recorded_contracts)
+        patch.setattr(native_module, "evaluate_model_contracts", recorded_contracts)
         for name, value in {REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)

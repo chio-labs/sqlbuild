@@ -1,3 +1,4 @@
+pub(crate) mod contract_diagnostics;
 pub(crate) mod dynamic_names;
 pub(crate) mod effective_config;
 pub(crate) mod model_contracts;

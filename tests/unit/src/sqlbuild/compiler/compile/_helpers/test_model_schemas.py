@@ -7,7 +7,12 @@ from typing import cast
 
 import pytest
 
-from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    assemble_project,
+    build_compile_inputs,
+    discover_project_inputs,
+    evaluate_model_contracts,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import (
@@ -18,7 +23,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompileInputsView,
 )
-from sqlbuild.compiler.contracts.main.validate import evaluate_model_contracts
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.main.identity.version_identity_model_metadata import (
     build_model_version_identity_metadata_json,

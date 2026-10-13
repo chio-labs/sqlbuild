@@ -40,8 +40,6 @@ from sqlbuild.compiler.compile.types import (
     CompileInputsView,
     ModelInput,
 )
-from sqlbuild.compiler.contracts._helpers import native_contracts as native_contracts_module
-from sqlbuild.compiler.contracts._helpers import native_promotion as native_promotion_module
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
 from sqlbuild.rule_engine._helpers.run import native_rows as native_rows_module
@@ -71,8 +69,7 @@ TYPE_PROOF_FILES: dict[str, str] = {
 
 _FACTS_CONSUMERS: tuple[ModuleType, ...] = (
     native_rows_module,
-    native_contracts_module,
-    native_promotion_module,
+    _native,
 )
 
 
