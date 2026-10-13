@@ -14,6 +14,7 @@ import duckdb
 import pytest
 
 import sqlbuild._native as native_module
+from sqlbuild._native import PlannedStaticSqlTests, PreparedCompileArtifacts
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     RenderedRetentionChange,
@@ -22,16 +23,15 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import RetentionChangePhase
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands._helpers.compile import target_writer
-from sqlbuild.cli.commands.classes import prepared_compile_artifacts
-from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.main.entrypoint.entry import main
-from sqlbuild.cli.compile.models import PlannedStaticSqlTests
 from sqlbuild.compiler.analysis_session.models import NativeQueryColumns
 from sqlbuild.compiler.frontier.constants import STAGE_CAPTURE_SUFFIX
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.planner.exceptions import NativeSqlTestPlanningError
 from sqlbuild.compiler.planner.models import NativeSqlTestArtifact
+from sqlbuild.compiler.sql_test_glue.main import (
+    plan_native_sql_test_artifacts as plan_artifacts_module,
+)
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )
@@ -170,25 +170,61 @@ def fail_native_planner(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(**kwargs: object) -> tuple[NativeSqlTestArtifact, ...]:
         raise NativeSqlTestPlanningError("native SQL-test planning failed: worker stopped")
 
-    monkeypatch.setattr(target_writer, "plan_native_sql_test_artifacts", fail)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", fail)
 
 
 def record_test_planning_threads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record the thread-name prefix of every background SQL-test planning task."""
 
     threads: list[str] = []
-    plan: Callable[..., PlannedStaticSqlTests] = prepared_compile_artifacts.plan_static_sql_tests
+    plan: Callable[..., PlannedStaticSqlTests] = native_module.plan_static_sql_tests
 
     def recorded_plan(**kwargs: Any) -> PlannedStaticSqlTests:
         threads.append(threading.current_thread().name.rpartition("_")[0])
         return plan(**kwargs)
 
-    monkeypatch.setattr(prepared_compile_artifacts, "plan_static_sql_tests", recorded_plan)
+    monkeypatch.setattr(native_module, "plan_static_sql_tests", recorded_plan)
     return threads
 
 
-def skip_artifact_preparation(self: PreparedCompileArtifacts, **kwargs: object) -> None:
+def use_prepared_artifacts(
+    monkeypatch: pytest.MonkeyPatch, *, model_range: tuple[int, int]
+) -> None:
+    """Compile with background preparation staging projects of this model range."""
+
+    class Prepared(PreparedCompileArtifacts):
+        min_prepared_models: int = model_range[0]
+        max_prepared_models: int = model_range[1]
+
+    monkeypatch.setattr(native_module, "PreparedCompileArtifacts", Prepared)
+
+
+def use_staging_directory_factory(
+    monkeypatch: pytest.MonkeyPatch, *, create_staging: Callable[[Path], None]
+) -> None:
+    """Compile with background staging that creates its directory through create_staging."""
+
+    class Prepared(PreparedCompileArtifacts):
+        def create_staging_directory(self, staging_dir: Path) -> None:
+            create_staging(staging_dir)
+
+    monkeypatch.setattr(native_module, "PreparedCompileArtifacts", Prepared)
+
+
+def skip_artifact_preparation(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable background preparation so the write phase plans SQL tests inline."""
+
+    class Prepared(PreparedCompileArtifacts):
+        def start(self, **kwargs: Any) -> None:
+            """Prepare nothing."""
+
+    monkeypatch.setattr(native_module, "PreparedCompileArtifacts", Prepared)
+
+
+def create_owned_staging_directory(staging_dir: Path) -> None:
+    """Create a staging directory the way a compile does."""
+
+    PreparedCompileArtifacts(enabled=True).create_staging_directory(staging_dir)
 
 
 def has_second_filesystem(root: Path) -> bool:

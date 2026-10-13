@@ -45,7 +45,7 @@ struct Conversion {
 
 /// The report as `orjson.dumps(report, option=OPT_INDENT_2)`, raising orjson's `TypeError`.
 #[pyfunction]
-fn emit_orjson_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn emit_orjson_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
     compiler_guard(|| {
         let mut conversion: Conversion = Conversion::default();
         let value: JsonValue = conversion.json_value(report)?;
@@ -58,7 +58,7 @@ fn emit_orjson_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
 
 /// The report as orjson writes it, or as `json.dumps(indent=2)` does when orjson rejects it.
 #[pyfunction]
-fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
     compiler_guard(|| {
         let mut conversion: Conversion = Conversion::default();
         let value: JsonValue = conversion.json_value(report)?;
@@ -73,6 +73,38 @@ fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
             &JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2))),
         )
     })
+}
+
+/// `orjson.dumps(value, option=OPT_SORT_KEYS)`, raising orjson's `TypeError`.
+pub(crate) fn orjson_sorted(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    let mut conversion: Conversion = Conversion::default();
+    let converted: JsonValue = conversion.json_value(value)?;
+    if let Some(error) = conversion.orjson_error {
+        return Err(PyTypeError::new_err(error));
+    }
+    emitted(
+        &converted,
+        &JsonDialect::Orjson(OrjsonOptions {
+            indent_2: false,
+            sort_keys: true,
+        }),
+    )
+}
+
+/// `json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)`.
+pub(crate) fn compact_sorted_json(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    let mut conversion: Conversion = Conversion::default();
+    let converted: JsonValue = conversion.json_value(value)?;
+    if let Some(error) = conversion.stdlib_error {
+        return Err(error);
+    }
+    emitted(
+        &converted,
+        &JsonDialect::Stdlib(StdlibJsonOptions {
+            sort_keys: true,
+            ..StdlibJsonOptions::new(None).with_separators(",", ":")
+        }),
+    )
 }
 
 fn emitted(value: &JsonValue, dialect: &JsonDialect) -> PyResult<String> {

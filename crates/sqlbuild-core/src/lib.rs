@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cli_text;
 pub mod constants;
 pub mod json;
 pub mod models;

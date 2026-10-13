@@ -1,0 +1,812 @@
+//! Write compiled project output to `target/`: models, functions, audits, SQL tests, manifest.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
+use pyo3::{IntoPyObjectExt, pyclass, pyfunction, wrap_pyfunction};
+use sqlbuild_cache::artifacts::main::new_sql_test_record::new_sql_test_record;
+use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test_record;
+use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
+
+use crate::bindings::_helpers::compile_command::artifact_batch::{ArtifactBatch, timed};
+use crate::bindings::_helpers::compile_command::reuse_recording::{
+    ArtifactRecorder, CompileArtifactWrites, artifact_kept, artifact_moved, artifact_tree_moved,
+};
+use crate::bindings::_helpers::compile_command::test_artifact_cache::{
+    IdentityContext, artifact_identity, artifact_record_key, identity_context, read_cache,
+    write_cache,
+};
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported, keywords, within,
+};
+use crate::bindings::_helpers::compile_outputs::artifacts::{
+    publish_staged_artifacts, remove_stale_artifacts,
+};
+
+const COMPILED_DIR: &str = "compiled";
+const MODELS_DIR: &str = "models";
+const FUNCTIONS_DIR: &str = "functions";
+const AUDITS_DIR: &str = "audits";
+const GENERIC_DIR: &str = "generic";
+const SINGULAR_DIR: &str = "singular";
+const TESTS_DIR: &str = "tests";
+const MANIFEST_FILE: &str = "manifest.json";
+const SQL_FILE_SUFFIX: &str = ".sql";
+/// `functions/<language>` path components that already lead a function's path.
+const LANGUAGE_DIR_DEPTH: usize = 2;
+const PUBLISHED_STAGING_CHANGED: &str = "changed";
+const PUBLISHED_TREE: &str = "tree";
+const OUTPUT_MODELS_MODULE: &str = "sqlbuild.cli.output.models";
+const CLI_EXCEPTIONS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const COMPILED_TEST_PATH_MODULE: &str = "sqlbuild.cli.paths.main._compiled_sql_test_output_path";
+const TEST_PATH_MODULE: &str = "sqlbuild.cli.paths.main._sql_test_output_path";
+const COMPILE_MODELS_MODULE: &str = "sqlbuild.compiler.compile.models";
+const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.planner.exceptions";
+const MODEL_CHAIN_MODULE: &str = "sqlbuild.compiler.planner.main.execution.sql_test_model_chain";
+const PLAN_ARTIFACTS_MODULE: &str =
+    "sqlbuild.compiler.sql_test_glue.main.plan_native_sql_test_artifacts";
+const COMPARISON_SQL_MODULE: &str = "sqlbuild.executor.testing.main.comparison_sql";
+const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
+const TARGET_OPTIONS: (&[&str], &[&str]) = (&["target_dir", "adapter", "project"], &["manifest"]);
+const STAGING_CHANGED_HELP: &str =
+    "Rerun the compile; avoid deleting target/ while a compile is running.";
+
+/// `base / part / ...`.
+fn joined<'py>(base: &Bound<'py, PyAny>, parts: &[&str]) -> PyResult<Bound<'py, PyAny>> {
+    let mut path: Bound<'py, PyAny> = base.clone();
+    for part in parts {
+        path = path.div(*part)?;
+    }
+    Ok(path)
+}
+
+fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+    imported(py, "pathlib", "Path")
+}
+
+/// `relative_path` under `models/`, unless it already starts there.
+fn model_output_path<'py>(relative_path: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = relative_path.py();
+    let parts: Bound<'py, PyTuple> = relative_path.getattr("parts")?.downcast_into()?;
+    if !parts.is_empty() && parts.get_item(0)?.eq(MODELS_DIR)? {
+        return path_class(py)?.call1(parts);
+    }
+    path_class(py)?.call1((MODELS_DIR,))?.div(relative_path)
+}
+
+/// `relative_path` under `functions/<language>/`, as a `.sql` file.
+fn function_output_path<'py>(
+    relative_path: &Bound<'py, PyAny>,
+    language: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = relative_path.py();
+    let parts: Bound<'py, PyTuple> = relative_path.getattr("parts")?.downcast_into()?;
+    let language_dir: Bound<'py, PyAny> = language.getattr("value")?;
+    let path: Bound<'py, PyAny> = if parts.len() >= LANGUAGE_DIR_DEPTH
+        && parts.get_item(0)?.eq(FUNCTIONS_DIR)?
+        && parts.get_item(1)?.eq(&language_dir)?
+    {
+        path_class(py)?.call1(parts)?
+    } else {
+        path_class(py)?
+            .call1((FUNCTIONS_DIR,))?
+            .div(language_dir)?
+            .div(relative_path)?
+    };
+    path.call_method1("with_suffix", (SQL_FILE_SUFFIX,))
+}
+
+/// The audit's folder and file name: generic audits under their target, others singular.
+fn audit_output_path<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = audit.py();
+    let target: Bound<'py, PyAny> = audit.getattr("attached_target_name")?;
+    let column: Bound<'py, PyAny> = audit.getattr("attached_column_name")?;
+    let name: String = audit.getattr("name")?.str()?.to_string();
+    let folder: Bound<'py, PyAny> = if target.is_none() {
+        path_class(py)?.call1((SINGULAR_DIR,))?
+    } else {
+        path_class(py)?.call1((GENERIC_DIR,))?.div(&target)?
+    };
+    let file_name: String = if !target.is_none() && !column.is_none() {
+        format!("{name}__{}{SQL_FILE_SUFFIX}", column.str()?)
+    } else {
+        format!("{name}{SQL_FILE_SUFFIX}")
+    };
+    folder.div(file_name)
+}
+
+/// The function's `CREATE FUNCTION` statements joined into one artifact.
+fn function_sql(adapter: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyResult<String> {
+    let py: Python<'_> = adapter.py();
+    let mut arguments: Vec<(&str, Bound<'_, PyAny>)> = vec![(
+        "destination",
+        function.getattr("destination")?.getattr("qualified_name")?,
+    )];
+    for field in [
+        "arguments",
+        "returns",
+        "body_sql",
+        "return_columns",
+        "language",
+        "runtime_version",
+        "entry_point",
+        "packages",
+    ] {
+        arguments.push((field, function.getattr(field)?));
+    }
+    let statements: Vec<String> = adapter
+        .getattr("render_create_function")?
+        .call((), Some(&keywords(py, &arguments)?))?
+        .extract()?;
+    Ok(statements.join(";\n\n"))
+}
+
+/// Delete compiled files no write group manages.
+fn remove_stale(target_dir: &Bound<'_, PyAny>, managed: &[Bound<'_, PyAny>]) -> PyResult<()> {
+    let py: Python<'_> = target_dir.py();
+    let compiled: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
+    let managed: Vec<PathBuf> = managed
+        .iter()
+        .map(|path| path.extract())
+        .collect::<PyResult<_>>()?;
+    timed(py, "stale_traversal_ms", || {
+        remove_stale_artifacts(py, compiled, managed).map(|_| ())
+    })
+}
+
+fn write_manifest(
+    target_dir: &Bound<'_, PyAny>,
+    manifest: &Bound<'_, PyAny>,
+    recorder: ArtifactRecorder<'_>,
+) -> PyResult<()> {
+    if manifest.is_none() {
+        return Ok(());
+    }
+    let mut batch: ArtifactBatch = ArtifactBatch::new(true, recorder);
+    batch.queue(
+        &joined(target_dir, &[MANIFEST_FILE])?,
+        manifest.call_method0("contents")?.extract()?,
+    )?;
+    batch.flush(target_dir.py())
+}
+
+/// Whether `target/compiled` exists, after making sure `target/` does.
+fn prepared_target(target_dir: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py: Python<'_> = target_dir.py();
+    let existed: bool = joined(target_dir, &[COMPILED_DIR])?
+        .call_method0("is_dir")?
+        .is_truthy()?;
+    let _ = target_dir.call_method(
+        "mkdir",
+        (),
+        Some(&keywords(
+            py,
+            &[
+                ("parents", true.into_bound_py_any(py)?),
+                ("exist_ok", true.into_bound_py_any(py)?),
+            ],
+        )?),
+    )?;
+    Ok(existed)
+}
+
+fn written_target<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    counts: [usize; 5],
+    diagnostics: Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = target_dir.py();
+    let [models, seeds, functions, audits, tests] = counts;
+    call_with(
+        &imported(py, OUTPUT_MODELS_MODULE, "WrittenTarget")?,
+        &[
+            ("model_count", models.into_bound_py_any(py)?),
+            ("seed_count", seeds.into_bound_py_any(py)?),
+            ("function_count", functions.into_bound_py_any(py)?),
+            ("audit_count", audits.into_bound_py_any(py)?),
+            ("test_count", tests.into_bound_py_any(py)?),
+            ("target_dir", target_dir.clone()),
+            ("diagnostics", diagnostics),
+        ],
+    )
+}
+
+fn length(value: &Bound<'_, PyAny>, field: &str) -> PyResult<usize> {
+    value.getattr(field)?.len()
+}
+
+/// Write the planner's compiled output under `target_dir`.
+fn write_planned_target<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+    plan_output: &Bound<'py, PyAny>,
+    manifest: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = target_dir.py();
+    let remove_stale_files: bool = prepared_target(target_dir)?;
+    let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, None);
+    let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
+    let compiled: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR])?;
+    for entry in plan_output.getattr("model_entries")?.try_iter()? {
+        let entry: Bound<'py, PyAny> = entry?;
+        let path: Bound<'py, PyAny> =
+            compiled.div(model_output_path(&entry.getattr("relative_path")?)?)?;
+        batch.queue_sql(&path, &entry.getattr("resolved_sql")?.extract::<String>()?)?;
+        managed.push(path);
+    }
+    batch.flush(py)?;
+    for entry in plan_output.getattr("function_entries")?.try_iter()? {
+        let entry: Bound<'py, PyAny> = entry?;
+        if entry
+            .getattr("destination")?
+            .getattr("qualified_name")?
+            .is_none()
+        {
+            continue;
+        }
+        let sql: String = function_sql(adapter, &entry)?;
+        let path: Bound<'py, PyAny> = compiled.div(function_output_path(
+            &entry.getattr("relative_path")?,
+            &entry.getattr("language")?,
+        )?)?;
+        batch.queue_sql(&path, &sql)?;
+        managed.push(path);
+    }
+    batch.flush(py)?;
+    for entry in plan_output.getattr("audit_entries")?.try_iter()? {
+        let entry: Bound<'py, PyAny> = entry?;
+        let path: Bound<'py, PyAny> = compiled.div(AUDITS_DIR)?.div(audit_output_path(&entry)?)?;
+        batch.queue_sql(&path, &entry.getattr("resolved_sql")?.extract::<String>()?)?;
+        managed.push(path);
+    }
+    batch.flush(py)?;
+    for entry in plan_output.getattr("test_entries")?.try_iter()? {
+        let entry: Bound<'py, PyAny> = entry?;
+        let path: Bound<'py, PyAny> = compiled
+            .div(TESTS_DIR)?
+            .div(imported(py, TEST_PATH_MODULE, "sql_test_output_path")?.call1((&entry,))?)?;
+        let comparison_sql: String = timed(py, "comparison_render_ms", || {
+            call_with(
+                &imported(py, COMPARISON_SQL_MODULE, "build_sql_test_comparison_sql")?,
+                &[
+                    ("test_entry", entry.clone()),
+                    (
+                        "set_difference_operator",
+                        adapter.call_method0("render_set_difference_operator")?,
+                    ),
+                    (
+                        "sql_analysis_dialect",
+                        adapter.call_method0("sql_analysis_dialect")?,
+                    ),
+                ],
+            )?
+            .extract()
+        })?;
+        batch.queue_sql(&path, &comparison_sql)?;
+        managed.push(path);
+    }
+    batch.flush(py)?;
+    if remove_stale_files {
+        remove_stale(target_dir, &managed)?;
+    }
+    write_manifest(target_dir, manifest, None)?;
+    written_target(
+        target_dir,
+        [
+            length(plan_output, "model_entries")?,
+            length(plan_output, "seed_entries")?,
+            length(plan_output, "function_entries")?,
+            length(plan_output, "audit_entries")?,
+            length(plan_output, "test_entries")?,
+        ],
+        PyTuple::empty(py).into_any(),
+    )
+}
+
+/// SQL tests planned ahead of the write phase, and where the compile notes its artifact writes.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Prepared<'a, 'py> {
+    /// `planned_tests()` hands over the background plan, when one was started.
+    pub(crate) planned_tests: Option<&'a Bound<'py, PyAny>>,
+    pub(crate) recorder: ArtifactRecorder<'a>,
+}
+
+/// A test needing a fresh artifact, with its cache slot and artifact identity when caching.
+type PendingTest = (Py<PyAny>, Option<String>, Option<String>);
+
+/// The managed SQL test artifact paths and the planning diagnostics of one write.
+type WrittenTests<'py> = (Vec<Bound<'py, PyAny>>, Vec<Bound<'py, PyAny>>);
+
+/// SQL tests whose cached artifacts cannot be reused, planned, beside the reusable ones.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct PlannedStaticSqlTests {
+    tests_root: Py<PyAny>,
+    /// Each pending test with its cache slot and artifact identity, when caching.
+    pending: Vec<PendingTest>,
+    /// One planned `NativeSqlTestArtifact` per pending test.
+    artifacts: Vec<Py<PyAny>>,
+    cached_paths: Vec<Py<PyAny>>,
+    cached_records: Vec<(String, SqlTestArtifactRecord)>,
+}
+
+/// `zip(pending, artifacts, strict=True)`.
+fn zipped(
+    planned: &PlannedStaticSqlTests,
+) -> PyResult<impl Iterator<Item = (&PendingTest, &Py<PyAny>)>> {
+    if planned.pending.len() != planned.artifacts.len() {
+        let relation: &str = if planned.artifacts.len() < planned.pending.len() {
+            "shorter"
+        } else {
+            "longer"
+        };
+        return Err(PyValueError::new_err(format!(
+            "zip() argument 2 is {relation} than argument 1"
+        )));
+    }
+    Ok(planned.pending.iter().zip(planned.artifacts.iter()))
+}
+
+/// Plan the tests natively inside the SQL-test planning lifecycle.
+fn planned_artifacts<'py>(
+    adapter: &Bound<'py, PyAny>,
+    project: &Bound<'py, PyAny>,
+    tests: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Vec<Py<PyAny>>> {
+    let py: Python<'py> = project.py();
+    if tests.is_empty() {
+        return Ok(Vec::new());
+    }
+    let lifecycle: Bound<'py, PyAny> = call_with(
+        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &[
+            ("operation_kind", "project".into_bound_py_any(py)?),
+            ("operation_name", "sql_test_planning".into_bound_py_any(py)?),
+        ],
+    )?;
+    within(&lifecycle, |entered| {
+        let artifacts: Vec<Py<PyAny>> = call_with(
+            &imported(py, PLAN_ARTIFACTS_MODULE, "plan_native_sql_test_artifacts")?,
+            &[
+                ("project", project.clone()),
+                ("tests", PyTuple::new(py, tests)?.into_any()),
+                ("adapter", adapter.clone()),
+                (
+                    "sql_analysis_enabled",
+                    project.getattr("settings")?.getattr("sql_analysis")?,
+                ),
+            ],
+        )?
+        .try_iter()?
+        .map(|artifact| artifact.map(Bound::unbind))
+        .collect::<PyResult<_>>()?;
+        let metadata: Bound<'py, PyDict> = PyDict::new(py);
+        metadata.set_item("item_count", artifacts.len())?;
+        let _ = call_with(
+            &entered.getattr("completed")?,
+            &[("metadata", metadata.into_any())],
+        )?;
+        Ok(artifacts)
+    })
+}
+
+/// Plan every SQL test whose cached artifact under `target_dir` cannot be reused.
+fn plan_tests<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    (adapter, project): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    recorder: ArtifactRecorder<'_>,
+) -> PyResult<PlannedStaticSqlTests> {
+    let py: Python<'py> = project.py();
+    let tests_root: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR, TESTS_DIR])?;
+    let tests_root_path: PathBuf = tests_root.extract()?;
+    let cache_dir: Bound<'py, PyAny> = project.getattr("compile_cache_dir")?;
+    let cached: HashMap<String, SqlTestArtifactRecord> = read_cache(&cache_dir)?;
+    let tests: Bound<'py, PyAny> = project.getattr("sql_tests")?;
+    let caching: Option<(IdentityContext<'py>, Bound<'py, PyAny>)> = if cache_dir.is_none() {
+        None
+    } else {
+        let context: IdentityContext<'py> = identity_context(project, adapter)?;
+        let chains: Bound<'py, PyAny> = call_with(
+            &imported(py, MODEL_CHAIN_MODULE, "sql_test_model_chain_names_by_key")?,
+            &[("project", project.clone()), ("tests", tests.clone())],
+        )?;
+        Some((context, chains))
+    };
+    let mut pending: Vec<PendingTest> = Vec::new();
+    let mut cached_paths: Vec<Py<PyAny>> = Vec::new();
+    let mut cached_records: Vec<(String, SqlTestArtifactRecord)> = Vec::new();
+    let empty: Bound<'py, PyTuple> = PyTuple::empty(py);
+    for test in tests.try_iter()? {
+        let test: Bound<'py, PyAny> = test?;
+        let Some((context, chains)) = &caching else {
+            pending.push((test.unbind(), None, None));
+            continue;
+        };
+        let record_key: String = artifact_record_key(&test)?;
+        let chain: Bound<'py, PyAny> =
+            chains.call_method1("get", (test.getattr("key")?, &empty))?;
+        let identity: String = artifact_identity(&test, &chain, context)?;
+        let reusable: Option<SqlTestArtifactRecord> = cached
+            .get(&record_key)
+            .and_then(|record| reusable_sql_test_record(&tests_root_path, record, &identity));
+        if let Some(record) = reusable {
+            let path: Bound<'py, PyAny> = tests_root.div(&record.relative_path)?;
+            artifact_kept(recorder, &path, (record.size, record.mtime_ns))?;
+            cached_paths.push(path.unbind());
+            cached_records.push((record_key, record));
+            continue;
+        }
+        pending.push((test.unbind(), Some(record_key), Some(identity)));
+    }
+    let pending_tests: Vec<Bound<'py, PyAny>> = pending
+        .iter()
+        .map(|(test, _, _)| test.bind(py).clone())
+        .collect();
+    let artifacts: Vec<Py<PyAny>> = planned_artifacts(adapter, project, pending_tests)?;
+    Ok(PlannedStaticSqlTests {
+        tests_root: tests_root.unbind(),
+        pending,
+        artifacts,
+        cached_paths,
+        cached_records,
+    })
+}
+
+/// The planned tests handed over by `planned_tests()`, when they target `target_dir`.
+fn resolved_plan<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    (adapter, project): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    prepared: Prepared<'_, 'py>,
+) -> PyResult<Bound<'py, PlannedStaticSqlTests>> {
+    let py: Python<'py> = project.py();
+    if let Some(planned_tests) = prepared.planned_tests {
+        let planned: Bound<'py, PyAny> = planned_tests.call0()?;
+        if !planned.is_none() {
+            let planned: Bound<'py, PlannedStaticSqlTests> = planned.downcast_into()?;
+            if planned
+                .get()
+                .tests_root
+                .bind(py)
+                .eq(joined(target_dir, &[COMPILED_DIR, TESTS_DIR])?)?
+            {
+                return Ok(planned);
+            }
+        }
+    }
+    Bound::new(
+        py,
+        plan_tests(target_dir, (adapter, project), prepared.recorder)?,
+    )
+}
+
+/// The planning errors of one test's artifact, as SQL test diagnostics.
+fn artifact_diagnostics<'py>(
+    test: &Bound<'py, PyAny>,
+    artifact: &Bound<'py, PyAny>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let py: Python<'py> = test.py();
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
+    for message in artifact.getattr("error_messages")?.try_iter()? {
+        diagnostics.push(call_with(
+            &imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?,
+            &[
+                ("phase", "test".into_bound_py_any(py)?),
+                ("severity", "error".into_bound_py_any(py)?),
+                (
+                    "code",
+                    imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?
+                        .getattr("code")?,
+                ),
+                ("message", message?),
+                ("resource_type", "sql_test".into_bound_py_any(py)?),
+                ("resource_name", test.getattr("name")?),
+                ("path", test.getattr("source_path")?),
+            ],
+        )?);
+    }
+    Ok(diagnostics)
+}
+
+/// Write planned SQL test artifacts and the cache; returns managed paths and planning errors.
+fn write_static_tests<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    (adapter, project): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    prepared: Prepared<'_, 'py>,
+    batch: &mut ArtifactBatch,
+) -> PyResult<WrittenTests<'py>> {
+    let py: Python<'py> = project.py();
+    let planned: Bound<'py, PlannedStaticSqlTests> =
+        resolved_plan(target_dir, (adapter, project), prepared)?;
+    let planned: &PlannedStaticSqlTests = planned.get();
+    let tests_root: &Bound<'py, PyAny> = planned.tests_root.bind(py);
+    let tests_root_path: PathBuf = tests_root.extract()?;
+    let mut managed: Vec<Bound<'py, PyAny>> = planned
+        .cached_paths
+        .iter()
+        .map(|path| path.bind(py).clone())
+        .collect();
+    let mut records: Vec<(String, SqlTestArtifactRecord)> = planned.cached_records.clone();
+    let mut test_paths: Vec<Bound<'py, PyAny>> = Vec::new();
+    for ((test, _, _), artifact) in zipped(planned)? {
+        let artifact: &Bound<'py, PyAny> = artifact.bind(py);
+        let path: Bound<'py, PyAny> = tests_root.div(call_with(
+            &imported(
+                py,
+                COMPILED_TEST_PATH_MODULE,
+                "compiled_sql_test_output_path",
+            )?,
+            &[
+                ("test", test.bind(py).clone()),
+                ("model_names", artifact.getattr("model_names")?),
+            ],
+        )?)?;
+        batch.queue_sql(&path, &artifact.getattr("sql")?.extract::<String>()?)?;
+        managed.push(path.clone());
+        test_paths.push(path);
+    }
+    batch.flush(py)?;
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
+    for (((test, record_key, identity), artifact), path) in zipped(planned)?.zip(&test_paths) {
+        let found: Vec<Bound<'py, PyAny>> = artifact_diagnostics(test.bind(py), artifact.bind(py))?;
+        if !found.is_empty() {
+            diagnostics.extend(found);
+            continue;
+        }
+        if let (Some(record_key), Some(identity)) = (record_key, identity) {
+            let artifact_path: PathBuf = path.extract()?;
+            if let Some(record) = new_sql_test_record(&tests_root_path, &artifact_path, identity) {
+                records.retain(|(key, _)| key != record_key);
+                records.push((record_key.clone(), record));
+            }
+        }
+    }
+    timed(py, "cache_publication_ms", || {
+        write_cache(&project.getattr("compile_cache_dir")?, &records)
+    })?;
+    Ok((managed, diagnostics))
+}
+
+/// Write offline compiled output under `target_dir`, reusing SQL tests planned ahead.
+pub(crate) fn write_static_target<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    (adapter, project): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    manifest: &Bound<'py, PyAny>,
+    prepared: Prepared<'_, 'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = target_dir.py();
+    let remove_stale_files: bool = prepared_target(target_dir)?;
+    let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, prepared.recorder);
+    let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
+    let compiled: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR])?;
+    for model in project.getattr("models")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        let path: Bound<'py, PyAny> =
+            compiled.div(model_output_path(&model.getattr("relative_path")?)?)?;
+        batch.queue_sql(&path, &model.getattr("query_sql")?.extract::<String>()?)?;
+        managed.push(path);
+    }
+    batch.flush(py)?;
+    for function in project.getattr("functions")?.try_iter()? {
+        let function: Bound<'py, PyAny> = function?;
+        if function
+            .getattr("destination")?
+            .getattr("qualified_name")?
+            .is_none()
+        {
+            continue;
+        }
+        let sql: String = function_sql(adapter, &function)?;
+        let path: Bound<'py, PyAny> = compiled.div(function_output_path(
+            &function.getattr("relative_path")?,
+            &function.getattr("language")?,
+        )?)?;
+        batch.queue_sql(&path, &sql)?;
+        managed.push(path);
+    }
+    batch.flush(py)?;
+    for audit in project.getattr("audits")?.try_iter()? {
+        let audit: Bound<'py, PyAny> = audit?;
+        let path: Bound<'py, PyAny> = compiled.div(AUDITS_DIR)?.div(audit_output_path(&audit)?)?;
+        batch.queue_sql(&path, &audit.getattr("sql_body")?.extract::<String>()?)?;
+        managed.push(path);
+    }
+    batch.flush(py)?;
+    let (test_paths, diagnostics) =
+        write_static_tests(target_dir, (adapter, project), prepared, &mut batch)?;
+    managed.extend(test_paths);
+    if remove_stale_files {
+        remove_stale(target_dir, &managed)?;
+    }
+    write_manifest(target_dir, manifest, prepared.recorder)?;
+    written_target(
+        target_dir,
+        [
+            length(project, "models")?,
+            length(project, "seeds")?,
+            length(project, "functions")?,
+            length(project, "audits")?,
+            length(project, "sql_tests")?,
+        ],
+        PyTuple::new(py, diagnostics)?.into_any(),
+    )
+}
+
+/// Plan uncached SQL tests and report their errors without writing artifacts or cache.
+pub(crate) fn planning_diagnostics<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    (adapter, project): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    prepared: Prepared<'_, 'py>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = project.py();
+    let planned: Bound<'py, PlannedStaticSqlTests> =
+        resolved_plan(target_dir, (adapter, project), prepared)?;
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
+    for ((test, _, _), artifact) in zipped(planned.get())? {
+        diagnostics.extend(artifact_diagnostics(test.bind(py), artifact.bind(py))?);
+    }
+    PyTuple::new(py, diagnostics)
+}
+
+/// Publish staged files with the same unchanged-file and stale-file semantics as a write.
+pub(crate) fn publish_staged_target<'py>(
+    (prepared, expected_files): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    target_dir: &Bound<'py, PyAny>,
+    manifest: &Bound<'py, PyAny>,
+    recorder: ArtifactRecorder<'_>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = target_dir.py();
+    let staged_dir: Bound<'py, PyAny> = joined(&prepared.getattr("target_dir")?, &[COMPILED_DIR])?;
+    let compiled_dir: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR])?;
+    let existed: bool = compiled_dir.call_method0("is_dir")?.is_truthy()?;
+    let expected: Vec<PathBuf> = py
+        .import("builtins")?
+        .getattr("sorted")?
+        .call1((expected_files,))?
+        .extract()?;
+    let (staged, compiled): (PathBuf, PathBuf) = (staged_dir.extract()?, compiled_dir.extract()?);
+    let (kind, published) = timed(py, "physical_write_ms", || {
+        publish_staged_artifacts(py, staged, compiled, expected)
+    })?;
+    if kind == PUBLISHED_STAGING_CHANGED {
+        return Err(staging_changed(
+            py,
+            "staged compile artifacts changed before publication; no artifact was published",
+        )?);
+    }
+    if kind == PUBLISHED_TREE {
+        artifact_tree_moved(recorder, &staged_dir, &compiled_dir)?;
+    } else {
+        let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
+        for (source, path) in &published {
+            artifact_moved(
+                recorder,
+                &source.into_bound_py_any(py)?,
+                &path.into_bound_py_any(py)?,
+            )?;
+            managed.push(path_class(py)?.call1((path,))?);
+        }
+        if existed {
+            remove_stale(target_dir, &managed)?;
+        }
+    }
+    write_manifest(target_dir, manifest, recorder)?;
+    written_target(
+        target_dir,
+        [
+            prepared.getattr("model_count")?.extract()?,
+            prepared.getattr("seed_count")?.extract()?,
+            prepared.getattr("function_count")?.extract()?,
+            prepared.getattr("audit_count")?.extract()?,
+            prepared.getattr("test_count")?.extract()?,
+        ],
+        prepared.getattr("diagnostics")?,
+    )
+}
+
+/// `StagedArtifactsChangedError(message, help=...)`.
+pub(crate) fn staging_changed(py: Python<'_>, message: &str) -> PyResult<PyErr> {
+    let error: Bound<'_, PyAny> =
+        imported(py, CLI_EXCEPTIONS_MODULE, "StagedArtifactsChangedError")?.call(
+            (message,),
+            Some(&keywords(
+                py,
+                &[("help", STAGING_CHANGED_HELP.into_bound_py_any(py)?)],
+            )?),
+        )?;
+    Ok(PyErr::from_value(error))
+}
+
+/// Write offline compiled output files under `target_dir`.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn write_static_compile_target<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> =
+        KeywordArguments::read(py, "write_static_compile_target", options, TARGET_OPTIONS)?;
+    write_static_target(
+        &arguments.value("target_dir")?,
+        (&arguments.value("adapter")?, &arguments.value("project")?),
+        &arguments.value("manifest")?,
+        Prepared::default(),
+    )
+}
+
+/// Write the planner's compiled output files under `target_dir`.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn write_compile_target<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "write_compile_target",
+        options,
+        (&["target_dir", "adapter", "plan_output"], &["manifest"]),
+    )?;
+    write_planned_target(
+        &arguments.value("target_dir")?,
+        &arguments.value("adapter")?,
+        &arguments.value("plan_output")?,
+        &arguments.value("manifest")?,
+    )
+}
+
+/// Plan uncached SQL tests and report their errors without writing artifacts or cache.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn static_sql_test_planning_diagnostics<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "static_sql_test_planning_diagnostics",
+        options,
+        (&["target_dir", "adapter", "project"], &[]),
+    )?;
+    planning_diagnostics(
+        &arguments.value("target_dir")?,
+        (&arguments.value("adapter")?, &arguments.value("project")?),
+        Prepared::default(),
+    )
+}
+
+/// Plan every SQL test whose cached artifact under `target_dir` cannot be reused.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn plan_static_sql_tests<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<PlannedStaticSqlTests> {
+    let arguments: KeywordArguments<'py> = KeywordArguments::read(
+        py,
+        "plan_static_sql_tests",
+        options,
+        (&["target_dir", "adapter", "project"], &["artifact_writes"]),
+    )?;
+    let recorder: Option<Py<CompileArtifactWrites>> =
+        arguments.value("artifact_writes")?.extract()?;
+    plan_tests(
+        &arguments.value("target_dir")?,
+        (&arguments.value("adapter")?, &arguments.value("project")?),
+        recorder.as_ref(),
+    )
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PlannedStaticSqlTests>()?;
+    module.add_function(wrap_pyfunction!(write_static_compile_target, module)?)?;
+    module.add_function(wrap_pyfunction!(write_compile_target, module)?)?;
+    module.add_function(wrap_pyfunction!(
+        static_sql_test_planning_diagnostics,
+        module
+    )?)?;
+    module.add_function(wrap_pyfunction!(plan_static_sql_tests, module)?)
+}

@@ -12,5 +12,6 @@ pub mod python_cleandoc;
 pub mod python_isalnum;
 pub mod python_isdigit;
 pub mod python_isspace;
+pub mod python_splitlines;
 pub mod python_str_repr;
 pub mod python_strip;

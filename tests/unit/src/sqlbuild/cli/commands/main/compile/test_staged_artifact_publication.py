@@ -1,4 +1,4 @@
-"""Staged cold-compile artifacts publish safely across filesystems and concurrent cleanup."""
+"""Staged cold-compile artifacts publish safely beside existing trees and concurrent cleanup."""
 
 from __future__ import annotations
 
@@ -11,26 +11,20 @@ from typing import Any
 import pytest
 from filelock import FileLock, Timeout
 
+from sqlbuild._native import PreparedCompileArtifacts
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands._helpers.compile.target_writer import (
-    publish_static_compile_target,
-    staged_artifact_files,
-    write_static_compile_target,
-)
-from sqlbuild.cli.commands.classes import prepared_compile_artifacts
-from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.exceptions import StagedArtifactsChangedError
 from sqlbuild.cli.output.models import WrittenTarget
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
-    CrossDeviceStagedPublishTestCase,
+    StagedPublishTestCase,
     StagingInterleavingTestCase,
     TamperedStagedPublishTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
+    StagingEveryProject,
     build_static_target_writer_project,
-    cross_device_rename,
-    cross_device_replace,
     read_target_files,
+    staged_then_published,
     write_relative_files,
 )
 
@@ -49,14 +43,14 @@ _PUBLISHED_FILES: dict[str, str] = {
 @pytest.mark.parametrize(
     "test_case",
     [
-        CrossDeviceStagedPublishTestCase(
-            description="new files join an existing tree on another filesystem",
+        StagedPublishTestCase(
+            description="new files join an existing tree and replace its stale files",
             existing_files={"compiled/models/obsolete.sql": "SELECT 0\n"},
             expected_files=_PUBLISHED_FILES,
             expected_removed=("compiled/models/obsolete.sql",),
         ),
-        CrossDeviceStagedPublishTestCase(
-            description="a cold tree that cannot be moved is copied file by file",
+        StagedPublishTestCase(
+            description="a cold tree is published whole",
             existing_files={},
             expected_files=_PUBLISHED_FILES,
             expected_removed=(),
@@ -64,31 +58,20 @@ _PUBLISHED_FILES: dict[str, str] = {
     ],
     ids=lambda case: case.description,
 )
-def test_given_cross_device_target_when_publishing_staged_artifacts_then_files_are_copied(
-    test_case: CrossDeviceStagedPublishTestCase,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+def test_given_staged_artifacts_when_publishing_then_target_holds_exactly_the_staged_files(
+    test_case: StagedPublishTestCase, tmp_path: Path
 ) -> None:
-    staging: Path = tmp_path / "staging"
     target: Path = tmp_path / "target"
-    prepared: WrittenTarget = write_static_compile_target(
-        target_dir=staging, adapter=DuckDbAdapter(), project=build_static_target_writer_project()
-    )
-    expected_names: frozenset[str] = staged_artifact_files(target_dir=staging)
     write_relative_files(root=target, files=test_case.existing_files)
-    monkeypatch.setattr(
-        os, "replace", cross_device_replace(staging_root=staging, real_replace=os.replace)
-    )
-    monkeypatch.setattr(os, "rename", cross_device_rename)
 
-    written: WrittenTarget = publish_static_compile_target(
-        prepared=prepared, target_dir=target, manifest=None, expected_files=expected_names
-    )
+    written: WrittenTarget | None = staged_then_published(target=target)
 
+    assert written is not None
     assert written.target_dir == target
     assert read_target_files(target, test_case.expected_files) == test_case.expected_files
     assert not any((target / relative).exists() for relative in test_case.expected_removed)
     assert sorted(path.name for path in target.rglob("*.tmp")) == []
+    assert sorted(path.name for path in target.glob(".sqlbuild-staging-*")) == []
 
 
 @pytest.mark.parametrize(
@@ -106,20 +89,16 @@ def test_given_cross_device_target_when_publishing_staged_artifacts_then_files_a
 def test_given_changed_staging_tree_when_publishing_then_nothing_stale_is_deleted(
     test_case: TamperedStagedPublishTestCase, tmp_path: Path
 ) -> None:
-    staging: Path = tmp_path / "staging"
     target: Path = tmp_path / "target"
-    prepared: WrittenTarget = write_static_compile_target(
-        target_dir=staging, adapter=DuckDbAdapter(), project=build_static_target_writer_project()
-    )
-    expected_names: frozenset[str] = staged_artifact_files(target_dir=staging)
     write_relative_files(root=target, files=test_case.existing_files)
-    for relative in test_case.removed_staged_files:
-        (staging / relative).unlink()
+
+    def remove_staged(root: Path) -> None:
+        for relative in test_case.removed_staged_files:
+            for staged in root.glob(f".sqlbuild-staging-*/{relative}"):
+                staged.unlink()
 
     with pytest.raises(StagedArtifactsChangedError):
-        publish_static_compile_target(
-            prepared=prepared, target_dir=target, manifest=None, expected_files=expected_names
-        )
+        _ = staged_then_published(target=target, before_publish=remove_staged)
 
     assert read_target_files(target, test_case.expected_kept_files) == (
         test_case.expected_kept_files
@@ -149,24 +128,22 @@ def test_given_cleanup_interleaved_with_staging_when_compiling_then_live_staging
     target: Path = tmp_path / "target"
     write_relative_files(root=target, files=test_case.existing_files)
     survived: list[bool] = []
-    create_staging: Callable[[Path], None] = prepared_compile_artifacts._create_staging_directory
     remove_tree: Callable[..., None] = shutil.rmtree
 
-    def create_then_clean(staging_dir: Path) -> None:
-        create_staging(staging_dir)
-        PreparedCompileArtifacts(enabled=True).remove_abandoned_staging(target_dir=target)
-        survived.append((staging_dir / ".owner").is_file())
+    class CleanedWhileStaging(StagingEveryProject):
+        def create_staging_directory(self, staging_dir: Path) -> None:
+            super().create_staging_directory(staging_dir)
+            PreparedCompileArtifacts(enabled=True).remove_abandoned_staging(target_dir=target)
+            survived.append((staging_dir / ".owner").is_file())
 
     def remove_while_locked(path: Any, *args: Any, **kwargs: Any) -> None:
         with pytest.raises(Timeout):
             FileLock(f"{os.fspath(path)}.lock", timeout=0).acquire()
         remove_tree(path, *args, **kwargs)
 
-    monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
-    monkeypatch.setattr(prepared_compile_artifacts, "_create_staging_directory", create_then_clean)
     monkeypatch.setattr(shutil, "rmtree", remove_while_locked)
 
-    with PreparedCompileArtifacts(enabled=True) as artifacts:
+    with CleanedWhileStaging(enabled=True) as artifacts:
         artifacts.remove_abandoned_staging(target_dir=target)
         artifacts.start(
             project=build_static_target_writer_project(),
@@ -196,15 +173,12 @@ def test_given_cleanup_interleaved_with_staging_when_compiling_then_live_staging
     ids=lambda case: case.description,
 )
 def test_given_staging_owner_lost_when_publishing_then_compile_fails_without_deleting(
-    test_case: TamperedStagedPublishTestCase,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    test_case: TamperedStagedPublishTestCase, tmp_path: Path
 ) -> None:
     target: Path = tmp_path / "target"
     write_relative_files(root=target, files=test_case.existing_files)
-    monkeypatch.setattr(prepared_compile_artifacts, "_MIN_PREPARED_ARTIFACT_MODELS", 1)
 
-    with PreparedCompileArtifacts(enabled=True) as artifacts:
+    with StagingEveryProject(enabled=True) as artifacts:
         artifacts.start(
             project=build_static_target_writer_project(),
             adapter=DuckDbAdapter(),

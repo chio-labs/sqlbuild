@@ -11,13 +11,10 @@ import sqlbuild._native as _native
 from sqlbuild._native import (
     compiled_model_record,
     project_with,
-)
-from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands._helpers.compile import target_writer as target_writer_module
-from sqlbuild.cli.commands._helpers.compile.target_writer import (
     write_compile_target,
     write_static_compile_target,
 )
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.output.models import (
     WrittenTarget,
 )
@@ -29,7 +26,11 @@ from sqlbuild.compiler.compile.types import (
     DiagnosticPhase,
 )
 from sqlbuild.compiler.manifest.main.build import build_manifest
+from sqlbuild.compiler.planner.main.execution import sql_test_model_chain as model_chain_module
 from sqlbuild.compiler.planner.models import ChainStep, PlanOutput, SqlTestPlanEntry
+from sqlbuild.compiler.sql_test_glue.main import (
+    plan_native_sql_test_artifacts as plan_artifacts_module,
+)
 from sqlbuild.executor.testing.main.comparison_sql import build_sql_test_comparison_sql
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     ExpectedMessageTestCase,
@@ -353,8 +354,8 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     )
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     original_mtime_ns: int = artifact_path.stat().st_mtime_ns
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -390,8 +391,8 @@ def test_given_artifact_with_moved_mtime_and_same_bytes_when_writing_then_reuses
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     moved_mtime_ns: int = artifact_path.stat().st_mtime_ns + 1_000_000_000
     os.utime(artifact_path, ns=(moved_mtime_ns, moved_mtime_ns))
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -433,8 +434,8 @@ def test_given_test_with_planning_error_when_writing_twice_then_error_is_not_cac
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
 
     second: WrittenTarget = write_static_compile_target(
         target_dir=target_dir,
@@ -474,8 +475,8 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
     changed_project: CompiledProjectView = project_with(
         project=project,
         models=(
@@ -520,8 +521,8 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
         project=project,
         models=(*project.models, unrelated_model),
     )
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -548,8 +549,8 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
     changed_test: CompiledSqlTest = replace(
         project.sql_tests[0], sql_body=project.sql_tests[0].sql_body + "\n-- edit"
     )
@@ -584,8 +585,8 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -611,11 +612,11 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
         project=build_cached_target_writer_project(target_dir=target_dir),
         compile_cache_dir=None,
     )
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
-    closure_index_spy: Mock = Mock(wraps=target_writer_module.sql_test_model_chain_names_by_key)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
+    closure_index_spy: Mock = Mock(wraps=model_chain_module.sql_test_model_chain_names_by_key)
     monkeypatch.setattr(
-        target_writer_module,
+        model_chain_module,
         "sql_test_model_chain_names_by_key",
         closure_index_spy,
     )
@@ -652,8 +653,8 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     expected_sql: str = artifact_path.read_text(encoding="utf-8")
     artifact_path.write_text("SELECT 'tampered'\n", encoding="utf-8")
-    planner_spy: Mock = Mock(wraps=target_writer_module.plan_native_sql_test_artifacts)
-    monkeypatch.setattr(target_writer_module, "plan_native_sql_test_artifacts", planner_spy)
+    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_native_sql_test_artifacts)
+    monkeypatch.setattr(plan_artifacts_module, "plan_native_sql_test_artifacts", planner_spy)
 
     _ = write_static_compile_target(
         target_dir=target_dir,

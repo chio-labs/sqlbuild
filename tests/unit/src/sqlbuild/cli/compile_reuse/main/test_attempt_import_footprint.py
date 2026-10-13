@@ -15,7 +15,6 @@ from tests.unit.src.sqlbuild.cli.compile_reuse.main._test_types import (
 from tests.unit.src.sqlbuild.cli.compile_reuse.main.helpers import compile_in_fresh_process
 
 _FULL_COMPILE_MODULES: tuple[str, ...] = (
-    "sqlbuild.cli.commands._helpers.compile.output",
     "sqlbuild.compiler.compile._helpers.native_stages.assembly",
 )
 

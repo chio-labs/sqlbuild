@@ -3,23 +3,22 @@ from __future__ import annotations
 import gc
 import json
 import sys
+import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
 import sqlbuild._native as discovery_entry
-from sqlbuild.cli.commands._helpers.compile import lineage as compile_lineage
-from sqlbuild.cli.commands._helpers.compile import target_writer
 from sqlbuild.cli.commands._helpers.runtime import adapters as runtime_adapters
-from sqlbuild.cli.commands.classes import prepared_compile_artifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.main.run import run_compile
 from sqlbuild.cli.entry.models import CompileCommandRequest
-from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.lineage.types import ColumnLineageMode
-from sqlbuild.compiler.pipeline.models import ProjectGraph
+from sqlbuild.compiler.sql_test_glue.main import (
+    plan_native_sql_test_artifacts as plan_artifacts_module,
+)
 from sqlbuild.presentation.classes import transient_status_reporter
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileColumnContractModeTestCase,
@@ -512,39 +511,42 @@ def test_given_explicit_column_contract_mode_when_compiling_column_audit_then_au
             lineage_mode=CompileLineageMode.RICH,
             expected_lineage_mode_values=(ColumnLineageMode.RICH.value,),
         ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_lineage_mode_when_resolving_compile_analysis_then_returns_expected_mode(
-    test_case: CompileLineageModeTestCase,
-) -> None:
-    mode: ColumnLineageMode = compile_lineage.compile_analysis_lineage_mode(test_case.lineage_mode)
-
-    assert (mode.value,) == test_case.expected_lineage_mode_values
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
         CompileLineageModeTestCase(
             description="skips lineage when disabled",
             lineage_mode=CompileLineageMode.NONE,
             expected_lineage_mode_values=(),
-        )
-    ],
+        ),
+    ),
     ids=lambda case: case.description,
 )
-def test_given_lineage_disabled_when_building_compile_lineage_then_skips_analyzer(
+def test_given_lineage_mode_when_compiling_then_lineage_runs_in_that_mode(
     test_case: CompileLineageModeTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    lineage: object = compile_lineage.build_compile_lineage(
-        graph=cast(ProjectGraph, object()),
-        dialect=None,
-        mode=test_case.lineage_mode,
-    )
+    project_dir: Path = prepare_static_compile_project(tmp_path)
+    modes: list[str] = []
+    build_lineage: Callable[..., object] = discovery_entry.build_project_column_lineage
 
-    assert lineage is None
-    assert test_case.expected_lineage_mode_values == ()
+    def recorded_lineage(*args: Any) -> object:
+        modes.append(ColumnLineageMode(args[2]).value)
+        return build_lineage(*args)
+
+    monkeypatch.setattr(discovery_entry, "build_project_column_lineage", recorded_lineage)
+
+    exit_code: int = run_compile(
+        CompileCommandRequest(
+            project_dir=project_dir,
+            json_output=True,
+            no_cache=True,
+            lineage_mode=test_case.lineage_mode,
+        )
+    )
+    _ = capsys.readouterr()
+
+    assert exit_code == 0
+    assert tuple(modes) == test_case.expected_lineage_mode_values
 
 
 @pytest.mark.parametrize(
@@ -594,26 +596,23 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
     project_dir: Path = prepare_rule_gated_compile_project(
         tmp_path, test_header=test_case.test_header
     )
-    planning_calls: list[Path] = []
-    static_planning: Callable[..., tuple[CompilerDiagnostic, ...]] = (
-        target_writer.static_sql_test_planning_diagnostics
-    )
+    planning_on_main_thread: list[bool] = []
+    plan_artifacts: Callable[..., object] = plan_artifacts_module.plan_native_sql_test_artifacts
 
-    def counted_static_planning(**kwargs: Any) -> tuple[CompilerDiagnostic, ...]:
-        planning_calls.append(kwargs["target_dir"])
-        return static_planning(**kwargs)
+    def counted_inline_planning(**kwargs: Any) -> object:
+        planning_on_main_thread.append(threading.current_thread() is threading.main_thread())
+        return plan_artifacts(**kwargs)
+
+    class Prepared(discovery_entry.PreparedCompileArtifacts):
+        min_prepared_models: int = test_case.min_prepared_models
 
     monkeypatch.setattr(
         runtime_adapters, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
     )
     monkeypatch.setattr(
-        target_writer, "static_sql_test_planning_diagnostics", counted_static_planning
+        plan_artifacts_module, "plan_native_sql_test_artifacts", counted_inline_planning
     )
-    monkeypatch.setattr(
-        prepared_compile_artifacts,
-        "_MIN_PREPARED_ARTIFACT_MODELS",
-        test_case.min_prepared_models,
-    )
+    monkeypatch.setattr(discovery_entry, "PreparedCompileArtifacts", Prepared)
 
     exit_code: int = run_compile(
         CompileCommandRequest(project_dir=project_dir, json_output=True, no_cache=True)
@@ -626,7 +625,7 @@ def test_given_rule_error_when_compiling_json_then_withheld_test_planning_errors
     )
     assert test_case.expected_message_fragment in payload["diagnostics"][-1]["message"]
     assert payload["summary"]["errors"] == len(test_case.expected_codes)
-    assert len(planning_calls) == test_case.expected_inline_planning_calls
+    assert planning_on_main_thread.count(True) == test_case.expected_inline_planning_calls
     assert not (project_dir / "target" / "compiled" / "tests").exists()
 
 

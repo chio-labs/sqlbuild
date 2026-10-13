@@ -59,3 +59,9 @@ pub(super) struct CharacterClassTestCase {
     pub(super) expected_digit: bool,
     pub(super) expected_space: bool,
 }
+
+pub(super) struct SplitlinesTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_lines: &'static [&'static str],
+}

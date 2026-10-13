@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import errno
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    PreparedCompileArtifacts,
     project_with,
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent, QueryResult
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.cli.output.models import WrittenTarget
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditRunScope,
@@ -582,24 +582,24 @@ def write_relative_files(*, root: Path, files: dict[str, str]) -> None:
         path.write_text(contents, encoding="utf-8")
 
 
-def cross_device_replace(
-    *, staging_root: Path, real_replace: Callable[[Any, Any], None]
-) -> Callable[[Any, Any], None]:
-    """Return an os.replace that rejects moves out of staging_root like a second filesystem."""
+class StagingEveryProject(PreparedCompileArtifacts):
+    """Stage artifacts for a project of any size."""
 
-    staging_prefix: str = os.fspath(staging_root)
-    replacements: dict[bool, Callable[[Any, Any], None]] = {
-        True: cross_device_rename,
-        False: real_replace,
-    }
-
-    def replace_file(source: Any, destination: Any) -> None:
-        replacements[os.fspath(source).startswith(staging_prefix)](source, destination)
-
-    return replace_file
+    min_prepared_models: int = 1
 
 
-def cross_device_rename(source: Any, destination: Any) -> None:
-    """Reject a move as if source and destination were on different filesystems."""
+def staged_then_published(
+    *, target: Path, before_publish: Callable[[Path], None] = lambda _: None
+) -> WrittenTarget | None:
+    """Stage the project's artifacts beside target, run before_publish, then publish them."""
 
-    raise OSError(errno.EXDEV, "Invalid cross-device link")
+    with StagingEveryProject(enabled=True) as artifacts:
+        artifacts.start(
+            project=build_static_target_writer_project(),
+            adapter=DuckDbAdapter(),
+            target_dir=target,
+            stage_artifacts=True,
+        )
+        _ = artifacts.planning_diagnostics()
+        before_publish(target)
+        return artifacts.publish(target_dir=target, manifest=None)

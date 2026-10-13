@@ -273,8 +273,7 @@ fn check_compile_reuse(py: Python<'_>, check: ReuseCheckPy) -> PyResult<NativeRe
 }
 
 /// The native content digest of artifact bytes, as reuse verifies written artifacts.
-#[pyfunction]
-fn artifact_digest(contents: &[u8]) -> String {
+pub(crate) fn artifact_digest(contents: &[u8]) -> String {
     native_digest(contents)
 }
 
@@ -303,6 +302,5 @@ fn texts(values: &[OsString]) -> Vec<String> {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeReuseAttempt>()?;
-    module.add_function(wrap_pyfunction!(check_compile_reuse, module)?)?;
-    module.add_function(wrap_pyfunction!(artifact_digest, module)?)
+    module.add_function(wrap_pyfunction!(check_compile_reuse, module)?)
 }

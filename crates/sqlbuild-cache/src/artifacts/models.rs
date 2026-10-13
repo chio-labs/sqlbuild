@@ -19,3 +19,39 @@ pub enum Publication {
     /// Each staged file was published at its compiled path, in this order.
     Files(Vec<(PathBuf, PathBuf)>),
 }
+
+/// What reusing one compiled SQL test artifact requires: its identity, place and content.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SqlTestArtifactRecord {
+    /// The digest of everything the artifact was rendered from.
+    pub identity: String,
+    /// The artifact's path below the compiled tests directory.
+    pub relative_path: PathBuf,
+    pub size: u64,
+    pub mtime_ns: i64,
+    /// The lowercase hex SHA-256 of the artifact's bytes.
+    pub content_sha256: String,
+}
+
+/// The fields of one cache file record, already checked to be strings and non-negative integers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredSqlTestRecord {
+    pub identity: String,
+    /// The `relative_path` text as stored.
+    pub relative_path: String,
+    pub size: u64,
+    pub mtime_ns: i64,
+    pub content_sha256: String,
+}
+
+impl SqlTestArtifactRecord {
+    /// The relative path's `as_posix()` text, as the cache file stores it.
+    #[must_use]
+    pub fn relative_posix(&self) -> String {
+        self.relative_path
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<String>>()
+            .join("/")
+    }
+}

@@ -18,7 +18,7 @@ pub(crate) const NATIVE_STAGES_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.native_stages.assembly";
 const ANALYSIS_CACHE_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.cache";
 pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild.compiler.analysis_session.models";
-const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main.record";
+const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
 const PROFILING_CPU_MODULE: &str = "sqlbuild.compiler.profiling.main._record_cpu";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PLANNER_TYPES_MODULE: &str = "sqlbuild.compiler.planner.types";

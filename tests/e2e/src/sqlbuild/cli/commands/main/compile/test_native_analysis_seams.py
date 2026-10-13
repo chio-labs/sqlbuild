@@ -36,7 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                 "complete_semantic_project": [ANY],
                 "evaluate_native_model_contracts": [ANY],
                 "native_promotion_conflict_diagnostics": [()],
-                "build_compile_lineage": [ANY],
+                "build_project_column_lineage": [ANY],
                 "plan_native_sql_test_artifacts": [ANY],
             },
         )
@@ -62,7 +62,7 @@ def test_given_project_when_compiling_then_native_seams_answer(
     assert native_seams == test_case.expected_native_returns
     planned_counts: list[int] = []
     for seams in (native_seams,):
-        assert isinstance(seams["build_compile_lineage"][0], ProjectColumnLineage)
+        assert isinstance(seams["build_project_column_lineage"][0], ProjectColumnLineage)
         assert isinstance(seams["assemble_native_project_resources"][0], NativeProjectResources)
         assert isinstance(seams["analyze_native_model_sql"][0], NativeModelAnalyses)
         assert seams["analyze_native_model_sql"][0].session is not None

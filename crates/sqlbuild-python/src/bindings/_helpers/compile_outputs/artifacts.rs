@@ -1,12 +1,11 @@
-//! Write, clean and publish compiled artifacts natively for the Python target writer.
+//! Write, clean and publish compiled artifacts natively, raising the errors Python raised.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 use pyo3::exceptions::PyOSError;
-use pyo3::prelude::{Bound, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyBytes;
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cache::artifacts::errors::ArtifactError;
 use sqlbuild_cache::artifacts::main::publish_staged::publish_staged;
 use sqlbuild_cache::artifacts::main::remove_stale::remove_stale;
@@ -19,8 +18,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 type PublishedRow = (String, Vec<(String, String)>);
 
 /// Write each `(path, contents)` artifact; returns how many were written and left unchanged.
-#[pyfunction]
-fn write_compiled_artifacts(
+pub(crate) fn write_compiled_artifacts(
     py: Python<'_>,
     files: Vec<(PathBuf, Vec<u8>)>,
     check_existing: bool,
@@ -34,8 +32,7 @@ fn write_compiled_artifacts(
 }
 
 /// Delete unmanaged compiled files and empty directories; returns how many files were removed.
-#[pyfunction]
-fn remove_stale_artifacts(
+pub(crate) fn remove_stale_artifacts(
     py: Python<'_>,
     compiled_dir: PathBuf,
     managed: Vec<PathBuf>,
@@ -48,8 +45,7 @@ fn remove_stale_artifacts(
 }
 
 /// Publish staged artifacts: `("changed", [])`, `("tree", [])` or `("files", [(source, path)])`.
-#[pyfunction]
-fn publish_staged_artifacts(
+pub(crate) fn publish_staged_artifacts(
     py: Python<'_>,
     staged_dir: PathBuf,
     compiled_dir: PathBuf,
@@ -75,8 +71,7 @@ fn publish_staged_artifacts(
 }
 
 /// Every staged artifact's path relative to `staged_dir`.
-#[pyfunction]
-fn staged_artifact_files(py: Python<'_>, staged_dir: PathBuf) -> PyResult<Vec<String>> {
+pub(crate) fn staged_artifact_files(py: Python<'_>, staged_dir: PathBuf) -> PyResult<Vec<String>> {
     compiler_guard(|| {
         let files: Vec<PathBuf> = py.detach(|| staged_files(&staged_dir));
         Ok(files.iter().map(|path| lossy(path)).collect())
@@ -129,11 +124,4 @@ fn existing_decode_error(py: Python<'_>, path: &PathBuf) -> PyErr {
         Err(error) => error,
         Ok(_) => PyOSError::new_err(format!("compiled artifact '{}' changed", path.display())),
     }
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(staged_artifact_files, module)?)?;
-    module.add_function(wrap_pyfunction!(write_compiled_artifacts, module)?)?;
-    module.add_function(wrap_pyfunction!(remove_stale_artifacts, module)?)?;
-    module.add_function(wrap_pyfunction!(publish_staged_artifacts, module)?)
 }

@@ -8,13 +8,14 @@ from _typeshed import SupportsRichComparison
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile, RelationInfo
-from sqlbuild.cli.commands.classes.prepared_compile_artifacts import PreparedCompileArtifacts
 from sqlbuild.cli.commands.types import CompileLineageMode
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
 from sqlbuild.cli.entry.models import CompileCommandRequest, CompileProfileFlags
+from sqlbuild.cli.output.models import WrittenTarget
 from sqlbuild.compiler.auditing.models import MeasurementContract, MeasurementThresholds
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditSeverity
+from sqlbuild.compiler.compile.classes.compile_input_reads import CompileInputReads
 from sqlbuild.compiler.compile.classes.sql_test_scan_cache import SqlTestScanCache
 from sqlbuild.compiler.compile.models import (
     CompileAdapterContext,
@@ -1007,15 +1008,106 @@ class NativeReuseAttempt:
     def record(self, record: dict[str, object]) -> tuple[str, int]: ...
 
 def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
-def artifact_digest(contents: bytes) -> str: ...
-def write_compiled_artifacts(
-    files: list[tuple[Path, bytes]], check_existing: bool
-) -> tuple[int, int]: ...
-def staged_artifact_files(staged_dir: Path) -> list[str]: ...
-def remove_stale_artifacts(compiled_dir: Path, managed: list[str]) -> int: ...
-def publish_staged_artifacts(
-    staged_dir: Path, compiled_dir: Path, expected: list[str]
-) -> tuple[str, list[tuple[str, str]]]: ...
+
+class CompileArtifactWrites:
+    @property
+    def artifacts(self) -> dict[str, tuple[str | None, int | None, int | None]]: ...
+
+class RecordedCompileOutput:
+    def print_stderr_line(self, line: str) -> None: ...
+    def record_stdout(self, text: str) -> None: ...
+    def print_stdout(self) -> None: ...
+    @property
+    def stderr_lines(self) -> list[str]: ...
+    @property
+    def stdout(self) -> str | None: ...
+
+def write_reusable_compile(
+    *,
+    attempt: CompileReuseAttempt,
+    output: RecordedCompileOutput,
+    exit_code: int,
+    input_reads: CompileInputReads,
+    artifact_writes: CompileArtifactWrites,
+    compile_cache_enabled: bool,
+    artifacts_written: bool,
+    dag_artifact_path: Path | None,
+    json_output: bool,
+) -> None: ...
+def format_compile_text(
+    *,
+    graph: ProjectGraph,
+    written: WrittenTarget,
+    manifest: bool,
+    lineage: ProjectColumnLineage | None,
+    diagnostics: tuple[CompilerDiagnostic, ...],
+    lineage_mode: CompileLineageMode = ...,
+    use_color: bool,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    sql_validation_enabled: bool = True,
+) -> str: ...
+def format_compile_json(
+    *,
+    graph: ProjectGraph,
+    written: WrittenTarget,
+    manifest: bool,
+    timings_ms: dict[str, int],
+    lineage: ProjectColumnLineage | None,
+    diagnostics: tuple[CompilerDiagnostic, ...],
+    lineage_mode: CompileLineageMode = ...,
+    selected_keys: frozenset[CompiledObjectKey] | None = None,
+    sql_validation_enabled: bool = True,
+) -> str: ...
+def format_compile_error_json(
+    *, code: str, message: str, help_text: str | None, location: SourceLocation | None = None
+) -> str: ...
+
+class PlannedStaticSqlTests: ...
+
+def write_static_compile_target(
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    project: CompiledProjectView,
+    manifest: NativeManifest | None = None,
+) -> WrittenTarget: ...
+def write_compile_target(
+    *,
+    target_dir: Path,
+    adapter: BaseAdapter,
+    plan_output: PlanOutput,
+    manifest: NativeManifest | None = None,
+) -> WrittenTarget: ...
+def static_sql_test_planning_diagnostics(
+    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProjectView
+) -> tuple[CompilerDiagnostic, ...]: ...
+def plan_static_sql_tests(
+    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProjectView
+) -> PlannedStaticSqlTests: ...
+
+class PreparedCompileArtifacts:
+    min_prepared_models: int
+    max_prepared_models: int
+    def __init__(self, *, enabled: bool) -> None: ...
+    @property
+    def enabled(self) -> bool: ...
+    def __enter__(self) -> PreparedCompileArtifacts: ...
+    def __exit__(self, *exception: object) -> None: ...
+    def remove_abandoned_staging(self, *, target_dir: Path) -> None: ...
+    def create_staging_directory(self, staging_dir: Path) -> None: ...
+    def start(
+        self,
+        *,
+        project: CompiledProjectView,
+        adapter: BaseAdapter,
+        target_dir: Path,
+        stage_artifacts: bool,
+    ) -> None: ...
+    def publish(
+        self, *, target_dir: Path, manifest: NativeManifest | None
+    ) -> WrittenTarget | None: ...
+    def planning_diagnostics(self) -> tuple[CompilerDiagnostic, ...] | None: ...
+
 def finalize_rule_findings_rows(
     request: dict[str, object],
 ) -> list[tuple[bool, str, str, int, int, str, str]]: ...
@@ -2124,3 +2216,17 @@ def _oracle_text_positions(
 ) -> tuple[str, list[tuple[int, int, int] | None]]: ...
 def _oracle_yaml_load(text: str) -> str: ...
 def _oracle_toml_load(text: str) -> str: ...
+
+# Discovery: header values and authored locations.
+def prepare_model_header_tokens(headers: Sequence[str], /) -> None: ...
+def parse_header_values(
+    *,
+    header: str,
+    file_path: object,
+    statement_name: str,
+    header_line: int | None,
+    error_class: type[Exception] | None = None,
+) -> dict[str, object]: ...
+def model_output_column_locations(
+    *, contents: str, relative_path: object, extract_implicit_alias_columns: bool = True
+) -> dict[str, Any]: ...

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild.compiler.discovery._helpers.sql.model_files import parse_header_values
+from sqlbuild._native import parse_header_values
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     DeepHeaderValuesTestCase,
 )

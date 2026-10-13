@@ -32,7 +32,7 @@ from sqlbuild.compiler.planner.models import (
     PlannerScope,
 )
 from sqlbuild.compiler.planner.types import GraphResourceKind
-from sqlbuild.compiler.python_nodes.main.hook_identities import build_hook_identities
+from sqlbuild.compiler.python_nodes.main._hook_identities import build_hook_identities
 
 
 def build_direct_model_version_identities(

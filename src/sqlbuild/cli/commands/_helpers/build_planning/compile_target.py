@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlbuild._native as _native
-from sqlbuild.cli.commands._helpers.compile.target_writer import write_compile_target
+from sqlbuild._native import write_compile_target
 from sqlbuild.cli.commands.models import (
     BuildCommandRequest,
     BuildInvocation,

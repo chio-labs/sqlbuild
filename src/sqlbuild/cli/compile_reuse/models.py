@@ -50,15 +50,6 @@ class SettingsInputsResult:
 
 
 @dataclass(frozen=True)
-class RecordedArtifact:
-    """What one compile wrote to an artifact: its content digest, or the stat it kept."""
-
-    digest: str | None
-    size: int | None = None
-    mtime_ns: int | None = None
-
-
-@dataclass(frozen=True)
 class CompileReuseAttempt:
     """Result of checking for a reusable compile, carried into a full compile on a miss."""
 

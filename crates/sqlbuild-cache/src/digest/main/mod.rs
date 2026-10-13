@@ -5,3 +5,4 @@ pub mod digest_files;
 pub mod fingerprint_project_files;
 pub mod hex_digest;
 pub mod installed_code_identity;
+pub mod sha256_hex;

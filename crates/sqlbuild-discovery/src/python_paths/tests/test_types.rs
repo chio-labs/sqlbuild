@@ -1,0 +1,6 @@
+/// One project layout and the Python files outside documented roots.
+pub(super) struct PythonPathsTestCase {
+    pub(super) description: &'static str,
+    pub(super) files: &'static [&'static str],
+    pub(super) expected_unsupported: &'static [&'static str],
+}

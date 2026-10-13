@@ -5,6 +5,7 @@ pub(crate) mod boundary;
 pub(crate) mod cache;
 pub(crate) mod cli;
 pub(crate) mod compile_attachment;
+pub(crate) mod compile_command;
 pub(crate) mod compile_driver;
 pub(crate) mod compile_outputs;
 pub(crate) mod compiled_project;

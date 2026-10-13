@@ -27,7 +27,7 @@ const PROMOTION_MODULE: &str = "sqlbuild.compiler.contracts.main.promotion_confl
 const DISCOVERY_CONSTANTS_MODULE: &str = "sqlbuild.compiler.discovery.constants";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const ANALYSIS_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline._helpers.analysis_selection";
-const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main.record";
+const PROFILING_MODULE: &str = "sqlbuild.compiler.profiling.main._record";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const COLLECTION_RENDERING_MODULE: &str =
     "sqlbuild.spec.contracts.main.resolve_effective_collection_rendering";
