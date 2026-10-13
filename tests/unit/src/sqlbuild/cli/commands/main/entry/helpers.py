@@ -47,8 +47,8 @@ def build_json_recording_handler(
 ) -> Callable[..., int]:
     """Build a fake command handler that records json output flags and returns exit_code."""
 
-    def record_json_handler(*args: object) -> int:
-        received_args.append(extract_json_output_fields(args))
+    def record_json_handler(*args: object, **kwargs: object) -> int:
+        received_args.append(extract_json_output_fields((*args, *kwargs.values())))
         return exit_code
 
     return record_json_handler

@@ -27,6 +27,7 @@ pub(crate) mod graph;
 pub(crate) mod hand_built;
 pub(crate) mod janitor;
 pub(crate) mod lineage;
+pub(crate) mod load;
 pub(crate) mod macro_bridge;
 pub(crate) mod manifest;
 pub(crate) mod model_config;

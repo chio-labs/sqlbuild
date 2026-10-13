@@ -36,7 +36,6 @@ from sqlbuild.spec.contracts.models import (
     CostConfig,
     ExecutionLimitsConfig,
     SnapshotsConfig,
-    SourceEntry,
 )
 
 if TYPE_CHECKING:
@@ -69,7 +68,6 @@ if TYPE_CHECKING:
     from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
     from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
     from sqlbuild.executor.janitor.models import JanitorPlan
-    from sqlbuild.executor.load.models import LoadExecutionResult
     from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
     from sqlbuild.integrations.dbt.models import DbtInitRequest
     from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -593,64 +591,6 @@ class LoadCommandRequest:
     cli_vars: dict[str, object] | None = None
     json_output: bool = False
     json_output_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class LoadInvocation:
-    """Resolved project, selected sources, and output context for load."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    selected_sources: tuple[SourceEntry, ...]
-    reference_sources: tuple[SourceEntry, ...]
-    use_color: bool
-    progress_stream: TextIO
-    relation_sources: tuple[SourceEntry, ...]
-
-
-@dataclass(frozen=True)
-class LoadExecutionPreparation:
-    """Prepared adapter, connection, runtime, and execution settings."""
-
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    target_name: str | None
-    effective_vars: dict[str, object]
-    run_id: str
-    effective_cursor_overrides: CursorOverrides
-    effective_concurrency: int
-    provider_session: Any
-    project_relations: dict[SqlResourceRef, str] | None
-
-
-@dataclass(frozen=True)
-class LoadRunOutcome:
-    """Load execution results, elapsed time, and summary counts."""
-
-    results: tuple[LoadExecutionResult, ...]
-    elapsed: float
-    success_count: int
-    fail_count: int
-    skip_count: int
-    warn_count: int
-
-
-@dataclass(frozen=True)
-class LoadSelectionSets:
-    """Mutable selection sets returned explicitly by selection phases."""
-
-    selected_sources: set[str]
-    selected_loaders: set[str]
-
-
-@dataclass(frozen=True)
-class LoadSelectorSets:
-    """Selection sets updated while applying include selectors."""
-
-    selected_sources: set[str]
-    selected_loaders: set[str]
-    directly_selected_loaders: set[str]
 
 
 @dataclass(frozen=True)

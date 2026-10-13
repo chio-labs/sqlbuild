@@ -11,6 +11,7 @@ pub mod freshness_text;
 pub mod integration_results;
 pub mod janitor_text;
 pub mod json;
+pub mod load_command;
 pub mod models;
 pub mod panics;
 pub mod posix_path;

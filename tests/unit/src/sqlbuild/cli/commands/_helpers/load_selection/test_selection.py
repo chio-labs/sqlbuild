@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-from sqlbuild.cli.commands._helpers.load.invocation import _effective_loader_defaults
-from sqlbuild.cli.commands._helpers.load.selection import (
+from sqlbuild._native import (
+    resolve_loader_defaults,
     select_load_entries,
     select_load_reference_entries,
 )
@@ -150,7 +150,7 @@ def test_given_connection_namespace_when_resolving_load_defaults_then_matches_co
         local_config=LocalConfig(),
     )
 
-    defaults: tuple[str | None, str | None] = _effective_loader_defaults(
+    defaults: tuple[str | None, str | None] = resolve_loader_defaults(
         discovered_inputs=discovered_inputs,
         selected_target=None,
         target_config=None,

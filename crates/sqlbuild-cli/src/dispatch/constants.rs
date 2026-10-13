@@ -310,9 +310,9 @@ const LOAD_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const LOAD_ROUTE: Route = routed(
     "run_load",
-    ("sqlbuild.cli.commands.main.execution._load", "run_load"),
+    ("sqlbuild._native", "run_load_command"),
     &LOAD_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const SEED_FIELDS: [Field; 9] = [
