@@ -9,9 +9,10 @@ use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::progress::main::claim_progress_terminal::claim_progress_terminal;
 use sqlbuild_core::progress::main::close_progress_projection::close_progress_projection;
 use sqlbuild_core::progress::main::consume_progress_event::consume_progress_event;
+use sqlbuild_core::progress::main::machine_output_mode::machine_output_mode as output_mode;
 use sqlbuild_core::progress::main::progress_terminal_duration::progress_terminal_duration;
 use sqlbuild_core::progress::models::{
-    ProgressEvent, ProgressPayload, ProgressProjection, ProgressSettings,
+    OutputModeFacts, ProgressEvent, ProgressPayload, ProgressProjection, ProgressSettings,
 };
 use sqlbuild_core::terminal_events::models::TerminalRequest;
 
@@ -320,6 +321,22 @@ fn current_native_progress_projector(py: Python<'_>) -> PyResult<Bound<'_, PyAny
     context_variable(py)?.call_method0("get")
 }
 
+/// Whether the parsed command writes machine output to stdout, so progress must use stderr.
+#[pyfunction]
+fn machine_output_mode(args: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let mut dbt_args: Vec<String> = Vec::new();
+    for arg in args.getattr("dbt_args")?.try_iter()? {
+        dbt_args.push(arg?.str()?.extract()?);
+    }
+    Ok(output_mode(&OutputModeFacts {
+        json: args.getattr("json")?.is_truthy()?,
+        command: optional_text(args, "command")?,
+        lineage_format: optional_text(args, "lineage_format")?,
+        query_format: optional_text(args, "query_format")?,
+        dbt_args,
+    }))
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py: Python<'_> = module.py();
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
@@ -331,6 +348,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
             .call((CONTEXT_NAME,), Some(&keywords))?,
     )?;
     module.add_class::<NativeProgressProjector>()?;
+    module.add_function(wrap_pyfunction!(machine_output_mode, module)?)?;
     module.add_function(wrap_pyfunction!(current_native_progress_projector, module)?)
 }
 

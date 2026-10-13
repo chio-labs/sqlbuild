@@ -22,6 +22,8 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import (
     captured_native_request,
     direct_sql_test,
     model_sql_test,
+    scenario_summary,
+    sql_test_summary,
 )
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
@@ -86,7 +88,7 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
     )
 
     assert len(request["sql_tests"]) == test_case.expected_test_count
-    assert request["sql_tests"][:3] == [
+    assert [sql_test_summary(fact) for fact in request["sql_tests"][:3]] == [
         (
             f"tests/unit/{name}.sql",
             "tests/unit",
@@ -96,14 +98,14 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
             mode,
             ([], [], [], []),
             [(mode, name)],
-            None,
+            ([], [], [], False, False),
             None,
         )
         for index, (mode, name) in enumerate(
             (("macro", "normalize"), ("udf", "tax"), ("table_fn", "items")), start=1
         )
     ]
-    assert request["sql_tests"][3] == (
+    assert sql_test_summary(request["sql_tests"][3]) == (
         "tests/unit/test_orders__keeps_paid.sql",
         "tests/unit",
         1,
@@ -116,7 +118,7 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
         None,
     )
     assert len(request["sql_scenarios"]) == test_case.expected_scenario_count
-    assert request["sql_scenarios"] == [
+    assert [scenario_summary(fact) for fact in request["sql_scenarios"]] == [
         (
             "tests/scenarios/orders.sql",
             "tests/scenarios",

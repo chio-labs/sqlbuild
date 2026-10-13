@@ -13,16 +13,19 @@ from _pytest.capture import CaptureFixture, CaptureResult
 from _pytest.monkeypatch import MonkeyPatch
 from duckdb import DuckDBPyConnection
 
-from sqlbuild._native import discover_project_inputs, format_load_execution_json
+from sqlbuild._native import (
+    discover_project_inputs,
+    format_load_execution_json,
+    run_load_command,
+    run_test_command,
+    select_load_entries,
+)
 from sqlbuild.adapter.contract.types import CursorKind
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.commands._helpers.load.selection import select_load_entries
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.main.execution._audit import run_audit
 from sqlbuild.cli.commands.main.execution._build import run_build
-from sqlbuild.cli.commands.main.execution._load import run_load
 from sqlbuild.cli.commands.main.execution._scenario import run_scenario
-from sqlbuild.cli.commands.main.execution._test import run_test
 from sqlbuild.cli.commands.main.project._plan import run_plan
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
@@ -1229,7 +1232,7 @@ def test_given_no_managed_source_read_ambiguity_when_building_then_source_deferr
         "audit": lambda **kwargs: run_audit(AuditCommandRequest(**kwargs)),
         "build": lambda **kwargs: run_build(BuildCommandRequest(**kwargs)),
         "scenario": lambda **kwargs: run_scenario(ScenarioTestCommandRequest(**kwargs)),
-        "test": lambda **kwargs: run_test(TestCommandRequest(**kwargs)),
+        "test": lambda **kwargs: run_test_command(request=TestCommandRequest(**kwargs)),
     }
     exit_code: int = command_runners[test_case.command](
         project_dir=tmp_path,
@@ -2049,8 +2052,8 @@ def test_given_source_loader_when_running_load_then_writes_source_table(
     write_repo_files(tmp_path, test_case.project_files)
     json_output_path: Path = tmp_path / "target" / "load.json"
 
-    exit_code: int = run_load(
-        LoadCommandRequest(
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=test_case.select,
@@ -3028,7 +3031,9 @@ def test_given_source_loader_write_strategy_when_running_load_twice_then_writes_
     write_repo_files(tmp_path, test_case.project_files)
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
+        exit_code: int = run_load_command(
+            request=LoadCommandRequest(project_dir=tmp_path, no_color=True)
+        )
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3403,7 +3408,9 @@ def test_given_loader_cursor_context_has_no_value_when_running_load_then_passes_
         connection.close()
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
+        exit_code: int = run_load_command(
+            request=LoadCommandRequest(project_dir=tmp_path, no_color=True)
+        )
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3498,8 +3505,8 @@ def test_given_reload_flag_when_running_load_then_passes_reload_context_to_loade
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(
-        LoadCommandRequest(
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             reload=test_case.reload,
@@ -3547,8 +3554,8 @@ def test_given_cursor_override_flags_when_running_load_then_passes_typed_context
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(
-        LoadCommandRequest(
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             cursor_overrides=test_case.cursor_overrides,
@@ -3891,7 +3898,9 @@ def test_given_generator_loader_with_inferred_columns_when_running_load_then_wri
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(project_dir=tmp_path, no_color=True)
+    )
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -3956,7 +3965,9 @@ def test_given_generator_loader_yields_multiple_rows_when_running_load_then_writ
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(project_dir=tmp_path, no_color=True)
+    )
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4335,8 +4346,8 @@ def test_given_loader_writes_many_rows_when_running_load_then_formats_human_row_
     write_repo_files(tmp_path, test_case.project_files)
     json_output_path: Path = tmp_path / "target" / "load.json"
 
-    exit_code: int = run_load(
-        LoadCommandRequest(
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             json_output_path=json_output_path,
@@ -4394,7 +4405,9 @@ def test_given_loader_returns_empty_rows_when_running_load_then_writes_empty_dec
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(project_dir=tmp_path, no_color=True)
+    )
 
     assert exit_code == 0
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4455,7 +4468,9 @@ def test_given_self_managed_loader_when_running_load_then_uses_loader_written_ta
     write_repo_files(tmp_path, test_case.project_files)
 
     for _ in range(test_case.run_count):
-        exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
+        exit_code: int = run_load_command(
+            request=LoadCommandRequest(project_dir=tmp_path, no_color=True)
+        )
         assert exit_code == 0
 
     connection: DuckDBPyConnection = duckdb.connect(str(tmp_path / "demo.duckdb"))
@@ -4558,7 +4573,9 @@ def test_given_loader_returns_conflicting_types_when_running_load_then_fails_cle
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(LoadCommandRequest(project_dir=tmp_path, no_color=True))
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(project_dir=tmp_path, no_color=True)
+    )
 
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == test_case.expected_exit_code
@@ -4884,8 +4901,8 @@ def test_given_invalid_load_selectors_when_running_load_then_it_raises_clear_err
     write_repo_files(tmp_path, test_case.project_files)
 
     with pytest.raises(CliUserError) as exc_info:
-        run_load(
-            LoadCommandRequest(
+        run_load_command(
+            request=LoadCommandRequest(
                 project_dir=tmp_path,
                 no_color=True,
                 select=test_case.select,
@@ -4956,8 +4973,8 @@ def test_given_no_selected_managed_sources_when_running_load_then_it_does_not_co
 ) -> None:
     write_repo_files(tmp_path, test_case.project_files)
 
-    exit_code: int = run_load(
-        LoadCommandRequest(
+    exit_code: int = run_load_command(
+        request=LoadCommandRequest(
             project_dir=tmp_path,
             no_color=True,
             select=test_case.select,

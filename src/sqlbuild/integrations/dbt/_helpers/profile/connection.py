@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from sqlbuild._native import normalize_dbt_profile_connection
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.profile.load import (
@@ -13,7 +14,6 @@ from sqlbuild.integrations.dbt._helpers.profile.load import (
     load_raw_dbt_profile,
     select_dbt_profile_output,
 )
-from sqlbuild.integrations.dbt._helpers.profile.normalize import normalize_dbt_profile_connection
 from sqlbuild.integrations.dbt._helpers.profile.render import render_selected_dbt_profile_output
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import (

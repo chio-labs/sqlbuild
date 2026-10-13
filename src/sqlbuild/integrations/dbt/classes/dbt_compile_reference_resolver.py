@@ -2,17 +2,13 @@
 
 from pathlib import Path
 
+from sqlbuild._native import (
+    resolve_dbt_reference_relation,
+    validate_compile_dbt_model_names,
+    validate_compile_dbt_model_reference,
+)
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileSqlReference
-from sqlbuild.integrations.dbt.main.manifest._resolve_reference_relation import (
-    resolve_dbt_reference_relation,
-)
-from sqlbuild.integrations.dbt.main.manifest._validate_compile_model_names import (
-    validate_compile_model_names,
-)
-from sqlbuild.integrations.dbt.main.manifest._validate_compile_model_reference import (
-    validate_compile_model_reference,
-)
 from sqlbuild.integrations.dbt.models import DbtManifestIndex
 
 
@@ -23,7 +19,7 @@ class DbtCompileReferenceResolver:
         self._dbt_manifest = dbt_manifest
 
     def validate_model_names(self, *, known_model_names: set[str]) -> None:
-        validate_compile_model_names(
+        validate_compile_dbt_model_names(
             known_model_names=known_model_names,
             dbt_manifest=self._dbt_manifest,
         )
@@ -102,7 +98,7 @@ class DbtCompileReferenceResolver:
         ref_package: str | None,
         owner_relative_sql_path: Path,
     ) -> None:
-        validate_compile_model_reference(
+        validate_compile_dbt_model_reference(
             reference=CompileSqlReference(
                 ref_kind=ref_kind,
                 ref_name=ref_name,

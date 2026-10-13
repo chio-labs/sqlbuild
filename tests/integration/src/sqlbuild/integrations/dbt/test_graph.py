@@ -5,7 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import assemble_project, build_compile_inputs, discover_project_inputs
+from sqlbuild._native import (
+    assemble_project,
+    build_compile_inputs,
+    build_dbt_manifest_index,
+    discover_project_inputs,
+)
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.integrations.dbt._helpers.graph.core import (
@@ -13,7 +18,6 @@ from sqlbuild.integrations.dbt._helpers.graph.core import (
     dbt_model_graph_key,
     expand_combined_downstream,
 )
-from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner
 from sqlbuild.integrations.dbt.models import (
     DbtCliOptions,

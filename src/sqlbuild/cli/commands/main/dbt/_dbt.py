@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild._native import PlanningProgressReporter
+from sqlbuild._native import PlanningProgressReporter, render_dbt_interop_plan
 from sqlbuild.cli.commands._helpers.dbt.auto_init import (
     ensure_sqlbuild_project_for_dbt_command,
 )
@@ -19,9 +19,6 @@ from sqlbuild.cli.commands.main.dbt._dbt_debug import run_dbt_debug_command
 from sqlbuild.integrations.dbt.main.cli.validate_execution_args import validate_dbt_execution_args
 from sqlbuild.integrations.dbt.main.pipeline.execute import execute_dbt_interop_from_project
 from sqlbuild.integrations.dbt.main.pipeline.plan import plan_dbt_interop_from_project
-from sqlbuild.integrations.dbt.main.pipeline.render_plan import (
-    render_dbt_interop_plan,
-)
 from sqlbuild.integrations.dbt.models import DbtInteropExecutionRequest, DbtInteropPlan
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.presentation.main.supports_color import supports_color

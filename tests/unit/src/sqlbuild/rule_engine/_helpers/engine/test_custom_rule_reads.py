@@ -218,7 +218,7 @@ def test_given_untracked_rule_reading_hidden_file_when_file_changes_then_rule_re
         test_case.expected_rerun_hits,
         2 - test_case.expected_rerun_hits,
     )
-    assert tuple(finding["path"] for finding in after_edit.findings) == (
+    assert tuple(finding.path.as_posix() for finding in after_edit.findings) == (
         test_case.expected_finding_paths
     )
 
@@ -278,7 +278,7 @@ def test_given_file_edited_while_rules_run_when_rerunning_then_new_contents_are_
         2 - test_case.expected_rerun_hits,
     )
     assert rerun.findings == oracle.findings
-    assert tuple(finding["path"] for finding in rerun.findings) == (
+    assert tuple(finding.path.as_posix() for finding in rerun.findings) == (
         test_case.expected_finding_paths
     )
 

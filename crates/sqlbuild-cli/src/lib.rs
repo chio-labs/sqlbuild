@@ -4,6 +4,7 @@
 
 pub mod argv;
 pub mod compute_logs;
+pub mod diff_report;
 pub mod dispatch;
 pub mod launcher;
 pub mod replay;

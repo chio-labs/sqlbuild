@@ -65,13 +65,6 @@ SCOPE_PATH_NONE: str = "none"
 SCOPE_GLOBAL_SUMMARY: str = "summary"
 SCOPE_GLOBAL_ALL: str = "all"
 SCOPE_DEFAULT_PAGE_SIZE: int = 100
-READ_ONLY_QUERY_ROOT_KEYS: frozenset[str] = frozenset(
-    {"except", "intersect", "select", "union", "values"}
-)
-DEFAULT_DIFF_MAX_VALUE_LENGTH: int = 160
-QUERY_DIFF_INCOMPLETE_PREPARATION_CODES: frozenset[str] = frozenset(
-    {"C229", "C230", "C231", "C232", "C233", "C234", "C235", "C240", "C244"}
-)
 MISSING_ORIGIN_BUILD_HELP: str = (
     "Pass --allow-missing-migration-origin to confirm in non-interactive runs."
 )
@@ -106,7 +99,6 @@ RETENTION_DECREASE_DBT_HELP: str = (
 )
 EXECUTION_LIMIT_BUILD_NOTE: str = "No warehouse changes were made."
 EXECUTION_LIMIT_DBT_NOTE: str = "dbt work has already run; no SQLBuild models were built."
-QUERY_DIFF_INCOMPLETE_EXECUTION_CODES: frozenset[str] = frozenset({"C237", "C238", "C239"})
 CLI_WAREHOUSE_SOURCE: str = "--warehouse"
 CONNECTION_WAREHOUSE_SOURCE: str = "connection warehouse"
 CONNECTION_DEFAULT_WAREHOUSE_SOURCE: str = "connection default"

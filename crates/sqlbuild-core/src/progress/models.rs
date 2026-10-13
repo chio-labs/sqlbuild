@@ -142,3 +142,14 @@ pub struct InspectionRecord {
     pub row_count: Option<i64>,
     pub error: Option<String>,
 }
+
+/// The parsed options that decide whether a command writes machine output to stdout.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OutputModeFacts {
+    pub json: bool,
+    pub command: Option<String>,
+    pub lineage_format: Option<String>,
+    pub query_format: Option<String>,
+    /// The arguments after `sqb dbt <command>`, where `--json` selects JSON output.
+    pub dbt_args: Vec<String>,
+}

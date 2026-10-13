@@ -2,7 +2,7 @@
 # migration work that moves to Rust. `remaining_lines` must equal the current count of that work:
 # a PR that moves code lowers it, and adding movable Python fails the check.
 # Native failures must surface as errors; `handled_native_errors` lists the reviewed exceptions.
-remaining_lines = 89820
+remaining_lines = 79435
 
 [[stays]]
 path = "executor"
@@ -60,9 +60,64 @@ reason = "public-api"
 note = "Public custom-rule API and test helper."
 
 [[stays]]
+path = "diagnostics/_helpers/logging.py"
+reason = "public-api"
+note = "Installs SQLBuild's handlers on Python's logging, which users and integrations configure."
+
+[[stays]]
+path = "diagnostics/_helpers/logging_formatters.py"
+reason = "public-api"
+note = "Python logging formatters for console and file diagnostics."
+
+[[stays]]
+path = "diagnostics/_helpers/redaction.py"
+reason = "public-api"
+note = "Collects redacted extra fields from a Python LogRecord; the redaction itself is native."
+
+[[stays]]
+path = "diagnostics/classes/diagnostic_record_redactor.py"
+reason = "public-api"
+note = "Redaction entry points that Python logging handlers call per record."
+
+[[stays]]
+path = "diagnostics/classes/diagnostics_console_formatter.py"
+reason = "public-api"
+note = "A logging.Formatter subclass for the console stream."
+
+[[stays]]
+path = "diagnostics/classes/dynamic_stderr_handler.py"
+reason = "public-api"
+note = "A logging.Handler that follows the current sys.stderr."
+
+[[stays]]
+path = "diagnostics/classes/invocation_diagnostic_routing.py"
+reason = "public-api"
+note = "Attaches and removes per-invocation logging handlers."
+
+[[stays]]
+path = "diagnostics/classes/log_record_route_filter.py"
+reason = "public-api"
+note = "A logging.Filter that routes records to destinations."
+
+[[stays]]
 path = "rule_engine/_helpers/host"
 reason = "user-code"
 note = "Subprocess host that loads and runs user rule modules."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/custom_dispatch.py"
+reason = "user-code"
+note = "Submits custom rules to their worker thread beside native built-in rule evaluation."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/custom_rules.py"
+reason = "user-code"
+note = "Dispatches custom rules to the rule-host worker pool and digests the fact views they read."
+
+[[stays]]
+path = "rule_engine/_helpers/run/rule_threads.py"
+reason = "user-code"
+note = "Runs rule phases and early SQL lint on worker threads with futures and stop events."
 
 [[stays]]
 path = "rule_engine/classes/rule_context.py"
@@ -234,10 +289,6 @@ note = "A test file that no longer parses is left unformatted, as before; no Pyt
 [[handled_native_errors]]
 location = "lint/_helpers/native_sql.py::_native_responses"
 note = "A native lint failure is reported as a lint error result, not recomputed in Python."
-
-[[handled_native_errors]]
-location = "rule_engine/_helpers/run/rules.py::_cached_sql_findings"
-note = "An undecodable cached finding is a cache miss; the rules run again natively."
 
 [[handled_native_errors]]
 location = "cli/commands/_helpers/refactor/compile_facts.py::compile_for_refactor"

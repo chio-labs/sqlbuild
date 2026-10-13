@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import sys
+from functools import partial
 from pathlib import Path
 
 import pytest
 
 from sqlbuild.cli.commands import models as command_models
 from sqlbuild.cli.commands._helpers.audit.invocation import resolve_audit_invocation
-from sqlbuild.cli.commands._helpers.check.invocation import resolve_check_invocation
-from sqlbuild.cli.commands._helpers.seed.invocation import resolve_seed_invocation
-from sqlbuild.cli.commands._helpers.test.invocation import resolve_test_invocation
+from sqlbuild.cli.commands._helpers.runtime.command_invocation import (
+    resolve_command_invocation,
+    resolve_reported_command_invocation,
+)
 from tests.integration.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     CommandInvocationTestCase,
 )
@@ -35,7 +37,10 @@ _PROJECT_TOML: str = (
         ),
         CommandInvocationTestCase(
             description="check text output reports progress on stdout",
-            resolve=resolve_check_invocation,
+            resolve=partial(
+                resolve_reported_command_invocation,
+                invocation_type=command_models.CheckInvocation,
+            ),
             request_type=command_models.CheckCommandRequest,
             json_output=False,
             expected_invocation_type_name="CheckInvocation",
@@ -44,7 +49,11 @@ _PROJECT_TOML: str = (
         ),
         CommandInvocationTestCase(
             description="test json output reports progress on stderr",
-            resolve=resolve_test_invocation,
+            resolve=partial(
+                resolve_reported_command_invocation,
+                invocation_type=command_models.TestInvocation,
+                require_connection=True,
+            ),
             request_type=command_models.TestCommandRequest,
             json_output=True,
             expected_invocation_type_name="TestInvocation",
@@ -53,7 +62,10 @@ _PROJECT_TOML: str = (
         ),
         CommandInvocationTestCase(
             description="seed text output omits shared progress reporters",
-            resolve=resolve_seed_invocation,
+            resolve=partial(
+                resolve_command_invocation,
+                invocation_type=command_models.SeedInvocation,
+            ),
             request_type=command_models.SeedCommandRequest,
             json_output=False,
             expected_invocation_type_name="SeedInvocation",

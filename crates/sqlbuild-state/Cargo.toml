@@ -1,0 +1,16 @@
+[package]
+name = "sqlbuild-state"
+version.workspace = true
+description = "Append-only warehouse state rows: event IDs, typed event SQL and source freshness versions."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sha2.workspace = true
+sqlbuild-core.workspace = true
+sqlbuild-cursor.workspace = true
+
+[lints]
+workspace = true

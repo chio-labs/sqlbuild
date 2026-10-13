@@ -240,9 +240,9 @@ const TEST_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const TEST_ROUTE: Route = routed(
     "run_test",
-    ("sqlbuild.cli.commands.main.execution._test", "run_test"),
+    ("sqlbuild._native", "run_test_command"),
     &TEST_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const CHECK_FIELDS: [Field; 9] = [
@@ -262,9 +262,9 @@ const CHECK_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const CHECK_ROUTE: Route = routed(
     "run_check",
-    ("sqlbuild.cli.commands.main.execution._check", "run_check"),
+    ("sqlbuild._native", "run_check_command"),
     &CHECK_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const AUDIT_FIELDS: [Field; 11] = [
@@ -310,9 +310,9 @@ const LOAD_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const LOAD_ROUTE: Route = routed(
     "run_load",
-    ("sqlbuild.cli.commands.main.execution._load", "run_load"),
+    ("sqlbuild._native", "run_load_command"),
     &LOAD_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const SEED_FIELDS: [Field; 9] = [
@@ -332,9 +332,9 @@ const SEED_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SEED_ROUTE: Route = routed(
     "run_seed",
-    ("sqlbuild.cli.commands.main.execution._seed", "run_seed"),
+    ("sqlbuild._native", "run_seed_command"),
     &SEED_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const LINEAGE_FIELDS: [Field; 11] = [
@@ -387,9 +387,9 @@ const CLONE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const CLONE_ROUTE: Route = routed(
     "run_clone",
-    ("sqlbuild.cli.commands.main.inspection._clone", "run_clone"),
+    ("sqlbuild._native", "run_clone_command"),
     &CLONE_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const DIFF_FIELDS: [Field; 35] = [
@@ -438,9 +438,9 @@ const DIFF_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const DIFF_ROUTE: Route = routed(
     "run_diff",
-    ("sqlbuild.cli.commands.main.inspection._diff", "run_diff"),
+    ("sqlbuild._native", "run_diff_command"),
     &DIFF_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const QUERY_ARGUMENTS: [Field; 6] = [

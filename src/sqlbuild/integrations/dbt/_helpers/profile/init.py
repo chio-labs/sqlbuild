@@ -6,13 +6,13 @@ import os
 import subprocess
 from pathlib import Path
 
+from sqlbuild._native import build_dbt_init_project_toml, normalize_dbt_profile_connection
 from sqlbuild.integrations.dbt._helpers.profile.load import (
     default_profiles_dir,
     load_dbt_project_metadata,
     load_raw_dbt_profile,
     select_dbt_profile_output,
 )
-from sqlbuild.integrations.dbt._helpers.profile.normalize import normalize_dbt_profile_connection
 from sqlbuild.integrations.dbt._helpers.profile.render import render_selected_dbt_profile_output
 from sqlbuild.integrations.dbt.exceptions import DbtProfileError
 from sqlbuild.integrations.dbt.models import (
@@ -69,7 +69,7 @@ def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult:
     )
     normalized: NormalizedDbtProfileConnection = normalize_dbt_profile_connection(resolved=resolved)
     target_path: Path = _resolve_path(root=dbt_project_dir, path=Path(metadata.target_path))
-    toml: str = _build_project_toml(
+    toml: str = build_dbt_init_project_toml(
         project_name=metadata.project_name.replace("-", "_"),
         adapter=normalized.adapter,
         target_name=selected.target_name,
@@ -176,54 +176,6 @@ def _display_path(*, path: Path, root: Path) -> str:
             return "~/" + path.relative_to(home).as_posix()
         except ValueError:
             return path.as_posix()
-
-
-def _build_project_toml(
-    *,
-    project_name: str,
-    adapter: str,
-    target_name: str,
-    profile_name: str,
-    dbt_project_dir: str,
-    profiles_dir: str,
-    target_path: str,
-    target_schema: str | None,
-    target_database: str | None,
-) -> str:
-    connection_name: str = f"{target_name}_dbt_profile"
-    target_lines: list[str] = [
-        f"[connections.{_quote_key(connection_name)}]",
-        'source = "dbt_profile"',
-        f'profile = "{_escape(profile_name)}"',
-        f'target = "{_escape(target_name)}"',
-        "",
-        f"[targets.{_quote_key(target_name)}]",
-        f'connection = "{_escape(connection_name)}"',
-    ]
-    if target_database is not None:
-        target_lines.append(f'database = "{_escape(target_database)}"')
-    if target_schema is not None:
-        target_lines.append(f'schema = "{_escape(target_schema)}"')
-    return (
-        f'name = "{_escape(project_name)}"\n'
-        f'adapter = "{_escape(adapter)}"\n'
-        f'default_target = "{_escape(target_name)}"\n\n'
-        "[dbt]\n"
-        f'project_dir = "{_escape(dbt_project_dir)}"\n'
-        f'profiles_dir = "{_escape(profiles_dir)}"\n'
-        f'target_path = "{_escape(target_path)}"\n'
-        f'target = "{_escape(target_name)}"\n\n' + "\n".join(target_lines) + "\n"
-    )
-
-
-def _quote_key(value: str) -> str:
-    if value.replace("_", "").replace("-", "").isalnum():
-        return value
-    return f'"{_escape(value)}"'
-
-
-def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _dbt_debug_warnings(

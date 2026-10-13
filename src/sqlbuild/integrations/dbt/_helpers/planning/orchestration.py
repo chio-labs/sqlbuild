@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from sqlbuild._native import build_dbt_interop_plan, resolve_sqlbuild_model_dbt_refs
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.main.selection.selector_expansion import split_selector_expansion
 from sqlbuild.compiler.planner.main.selection.sqlbuild_model_selectors import (
     resolve_sqlbuild_model_selector_names,
 )
 from sqlbuild.compiler.planner.models import SelectorExpansion
-from sqlbuild.integrations.dbt._helpers.manifest.sqlbuild_refs import (
-    resolve_sqlbuild_model_dbt_refs,
-)
-from sqlbuild.integrations.dbt._helpers.planning.plan import build_dbt_interop_plan
 from sqlbuild.integrations.dbt._helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt._helpers.selection.selector_terms import dbt_fqn_selector_term
 from sqlbuild.integrations.dbt.classes.dbt_runner import DbtRunner

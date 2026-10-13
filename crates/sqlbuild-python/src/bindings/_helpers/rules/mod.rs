@@ -1,9 +1,15 @@
+pub(crate) mod builtin_catalogue;
+pub(crate) mod custom_rule_cache;
 pub(crate) mod custom_rule_evidence;
 pub(crate) mod dsl_headers;
 pub(crate) mod evaluation;
+pub(crate) mod findings;
 pub(crate) mod lint;
 pub(crate) mod registration;
 pub(crate) mod relation_keys;
 pub(crate) mod results;
 pub(crate) mod rows;
+pub(crate) mod rule_cache;
+pub(crate) mod rules_config;
 pub(crate) mod skills;
+pub(crate) mod sql_test_objects;

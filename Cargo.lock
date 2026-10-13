@@ -1210,6 +1210,9 @@ dependencies = [
 [[package]]
 name = "sqlbuild-core"
 version = "0.156.1"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "sqlbuild-cursor"
@@ -1274,6 +1277,7 @@ dependencies = [
  "sqlbuild-rules",
  "sqlbuild-scopes",
  "sqlbuild-sqltext",
+ "sqlbuild-state",
 ]
 
 [[package]]
@@ -1342,6 +1346,15 @@ dependencies = [
  "serde",
  "sqlbuild-core",
  "sqlparser",
+]
+
+[[package]]
+name = "sqlbuild-state"
+version = "0.156.1"
+dependencies = [
+ "sha2",
+ "sqlbuild-core",
+ "sqlbuild-cursor",
 ]
 
 [[package]]

@@ -850,12 +850,6 @@ impl fensu_policy::policy::types::PolicyRule for RuleMetadata {
     }
 }
 
-#[derive(Debug, Serialize)]
-pub struct CatalogueResponse {
-    pub version: u32,
-    pub rules: Vec<RuleMetadata>,
-}
-
 /// One compiled model's facts as the rules request builder receives them.
 #[derive(Clone, Debug, Default)]
 pub struct ModelRow {

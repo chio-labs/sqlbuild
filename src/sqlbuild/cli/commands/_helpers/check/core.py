@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
-from typing import Any, TextIO
+from typing import Any
 
 from sqlbuild._native import (
-    NativeProgressProjector,
-    TerminalEventIndex,
     build_python_relation_targets,
-    current_native_progress_projector,
-    current_terminal_event_index,
-    transitive_closure_many,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
@@ -25,11 +19,8 @@ from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.exceptions import PlannerInputError
-from sqlbuild.compiler.planner.main.selection.selector_parse import parse_project_selector
-from sqlbuild.compiler.planner.models import ParsedSelector, PathSelector
 from sqlbuild.compiler.python_nodes.main.selectors import resolve_python_nodes_from_selectors
 from sqlbuild.compiler.python_nodes.models import (
-    DiscoveredPythonNode,
     PythonNodeGraph,
     PythonSqlRunLifecyclePlan,
 )
@@ -43,81 +34,12 @@ from sqlbuild.executor.python_nodes.models import (
     PythonNodeRunState,
     PythonNodeRuntime,
 )
-from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.python_nodes.types import SqlResourceRefKind
 from sqlbuild.spec.contracts.models import SourceEntry
 
 _IGNORED_EXCLUDE_SELECTOR_ERROR_CODES: frozenset[str] = frozenset({"S007", "S008", "S009"})
-
-
-def resolve_selected_check_names(
-    *, graph: PythonNodeGraph, select: tuple[str, ...], exclude: tuple[str, ...]
-) -> frozenset[str]:
-    """Resolve sqb check selectors into check names only."""
-
-    _validate_check_selectors(select=(*select, *exclude))
-    if select:
-        selected_names: frozenset[str] = resolve_python_nodes_from_selectors(
-            select=select, exclude=exclude, graph=graph
-        )
-        return _check_names_from_selection(graph=graph, selected_names=selected_names)
-    check_names: frozenset[str] = frozenset(
-        node.name for node in graph.nodes if node.kind == PythonNodeKind.CHECK
-    )
-    excluded: frozenset[str] = (
-        resolve_python_nodes_from_selectors(select=exclude, exclude=(), graph=graph)
-        if exclude
-        else frozenset()
-    )
-    return frozenset(check_names - excluded)
-
-
-def check_dependency_closure(
-    *, graph: PythonNodeGraph, check_names: frozenset[str]
-) -> frozenset[str]:
-    """Return transitive executable Python dependencies of selected checks."""
-
-    dependencies: frozenset[str] = transitive_closure_many(
-        starts=check_names, edges=graph.upstream_deps, include_starts=False
-    )
-    return dependencies - check_names
-
-
-def _validate_check_selectors(*, select: tuple[str, ...]) -> None:
-    raw_selector: str
-    for raw_selector in select:
-        token: str
-        for token in raw_selector.split():
-            part: str
-            for part in token.split(","):
-                parsed: ParsedSelector | PathSelector = parse_project_selector(part)
-                if isinstance(parsed, PathSelector) or parsed.upstream or parsed.downstream:
-                    raise CliUserError(
-                        "sqb check selectors do not support graph operators; "
-                        "select checks directly without '+', '~', or path-between expansion",
-                        code="C681",
-                    )
-
-
-def _check_names_from_selection(
-    *, graph: PythonNodeGraph, selected_names: frozenset[str]
-) -> frozenset[str]:
-    non_check_names: tuple[str, ...] = tuple(
-        sorted(
-            name
-            for name in selected_names
-            if graph.nodes_by_name[name].kind != PythonNodeKind.CHECK
-        )
-    )
-    if non_check_names:
-        raise CliUserError(
-            "sqb check selectors must resolve only to Python checks; non-check selections: "
-            + ", ".join(non_check_names),
-            code="C682",
-        )
-    return selected_names
 
 
 def record_python_run_state_results(
@@ -263,99 +185,6 @@ def load_results_by_loader_name(
         for result in load_results
         if (loader_name := loader_by_source_name.get(result.source_name)) is not None
     }
-
-
-def write_check_results(
-    *,
-    stream: TextIO,
-    results: tuple[PythonCheckExecutionResult, ...],
-    use_color: bool,
-    check_functions: tuple[DiscoveredCheckFunction, ...] = (),
-    python_graph: PythonNodeGraph | None = None,
-) -> None:
-    """Write human-readable check result rows."""
-
-    style: CliStyle = CliStyle(use_color=use_color)
-    projector: NativeProgressProjector | None = current_native_progress_projector()
-    result_by_name: dict[str, PythonCheckExecutionResult] = {
-        result.node_name: result for result in results
-    }
-    grouped_names: dict[str, list[str]] = _group_check_names(
-        results=results,
-        check_functions=check_functions,
-        python_graph=python_graph,
-    )
-    stream.write("\n")
-    group_label: str
-    result_names: list[str]
-    for group_label, result_names in grouped_names.items():
-        stream.write(f"Python checks: {group_label}\n\n")
-        for result_name in result_names:
-            result: PythonCheckExecutionResult = result_by_name[result_name]
-            duration_ms: float | None = (
-                projector.resource_terminal_duration(
-                    resource_name=result.node_name,
-                    resource_id=f"check:{result.node_name}",
-                )
-                if projector is not None
-                else None
-            )
-            _write_check_result_row(
-                stream=stream,
-                result=result,
-                style=style,
-                duration_ms=duration_ms,
-            )
-            if projector is not None:
-                _ = projector.consume_resource_terminal(
-                    resource_name=result.node_name,
-                    resource_id=f"check:{result.node_name}",
-                )
-        stream.write("\n")
-
-
-def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str:
-    """Format check execution JSON."""
-
-    projector: TerminalEventIndex | None = current_terminal_event_index()
-    if projector is not None:
-        results = tuple(
-            result
-            for result in results
-            if projector.resource_terminal(
-                resource_name=result.node_name,
-                resource_id=f"check:{result.node_name}",
-            )
-            is not None
-        )
-    payload: dict[str, object] = {
-        "version": 1,
-        "command": "check",
-        "status": "failed" if check_results_failed(results) else "success",
-        "summary": {
-            "pass_count": sum(1 for result in results if result.passed),
-            "warn_count": sum(1 for result in results if result.warned),
-            "fail_count": sum(1 for result in results if result.failed),
-            "total_count": len(results),
-        },
-        "checks": [
-            {
-                "kind": "python_check",
-                "name": result.node_name,
-                "display_name": result.node_name,
-                "check_id": f"python_check:{result.node_name}",
-                "status": "pass" if result.passed else "warn" if result.warned else "fail",
-                "passed": result.passed,
-                "severity": result.severity.value,
-                "message": result.message,
-                "error_message": result.error_message,
-                "metadata": result.metadata,
-                "warnings": list(result.warning_messages) or None,
-            }
-            for result in results
-        ],
-    }
-    return json.dumps(payload, indent=2) + "\n"
 
 
 def check_results_failed(results: tuple[PythonCheckExecutionResult, ...]) -> bool:
@@ -528,67 +357,3 @@ def _check_sql_ref_location(
 
 def _sql_ref_sort_key(ref: SqlResourceRef) -> tuple[str, str]:
     return (ref.kind.value, ref.name)
-
-
-def _group_check_names(
-    *,
-    results: tuple[PythonCheckExecutionResult, ...],
-    check_functions: tuple[DiscoveredCheckFunction, ...],
-    python_graph: PythonNodeGraph | None,
-) -> dict[str, list[str]]:
-    check_by_name: dict[str, DiscoveredCheckFunction] = {
-        check.name: check for check in check_functions
-    }
-    groups: dict[str, list[str]] = {}
-    result: PythonCheckExecutionResult
-    for result in results:
-        group_label: str = _check_group_label(
-            check=check_by_name.get(result.node_name),
-            result_name=result.node_name,
-            python_graph=python_graph,
-        )
-        groups.setdefault(group_label, []).append(result.node_name)
-    return groups
-
-
-def _check_group_label(
-    *,
-    check: DiscoveredCheckFunction | None,
-    result_name: str,
-    python_graph: PythonNodeGraph | None,
-) -> str:
-    if python_graph is not None:
-        node: DiscoveredPythonNode | None = python_graph.nodes_by_name.get(result_name)
-        upstream_names: tuple[str, ...] = (
-            *python_graph.upstream_deps.get(result_name, ()),
-            *(() if node is None else (sql_ref.name for sql_ref in node.sql_deps)),
-        )
-        if len(upstream_names) == 1:
-            return upstream_names[0]
-        if len(upstream_names) > 1:
-            return (
-                check.group if check is not None and check.group is not None else "multi-dependency"
-            )
-    if check is not None and check.group is not None:
-        return check.group
-    return "ungrouped"
-
-
-def _write_check_result_row(
-    *,
-    stream: TextIO,
-    result: PythonCheckExecutionResult,
-    style: CliStyle,
-    duration_ms: float | None,
-) -> None:
-    status: str = "PASS" if result.passed else "WARN" if result.warned else "FAIL"
-    stream.write(f"  {'check':<10}{result.node_name:<50} {style.status(status=status)}")
-    if duration_ms is not None:
-        stream.write(f"  {duration_ms / 1000.0:.2f}s")
-    detail: str | None = result.error_message or result.message
-    if detail:
-        stream.write(f"  {detail}")
-    stream.write("\n")
-    warning_message: str
-    for warning_message in result.warning_messages:
-        stream.write(f"    {style.warning(warning_message)}\n")

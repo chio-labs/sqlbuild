@@ -8,7 +8,6 @@ import pytest
 
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.cli.commands._helpers.check import core as check_core
-from sqlbuild.cli.commands._helpers.check.core import check_dependency_closure
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.compiler.compile.models import CompiledProject, CompiledRelationLocation
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
@@ -21,35 +20,6 @@ from sqlbuild.spec.contracts.models import SourceEntry
 from tests.unit.src.sqlbuild.cli.commands._helpers.check._test_types import (
     CheckPlanningTestCase,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    (
-        CheckPlanningTestCase(
-            description="transitive check dependency closure",
-            expected_names=frozenset({"asset", "task", "loader"}),
-        ),
-    ),
-    ids=lambda case: case.description,
-)
-def test_given_check_with_transitive_dependencies_when_planning_then_entire_closure_is_selected(
-    test_case: CheckPlanningTestCase,
-) -> None:
-    graph: Mock = Mock(
-        upstream_deps={
-            "quality_check": ("asset",),
-            "asset": ("task", "loader"),
-            "task": (),
-            "loader": (),
-        }
-    )
-
-    selected: frozenset[str] = check_dependency_closure(
-        graph=graph, check_names=frozenset({"quality_check"})
-    )
-
-    assert selected == test_case.expected_names
 
 
 @pytest.mark.parametrize(

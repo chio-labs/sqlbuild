@@ -17,13 +17,21 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
+from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
+    CheckCommandRequest,
+    CloneCommandRequest,
+    DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
     LineageCommandRequest,
+    LoadCommandRequest,
     PlaygroundCommandRequest,
+    QueryDiffPreparation,
     RefactorCommandRequest,
     ScopeCommandRequest,
+    SeedCommandRequest,
+    TestCommandRequest,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
@@ -35,6 +43,7 @@ from sqlbuild.cli.entry.models import (
     ResolvedWarehouse,
 )
 from sqlbuild.cli.output.models import SkillMaintenanceResult, SkillUpdateResult, WrittenTarget
+from sqlbuild.cli.progress.models import NestedProgressChildRow
 from sqlbuild.compiler.auditing.models import (
     AuditGateIdentity,
     MeasurementContract,
@@ -107,6 +116,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredAdapterFile,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
+    DiscoveredCheckFunction,
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredHookFunction,
@@ -127,6 +137,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveryFileFault,
     EnumDeclaration,
     ModelSchemaDeclaration,
+    SqlTestParameterDeclaration,
     TolerantScopeDiscovery,
 )
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
@@ -139,6 +150,8 @@ from sqlbuild.compiler.lineage.models import (
     ModelColumnLineage,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
+from sqlbuild.compiler.migrations.models import MigrationRelation
+from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from sqlbuild.compiler.pipeline.models import (
     CompiledProjectPhaseResult,
     CompilePipelineOptions,
@@ -154,6 +167,7 @@ from sqlbuild.compiler.planner.models import (
     FutureCursorSafetyEvidence,
     MaximumStartSafetyEvidence,
     PlanOutput,
+    SqlTestPlanEntry,
 )
 from sqlbuild.compiler.planner.types import CursorGrain
 from sqlbuild.compiler.python_nodes.models import (
@@ -193,6 +207,10 @@ from sqlbuild.compiler.scopes.models import (
 )
 from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
+from sqlbuild.compiler.source_freshness.types import (
+    SourceFreshnessAgeStatus,
+    SourceFreshnessComparableRecord,
+)
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingResult,
     SqlLexicalSyntax,
@@ -211,6 +229,7 @@ from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
@@ -219,6 +238,16 @@ from sqlbuild.executor.python_nodes.models import (
 )
 from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
+from sqlbuild.integrations.dbt.models import (
+    DbtInteropPlan,
+    DbtInteropSelectionResult,
+    DbtLsNode,
+    DbtManifestIndex,
+    DbtManifestModel,
+    NormalizedDbtProfileConnection,
+    ResolvedDbtProfileOutput,
+)
+from sqlbuild.integrations.dbt.types import DbtInteropCommand
 from sqlbuild.lint.models import HeaderSpan, LintConfig, LintViolation
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
@@ -226,7 +255,8 @@ from sqlbuild.presentation.classes.transient_status_reporter import TransientSta
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.presentation.types import CompletionState
 from sqlbuild.python_nodes.models import SqlResourceRef
-from sqlbuild.rule_engine.models import Finding, Rule, RulesResult
+from sqlbuild.rule_engine.models import Finding, Rule, RulesConfig, RulesResult
+from sqlbuild.rule_engine.types import RuleCheck
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
@@ -241,11 +271,17 @@ from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SettingsConfig,
     SourceEntry,
+    SourceFreshnessAgePolicy,
     SourceLocation,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import WarehouseGroup
+from sqlbuild.spec.contracts.types import (
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
+    WarehouseGroup,
+)
 from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import StateSqlValueType
 
 BUILD_IDENTITY: str
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
@@ -274,22 +310,23 @@ class LintPreparationRequest(TypedDict):
     dialect: str
 
 def analyze_column_references_json(request_json: str) -> str: ...
-def catalogue_json() -> str: ...
+def builtin_rules(*, check: RuleCheck) -> list[Rule]: ...
+def selected_sql_rule_codes(*, select: list[str], ignore: list[str]) -> list[str]: ...
 
 class NativeRulesRequest:
     """A natively built rules request held until it is evaluated once."""
 
+    def sql_facts_json(self) -> str: ...
+
 def build_rules_request(
     project: dict[str, object],
     models: tuple[NativeCompiledProject, list[str]],
-    sql_tests: list[tuple[object, ...]],
-    scenarios: list[tuple[object, ...]],
+    sql_tests: list[CompiledSqlTest],
+    scenarios: list[CompiledSqlScenario],
 ) -> NativeRulesRequest: ...
 def evaluate_rules_request(
     request: NativeRulesRequest,
-) -> tuple[
-    list[tuple[bool, str, str, int, int, str, str]], list[str], int, int, int, int, bool
-]: ...
+) -> tuple[list[Finding], list[str], int, int, int, int, bool]: ...
 def emit_orjson_report(report: object) -> str: ...
 def emit_json_report(report: object) -> str: ...
 
@@ -1359,6 +1396,70 @@ def resolve_target_connection_config(
 def validate_preview_target(
     *, discovered_inputs: DiscoveredProjectInputs, as_target: str | None, command_name: str
 ) -> None: ...
+def normalize_dbt_profile_connection(
+    *, resolved: ResolvedDbtProfileOutput
+) -> NormalizedDbtProfileConnection: ...
+def build_dbt_init_project_toml(
+    *,
+    project_name: str,
+    adapter: str,
+    target_name: str,
+    profile_name: str,
+    dbt_project_dir: str,
+    profiles_dir: str,
+    target_path: str,
+    target_schema: str | None,
+    target_database: str | None,
+) -> str: ...
+def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex: ...
+def build_compile_dbt_manifest_index(
+    *, manifest_contents: str | None
+) -> DbtManifestIndex | None: ...
+def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex: ...
+def resolve_dbt_manifest_model(
+    *, manifest: DbtManifestIndex, name: str, package_name: str | None = None
+) -> DbtManifestModel: ...
+def validate_compile_dbt_model_names(
+    *, known_model_names: Iterable[str], dbt_manifest: DbtManifestIndex | None
+) -> None: ...
+def validate_compile_dbt_model_reference(
+    *,
+    reference: CompileSqlReference,
+    model_relative_path: Path,
+    dbt_manifest: DbtManifestIndex | None,
+) -> None: ...
+def resolve_sqlbuild_model_dbt_refs(
+    *,
+    project: CompiledProjectView,
+    manifest: DbtManifestIndex,
+    selected_model_names: Iterable[str] | None = None,
+) -> tuple[tuple[CompiledModelView, DbtManifestModel], ...]: ...
+def resolve_dbt_reference_relation(
+    *,
+    manifest: DbtManifestIndex | None,
+    ref_kind: str,
+    ref_name: str,
+    ref_package: str | None,
+) -> str | None: ...
+def build_dbt_interop_plan(
+    *,
+    command: DbtInteropCommand | str,
+    dbt_command_argv: Sequence[str],
+    dbt_ls_nodes: Sequence[DbtLsNode],
+    sqlbuild_command_argvs: Sequence[Sequence[str]],
+    selection: DbtInteropSelectionResult,
+    dbt_required_selector_terms: Sequence[str] = (),
+    supplemental_dbt_command_argvs: Sequence[Sequence[str]] = (),
+    warnings: Sequence[str] = (),
+    sqlbuild_plan_output: PlanOutput | None = None,
+) -> DbtInteropPlan: ...
+def render_dbt_interop_plan(
+    *,
+    plan: DbtInteropPlan,
+    json_output: bool,
+    use_color: bool,
+    display_options: DisplayOptions | None = None,
+) -> str: ...
 def run_debug_command(
     *,
     project_dir: Path | None = None,
@@ -1425,6 +1526,33 @@ class NativeProgressProjector:
     ) -> float | None: ...
     def close(self) -> None: ...
 
+def render_diff_output(
+    *,
+    result: DiffExecutionResult,
+    from_label: str,
+    to_label: str,
+    mode_label: str,
+    use_color: bool,
+    verbose: bool,
+    max_column_examples: int,
+    max_row_only_examples: int,
+    max_value_length: int | None = ...,
+    suppress_example_values: bool = ...,
+    outcome: str | None = ...,
+) -> str: ...
+def render_diff_error_json(
+    *,
+    status: str,
+    code: str,
+    message: str,
+    help_text: str | None = ...,
+    size_guard: dict[str, object] | None = ...,
+) -> str: ...
+def run_diff_command(*, request: DiffCommandRequest) -> int: ...
+def execute_query_diff(
+    *, request: DiffCommandRequest, preparation: QueryDiffPreparation
+) -> DiffExecutionResult: ...
+def machine_output_mode(args: CliNamespace, /) -> bool: ...
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 
 class ConnectionProgressReporter:
@@ -1612,9 +1740,7 @@ class PreparedCompileArtifacts:
     ) -> WrittenTarget | None: ...
     def planning_diagnostics(self) -> tuple[CompilerDiagnostic, ...] | None: ...
 
-def finalize_rule_findings_rows(
-    request: dict[str, object],
-) -> list[tuple[bool, str, str, int, int, str, str]]: ...
+def finalize_rule_findings_rows(request: dict[str, object]) -> list[Finding]: ...
 def run_custom_host_json(spec_json: str) -> str: ...
 def format_sql_json(request_json: str) -> str: ...
 def format_sql_batch_json(request_json: str) -> str: ...
@@ -1628,7 +1754,7 @@ def prepare_lint_sql_batch(
     requests: list[LintPreparationRequest],
 ) -> list[tuple[bool, tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None]]: ...
 def lint_backtick_identifiers(dialect: str) -> bool: ...
-def load_config_json(project_dir: str) -> str: ...
+def load_rules_config(*, project_dir: Path) -> RulesConfig: ...
 def selected_codes_json(request_json: str) -> str: ...
 def render_owned_skill(content: str, input_fingerprint: str) -> str: ...
 def skill_freshness(content: str | None, input_fingerprint: str) -> str: ...
@@ -2737,6 +2863,66 @@ def run_lineage_command(*, request: LineageCommandRequest) -> int: ...
 def run_refactor_command(*, request: RefactorCommandRequest) -> int: ...
 def run_janitor_command(*, request: JanitorCommandRequest) -> int: ...
 def run_freshness_command(*, request: FreshnessCommandRequest) -> int: ...
+def run_clone_command(*, request: CloneCommandRequest) -> int: ...
+def run_load_command(*, request: LoadCommandRequest) -> int: ...
+def run_check_command(*, request: CheckCommandRequest) -> int: ...
+def write_check_results(
+    *,
+    stream: TextIO,
+    results: tuple[PythonCheckExecutionResult, ...],
+    use_color: bool,
+    check_functions: tuple[DiscoveredCheckFunction, ...] = (),
+    python_graph: PythonNodeGraph | None = None,
+) -> None: ...
+def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
+def run_test_command(*, request: TestCommandRequest) -> int: ...
+def run_seed_command(*, request: SeedCommandRequest) -> int: ...
+def format_parameterized_test_label(
+    *,
+    name: str,
+    source_path: Path | None,
+    parameter_schema: tuple[SqlTestParameterDeclaration, ...],
+    parameter_values: tuple[tuple[str, SqlValue], ...],
+) -> str: ...
+def resolve_test_name_width(test_entries: tuple[SqlTestPlanEntry, ...]) -> int: ...
+def build_test_expectation_rows(
+    result: SqlTestExecutionResult,
+) -> tuple[NestedProgressChildRow, ...]: ...
+def select_load_entries(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    select: tuple[str, ...],
+    exclude: tuple[str, ...],
+    target_config: TargetConfig | None,
+    loader_default_database: str | None = None,
+    loader_default_schema: str | None = None,
+) -> tuple[SourceEntry, ...]: ...
+def select_load_reference_entries(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_sources: tuple[SourceEntry, ...],
+    target_config: TargetConfig | None,
+    loader_default_database: str | None = None,
+    loader_default_schema: str | None = None,
+) -> tuple[SourceEntry, ...]: ...
+def resolve_loader_defaults(
+    *,
+    discovered_inputs: DiscoveredProjectInputs,
+    selected_target: str | None = None,
+    target_config: TargetConfig | None = None,
+    cli_vars: dict[str, object] | None = None,
+) -> tuple[str | None, str | None]: ...
+
+class LoadProgressReporter:
+    def __init__(
+        self, *, stream: TextIO, use_color: bool, source_order: dict[str, int], total_count: int
+    ) -> None: ...
+    def on_start(self, source: SourceEntry) -> None: ...
+    def on_progress(self, source: SourceEntry, message: str) -> None: ...
+    def on_complete(self, result: LoadExecutionResult) -> None: ...
+    def clear_transient_line(self) -> None: ...
+    def redraw_transient_line(self) -> None: ...
+
 def observe_source_freshness_json(
     *,
     adapter: object,
@@ -2904,6 +3090,69 @@ def _oracle_yaml_load(text: str) -> str: ...
 def _oracle_toml_load(text: str) -> str: ...
 
 # Discovery: header values and authored locations.
+def deterministic_migration_event_id(
+    *,
+    run_id: str,
+    target_name: str | None,
+    origin: MigrationRelation,
+    destination: MigrationRelation,
+) -> str: ...
+def deterministic_column_migration_event_id(
+    *,
+    run_id: str,
+    target_name: str | None,
+    relation: MigrationRelation,
+    origin_column: str,
+    destination_column: str,
+) -> str: ...
+def deterministic_old_name_view_event_id(
+    *, event_type: OldNameViewEventType, migration_event_id: str
+) -> str: ...
+def render_event_exists_sql(*, table: str, event_id: str) -> str: ...
+def render_event_insert_sql(
+    *,
+    table: str,
+    columns: tuple[str, ...],
+    column_types: Mapping[str, StateSqlValueType],
+    values: tuple[object | None, ...],
+) -> str: ...
+def source_freshness_data_version_hash(
+    *,
+    source_name: str,
+    strategy: SourceFreshnessStrategy | str,
+    value_kind: SourceFreshnessValueKind | str,
+    data_version: str,
+) -> str: ...
+def normalize_source_freshness_data_version(
+    *, value: object, value_kind: SourceFreshnessValueKind
+) -> str: ...
+def source_freshness_records_equivalent(
+    *,
+    previous_record: SourceFreshnessComparableRecord,
+    current_record: SourceFreshnessComparableRecord,
+    lag_tolerance: str | None = None,
+) -> bool: ...
+def evaluate_source_freshness_age_policy(
+    *,
+    policy: SourceFreshnessAgePolicy | None,
+    data_version: object,
+    observed_at: datetime,
+) -> SourceFreshnessAgeStatus | None: ...
+def redact_diagnostic_text(value: str) -> str: ...
+def redact_diagnostic_value(*, name: str, value: object) -> object: ...
+def sql_rule_lint_key(*, config: LintConfig) -> str: ...
+def sql_model_rule_keys(
+    *, lint_key: str, codes: list[str], models: list[tuple[str, str, str, str | None]]
+) -> dict[str, str]: ...
+def sql_file_rule_key(
+    *, lint_key: str, codes: list[str], relative_path: str, contents: str, expanded: bool
+) -> str | None: ...
+def load_sql_rule_cache(*, path: Path) -> dict[str, tuple[str, str]]: ...
+def lookup_sql_rule_cache(
+    *, entries: dict[str, tuple[str, str]], keys: list[tuple[str, str]]
+) -> dict[str, list[Finding]]: ...
+def encode_sql_rule_findings(*, findings: list[Finding]) -> str: ...
+def write_sql_rule_cache(*, path: Path, entries: dict[str, tuple[str, str]]) -> None: ...
 def cursor_parse(*, raw: object, cursor_type: str) -> CursorScalar: ...
 def cursor_try_parse(*, raw: object, cursor_type: str) -> CursorScalar | None: ...
 def cursor_render(*, value: CursorScalar) -> str: ...
@@ -2952,6 +3201,53 @@ def custom_rule_import_closure(*, rule: Rule, project_dir: Path) -> tuple[Path, 
 def custom_rule_implementation_fingerprint(
     *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
 ) -> str: ...
+def custom_rule_identity(
+    *,
+    code_identity: str,
+    runtime_version: str,
+    code: str,
+    family: str,
+    slug: str,
+    message: str,
+    remediation: str,
+    subject: str | None,
+    implementation_fingerprint: str,
+    config: RulesConfig,
+    dialect: str,
+    project_dir: str,
+) -> str: ...
+
+class CustomRuleCache:
+    """One custom-rule run's subjects, reused and new results, and its cache file."""
+
+    def __init__(
+        self,
+        *,
+        path: Path | None,
+        rules: list[tuple[str, str | None, str | None]],
+        target_name: str | None,
+        models: list[tuple[str, str, str | None]],
+    ) -> None: ...
+    def pending_readsets(self) -> list[tuple[tuple[str, ...], ...]]: ...
+    def plan(self, *, digests: list[str | None]) -> dict[str, list[str] | None]: ...
+    def record(
+        self,
+        *,
+        evaluated: list[
+            tuple[
+                str,
+                str,
+                tuple[tuple[tuple[str, ...], ...], str | None] | None,
+                list[dict[str, object]],
+            ]
+        ],
+    ) -> None: ...
+    def findings(self) -> list[Finding]: ...
+    @property
+    def hits(self) -> int: ...
+    @property
+    def misses(self) -> int: ...
+
 def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...

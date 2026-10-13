@@ -1,0 +1,254 @@
+//! Build and render the `sqb dbt` selection plan.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyDict, PyTuple};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_core::cli_text::main::dbt_interop_plan_warnings::dbt_interop_plan_warnings;
+use sqlbuild_core::cli_text::main::format_dbt_interop_plan::format_dbt_interop_plan;
+use sqlbuild_core::cli_text::main::format_dbt_interop_plan_json::format_dbt_interop_plan_json;
+use sqlbuild_core::cli_text::models::{DbtInteropPlanText, DbtLsNodeText, DisplayLimit};
+
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, imported,
+};
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const DBT_MODELS: &str = "sqlbuild.integrations.dbt.models";
+const DBT_TYPES: &str = "sqlbuild.integrations.dbt.types";
+const PRESENTATION_MODELS: &str = "sqlbuild.presentation.models";
+const BUILD_OPTIONS: (&[&str], &[&str]) = (
+    &[
+        "command",
+        "dbt_command_argv",
+        "dbt_ls_nodes",
+        "sqlbuild_command_argvs",
+        "selection",
+    ],
+    &[
+        "dbt_required_selector_terms",
+        "supplemental_dbt_command_argvs",
+        "warnings",
+        "sqlbuild_plan_output",
+    ],
+);
+const RENDER_OPTIONS: (&[&str], &[&str]) =
+    (&["plan", "json_output", "use_color"], &["display_options"]);
+
+fn strings(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    value.try_iter()?.map(|item| item?.extract()).collect()
+}
+
+fn argvs(value: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<String>>> {
+    value.try_iter()?.map(|argv| strings(&argv?)).collect()
+}
+
+fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    if value.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(value.extract()?))
+}
+
+fn reason_value(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    if value.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(value.getattr("value")?.extract()?))
+}
+
+fn ls_node(node: &Bound<'_, PyAny>) -> PyResult<DbtLsNodeText> {
+    Ok(DbtLsNodeText {
+        unique_id: node.getattr("unique_id")?.extract()?,
+        resource_type: optional_text(&node.getattr("resource_type")?)?,
+        name: optional_text(&node.getattr("name")?)?,
+        fqn: strings(&node.getattr("fqn")?)?,
+    })
+}
+
+fn plan_text(plan: &Bound<'_, PyAny>) -> PyResult<DbtInteropPlanText> {
+    let selection: Bound<'_, PyAny> = plan.getattr("selection")?;
+    let anchor_ids: Bound<'_, PyAny> = selection.getattr("dbt_anchor_unique_ids_by_term")?;
+    let empty: Bound<'_, PyTuple> = PyTuple::empty(plan.py());
+    let mut anchors: Vec<(String, Vec<String>)> = Vec::new();
+    for term in selection.getattr("dbt_anchor_terms")?.try_iter()? {
+        let term: Bound<'_, PyAny> = term?;
+        let unique_ids: Vec<String> = strings(&anchor_ids.call_method1("get", (&term, &empty))?)?;
+        anchors.push((term.extract()?, unique_ids));
+    }
+    let mut path_translations: Vec<(String, String)> = Vec::new();
+    for pair in selection.getattr("path_translations")?.try_iter()? {
+        path_translations.push(pair?.extract()?);
+    }
+    Ok(DbtInteropPlanText {
+        command: plan.getattr("command")?.getattr("value")?.extract()?,
+        dbt_argv: strings(&plan.getattr("dbt_command_argv")?)?,
+        supplemental_dbt_argvs: argvs(&plan.getattr("supplemental_dbt_command_argvs")?)?,
+        dbt_nodes: plan
+            .getattr("dbt_selected_nodes")?
+            .try_iter()?
+            .map(|node| ls_node(&node?))
+            .collect::<PyResult<_>>()?,
+        dbt_selected_unique_ids: strings(&plan.getattr("dbt_selected_unique_ids")?)?,
+        dbt_required_unique_ids: strings(&selection.getattr("dbt_required_unique_ids")?)?,
+        dbt_required_selector_terms: strings(&plan.getattr("dbt_required_selector_terms")?)?,
+        dbt_skip_reason: reason_value(&plan.getattr("dbt_skip_reason")?)?,
+        sqlbuild_argvs: argvs(&plan.getattr("sqlbuild_command_argvs")?)?,
+        sqlbuild_models: strings(&selection.getattr("sqlbuild_model_names")?)?,
+        sqlbuild_skip_reason: reason_value(&plan.getattr("sqlbuild_skip_reason")?)?,
+        anchors,
+        path_translations,
+        warnings: strings(&plan.getattr("warnings")?)?,
+    })
+}
+
+fn tuple_of<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    Ok(PyTuple::new(value.py(), value.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())
+}
+
+fn tuple_of_tuples<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let items: Vec<Bound<'py, PyAny>> = value
+        .try_iter()?
+        .map(|item| tuple_of(item?))
+        .collect::<PyResult<_>>()?;
+    Ok(PyTuple::new(value.py(), items)?.into_any())
+}
+
+fn empty_or<'py>(value: Bound<'py, PyAny>) -> Bound<'py, PyAny> {
+    if value.is_none() {
+        return PyTuple::empty(value.py()).into_any();
+    }
+    value
+}
+
+fn skip_reason<'py>(py: Python<'py>, has_work: bool, member: &str) -> PyResult<Bound<'py, PyAny>> {
+    if has_work {
+        return Ok(py.None().into_bound(py));
+    }
+    imported(py, DBT_TYPES, "DbtInteropSkipReason")?.getattr(member)
+}
+
+/// Build a display-ready selection plan without dbt model state.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn build_dbt_interop_plan<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let arguments: KeywordArguments<'py> =
+        KeywordArguments::read(py, "build_dbt_interop_plan", options, BUILD_OPTIONS)?;
+    let command: Bound<'py, PyAny> =
+        imported(py, DBT_TYPES, "DbtInteropCommand")?.call1((arguments.value("command")?,))?;
+    let nodes: Bound<'py, PyAny> = tuple_of(arguments.value("dbt_ls_nodes")?)?;
+    let mut selected: Vec<String> = Vec::new();
+    for node in nodes.try_iter()? {
+        selected.push(node?.getattr("unique_id")?.extract()?);
+    }
+    selected.sort();
+    let selection: Bound<'py, PyAny> = arguments.value("selection")?;
+    let dbt_has_work: bool =
+        !selected.is_empty() || selection.getattr("dbt_required_unique_ids")?.is_truthy()?;
+    let sqlbuild_has_work: bool = selection.getattr("sqlbuild_model_names")?.is_truthy()?;
+    let warnings: Vec<String> = dbt_interop_plan_warnings(
+        strings(&empty_or(arguments.value("warnings")?))?,
+        dbt_has_work || sqlbuild_has_work,
+    );
+    call_with(
+        &imported(py, DBT_MODELS, "DbtInteropPlan")?,
+        &[
+            ("command", command),
+            (
+                "dbt_command_argv",
+                tuple_of(arguments.value("dbt_command_argv")?)?,
+            ),
+            ("dbt_selected_nodes", nodes),
+            (
+                "dbt_selected_unique_ids",
+                PyTuple::new(py, selected)?.into_any(),
+            ),
+            (
+                "sqlbuild_command_argvs",
+                tuple_of_tuples(arguments.value("sqlbuild_command_argvs")?)?,
+            ),
+            ("selection", selection),
+            (
+                "sqlbuild_plan_output",
+                arguments.value("sqlbuild_plan_output")?,
+            ),
+            (
+                "dbt_required_selector_terms",
+                tuple_of(empty_or(arguments.value("dbt_required_selector_terms")?))?,
+            ),
+            (
+                "supplemental_dbt_command_argvs",
+                tuple_of_tuples(empty_or(arguments.value("supplemental_dbt_command_argvs")?))?,
+            ),
+            (
+                "dbt_skip_reason",
+                skip_reason(py, dbt_has_work, "NO_DBT_WORK")?,
+            ),
+            (
+                "sqlbuild_skip_reason",
+                skip_reason(py, sqlbuild_has_work, "NO_SQLBUILD_WORK")?,
+            ),
+            ("warnings", PyTuple::new(py, warnings)?.into_any()),
+        ],
+    )
+}
+
+fn display_limit(options: &Bound<'_, PyAny>) -> PyResult<DisplayLimit> {
+    Ok(DisplayLimit {
+        max_entries: options.getattr("max_entries_per_section")?.extract()?,
+        overflow_flag: options.getattr("overflow_flag")?.extract()?,
+    })
+}
+
+/// Render a dbt interop plan in the requested CLI output format.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn render_dbt_interop_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+    let arguments: KeywordArguments<'_> =
+        KeywordArguments::read(py, "render_dbt_interop_plan", options, RENDER_OPTIONS)?;
+    let plan: Bound<'_, PyAny> = arguments.value("plan")?;
+    let text: DbtInteropPlanText = plan_text(&plan)?;
+    if arguments.flag("json_output")? {
+        return Ok(format_dbt_interop_plan_json(&text));
+    }
+    let mut display: Bound<'_, PyAny> = arguments.value("display_options")?;
+    if !display.is_truthy()? {
+        display = imported(py, PRESENTATION_MODELS, "DisplayOptions")?.call0()?;
+    }
+    let use_color: bool = arguments.flag("use_color")?;
+    let plan_output: Bound<'_, PyAny> = plan.getattr("sqlbuild_plan_output")?;
+    let sqlbuild_plan: Option<String> =
+        if text.sqlbuild_skip_reason.is_some() || plan_output.is_none() {
+            None
+        } else {
+            Some(
+                call_with(
+                    &imported(py, NATIVE_MODULE, "format_plan")?,
+                    &[
+                        ("plan", plan_output),
+                        (
+                            "use_color",
+                            PyBool::new(py, use_color).to_owned().into_any(),
+                        ),
+                        ("display_options", display.clone()),
+                    ],
+                )?
+                .extract()?,
+            )
+        };
+    Ok(format!(
+        "\n{}",
+        format_dbt_interop_plan(
+            &text,
+            sqlbuild_plan.as_deref(),
+            (&display_limit(&display)?, use_color)
+        )
+    ))
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(build_dbt_interop_plan, module)?)?;
+    module.add_function(wrap_pyfunction!(render_dbt_interop_plan, module)?)
+}

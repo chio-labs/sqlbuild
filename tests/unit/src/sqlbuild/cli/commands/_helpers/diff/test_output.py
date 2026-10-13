@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pytest
 
+from sqlbuild._native import render_diff_output
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     RowDiffColumnResult,
@@ -13,7 +14,6 @@ from sqlbuild.adapter.contract.models import (
     RowDiffTolerance,
     SchemaDiffResult,
 )
-from sqlbuild.cli.commands._helpers.diff.output import render_diff_output
 from sqlbuild.executor.diff.models import DiffExecutionResult, ModelDiffResult
 from tests.unit.src.sqlbuild.cli.commands._helpers.diff._test_types import (
     RenderDiffOutputTestCase,

@@ -6,7 +6,12 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import read_latest_fingerprints, write_fingerprint
+from sqlbuild._native import (
+    normalize_source_freshness_data_version,
+    read_latest_fingerprints,
+    source_freshness_data_version_hash,
+    write_fingerprint,
+)
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -24,12 +29,6 @@ from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAd
 from sqlbuild.compiler.fingerprints.constants import FINGERPRINT_TABLE_NAME
 from sqlbuild.compiler.fingerprints.models import Fingerprint, FingerprintSet
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.source_freshness.main.data_version_hash import (
-    source_freshness_data_version_hash,
-)
-from sqlbuild.compiler.source_freshness.main.normalization import (
-    normalize_source_freshness_data_version,
-)
 from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 from tests.integration.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksBuildFlowTestCase,

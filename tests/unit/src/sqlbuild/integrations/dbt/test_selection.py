@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from sqlbuild._native import build_dbt_manifest_index
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.integrations.dbt._helpers.graph.core import build_dbt_combined_graph
-from sqlbuild.integrations.dbt._helpers.manifest.core import build_dbt_manifest_index
 from sqlbuild.integrations.dbt._helpers.selection.core import resolve_dbt_interop_sqlbuild_selection
 from sqlbuild.integrations.dbt.exceptions import DbtInteropArgumentError
 from sqlbuild.integrations.dbt.models import (

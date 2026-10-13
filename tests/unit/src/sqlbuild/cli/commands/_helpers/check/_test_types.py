@@ -17,3 +17,10 @@ class CheckOutputProjectionCase:
     expected_first_duration: str
     expected_second_duration: str
     expected_generic_terminal_count: int
+
+
+@dataclass(frozen=True)
+class CheckMetadataRowsCase:
+    description: str
+    metadata: dict[str, object]
+    expected_row_fragment: str

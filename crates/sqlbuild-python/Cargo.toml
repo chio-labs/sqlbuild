@@ -36,6 +36,7 @@ sqlbuild-render.workspace = true
 sqlbuild-rules.workspace = true
 sqlbuild-scopes.workspace = true
 sqlbuild-sqltext.workspace = true
+sqlbuild-state.workspace = true
 
 [lints]
 workspace = true

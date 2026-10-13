@@ -6,11 +6,14 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from sqlbuild._native import (
+    evaluate_source_freshness_age_policy,
+    normalize_source_freshness_data_version,
+    source_freshness_data_version_hash,
+    source_freshness_records_equivalent,
+)
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
-from sqlbuild.compiler.source_freshness._helpers.age_policy import (
-    evaluate_source_freshness_age_policy,
-)
 from sqlbuild.compiler.source_freshness.constants import (
     INCOMPLETE_CONFIGURATION_ERROR_FRAGMENT,
     PHYSICAL_TABLE_SOURCE_ERROR_FRAGMENT,
@@ -19,19 +22,10 @@ from sqlbuild.compiler.source_freshness.exceptions import SourceFreshnessObserva
 from sqlbuild.compiler.source_freshness.main.adapter_observation import (
     observe_adapter_sources_freshness,
 )
-from sqlbuild.compiler.source_freshness.main.data_version_hash import (
-    source_freshness_data_version_hash,
-)
-from sqlbuild.compiler.source_freshness.main.normalization import (
-    normalize_source_freshness_data_version,
-)
 from sqlbuild.compiler.source_freshness.main.observation import (
     observe_configured_source_freshness,
 )
 from sqlbuild.compiler.source_freshness.main.read import read_latest_source_freshness
-from sqlbuild.compiler.source_freshness.main.record_equivalence import (
-    source_freshness_records_equivalent,
-)
 from sqlbuild.compiler.source_freshness.models import (
     AdapterSourceFreshnessBatch,
     DirectSourceFreshnessPlanningResult,

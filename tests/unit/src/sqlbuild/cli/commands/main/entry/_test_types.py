@@ -155,3 +155,6 @@ class MachineProgressRoutingCase:
     json_output: Path | None
     expected_stdout_fragment: str
     expected_stderr_fragment: str
+    command: str | None = None
+    dbt_args: tuple[str, ...] = ()
+    expected_stdout_excludes: str = "Project compile  FAIL"

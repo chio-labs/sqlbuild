@@ -8,7 +8,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
-from sqlbuild._native import build_compiled_project, discover_project_inputs
+from sqlbuild._native import (
+    build_compiled_project,
+    discover_project_inputs,
+    load_dbt_manifest_index,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
@@ -24,9 +28,6 @@ from sqlbuild.integrations.dbt.main.cli._route_interop_args import route_dbt_int
 from sqlbuild.integrations.dbt.main.config._resolve_plan_options import resolve_dbt_plan_options
 from sqlbuild.integrations.dbt.main.config._resolve_vars_mapping import resolve_dbt_vars_mapping
 from sqlbuild.integrations.dbt.main.graph._build_combined_graph import build_dbt_combined_graph
-from sqlbuild.integrations.dbt.main.manifest._load_manifest_index import (
-    load_manifest_index as load_dbt_manifest_index,
-)
 from sqlbuild.integrations.dbt.main.manifest._resolve_manifest_path import (
     resolve_dbt_manifest_path,
 )

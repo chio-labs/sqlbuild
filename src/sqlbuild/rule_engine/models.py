@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, SqlExpansionContext
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.lint.models import LintRunResult
 from sqlbuild.rule_engine.types import FactKey, RuleCheck, RuleOptionValue, RuleSubject
@@ -340,6 +341,31 @@ class PreparedSqlLint:
 
 
 @dataclass(frozen=True)
+class SqlRulesEvaluation:
+    """SQL rule findings of one run, their cache accounting and elapsed time."""
+
+    findings: tuple[Finding, ...]
+    cache_hits: int
+    cache_misses: int
+    sql_ms: int = 0
+
+
+@dataclass(frozen=True)
+class RuleRunPlan:
+    """The catalogue, selected rules, project slice and settings one rules run evaluates."""
+
+    effective_config: RulesConfig
+    project_dir: Path
+    catalogue: tuple[Rule, ...]
+    custom_payloads: list[dict[str, object]]
+    selected: tuple[Rule, ...]
+    skipped_type_proof_rules: tuple[str, ...]
+    model_paths: frozenset[str] | None
+    project: CompiledProjectView
+    config: RulesConfig
+
+
+@dataclass(frozen=True)
 class RulesRunResult:
     """Unified findings and phase measurements for configured rules."""
 
@@ -440,9 +466,9 @@ class NativeRulesEvaluation:
 
 @dataclass(frozen=True)
 class CustomRulesOutcome:
-    """Custom-rule finding payloads in canonical order and their cache accounting."""
+    """Custom-rule findings in canonical order and their cache accounting."""
 
-    findings: tuple[dict[str, object], ...]
+    findings: tuple[Finding, ...]
     cache_hits: int
     cache_misses: int
     custom_ms: int

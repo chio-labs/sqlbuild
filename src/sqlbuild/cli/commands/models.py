@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, TextIO
 
 from sqlbuild.cli.commands.types import (
     PlaygroundTemplate,
@@ -36,7 +36,6 @@ from sqlbuild.spec.contracts.models import (
     CostConfig,
     ExecutionLimitsConfig,
     SnapshotsConfig,
-    SourceEntry,
 )
 
 if TYPE_CHECKING:
@@ -50,32 +49,23 @@ if TYPE_CHECKING:
         DirectPythonLifecycleState,
     )
     from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
-    from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
-        NestedCommandProgressCallbacks,
-    )
     from sqlbuild.compiler.compile.models import (
         CompiledSqlScenario,
         CompilerDiagnostic,
     )
     from sqlbuild.compiler.compile.types import CompiledProjectView
-    from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
+    from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
     from sqlbuild.compiler.pipeline.models import (
-        ClonePipelineResult,
         CompilePipelineResult,
         PythonPlanEntry,
     )
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
-    from sqlbuild.compiler.python_nodes.models import PythonNodeGraph, PythonSqlRunLifecyclePlan
     from sqlbuild.compiler.refactoring.models import RefactorProject
-    from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
-    from sqlbuild.executor.clone.models import CloneExecutionResult
-    from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
+    from sqlbuild.executor.build.models import BuildExecutionResult
     from sqlbuild.executor.janitor.models import JanitorPlan
-    from sqlbuild.executor.load.models import LoadExecutionResult
     from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
     from sqlbuild.integrations.dbt.models import DbtInitRequest
     from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
-    from sqlbuild.python_nodes.models import SqlResourceRef
     from sqlbuild.runtime.contracts.types import NodeStartCallback
 
 
@@ -306,20 +296,6 @@ class CheckInvocation:
 
 
 @dataclass(frozen=True)
-class CheckExecutionPreparation:
-    """Prepared Python graph, check selection, lifecycle, and relation defaults."""
-
-    python_graph: PythonNodeGraph
-    check_functions: tuple[DiscoveredCheckFunction, ...]
-    lifecycle_plan: PythonSqlRunLifecyclePlan
-    relation_targets: dict[SqlResourceRef, str]
-    relation_refs: frozenset[SqlResourceRef]
-    default_database: str | None
-    default_schema: str | None
-    project_relations: dict[SqlResourceRef, str] | None = None
-
-
-@dataclass(frozen=True)
 class CloneCommandRequest:
     """CLI inputs for one clone command invocation."""
 
@@ -335,42 +311,6 @@ class CloneCommandRequest:
     cli_vars: dict[str, object] | None = None
     json_output_path: Path | None = None
     event_output_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class CloneInvocation:
-    """Resolved project, adapter, and output context for clone."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter_name: str
-    adapter: BaseAdapter
-    destination_target_name: str
-    use_color: bool
-    progress_stream: TextIO
-
-
-@dataclass(frozen=True)
-class CloneConnectionContext:
-    """Destination connection configuration and handle for a clone."""
-
-    destination_connection_config: dict[str, object]
-    destination_connection: Any
-
-
-@dataclass(frozen=True)
-class CloneExecutionPreparation:
-    """Prepared direct clone pipeline and selected destination entries."""
-
-    pipeline_result: ClonePipelineResult
-
-
-@dataclass(frozen=True)
-class CloneRunOutcome:
-    """Direct clone execution result and elapsed time."""
-
-    result: CloneExecutionResult
-    elapsed: float
 
 
 @dataclass(frozen=True)
@@ -467,30 +407,6 @@ class DiffCommandRequest:
 
 
 @dataclass(frozen=True)
-class DiffInvocation:
-    """Resolved project discovery and mode for diff."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-
-
-@dataclass(frozen=True)
-class DirectDiffPreparation:
-    """Resolved direct diff adapter and compiled target projects."""
-
-    from_target: str
-    to_target: str
-    adapter: BaseAdapter
-    left_project: Any
-    right_project: Any
-    selected_names: tuple[str, ...]
-    connection_config: dict[str, object]
-    effective_max_column_examples: int
-    effective_max_row_only_examples: int
-    full_size_limits: FullDiffSizeLimits | None = None
-
-
-@dataclass(frozen=True)
 class QueryDiffPreparation:
     """Resolved raw-query diff adapter, connection, SQL, and limits."""
 
@@ -507,35 +423,6 @@ class QueryDiffPreparation:
     artifact_ttl: str
     effective_max_column_examples: int
     effective_max_row_only_examples: int
-
-
-@dataclass(frozen=True)
-class DiffExampleRenderOptions:
-    """Bounded example rendering controls independent of comparison execution."""
-
-    max_value_length: int | None
-    suppress_values: bool = False
-
-
-@dataclass(frozen=True)
-class RenderedDiffExampleValue:
-    """One safely bounded value plus explicit information-loss metadata."""
-
-    text: str | None
-    original_length: int
-    truncated: bool
-    suppressed: bool
-    first_difference: int | None
-
-
-@dataclass(frozen=True)
-class QueryDiffRunOutcome:
-    """Raw-query result plus measured lifecycle phase durations."""
-
-    result: DiffExecutionResult
-    phase_seconds: dict[str, float]
-    outcome: str
-    exit_code: int
 
 
 @dataclass(frozen=True)
@@ -631,64 +518,6 @@ class LoadCommandRequest:
     cli_vars: dict[str, object] | None = None
     json_output: bool = False
     json_output_path: Path | None = None
-
-
-@dataclass(frozen=True)
-class LoadInvocation:
-    """Resolved project, selected sources, and output context for load."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    selected_sources: tuple[SourceEntry, ...]
-    reference_sources: tuple[SourceEntry, ...]
-    use_color: bool
-    progress_stream: TextIO
-    relation_sources: tuple[SourceEntry, ...]
-
-
-@dataclass(frozen=True)
-class LoadExecutionPreparation:
-    """Prepared adapter, connection, runtime, and execution settings."""
-
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    target_name: str | None
-    effective_vars: dict[str, object]
-    run_id: str
-    effective_cursor_overrides: CursorOverrides
-    effective_concurrency: int
-    provider_session: Any
-    project_relations: dict[SqlResourceRef, str] | None
-
-
-@dataclass(frozen=True)
-class LoadRunOutcome:
-    """Load execution results, elapsed time, and summary counts."""
-
-    results: tuple[LoadExecutionResult, ...]
-    elapsed: float
-    success_count: int
-    fail_count: int
-    skip_count: int
-    warn_count: int
-
-
-@dataclass(frozen=True)
-class LoadSelectionSets:
-    """Mutable selection sets returned explicitly by selection phases."""
-
-    selected_sources: set[str]
-    selected_loaders: set[str]
-
-
-@dataclass(frozen=True)
-class LoadSelectorSets:
-    """Selection sets updated while applying include selectors."""
-
-    selected_sources: set[str]
-    selected_loaders: set[str]
-    directly_selected_loaders: set[str]
 
 
 @dataclass(frozen=True)
@@ -871,22 +700,6 @@ class SeedInvocation:
 
 
 @dataclass(frozen=True)
-class SeedExecutionPreparation:
-    """Prepared seed execution settings and compiled pipeline."""
-
-    pipeline_result: CompilePipelineResult
-    effective_concurrency: int
-
-
-@dataclass(frozen=True)
-class SeedRunOutcome:
-    """Seed execution results and elapsed time."""
-
-    results: tuple[SeedExecutionResult, ...]
-    elapsed: float
-
-
-@dataclass(frozen=True)
 class TestCommandRequest:
     """CLI inputs for one test command invocation."""
 
@@ -968,17 +781,6 @@ class TestInvocation:
     progress_stream: TextIO
     connection_progress: ConnectionProgressReporter
     planning_progress: PlanningProgressReporter
-
-
-@dataclass(frozen=True)
-class TestExecutionPreparation:
-    """Prepared nested progress and execution reporters for test runs."""
-
-    progress: NestedCommandProgressCallbacks
-    execution_connection_progress: ConnectionProgressReporter
-    preflight_progress: TransientStatusReporter
-    effective_concurrency: int
-    worker_count: int
 
 
 @dataclass(frozen=True)

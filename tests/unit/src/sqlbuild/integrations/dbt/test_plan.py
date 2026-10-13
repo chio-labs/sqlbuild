@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.integrations.dbt._helpers.planning.plan import (
-    build_dbt_interop_plan,
-    format_dbt_interop_plan,
-    format_dbt_interop_plan_json,
-)
+from sqlbuild._native import build_dbt_interop_plan, render_dbt_interop_plan
 from sqlbuild.integrations.dbt.models import DbtInteropPlan, DbtInteropSelectionResult, DbtLsNode
 from tests.unit.src.sqlbuild.integrations.dbt._test_types import DbtPlanTestCase
 
@@ -86,8 +82,8 @@ def test_given_ordinary_interop_selection_when_rendering_then_reports_selected_w
         warnings=test_case.warnings,
     )
 
-    human: str = format_dbt_interop_plan(plan=plan, use_color=False)
-    json_output: str = format_dbt_interop_plan_json(plan)
+    human: str = render_dbt_interop_plan(plan=plan, json_output=False, use_color=False)
+    json_output: str = render_dbt_interop_plan(plan=plan, json_output=True, use_color=False)
 
     assert (plan.dbt_skip_reason is not None) is test_case.expected_dbt_skipped
     assert (plan.sqlbuild_skip_reason is not None) is test_case.expected_sqlbuild_skipped

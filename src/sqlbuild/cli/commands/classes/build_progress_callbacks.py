@@ -16,12 +16,12 @@ from sqlbuild._native import (
     format_completion_line,
     format_expectation_detail,
     format_expectation_name,
+    format_parameterized_test_label,
     format_status_cell,
     format_summary_footer,
 )
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType

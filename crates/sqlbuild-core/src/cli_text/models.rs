@@ -1,7 +1,7 @@
 //! Plain data of the human compile report, and the semantic styling it is rendered with.
 
 use crate::cli_text::constants::{
-    BLUE, BOLD, DIM, ERROR_STATUS_LABELS, GREEN, RED, RESET, SKIPPED_STATUS_LABELS,
+    BLUE, BOLD, DIM, ERROR_STATUS_LABELS, GREEN, ORANGE, RED, RESET, SKIPPED_STATUS_LABELS,
     SUCCESS_STATUS_LABELS, WARNING_STATUS_LABELS, YELLOW,
 };
 
@@ -68,6 +68,16 @@ impl CliStyle {
     #[must_use]
     pub fn object_name(self, text: &str) -> String {
         self.apply("", text)
+    }
+
+    #[must_use]
+    pub fn dbt_label(self, text: &str) -> String {
+        self.apply(ORANGE, text)
+    }
+
+    #[must_use]
+    pub fn dbt_section(self, text: &str) -> String {
+        self.apply(BOLD, text)
     }
 
     #[must_use]
@@ -505,4 +515,35 @@ impl CliDocument {
         }
         rendered
     }
+}
+
+/// One node `dbt ls` selected.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DbtLsNodeText {
+    pub unique_id: String,
+    pub resource_type: Option<String>,
+    pub name: Option<String>,
+    pub fqn: Vec<String>,
+}
+
+/// Everything a `sqb dbt` plan shows, in text and JSON.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DbtInteropPlanText {
+    /// `DbtInteropCommand` value.
+    pub command: String,
+    pub dbt_argv: Vec<String>,
+    pub supplemental_dbt_argvs: Vec<Vec<String>>,
+    pub dbt_nodes: Vec<DbtLsNodeText>,
+    pub dbt_selected_unique_ids: Vec<String>,
+    pub dbt_required_unique_ids: Vec<String>,
+    pub dbt_required_selector_terms: Vec<String>,
+    /// `DbtInteropSkipReason` value, when dbt is skipped.
+    pub dbt_skip_reason: Option<String>,
+    pub sqlbuild_argvs: Vec<Vec<String>>,
+    pub sqlbuild_models: Vec<String>,
+    pub sqlbuild_skip_reason: Option<String>,
+    /// Each anchor term with the dbt unique ids it matched.
+    pub anchors: Vec<(String, Vec<String>)>,
+    pub path_translations: Vec<(String, String)>,
+    pub warnings: Vec<String>,
 }

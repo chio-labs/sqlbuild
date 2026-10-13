@@ -1,0 +1,237 @@
+//! Source freshness data versions, their hashes, skip equivalence and age policy.
+
+use std::cell::RefCell;
+
+use pyo3::exceptions::PyOverflowError;
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyBool, PyInt, PyString};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_cursor::algebra::models::LocalDateTime;
+use sqlbuild_state::freshness::errors::FreshnessError;
+use sqlbuild_state::freshness::main::age_status::age_status;
+use sqlbuild_state::freshness::main::data_version_hash::data_version_hash;
+use sqlbuild_state::freshness::main::normalized_data_version::normalized_data_version;
+use sqlbuild_state::freshness::main::records_equivalent::records_equivalent;
+use sqlbuild_state::freshness::models::{AgeStatus, ComparableRecord, DataVersion};
+use sqlbuild_state::freshness::types::TimestampParser;
+
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
+use crate::bindings::_helpers::state_rows::timestamps::{
+    date_time_typed, in_utc, offset_aware, presumed_utc,
+};
+
+const EXCEPTIONS_MODULE: &str = "sqlbuild.compiler.source_freshness.exceptions";
+const TYPES_MODULE: &str = "sqlbuild.compiler.source_freshness.types";
+const TIMESTAMP_KIND: &str = "timestamp";
+const INTEGER_KIND: &str = "integer";
+const STRING_KIND: &str = "string";
+
+fn raised(py: Python<'_>, class: &str, message: String) -> PyErr {
+    match imported(py, EXCEPTIONS_MODULE, class).and_then(|class| class.call1((message,))) {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+fn python_error(py: Python<'_>, error: FreshnessError) -> PyErr {
+    match error {
+        FreshnessError::Observation(message) => {
+            raised(py, "SourceFreshnessObservationError", message)
+        }
+        FreshnessError::Input(message) => raised(py, "SourceFreshnessInputError", message),
+        FreshnessError::Overflow(message) => PyOverflowError::new_err(message),
+    }
+}
+
+/// Hash the stable source freshness identity used as a graph input.
+#[pyfunction(name = "source_freshness_data_version_hash")]
+#[pyo3(signature = (*, source_name, strategy, value_kind, data_version))]
+fn version_hash(
+    source_name: &str,
+    strategy: &str,
+    value_kind: &str,
+    data_version: &str,
+) -> PyResult<String> {
+    data_version_hash((source_name, strategy), value_kind, data_version)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(format!("{error:?}")))
+}
+
+fn observation_error(py: Python<'_>, message: &str) -> PyErr {
+    raised(py, "SourceFreshnessObservationError", message.to_owned())
+}
+
+/// A source freshness value normalized for stable state storage.
+#[pyfunction(name = "normalize_source_freshness_data_version")]
+#[pyo3(signature = (*, value, value_kind))]
+fn normalize<'py>(
+    value: &Bound<'py, PyAny>,
+    value_kind: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = value.py();
+    if value_kind.eq(TIMESTAMP_KIND)? {
+        if !date_time_typed(value)? {
+            return Err(observation_error(
+                py,
+                "Timestamp source freshness values must be datetime values",
+            ));
+        }
+        let aware: bool = !value.getattr("tzinfo")?.is_none();
+        let local: LocalDateTime = if aware {
+            local_date_time(&in_utc(value)?)?
+        } else {
+            local_date_time(value)?
+        };
+        let text: String = normalized_data_version(&DataVersion::Timestamp { local, utc: aware });
+        return Ok(PyString::new(py, &text).into_any());
+    }
+    if value_kind.eq(INTEGER_KIND)? {
+        if value.is_instance_of::<PyBool>() || !value.is_instance_of::<PyInt>() {
+            return Err(observation_error(
+                py,
+                "Integer source freshness values must be integer values",
+            ));
+        }
+        return Ok(value.str()?.into_any());
+    }
+    if value_kind.eq(STRING_KIND)? {
+        if !value.is_instance_of::<PyString>() {
+            return Err(observation_error(
+                py,
+                "String source freshness values must be string values",
+            ));
+        }
+        return Ok(value.clone());
+    }
+    Err(raised(
+        py,
+        "SourceFreshnessObservationError",
+        format!(
+            "Unsupported source freshness value kind: {}",
+            value_kind.str()?
+        ),
+    ))
+}
+
+/// Stored timestamp text parsed with `datetime.fromisoformat`, remembering a Python failure.
+struct StateTimestamps<'py> {
+    py: Python<'py>,
+    failure: RefCell<Option<PyErr>>,
+}
+
+impl StateTimestamps<'_> {
+    fn parsed(&self, text: &str) -> PyResult<LocalDateTime> {
+        let parsed =
+            imported(self.py, DATETIME_MODULE, "datetime")?.call_method1("fromisoformat", (text,));
+        match parsed {
+            Ok(value) => presumed_utc(&value),
+            Err(error) if error.is_instance_of::<pyo3::exceptions::PyValueError>(self.py) => {
+                let wrapped: PyErr = observation_error(
+                    self.py,
+                    &format!(
+                        "Timestamp source freshness state value is not valid ISO datetime: {text}"
+                    ),
+                );
+                wrapped.set_cause(self.py, Some(error));
+                Err(wrapped)
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+impl TimestampParser for StateTimestamps<'_> {
+    fn utc_timestamp(&self, text: &str) -> Result<LocalDateTime, FreshnessError> {
+        self.parsed(text).map_err(|error| {
+            let message: String = error.to_string();
+            *self.failure.borrow_mut() = Some(error);
+            FreshnessError::Observation(message)
+        })
+    }
+}
+
+fn comparable(record: &Bound<'_, PyAny>) -> PyResult<ComparableRecord> {
+    Ok(ComparableRecord {
+        data_version_hash: record.getattr("data_version_hash")?.extract()?,
+        value_kind: record.getattr("value_kind")?.extract()?,
+        data_version: record.getattr("data_version")?.extract()?,
+    })
+}
+
+/// Whether two source freshness records are equivalent for skip decisions.
+#[pyfunction(name = "source_freshness_records_equivalent")]
+#[pyo3(signature = (*, previous_record, current_record, lag_tolerance = None))]
+fn equivalent(
+    previous_record: &Bound<'_, PyAny>,
+    current_record: &Bound<'_, PyAny>,
+    lag_tolerance: Option<&str>,
+) -> PyResult<bool> {
+    let py: Python<'_> = previous_record.py();
+    let parser = StateTimestamps {
+        py,
+        failure: RefCell::new(None),
+    };
+    let records = (&comparable(previous_record)?, &comparable(current_record)?);
+    records_equivalent(records, lag_tolerance, &parser).map_err(|error| {
+        parser
+            .failure
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| python_error(py, error))
+    })
+}
+
+/// A `datetime` required to be aware, in UTC.
+fn aware_utc(value: &Bound<'_, PyAny>, field_name: &str) -> PyResult<LocalDateTime> {
+    if !offset_aware(value)? {
+        return Err(observation_error(
+            value.py(),
+            &format!("source freshness {field_name} must be timezone-aware"),
+        ));
+    }
+    local_date_time(&in_utc(value)?)
+}
+
+/// Optional timestamp age policy for one source freshness observation.
+#[pyfunction(name = "evaluate_source_freshness_age_policy")]
+#[pyo3(signature = (*, policy, data_version, observed_at))]
+fn age_policy<'py>(
+    policy: &Bound<'py, PyAny>,
+    data_version: &Bound<'py, PyAny>,
+    observed_at: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py: Python<'py> = policy.py();
+    if policy.is_none() {
+        return Ok(None);
+    }
+    let statuses: Bound<'py, PyAny> = imported(py, TYPES_MODULE, "SourceFreshnessAgeStatus")?;
+    if !date_time_typed(data_version)? {
+        return statuses.getattr("UNKNOWN").map(Some);
+    }
+    let version: LocalDateTime = aware_utc(data_version, "data_version")?;
+    let observed: LocalDateTime = aware_utc(observed_at, "observed_at")?;
+    let error_after: Option<String> = policy.getattr("error_after")?.extract()?;
+    let warn_after: Option<String> = policy.getattr("warn_after")?.extract()?;
+    let status: AgeStatus = age_status(
+        (&version, &observed),
+        error_after.as_deref(),
+        warn_after.as_deref(),
+    )
+    .map_err(|error| python_error(py, error))?;
+    let member: &str = match status {
+        AgeStatus::Pass => "PASS",
+        AgeStatus::Warn => "WARN",
+        AgeStatus::Error => "ERROR",
+    };
+    statuses.getattr(member).map(Some)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(version_hash, module)?)?;
+    module.add_function(wrap_pyfunction!(normalize, module)?)?;
+    module.add_function(wrap_pyfunction!(equivalent, module)?)?;
+    module.add_function(wrap_pyfunction!(age_policy, module)?)?;
+    Ok(())
+}

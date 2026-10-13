@@ -6,7 +6,7 @@ from concurrent.futures import Executor
 from threading import Event
 
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.rule_engine._helpers.run.rules import prepare_sql_rules as prepare
+from sqlbuild.rule_engine._helpers.run.rule_threads import prepare_sql_rules as prepare
 from sqlbuild.rule_engine.models import PreparedSqlLint
 
 

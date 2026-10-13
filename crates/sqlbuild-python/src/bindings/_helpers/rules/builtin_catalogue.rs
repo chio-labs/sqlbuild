@@ -1,0 +1,143 @@
+//! The built-in rule catalogue returned as the Python `Rule` models.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_rules::models::RuleMetadata;
+use sqlbuild_rules::rules::main::builtin_options::builtin_options;
+use sqlbuild_rules::rules::main::catalogue::catalogue;
+use sqlbuild_rules::rules::main::selected_sql_codes::selected_sql_codes;
+use sqlbuild_rules::rules::models::{BuiltinOption, BuiltinOptionKind};
+
+use crate::bindings::_helpers::boundary::panics::compiler_guard;
+
+const MODELS_MODULE: &str = "sqlbuild.rule_engine.models";
+const TYPES_MODULE: &str = "sqlbuild.rule_engine.types";
+const FAMILY_SUFFIX_LENGTH: usize = 3;
+
+fn keywords<'py>(
+    py: Python<'py>,
+    fields: Vec<(&str, Bound<'py, PyAny>)>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let arguments: Bound<'py, PyDict> = PyDict::new(py);
+    for (name, value) in fields {
+        arguments.set_item(name, value)?;
+    }
+    Ok(arguments)
+}
+
+fn option<'py>(
+    option_class: &Bound<'py, PyAny>,
+    declared: BuiltinOption,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = option_class.py();
+    let (factory, default): (&str, Bound<'py, PyAny>) = match declared.kind {
+        BuiltinOptionKind::Boolean => ("boolean", PyBool::new(py, false).to_owned().into_any()),
+        BuiltinOptionKind::StringList => ("string_list", PyTuple::empty(py).into_any()),
+    };
+    let arguments = keywords(
+        py,
+        vec![
+            ("name", PyString::new(py, declared.name).into_any()),
+            ("default", default),
+            (
+                "description",
+                PyString::new(py, declared.description).into_any(),
+            ),
+        ],
+    )?;
+    option_class.call_method(factory, (), Some(&arguments))
+}
+
+fn rule<'py>(
+    models: &Bound<'py, PyModule>,
+    subjects: &Bound<'py, PyAny>,
+    check: &Bound<'py, PyAny>,
+    metadata: RuleMetadata,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = models.py();
+    let option_class: Bound<'py, PyAny> = models.getattr("RuleOption")?;
+    let options: Vec<Bound<'py, PyAny>> = builtin_options(&metadata.code)
+        .into_iter()
+        .map(|declared| option(&option_class, declared))
+        .collect::<PyResult<_>>()?;
+    let guidance: Bound<'py, PyAny> = match metadata.guidance {
+        Some(guidance) => models.getattr("RuleGuidance")?.call(
+            (),
+            Some(&keywords(
+                py,
+                vec![
+                    (
+                        "good_example",
+                        PyString::new(py, &guidance.good_example).into_any(),
+                    ),
+                    (
+                        "anti_tautology",
+                        PyString::new(py, &guidance.anti_tautology).into_any(),
+                    ),
+                    (
+                        "mutation_check",
+                        PyString::new(py, &guidance.mutation_check).into_any(),
+                    ),
+                ],
+            )?),
+        )?,
+        None => py.None().into_bound(py),
+    };
+    let family: &str = &metadata.code[..metadata.code.len().saturating_sub(FAMILY_SUFFIX_LENGTH)];
+    let subject: Bound<'py, PyAny> = subjects.getattr(if metadata.project_wide {
+        "PROJECT"
+    } else {
+        "MODEL"
+    })?;
+    let text = |value: &str| PyString::new(py, value).into_any();
+    let arguments = keywords(
+        py,
+        vec![
+            ("code", text(&metadata.code)),
+            ("family", text(family)),
+            ("slug", text(&metadata.slug)),
+            ("message", text(&metadata.message)),
+            ("remediation", text(&metadata.remediation)),
+            ("check", check.clone()),
+            ("options", PyTuple::new(py, options)?.into_any()),
+            (
+                "enabled_by_default",
+                PyBool::new(py, metadata.enabled_by_default)
+                    .to_owned()
+                    .into_any(),
+            ),
+            ("subject", subject),
+            ("guidance", guidance),
+        ],
+    )?;
+    models.getattr("Rule")?.call((), Some(&arguments))
+}
+
+/// Every built-in rule as a `Rule` whose `check` is the given placeholder.
+#[pyfunction]
+#[pyo3(signature = (*, check))]
+fn builtin_rules<'py>(
+    py: Python<'py>,
+    check: Bound<'py, PyAny>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let models: Bound<'py, PyModule> = py.import(MODELS_MODULE)?;
+    let subjects: Bound<'py, PyAny> = py.import(TYPES_MODULE)?.getattr("RuleSubject")?;
+    compiler_guard(|| Ok(catalogue()))?
+        .into_iter()
+        .map(|metadata| rule(&models, &subjects, &check, metadata))
+        .collect()
+}
+
+/// The built-in SQL rule codes `select` enables and `ignore` does not, in catalogue order.
+#[pyfunction]
+#[pyo3(signature = (*, select, ignore))]
+fn selected_sql_rule_codes(select: Vec<String>, ignore: Vec<String>) -> PyResult<Vec<String>> {
+    compiler_guard(|| Ok(selected_sql_codes(&select, &ignore)))
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(builtin_rules, module)?)?;
+    module.add_function(wrap_pyfunction!(selected_sql_rule_codes, module)?)?;
+    Ok(())
+}

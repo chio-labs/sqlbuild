@@ -49,3 +49,20 @@ impl FaultCollector {
         self.faults.into_inner()
     }
 }
+
+/// The value kind of one built-in rule option.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinOptionKind {
+    /// A boolean defaulting to false.
+    Boolean,
+    /// A list of strings defaulting to empty.
+    StringList,
+}
+
+/// One option a built-in rule declares.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BuiltinOption {
+    pub kind: BuiltinOptionKind,
+    pub name: &'static str,
+    pub description: &'static str,
+}

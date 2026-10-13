@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild._native import render_event_exists_sql, render_event_insert_sql
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
     render_state_table_create_sql,
@@ -18,8 +19,6 @@ from sqlbuild.compiler.migrations.constants import (
 from sqlbuild.compiler.migrations.exceptions import MigrationStateError
 from sqlbuild.compiler.migrations.models import MigrationEvent, MigrationRelation
 from sqlbuild.compiler.migrations.types import MigrationDecision, MigrationDiscovery
-from sqlbuild.sql_values.main.render_state_literal import render_state_sql_literal
-from sqlbuild.sql_values.types import StateSqlValueType
 
 
 def qualified_migration_table(
@@ -68,31 +67,6 @@ def build_insert_sql(
         column_types=MIGRATION_COLUMN_TYPES,
         values=_event_values(event),
     )
-
-
-def render_event_exists_sql(*, table: str, event_id: str) -> str:
-    """Render the lookup that makes an append-only event write idempotent."""
-
-    event_id_literal: str = render_state_sql_literal(
-        value=event_id, declared_type=StateSqlValueType.STRING
-    )
-    return f"SELECT event_id FROM {table} WHERE event_id = {event_id_literal}"
-
-
-def render_event_insert_sql(
-    *,
-    table: str,
-    columns: tuple[str, ...],
-    column_types: Mapping[str, StateSqlValueType],
-    values: tuple[object | None, ...],
-) -> str:
-    """Render one append-only event row as INSERT ... VALUES with typed literals."""
-
-    literals: str = ", ".join(
-        render_state_sql_literal(value=value, declared_type=column_types[column])
-        for column, value in zip(columns, values, strict=True)
-    )
-    return f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({literals})"
 
 
 def _event_table(*, event: MigrationEvent, render_qualified_name: Callable[..., str | None]) -> str:

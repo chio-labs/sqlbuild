@@ -1,0 +1,11 @@
+//! Register the static `sqb dbt` interop helpers.
+
+use pyo3::prelude::{Bound, PyModule, PyResult};
+
+use crate::bindings::_helpers::dbt_interop::{manifest, plan, profile};
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    manifest::register(module)?;
+    plan::register(module)?;
+    profile::register(module)
+}

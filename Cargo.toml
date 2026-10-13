@@ -2,6 +2,7 @@
 members = [
     "crates/sqlbuild-core",
     "crates/sqlbuild-cursor",
+    "crates/sqlbuild-state",
     "crates/sqlbuild-pysource",
     "crates/sqlbuild-cache",
     "crates/sqlbuild-sqltext",
@@ -26,6 +27,7 @@ resolver = "2"
 order = [
     "sqlbuild-core",
     "sqlbuild-cursor",
+    "sqlbuild-state",
     "sqlbuild-pysource",
     "sqlbuild-cache",
     "sqlbuild-sqltext",
@@ -104,6 +106,7 @@ sqlbuild-model-config = { path = "crates/sqlbuild-model-config" }
 sqlbuild-pysource = { path = "crates/sqlbuild-pysource" }
 sqlbuild-scopes = { path = "crates/sqlbuild-scopes" }
 sqlbuild-sqltext = { path = "crates/sqlbuild-sqltext" }
+sqlbuild-state = { path = "crates/sqlbuild-state" }
 stacker = "0.1"
 sqlparser = { version = "0.58", features = ["visitor"] }
 syn = { version = "2", features = ["full", "visit", "extra-traits"] }

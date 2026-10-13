@@ -32,7 +32,6 @@ const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const CODED_ERROR_MODULE: &str = "sqlbuild.presentation.main.coded_error_text";
 const TRANSIENT_LINE_MODULE: &str = "sqlbuild.presentation.main.transient_line_coordinator";
 const SKILLS_MODULE: &str = "sqlbuild._native";
-const DIFF_JSON_MODULE: &str = "sqlbuild.cli.commands._helpers.diff.json_output";
 const RULES_ERRORS_MODULE: &str = "sqlbuild.rule_engine.exceptions";
 const LINT_ERRORS_MODULE: &str = "sqlbuild.lint.exceptions";
 const CONTRACT_MODELS_MODULE: &str = "sqlbuild.spec.contracts.models";
@@ -195,7 +194,7 @@ fn render_diff_error<'py>(
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, DIFF_JSON_MODULE, "render_diff_error_json")?,
+        &imported(py, NATIVE_MODULE, "render_diff_error_json")?,
         fields,
     )
 }

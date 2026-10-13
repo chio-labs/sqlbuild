@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild._native import deterministic_old_name_view_event_id
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import RelationInfo
@@ -18,9 +19,6 @@ from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.migrations.constants import (
     MIGRATION_TABLE_NAME,
     OLD_NAME_VIEW_TABLE_NAME,
-)
-from sqlbuild.compiler.migrations.main.deterministic_old_name_view_event_id import (
-    deterministic_old_name_view_event_id,
 )
 from sqlbuild.compiler.migrations.main.read_old_name_view_histories import (
     read_old_name_view_histories,

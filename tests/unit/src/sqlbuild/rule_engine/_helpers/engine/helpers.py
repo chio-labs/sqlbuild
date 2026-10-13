@@ -1,6 +1,7 @@
 """Test helpers for native rules engine boundaries."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from operator import attrgetter
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any, cast
 import pytest
 
 from sqlbuild._native import (
+    NativeRulesRequest,
     project_with,
 )
 from sqlbuild.compiler.compile.models import (
@@ -22,7 +24,7 @@ from sqlbuild.compiler.compile.models import (
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
 from sqlbuild.compiler.discovery.models import DiscoveredSqlTestBlock, DiscoveredSqlTestFile
 from sqlbuild.compiler.scopes.models import ScopeIndex
-from sqlbuild.rule_engine._helpers.engine import native
+from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue
 from sqlbuild.rule_engine._helpers.engine.custom_rules import evaluate_custom_rules_cached
 from sqlbuild.rule_engine._helpers.run import native_rows
@@ -43,6 +45,9 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import Cust
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
+
+
+_BUILD_RULES_REQUEST: Callable[..., NativeRulesRequest] = native_rows._native.build_rules_request
 
 
 def project_with_scope(*, index: ScopeIndex) -> CompiledProjectView:
@@ -66,13 +71,16 @@ def captured_native_request(
 
     def build_rules_request(
         project_rows: dict[str, Any],
-        models: list[tuple[object, ...]],
-        sql_tests: list[tuple[object, ...]],
-        sql_scenarios: list[tuple[object, ...]],
-    ) -> tuple[object, tuple[int, int, int]]:
+        models: tuple[object, list[str]],
+        sql_tests: list[object],
+        sql_scenarios: list[object],
+    ) -> object:
+        request: NativeRulesRequest = _BUILD_RULES_REQUEST(
+            project_rows, models, sql_tests, sql_scenarios
+        )
         captured.update(cast(dict[str, Any], json.loads(project_rows["header_json"])))
-        captured.update(models=models, sql_tests=sql_tests, sql_scenarios=sql_scenarios)
-        return object(), (len(models), len(sql_tests), len(sql_scenarios))
+        captured.update(models=models, **json.loads(request.sql_facts_json()))
+        return request
 
     def evaluate_rules_request(request: object) -> NativeRulesEvaluation:
         return NativeRulesEvaluation(
@@ -397,4 +405,47 @@ def _incremental_project(models: tuple[IncrementalModelSpec, ...]) -> CompiledPr
     ]
     return project_with(
         project=projects[0], models=tuple(project.models[0] for project in projects)
+    )
+
+
+def sql_test_summary(fact: dict[str, Any]) -> tuple[object, ...]:
+    """The SQL test fact fields the native rules request carries, in a compact comparable form."""
+
+    return (
+        fact["source_path"],
+        fact["ownership_root"],
+        fact["block_index"],
+        fact["name"],
+        fact["explicit_name"],
+        fact["mode"],
+        (
+            fact["expected_model_names"],
+            fact["assertion_names"],
+            fact["assertion_target_model_names"],
+            fact["target_model_names"],
+        ),
+        [(resource["kind"], resource["name"]) for resource in fact["tested_resources"]],
+        (
+            fact["authored_ctes"],
+            fact["expected_ctes"],
+            fact["assertion_ctes"],
+            fact["has_macro_mocks"],
+            fact["has_model_query_overrides"],
+        ),
+        fact["case_name"],
+    )
+
+
+def scenario_summary(fact: dict[str, Any]) -> tuple[object, ...]:
+    """The SQL scenario fact fields the native rules request carries, in field order."""
+
+    return (
+        fact["source_path"],
+        fact["ownership_root"],
+        fact["name"],
+        fact["description"],
+        fact["expected_model_names"],
+        fact["assertion_names"],
+        fact["assertion_target_model_names"],
+        fact["target_model_names"],
     )

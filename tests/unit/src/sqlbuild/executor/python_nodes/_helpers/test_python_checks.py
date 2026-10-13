@@ -11,9 +11,9 @@ import pytest
 from sqlbuild._native import (
     ExecutionEventWriter,
     TerminalEventIndex,
+    format_check_json,
     terminal_event_index_scope,
 )
-from sqlbuild.cli.commands._helpers.check.core import format_check_json
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction
 from sqlbuild.compiler.python_nodes.models import PythonNodeGraph
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind, PythonNodeStatus, SkipMode
