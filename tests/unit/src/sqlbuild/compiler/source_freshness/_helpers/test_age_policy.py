@@ -4,9 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sqlbuild.compiler.source_freshness._helpers.age_policy import (
-    evaluate_source_freshness_age_policy,
-)
+from sqlbuild._native import evaluate_source_freshness_age_policy
 from sqlbuild.spec.contracts.models import SourceFreshnessAgePolicy
 from tests.unit.src.sqlbuild.compiler.source_freshness._helpers._test_types import (
     SourceFreshnessAgePolicyDurationTestCase,

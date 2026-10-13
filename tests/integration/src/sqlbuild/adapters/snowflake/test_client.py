@@ -7,6 +7,10 @@ from typing import Any
 
 import pytest
 
+from sqlbuild._native import (
+    normalize_source_freshness_data_version,
+    source_freshness_data_version_hash,
+)
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
@@ -22,12 +26,6 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.lineage.types import InferredNullability
-from sqlbuild.compiler.source_freshness.main.data_version_hash import (
-    source_freshness_data_version_hash,
-)
-from sqlbuild.compiler.source_freshness.main.normalization import (
-    normalize_source_freshness_data_version,
-)
 from sqlbuild.spec.contracts.types import SourceFreshnessValueKind
 from tests.integration.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeBuildFlowTestCase,

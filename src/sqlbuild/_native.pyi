@@ -140,6 +140,8 @@ from sqlbuild.compiler.lineage.models import (
     ModelColumnLineage,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
+from sqlbuild.compiler.migrations.models import MigrationRelation
+from sqlbuild.compiler.migrations.types import OldNameViewEventType
 from sqlbuild.compiler.pipeline.models import (
     CompiledProjectPhaseResult,
     CompilePipelineOptions,
@@ -194,6 +196,10 @@ from sqlbuild.compiler.scopes.models import (
 )
 from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
 from sqlbuild.compiler.source_freshness.models import SourceFreshnessIdentity, SourceFreshnessRecord
+from sqlbuild.compiler.source_freshness.types import (
+    SourceFreshnessAgeStatus,
+    SourceFreshnessComparableRecord,
+)
 from sqlbuild.compiler.sql_analysis.models import (
     SqlBindingResult,
     SqlLexicalSyntax,
@@ -242,11 +248,17 @@ from sqlbuild.spec.contracts.models import (
     SchemaSeedEntry,
     SettingsConfig,
     SourceEntry,
+    SourceFreshnessAgePolicy,
     SourceLocation,
     TargetConfig,
 )
-from sqlbuild.spec.contracts.types import WarehouseGroup
+from sqlbuild.spec.contracts.types import (
+    SourceFreshnessStrategy,
+    SourceFreshnessValueKind,
+    WarehouseGroup,
+)
 from sqlbuild.sql_values.models import SqlValue
+from sqlbuild.sql_values.types import StateSqlValueType
 
 BUILD_IDENTITY: str
 STAGE_CAPTURE_OMITTED_ATTRIBUTES: dict[str, frozenset[str]]
@@ -2906,6 +2918,54 @@ def _oracle_yaml_load(text: str) -> str: ...
 def _oracle_toml_load(text: str) -> str: ...
 
 # Discovery: header values and authored locations.
+def deterministic_migration_event_id(
+    *,
+    run_id: str,
+    target_name: str | None,
+    origin: MigrationRelation,
+    destination: MigrationRelation,
+) -> str: ...
+def deterministic_column_migration_event_id(
+    *,
+    run_id: str,
+    target_name: str | None,
+    relation: MigrationRelation,
+    origin_column: str,
+    destination_column: str,
+) -> str: ...
+def deterministic_old_name_view_event_id(
+    *, event_type: OldNameViewEventType, migration_event_id: str
+) -> str: ...
+def render_event_exists_sql(*, table: str, event_id: str) -> str: ...
+def render_event_insert_sql(
+    *,
+    table: str,
+    columns: tuple[str, ...],
+    column_types: Mapping[str, StateSqlValueType],
+    values: tuple[object | None, ...],
+) -> str: ...
+def source_freshness_data_version_hash(
+    *,
+    source_name: str,
+    strategy: SourceFreshnessStrategy | str,
+    value_kind: SourceFreshnessValueKind | str,
+    data_version: str,
+) -> str: ...
+def normalize_source_freshness_data_version(
+    *, value: object, value_kind: SourceFreshnessValueKind
+) -> str: ...
+def source_freshness_records_equivalent(
+    *,
+    previous_record: SourceFreshnessComparableRecord,
+    current_record: SourceFreshnessComparableRecord,
+    lag_tolerance: str | None = None,
+) -> bool: ...
+def evaluate_source_freshness_age_policy(
+    *,
+    policy: SourceFreshnessAgePolicy | None,
+    data_version: object,
+    observed_at: datetime,
+) -> SourceFreshnessAgeStatus | None: ...
 def cursor_parse(*, raw: object, cursor_type: str) -> CursorScalar: ...
 def cursor_try_parse(*, raw: object, cursor_type: str) -> CursorScalar | None: ...
 def cursor_render(*, value: CursorScalar) -> str: ...

@@ -1,0 +1,30 @@
+//! Value kinds, payload keys, duration units and messages of source freshness state.
+
+pub const TIMESTAMP_VALUE_KIND: &str = "timestamp";
+pub(crate) const SOURCE_NAME_KEY: &str = "source_name";
+pub(crate) const STRATEGY_KEY: &str = "strategy";
+pub(crate) const VALUE_KIND_KEY: &str = "value_kind";
+pub(crate) const DATA_VERSION_KEY: &str = "data_version";
+pub(crate) const COMPACT_ITEM_SEPARATOR: &str = ",";
+pub(crate) const COMPACT_KEY_SEPARATOR: &str = ":";
+pub(crate) const UTC_SUFFIX: &str = "+00:00";
+pub(crate) const SECONDS_PER_MINUTE: u128 = 60;
+pub(crate) const SECONDS_PER_HOUR: u128 = 3_600;
+pub(crate) const SECONDS_PER_DAY: u128 = 86_400;
+pub(crate) const MICROS_PER_SECOND: u128 = 1_000_000;
+/// `timedelta.max.days`.
+pub(crate) const MAX_TIMEDELTA_DAYS: u128 = 999_999_999;
+/// The largest C `int` a `timedelta` day count passes through.
+pub(crate) const MAX_C_INT: u128 = i32::MAX as u128;
+pub(crate) const C_INT_OVERFLOW: &str = "Python int too large to convert to C int";
+pub const LAG_TOLERANCE_INVALID: &str =
+    "source freshness lag_tolerance must be a positive duration like 15m, 2h, or 1d";
+pub const AGE_POLICY_INVALID: &str =
+    "source freshness age_policy value must be a positive duration like 15m, 2h, or 1d";
+pub(crate) const ERA_YEARS: i128 = 400;
+pub(crate) const DAYS_PER_ERA: i128 = 146_097;
+pub(crate) const DAYS_PER_YEAR: i128 = 365;
+pub(crate) const MARCH_BASED_MONTH_DAYS: i128 = 153;
+pub(crate) const MONTH_LENGTH_DIVISOR: i128 = 5;
+pub(crate) const MONTHS_FROM_MARCH: i128 = 9;
+pub(crate) const FEBRUARY: u32 = 2;

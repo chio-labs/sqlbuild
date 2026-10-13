@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlbuild.compiler.migrations.main.deterministic_column_event_id import (
+from sqlbuild._native import (
     deterministic_column_migration_event_id,
-)
-from sqlbuild.compiler.migrations.main.deterministic_event_id import (
     deterministic_migration_event_id,
-)
-from sqlbuild.compiler.migrations.main.deterministic_old_name_view_event_id import (
     deterministic_old_name_view_event_id,
 )
 from sqlbuild.compiler.migrations.models import (

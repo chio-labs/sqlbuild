@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlbuild.compiler.migrations.models import MigrationRelation
+from sqlbuild.compiler.migrations.types import OldNameViewEventType
+
 
 @dataclass(frozen=True)
 class NewestEventTestCase:
@@ -60,3 +63,40 @@ class OldNameViewAbsentColumnsTestCase:
     absent_columns: tuple[str, ...]
     expected_statuses: tuple[str, ...]
     expected_archive_name: str | None
+
+
+@dataclass(frozen=True)
+class PinnedMoveEventIdTestCase:
+    description: str
+    run_id: str
+    target_name: str | None
+    origin: MigrationRelation
+    destination: MigrationRelation
+    expected_event_id: str
+
+
+@dataclass(frozen=True)
+class PinnedFreshnessHashTestCase:
+    description: str
+    source_name: str
+    strategy: str
+    value_kind: str
+    data_version: str
+    expected_hash: str
+
+
+@dataclass(frozen=True)
+class PinnedColumnEventIdTestCase:
+    description: str
+    relation: MigrationRelation
+    origin_column: str
+    destination_column: str
+    expected_event_id: str
+
+
+@dataclass(frozen=True)
+class PinnedOldNameEventIdTestCase:
+    description: str
+    event_type: OldNameViewEventType
+    migration_event_id: str
+    expected_event_id: str

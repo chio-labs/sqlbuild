@@ -369,6 +369,7 @@ crate_names = [
     "sqlbuild-rules",
     "sqlbuild-scopes",
     "sqlbuild-sqltext",
+    "sqlbuild-state",
 ]
 
 [[dupes.contract_exemptions]]

@@ -6,6 +6,7 @@ import json
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from sqlbuild._native import render_event_exists_sql, render_event_insert_sql
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
     render_state_table_create_sql,
@@ -13,8 +14,6 @@ from sqlbuild.adapter.state_sql.main.render_state_table_create_sql import (
 from sqlbuild.compiler.migrations._helpers.sql import (
     decode_event_timestamp,
     optional_text,
-    render_event_exists_sql,
-    render_event_insert_sql,
 )
 from sqlbuild.compiler.migrations.constants import (
     OLD_NAME_VIEW_COLUMN_TYPES,

@@ -10,7 +10,7 @@ use crate::bindings::_helpers::{
     fingerprints, freshness, frontier, graph, janitor, lineage, macro_bridge, manifest,
     model_config, plan_output, presentation_text, project_assembly, refactor, references, render,
     result_output, rules, scopes, semantic_checks, semantic_shapes, sql_test_glue, sqltext,
-    type_system, workspace_commands,
+    state_rows, type_system, workspace_commands,
 };
 use crate::bindings::models;
 
@@ -59,6 +59,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     workspace_commands::registration::register(module)?;
     auditing::registration::register(module)?;
     cursor::registration::register(module)?;
+    state_rows::registration::register(module)?;
     Ok(())
 }
 

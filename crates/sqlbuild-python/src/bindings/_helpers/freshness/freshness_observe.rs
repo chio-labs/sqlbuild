@@ -17,6 +17,8 @@ use sqlbuild_core::freshness_text::models::{
 };
 
 const FRESHNESS_PACKAGE: &str = "sqlbuild.compiler.source_freshness.main";
+const NATIVE: &str = "_native";
+const NATIVE_MODULE: &str = "sqlbuild._native";
 const FRESHNESS_MODELS: &str = "sqlbuild.compiler.source_freshness.models";
 const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
 const CONTRACT_TYPES: &str = "sqlbuild.spec.contracts.types";
@@ -44,6 +46,9 @@ fn freshness_function<'py>(
     py: Python<'py>,
     (module, name): (&str, &str),
 ) -> PyResult<Bound<'py, PyAny>> {
+    if module == NATIVE {
+        return py.import(NATIVE_MODULE)?.getattr(name);
+    }
     py.import(format!("{FRESHNESS_PACKAGE}.{module}"))?
         .getattr(name)
 }
@@ -131,21 +136,17 @@ fn record<'py>(
     let normalize: Bound<'py, PyDict> = PyDict::new(py);
     normalize.set_item("value", observation.getattr("data_version")?)?;
     normalize.set_item("value_kind", observation.getattr("value_kind")?)?;
-    let data_version: Bound<'py, PyAny> = freshness_function(
-        py,
-        ("normalization", "normalize_source_freshness_data_version"),
-    )?
-    .call((), Some(&normalize))?;
+    let data_version: Bound<'py, PyAny> =
+        freshness_function(py, (NATIVE, "normalize_source_freshness_data_version"))?
+            .call((), Some(&normalize))?;
     let hash: Bound<'py, PyDict> = PyDict::new(py);
     hash.set_item("source_name", observation.getattr("source_name")?)?;
     hash.set_item("strategy", observation.getattr("strategy")?)?;
     hash.set_item("value_kind", observation.getattr("value_kind")?)?;
     hash.set_item("data_version", &data_version)?;
-    let data_version_hash: Bound<'py, PyAny> = freshness_function(
-        py,
-        ("data_version_hash", "source_freshness_data_version_hash"),
-    )?
-    .call((), Some(&hash))?;
+    let data_version_hash: Bound<'py, PyAny> =
+        freshness_function(py, (NATIVE, "source_freshness_data_version_hash"))?
+            .call((), Some(&hash))?;
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item("source_name", observation.getattr("source_name")?)?;
     fields.set_item("target_database", source.getattr("database")?)?;
@@ -161,7 +162,7 @@ fn record<'py>(
         observation.getattr("value_kind")?.getattr("value")?,
     )?;
     fields.set_item("data_version", &data_version)?;
-    fields.set_item("data_version_hash", data_version_hash)?;
+    fields.set_item(NATIVE, data_version_hash)?;
     fields.set_item("observed_at", observation.getattr("observed_at")?)?;
     py.import(FRESHNESS_MODELS)?
         .getattr("SourceFreshnessRecord")?
@@ -200,7 +201,7 @@ fn observed_result(
     age.set_item("data_version", observation.getattr("data_version")?)?;
     age.set_item("observed_at", observation.getattr("observed_at")?)?;
     let age_status: Bound<'_, PyAny> =
-        freshness_function(py, ("age_policy", "evaluate_source_freshness_age_policy"))?
+        freshness_function(py, (NATIVE, "evaluate_source_freshness_age_policy"))?
             .call((), Some(&age))?;
     let previous: Option<Bound<'_, PyAny>> = previous_record(state, &current)?;
     let comparison: StateComparison = match &previous {
@@ -211,12 +212,10 @@ fn observed_result(
             options.set_item("previous_record", previous)?;
             options.set_item("current_record", &current)?;
             options.set_item("lag_tolerance", &lag_tolerance)?;
-            let equivalent: bool = freshness_function(
-                py,
-                ("record_equivalence", "source_freshness_records_equivalent"),
-            )?
-            .call((), Some(&options))?
-            .is_truthy()?;
+            let equivalent: bool =
+                freshness_function(py, (NATIVE, "source_freshness_records_equivalent"))?
+                    .call((), Some(&options))?
+                    .is_truthy()?;
             if equivalent {
                 StateComparison::Equivalent {
                     same_hash: previous
