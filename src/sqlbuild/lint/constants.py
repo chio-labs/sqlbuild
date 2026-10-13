@@ -10,16 +10,8 @@ LINT_ENGINE_NATIVE: str = "native"
 VIOLATION_SEVERITY_FAULT: LintSeverity = LintSeverity.FAULT
 VIOLATION_SEVERITY_WARNING: LintSeverity = LintSeverity.WARNING
 
-HEADER_KIND_MODEL: str = "MODEL"
 HEADER_KIND_SCENARIO: str = "SCENARIO"
 HEADER_KIND_TEST: str = "TEST"
-HEADER_KIND_FUNCTION: str = "FUNCTION"
-HEADER_KIND_HOOK: str = "HOOK"
-
-DESCRIPTION_HEADER_KINDS: frozenset[str] = frozenset({HEADER_KIND_MODEL, HEADER_KIND_SCENARIO})
-DESCRIPTION_REQUIRED_HEADER_KINDS: frozenset[str] = frozenset(
-    {HEADER_KIND_MODEL, HEADER_KIND_SCENARIO, HEADER_KIND_FUNCTION, HEADER_KIND_HOOK}
-)
 
 DEFAULT_MAX_LITERAL_LENGTH: int = 100
 DEFAULT_MAX_RANKING_ORDER_BY: int = 5
@@ -37,23 +29,6 @@ SAFE_RULE_FIX_CODES: frozenset[str] = frozenset(
         "SQBRSQL042",
     }
 )
-
-LINT_DIRECTORY_NAMES: tuple[str, ...] = (
-    "models",
-    "tests",
-    "audits",
-    "functions",
-    "enums",
-    "constants",
-    "hooks",
-    "schemas",
-)
-
-RULE_DESCRIPTION_PRESENT: str = "description-present"
-RULE_DESCRIPTION_LENGTH: str = "description-length"
-RULE_LEADING_COMMENT_DESCRIPTION: str = "leading-comment-description"
-RULE_HEADER_WHITESPACE: str = "header-whitespace"
-RULE_HEADER_PARSE: str = "header-parse"
 
 TEMPLATE_INTERPOLATION_START: str = "${"
 RELATION_IDENTITY_TEMPLATE: str = "{kind}:{name}"

@@ -131,3 +131,13 @@ pub(crate) const DEFAULT_DIALECT: &str = "generic";
 /// Adapter names whose SQL dialect has another name; other adapters name their dialect.
 pub(crate) const ADAPTER_DIALECT_TRANSLATIONS: [(&str, &str); 2] =
     [("motherduck", "duckdb"), ("sqlserver", "tsql")];
+pub(crate) const MODELS_DIRECTORY: &str = "models";
+/// Inherited and local declaration folders, whose files declare several headers.
+pub(crate) const SCOPED_DECLARATION_DIRECTORIES: [&str; 6] = [
+    "macros",
+    "enums",
+    "constants",
+    "_macros",
+    "_enums",
+    "_constants",
+];

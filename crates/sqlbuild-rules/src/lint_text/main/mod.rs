@@ -1,4 +1,5 @@
 pub mod apply_suppressions;
+pub mod first_header_only;
 pub mod format_sql_bodies;
 pub mod interpolation_text_at;
 pub mod lint_sql_bodies;

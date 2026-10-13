@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import apply_lint_suppressions
+from sqlbuild._native import apply_lint_suppressions, run_lint
 from sqlbuild.lint.constants import LINT_ENGINE_SQLBUILD, VIOLATION_SEVERITY_FAULT
-from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from tests.unit.src.sqlbuild.lint._test_types import (
     FixtureCeremonyFormatTestCase,

@@ -98,6 +98,7 @@ from sqlbuild.compiler.compile.models import (
     NativeModelConfigInputs,
     NativeModelConfigSession,
     PythonSqlReferenceReport,
+    SqlExpansionContext,
     SqlReferenceScan,
     StaticMacroExport,
 )
@@ -257,7 +258,7 @@ from sqlbuild.integrations.dbt.models import (
     ResolvedDbtProfileOutput,
 )
 from sqlbuild.integrations.dbt.types import DbtInteropCommand
-from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintViolation
+from sqlbuild.lint.models import HeaderSpan, LintBody, LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
@@ -3330,6 +3331,22 @@ def sql_body_ranges(
     *, contents: str, headers: tuple[HeaderSpan, ...]
 ) -> tuple[tuple[int, int], ...]: ...
 def measurement_body_ranges(*, contents: str) -> tuple[tuple[int, int], ...]: ...
+def run_lint(
+    *,
+    project_dir: Path,
+    config: LintConfig,
+    value_renderer: TypedSqlValueRenderer | None = None,
+    selected_paths: frozenset[Path] | None = None,
+    discovered_inputs: DiscoveredProjectInputs | None = None,
+    dynamic_output_paths: frozenset[Path] = frozenset(),
+    compiled_expansions: dict[Path, CompiledSqlExpansion] | None = None,
+    expansion_context: SqlExpansionContext | None = None,
+    source_files: dict[Path, str] | None = None,
+    skip_unexpandable: bool = False,
+) -> LintRunResult: ...
+def collect_lint_project_files(
+    *, project_dir: Path, selected_paths: frozenset[Path] | None = None
+) -> dict[Path, str]: ...
 def lint_native_headers(
     *, contents: str, file_path: Path, headers: tuple[HeaderSpan, ...], config: LintConfig
 ) -> tuple[LintViolation, ...]: ...

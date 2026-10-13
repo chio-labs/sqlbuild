@@ -238,11 +238,11 @@ class BatchedPreparationFailureTestCase:
 
 @dataclass(frozen=True)
 class CollectProjectFilesTestCase:
-    """Test case for sharing discovered SQL text when collecting lint inputs."""
+    """Test case for collecting exact authored SQL text for lint inputs."""
 
     description: str
     model_bytes: bytes
-    expected_shared: bool
+    expected_contents: str
 
 
 @dataclass(frozen=True)

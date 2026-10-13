@@ -61,3 +61,9 @@ pub(super) struct FormatSettingsTestCase {
     pub(super) local_toml: &'static str,
     pub(super) expected_settings: crate::lint_text::models::FormatSettings,
 }
+
+pub(super) struct FirstHeaderTestCase {
+    pub(super) description: &'static str,
+    pub(super) relative_parts: &'static [&'static str],
+    pub(super) expected_first_only: bool,
+}

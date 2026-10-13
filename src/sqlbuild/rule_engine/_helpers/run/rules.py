@@ -8,10 +8,12 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from sqlbuild._native import (
+    collect_lint_project_files,
     encode_sql_rule_findings,
     load_sql_rule_cache,
     lookup_sql_rule_cache,
     project_with,
+    run_lint,
     selected_sql_rule_codes,
     sql_file_rule_key,
     sql_model_rule_keys,
@@ -43,10 +45,8 @@ from sqlbuild.lint.constants import (
 )
 from sqlbuild.lint.exceptions import NativeLintError
 from sqlbuild.lint.main.build_expansion_context import build_expansion_context
-from sqlbuild.lint.main.collect_project_files import collect_project_files
 from sqlbuild.lint.main.compiled_relation_keys import compiled_relation_keys
 from sqlbuild.lint.main.declared_relation_keys import declared_relation_keys
-from sqlbuild.lint.main.run_lint import run_lint
 from sqlbuild.lint.models import LintConfig, LintRunResult, LintViolation
 from sqlbuild.lint.types import RelationKeys
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
@@ -246,9 +246,7 @@ def _prepare_sql_rule_inputs(
     return _SqlRuleInputs(
         identities=identities,
         project_files=(
-            collect_project_files(
-                project_dir=project_dir, selected_paths=None, discovered_inputs=discovered_inputs
-            )
+            collect_lint_project_files(project_dir=project_dir, selected_paths=None)
             if identities and collect_files
             else None
         ),
@@ -470,11 +468,7 @@ def _run_sql_rules(
             project_files = (
                 prepared_inputs.project_files
                 if prepared_inputs is not None and prepared_inputs.project_files is not None
-                else collect_project_files(
-                    project_dir=project_dir,
-                    selected_paths=None,
-                    discovered_inputs=discovered_inputs,
-                )
+                else collect_lint_project_files(project_dir=project_dir, selected_paths=None)
             )
         lint_key: str = sql_rule_lint_key(config=lint_config)
         file_keys: dict[str, str | None] = {

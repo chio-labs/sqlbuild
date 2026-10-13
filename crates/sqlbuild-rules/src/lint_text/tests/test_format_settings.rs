@@ -57,3 +57,48 @@ fn given_project_config_when_resolving_format_settings_then_values_match_python(
         );
     }
 }
+
+#[test]
+fn given_relative_paths_when_classifying_headers_then_only_plain_models_scan_one_header() {
+    let test_cases = [
+        crate::lint_text::tests::test_types::FirstHeaderTestCase {
+            description: "a plain model file",
+            relative_parts: &["models", "staging", "orders.sql"],
+            expected_first_only: true,
+        },
+        crate::lint_text::tests::test_types::FirstHeaderTestCase {
+            description: "a scoped declaration file under models",
+            relative_parts: &["models", "_enums", "status.sql"],
+            expected_first_only: false,
+        },
+        crate::lint_text::tests::test_types::FirstHeaderTestCase {
+            description: "a declaration group file under models",
+            relative_parts: &["models", "_sqlbuild", "orders.sql"],
+            expected_first_only: false,
+        },
+        crate::lint_text::tests::test_types::FirstHeaderTestCase {
+            description: "a file named like a folder is still a model",
+            relative_parts: &["models", "enums.sql"],
+            expected_first_only: true,
+        },
+        crate::lint_text::tests::test_types::FirstHeaderTestCase {
+            description: "files outside models scan every header",
+            relative_parts: &["tests", "unit", "orders.sql"],
+            expected_first_only: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        let parts: Vec<String> = test_case
+            .relative_parts
+            .iter()
+            .map(|part| (*part).to_owned())
+            .collect();
+        assert_eq!(
+            crate::lint_text::main::first_header_only::first_header_only(&parts),
+            test_case.expected_first_only,
+            "{}",
+            test_case.description
+        );
+    }
+}
