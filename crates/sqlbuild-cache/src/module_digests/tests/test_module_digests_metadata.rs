@@ -1,11 +1,8 @@
 use sqlbuild_core::json::models::JsonValue;
 
 use crate::module_digests::main::module_digests_metadata::module_digests_metadata;
+use crate::module_digests::tests::helpers::text;
 use crate::module_digests::tests::test_types::MetadataTestCase;
-
-fn text(value: &str) -> JsonValue {
-    JsonValue::String(value.to_owned())
-}
 
 #[test]
 fn given_module_digests_when_encoding_then_matches_python_sorted_json() {

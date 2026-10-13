@@ -3,8 +3,8 @@
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 use crate::assembly::target_checks::constants::PRESERVE_TARGET_VALUE;
+use crate::assembly::target_checks::errors::TargetError;
 use crate::assembly::target_checks::main::missing_target_parts::missing_target_parts;
-use crate::assembly::target_checks::models::TargetError;
 
 /// Python's `repr` of an optional string.
 fn optional_repr(value: Option<&String>) -> String {

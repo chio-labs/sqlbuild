@@ -3,7 +3,7 @@
 use sqlbuild_core::json::models::JsonValue;
 
 /// The code points of a JSON string, a lone surrogate as its own value; empty for other values.
-pub fn python_code_points(value: &JsonValue) -> Vec<u32> {
+pub(crate) fn python_code_points(value: &JsonValue) -> Vec<u32> {
     match value {
         JsonValue::String(text) => text.chars().map(u32::from).collect(),
         JsonValue::Utf16(units) => char::decode_utf16(units.iter().copied())

@@ -10,13 +10,12 @@ use sqlbuild_analysis::assembly::target_checks::constants::{
     LOADER_COLLISION_CODE, MANAGED_WRITE_SCHEMA_CODE, MISSING_TARGET_PARTS_CODE,
     NAMED_TARGET_SCHEMA_CODE,
 };
+use sqlbuild_analysis::assembly::target_checks::errors::TargetError;
 use sqlbuild_analysis::assembly::target_checks::main::explicit_write_schema::explicit_write_schema;
 use sqlbuild_analysis::assembly::target_checks::main::first_shared_namespace::first_shared_namespace;
 use sqlbuild_analysis::assembly::target_checks::main::missing_target_parts::missing_target_parts;
 use sqlbuild_analysis::assembly::target_checks::main::target_error_message::target_error_message;
-use sqlbuild_analysis::assembly::target_checks::models::{
-    LoaderCollision, MissingParts, TargetError,
-};
+use sqlbuild_analysis::assembly::target_checks::models::{LoaderCollision, MissingParts};
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
@@ -100,7 +99,7 @@ fn text_or_none(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 fn validate_named_target_schema_strategy<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
-) -> PyResult<()> {
+) -> Result<(), PyErr> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "validate_named_target_schema_strategy",
@@ -168,7 +167,7 @@ pub(crate) fn named_target_schema_strategy(
 fn validate_managed_loader_target_isolation<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
-) -> PyResult<()> {
+) -> Result<(), PyErr> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "validate_managed_loader_target_isolation",
@@ -402,7 +401,7 @@ fn managed_source_namespace(
 fn validate_project_targets<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
-) -> PyResult<()> {
+) -> Result<(), PyErr> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "validate_project_targets",
@@ -502,7 +501,7 @@ fn required_target_parts(
 fn validate_managed_write_schemas<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
-) -> PyResult<()> {
+) -> Result<(), PyErr> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "validate_managed_write_schemas",

@@ -663,13 +663,13 @@ ANALYSIS_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "compile/_helpers/analysis",
     "compile/_helpers/diagnostics",
     "contracts",
-    "pipeline/_helpers/target_validation.py",
     "sql_analysis",
 )
 ANALYSIS_NATIVE_CODE_SCAN_ROOTS: tuple[str, ...] = (
     "crates/sqlbuild-analysis/src/semantic_checks/constants.rs",
     "crates/sqlbuild-analysis/src/semantic_checks/_helpers/resource_sql/diagnostics.rs",
     "crates/sqlbuild-analysis/src/contracts/constants.rs",
+    "crates/sqlbuild-analysis/src/assembly/target_checks/constants.rs",
     "crates/sqlbuild-python/src/bindings/_helpers/compiled_project/model_loop.rs",
 )
 NATIVE_CODE_TEST_DIRECTORY: str = "tests"

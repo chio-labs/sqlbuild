@@ -16,6 +16,7 @@ use sqlbuild_cache::macro_store_keys::main::macro_store_token::macro_store_token
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::frontier::encoder::emit_error;
 
 const VALUE_RENDERER_FIELD: &str = "_value_renderer";
 /// Nesting at which a value counts as too deep to key, as Python's recursion limit stops it.
@@ -238,7 +239,7 @@ fn macro_store_token<'py>(
         )?;
         let identity: JsonValue = types.canonical(&arguments.value("identity")?, 0)?;
         let raw_source: String = loaded.getattr("raw_source")?.extract()?;
-        Ok(macro_key((name, path), identity, &raw_source))
+        macro_key((name, path), identity, &raw_source).map_err(emit_error)
     })();
     match keyed {
         Err(error) if unstable(py, &error) => Ok(None),
@@ -280,7 +281,7 @@ fn context_store_token<'py>(
             }
             JsonValue::Array(parts)
         };
-        Ok(context_key(&JsonValue::Array(vec![context, declared])))
+        context_key(&JsonValue::Array(vec![context, declared])).map_err(emit_error)
     })();
     match keyed {
         Err(error) if unstable(py, &error) => Ok(None),

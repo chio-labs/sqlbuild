@@ -72,7 +72,7 @@ impl<'py> PythonTypes<'py> {
     }
 
     /// Whether `value` is a dataclass instance rather than a dataclass.
-    pub(crate) fn is_dataclass_instance(&self, value: &Bound<'py, PyAny>) -> PyResult<bool> {
+    pub(crate) fn dataclass_instance_check(&self, value: &Bound<'py, PyAny>) -> PyResult<bool> {
         Ok(self.is_dataclass.call1((value,))?.is_truthy()?
             && !value.is_instance(&imported(value.py(), "builtins", "type")?)?)
     }

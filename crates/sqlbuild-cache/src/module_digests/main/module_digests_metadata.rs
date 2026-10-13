@@ -4,10 +4,8 @@ use sqlbuild_core::json::errors::JsonEmitError;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
 
-use crate::module_digests::main::python_code_points::python_code_points;
-
-/// A row's path and digest code points, the key Python sorts rows by.
-type RowKey = (Vec<u32>, Vec<u32>);
+use crate::module_digests::_helpers::python_code_points::python_code_points;
+use crate::module_digests::types::RowKey;
 
 /// `json.dumps(sorted([path, digest] for path, digest in rows))`.
 pub fn module_digests_metadata(rows: Vec<(JsonValue, JsonValue)>) -> Result<String, JsonEmitError> {

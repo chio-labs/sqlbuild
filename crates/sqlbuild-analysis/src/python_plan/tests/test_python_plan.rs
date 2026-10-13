@@ -1,19 +1,7 @@
-use std::collections::HashMap;
-
 use crate::python_plan::main::ordered_python_names::ordered_python_names;
 use crate::python_plan::main::upstream_closure::upstream_closure;
+use crate::python_plan::tests::helpers::edges;
 use crate::python_plan::tests::test_types::{ClosureTestCase, OrderTestCase};
-
-fn edges(rows: &[(&str, &[&str])]) -> HashMap<String, Vec<String>> {
-    rows.iter()
-        .map(|(name, upstream)| {
-            (
-                (*name).to_owned(),
-                upstream.iter().map(|value| (*value).to_owned()).collect(),
-            )
-        })
-        .collect()
-}
 
 #[test]
 fn given_selected_nodes_when_ordering_then_matches_python_ready_queue() {

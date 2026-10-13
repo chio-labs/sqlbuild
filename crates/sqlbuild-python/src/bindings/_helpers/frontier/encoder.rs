@@ -46,11 +46,12 @@ fn tagged(key: &str, value: JsonValue) -> JsonValue {
 }
 
 /// Set `key` in `entries`, keeping the position of a key already present, as a dict does.
-fn insert(entries: &mut Vec<(String, JsonValue)>, key: String, value: JsonValue) {
+fn with_entry<T>(mut entries: Vec<(String, T)>, key: String, value: T) -> Vec<(String, T)> {
     match entries.iter_mut().find(|(existing, _)| *existing == key) {
         Some(entry) => entry.1 = value,
         None => entries.push((key, value)),
     }
+    entries
 }
 
 /// `table[name]` of a per-type table.
@@ -243,7 +244,7 @@ impl<'py> CaptureEncoder<'py> {
         {
             return self.encode_items(value);
         }
-        if self.types.is_dataclass_instance(value)? {
+        if self.types.dataclass_instance_check(value)? {
             return self.encode_dataclass(value, type_name);
         }
         if value.is_instance(&self.types.mapping)? {
@@ -298,7 +299,7 @@ impl<'py> CaptureEncoder<'py> {
             }
             let item: Bound<'py, PyAny> = attribute_or_none(value, &name)?;
             let encoded: JsonValue = self.encode(&item)?;
-            insert(&mut entries, name, encoded);
+            entries = with_entry(entries, name, encoded);
         }
         Ok(JsonValue::Object(entries))
     }
@@ -331,7 +332,7 @@ impl<'py> CaptureEncoder<'py> {
             let item: Bound<'py, PyAny> = item?;
             let key: String = item.get_item(0)?.str()?.to_str()?.to_owned();
             let encoded: JsonValue = self.encode(&item.get_item(1)?)?;
-            insert(&mut entries, key, encoded);
+            entries = with_entry(entries, key, encoded);
         }
         Ok(JsonValue::Object(entries))
     }
@@ -384,7 +385,7 @@ impl<'py> CaptureEncoder<'py> {
                 } else {
                     self.encode(&item)?
                 };
-            insert(&mut entries, name, encoded);
+            entries = with_entry(entries, name, encoded);
         }
         Ok(JsonValue::Object(entries))
     }
@@ -410,7 +411,7 @@ fn instance_attributes<'py>(value: &Bound<'py, PyAny>) -> PyResult<Option<Attrib
         for item in instance_dict.call_method0("items")?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             let name: String = item.get_item(0)?.str()?.to_str()?.to_owned();
-            set_attribute(&mut attributes, name, item.get_item(1)?);
+            attributes = with_entry(attributes, name, item.get_item(1)?);
         }
     }
     for cls in value.get_type().getattr("__mro__")?.try_iter()? {
@@ -431,26 +432,11 @@ fn instance_attributes<'py>(value: &Bound<'py, PyAny>) -> PyResult<Option<Attrib
                 continue;
             }
             let item: Bound<'py, PyAny> = value.getattr(text.as_str())?;
-            set_attribute(&mut attributes, text, item);
+            attributes = with_entry(attributes, text, item);
         }
     }
     if attributes.is_empty() && !has_dict {
         return Ok(None);
     }
     Ok(Some(attributes))
-}
-
-/// Set `name` in `attributes`, keeping the position of a name already present.
-fn set_attribute<'py>(
-    attributes: &mut Vec<(String, Bound<'py, PyAny>)>,
-    name: String,
-    item: Bound<'py, PyAny>,
-) {
-    match attributes
-        .iter_mut()
-        .find(|(existing, _)| *existing == name)
-    {
-        Some(entry) => entry.1 = item,
-        None => attributes.push((name, item)),
-    }
 }

@@ -1,14 +1,12 @@
+use crate::assembly::target_checks::errors::TargetError;
 use crate::assembly::target_checks::main::explicit_write_schema::explicit_write_schema;
 use crate::assembly::target_checks::main::first_shared_namespace::first_shared_namespace;
 use crate::assembly::target_checks::main::target_error_message::target_error_message;
-use crate::assembly::target_checks::models::{LoaderCollision, MissingParts, TargetError};
+use crate::assembly::target_checks::models::{LoaderCollision, MissingParts};
+use crate::assembly::target_checks::tests::helpers::owned;
 use crate::assembly::target_checks::tests::test_types::{
     MessageTestCase, NamespaceTestCase, SchemaTestCase,
 };
-
-fn owned(value: Option<&str>) -> Option<String> {
-    value.map(str::to_owned)
-}
 
 #[test]
 fn given_target_error_when_formatting_then_matches_python_message() {

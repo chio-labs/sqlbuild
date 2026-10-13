@@ -213,14 +213,6 @@ location = "compiler/planner/_helpers/sql_tests/fixture_formatting.py::format_re
 note = "A test file that no longer parses is left unformatted, as before; no Python implementation runs."
 
 [[handled_native_errors]]
-location = "compiler/macro_bridge/_helpers/store_keys.py::macro_store_token"
-note = "A macro without a stable key is not stored; no Python implementation runs."
-
-[[handled_native_errors]]
-location = "compiler/macro_bridge/_helpers/store_keys.py::context_store_token"
-note = "A context without a stable key is not stored; no Python implementation runs."
-
-[[handled_native_errors]]
 location = "lint/_helpers/native_sql.py::_native_responses"
 note = "A native lint failure is reported as a lint error result, not recomputed in Python."
 

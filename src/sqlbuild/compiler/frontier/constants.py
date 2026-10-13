@@ -1,5 +1,9 @@
 """Compiler cache namespace and stage capture constants."""
 
+from __future__ import annotations
+
+import itertools
+
 NATIVE_CACHE_NAMESPACE_SUFFIX: str = "-native-v1"
 RETIRED_CACHE_NAMESPACE_SUFFIXES: tuple[str, ...] = (
     "",
@@ -15,3 +19,4 @@ STAGE_CAPTURE_SUFFIX: str = ".json"
 STAGE_CAPTURE_SHARED_MARKER: str = "__shared__"
 STAGE_CAPTURE_ROOT_KEY: str = "__capture__"
 STAGE_CAPTURE_SHARED_NODES_KEY: str = "__shared_nodes__"
+STAGE_CAPTURE_SEQUENCE: itertools.count[int] = itertools.count(1)

@@ -1,4 +1,4 @@
-use crate::assembly::target_checks::models::TargetError;
+use crate::assembly::target_checks::errors::TargetError;
 
 pub(crate) struct MessageTestCase {
     pub(crate) description: &'static str,

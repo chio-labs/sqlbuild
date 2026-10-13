@@ -64,7 +64,7 @@ fn module_digests_metadata<'py>(
 }
 
 /// Whether a decoded metadata row is a list of a path and a digest.
-fn is_digest_row(row: &Bound<'_, PyAny>) -> PyResult<bool> {
+fn digest_row_check(row: &Bound<'_, PyAny>) -> PyResult<bool> {
     let Ok(row) = row.downcast::<PyList>() else {
         return Ok(false);
     };
@@ -96,7 +96,7 @@ fn unchanged_module_digests<'py>(
         return Ok(None);
     };
     for row in rows.iter() {
-        if !is_digest_row(&row)? {
+        if !digest_row_check(&row)? {
             return Ok(None);
         }
     }

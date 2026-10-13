@@ -1,7 +1,5 @@
 //! Stage captures: frontier objects written as canonical JSON so compiles compare stage by stage.
 
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -16,9 +14,7 @@ use crate::bindings::_helpers::frontier::encoder::{CaptureEncoder, emit_error};
 
 const CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR";
 const CAPTURE_SUFFIX: &str = ".json";
-
-/// The number of the next capture this process writes, starting at one.
-static NEXT_CAPTURE: AtomicU64 = AtomicU64::new(1);
+const FRONTIER_CONSTANTS_MODULE: &str = "sqlbuild.compiler.frontier.constants";
 
 /// The capture document of `value`, or the shared nodes written before encoding failed.
 fn capture_text(py: Python<'_>, value: &Bound<'_, PyAny>) -> Result<String, (String, pyo3::PyErr)> {
@@ -45,7 +41,13 @@ pub(crate) fn write_stage_capture(
     if !directory.is_truthy()? {
         return Ok(());
     }
-    let number: u64 = NEXT_CAPTURE.fetch_add(1, Ordering::SeqCst);
+    let number: u64 = imported(py, "builtins", "next")?
+        .call1((imported(
+            py,
+            FRONTIER_CONSTANTS_MODULE,
+            "STAGE_CAPTURE_SEQUENCE",
+        )?,))?
+        .extract()?;
     let stage_name: String = stage.getattr("value")?.str()?.extract()?;
     let path: Bound<'_, PyAny> = imported(py, "pathlib", "Path")?
         .call1((directory,))?

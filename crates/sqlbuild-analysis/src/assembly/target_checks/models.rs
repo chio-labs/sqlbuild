@@ -1,18 +1,5 @@
 //! The target namespace check failures, with the values their messages name.
 
-/// One target namespace check failure.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TargetError {
-    /// A resource of an adapter that needs both parts resolved without some of them.
-    MissingParts(MissingParts),
-    /// Two targets on one connection write managed loader data to one namespace.
-    LoaderCollision(LoaderCollision),
-    /// A managed write, named by its label, without an explicit physical schema.
-    ManagedWriteSchema(String),
-    /// A named target without an explicit schema.
-    NamedTargetSchema(String),
-}
-
 /// A resource whose relation location misses a database or schema.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingParts {

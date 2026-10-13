@@ -1,16 +1,9 @@
-use sqlbuild_core::json::models::{JsonInteger, JsonValue};
+use sqlbuild_core::json::models::JsonValue;
 
 use crate::stage_capture::main::capture_sort_key::capture_sort_key;
 use crate::stage_capture::models::CaptureDocument;
+use crate::stage_capture::tests::helpers::{integer, text};
 use crate::stage_capture::tests::test_types::{DocumentTestCase, SortKeyTestCase};
-
-fn text(value: &str) -> JsonValue {
-    JsonValue::String(value.to_owned())
-}
-
-fn integer(value: i64) -> JsonValue {
-    JsonValue::Integer(JsonInteger::from(value))
-}
 
 #[test]
 fn given_shared_nodes_and_root_when_writing_document_then_matches_python_writer() {

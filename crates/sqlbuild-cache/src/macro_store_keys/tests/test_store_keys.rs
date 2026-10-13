@@ -3,15 +3,8 @@ use sqlbuild_core::json::models::JsonValue;
 use crate::macro_store_keys::main::canonical_sort_text::canonical_sort_text;
 use crate::macro_store_keys::main::context_store_token::context_store_token;
 use crate::macro_store_keys::main::macro_store_token::macro_store_token;
+use crate::macro_store_keys::tests::helpers::{array, text};
 use crate::macro_store_keys::tests::test_types::StoreKeyTestCase;
-
-fn text(value: &str) -> JsonValue {
-    JsonValue::String(value.to_owned())
-}
-
-fn array(items: Vec<JsonValue>) -> JsonValue {
-    JsonValue::Array(items)
-}
 
 #[test]
 fn given_macro_identity_when_keying_then_matches_python_key_text() {
@@ -35,7 +28,8 @@ fn given_macro_identity_when_keying_then_matches_python_key_text() {
             (text("cents"), text("macros/money.py")),
             test_case.value,
             "SELECT 1",
-        );
+        )
+        .unwrap_or_default();
 
         assert_eq!(
             key.as_deref(),
@@ -61,7 +55,7 @@ fn given_canonical_context_when_keying_then_matches_python_digest() {
     }];
 
     for test_case in test_cases {
-        let key = context_store_token(&test_case.value);
+        let key = context_store_token(&test_case.value).unwrap_or_default();
 
         assert_eq!(
             key.as_deref(),

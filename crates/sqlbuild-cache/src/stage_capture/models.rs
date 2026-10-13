@@ -2,23 +2,15 @@
 
 use sqlbuild_core::json::errors::JsonEmitError;
 use sqlbuild_core::json::main::dumps::dumps;
-use sqlbuild_core::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
+use sqlbuild_core::json::models::JsonValue;
 
+use crate::stage_capture::_helpers::dialect::capture_dialect;
 use crate::stage_capture::constants::{ROOT_KEY, SHARED_NODES_KEY};
 
 /// One capture document: each shared node and then the root, each on its own line.
 #[derive(Debug, Default)]
 pub struct CaptureDocument {
     shared: bool,
-}
-
-/// `json.dumps(value, ensure_ascii=False, allow_nan=False, ...)` with `indent` and separators.
-pub(crate) fn capture_dialect(indent: Option<usize>, separators: (&str, &str)) -> JsonDialect {
-    JsonDialect::Stdlib(StdlibJsonOptions {
-        ensure_ascii: false,
-        allow_nan: false,
-        ..StdlibJsonOptions::new(indent).with_separators(separators.0, separators.1)
-    })
 }
 
 impl CaptureDocument {
