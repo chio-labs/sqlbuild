@@ -3,6 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import (
     bind_command_output_sink_declarations,
     discover_command_output_sink_declarations,
@@ -12,7 +13,6 @@ from sqlbuild.compiler.discovery._helpers.filesystem.core import (
     discover_event_exporter_declarations,
     discover_provider_classes,
 )
-from sqlbuild.compiler.discovery._helpers.yml.project import load_project_config
 from sqlbuild.compiler.discovery.exceptions import ProjectConfigError
 from sqlbuild.compiler.discovery.models import (
     DiscoveredCommandOutputSink,
@@ -45,7 +45,9 @@ def discover_runtime_extensions(*, project_dir: Path) -> DiscoveredRuntimeExtens
         and not (project_dir / "sqlbuild_project.toml").exists()
     ):
         return DiscoveredRuntimeExtensions()
-    config: LifecycleEventSinksConfig = load_project_config(project_dir=project_dir).sinks.lifecycle
+    config: LifecycleEventSinksConfig = _native.load_project_config_file(
+        project_dir
+    ).sinks.lifecycle
     declaration_names: frozenset[str] = frozenset(item.name for item in declarations)
     unknown_names: frozenset[str] = frozenset(config.named) - declaration_names
     if unknown_names:

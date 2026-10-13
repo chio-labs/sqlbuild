@@ -35,3 +35,26 @@ fn given_setting_guidance_when_rendering_then_text_matches_python() {
         );
     }
 }
+
+#[test]
+fn given_target_warehouse_without_session_warehouses_when_rejecting_then_text_matches_python() {
+    let test_cases = [GuidanceTestCase {
+        description: "a quoted local query warehouse",
+        rendered: crate::project::main::unsupported_target_warehouse::unsupported_target_warehouse(
+            ("/p/sqlbuild_local.toml", "sqlbuild_local.toml"),
+            "duckdb",
+            ("dev", "query", "WH \"x\""),
+        ),
+        expected_note: "/p/sqlbuild_local.toml [targets.dev.warehouses] selects a query warehouse, but the 'duckdb' adapter has no warehouse to select; sqlbuild_local.toml sets [targets.dev.warehouses] query = \"WH \\\"x\\\"\"",
+        expected_help: "remove the [targets.dev.warehouses] section from sqlbuild_local.toml; command-group warehouses need an adapter with a session warehouse, such as snowflake or an adapter extending it",
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            (test_case.rendered.0.as_str(), test_case.rendered.1.as_str()),
+            (test_case.expected_note, test_case.expected_help),
+            "{}",
+            test_case.description
+        );
+    }
+}

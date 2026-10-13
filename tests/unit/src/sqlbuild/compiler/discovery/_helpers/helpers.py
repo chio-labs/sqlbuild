@@ -2,6 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
+from sqlbuild import _native
 from sqlbuild._native import (
     discover_audit_files,
     discover_constant_files,
@@ -21,6 +22,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredSqlTestCase,
     SqlTestParameterDeclaration,
 )
+from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     LoadProjectConfigTestCase,
 )
@@ -179,3 +181,15 @@ def parse_statement_header_file(*, statement: str, contents: str, file_path: Pat
     """Parse one authored statement file with the discovery parser for its header kind."""
 
     return _STATEMENT_HEADER_PARSERS[statement](contents=contents, file_path=file_path)
+
+
+def load_project_config(*, project_dir: Path) -> ProjectConfig:
+    """Load the shared project configuration through the native reader."""
+
+    return _native.load_project_config_file(project_dir)
+
+
+def load_local_config(*, project_dir: Path) -> LocalConfig:
+    """Load the local configuration overrides through the native reader."""
+
+    return _native.load_local_config_file(project_dir)

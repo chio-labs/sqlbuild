@@ -8,8 +8,8 @@ from sqlbuild._native import (
     directory_snapshot_scope,
     discover_model_files,
     discover_model_schema_files,
+    load_project_config_file,
 )
-from sqlbuild.compiler.discovery._helpers.yml.project import load_project_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveryFileFault
 from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 
@@ -17,7 +17,7 @@ from sqlbuild.spec.contracts.models import LocalConfig, ProjectConfig
 def discover_model_description_inputs(*, project_dir: Path) -> DiscoveredProjectInputs:
     """Load project config, model files and model schemas without importing project Python."""
 
-    project_config: ProjectConfig = load_project_config(project_dir=project_dir)
+    project_config: ProjectConfig = load_project_config_file(project_dir)
     with directory_snapshot_scope(project_dir=project_dir):
         return DiscoveredProjectInputs(
             project_config=project_config,
