@@ -6,13 +6,11 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild.cli.progress.classes.planning_progress_reporter import (
+from sqlbuild._native import (
     PlanningProgressReporter,
-    _is_planning_completion_message,
 )
 from sqlbuild.presentation.classes.cli_style import CliStyle
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
-    PlanningCompletionMessageTestCase,
     PlanningFinishTestCase,
     PlanningProgressTestCase,
 )
@@ -57,33 +55,6 @@ def test_given_planning_messages_when_reporting_then_writes_expected_output(
         reporter.on_progress(message)
 
     assert stream.getvalue() == test_case.expected_output
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PlanningCompletionMessageTestCase(
-            description="treats applied clone plan as completion",
-            message="Applied clone plan. (0.10s)",
-            expected_is_completion=True,
-        ),
-        PlanningCompletionMessageTestCase(
-            description="treats finalized dbt run as completion",
-            message="Finalized dbt run.",
-            expected_is_completion=True,
-        ),
-        PlanningCompletionMessageTestCase(
-            description="treats evaluated rules as completion",
-            message="Evaluated rules. (built-in 0.00s, custom 0.00s)",
-            expected_is_completion=True,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_planning_message_when_classifying_completion_then_returns_expected_result(
-    test_case: PlanningCompletionMessageTestCase,
-) -> None:
-    assert _is_planning_completion_message(test_case.message) == test_case.expected_is_completion
 
 
 @pytest.mark.parametrize(

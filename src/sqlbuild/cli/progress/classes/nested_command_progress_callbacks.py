@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from typing import TextIO
 
-from sqlbuild.cli.progress.classes.native_progress_projector import (
+from sqlbuild._native import (
     NativeProgressProjector,
     current_native_progress_projector,
 )

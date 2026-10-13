@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any, TextIO
 
-from sqlbuild._native import build_project_relation_targets
+from sqlbuild._native import (
+    ConnectionProgressReporter,
+    build_project_relation_targets,
+    write_execution_header,
+)
 from sqlbuild.cli.commands._helpers.build_execution.run_context import (
     write_build_run_context,
 )
@@ -27,10 +31,6 @@ from sqlbuild.cli.commands.models import (
     BuildRunOutcome,
     DirectLifecycleCallbacks,
 )
-from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-    ConnectionProgressReporter,
-)
-from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.main.cursor_window.typed_cursor_overrides import (
     typed_cursor_overrides,

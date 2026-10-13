@@ -45,19 +45,19 @@ from sqlbuild.spec.contracts.models import (
 )
 
 if TYPE_CHECKING:
+    from sqlbuild._native import (
+        ConnectionProgressReporter,
+        PlanningProgressReporter,
+    )
     from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
     from sqlbuild.cli.commands.classes.build_progress_callbacks import BuildProgressCallbacks
     from sqlbuild.cli.commands.classes.direct_python_lifecycle_state import (
         DirectPythonLifecycleState,
     )
     from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
-    from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-        ConnectionProgressReporter,
-    )
     from sqlbuild.cli.progress.classes.nested_command_progress_callbacks import (
         NestedCommandProgressCallbacks,
     )
-    from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
     from sqlbuild.compiler.compile.models import (
         CompiledObjectKey,
         CompiledSqlScenario,

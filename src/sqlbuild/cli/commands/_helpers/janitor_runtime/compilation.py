@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 import time
 
-from sqlbuild._native import build_compiled_project
+from sqlbuild._native import PlanningProgressReporter, build_compiled_project
 from sqlbuild.cli.commands._helpers.runtime.adapter_context import (
     resolve_adapter_connection_context,
 )
@@ -14,7 +14,6 @@ from sqlbuild.cli.commands.models import (
     JanitorCompileContext,
     JanitorInvocation,
 )
-from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 

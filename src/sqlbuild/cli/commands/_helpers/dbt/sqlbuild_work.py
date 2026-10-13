@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import ConnectionProgressReporter, format_execution_header
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.cli.commands._helpers.build_planning.plan_policies import (
     dbt_interop_plan_safety_gates,
@@ -16,8 +17,6 @@ from sqlbuild.cli.commands.classes.build_progress_callbacks import (
     format_build_footer,
 )
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
-from sqlbuild.cli.progress.main._execution_header import format_execution_header
 from sqlbuild.cli.target_artifacts.main._write_runtime_target import write_runtime_target
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner.models import (

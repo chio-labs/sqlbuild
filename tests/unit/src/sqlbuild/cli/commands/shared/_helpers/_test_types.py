@@ -156,13 +156,6 @@ class RuntimeDiagnosticsTestCase:
 
 
 @dataclass(frozen=True)
-class PlanningCompletionMessageTestCase:
-    description: str
-    message: str
-    expected_is_completion: bool
-
-
-@dataclass(frozen=True)
 class PlanningFinishTestCase:
     description: str
     messages_before_finish: tuple[str, ...]

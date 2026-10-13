@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from _pytest.capture import CaptureResult
 
+from sqlbuild._native import VerboseInspectionWriter
 from sqlbuild.adapter.relations.main.record_inspection_query import record_inspection_query
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.progress.classes.verbose_inspection_writer import VerboseInspectionWriter
 from sqlbuild.cli.progress.main.verbose_inspection_output import verbose_inspection_output
 from tests.unit.src.sqlbuild.cli.progress.main.verbose_inspection_output._test_types import (
     VerboseInspectionFormatTestCase,

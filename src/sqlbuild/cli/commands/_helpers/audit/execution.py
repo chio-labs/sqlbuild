@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import ExecutionEventWriter
+from sqlbuild._native import (
+    ConnectionProgressReporter,
+    ExecutionEventWriter,
+    NativeProgressProjector,
+    current_native_progress_projector,
+)
 from sqlbuild.cli.commands.models import (
     AuditCommandRequest,
     AuditExecutionPreparation,
     AuditInvocation,
 )
 from sqlbuild.cli.progress.classes.audit_progress_reporter import AuditProgressReporter
-from sqlbuild.cli.progress.classes.connection_progress_reporter import (
-    ConnectionProgressReporter,
-)
-from sqlbuild.cli.progress.classes.native_progress_projector import (
-    NativeProgressProjector,
-    current_native_progress_projector,
-)
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.compiler.planner.models import AuditPlanEntry
 from sqlbuild.cost.classes.cost_context import CostContext

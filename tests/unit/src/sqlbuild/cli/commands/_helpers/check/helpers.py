@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
+from sqlbuild._native import NativeProgressProjector
 from sqlbuild.executor.python_nodes.models import PythonCheckExecutionResult
 from sqlbuild.python_nodes.types import PythonCheckSeverity
 from sqlbuild.runtime.observability.types import JSONValue

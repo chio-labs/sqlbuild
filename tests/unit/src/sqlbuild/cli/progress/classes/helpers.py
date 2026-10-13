@@ -6,7 +6,7 @@ from collections.abc import Callable
 from io import StringIO
 from threading import Event, Lock, Thread, current_thread
 
-from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
+from sqlbuild._native import NativeProgressProjector
 from sqlbuild.observability import (
     EventDispatcher,
     OperationAttributes,

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from sqlbuild._native import format_seed_execution_json, write_execution_json_output
+from sqlbuild._native import (
+    format_seed_execution_json,
+    write_execution_header,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands.models import (
     SeedCommandRequest,
     SeedExecutionPreparation,
     SeedInvocation,
     SeedRunOutcome,
 )
-from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.build.types import ExecutionStatus
 from sqlbuild.presentation.classes.cli_style import CliStyle

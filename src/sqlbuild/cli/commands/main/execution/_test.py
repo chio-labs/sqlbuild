@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import write_execution_header
 from sqlbuild.cli.commands._helpers.test.execution import (
     execute_test_plan,
     prepare_test_execution,
@@ -19,7 +20,6 @@ from sqlbuild.cli.commands.models import (
     TestExecutionPreparation,
     TestInvocation,
 )
-from sqlbuild.cli.progress.main._write_execution_header import write_execution_header
 from sqlbuild.cli.target_artifacts.main._write_test_runtime_target import write_test_runtime_target
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult
 from sqlbuild.executor.testing.models import SqlTestExecutionResult

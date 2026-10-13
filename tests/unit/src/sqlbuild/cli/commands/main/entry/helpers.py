@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+from sqlbuild._native import NativeProgressProjector
 from sqlbuild.cli.entry.models import (
     CliEntrypointHandlers,
 )
@@ -88,3 +89,16 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
         run_rules=overrides.get("run_rules", noop_handler),
         run_scope=overrides.get("run_scope", noop_handler),
     )
+
+
+class CloseFailingProjector:
+    """Delegate to a native progress projector whose close always fails."""
+
+    def __init__(self, **options: Any) -> None:
+        self._projector: NativeProgressProjector = NativeProgressProjector(**options)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._projector, name)
+
+    def close(self) -> None:
+        raise OSError("controlled projector close failure")

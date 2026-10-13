@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from sqlbuild._native import VerboseInspectionWriter
 from sqlbuild.adapter.relations.main.inspection_query_sink import inspection_query_sink
-from sqlbuild.cli.progress.classes.verbose_inspection_writer import VerboseInspectionWriter
 
 
 @contextmanager

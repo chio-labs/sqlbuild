@@ -9,16 +9,16 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from sqlbuild._native import ExecutionEventWriter
+from sqlbuild._native import (
+    ExecutionEventWriter,
+    NativeProgressProjector,
+    current_native_progress_projector,
+    format_expectation_detail,
+    format_expectation_name,
+)
 from sqlbuild.adapter.contract.models import LifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
 from sqlbuild.cli.commands._helpers.test.sql_progress import format_parameterized_test_label
-from sqlbuild.cli.progress.classes.native_progress_projector import (
-    NativeProgressProjector,
-    current_native_progress_projector,
-)
-from sqlbuild.cli.progress.main._expectation_detail import format_expectation_detail
-from sqlbuild.cli.progress.main._expectation_name import format_expectation_name
 from sqlbuild.cli.progress.models import AuditDisplayEntry, ExecutionCounts
 from sqlbuild.compiler.auditing.types import AuditEvaluationMode, AuditOutcome, AuditRunScope
 from sqlbuild.compiler.compile.types import CompiledResourceType

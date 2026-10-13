@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from sqlbuild._native import ConnectionProgressReporter
 from sqlbuild.cli.commands.main.dbt.dbt_sqlbuild_work import execute_dbt_sqlbuild_work
 from sqlbuild.cli.commands.main.execution.command_warehouse import apply_command_warehouse
 from sqlbuild.cli.commands.main.execution.connection_progress import (
     build_connection_progress_reporter,
 )
 from sqlbuild.cli.commands.models import DbtSqlbuildWorkContext
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.compiler.compile.main.effective_config import build_effective_connection_config
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.planner.models import PlanOutput

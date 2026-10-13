@@ -10,10 +10,10 @@ from itertools import cycle, islice
 from types import ModuleType
 from typing import Any
 
+from sqlbuild._native import NativeProgressProjector
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
-from sqlbuild.cli.progress.classes.native_progress_projector import NativeProgressProjector
 from sqlbuild.observability import (
     EventDispatcher,
     LifecycleEvent,

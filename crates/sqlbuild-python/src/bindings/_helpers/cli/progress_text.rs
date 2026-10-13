@@ -1,0 +1,170 @@
+//! Execution headers, SQL expectation rows and verbose inspection lines of CLI progress.
+
+use std::sync::{Mutex, MutexGuard};
+
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::PyDict;
+use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_core::progress::main::execution_header_text::execution_header_text;
+use sqlbuild_core::progress::main::format_execution_header::format_execution_header as format_header;
+use sqlbuild_core::progress::main::format_expectation_detail::format_expectation_detail as format_detail;
+use sqlbuild_core::progress::main::format_expectation_name::format_expectation_name as format_name;
+use sqlbuild_core::progress::main::format_inspection_record::format_inspection_record;
+use sqlbuild_core::progress::models::{ExpectationStep, InspectionRecord};
+use sqlbuild_core::progress::types::DifferenceSample;
+
+use crate::bindings::_helpers::cli::progress::write_persistent;
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+
+const HEADER_OPTIONS: (&[&str], &[&str]) = (
+    &["stream", "command", "target", "concurrency", "use_color"],
+    &[],
+);
+
+/// Format command and execution context for a progress header.
+#[pyfunction]
+#[pyo3(signature = (*, command, target, concurrency))]
+fn format_execution_header(command: &str, target: Option<&str>, concurrency: i64) -> String {
+    format_header(command, target, concurrency)
+}
+
+/// Write an execution header for command progress output.
+#[pyfunction]
+#[pyo3(signature = (**options))]
+fn write_execution_header(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
+    let arguments: KeywordArguments<'_> =
+        KeywordArguments::read(py, "write_execution_header", options, HEADER_OPTIONS)?;
+    let command: String = arguments.value("command")?.extract()?;
+    let target: Option<String> = arguments.value("target")?.extract()?;
+    let concurrency: i64 = arguments.value("concurrency")?.extract()?;
+    let style: CliStyle = CliStyle {
+        use_color: arguments.value("use_color")?.extract()?,
+    };
+    let text: String = execution_header_text(style, (&command, target.as_deref(), concurrency));
+    let stream: Bound<'_, PyAny> = arguments.value("stream")?;
+    stream.call_method1("write", (text,))?;
+    stream.call_method0("flush")?;
+    Ok(())
+}
+
+/// Format a comparison result name as a user-facing expectation name.
+#[pyfunction]
+fn format_expectation_name(model_name: &str) -> String {
+    format_name(model_name)
+}
+
+fn difference_samples(samples: &Bound<'_, PyAny>) -> PyResult<Vec<DifferenceSample>> {
+    let mut rows: Vec<DifferenceSample> = Vec::new();
+    for sample in samples.try_iter()? {
+        rows.push(sample?.getattr("values")?.extract()?);
+    }
+    Ok(rows)
+}
+
+fn expectation_step(step: &Bound<'_, PyAny>) -> PyResult<ExpectationStep> {
+    let mut column_differences: Vec<(String, String, String)> = Vec::new();
+    for difference in step.getattr("column_differences")?.try_iter()? {
+        let difference: Bound<'_, PyAny> = difference?;
+        column_differences.push((
+            difference.getattr("name")?.str()?.to_string(),
+            difference.getattr("actual")?.str()?.to_string(),
+            difference.getattr("expected")?.str()?.to_string(),
+        ));
+    }
+    Ok(ExpectationStep {
+        model_name: step.getattr("model_name")?.extract()?,
+        outcome: step.getattr("outcome")?.str()?.to_string(),
+        actual_row_count: step.getattr("actual_row_count")?.extract()?,
+        expected_row_count: step.getattr("expected_row_count")?.extract()?,
+        mismatched_row_count: step.getattr("mismatched_row_count")?.extract()?,
+        unexpected_row_count: step.getattr("unexpected_row_count")?.extract()?,
+        missing_row_count: step.getattr("missing_row_count")?.extract()?,
+        unexpected_samples: difference_samples(&step.getattr("unexpected_samples")?)?,
+        missing_samples: difference_samples(&step.getattr("missing_samples")?)?,
+        column_differences,
+    })
+}
+
+/// Format failing row count detail for an expectation row.
+#[pyfunction]
+fn format_expectation_detail(step_result: &Bound<'_, PyAny>) -> PyResult<String> {
+    Ok(format_detail(&expectation_step(step_result)?))
+}
+
+fn inspection_record(record: &Bound<'_, PyAny>) -> PyResult<InspectionRecord> {
+    Ok(InspectionRecord {
+        sql: record.getattr("sql")?.extract()?,
+        elapsed_seconds: record.getattr("elapsed_seconds")?.extract()?,
+        row_count: record.getattr("row_count")?.extract()?,
+        error: record.getattr("error")?.extract()?,
+    })
+}
+
+/// Write each inspection read as one truncated stderr line and keep a running total.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct VerboseInspectionWriter {
+    totals: Mutex<(usize, f64)>,
+}
+
+impl VerboseInspectionWriter {
+    fn locked(&self) -> PyResult<MutexGuard<'_, (usize, f64)>> {
+        self.totals
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("inspection writer lock is poisoned"))
+    }
+}
+
+fn write_stderr_line(py: Python<'_>, text: &str) -> PyResult<()> {
+    let stderr: Bound<'_, PyAny> = py.import("sys")?.getattr("stderr")?;
+    write_persistent(py, &stderr, &format!("{text}\n"))
+}
+
+#[pymethods]
+impl VerboseInspectionWriter {
+    #[new]
+    fn new() -> Self {
+        Self {
+            totals: Mutex::new((0, 0.0)),
+        }
+    }
+
+    /// Write one inspection read; safe to call from inspection worker threads.
+    fn write(&self, py: Python<'_>, record: &Bound<'_, PyAny>) -> PyResult<()> {
+        let record: InspectionRecord = inspection_record(record)?;
+        {
+            let mut totals: MutexGuard<'_, (usize, f64)> = self.locked()?;
+            totals.0 += 1;
+            totals.1 += record.elapsed_seconds;
+        }
+        write_stderr_line(py, &format_inspection_record(&record))
+    }
+
+    /// Write the read count and cumulative query time when anything was read.
+    fn write_total(&self, py: Python<'_>) -> PyResult<()> {
+        let (count, seconds) = *self.locked()?;
+        if count == 0 {
+            return Ok(());
+        }
+        write_stderr_line(
+            py,
+            &format!("Inspection queries: {count} ({seconds:.2}s cumulative query time)"),
+        )
+    }
+
+    /// Render one inspection read as a single truncated diagnostic line.
+    #[staticmethod]
+    #[pyo3(signature = (*, record))]
+    fn format_record(record: &Bound<'_, PyAny>) -> PyResult<String> {
+        Ok(format_inspection_record(&inspection_record(record)?))
+    }
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<VerboseInspectionWriter>()?;
+    module.add_function(wrap_pyfunction!(format_execution_header, module)?)?;
+    module.add_function(wrap_pyfunction!(write_execution_header, module)?)?;
+    module.add_function(wrap_pyfunction!(format_expectation_name, module)?)?;
+    module.add_function(wrap_pyfunction!(format_expectation_detail, module)?)
+}

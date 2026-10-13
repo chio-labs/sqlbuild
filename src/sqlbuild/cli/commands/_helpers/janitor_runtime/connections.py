@@ -5,12 +5,12 @@ from __future__ import annotations
 import sys
 import time
 
+from sqlbuild._native import ConnectionProgressReporter
 from sqlbuild.cli.commands.models import (
     JanitorCompileContext,
     JanitorConnectionContext,
     JanitorInvocation,
 )
-from sqlbuild.cli.progress.classes.connection_progress_reporter import ConnectionProgressReporter
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 

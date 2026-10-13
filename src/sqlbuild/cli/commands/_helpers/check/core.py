@@ -7,8 +7,10 @@ from collections.abc import Callable
 from typing import Any, TextIO
 
 from sqlbuild._native import (
+    NativeProgressProjector,
     TerminalEventIndex,
     build_python_relation_targets,
+    current_native_progress_projector,
     current_terminal_event_index,
     transitive_closure_many,
 )
@@ -19,10 +21,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.progress.classes.native_progress_projector import (
-    NativeProgressProjector,
-    current_native_progress_projector,
-)
 from sqlbuild.compiler.compile.models import CompiledRelationLocation
 from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import CompilePipelineResult

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+from sqlbuild._native import PlanningProgressReporter
 from sqlbuild.cli.commands._helpers.planning.external_refs import (
     resolve_external_sql_reference_resolver,
 )
@@ -14,7 +15,6 @@ from sqlbuild.cli.commands.models import (
     CloneExecutionPreparation,
     CloneInvocation,
 )
-from sqlbuild.cli.progress.classes.planning_progress_reporter import PlanningProgressReporter
 from sqlbuild.compiler.pipeline.main.clone import run_clone_pipeline
 from sqlbuild.compiler.pipeline.models import ClonePipelineConnection, ClonePipelineResult
 from sqlbuild.compiler.planner.models import (
