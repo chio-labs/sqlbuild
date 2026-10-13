@@ -8,6 +8,7 @@ pub mod json;
 pub mod models;
 pub mod panics;
 pub mod posix_path;
+pub mod terminal_events;
 pub mod text;
 
 #[cfg(test)]

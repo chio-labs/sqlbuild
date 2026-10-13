@@ -9,18 +9,19 @@ from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import TextIO
 
+from sqlbuild._native import (
+    TerminalEventClaim,
+    TerminalEventIndex,
+    current_terminal_event_index,
+)
 from sqlbuild.cli.output._helpers.integration_result import (
     build_clone_integration_result,
     build_degraded_integration_result,
     build_integration_result,
     result_resource_identity,
 )
-from sqlbuild.cli.output.classes.terminal_event_index import (
-    TerminalEventIndex,
-    current_terminal_event_index,
-)
 from sqlbuild.cli.output.constants import INTEGRATION_RESULT_PATH_ENV
-from sqlbuild.cli.output.models import IntegrationResultEnvelope, TerminalEventClaim
+from sqlbuild.cli.output.models import IntegrationResultEnvelope
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.clone.models import CloneItemResult
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
@@ -134,7 +135,7 @@ class ExecutionEventWriter:
         self._stream.write(envelope.to_json())
         self._stream.flush()
 
-    def _output_scope(self) -> AbstractContextManager[None]:
+    def _output_scope(self) -> AbstractContextManager[object]:
         if self._terminal_index is None:
             return nullcontext()
         return self._terminal_index.output_serialization_scope()

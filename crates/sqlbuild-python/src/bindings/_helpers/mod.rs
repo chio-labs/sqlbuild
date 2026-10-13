@@ -27,6 +27,7 @@ pub(crate) mod python_values;
 pub(crate) mod refactor;
 pub(crate) mod references;
 pub(crate) mod render;
+pub(crate) mod result_output;
 pub(crate) mod rules;
 pub(crate) mod scopes;
 pub(crate) mod semantic_checks;

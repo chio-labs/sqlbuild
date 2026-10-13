@@ -3,9 +3,7 @@ from typing import Any
 
 import pytest
 
-from sqlbuild.cli.output.main._clone_execution_json import (
-    format_clone_execution_json,
-)
+from sqlbuild._native import format_clone_execution_json
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
 from sqlbuild.executor.clone.types import CloneAction, CloneStatus
 from tests.unit.src.sqlbuild.cli.output.main.clone_execution_json._test_types import (

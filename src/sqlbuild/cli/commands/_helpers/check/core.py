@@ -6,7 +6,12 @@ import json
 from collections.abc import Callable
 from typing import Any, TextIO
 
-from sqlbuild._native import build_python_relation_targets, transitive_closure_many
+from sqlbuild._native import (
+    TerminalEventIndex,
+    build_python_relation_targets,
+    current_terminal_event_index,
+    transitive_closure_many,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.models import RelationLookup
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
@@ -14,10 +19,6 @@ from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name im
     resolve_relation_location_qualified_name,
 )
 from sqlbuild.cli.commands.exceptions import CliUserError
-from sqlbuild.cli.output.classes.terminal_event_index import (
-    TerminalEventIndex,
-    current_terminal_event_index,
-)
 from sqlbuild.cli.progress.classes.native_progress_projector import (
     NativeProgressProjector,
     current_native_progress_projector,

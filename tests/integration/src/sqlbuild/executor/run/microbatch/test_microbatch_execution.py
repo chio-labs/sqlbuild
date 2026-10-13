@@ -11,7 +11,6 @@ from typing import Any, cast
 import pytest
 
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.output._helpers.execution_result_document import _format_model_assets
 from sqlbuild.compiler.auditing.types import AuditRunScope
 from sqlbuild.compiler.discovery.models import DiscoveredHookFunction, PythonHookEntry, SqlHookEntry
 from sqlbuild.compiler.planner.constants import (
@@ -40,6 +39,7 @@ from tests.integration.src.sqlbuild.executor.run.microbatch.helpers import (
     verify_failure_state,
     verify_success_state,
 )
+from tests.unit.src.sqlbuild.cli.output._helpers.helpers import formatted_model_asset
 
 _TS_SOURCE_SQL: str = (
     "CREATE TABLE main.raw_events (  id INTEGER, event_time TIMESTAMP, payload VARCHAR)"
@@ -664,7 +664,7 @@ def test_given_warn_limit_when_pre_hook_fails_then_execution_metadata_is_preserv
     result: ModelExecutionResult = run_failure_test(
         test_case=test_case, adapter=adapter, connection=connection
     )
-    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+    asset: dict[str, object] = formatted_model_asset(result)
     microbatch: dict[str, object] = cast(dict[str, object], asset["microbatch"])
 
     assert result.microbatch_limit_count == test_case.expected_microbatch_limit_count
@@ -723,7 +723,7 @@ def test_given_warn_limit_when_pre_hook_skips_then_execution_metadata_is_preserv
     result: ModelExecutionResult = run_skipped_test(
         test_case=test_case, adapter=adapter, connection=connection
     )
-    asset: dict[str, object] = _format_model_assets(results=(result,), plan=None)[0]
+    asset: dict[str, object] = formatted_model_asset(result)
     microbatch: dict[str, object] = cast(dict[str, object], asset["microbatch"])
 
     assert result.microbatch_limit_count == test_case.expected_microbatch_limit_count

@@ -1,6 +1,7 @@
 """Private SQLBuild native engine bindings."""
 
 from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence, Set
+from contextlib import AbstractContextManager
 from pathlib import Path, PurePath
 from typing import Any, Literal, TypedDict, overload
 
@@ -183,11 +184,22 @@ from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestPlanningRequest,
 )
 from sqlbuild.compiler.sql_test_glue.types import NativeSqlTestAssemblyRow, NativeSqlTestPlanRow
+from sqlbuild.executor.auditing.models import AuditExecutionResult
+from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+from sqlbuild.executor.clone.models import CloneExecutionResult
+from sqlbuild.executor.load.models import LoadExecutionResult
+from sqlbuild.executor.python_nodes.models import (
+    PythonCheckExecutionResult,
+    PythonNodeExecutionResult,
+)
+from sqlbuild.executor.scenario.models import ScenarioRunResult, ScenarioSnapshotCaptureRunResult
+from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.lint.types import RelationKeyRow
 from sqlbuild.presentation.classes.transient_status_reporter import TransientStatusReporter
 from sqlbuild.presentation.models import DisplayOptions
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.spec.contracts.models import (
     DefaultsConfig,
     LocalConfig,
@@ -1064,6 +1076,82 @@ def format_plan(
     include_direct_freshness_diagnostics: bool = True,
     include_completion: bool = False,
 ) -> str: ...
+
+class TerminalEventClaim:
+    @property
+    def terminal(self) -> LifecycleEvent: ...
+    @property
+    def event_sequence(self) -> int: ...
+
+class TerminalEventIndex:
+    def __init__(self) -> None: ...
+    def consume(self, event: LifecycleEvent) -> None: ...
+    def claim_resource_terminal(
+        self,
+        *,
+        resource_name: str,
+        resource_id: str | None = None,
+        resource_attempt_id: str | None = None,
+        attempt_number: int | None = None,
+    ) -> TerminalEventClaim | None: ...
+    def resource_terminal(
+        self, *, resource_name: str, resource_id: str | None = None
+    ) -> LifecycleEvent | None: ...
+    def lifecycle_terminal(self) -> LifecycleEvent | None: ...
+    def output_serialization_scope(self) -> AbstractContextManager[bool]: ...
+    def events(self) -> tuple[LifecycleEvent, ...]: ...
+
+class TerminalEventIndexScope:
+    def __enter__(self) -> TerminalEventIndex: ...
+    def __exit__(self, *exc_info: object) -> bool: ...
+
+def current_terminal_event_index() -> TerminalEventIndex | None: ...
+def terminal_event_index_scope(index: TerminalEventIndex) -> TerminalEventIndexScope: ...
+def format_build_execution_json(
+    *,
+    result: BuildExecutionResult,
+    plan: PlanOutput,
+    python_node_results: tuple[PythonNodeExecutionResult, ...] = (),
+    python_check_results: tuple[PythonCheckExecutionResult, ...] = (),
+    command: str = "build",
+    run_id: str | None = None,
+    cost: dict[str, object] | None = None,
+) -> str: ...
+def format_seed_execution_json(
+    *, results: tuple[SeedExecutionResult, ...], plan: PlanOutput
+) -> str: ...
+def format_load_execution_json(*, results: tuple[LoadExecutionResult, ...]) -> str: ...
+def format_clone_execution_json(
+    *, result: CloneExecutionResult, resource_types_by_name: Mapping[str, str]
+) -> str: ...
+def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -> str: ...
+def format_audit_execution_json(
+    *,
+    results: tuple[AuditExecutionResult, ...],
+    configured_concurrency: int = 1,
+    worker_count: int | None = None,
+) -> str: ...
+def format_scenario_execution_json(
+    *,
+    results: tuple[ScenarioRunResult, ...],
+    local: bool = False,
+    run_namespace: str | None = None,
+    namespace_source: str = "unset",
+    duration_ms: float | None = None,
+) -> str: ...
+def format_scenario_snapshot_execution_json(
+    *,
+    results: tuple[ScenarioSnapshotCaptureRunResult, ...],
+    refresh: bool = False,
+    run_namespace: str | None = None,
+    namespace_source: str = "unset",
+) -> str: ...
+def degraded_execution_json(
+    *, command: str, status: str, error: Exception, execution_succeeded: bool
+) -> str: ...
+def write_execution_json_output(
+    *, payload: str, json_output: bool, json_output_path: Path | None
+) -> None: ...
 def format_plan_json(
     *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> str: ...

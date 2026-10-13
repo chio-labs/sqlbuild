@@ -8,8 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sqlbuild.cli.output.classes.terminal_event_index import TerminalEventIndex
-from sqlbuild.cli.output.main._seed_execution_json import format_seed_execution_json
+from sqlbuild._native import TerminalEventIndex, format_seed_execution_json
 from sqlbuild.compiler.planner.models import PlanOutput
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.pipeline._helpers.seeding import run_seed_pipeline

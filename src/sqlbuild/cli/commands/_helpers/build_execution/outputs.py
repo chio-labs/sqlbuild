@@ -6,7 +6,12 @@ import json
 import sys
 from typing import TextIO
 
-from sqlbuild._native import format_plan
+from sqlbuild._native import (
+    degraded_execution_json,
+    format_build_execution_json,
+    format_plan,
+    write_execution_json_output,
+)
 from sqlbuild.cli.commands._helpers.build_python_nodes.python_node_output import (
     python_node_results_failed,
 )
@@ -18,11 +23,6 @@ from sqlbuild.cli.commands.models import (
     BuildInvocation,
     BuildRunOutcome,
 )
-from sqlbuild.cli.output.main._build_execution_json import format_build_execution_json
-from sqlbuild.cli.output.main._execution_json_degradation import (
-    degraded_execution_json,
-)
-from sqlbuild.cli.output.main._write_execution_json_output import write_execution_json_output
 from sqlbuild.cli.target_artifacts.main._write_python_check_runtime_target import (
     write_python_check_runtime_target,
 )

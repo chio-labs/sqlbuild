@@ -1,0 +1,438 @@
+//! The `assets` entries of execution-result documents.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyList};
+
+use crate::bindings::_helpers::plan_output::safety::{future_cursor_safety, maximum_start_safety};
+use crate::bindings::_helpers::plan_output::values::{any, dict, items, optional_enum_value};
+use crate::bindings::_helpers::result_output::projection::{Projection, rounded};
+
+const FAILED_STATUS: &str = "failed";
+const SQL_EVENT_KIND: &str = "sql";
+
+/// A dictionary of the entries whose value is not `None`, in order.
+pub(crate) fn without_none<'py>(
+    py: Python<'py>,
+    entries: Vec<(&str, Bound<'py, PyAny>)>,
+) -> PyResult<Bound<'py, PyDict>> {
+    dict(
+        py,
+        entries
+            .into_iter()
+            .filter(|(_, value)| !value.is_none())
+            .collect(),
+    )
+}
+
+/// `value or None`.
+pub(crate) fn or_none<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if value.is_truthy()? {
+        return Ok(value);
+    }
+    Ok(value.py().None().into_bound(value.py()))
+}
+
+/// The qualified names of a plan's locations, or nothing without a plan.
+fn targets<'py>(
+    plan: Option<&Bound<'py, PyAny>>,
+    field: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let Some(plan) = plan else {
+        return Ok(None);
+    };
+    let py: Python<'py> = plan.py();
+    let names: Bound<'py, PyDict> = PyDict::new(py);
+    for item in plan.getattr(field)?.call_method0("items")?.try_iter()? {
+        let (name, location): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
+        names.set_item(name, location.getattr("qualified_name")?)?;
+    }
+    Ok(Some(names.into_any()))
+}
+
+/// `targets.get(name)`, or `None` without a plan.
+fn target<'py>(
+    py: Python<'py>,
+    targets: Option<&Bound<'py, PyAny>>,
+    name: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    match targets {
+        Some(targets) => targets.call_method1("get", (name,)),
+        None => Ok(py.None().into_bound(py)),
+    }
+}
+
+fn last_recorded_sql<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = result.py();
+    if !result
+        .getattr("status")?
+        .getattr("value")?
+        .eq(FAILED_STATUS)?
+    {
+        return Ok(py.None().into_bound(py));
+    }
+    let events: Vec<Bound<'py, PyAny>> = items(&result.getattr("lifecycle_events")?)?;
+    for event in events.iter().rev() {
+        if event
+            .getattr("kind")?
+            .getattr("value")?
+            .eq(SQL_EVENT_KIND)?
+        {
+            return event.getattr("content");
+        }
+    }
+    Ok(py.None().into_bound(py))
+}
+
+/// The run type and accounting of a microbatch model result.
+fn microbatch<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = result.py();
+    let run_type: Bound<'py, PyAny> = result.getattr("microbatch_run_type")?;
+    if run_type.is_none() {
+        return Ok(run_type);
+    }
+    let state: Bound<'py, PyDict> = dict(py, vec![("run_type", run_type)])?;
+    for (key, field) in [
+        ("strategy", "microbatch_strategy"),
+        ("reason", "microbatch_plan_reason"),
+    ] {
+        let value: Bound<'py, PyAny> = result.getattr(field)?;
+        if !value.is_none() {
+            state.set_item(key, value)?;
+        }
+    }
+    for (key, field) in [
+        ("batch_count", "batch_count"),
+        ("batch_size", "batch_size"),
+        ("recovery_batch_count", "microbatch_recovery_batch_count"),
+        ("known_gap_count", "microbatch_known_gap_count"),
+        (
+            "unaccounted_interval_count",
+            "microbatch_unaccounted_interval_count",
+        ),
+        (
+            "synthetic_completion_count",
+            "microbatch_synthetic_completion_count",
+        ),
+        (
+            "unknown_fingerprint_count",
+            "microbatch_unknown_fingerprint_count",
+        ),
+        ("contiguous_frontier", "microbatch_contiguous_frontier"),
+        (
+            "unaccounted_partition_policy",
+            "microbatch_unaccounted_partition_policy",
+        ),
+        ("replay_requirement_id", "microbatch_replay_requirement_id"),
+        (
+            "required_model_version_hash",
+            "microbatch_required_model_version_hash",
+        ),
+        (
+            "physical_generation_id",
+            "microbatch_physical_generation_id",
+        ),
+        ("concurrent_enabled", "microbatch_concurrent_enabled"),
+        ("batch_concurrency", "microbatch_batch_concurrency"),
+        ("global_concurrency", "microbatch_global_concurrency"),
+        (
+            "replay_requirement_state",
+            "microbatch_replay_requirement_state",
+        ),
+    ] {
+        state.set_item(key, result.getattr(field)?)?;
+    }
+    let intervals: Bound<'py, PyList> = PyList::empty(py);
+    for interval in items(&result.getattr("microbatch_accounting_intervals")?)? {
+        let fields: Vec<(&str, Bound<'py, PyAny>)> = [
+            "partition_start",
+            "partition_end",
+            "accounting_status",
+            "fingerprint_status",
+            "model_version_hash",
+            "completion_type",
+            "event_id",
+        ]
+        .into_iter()
+        .map(|field| Ok((field, interval.getattr(field)?)))
+        .collect::<PyResult<_>>()?;
+        pyo3::types::PyListMethods::append(&intervals, dict(py, fields)?)?;
+    }
+    state.set_item("intervals", intervals)?;
+    let limit: Bound<'py, PyAny> = result.getattr("microbatch_limit")?;
+    if !limit.is_none() {
+        state.set_item("limit", limit)?;
+        state.set_item("count", result.getattr("microbatch_limit_count")?)?;
+        state.set_item(
+            "action",
+            optional_enum_value(&result.getattr("microbatch_limit_action")?)?,
+        )?;
+        state.set_item("warning", result.getattr("microbatch_limit_warning")?)?;
+    }
+    Ok(state.into_any())
+}
+
+fn value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
+    result.getattr(field)?.getattr("value")
+}
+
+/// `<field>.value` when it is set.
+fn optional_value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
+    let value: Bound<'py, PyAny> = result.getattr(field)?;
+    if !value.is_truthy()? {
+        return Ok(value.py().None().into_bound(value.py()));
+    }
+    value.getattr("value")
+}
+
+fn model_asset<'py>(
+    projection: &Projection<'py>,
+    result: &Bound<'py, PyAny>,
+    targets: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = result.py();
+    let name: Bound<'py, PyAny> = result.getattr("model_name")?;
+    let planned: Bound<'py, PyAny> = target(py, targets, &name)?;
+    let empty_inputs: Bound<'py, PyAny> =
+        PyList::new(py, items(&result.getattr("empty_cursor_inputs")?)?)?.into_any();
+    without_none(
+        py,
+        vec![
+            ("kind", any(py, "model")?),
+            ("name", name),
+            ("status", value(result, "status")?),
+            (
+                "duration_ms",
+                projection.result_duration(result, &result.getattr("duration_ms")?)?,
+            ),
+            (
+                "target",
+                if planned.is_truthy()? {
+                    planned
+                } else {
+                    result.getattr("promoted_relation")?
+                },
+            ),
+            ("staging_relation", result.getattr("staging_relation")?),
+            ("failed_phase", optional_value(result, "failed_phase")?),
+            ("skip_mode", optional_value(result, "skip_mode")?),
+            ("skip_reason", result.getattr("skip_reason")?),
+            ("error_code", result.getattr("error_code")?),
+            ("error_help", result.getattr("error_help")?),
+            ("error_message", result.getattr("error_message")?),
+            ("failed_sql", result.getattr("failed_sql")?),
+            ("last_recorded_sql", last_recorded_sql(result)?),
+            ("warnings", result.getattr("warning_messages")?),
+            ("empty_cursor_inputs", or_none(empty_inputs)?),
+            (
+                "waiting_on_empty_inputs",
+                or_none(result.getattr("waiting_on_empty_inputs")?)?,
+            ),
+            (
+                "future_cursor_safety",
+                future_cursor_safety(&result.getattr("future_cursor_safety")?)?,
+            ),
+            (
+                "maximum_start_safety",
+                maximum_start_safety(&result.getattr("maximum_start_safety")?)?,
+            ),
+            ("microbatch", microbatch(result)?),
+        ],
+    )
+}
+
+/// Model result assets, with plan targets when a plan is given.
+pub(crate) fn model_assets<'py>(
+    projection: &Projection<'py>,
+    results: &[Bound<'py, PyAny>],
+    plan: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    let targets: Option<Bound<'py, PyAny>> = targets(plan, "model_locations")?;
+    let mut assets: Vec<Bound<'py, PyDict>> = Vec::new();
+    for result in results {
+        if projection.terminal_recorded(result)? {
+            assets.push(model_asset(projection, result, targets.as_ref())?);
+        }
+    }
+    Ok(assets)
+}
+
+/// Seed result assets, with plan targets and reasons when a plan is given.
+pub(crate) fn seed_assets<'py>(
+    projection: &Projection<'py>,
+    results: &[Bound<'py, PyAny>],
+    plan: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    let targets: Option<Bound<'py, PyAny>> = targets(plan, "seed_locations")?;
+    let reasons: Option<Bound<'py, PyAny>> = match plan {
+        Some(plan) => {
+            let reasons: Bound<'py, PyDict> = PyDict::new(plan.py());
+            for entry in items(&plan.getattr("seed_entries")?)? {
+                reasons.set_item(entry.getattr("name")?, value(&entry, "reason")?)?;
+            }
+            Some(reasons.into_any())
+        }
+        None => None,
+    };
+    let mut assets: Vec<Bound<'py, PyDict>> = Vec::new();
+    for result in results {
+        if !projection.terminal_recorded(result)? {
+            continue;
+        }
+        let py: Python<'py> = result.py();
+        let name: Bound<'py, PyAny> = result.getattr("seed_name")?;
+        assets.push(without_none(
+            py,
+            vec![
+                ("kind", any(py, "seed")?),
+                ("name", name.clone()),
+                ("status", value(result, "status")?),
+                (
+                    "duration_ms",
+                    projection.result_duration(result, &result.getattr("duration_ms")?)?,
+                ),
+                ("target", target(py, targets.as_ref(), &name)?),
+                ("reason", target(py, reasons.as_ref(), &name)?),
+                ("error_code", result.getattr("error_code")?),
+                ("error_help", result.getattr("error_help")?),
+                ("error_message", result.getattr("error_message")?),
+            ],
+        )?);
+    }
+    Ok(assets)
+}
+
+/// Function result assets, with plan targets when a plan is given.
+pub(crate) fn function_assets<'py>(
+    projection: &Projection<'py>,
+    results: &[Bound<'py, PyAny>],
+    plan: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    let targets: Option<Bound<'py, PyAny>> = targets(plan, "function_locations")?;
+    let mut assets: Vec<Bound<'py, PyDict>> = Vec::new();
+    for result in results {
+        if !projection.terminal_recorded(result)? {
+            continue;
+        }
+        let py: Python<'py> = result.py();
+        let name: Bound<'py, PyAny> = result.getattr("function_name")?;
+        assets.push(without_none(
+            py,
+            vec![
+                ("kind", result.getattr("function_kind")?),
+                ("name", name.clone()),
+                ("status", value(result, "status")?),
+                (
+                    "duration_ms",
+                    projection.result_duration(result, &result.getattr("duration_ms")?)?,
+                ),
+                ("target", target(py, targets.as_ref(), &name)?),
+                ("error_code", result.getattr("error_code")?),
+                ("error_help", result.getattr("error_help")?),
+                ("error_message", result.getattr("error_message")?),
+                ("warnings", result.getattr("warning_messages")?),
+            ],
+        )?);
+    }
+    Ok(assets)
+}
+
+/// Source and loader load result assets.
+pub(crate) fn load_assets<'py>(
+    projection: &Projection<'py>,
+    results: &[Bound<'py, PyAny>],
+) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    let mut assets: Vec<Bound<'py, PyDict>> = Vec::new();
+    for result in results {
+        if !projection.terminal_recorded(result)? {
+            continue;
+        }
+        let py: Python<'py> = result.py();
+        assets.push(without_none(
+            py,
+            vec![
+                ("kind", value(result, "resource_kind")?),
+                ("name", result.getattr("source_name")?),
+                ("status", value(result, "status")?),
+                (
+                    "duration_ms",
+                    projection.result_duration(result, &result.getattr("duration_ms")?)?,
+                ),
+                ("target", result.getattr("target")?),
+                ("staging_relation", result.getattr("staging_relation")?),
+                ("loader", result.getattr("loader_name")?),
+                ("rows_loaded", result.getattr("rows_loaded")?),
+                ("skip_mode", optional_value(result, "skip_mode")?),
+                ("skip_reason", result.getattr("skip_reason")?),
+                ("error_message", result.getattr("error_message")?),
+                ("warnings", or_none(result.getattr("warning_messages")?)?),
+            ],
+        )?);
+    }
+    Ok(assets)
+}
+
+/// Python node result assets.
+pub(crate) fn python_node_assets<'py>(
+    projection: &Projection<'py>,
+    results: &[Bound<'py, PyAny>],
+) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    let mut assets: Vec<Bound<'py, PyDict>> = Vec::new();
+    for result in results {
+        if !projection.terminal_recorded(result)? {
+            continue;
+        }
+        let py: Python<'py> = result.py();
+        assets.push(without_none(
+            py,
+            vec![
+                ("kind", value(result, "kind")?),
+                ("name", result.getattr("node_name")?),
+                ("status", value(result, "status")?),
+                ("metadata", result.getattr("metadata")?),
+                ("materialized", result.getattr("materialized")?),
+                ("skip_mode", optional_value(result, "skip_mode")?),
+                ("skip_reason", result.getattr("skip_reason")?),
+                ("error_message", result.getattr("error_message")?),
+                ("warnings", or_none(result.getattr("warning_messages")?)?),
+            ],
+        )?);
+    }
+    Ok(assets)
+}
+
+/// One clone item asset under its resource type.
+pub(crate) fn clone_asset<'py>(
+    projection: &Projection<'py>,
+    item: &Bound<'py, PyAny>,
+    resource_type: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = item.py();
+    let name: String = item.getattr("name")?.extract()?;
+    let seconds: Bound<'py, PyAny> = item.getattr("duration_seconds")?;
+    let fallback: Option<f64> = if seconds.is_none() {
+        None
+    } else {
+        Some(seconds.extract::<f64>()? * 1000.0)
+    };
+    let duration: Option<f64> =
+        projection.resource_duration((&name, &format!("{resource_type}:{name}")), fallback)?;
+    without_none(
+        py,
+        vec![
+            ("kind", any(py, resource_type)?),
+            ("name", any(py, name)?),
+            ("status", value(item, "status")?),
+            ("action", value(item, "action")?),
+            (
+                "duration_ms",
+                match duration {
+                    Some(duration) => rounded(py, duration)?,
+                    None => py.None().into_bound(py),
+                },
+            ),
+            ("origin_relation", item.getattr("origin_relation")?),
+            ("target", item.getattr("destination_relation")?),
+            ("message", item.getattr("message")?),
+        ],
+    )
+}

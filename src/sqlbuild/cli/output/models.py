@@ -62,16 +62,7 @@ from sqlbuild.runtime.observability.constants import (
     RESOURCE_TERMINALS,
 )
 from sqlbuild.runtime.observability.exceptions import ObservabilityValidationError
-from sqlbuild.runtime.observability.models import LifecycleEvent
 from sqlbuild.runtime.observability.types import JSONValue
-
-
-@dataclass(frozen=True)
-class TerminalEventClaim:
-    """One claimed terminal with its immutable canonical publication sequence."""
-
-    terminal: LifecycleEvent
-    event_sequence: int
 
 
 @dataclass(frozen=True)
