@@ -1290,6 +1290,14 @@ def run_skills_command(
     force: bool = False,
 ) -> int: ...
 def run_playground_command(request: PlaygroundCommandRequest) -> int: ...
+def run_debug_command(
+    *,
+    project_dir: Path | None = None,
+    no_color: bool = False,
+    no_connection: bool = False,
+    selected_target: str | None = None,
+    json_output: bool = False,
+) -> int: ...
 
 class TerminalEventClaim:
     @property

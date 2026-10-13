@@ -19,12 +19,6 @@ class CompileLineageMode(StrEnum):
     NONE = "none"
 
 
-class DebugCheckStatus(StrEnum):
-    OK = "OK"
-    ERROR = "ERROR"
-    SKIP = "SKIP"
-
-
 class CliCommand(StrEnum):
     COMPILE = "compile"
     DAG = "dag"

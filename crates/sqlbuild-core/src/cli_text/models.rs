@@ -103,20 +103,26 @@ impl CliStyle {
     /// `CliStyle.status`: the status word styled by what it reports.
     #[must_use]
     pub fn status(self, status: &str) -> String {
+        self.status_text(status, status)
+    }
+
+    /// `CliStyle.status(status=..., text=...)`: `text` styled by the status word it reports.
+    #[must_use]
+    pub fn status_text(self, status: &str, text: &str) -> String {
         let normalized: String = status.to_uppercase();
         if SUCCESS_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.success(status);
+            return self.success(text);
         }
         if WARNING_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.warning(status);
+            return self.warning(text);
         }
         if ERROR_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.error(status);
+            return self.error(text);
         }
         if SKIPPED_STATUS_LABELS.contains(&normalized.as_str()) {
-            return self.muted(status);
+            return self.muted(text);
         }
-        status.to_owned()
+        text.to_owned()
     }
 }
 

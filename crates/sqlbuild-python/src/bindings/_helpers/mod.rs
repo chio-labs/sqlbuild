@@ -14,6 +14,7 @@ pub(crate) mod compiled_project;
 pub(crate) mod contracts;
 pub(crate) mod cost_report;
 pub(crate) mod dag_artifact;
+pub(crate) mod debug_command;
 pub(crate) mod discovery;
 pub(crate) mod fingerprints;
 pub(crate) mod frontier;

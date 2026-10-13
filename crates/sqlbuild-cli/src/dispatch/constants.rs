@@ -497,7 +497,7 @@ const DEBUG_ARGUMENTS: [Field; 5] = [
 ];
 pub(crate) const DEBUG_ROUTE: Route = routed(
     "run_debug",
-    ("sqlbuild.cli.commands.main.inspection._debug", "run_debug"),
+    ("sqlbuild._native", "run_debug_command"),
     &DEBUG_ARGUMENTS,
     CallShape {
         slot_positional: 0,
