@@ -725,6 +725,8 @@ def _run_timed_sqb(
         "--no-color",
         *sqb_args,
     ]
+    # Flush the previous run's artifact writes so their disk write-back is not timed here.
+    os.sync()
     started: float = time.monotonic()
     try:
         with (
