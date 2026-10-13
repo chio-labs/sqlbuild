@@ -26,8 +26,8 @@ from scripts.compiler_differential.constants import (
     ANALYSIS_UPSTREAM_CHAIN_HOPS,
     COMPILED_PROJECT_CAPTURE_TYPE,
 )
-from sqlbuild.compiler.compile.models import CompiledProject
 from sqlbuild._native import STAGE_CAPTURE_OMITTED_ATTRIBUTES
+from sqlbuild.compiler.compile.models import CompiledProject
 
 _SET_OPERATION: re.Pattern[str] = re.compile(r"\b(?:UNION|INTERSECT|EXCEPT)\b", re.IGNORECASE)
 _LEADING_CTE: re.Pattern[str] = re.compile(r"^\s*WITH\s+\w+\s+AS\s*\(", re.IGNORECASE)

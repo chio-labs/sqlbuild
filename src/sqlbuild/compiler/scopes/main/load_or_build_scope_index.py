@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 
-from sqlbuild._native import build_compile_inputs, discover_project_inputs
+from sqlbuild._native import build_compile_inputs, compile_frontier, discover_project_inputs
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.discovery.main.resolve_adapter import resolve_adapter
 from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
@@ -14,7 +14,6 @@ from sqlbuild.compiler.compile.main._scope_index_with_compile_usages import (
 from sqlbuild.compiler.compile.models import CompileAdapterContext
 from sqlbuild.compiler.compile.types import CompileInputsView
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
-from sqlbuild._native import compile_frontier
 from sqlbuild.compiler.frontier.types import CompilerStage
 from sqlbuild.compiler.scopes._helpers.builder import build_tolerant_scope_index
 from sqlbuild.compiler.scopes._helpers.cache import (

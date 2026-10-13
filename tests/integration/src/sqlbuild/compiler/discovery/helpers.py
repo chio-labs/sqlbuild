@@ -28,6 +28,7 @@ from sqlbuild._native import (
     discover_project_inputs,
     discover_sql_function_files,
     discover_sql_hook_files,
+    render_stage_capture,
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
     build_tolerant_scope_discovery,
@@ -52,7 +53,6 @@ from sqlbuild.compiler.discovery.models import (
     SqlHookEntry,
     TolerantScopeDiscovery,
 )
-from sqlbuild._native import render_stage_capture
 from sqlbuild.sql_values.models import AuthoredSqlSet, AuthoredSqlValueCall
 from tests.integration.src.sqlbuild.compiler.discovery._test_types import (
     GeneratedDeclarationFileTestCase,
