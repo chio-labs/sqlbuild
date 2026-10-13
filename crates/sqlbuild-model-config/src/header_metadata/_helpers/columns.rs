@@ -1,6 +1,8 @@
-//! MODEL column mappings, as `parse_schema_columns` reads them with `migrate_from` allowed.
+//! Authored column mappings of a MODEL header or SCHEMA declaration, as `parse_schema_columns` reads them.
 
 use std::collections::HashSet;
+
+const MISSING_COLUMNS: &str = "must declare at least one column";
 
 use crate::errors::ConfigError;
 use crate::header_metadata::_helpers::audits::audit_list;
@@ -8,25 +10,31 @@ use crate::header_metadata::_helpers::text::{
     Site, entry, non_blank_text, optional_bool, optional_text,
 };
 use crate::header_metadata::constants::{
-    MODEL_COLUMN_KEYS, MODEL_LABEL, NOT_NULL_AUDIT_NAME, NULLABLE_NOT_NULL_CODE,
+    MIGRATE_FROM_KEY, MODEL_COLUMN_KEYS, NOT_NULL_AUDIT_NAME, NULLABLE_NOT_NULL_CODE,
 };
-use crate::header_metadata::models::ParsedColumn;
+use crate::header_metadata::models::{ColumnRequest, ParsedColumn};
 use crate::types::{AuthoredNode, NodeKind};
 
-/// Parse an authored columns mapping; Python's `None` declares no columns.
+/// Parse an authored columns mapping; Python's `None` declares no columns unless they are required.
 pub(crate) fn column_mapping<N: AuthoredNode>(
     node: &N,
-    path: &str,
+    request: ColumnRequest<'_>,
 ) -> Result<Vec<ParsedColumn<N>>, ConfigError> {
     let site = Site {
-        path,
-        label: MODEL_LABEL,
+        path: request.path,
+        label: request.label,
         column: None,
     };
     match node.kind() {
+        NodeKind::Null if request.require_columns => {
+            return Err(site.error(MISSING_COLUMNS));
+        }
         NodeKind::Null => return Ok(Vec::new()),
         NodeKind::Map => {}
         _ => return Err(site.error("'columns' must be a mapping")),
+    }
+    if request.require_columns && node.entries().is_empty() {
+        return Err(site.error(MISSING_COLUMNS));
     }
     let mut seen: HashSet<String> = HashSet::new();
     let mut columns: Vec<ParsedColumn<N>> = Vec::new();
@@ -39,7 +47,7 @@ pub(crate) fn column_mapping<N: AuthoredNode>(
                 "has duplicate column '{text}' (column names are case-insensitive)"
             )));
         }
-        columns.push(column(&name, &text, &metadata, path)?);
+        columns.push(column(&name, &text, &metadata, request)?);
     }
     Ok(columns)
 }
@@ -48,9 +56,10 @@ fn column<N: AuthoredNode>(
     name: &N,
     text: &str,
     metadata: &N,
-    path: &str,
+    request: ColumnRequest<'_>,
 ) -> Result<ParsedColumn<N>, ConfigError> {
-    let label = format!("{MODEL_LABEL} column '{text}'");
+    let path: &str = request.path;
+    let label = format!("{} column '{text}'", request.label);
     let site = Site {
         path,
         label: &label,
@@ -60,7 +69,7 @@ fn column<N: AuthoredNode>(
         return Err(site.error("metadata must be a mapping"));
     }
     let entries = metadata.entries();
-    let unknown = unknown_keys(&entries);
+    let unknown = unknown_keys(&entries, request.allow_migrate_from);
     if !unknown.is_empty() {
         return Err(site.error(&format!(
             "has unknown metadata keys: {}",
@@ -92,15 +101,17 @@ fn column<N: AuthoredNode>(
         nullable,
         description: optional_text(entry(&entries, "description"), site, "description")?,
         audits,
-        migrate_from: optional_text(entry(&entries, "migrate_from"), site, "migrate_from")?,
+        migrate_from: optional_text(entry(&entries, MIGRATE_FROM_KEY), site, MIGRATE_FROM_KEY)?,
     })
 }
 
-/// Return the sorted metadata keys outside `MODEL_COLUMN_KEYS`; header keys are always strings.
-fn unknown_keys<N: AuthoredNode>(entries: &[(N, N)]) -> Vec<String> {
+/// Return the sorted metadata keys a column may not declare; header keys are always strings.
+fn unknown_keys<N: AuthoredNode>(entries: &[(N, N)], allow_migrate_from: bool) -> Vec<String> {
     let mut unknown: Vec<String> = entries
         .iter()
-        .filter(|(key, _)| !is_model_column_key(key))
+        .filter(|(key, _)| {
+            !is_model_column_key(key) || (!allow_migrate_from && key.is_text(MIGRATE_FROM_KEY))
+        })
         .map(|(key, _)| key.python_str())
         .collect();
     unknown.sort_unstable();

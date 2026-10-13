@@ -8,6 +8,7 @@ from sqlbuild._native import (
     discover_enum_files,
     discover_macro_files,
     discover_model_schema_files,
+    discover_python_function_files,
     discover_sql_function_files,
     discover_sql_hook_files,
 )
@@ -15,6 +16,7 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredConstantFile,
     DiscoveredEnumFile,
     DiscoveredMacroFile,
+    DiscoveredPythonFunctionFile,
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestCase,
     SqlTestParameterDeclaration,
@@ -127,6 +129,17 @@ def discover_declaration_file(*, project_dir: Path, relative_path: str, contents
         project_dir=project_dir
     )
     return discovered[0]
+
+
+def discover_python_function_file(
+    *, project_dir: Path, file_name: str, contents: str
+) -> DiscoveredPythonFunctionFile:
+    """Write one ``functions/python`` file into a project and return its discovered record."""
+
+    file_path: Path = project_dir / "functions" / "python" / file_name
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    _ = file_path.write_text(contents, encoding="utf-8")
+    return discover_python_function_files(project_dir=project_dir)[0]
 
 
 _STATEMENT_HEADER_PARSERS: dict[str, Callable[..., object]] = {

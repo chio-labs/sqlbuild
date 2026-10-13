@@ -4,7 +4,6 @@ use pyo3::{FromPyObject, pyclass};
 use sqlbuild_analysis::semantic_validation::models as validation;
 use sqlbuild_analysis::semantic_validation::types::{Expansion, Relations};
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 #[derive(FromPyObject, Debug)]
 #[pyo3(from_item_all)]
@@ -89,13 +88,28 @@ impl From<PositionInput> for validation::PositionInput {
     }
 }
 
-/// The directory listings one Python discovery pass shares across its native calls.
+/// The directory listings one discovery pass shares across its native calls.
 #[pyclass(module = "sqlbuild._native", frozen)]
 #[derive(Debug)]
 pub(crate) struct NativeProjectTree {
     pub(crate) inner: sqlbuild_discovery::tree::models::ProjectTree,
-    /// Directories whose listings were already handed to the Python snapshot.
-    pub(crate) exported: Mutex<std::collections::HashSet<String>>,
+}
+
+/// One discovery pass of a project: the memo its native calls share, active inside its scope.
+#[pyclass(module = "sqlbuild._native", frozen)]
+#[derive(Debug)]
+pub(crate) struct NativeDirectorySnapshot {
+    pub(crate) project_dir: pyo3::Py<pyo3::PyAny>,
+    pub(crate) memo: pyo3::Py<pyo3::types::PyDict>,
+}
+
+/// The context manager that makes one snapshot active for a project until it exits.
+#[pyclass(module = "sqlbuild._native")]
+#[derive(Debug)]
+pub(crate) struct NativeDirectorySnapshotScope {
+    pub(crate) project_dir: pyo3::Py<pyo3::PyAny>,
+    /// The context-variable token of the snapshot this scope activated, if it activated one.
+    pub(crate) token: Option<pyo3::Py<pyo3::PyAny>>,
 }
 
 /// One native YAML file discovery request; `kind` is `source` or `schema`.

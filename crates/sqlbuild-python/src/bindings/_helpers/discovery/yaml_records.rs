@@ -24,7 +24,7 @@ use crate::bindings::_helpers::discovery::raised::{
     discovery_error, failure_error, read_error, stage_error,
 };
 use crate::bindings::_helpers::discovery::snapshot::{
-    escaped, in_snapshot, project_root, project_tree, seed_listings,
+    escaped, in_snapshot, project_root, project_tree,
 };
 use crate::bindings::_helpers::discovery::yaml_entries::{
     YamlClasses, parse_schema_document, parse_sources_document,
@@ -169,7 +169,6 @@ fn load_files<'py>(
         let mut outcomes = outcomes
             .map_err(|failure| stage_error(&tree.get().inner, project_dir, failure))?
             .into_iter();
-        seed_listings(project_dir, &tree)?;
         for path in batch {
             let relative: Bound<'py, PyAny> =
                 path_object(py, &tree.get().inner, path.clone())?.into_bound(py);

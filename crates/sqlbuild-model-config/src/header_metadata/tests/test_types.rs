@@ -23,3 +23,11 @@ pub(super) struct FactoryReferencesTestCase {
     pub(super) raw: Value,
     pub(super) expected_references: Result<&'static [&'static str], &'static str>,
 }
+
+/// One SCHEMA declaration `columns` value and its column names or first error.
+pub(super) struct SchemaColumnsTestCase {
+    pub(super) description: &'static str,
+    pub(super) columns: Value,
+    /// The comma-separated column names, or the first error message.
+    pub(super) expected_summary: &'static str,
+}

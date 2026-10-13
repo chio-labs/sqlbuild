@@ -28,7 +28,6 @@ from sqlbuild.compiler.discovery._helpers.yml.project import (
     load_local_config,
     load_project_config,
 )
-from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 
 # Test-only reference grammar of the MODEL header the native matcher replaced.
@@ -60,7 +59,6 @@ _FILE_NAMES: tuple[str, ...] = (
     ".draft.sql",
 )
 _LINK_NAMES: tuple[str, ...] = ("shared", "enums_link", "_sqlbuild_link")
-_PATTERNS: tuple[str, ...] = ("*", "*.sql", "*.py", "*.yml", "schema.yml", "_sqlbuild", "enums")
 _ISOLATED_DISCOVERERS: dict[str, Callable[..., tuple[object, ...]]] = {
     "model_files": partial(
         discover_model_files,
@@ -132,27 +130,33 @@ def write_random_tree(*, root: Path, seed: int, entry_count: int) -> None:
         rng.choice(creators)(rng, rng.choice(directories), directories)
 
 
-def snapshot_glob_mismatches(*, root: Path) -> tuple[str, ...]:
-    """Return every root and pattern where the snapshot disagrees with ``Path.rglob``."""
+def _is_module(path: Path) -> bool:
+    return path.stem != "__init__"
 
-    tree: DirectorySnapshot = DirectorySnapshot(project_dir=root)
-    directories: list[Path] = [root, *sorted(filter(Path.is_dir, root.rglob("*")))]
+
+def snapshot_glob_mismatches(*, root: Path) -> tuple[str, ...]:
+    """Return every root where the native Python module listing disagrees with ``Path.rglob``."""
+
+    directories: list[Path] = sorted(filter(Path.is_dir, root.rglob("*")))
     labels: list[str] = []
     matches: list[bool] = []
     for directory in directories:
-        for pattern in _PATTERNS:
-            labels.append(f"{directory}:{pattern}")
-            matches.append(
-                sorted(tree.rglob(root=directory, pattern=pattern))
-                == sorted(directory.rglob(pattern))
-            )
-        labels.append(f"{directory}:<directories>")
+        relative_root: str = directory.relative_to(root).as_posix()
+        expected: list[Path] = list(filter(_is_module, sorted(directory.rglob("*.py"))))
+        labels.append(f"{directory}:*.py")
         matches.append(
-            sorted(tree.directories(root=directory))
-            == sorted(filter(Path.is_dir, directory.rglob("*")))
+            list(
+                _native.discover_python_module_files(
+                    project_dir=root, root=relative_root, public_only=False
+                )
+            )
+            == expected
         )
     labels.append("absent root")
-    matches.append(tree.rglob(root=root / "absent", pattern="*") == ())
+    matches.append(
+        _native.discover_python_module_files(project_dir=root, root="absent", public_only=False)
+        == ()
+    )
     return tuple(compress(labels, [not matched for matched in matches]))
 
 

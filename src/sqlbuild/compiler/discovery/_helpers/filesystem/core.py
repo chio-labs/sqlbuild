@@ -11,18 +11,13 @@ from dataclasses import dataclass, field
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, get_type_hints
+from typing import TYPE_CHECKING, Any, get_type_hints
 
+import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import COMPILE_INPUT_READS
-from sqlbuild.compiler.discovery._helpers.filesystem.named_declarations import (
-    named_declaration_files,
-    named_declaration_roots,
-)
 from sqlbuild.compiler.discovery._helpers.filesystem.scoped_paths import (
     project_relative_path,
 )
-from sqlbuild.compiler.discovery._helpers.python.functions import parse_python_function
-from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
 from sqlbuild.compiler.discovery.constants import (
     PYTHON_INIT_MODULE_STEM,
     PYTHON_NODE_ROOT,
@@ -44,15 +39,12 @@ from sqlbuild.compiler.discovery.models import (
     DiscoveredMaterializationFile,
     DiscoveredProvider,
     DiscoveredProviderUsage,
-    DiscoveredPythonFunctionFile,
     DiscoveredPythonNodeFunctions,
     DiscoveredTaskFunction,
-    NamedDeclarationRoot,
 )
 from sqlbuild.compiler.resource_names.main._validate_resource_identity import (
     validate_resource_identity,
 )
-from sqlbuild.compiler.scopes.types import DeclarationKind
 from sqlbuild.provider.exceptions import ProviderInputError
 from sqlbuild.python_nodes.main.read_asset_definition import read_asset_definition
 from sqlbuild.python_nodes.main.read_audit_factory_definition import (
@@ -112,38 +104,6 @@ class _PythonNodeDiscoveryBucket:
         self.audit_factories.append(item)
 
 
-def discover_python_function_files(
-    *, project_dir: Path
-) -> tuple[DiscoveredPythonFunctionFile, ...]:
-    """Discover Python function files under functions/python/."""
-
-    function_root: Path = project_dir / "functions" / "python"
-    if not function_root.is_dir():
-        return ()
-
-    discovered_function_files: list[DiscoveredPythonFunctionFile] = []
-    file_path: Path
-    for file_path in _sorted_glob(project_dir=project_dir, root=function_root, pattern="*.py"):
-        contents: str = file_path.read_text(encoding="utf-8")
-        header_values: dict[str, object]
-        entry_point: str
-        body_python: str
-        header_values, entry_point, body_python = parse_python_function(
-            contents=contents, file_path=file_path
-        )
-        discovered_function_files.append(
-            DiscoveredPythonFunctionFile(
-                file_path=file_path,
-                relative_path=project_relative_path(path=file_path, project_dir=project_dir),
-                contents=contents,
-                header_values=header_values,
-                entry_point=entry_point,
-                body_python=body_python,
-            )
-        )
-    return tuple(discovered_function_files)
-
-
 def discover_materialization_files(
     *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
 ) -> tuple[DiscoveredMaterializationFile, ...]:
@@ -156,9 +116,9 @@ def discover_materialization_files(
     provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
     discovered_files: list[DiscoveredMaterializationFile] = []
     file_path: Path
-    for file_path in sorted(materializations_root.rglob("*.py")):
-        if file_path.stem == PYTHON_INIT_MODULE_STEM:
-            continue
+    for file_path in _native.discover_python_module_files(
+        project_dir=project_dir, root="materializations", public_only=False
+    ):
         materialize_fn: Callable[..., object] | None = _load_materialize_function(
             file_path=file_path,
             project_dir=project_dir,
@@ -204,17 +164,9 @@ def discover_hook_functions(
     discovered_hooks: list[DiscoveredHookFunction] = []
     seen_names: dict[str, Path] = {}
     provider_by_name: dict[str, DiscoveredProvider] = _provider_by_name(providers)
-    root: NamedDeclarationRoot
-    file_path: Path
-    for root, file_path in named_declaration_files(
-        project_dir=project_dir,
-        roots=named_declaration_roots(
-            project_dir=project_dir, kinds=frozenset({DeclarationKind.PYTHON_HOOK})
-        ),
-        pattern="*.py",
-    ):
-        if file_path.stem == PYTHON_INIT_MODULE_STEM or file_path.name.startswith("_"):
-            continue
+    hook_file: dict[str, Any]
+    for hook_file in _native.discover_python_hook_files(project_dir=project_dir):
+        file_path: Path = hook_file["file_path"]
         module: ModuleType = _load_python_node_module(
             file_path=file_path,
             project_dir=project_dir,
@@ -234,21 +186,16 @@ def discover_hook_functions(
                 )
             seen_names[hook_definition.name] = file_path
             discovered_hooks.append(
-                root.place(
-                    DiscoveredHookFunction(
-                        file_path=file_path,
-                        relative_path=project_relative_path(
-                            path=file_path, project_dir=project_dir
-                        ),
-                        name=hook_definition.name,
+                DiscoveredHookFunction(
+                    **hook_file,
+                    name=hook_definition.name,
+                    function=value,
+                    description=hook_definition.description,
+                    reads=hook_definition.reads,
+                    provider_usages=_provider_usages(
                         function=value,
-                        description=hook_definition.description,
-                        reads=hook_definition.reads,
-                        provider_usages=_provider_usages(
-                            function=value,
-                            provider_by_name=provider_by_name,
-                        ),
-                    )
+                        provider_by_name=provider_by_name,
+                    ),
                 )
             )
     return tuple(discovered_hooks)
@@ -281,7 +228,9 @@ def discover_provider_classes(*, project_dir: Path) -> tuple[DiscoveredProvider,
     discovered_providers: list[DiscoveredProvider] = []
     seen_names: dict[str, Path] = {}
     file_path: Path
-    for file_path in _public_python_files(root=providers_root):
+    for file_path in _native.discover_python_module_files(
+        project_dir=project_dir, root="providers", public_only=True
+    ):
         module: ModuleType = _load_provider_module(file_path=file_path, project_dir=project_dir)
         for _, value in inspect.getmembers(module, inspect.isclass):
             if value.__module__ != module.__name__:
@@ -363,7 +312,9 @@ def discover_event_exporter_declarations(
         return ()
     discovered: list[DiscoveredEventExporterDeclaration] = []
     seen_names: dict[str, Path] = {}
-    for file_path in _public_python_files(root=exporters_root):
+    for file_path in _native.discover_python_module_files(
+        project_dir=project_dir, root="sinks", public_only=True
+    ):
         module: ModuleType = _load_sink_module(file_path=file_path, project_dir=project_dir)
         seen_function_ids: set[int] = set()
         for _, value in inspect.getmembers(module, inspect.isfunction):
@@ -522,18 +473,6 @@ def _bind_event_exporter_provider_usages(
     return _provider_usages(function=function, provider_by_name=provider_by_name)
 
 
-def _public_python_files(*, root: Path) -> tuple[Path, ...]:
-    public_files: list[Path] = []
-    for file_path in sorted(root.rglob("*.py")):
-        relative_parts: tuple[str, ...] = file_path.relative_to(root).parts
-        if file_path.stem == PYTHON_INIT_MODULE_STEM:
-            continue
-        if any(part.startswith("_") for part in relative_parts):
-            continue
-        public_files.append(file_path)
-    return tuple(public_files)
-
-
 def _provider_name(*, provider_class: type[Provider], file_path: Path, project_dir: Path) -> str:
     relative_path: Path = project_relative_path(path=file_path, project_dir=project_dir)
     explicit_name: str | None = provider_class.provider_name
@@ -645,8 +584,9 @@ def _discover_python_node_functions(
     try:
         modules: tuple[tuple[Path, ModuleType], ...] = tuple(
             (file_path, _import_python_root_module(file_path=file_path, project_dir=project_dir))
-            for file_path in sorted(node_root.rglob("*.py"))
-            if file_path.stem != PYTHON_INIT_MODULE_STEM
+            for file_path in _native.discover_python_module_files(
+                project_dir=project_dir, root=PYTHON_NODE_ROOT, public_only=False
+            )
         )
         direct_functions: dict[int, Callable[..., object]] = {}
         file_path: Path
@@ -1213,19 +1153,3 @@ def _load_materialization_module(*, file_path: Path, project_dir: Path) -> Modul
     if hasattr(module, removed_hook_name):
         raise PythonNodeDiscoveryError(removed_hook_message)
     return module
-
-
-def _sorted_glob(*, project_dir: Path, root: Path, pattern: str) -> list[Path]:
-    """Return ``sorted(root.rglob(pattern))`` from the active discovery snapshot."""
-
-    return sorted(
-        DirectorySnapshot.current(project_dir=project_dir).rglob(root=root, pattern=pattern)
-    )
-
-
-def _is_relative_to(*, path: Path, parent: Path) -> bool:
-    try:
-        path.relative_to(parent)
-    except ValueError:
-        return False
-    return True

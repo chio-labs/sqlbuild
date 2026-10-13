@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import discover_project_inputs
-from sqlbuild.compiler.discovery.classes.directory_snapshot import DirectorySnapshot
+from sqlbuild._native import directory_snapshot_scope, discover_project_inputs
 from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_helpers import (
     isolated_discovery_mismatches,
     model_paths,
@@ -33,7 +32,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     ],
     ids=lambda case: case.description,
 )
-def test_given_randomized_tree_when_globbing_snapshot_then_matches_pathlib_rglob(
+def test_given_randomized_tree_when_listing_python_modules_then_matches_pathlib_rglob(
     tmp_path: Path, test_case: SnapshotGlobTestCase
 ) -> None:
     write_random_tree(root=tmp_path, seed=test_case.seed, entry_count=test_case.entry_count)
@@ -111,10 +110,10 @@ def test_given_files_change_between_discovery_passes_when_discovering_then_sees_
 def test_given_nested_scope_for_same_project_when_entering_then_reuses_active_snapshot(
     tmp_path: Path, test_case: SnapshotScopeReuseTestCase
 ) -> None:
-    with DirectorySnapshot.scope(project_dir=tmp_path) as outer:
-        with DirectorySnapshot.scope(project_dir=tmp_path) as inner:
+    with directory_snapshot_scope(project_dir=tmp_path) as outer:
+        with directory_snapshot_scope(project_dir=tmp_path) as inner:
             nested_reuse: bool = inner is outer
-    with DirectorySnapshot.scope(project_dir=tmp_path) as later:
+    with directory_snapshot_scope(project_dir=tmp_path) as later:
         later_reuse: bool = later is outer
 
     assert nested_reuse is test_case.expected_nested_reuse

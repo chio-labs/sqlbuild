@@ -8,11 +8,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{IntoPyObjectExt, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_discovery::model_files::main::parse_model_text::parse_model_text;
 use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOptions};
-use sqlbuild_discovery::tree::main::listings::read_listings;
-use sqlbuild_discovery::tree::models::{ProjectTree, TreeEntry};
-use std::collections::HashSet;
+use sqlbuild_discovery::tree::models::ProjectTree;
 use std::path::Path;
-use std::sync::Mutex;
 
 use crate::bindings::_helpers::discovery::declaration_records::source_locations;
 use crate::bindings::_helpers::discovery::header_declarations::{
@@ -29,7 +26,6 @@ pub(crate) type PyObject = Py<PyAny>;
 const STEM_ATTRIBUTE: &str = "stem";
 const ENUMS_KEY: &str = "enums";
 const CONSTANTS_KEY: &str = "constants";
-pub(crate) type Listing = (PyObject, Vec<(PyObject, bool, bool)>);
 
 /// A relative path as Python names it: the real, surrogate-escaped name where it is not UTF-8.
 pub(crate) fn path_object(
@@ -43,46 +39,13 @@ pub(crate) fn path_object(
     }
 }
 
-fn entry_rows(py: Python<'_>, entries: &[TreeEntry]) -> PyResult<Vec<(PyObject, bool, bool)>> {
-    entries
-        .iter()
-        .map(|entry| {
-            let name: PyObject = match &entry.raw_name {
-                Some(raw) => raw.into_py_any(py)?,
-                None => entry.name.as_str().into_py_any(py)?,
-            };
-            Ok((name, entry.is_dir, entry.is_walkable_dir))
-        })
-        .collect()
-}
-
 #[pymethods]
 impl NativeProjectTree {
     #[new]
     fn new(project_dir: &str) -> Self {
         Self {
             inner: ProjectTree::new(Path::new(project_dir)),
-            exported: Mutex::new(HashSet::new()),
         }
-    }
-}
-
-impl NativeProjectTree {
-    /// The listings read since the last export, each exported once.
-    pub(crate) fn exported_listings(&self, py: Python<'_>) -> PyResult<Vec<Listing>> {
-        let Ok(mut exported) = self.exported.lock() else {
-            return Ok(Vec::new());
-        };
-        read_listings(&self.inner)
-            .into_iter()
-            .filter(|(directory, _)| exported.insert(directory.clone()))
-            .map(|(directory, entries)| {
-                Ok((
-                    path_object(py, &self.inner, directory)?,
-                    entry_rows(py, &entries)?,
-                ))
-            })
-            .collect()
     }
 }
 

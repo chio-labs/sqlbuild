@@ -26,12 +26,10 @@ from sqlbuild._native import (
     discover_enum_files,
     discover_model_schema_files,
     discover_project_inputs,
+    discover_scope_snapshot,
     discover_sql_function_files,
     discover_sql_hook_files,
     render_stage_capture,
-)
-from sqlbuild.compiler.discovery._helpers.filesystem.aggregation import (
-    build_tolerant_scope_discovery,
 )
 from sqlbuild.compiler.discovery.classes.selected_contract_input_discoverer import (
     SelectedContractInputDiscoverer,
@@ -519,7 +517,7 @@ def discovery_failure_with_help(*, project_dir: Path) -> tuple[str, str, bool]:
 def tolerant_scope_fault_outcome(*, project_dir: Path) -> tuple[object, ...]:
     """Return tolerant scope discovery's model and source paths and its per-file faults."""
 
-    discovery: TolerantScopeDiscovery = build_tolerant_scope_discovery(project_dir=project_dir)
+    discovery: TolerantScopeDiscovery = discover_scope_snapshot(project_dir=project_dir)
     return (
         *_inputs_paths(discovery.discovered_inputs),
         tuple(
@@ -596,7 +594,7 @@ def tolerant_declaration_outcome(
 ) -> tuple[object, tuple[DiscoveryFileFault, ...], tuple[DiscoveryFileFault, ...]]:
     """Return tolerant scope discovery's declaration collections and faults."""
 
-    discovery: TolerantScopeDiscovery = build_tolerant_scope_discovery(project_dir=project_dir)
+    discovery: TolerantScopeDiscovery = discover_scope_snapshot(project_dir=project_dir)
     return (
         render_stage_capture(discovery.discovered_inputs),
         discovery.resource_faults,

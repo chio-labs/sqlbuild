@@ -66,7 +66,6 @@ class SharedSnapshotTestCase:
 
     description: str
     created_file: str
-    pattern: str
     expected_matches: tuple[str, ...] = ()
 
 

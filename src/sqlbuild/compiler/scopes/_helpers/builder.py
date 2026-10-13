@@ -8,7 +8,6 @@ import sqlbuild._native as _native
 from sqlbuild.compiler.compile.constants import SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM
 from sqlbuild.compiler.compile.main._static_macro_inventory import inventory_project_macros
 from sqlbuild.compiler.compile.models import StaticMacroInventory
-from sqlbuild.compiler.discovery.main._scope_snapshot import discover_scope_snapshot
 from sqlbuild.compiler.discovery.models import TolerantScopeDiscovery
 from sqlbuild.compiler.scopes.main._open_native_scope_index import open_native_scope_index
 from sqlbuild.compiler.scopes.models import ScopeIndex
@@ -20,7 +19,7 @@ def build_tolerant_scope_index(
 ) -> ScopeIndex:
     """Build a partial static index from published tolerant compiler facts."""
 
-    snapshot: TolerantScopeDiscovery = discover_scope_snapshot(project_dir=project_dir)
+    snapshot: TolerantScopeDiscovery = _native.discover_scope_snapshot(project_dir=project_dir)
     macro_inventory: StaticMacroInventory = inventory_project_macros(
         macro_files=snapshot.discovered_inputs.macro_files
     )

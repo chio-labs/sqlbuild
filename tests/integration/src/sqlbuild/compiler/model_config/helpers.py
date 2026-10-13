@@ -18,7 +18,6 @@ from sqlbuild.compiler.auditing.main._parse_audit_instances import parse_audit_i
 from sqlbuild.compiler.compile.exceptions import CompileInputError
 from sqlbuild.compiler.compile.models import CompileAdapterContext
 from sqlbuild.compiler.compile.types import CompileInputsView
-from sqlbuild.compiler.discovery.main._model_schema_columns import parse_schema_columns
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs, DiscoveredSqlModelFile
 from sqlbuild.spec.contracts.main.resolve_effective_collection_rendering import (
     resolve_effective_collection_rendering,
@@ -322,13 +321,11 @@ def _attached(entry: SchemaModelEntry | None) -> TypeGuard[SchemaModelEntry]:
 def _python_metadata(*, model_file: DiscoveredSqlModelFile) -> object:
     try:
         return (
-            parse_schema_columns(
-                raw_columns=model_file.header_values.get("columns"),
-                file_path=model_file.relative_path,
-                label="model",
-                error_class=CompileInputError,
-                column_locations=model_file.header_column_locations or {},
-                allow_migrate_from=True,
+            _native.parse_schema_columns(
+                model_file.header_values.get("columns"),
+                (str(model_file.relative_path), "model"),
+                (False, True, False),
+                model_file.header_column_locations or {},
             ),
             parse_audit_instances(
                 raw_audits=model_file.header_values.get("audits"),

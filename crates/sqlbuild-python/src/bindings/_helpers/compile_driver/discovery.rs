@@ -15,7 +15,9 @@ use crate::bindings::_helpers::discovery::declaration_records::{
 use crate::bindings::_helpers::discovery::model_records::{
     ModelFileSelection, discovered_model_files,
 };
+use crate::bindings::_helpers::discovery::python_function_files::discover_python_function_files;
 use crate::bindings::_helpers::discovery::python_paths::reject_unsupported_python_paths;
+use crate::bindings::_helpers::discovery::snapshot::in_snapshot;
 use crate::bindings::_helpers::discovery::sql_test_records::{
     discover_scenario_files, discover_test_files,
 };
@@ -36,7 +38,6 @@ const EVENT_EXPORTERS_MODULE: &str =
 const FILESYSTEM_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.core";
 const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
 const LOADERS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.integrations.loaders";
-const SNAPSHOT_MODULE: &str = "sqlbuild.compiler.discovery.classes.directory_snapshot";
 const DISCOVERY_MODELS_MODULE: &str = "sqlbuild.compiler.discovery.models";
 
 /// Declaration file collections counted into the declaration-parse lifecycle, in field order.
@@ -60,41 +61,30 @@ const DECLARATION_COLLECTIONS: [&str; 14] = [
 /// A native discoverer that takes only `project_dir`.
 type FileDiscoverer = for<'py> fn(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>;
 
-/// Early discoverers by result field; `None` is the Python function-file discoverer (uses `ast`).
-const FILE_DISCOVERERS: [(&str, Option<FileDiscoverer>); 8] = [
-    (
-        "enum_files",
-        Some(|dir| Ok(discover_enum_files(dir, None, false)?.into_any())),
-    ),
-    (
-        "constant_files",
-        Some(|dir| Ok(discover_constant_files(dir, None, false)?.into_any())),
-    ),
-    (
-        "model_schema_files",
-        Some(|dir| Ok(discover_model_schema_files(dir, None)?.into_any())),
-    ),
-    (
-        "sql_function_files",
-        Some(|dir| Ok(discover_sql_function_files(dir, None)?.into_any())),
-    ),
-    (
-        "sql_hook_files",
-        Some(|dir| Ok(discover_sql_hook_files(dir, None)?.into_any())),
-    ),
-    ("python_function_files", None),
-    (
-        "schema_files",
-        Some(|dir| Ok(discover_schema_files(dir)?.into_any())),
-    ),
-    (
-        "seed_files",
-        Some(|dir| Ok(discover_seed_files(dir)?.into_any())),
-    ),
-];
-
-/// Discoverers that run after the schema files, in their original order.
-const LATE_FILE_DISCOVERERS: [(&str, FileDiscoverer); 6] = [
+/// Early discoverers by result field, in their original order.
+const FILE_DISCOVERERS: [(&str, FileDiscoverer); 14] = [
+    ("enum_files", |dir| {
+        Ok(discover_enum_files(dir, None, false)?.into_any())
+    }),
+    ("constant_files", |dir| {
+        Ok(discover_constant_files(dir, None, false)?.into_any())
+    }),
+    ("model_schema_files", |dir| {
+        Ok(discover_model_schema_files(dir, None)?.into_any())
+    }),
+    ("sql_function_files", |dir| {
+        Ok(discover_sql_function_files(dir, None)?.into_any())
+    }),
+    ("sql_hook_files", |dir| {
+        Ok(discover_sql_hook_files(dir, None)?.into_any())
+    }),
+    ("python_function_files", |dir| {
+        Ok(discover_python_function_files(dir)?.into_any())
+    }),
+    ("schema_files", |dir| {
+        Ok(discover_schema_files(dir)?.into_any())
+    }),
+    ("seed_files", |dir| Ok(discover_seed_files(dir)?.into_any())),
     ("test_files", |dir| {
         Ok(discover_test_files(dir, None, None)?.into_any())
     }),
@@ -370,12 +360,7 @@ fn declaration_files<'py>(
     (sql_analysis_enabled, extract_output_column_locations): (bool, bool),
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project_dir.py();
-    let directory: [(&str, Bound<'py, PyAny>); 1] = [("project_dir", project_dir.clone())];
-    let snapshot: Bound<'py, PyAny> = call_with(
-        &imported(py, SNAPSHOT_MODULE, "DirectorySnapshot")?.getattr("scope")?,
-        &directory,
-    )?;
-    within(&snapshot, |_| {
+    in_snapshot(project_dir, || {
         let files: Bound<'py, PyDict> = PyDict::new(py);
         files.set_item("source_files", discover_source_files(project_dir, None)?)?;
         files.set_item(
@@ -390,16 +375,6 @@ fn declaration_files<'py>(
             )?,
         )?;
         for (field, discover) in FILE_DISCOVERERS {
-            let discovered: Bound<'py, PyAny> = match discover {
-                Some(discover) => discover(project_dir)?,
-                None => call_with(
-                    &imported(py, FILESYSTEM_MODULE, "discover_python_function_files")?,
-                    &directory,
-                )?,
-            };
-            files.set_item(field, discovered)?;
-        }
-        for (field, discover) in LATE_FILE_DISCOVERERS {
             files.set_item(field, discover(project_dir)?)?;
         }
         Ok(files)

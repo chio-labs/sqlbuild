@@ -11,9 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::{model_record, path_object};
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
-use crate::bindings::_helpers::discovery::snapshot::{
-    in_snapshot, project_root, project_tree, seed_listings,
-};
+use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
 use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::models::NativeProjectTree;
 
@@ -57,7 +55,6 @@ fn model_items<'py>(
             };
             items.push((relative_path, built));
         }
-        seed_listings(project_dir, &tree)?;
         Ok(items)
     })
 }
