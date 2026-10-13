@@ -105,6 +105,21 @@ reason = "user-code"
 note = "Subprocess host that loads and runs user rule modules."
 
 [[stays]]
+path = "rule_engine/_helpers/engine/custom_dispatch.py"
+reason = "user-code"
+note = "Submits custom rules to their worker thread beside native built-in rule evaluation."
+
+[[stays]]
+path = "rule_engine/_helpers/engine/custom_rules.py"
+reason = "user-code"
+note = "Dispatches custom rules to the rule-host worker pool and digests the fact views they read."
+
+[[stays]]
+path = "rule_engine/_helpers/run/rule_threads.py"
+reason = "user-code"
+note = "Runs rule phases and early SQL lint on worker threads with futures and stop events."
+
+[[stays]]
 path = "rule_engine/classes/rule_context.py"
 reason = "user-code"
 note = "The context object user rules receive."

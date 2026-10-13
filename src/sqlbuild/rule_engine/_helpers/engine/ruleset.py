@@ -13,8 +13,8 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine._helpers.engine.catalogue import build_catalogue, select_rules
 from sqlbuild.rule_engine._helpers.engine.config import resolve_rule_ignore_selectors
+from sqlbuild.rule_engine._helpers.engine.custom_dispatch import evaluate_native
 from sqlbuild.rule_engine._helpers.engine.hermeticity import verify_custom_rules
-from sqlbuild.rule_engine._helpers.engine.native import evaluate_native
 from sqlbuild.rule_engine.models import ResolvedRuleset, Rule, RulesConfig, RulesResult
 
 

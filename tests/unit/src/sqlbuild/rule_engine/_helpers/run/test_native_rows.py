@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine._helpers.engine import native
+from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
+from sqlbuild.rule_engine.exceptions import RulesError
 from sqlbuild.rule_engine.models import RulesCacheConfig, RulesConfig, RulesResult
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import evaluate_contract_rule
 from tests.unit.src.sqlbuild.rule_engine._helpers.run._test_types import (
@@ -42,7 +43,7 @@ def test_given_config_value_the_encoder_rejects_when_building_natively_then_rule
         config_values={"priority": test_case.rejected_value},
     )
 
-    with pytest.raises(native.RulesError, match=test_case.expected_message):
+    with pytest.raises(RulesError, match=test_case.expected_message):
         native.evaluate_native(
             project=project,
             config=RulesConfig(cache=RulesCacheConfig(enabled=False)),

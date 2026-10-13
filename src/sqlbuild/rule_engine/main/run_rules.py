@@ -5,7 +5,7 @@ from pathlib import Path
 from sqlbuild.compiler.compile.models import CompiledObjectKey
 from sqlbuild.compiler.discovery.models import DiscoveredProjectInputs
 from sqlbuild.compiler.pipeline.models import ProjectGraph
-from sqlbuild.rule_engine._helpers.run.rules import evaluate_rules
+from sqlbuild.rule_engine._helpers.run.rule_threads import evaluate_rules
 from sqlbuild.rule_engine.models import (
     PreparedSqlLint,
     RulesConfig,

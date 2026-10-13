@@ -15,6 +15,7 @@ import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.render.macros as macros_module
 import sqlbuild.compiler.compile.main.sql_expansion_context as expansion_context_module
 import sqlbuild.rule_engine._helpers.host.custom_host_pool as custom_host_pool_module
+import sqlbuild.rule_engine._helpers.run.rule_threads as rule_threads_module
 import sqlbuild.rule_engine._helpers.run.rules as rules_module
 from sqlbuild._native import run_cli as main
 from sqlbuild.compiler.compile.models import DeclarationScopeBuild, LoadedMacro
@@ -25,11 +26,11 @@ from sqlbuild.lint.models import LintRunResult
 from sqlbuild.rule_engine._helpers.run.cache_paths import rules_bulk_cache_path
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostSplitIntegrationTestCase,
+    CustomRuleCacheSequenceTestCase,
     DynamicPivotRulesIntegrationTestCase,
     EarlyLintInputsTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
     ImplicitAliasRuleIntegrationTestCase,
-    CustomRuleCacheSequenceTestCase,
     NumericRangeDecisionIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
@@ -1046,7 +1047,7 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
     )
     lint_started: Event = Event()
     stop_observed: list[bool] = []
-    original_run_lint: Callable[..., LintRunResult] = rules_module.run_lint
+    original_run_lint: Callable[..., LintRunResult] = rule_threads_module.run_lint
 
     def stop_awaiting_run_lint(**kwargs: Any) -> LintRunResult:
         lint_started.set()
@@ -1054,7 +1055,7 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
         stop_observed.append(stop is not None and stop.wait(timeout=_EARLY_LINT_STOP_TIMEOUT_S))
         return original_run_lint(**kwargs)
 
-    monkeypatch.setattr(rules_module, "run_lint", stop_awaiting_run_lint)
+    monkeypatch.setattr(rule_threads_module, "run_lint", stop_awaiting_run_lint)
 
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
 

@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pytest
 
 from sqlbuild._native import NativeRulesRequest
-from sqlbuild.rule_engine._helpers.engine import native
+from sqlbuild.rule_engine._helpers.engine import custom_dispatch as native
 from sqlbuild.rule_engine._helpers.run import native_rows
 from sqlbuild.rule_engine.models import NativeRulesEvaluation
 
