@@ -164,7 +164,7 @@ fn internal_error(reason: &str) -> PyErr {
 impl NativeModelAnalysisSession {
     /// Models whose output names and lineage the finished session keeps for later stages.
     #[getter]
-    fn fact_models(&self) -> Vec<String> {
+    pub(crate) fn fact_models(&self) -> Vec<String> {
         self.finished
             .as_ref()
             .map(finished_fact_models)

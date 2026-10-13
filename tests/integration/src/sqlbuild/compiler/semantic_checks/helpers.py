@@ -14,12 +14,7 @@ import pytest
 
 import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.diagnostics.recovery as semantic_recovery
-import sqlbuild.compiler.semantic_checks._helpers.stage as semantic_stage
-from sqlbuild._native import (
-    build_project_graph,
-    discover_project_inputs,
-    project_with,
-)
+from sqlbuild._native import build_project_graph, discover_project_inputs, project_with
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.analysis_session.types import DiagnosticRow
@@ -28,11 +23,6 @@ from sqlbuild.compiler.compile._helpers.diagnostics.recovery import (
 )
 from sqlbuild.compiler.compile.models import CompilerDiagnostic
 from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
-from sqlbuild.compiler.semantic_checks._helpers.metadata import native_metadata_diagnostics
-from sqlbuild.compiler.semantic_checks._helpers.payloads import session_fact_models
-from sqlbuild.compiler.semantic_checks.main._complete_native_semantic_diagnostics import (
-    complete_native_semantic_diagnostics,
-)
 from tests.integration.src.sqlbuild.compiler.analysis_session.helpers import (
     generated_analysis_files,
 )
@@ -248,7 +238,7 @@ def note_kinds(project: CompiledProjectView, kinds: tuple[str, ...]) -> Counter[
 def native_completion(inputs: SemanticInputs) -> CompiledProjectView:
     """The native stage's completed project."""
 
-    return complete_native_semantic_diagnostics(
+    return native_module.complete_semantic_project(
         project=inputs.project,
         profile=inputs.profile,
         binding_results=inputs.binding_results,
@@ -284,18 +274,27 @@ def without_session(inputs: SemanticInputs) -> SemanticInputs:
     return replace(inputs, native_session=None)
 
 
-def record_session_models(*, monkeypatch: pytest.MonkeyPatch) -> list[frozenset[str]]:
-    """Keep each completion's models whose output names and lineage the session supplies."""
+def session_fact_models(inputs: SemanticInputs) -> frozenset[str]:
+    """Models whose output names and lineage the finished session supplies to the stage."""
 
-    selections: list[frozenset[str]] = []
+    kept: frozenset[str] = frozenset(getattr(inputs.native_session, "fact_models", ()))
+    proven: frozenset[str] = frozenset(
+        model.name for model in filter(_output_proven, inputs.project.models)
+    )
+    return frozenset(model.name for model in inputs.project.models) & kept - proven
 
-    def recorded(**arguments: Any) -> frozenset[str]:
-        selected: frozenset[str] = session_fact_models(**arguments)
-        selections.append(selected)
-        return selected
 
-    monkeypatch.setattr(semantic_stage, "session_fact_models", recorded)
-    return selections
+def _output_proven(model: CompiledModelView) -> bool:
+    return model.dynamic_column_contract is not None and model.dynamic_column_contract.output_proven
+
+
+def has_blocking_binding(project: CompiledProjectView) -> bool:
+    """Whether any model owns a binding error, so the stage plans a type recovery."""
+
+    bindings: list[tuple[CompilerDiagnostic, ...]] = [
+        model.binding_diagnostics for model in project.models
+    ]
+    return any(item.is_error for item in chain.from_iterable(bindings))
 
 
 def completion_view(project: CompiledProjectView) -> tuple[object, ...]:
@@ -314,29 +313,6 @@ def _model_view(model: CompiledModelView) -> tuple[object, ...]:
         model.inferred_columns,
         model.unchecked_output_columns,
     )
-
-
-def record_native_statuses(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count native type recovery plans, completions and completed diagnostics."""
-
-    statuses: Counter[str] = Counter()
-    plan: Callable[..., Any] = native_module.plan_semantic_type_recovery
-    complete: Callable[..., Any] = native_module.complete_semantic_checks
-
-    def counted_plan(*arguments: Any) -> Any:
-        recovery: Any = plan(*arguments)
-        statuses[f"type_recovery_{recovery.status}"] += 1
-        return recovery
-
-    def counted_complete(*arguments: Any) -> Any:
-        outcome: Any = complete(*arguments)
-        statuses["completion_native"] += 1
-        statuses["diagnostics_native"] += len(outcome[0])
-        return outcome
-
-    monkeypatch.setattr(native_module, "plan_semantic_type_recovery", counted_plan)
-    monkeypatch.setattr(native_module, "complete_semantic_checks", counted_complete)
-    return statuses
 
 
 def non_ascii_variant(*, files: dict[str, str], rng: random.Random) -> dict[str, str]:
@@ -548,37 +524,26 @@ def generated_metadata_files(*, rng: random.Random, model_count: int) -> dict[st
 def native_metadata(inputs: SemanticInputs) -> tuple[CompilerDiagnostic, ...]:
     """The native stage's metadata diagnostics."""
 
-    catalog: Any = cast(Any, inputs.project.binding_catalog)
-    return native_metadata_diagnostics(
+    return native_module.semantic_metadata_diagnostics(
         project=inputs.project,
         profile=inputs.profile,
         resource_sql_analysis=inputs.resource_sql_analysis,
-        catalog=catalog.native,
     )
 
 
-def _family_counts(outcome: Any) -> Counter[str]:
-    counts: Counter[str] = Counter()
-    for function_rows, reference_rows, schema_audit_rows in outcome[0]:
-        counts.update(f"function {row[0]}" for row in function_rows)
-        counts.update(f"reference {row[0]}" for row in reference_rows)
-        counts.update(f"schema_audit {row[0]}" for row in schema_audit_rows)
-    counts.update(f"source {row[0]}" for _, row in outcome[1])
-    counts.update(f"sql_test {row[0]}" for _, row, _ in outcome[2])
-    return counts
+def _completed(outcome: tuple[str, object]) -> bool:
+    return outcome[0] == "completed"
 
 
-def record_metadata_families(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count native metadata runs and errors by family and code."""
+def metadata_families(views: dict[str, object]) -> Counter[str]:
+    """Completed metadata runs and their diagnostics counted by resource type and code."""
 
-    counts: Counter[str] = Counter()
-    check: Callable[..., Any] = native_module.check_semantic_metadata_rows
-
-    def counted(*arguments: Any) -> Any:
-        outcome: Any = check(*arguments)
-        counts["native"] += 1
-        counts.update(_family_counts(outcome))
-        return outcome
-
-    monkeypatch.setattr(native_module, "check_semantic_metadata_rows", counted)
-    return counts
+    completed: list[tuple[CompilerDiagnostic, ...]] = [
+        cast(tuple[CompilerDiagnostic, ...], value)
+        for _, value in filter(_completed, cast(list[tuple[str, object]], list(views.values())))
+    ]
+    families: Counter[str] = Counter(
+        f"{item.resource_type} {item.code}" for item in chain.from_iterable(completed)
+    )
+    families["native"] = len(completed)
+    return families

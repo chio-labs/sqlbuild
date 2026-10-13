@@ -1782,112 +1782,17 @@ def _oracle_cte_fact_recovery(
 ) -> tuple[str | None, list[tuple[str, str]], list[tuple[str, str]], list[str], list[str]]: ...
 
 # Native analysis: semantic completion.
-class SemanticTypeRecovery:
-    @property
-    def status(self) -> str: ...
-    @property
-    def poisoned(self) -> list[tuple[str, str]]: ...
-    @property
-    def revalidated(self) -> list[int]: ...
-    def finish(
-        self, revised: list[list[tuple[str, int | None, int | None]]], /
-    ) -> tuple[list[tuple[int, str | None]], list[list[int]]]: ...
-
-def plan_semantic_type_recovery(
-    catalog: object,
-    request: tuple[
-        str | None,
-        list[
-            tuple[
-                str,
-                str,
-                list[str] | None,
-                list[str],
-                list[tuple[str, list[tuple[str, str]]]] | None,
-                list[tuple[int, str, str, bool]],
-                list[tuple[int, str, str, int | None, int | None]],
-            ]
-        ],
-        list[tuple[int, str, bool, str | None]],
-    ],
+def complete_semantic_project(
+    *,
+    project: Any,
+    profile: Any,
+    binding_results: dict[str, list[tuple[str, str, int | None, int | None, int | None, int | None, str]]],
+    resource_sql_analysis: bool,
     session: NativeModelAnalysisSession | None = None,
-    /,
-) -> SemanticTypeRecovery: ...
-def check_semantic_metadata_rows(
-    catalog: object,
-    request: tuple[
-        str | None,
-        bool,
-        list[tuple[str, str]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[str, list[tuple[str, str]]]],
-        list[tuple[object, ...]],
-        list[str],
-        list[tuple[str, str | None, int]],
-        list[tuple[int, list[tuple[str, list[str]]]]],
-    ],
-    /,
-) -> tuple[
-    list[
-        tuple[
-            list[tuple[str, str, int, int]],
-            list[tuple[str, str, int, int, bool]],
-            list[tuple[str, str, int, int]],
-        ]
-    ],
-    list[tuple[int, tuple[str, str, int, int]]],
-    list[tuple[int, tuple[str, str, int, int], int]],
-    list[str],
-]: ...
-def complete_semantic_checks(
-    catalog: object,
-    request: tuple[
-        str | None,
-        list[
-            tuple[
-                int,
-                str,
-                str,
-                str | None,
-                str | None,
-                int | None,
-                int | None,
-                tuple[int, int, int | None, int | None] | None,
-                str | None,
-                list[str],
-            ]
-        ],
-        list[
-            tuple[
-                str,
-                str,
-                str,
-                list[str] | None,
-                list[tuple[str, list[tuple[str, str]]]] | None,
-                list[str],
-                str | None,
-            ]
-        ],
-        list[tuple[str, list[tuple[str, str]]]],
-    ],
-    session: NativeModelAnalysisSession | None = None,
-    /,
-) -> tuple[
-    list[
-        tuple[
-            int,
-            str,
-            str | None,
-            list[str],
-            tuple[int, int, int | None, int | None] | None,
-            int | None,
-            int | None,
-            bool,
-        ]
-    ],
-    list[list[int]] | None,
-    list[tuple[int | None, tuple[int, str, str, str] | None]],
-]: ...
+) -> Any: ...
+def semantic_metadata_diagnostics(
+    *, project: Any, profile: Any, resource_sql_analysis: bool
+) -> tuple[Any, ...]: ...
 
 # Native analysis: contracts.
 type _ContractDiagnosticRow = tuple[

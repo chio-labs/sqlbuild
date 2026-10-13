@@ -24,8 +24,8 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
     captured_semantic_inputs,
     files_with_non_ascii,
     generated_metadata_files,
+    metadata_families,
     native_metadata,
-    record_metadata_families,
     semantic_outcome,
     with_dialect,
 )
@@ -44,10 +44,9 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
             golden_prefix="metadata_generated",
             expected_minimum_native=32,
             expected_minimum_families={
-                "function B102": 100,
-                "function B301": 100,
-                "reference B300": 50,
-                "reference B301": 16,
+                "model B102": 100,
+                "model B300": 50,
+                "model B301": 116,
                 "source B300": 4,
                 "sql_test B302": 16,
             },
@@ -61,7 +60,7 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
             non_ascii=True,
             golden_prefix="metadata_formerly_deferred",
             expected_minimum_native=12,
-            expected_minimum_families={"function B301": 10, "reference B300": 4},
+            expected_minimum_families={"model B300": 4, "model B301": 10},
         ),
     ],
     ids=lambda case: case.description,
@@ -72,7 +71,7 @@ def test_given_generated_projects_when_checking_metadata_natively_then_matches_r
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
-    families: Counter[str] = record_metadata_families(monkeypatch=monkeypatch)
+    families: Counter[str] = Counter()
     golden: list[GoldenEntry] = []
     for index in range(test_case.count):
         project_dir: Path = tmp_path / f"project_{index}"
@@ -91,6 +90,7 @@ def test_given_generated_projects_when_checking_metadata_natively_then_matches_r
             )
             for dialect in test_case.dialects
         }
+        families.update(metadata_families(views))
         golden.append(golden_entry("metadata", views, masked=(str(project_dir),)))
 
     assert (
