@@ -16,8 +16,9 @@ use sqlbuild_core::freshness_text::models::{
     FreshnessSourceResult, FreshnessStatus, StateComparison,
 };
 
-const FRESHNESS_PACKAGE: &str = "sqlbuild.compiler.source_freshness.main";
-const NATIVE: &str = "_native";
+const ADAPTER_OBSERVATION_MODULE: &str =
+    "sqlbuild.compiler.source_freshness.main.adapter_observation";
+const OBSERVATION_MODULE: &str = "sqlbuild.compiler.source_freshness.main.observation";
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const FRESHNESS_MODELS: &str = "sqlbuild.compiler.source_freshness.models";
 const CONTRACT_MODELS: &str = "sqlbuild.spec.contracts.models";
@@ -46,11 +47,7 @@ fn freshness_function<'py>(
     py: Python<'py>,
     (module, name): (&str, &str),
 ) -> PyResult<Bound<'py, PyAny>> {
-    if module == NATIVE {
-        return py.import(NATIVE_MODULE)?.getattr(name);
-    }
-    py.import(format!("{FRESHNESS_PACKAGE}.{module}"))?
-        .getattr(name)
+    py.import(module)?.getattr(name)
 }
 
 fn optional_text(value: Bound<'_, PyAny>) -> PyResult<Option<String>> {
@@ -136,16 +133,18 @@ fn record<'py>(
     let normalize: Bound<'py, PyDict> = PyDict::new(py);
     normalize.set_item("value", observation.getattr("data_version")?)?;
     normalize.set_item("value_kind", observation.getattr("value_kind")?)?;
-    let data_version: Bound<'py, PyAny> =
-        freshness_function(py, (NATIVE, "normalize_source_freshness_data_version"))?
-            .call((), Some(&normalize))?;
+    let data_version: Bound<'py, PyAny> = freshness_function(
+        py,
+        (NATIVE_MODULE, "normalize_source_freshness_data_version"),
+    )?
+    .call((), Some(&normalize))?;
     let hash: Bound<'py, PyDict> = PyDict::new(py);
     hash.set_item("source_name", observation.getattr("source_name")?)?;
     hash.set_item("strategy", observation.getattr("strategy")?)?;
     hash.set_item("value_kind", observation.getattr("value_kind")?)?;
     hash.set_item("data_version", &data_version)?;
     let data_version_hash: Bound<'py, PyAny> =
-        freshness_function(py, (NATIVE, "source_freshness_data_version_hash"))?
+        freshness_function(py, (NATIVE_MODULE, "source_freshness_data_version_hash"))?
             .call((), Some(&hash))?;
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item("source_name", observation.getattr("source_name")?)?;
@@ -201,7 +200,7 @@ fn observed_result(
     age.set_item("data_version", observation.getattr("data_version")?)?;
     age.set_item("observed_at", observation.getattr("observed_at")?)?;
     let age_status: Bound<'_, PyAny> =
-        freshness_function(py, (NATIVE, "evaluate_source_freshness_age_policy"))?
+        freshness_function(py, (NATIVE_MODULE, "evaluate_source_freshness_age_policy"))?
             .call((), Some(&age))?;
     let previous: Option<Bound<'_, PyAny>> = previous_record(state, &current)?;
     let comparison: StateComparison = match &previous {
@@ -213,7 +212,7 @@ fn observed_result(
             options.set_item("current_record", &current)?;
             options.set_item("lag_tolerance", &lag_tolerance)?;
             let equivalent: bool =
-                freshness_function(py, (NATIVE, "source_freshness_records_equivalent"))?
+                freshness_function(py, (NATIVE_MODULE, "source_freshness_records_equivalent"))?
                     .call((), Some(&options))?
                     .is_truthy()?;
             if equivalent {
@@ -270,7 +269,10 @@ fn adapter_batch<'py>(
     options.set_item("observed_at", &observer.observed_at)?;
     match freshness_function(
         py,
-        ("adapter_observation", "observe_adapter_sources_freshness"),
+        (
+            ADAPTER_OBSERVATION_MODULE,
+            "observe_adapter_sources_freshness",
+        ),
     )?
     .call((), Some(&options))
     {
@@ -332,8 +334,11 @@ fn configured_observation<'py>(
     options.set_item("connection", &observer.connection)?;
     options.set_item("source", source)?;
     options.set_item("observed_at", &observer.observed_at)?;
-    match freshness_function(py, ("observation", "observe_configured_source_freshness"))?
-        .call((), Some(&options))
+    match freshness_function(
+        py,
+        (OBSERVATION_MODULE, "observe_configured_source_freshness"),
+    )?
+    .call((), Some(&options))
     {
         Ok(observation) => Ok(Ok(observation)),
         Err(error) => Ok(Err(target_result(

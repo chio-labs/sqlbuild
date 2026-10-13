@@ -18,7 +18,11 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const COMPILE_MODELS: &str = "sqlbuild.compiler.compile.models";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
-const CLONE_PACKAGE: &str = "sqlbuild.executor.clone.main";
+const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main.build_retention_requests";
+const TRANSIENT_MODELS_MODULE: &str =
+    "sqlbuild.executor.clone.main.build_destination_transient_models";
+const FINGERPRINTING_MODULE: &str = "sqlbuild.executor.clone.main.fingerprinting";
+const EXECUTE_MODULE: &str = "sqlbuild.executor.clone.main.execute";
 const TARGET_CONFIG_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_config";
 const CONTRACT_TYPES: &str = "sqlbuild.spec.contracts.types";
 const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
@@ -171,13 +175,6 @@ fn target_config<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny
     )
 }
 
-fn clone_function<'py>(
-    py: Python<'py>,
-    (module, name): (&str, &str),
-) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, &format!("{CLONE_PACKAGE}.{module}"), name)
-}
-
 /// The executor input for the whole clone, streaming items through `on_item`.
 fn execution_input<'py>(
     invocation: &Invocation<'py>,
@@ -194,12 +191,10 @@ fn execution_input<'py>(
         .map(|entry| entry?.getattr("name"))
         .collect::<PyResult<_>>()?;
     let retention: Bound<'py, PyAny> = call_with(
-        &clone_function(
+        &imported(
             py,
-            (
-                "build_retention_requests",
-                "build_destination_retention_requests",
-            ),
+            RETENTION_REQUESTS_MODULE,
+            "build_destination_retention_requests",
         )?,
         &[
             ("project", project.clone()),
@@ -231,12 +226,10 @@ fn execution_input<'py>(
         ],
     )?;
     let transient: Bound<'py, PyAny> = call_with(
-        &clone_function(
+        &imported(
             py,
-            (
-                "build_destination_transient_models",
-                "build_destination_transient_models",
-            ),
+            TRANSIENT_MODELS_MODULE,
+            "build_destination_transient_models",
         )?,
         &[("project", project.clone())],
     )?;
@@ -327,7 +320,7 @@ fn copy_fingerprints<'py>(
     )?;
     let copied: PyResult<Bound<'py, PyAny>> = within(&lifecycle, |_| {
         call_with(
-            &clone_function(py, ("fingerprinting", "copy_clone_fingerprints"))?,
+            &imported(py, FINGERPRINTING_MODULE, "copy_clone_fingerprints")?,
             &fields,
         )
     });
@@ -370,7 +363,7 @@ pub(crate) fn execute_clone_plan<'py>(
             ),
         )?;
         call_with(
-            &clone_function(py, ("execute", "execute_clone"))?,
+            &imported(py, EXECUTE_MODULE, "execute_clone")?,
             &[("inputs", input)],
         )
     })();

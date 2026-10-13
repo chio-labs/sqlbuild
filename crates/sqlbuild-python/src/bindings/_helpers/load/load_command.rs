@@ -28,7 +28,9 @@ const NATIVE_MODULE: &str = "sqlbuild._native";
 const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
 const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
-const EFFECTIVE_PACKAGE: &str = "sqlbuild.compiler.compile.main";
+const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild.compiler.compile.main.effective_target";
+const EFFECTIVE_RUNTIME_MODULE: &str = "sqlbuild.compiler.compile.main.effective_runtime";
+const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild.compiler.compile.main.effective_settings";
 const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
 const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
 const RELATION_LOOKUP_MODULE: &str = "sqlbuild.adapter.relations.main.relation_lookup";
@@ -77,10 +79,6 @@ fn write(stream: &Bound<'_, PyAny>, value: &str) -> PyResult<()> {
     Ok(())
 }
 
-fn effective<'py>(py: Python<'py>, (module, name): (&str, &str)) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, &format!("{EFFECTIVE_PACKAGE}.{module}"), name)
-}
-
 fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Invocation<'py>> {
     let project_dir: Bound<'py, PyAny> = match request.getattr("project_dir")? {
         directory if !directory.is_none() => directory,
@@ -102,7 +100,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     )?;
     let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
     let target_config: Bound<'py, PyAny> = call_with(
-        &effective(py, ("effective_target", "build_effective_target_config"))?,
+        &imported(py, EFFECTIVE_TARGET_MODULE, "build_effective_target_config")?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", selected_target.clone()),
@@ -306,7 +304,11 @@ fn prepare<'py>(
     )?;
     check_reference_targets(invocation, (&adapter, &connection_config))?;
     let runtime: (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &effective(py, ("effective_runtime", "build_effective_runtime_config"))?,
+        &imported(
+            py,
+            EFFECTIVE_RUNTIME_MODULE,
+            "build_effective_runtime_config",
+        )?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", request.getattr("selected_target")?),
@@ -317,9 +319,10 @@ fn prepare<'py>(
     let requested: Bound<'py, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {
         call_with(
-            &effective(
+            &imported(
                 py,
-                ("effective_settings", "build_effective_settings_config"),
+                EFFECTIVE_SETTINGS_MODULE,
+                "build_effective_settings_config",
             )?,
             &[("discovered_inputs", discovered.clone())],
         )?

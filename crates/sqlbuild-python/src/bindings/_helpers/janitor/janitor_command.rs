@@ -28,16 +28,14 @@ const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
 const PREVIEW_TARGET_MODULE: &str = "sqlbuild._native";
 const TARGET_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_target_name";
 const RETENTION_MODULE: &str = "sqlbuild.executor.janitor.main.resolve_retention_days";
-const RUNTIME_PACKAGE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime";
+const PLANNING_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.planning";
+const EXECUTION_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.execution";
+const COMPILATION_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.compilation";
+const CONNECTIONS_MODULE: &str = "sqlbuild.cli.commands._helpers.janitor_runtime.connections";
 const COMMAND_NAME: &str = "janitor";
 
 fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
     py.import(module)?.getattr(name)
-}
-
-/// One of the janitor runtime phases, which reach the adapter and executor.
-fn runtime<'py>(py: Python<'py>, (module, name): (&str, &str)) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, &format!("{RUNTIME_PACKAGE}.{module}"), name)
 }
 
 fn keywords<'py>(
@@ -192,7 +190,7 @@ fn clean(
     let style: CliStyle = CliStyle {
         use_color: invocation.getattr("use_color")?.extract()?,
     };
-    let planning: Bound<'_, PyAny> = runtime(py, ("planning", "build_janitor_execution_plan"))?
+    let planning: Bound<'_, PyAny> = imported(py, PLANNING_MODULE, "build_janitor_execution_plan")?
         .call(
             (),
             Some(&keywords(
@@ -227,17 +225,18 @@ fn clean(
         write(py, "Janitor cancelled.\n")?;
         return Ok(1);
     }
-    let result: Bound<'_, PyAny> = runtime(py, ("execution", "execute_janitor_cleanup"))?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[
-                ("compile_context", compile_context),
-                ("connection_context", connection_context),
-                ("planning_result", &planning),
-            ],
-        )?),
-    )?;
+    let result: Bound<'_, PyAny> = imported(py, EXECUTION_MODULE, "execute_janitor_cleanup")?
+        .call(
+            (),
+            Some(&keywords(
+                py,
+                &[
+                    ("compile_context", compile_context),
+                    ("connection_context", connection_context),
+                    ("planning_result", &planning),
+                ],
+            )?),
+        )?;
     write(
         py,
         &janitor_completion_text(&janitor_result_counts(&result)?, style),
@@ -272,10 +271,10 @@ fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i
         flush(py)?;
     }
     let compile_context: Bound<'_, PyAny> =
-        runtime(py, ("compilation", "compile_janitor_project"))?
+        imported(py, COMPILATION_MODULE, "compile_janitor_project")?
             .call((), Some(&keywords(py, &[("invocation", &invocation)])?))?;
     let connection_context: Bound<'_, PyAny> =
-        runtime(py, ("connections", "connect_janitor_warehouse"))?.call(
+        imported(py, CONNECTIONS_MODULE, "connect_janitor_warehouse")?.call(
             (),
             Some(&keywords(
                 py,
@@ -292,7 +291,7 @@ fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i
         (&compile_context, &connection_context),
     );
     let closed: PyResult<Bound<'_, PyAny>> =
-        runtime(py, ("connections", "close_janitor_warehouse")).and_then(|close| {
+        imported(py, CONNECTIONS_MODULE, "close_janitor_warehouse").and_then(|close| {
             close.call(
                 (),
                 Some(&keywords(
