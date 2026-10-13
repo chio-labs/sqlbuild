@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from _pytest.capture import CaptureResult
 
-from sqlbuild.cli.commands.main.dbt._dbt import run_dbt_command
+from sqlbuild._native import run_dbt_command
 from sqlbuild.integrations.dbt.models import (
     DbtInitRequest,
     DbtInitResult,
@@ -55,6 +55,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import (
 )
 def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
     test_case: DbtPlanProgressTestCase,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -73,24 +74,13 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt.plan_dbt_interop_from_project",
+        "sqlbuild.integrations.dbt.main.pipeline.plan.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
-
-    def ensure_existing_sqlbuild_project(
-        *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
-    ) -> tuple[Path, tuple[str, ...]]:
-        del no_color
-        assert project_dir is not None
-        return project_dir, args
-
-    monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt.ensure_sqlbuild_project_for_dbt_command",
-        ensure_existing_sqlbuild_project,
-    )
+    write_minimal_sqlbuild_project(tmp_path)
     exit_code: int = run_dbt_command(
         command=DbtInteropCommand.PLAN,
-        project_dir=Path("/project"),
+        project_dir=tmp_path,
         args=test_case.args,
         no_color=True,
     )
@@ -125,6 +115,7 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
 )
 def test_given_dbt_execution_command_when_running_then_routes_expected_stream_and_args(
     test_case: DbtExecutionWrapperTestCase,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured_calls: list[tuple[DbtInteropCommand, tuple[str, ...], object]] = []
@@ -134,25 +125,14 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         return 0
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt.execute_dbt_interop_from_project",
+        "sqlbuild.integrations.dbt.main.pipeline.execute.execute_dbt_interop_from_project",
         execute_dbt_interop_from_project,
     )
-
-    def ensure_existing_sqlbuild_project(
-        *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
-    ) -> tuple[Path, tuple[str, ...]]:
-        del no_color
-        assert project_dir is not None
-        return project_dir, args
-
-    monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt.ensure_sqlbuild_project_for_dbt_command",
-        ensure_existing_sqlbuild_project,
-    )
+    write_minimal_sqlbuild_project(tmp_path)
 
     exit_code: int = run_dbt_command(
         command=DbtInteropCommand(test_case.command_name),
-        project_dir=Path("/project"),
+        project_dir=tmp_path,
         args=test_case.args,
         no_color=True,
     )
@@ -193,6 +173,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
 )
 def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debug(
     test_case: DbtDebugWrapperTestCase,
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -219,37 +200,22 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
         return 0
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt_debug.debug_dbt_from_project",
+        "sqlbuild.integrations.dbt.main.pipeline.debug.debug_dbt_from_project",
         debug_dbt_from_project,
     )
-    monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt_debug.run_debug_command", run_sqlbuild_debug
-    )
-
-    def ensure_existing_sqlbuild_project(
-        *, project_dir: Path | None, args: tuple[str, ...], no_color: bool
-    ) -> tuple[Path, tuple[str, ...]]:
-        del no_color
-        assert project_dir is not None
-        return project_dir, args
-
-    monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt.ensure_sqlbuild_project_for_dbt_command",
-        ensure_existing_sqlbuild_project,
-    )
+    monkeypatch.setattr("sqlbuild._native.run_debug_command", run_sqlbuild_debug)
+    write_minimal_sqlbuild_project(tmp_path)
 
     exit_code: int = run_dbt_command(
         command=DbtInteropCommand.DEBUG,
-        project_dir=Path("/project"),
+        project_dir=tmp_path,
         args=test_case.args,
         no_color=True,
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert dbt_calls == [(Path("/project"), test_case.expected_dbt_args, sys.stdout, sys.stderr)]
-    assert sqlbuild_calls == [
-        (Path("/project"), True, test_case.expected_sqlbuild_no_connection, False)
-    ]
+    assert dbt_calls == [(tmp_path, test_case.expected_dbt_args, sys.stdout, sys.stderr)]
+    assert sqlbuild_calls == [(tmp_path, True, test_case.expected_sqlbuild_no_connection, False)]
     captured: CaptureResult[str] = capsys.readouterr()
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in captured.err
@@ -323,11 +289,11 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.dbt.auto_init.run_dbt_profile_init",
+        "sqlbuild.integrations.dbt.main.profile.profile_init.run_dbt_profile_init",
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt.plan_dbt_interop_from_project",
+        "sqlbuild.integrations.dbt.main.pipeline.plan.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
 
@@ -412,11 +378,11 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild.cli.commands._helpers.dbt.auto_init.run_dbt_profile_init",
+        "sqlbuild.integrations.dbt.main.profile.profile_init.run_dbt_profile_init",
         run_dbt_profile_init,
     )
     monkeypatch.setattr(
-        "sqlbuild.cli.commands.main.dbt._dbt.plan_dbt_interop_from_project",
+        "sqlbuild.integrations.dbt.main.pipeline.plan.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
 

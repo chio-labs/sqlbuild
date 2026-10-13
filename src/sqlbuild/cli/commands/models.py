@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
     from sqlbuild.compiler.refactoring.models import RefactorProject
     from sqlbuild.executor.janitor.models import JanitorPlan
-    from sqlbuild.integrations.dbt.models import DbtInitRequest
 
 
 @dataclass(frozen=True)
@@ -271,14 +270,6 @@ class DbtInitCommandRequest:
     dry_run: bool
     overwrite: bool
     skip_dbt_debug: bool
-
-
-@dataclass(frozen=True)
-class DbtInitInvocation:
-    """Resolved profile-init request and output styling context."""
-
-    request: DbtInitRequest
-    use_color: bool
 
 
 @dataclass(frozen=True)

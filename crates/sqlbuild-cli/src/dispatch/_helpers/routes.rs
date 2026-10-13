@@ -2,7 +2,7 @@
 
 use crate::dispatch::models::{CallShape, ClassRef, Field, Route, Source};
 
-const DBT_IMPLEMENTATION: (&str, &str) = ("sqlbuild.cli.commands.main.dbt._dbt", "run_dbt_command");
+const DBT_IMPLEMENTATION: (&str, &str) = ("sqlbuild._native", "run_dbt_command");
 
 pub(crate) const fn class(module: &'static str, name: &'static str) -> ClassRef {
     ClassRef { module, name }
