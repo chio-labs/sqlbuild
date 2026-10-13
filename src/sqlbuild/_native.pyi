@@ -44,6 +44,7 @@ from sqlbuild.compiler.compile.models import (
     InferredColumn,
     LoadedMacro,
     MacroContext,
+    PythonSqlReferenceReport,
     StaticMacroExport,
     StaticMacroFault,
 )
@@ -1308,7 +1309,13 @@ def unknown_mapping_keys(
     keys: list[tuple[str, bool]], allowed: list[str], /
 ) -> tuple[str, str] | None: ...
 def unsupported_keys_help(keys: list[str], supported_keys: list[str], /) -> str: ...
-def resource_sql_diagnostic_rows(catalog: object, request: object, /) -> list[object]: ...
+def resource_sql_diagnostics_of(
+    catalog: object,
+    project: Any,
+    shapes: dict[str, dict[str, str]],
+    profile: ExpressionInferenceProfile,
+    /,
+) -> tuple[CompilerDiagnostic, ...]: ...
 def compiler_query_hash(sql: str, dialect: str | None, /) -> str: ...
 def function_definition_hash(sql: str, language: str, dialect: str | None, /) -> str: ...
 def normalize_query_text(sql: str, /) -> str: ...
@@ -1914,7 +1921,7 @@ def explicit_reference_report(
     settings: dict[str, object],
     owners: list[tuple[Any, int, list[tuple[str, str, int]]]],
     /,
-) -> Any: ...
+) -> PythonSqlReferenceReport: ...
 def native_execution_gate_edges(
     project: Any, /
 ) -> tuple[
