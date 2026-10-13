@@ -1,0 +1,757 @@
+//! `sqb lineage`: load or build the relation graph, select lineage, and print it.
+
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
+use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::lineage_command::constants::{
+    BOTH_DIRECTIONS, COLUMN_TARGET_SEPARATOR, DOWNSTREAM_DIRECTION, MODEL_RESOURCE_TYPE,
+    RICH_STATUS_MODEL_THRESHOLD, SELECTOR_INTERSECTION_MARKER, UPSTREAM_DIRECTION,
+};
+use sqlbuild_analysis::lineage_command::errors::LineageError;
+use sqlbuild_analysis::lineage_command::main::column_candidates::column_candidates;
+use sqlbuild_analysis::lineage_command::main::lineage_path_nodes::lineage_path_nodes;
+use sqlbuild_analysis::lineage_command::main::lineage_stdout::lineage_stdout;
+use sqlbuild_analysis::lineage_command::main::normalize_lineage_target::normalize_lineage_target;
+use sqlbuild_analysis::lineage_command::main::parse_lineage_depth::parse_lineage_depth;
+use sqlbuild_analysis::lineage_command::main::render_column_trace::render_column_trace;
+use sqlbuild_analysis::lineage_command::main::render_lineage_graph::render_lineage_graph;
+use sqlbuild_analysis::lineage_command::main::resolve_lineage_target::resolve_lineage_target;
+use sqlbuild_analysis::lineage_command::main::select_anchored_lineage::select_anchored_lineage;
+use sqlbuild_analysis::lineage_command::main::select_directional_lineage::select_directional_lineage;
+use sqlbuild_analysis::lineage_command::main::select_target_lineage::select_target_lineage;
+use sqlbuild_analysis::lineage_command::main::validate_lineage_request::validate_lineage_request;
+use sqlbuild_analysis::lineage_command::models::{
+    ColumnCandidates, ColumnTrace, LineageAnchors, LineageColumn, LineageColumnEdge, LineageIndex,
+    LineageKey, LineageRendering, LineageRequestShape, LineageTarget, SemanticUse,
+};
+use sqlbuild_core::cli_text::models::CliStyle;
+
+use crate::bindings::_helpers::lineage::lineage_cache::{
+    lineage_fingerprint, read_lineage_cache, write_lineage_cache,
+};
+use crate::bindings::_helpers::lineage::lineage_index::{
+    graph_index, index_views, lineage_key, lineage_keys,
+};
+
+const NATIVE_MODULE: &str = "sqlbuild._native";
+const ERRORS_MODULE: &str = "sqlbuild.cli.commands.exceptions";
+const COMMAND_MODELS: &str = "sqlbuild.cli.commands.models";
+const COLOR_MODULE: &str = "sqlbuild.presentation.main.supports_color";
+const STATUS_MODULE: &str = "sqlbuild.presentation.main._maybe_status";
+const ADAPTERS_MODULE: &str = "sqlbuild.cli.commands._helpers.runtime.adapters";
+const ADAPTER_NAME_MODULE: &str = "sqlbuild.spec.contracts.main.resolve_effective_adapter_name";
+const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild.compiler.pipeline.main.reject_unit_test_selectors";
+const GRAPH_SELECTION_MODULE: &str = "sqlbuild.compiler.pipeline.main.project_graph_selection";
+const SELECTION_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selection";
+const SELECTOR_TOKENS_MODULE: &str = "sqlbuild.compiler.planner.main.selection._selector_tokens";
+const SELECTOR_PARSE_MODULE: &str = "sqlbuild.compiler.planner.main.selection.selector_parse";
+const SELECTOR_MATCH_MODULE: &str = "sqlbuild.compiler.planner.main.selection._selector_match";
+const PLANNER_MODELS: &str = "sqlbuild.compiler.planner.models";
+const PLANNER_EXCEPTIONS: &str = "sqlbuild.compiler.planner.exceptions";
+const UNKNOWN_SELECTOR_ERROR_CODE: &str = "S007";
+const RICH_MODE: &str = "rich";
+const ANALYSIS_HELP: &str = "enable SQL analysis or install SQLBuild with Polyglot support";
+/// Selector views every planner selector function reads.
+const GRAPH_VIEW_NAMES: [&str; 5] = [
+    "all_keys",
+    "upstream_deps",
+    "downstream_deps",
+    "tag_index",
+    "path_index",
+];
+/// Selector kinds that match a set of resources rather than a named anchor.
+const SET_SELECTOR_KINDS: [&str; 2] = ["tag", "path"];
+
+/// The relation graph lineage reads: a cached index, or a compiled graph with its adapter.
+enum LineageSource<'py> {
+    Cached(LineageIndex),
+    Compiled {
+        index: LineageIndex,
+        graph: Bound<'py, PyAny>,
+        adapter: Bound<'py, PyAny>,
+    },
+}
+
+impl LineageSource<'_> {
+    fn index(&self) -> &LineageIndex {
+        match self {
+            Self::Cached(index) | Self::Compiled { index, .. } => index,
+        }
+    }
+}
+
+fn keywords<'py>(
+    py: Python<'py>,
+    items: &[(&str, &Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict: Bound<'py, PyDict> = PyDict::new(py);
+    for (name, value) in items {
+        dict.set_item(*name, value)?;
+    }
+    Ok(dict)
+}
+
+fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    py.import(module)?.getattr(name)
+}
+
+/// `CliUserError(message, code=..., help=...)`.
+fn user_error(py: Python<'_>, error: LineageError) -> PyErr {
+    let raised = (|| {
+        let options: Bound<'_, PyDict> = PyDict::new(py);
+        options.set_item("code", error.code)?;
+        options.set_item("help", error.help)?;
+        imported(py, ERRORS_MODULE, "CliUserError")?.call((error.message,), Some(&options))
+    })();
+    match raised {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
+fn strings(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    value.try_iter()?.map(|item| item?.extract()).collect()
+}
+
+fn name_lookup(index: &LineageIndex) -> HashMap<&str, &LineageKey> {
+    index
+        .all_keys
+        .iter()
+        .map(|(name, key)| (name.as_str(), key))
+        .collect()
+}
+
+fn normalized_targets(
+    py: Python<'_>,
+    index: &LineageIndex,
+    targets: &[String],
+) -> PyResult<Vec<String>> {
+    let names: HashMap<&str, &LineageKey> = name_lookup(index);
+    let lookup = |name: &str| names.get(name).map(|key| (*key).clone());
+    targets
+        .iter()
+        .map(|target| {
+            normalize_lineage_target(target, &lookup).map_err(|error| user_error(py, error))
+        })
+        .collect()
+}
+
+/// `discover_project_inputs` with lineage's analysis override.
+fn discover<'py>(
+    py: Python<'py>,
+    project_dir: &Bound<'py, PyAny>,
+    analysis_override: Option<bool>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item("project_dir", project_dir)?;
+    options.set_item("sql_analysis_enabled_override", analysis_override)?;
+    options.set_item("extract_output_column_locations", false)?;
+    imported(py, NATIVE_MODULE, "discover_project_inputs")?.call((), Some(&options))
+}
+
+fn reject_unit_tests(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+    discovered: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    let options: Bound<'_, PyDict> = keywords(
+        py,
+        &[
+            ("select", &request.getattr("select")?),
+            ("exclude", &request.getattr("exclude")?),
+            ("discovered_inputs", discovered),
+        ],
+    )?;
+    imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?
+        .call((), Some(&options))?;
+    Ok(())
+}
+
+/// The cached relation index, or a freshly built graph that refreshes the cache.
+fn prepare_source<'py>(
+    py: Python<'py>,
+    request: &Bound<'py, PyAny>,
+    (project_dir, compiled): (&Bound<'py, PyAny>, bool),
+) -> PyResult<LineageSource<'py>> {
+    let directory: PathBuf = project_dir.extract()?;
+    let fingerprint: Option<String> = if compiled {
+        None
+    } else {
+        lineage_fingerprint(project_dir, &request.getattr("cli_vars")?)?
+    };
+    if let Some(fingerprint) = &fingerprint
+        && let Some(index) = read_lineage_cache(py, &directory, fingerprint)?
+    {
+        return Ok(LineageSource::Cached(index));
+    }
+    let discovered: Bound<'py, PyAny> =
+        discover(py, project_dir, if compiled { None } else { Some(false) })?;
+    reject_unit_tests(py, request, &discovered)?;
+    let adapter_name: Bound<'py, PyAny> =
+        imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?.call(
+            (),
+            Some(&keywords(
+                py,
+                &[
+                    ("project_config", &discovered.getattr("project_config")?),
+                    ("local_config", &discovered.getattr("local_config")?),
+                ],
+            )?),
+        )?;
+    let adapter: Bound<'py, PyAny> = imported(py, ADAPTERS_MODULE, "resolve_adapter")?.call(
+        (),
+        Some(&keywords(
+            py,
+            &[
+                ("adapter_name", &adapter_name),
+                ("project_dir", project_dir),
+            ],
+        )?),
+    )?;
+    let no_validation: bool = request.getattr("no_sql_validation")?.extract::<bool>()? || !compiled;
+    let options: Bound<'py, PyDict> = keywords(
+        py,
+        &[
+            ("discovered_inputs", &discovered),
+            ("adapter", &adapter),
+            ("cli_vars", &request.getattr("cli_vars")?),
+        ],
+    )?;
+    options.set_item("no_sql_validation", no_validation)?;
+    options.set_item("skip_column_inference", !compiled)?;
+    let graph: Bound<'py, PyAny> =
+        imported(py, NATIVE_MODULE, "build_project_graph")?.call((), Some(&options))?;
+    let index: LineageIndex = graph_index(&graph)?;
+    if let Some(fingerprint) = &fingerprint {
+        write_lineage_cache(py, &directory, fingerprint, &index)?;
+        return Ok(LineageSource::Cached(index));
+    }
+    Ok(LineageSource::Compiled {
+        index,
+        graph,
+        adapter,
+    })
+}
+
+fn compiled_graph_error(py: Python<'_>, message: &str, help: bool) -> PyErr {
+    let error: LineageError = LineageError::new("C307", message);
+    user_error(
+        py,
+        if help {
+            error.with_help(ANALYSIS_HELP)
+        } else {
+            error
+        },
+    )
+}
+
+fn semantic_use(value: &Bound<'_, PyAny>) -> PyResult<SemanticUse> {
+    let source: Bound<'_, PyAny> = value.getattr("source")?;
+    Ok(SemanticUse {
+        consumer_model: value.getattr("consumer_model")?.str()?.extract()?,
+        context: value.getattr("context")?.str()?.extract()?,
+        expression: value.getattr("expression_sql")?.str()?.extract()?,
+        source: lineage_column(&source)?,
+        confidence: value.getattr("confidence")?.getattr("value")?.extract()?,
+        line: value.getattr("line")?.extract()?,
+        column: value.getattr("column")?.extract()?,
+    })
+}
+
+/// Direct semantic column uses of the targeted or selected models.
+fn semantic_uses(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+    source: &LineageSource<'_>,
+) -> PyResult<Vec<SemanticUse>> {
+    let LineageSource::Compiled {
+        index,
+        graph,
+        adapter,
+    } = source
+    else {
+        return Err(compiled_graph_error(
+            py,
+            "semantic uses require a compiled project graph",
+            false,
+        ));
+    };
+    let targets: Vec<String> = strings(&request.getattr("targets")?)?;
+    let model_names: Vec<String> = if targets.is_empty() {
+        let options: Bound<'_, PyDict> = keywords(
+            py,
+            &[
+                ("graph", graph),
+                ("select", &request.getattr("select")?),
+                ("exclude", &request.getattr("exclude")?),
+            ],
+        )?;
+        let keys: Vec<LineageKey> = lineage_keys(
+            &imported(py, GRAPH_SELECTION_MODULE, "select_project_graph")?
+                .call((), Some(&options))?,
+        )?;
+        keys.into_iter()
+            .filter(|key| key.resource_type == MODEL_RESOURCE_TYPE)
+            .map(|key| key.name)
+            .collect()
+    } else {
+        normalized_targets(py, index, &targets)?
+            .into_iter()
+            .map(|target| {
+                target
+                    .split_once(COLUMN_TARGET_SEPARATOR)
+                    .map_or(target.clone(), |(model, _)| model.to_owned())
+            })
+            .collect()
+    };
+    let uses: Bound<'_, PyAny> =
+        imported(py, NATIVE_MODULE, "build_direct_semantic_uses")?.call1((
+            graph.getattr("project")?,
+            adapter.call_method0("sql_analysis_dialect")?,
+            PyFrozenSet::new(py, model_names)?,
+        ))?;
+    uses.try_iter()?
+        .map(|value| semantic_use(&value?))
+        .collect()
+}
+
+fn lineage_column(column: &Bound<'_, PyAny>) -> PyResult<LineageColumn> {
+    Ok(LineageColumn {
+        resource_type: column.getattr("resource_type")?.str()?.extract()?,
+        resource_name: column.getattr("resource_name")?.extract()?,
+        column_name: column.getattr("column_name")?.extract()?,
+    })
+}
+
+fn column_edge(edge: &Bound<'_, PyAny>) -> PyResult<LineageColumnEdge> {
+    Ok(LineageColumnEdge {
+        source: lineage_column(&edge.getattr("source")?)?,
+        target: lineage_column(&edge.getattr("target")?)?,
+        transform: edge.getattr("transform_kind")?.str()?.extract()?,
+        confidence: edge.getattr("confidence")?.str()?.extract()?,
+    })
+}
+
+/// Edges reached depth first from one column, as Python's stack walk visits them.
+fn traced_edges(
+    lineage: &Bound<'_, PyAny>,
+    (resource_name, column_name): (&str, &str),
+    (direction, max_depth): (&str, Option<i64>),
+) -> PyResult<Vec<LineageColumnEdge>> {
+    let mut result: Vec<LineageColumnEdge> = Vec::new();
+    if max_depth == Some(0) {
+        return Ok(result);
+    }
+    let downstream: bool = direction == DOWNSTREAM_DIRECTION;
+    let mut stack: Vec<(String, String, i64)> =
+        vec![(resource_name.to_owned(), column_name.to_owned(), 0)];
+    let mut visited: HashSet<(String, String)> = HashSet::new();
+    while let Some((resource, column, depth)) = stack.pop() {
+        if !visited.insert((resource.clone(), column.clone())) {
+            continue;
+        }
+        if max_depth.is_some_and(|maximum| depth >= maximum) {
+            continue;
+        }
+        let edges: Bound<'_, PyAny> = if downstream {
+            let options: Bound<'_, PyDict> = PyDict::new(lineage.py());
+            options.set_item("resource_name", &resource)?;
+            options.set_item("column_name", &column)?;
+            lineage.call_method("column_consumers", (), Some(&options))?
+        } else {
+            lineage.call_method1("edges_targeting", (&resource,))?
+        };
+        for edge in edges.try_iter()? {
+            let edge: LineageColumnEdge = column_edge(&edge?)?;
+            let next: &LineageColumn = if downstream {
+                &edge.target
+            } else {
+                if edge.target.column_name != column {
+                    continue;
+                }
+                &edge.source
+            };
+            stack.push((
+                next.resource_name.clone(),
+                next.column_name.clone(),
+                depth + 1,
+            ));
+            result.push(edge);
+        }
+    }
+    Ok(result)
+}
+
+/// `with maybe_status(...)` around building column lineage.
+fn column_lineage<'py>(
+    py: Python<'py>,
+    (graph, mode): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    candidates: &ColumnCandidates,
+) -> PyResult<Bound<'py, PyAny>> {
+    let count: usize = candidates.model_names.len();
+    let rich: bool = mode.str()?.extract::<String>()? == RICH_MODE;
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item(
+        "message",
+        format!("Analyzing column lineage for {count} models..."),
+    )?;
+    options.set_item("enabled", rich && count >= RICH_STATUS_MODEL_THRESHOLD)?;
+    let status: Bound<'py, PyAny> =
+        imported(py, STATUS_MODULE, "maybe_status")?.call((), Some(&options))?;
+    status.call_method0("__enter__")?;
+    let built: PyResult<Bound<'py, PyAny>> =
+        imported(py, NATIVE_MODULE, "build_project_column_lineage").and_then(|build| {
+            build.call1((
+                graph.getattr("project")?,
+                py.None(),
+                mode,
+                PyFrozenSet::new(py, &candidates.model_names)?,
+            ))
+        });
+    status.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+    built
+}
+
+/// The column trace of a `model.column` target, or `None` when the target is not a model column.
+fn column_trace(
+    py: Python<'_>,
+    source: &LineageSource<'_>,
+    (target, mode): (&str, &Bound<'_, PyAny>),
+    (direction, depth): (&str, Option<i64>),
+) -> PyResult<Option<ColumnTrace>> {
+    let Some((resource_name, column_name)) = target.rsplit_once(COLUMN_TARGET_SEPARATOR) else {
+        return Ok(None);
+    };
+    let LineageSource::Compiled { index, graph, .. } = source else {
+        return Err(compiled_graph_error(
+            py,
+            "column lineage requires a compiled project graph",
+            true,
+        ));
+    };
+    let Some(key) = name_lookup(index)
+        .get(resource_name)
+        .map(|key| (*key).clone())
+    else {
+        return Ok(None);
+    };
+    if key.resource_type != MODEL_RESOURCE_TYPE {
+        return Ok(None);
+    }
+    if direction == BOTH_DIRECTIONS {
+        return Err(user_error(
+            py,
+            LineageError::new(
+                "C306",
+                "column lineage supports --direction upstream or downstream, not both",
+            ),
+        ));
+    }
+    let candidates: ColumnCandidates = column_candidates(index, &key, (direction, depth));
+    let lineage: Bound<'_, PyAny> = column_lineage(py, (graph, mode), &candidates)?;
+    if lineage.is_none() {
+        return Err(compiled_graph_error(
+            py,
+            "column lineage requires SQL analysis to be enabled and available",
+            true,
+        ));
+    }
+    Ok(Some(ColumnTrace {
+        target: LineageColumn {
+            resource_type: key.resource_type.clone(),
+            resource_name: key.name.clone(),
+            column_name: column_name.to_owned(),
+        },
+        trace: traced_edges(&lineage, (&key.name, column_name), (direction, depth))?,
+        direction: direction.to_owned(),
+        mode: mode.getattr("value")?.extract()?,
+        max_depth: depth,
+        analyzed_model_count: candidates.model_names.len(),
+        truncated: candidates.truncated,
+    }))
+}
+
+/// Selector views of the source: the compiled graph's own dicts, or dicts built from the index.
+fn selector_views<'py>(
+    py: Python<'py>,
+    source: &LineageSource<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    match source {
+        LineageSource::Compiled { graph, .. } => graph.getattr("lineage_views"),
+        LineageSource::Cached(index) => index_views(py, index),
+    }
+}
+
+fn view_options<'py>(views: &Bound<'py, PyAny>, names: &[&str]) -> PyResult<Bound<'py, PyDict>> {
+    let options: Bound<'py, PyDict> = PyDict::new(views.py());
+    for name in names {
+        options.set_item(*name, views.getattr(*name)?)?;
+    }
+    Ok(options)
+}
+
+/// Depth anchors of selectors the shared resolver already validated.
+fn selector_anchors(
+    py: Python<'_>,
+    (views, index): (&Bound<'_, PyAny>, &LineageIndex),
+    select: &[String],
+    require_clear_anchors: bool,
+) -> PyResult<LineageAnchors> {
+    let parse: Bound<'_, PyAny> = imported(py, SELECTOR_PARSE_MODULE, "parse_project_selector")?;
+    let matcher: Bound<'_, PyAny> = imported(py, SELECTOR_MATCH_MODULE, "match_project_selector")?;
+    let path_class: Bound<'_, PyAny> = imported(py, PLANNER_MODELS, "PathSelector")?;
+    let names: HashMap<&str, &LineageKey> = name_lookup(index);
+    let named = |name: String| -> PyResult<LineageKey> {
+        names
+            .get(name.as_str())
+            .map(|key| (*key).clone())
+            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(name))
+    };
+    let mut anchors: LineageAnchors = LineageAnchors::default();
+    for raw in select {
+        for token in raw.split_whitespace() {
+            if token.contains(SELECTOR_INTERSECTION_MARKER) && require_clear_anchors {
+                return Err(user_error(
+                    py,
+                    LineageError::new(
+                        "C308",
+                        "--depth cannot be combined with comma-intersection selectors",
+                    ),
+                ));
+            }
+            for part in token.split(SELECTOR_INTERSECTION_MARKER) {
+                let parsed: Bound<'_, PyAny> = parse.call1((part,))?;
+                if parsed.is_instance(&path_class)? {
+                    let start: LineageKey = named(parsed.getattr("start_name")?.extract()?)?;
+                    let end: LineageKey = named(parsed.getattr("end_name")?.extract()?)?;
+                    anchors
+                        .retained
+                        .extend(lineage_path_nodes(index, &start, &end));
+                    anchors.upstream.push(start);
+                    anchors.downstream.push(end);
+                    continue;
+                }
+                let kind: String = parsed.getattr("kind")?.str()?.extract()?;
+                let set_kind: bool = SET_SELECTOR_KINDS.contains(&kind.as_str());
+                if set_kind && require_clear_anchors {
+                    return Err(user_error(
+                        py,
+                        LineageError::new(
+                            "C309",
+                            "--depth requires name, source, seed, or path-between selectors",
+                        ),
+                    ));
+                }
+                let options: Bound<'_, PyDict> =
+                    view_options(views, &["all_keys", "tag_index", "path_index"])?;
+                options.set_item("parsed", &parsed)?;
+                let matched: Vec<LineageKey> = lineage_keys(&matcher.call((), Some(&options))?)?;
+                let upstream: bool = parsed.getattr("upstream")?.extract()?;
+                let downstream: bool = parsed.getattr("downstream")?.extract()?;
+                if set_kind || upstream {
+                    anchors.upstream.extend(matched.iter().cloned());
+                }
+                if set_kind || downstream {
+                    anchors.downstream.extend(matched.iter().cloned());
+                }
+                if !set_kind && !upstream && !downstream {
+                    anchors.retained.extend(matched);
+                }
+            }
+        }
+    }
+    Ok(anchors)
+}
+
+/// Lineage of `--select`/`--exclude`, expanded by direction or trimmed to depth.
+fn selector_rendering(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+    source: &LineageSource<'_>,
+    (depth, style): (Option<i64>, CliStyle),
+) -> PyResult<LineageRendering> {
+    let views: Bound<'_, PyAny> = selector_views(py, source)?;
+    let select: Bound<'_, PyAny> = request.getattr("select")?;
+    let exclude: Bound<'_, PyAny> = request.getattr("exclude")?;
+    let options: Bound<'_, PyDict> = view_options(&views, &GRAPH_VIEW_NAMES)?;
+    options.set_item("select", &select)?;
+    options.set_item("exclude", &exclude)?;
+    let selected: Vec<LineageKey> = lineage_keys(
+        &imported(py, SELECTION_MODULE, "resolve_project_selectors")?.call((), Some(&options))?,
+    )?;
+    let index: &LineageIndex = source.index();
+    let direction: Option<String> = request.getattr("direction")?.extract()?;
+    let output_format: String = request.getattr("output_format")?.extract()?;
+    let graph = if let Some(direction) = direction {
+        let options: Bound<'_, PyDict> = view_options(&views, &GRAPH_VIEW_NAMES)?;
+        options.set_item("selectors", &exclude)?;
+        let excluded: Vec<LineageKey> = lineage_keys(
+            &imported(
+                py,
+                SELECTOR_TOKENS_MODULE,
+                "resolve_project_selector_tokens",
+            )?
+            .call((), Some(&options))?,
+        )?;
+        select_directional_lineage(index, (&selected, &excluded), (&direction, depth))
+    } else {
+        let anchors: LineageAnchors =
+            selector_anchors(py, (&views, index), &strings(&select)?, depth.is_some())?;
+        select_anchored_lineage(index, &selected, (&anchors, depth))
+    };
+    Ok(render_lineage_graph(&graph, &output_format, style))
+}
+
+/// Re-raise an unknown selector from a cached graph as the unit-test error it may hide.
+fn selector_failure(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+    (source, project_dir): (&LineageSource<'_>, &Bound<'_, PyAny>),
+    error: PyErr,
+) -> PyErr {
+    let check = || -> PyResult<()> {
+        let planner_error: Bound<'_, PyAny> =
+            imported(py, PLANNER_EXCEPTIONS, "PlannerInputError")?;
+        if !matches!(source, LineageSource::Cached(_))
+            || !error.is_instance(py, &planner_error)
+            || error.value(py).getattr("code")?.extract::<String>()? != UNKNOWN_SELECTOR_ERROR_CODE
+        {
+            return Ok(());
+        }
+        reject_unit_tests(py, request, &discover(py, project_dir, Some(false))?)
+    };
+    match check() {
+        Ok(()) => error,
+        Err(raised) => raised,
+    }
+}
+
+fn rendering(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+    (source, project_dir): (&LineageSource<'_>, &Bound<'_, PyAny>),
+    (depth, style): (Option<i64>, CliStyle),
+) -> PyResult<LineageRendering> {
+    let targets: Vec<String> = strings(&request.getattr("targets")?)?;
+    let output_format: String = request.getattr("output_format")?.extract()?;
+    if targets.is_empty() {
+        return selector_rendering(py, request, source, (depth, style))
+            .map_err(|error| selector_failure(py, request, (source, project_dir), error));
+    }
+    let targets: Vec<String> = normalized_targets(py, source.index(), &targets)?;
+    let direction: String = request
+        .getattr("direction")?
+        .extract::<Option<String>>()?
+        .unwrap_or_else(|| UPSTREAM_DIRECTION.to_owned());
+    if let [target] = targets.as_slice()
+        && let Some(trace) = column_trace(
+            py,
+            source,
+            (target, &request.getattr("lineage_mode")?),
+            (&direction, depth),
+        )?
+    {
+        return Ok(render_column_trace(&trace, &output_format, style));
+    }
+    let graph = select_target_lineage(source.index(), &targets, (&direction, depth))
+        .map_err(|error| user_error(py, error))?;
+    Ok(render_lineage_graph(&graph, &output_format, style))
+}
+
+fn request_shape(request: &Bound<'_, PyAny>) -> PyResult<LineageRequestShape> {
+    Ok(LineageRequestShape {
+        targets: strings(&request.getattr("targets")?)?,
+        select: strings(&request.getattr("select")?)?,
+        exclude: strings(&request.getattr("exclude")?)?,
+    })
+}
+
+/// Run one `sqb lineage` request and print its result.
+#[pyfunction]
+#[pyo3(signature = (*, request))]
+fn run_lineage_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+    let shape: LineageRequestShape = request_shape(request)?;
+    validate_lineage_request(&shape).map_err(|error| user_error(py, error))?;
+    let depth: Option<i64> = parse_lineage_depth(&request.getattr("depth")?.extract::<String>()?)
+        .map_err(|error| user_error(py, error))?;
+    let project_dir: Bound<'_, PyAny> = match request.getattr("project_dir")? {
+        directory if !directory.is_none() => directory,
+        _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
+    };
+    let include_uses: bool = request.getattr("include_uses")?.extract()?;
+    let compiled: bool = include_uses
+        || shape
+            .targets
+            .iter()
+            .any(|target| target.contains(COLUMN_TARGET_SEPARATOR));
+    let source: LineageSource<'_> = prepare_source(py, request, (&project_dir, compiled))?;
+    let uses: Option<Vec<SemanticUse>> = if include_uses {
+        Some(semantic_uses(py, request, &source)?)
+    } else {
+        None
+    };
+    let style: CliStyle = CliStyle {
+        use_color: imported(py, COLOR_MODULE, "supports_color")?
+            .call0()?
+            .extract()?,
+    };
+    let rendered: LineageRendering =
+        rendering(py, request, (&source, &project_dir), (depth, style))?;
+    let output: String = lineage_stdout(rendered, uses.as_deref())
+        .map_err(|error| PyValueError::new_err(format!("{error:?}")))?;
+    py.import("sys")?
+        .getattr("stdout")?
+        .call_method1("write", (output,))?;
+    Ok(0)
+}
+
+/// Read a `[kind:]<name>` or `[kind:]<model>.<column>` target against selector names.
+#[pyfunction]
+#[pyo3(name = "resolve_lineage_target", signature = (*, all_keys, target))]
+fn resolve_lineage_target_object<'py>(
+    py: Python<'py>,
+    all_keys: &Bound<'py, PyAny>,
+    target: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let mut names: HashMap<String, LineageKey> = HashMap::new();
+    for item in all_keys.call_method0("items")?.try_iter()? {
+        let (name, key): (String, Bound<'py, PyAny>) = item?.extract()?;
+        names.insert(name, lineage_key(&key)?);
+    }
+    let lookup = |name: &str| names.get(name).cloned();
+    let resolved: LineageTarget = resolve_lineage_target(target, &lookup);
+    let resource_name: &str = resolved
+        .name
+        .split_once(COLUMN_TARGET_SEPARATOR)
+        .map_or(resolved.name.as_str(), |(resource, _)| resource);
+    let options: Bound<'py, PyDict> = PyDict::new(py);
+    options.set_item("kind", &resolved.kind)?;
+    options.set_item("name", &resolved.name)?;
+    options.set_item("key", all_keys.call_method1("get", (resource_name,))?)?;
+    options.set_item("column_name", &resolved.column_name)?;
+    options.set_item("kind_matches", resolved.kind_matches)?;
+    imported(py, COMMAND_MODELS, "LineageTarget")?.call((), Some(&options))
+}
+
+/// The relation lineage cache key, or `None` when the inputs cannot be hashed.
+#[pyfunction]
+#[pyo3(signature = (*, project_dir, cli_vars))]
+fn lineage_cache_fingerprint(
+    project_dir: &Bound<'_, PyAny>,
+    cli_vars: &Bound<'_, PyAny>,
+) -> PyResult<Option<String>> {
+    lineage_fingerprint(project_dir, cli_vars)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(run_lineage_command, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_lineage_target_object, module)?)?;
+    module.add_function(wrap_pyfunction!(lineage_cache_fingerprint, module)?)?;
+    Ok(())
+}

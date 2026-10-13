@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlbuild.cli.commands._helpers.lineage.selection import resolve_lineage_target
+from sqlbuild._native import resolve_lineage_target
 from sqlbuild.cli.commands.constants import COLUMN_TARGET_KIND, COLUMN_TARGET_SEPARATOR
 from sqlbuild.cli.commands.exceptions import CliUserError
 from sqlbuild.cli.commands.models import LineageTarget, RefactorCommandRequest

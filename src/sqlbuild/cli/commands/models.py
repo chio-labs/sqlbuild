@@ -65,7 +65,6 @@ if TYPE_CHECKING:
     )
     from sqlbuild.compiler.compile.types import CompiledProjectView
     from sqlbuild.compiler.discovery.models import DiscoveredCheckFunction, DiscoveredProjectInputs
-    from sqlbuild.compiler.lineage.models import ColumnLineageEdge, QualifiedLineageColumn
     from sqlbuild.compiler.pipeline.models import (
         ClonePipelineResult,
         CompilePipelineResult,
@@ -721,46 +720,6 @@ class JanitorPlanningResult:
 
 
 @dataclass(frozen=True)
-class LineageNode:
-    """One displayable lineage graph node."""
-
-    key: CompiledObjectKey
-    relative_path: str | None = None
-    qualified_name: str | None = None
-
-
-@dataclass(frozen=True)
-class LineageGraph:
-    """Selected lineage graph slice."""
-
-    nodes: tuple[LineageNode, ...]
-    edges: tuple[tuple[CompiledObjectKey, CompiledObjectKey], ...]
-    focus_keys: tuple[CompiledObjectKey, ...] = field(default_factory=tuple)
-    direction: str | None = None
-
-
-@dataclass(frozen=True)
-class RelationLineageIndex:
-    """Cacheable structural graph used by relation-level lineage inspection."""
-
-    nodes: dict[CompiledObjectKey, LineageNode]
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
-    tag_index: dict[str, frozenset[CompiledObjectKey]]
-    path_index: dict[CompiledObjectKey, str]
-    all_keys: dict[str, CompiledObjectKey]
-
-
-@dataclass(frozen=True)
-class LineageSelectionAnchors:
-    """Selector anchors used for optional post-selection depth trimming."""
-
-    upstream: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
-    downstream: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
-    retained: frozenset[CompiledObjectKey] = field(default_factory=frozenset)
-
-
-@dataclass(frozen=True)
 class LineageTarget:
     """One positional target, `[kind:]<name>` or `[kind:]<model>.<column>`, resolved by name."""
 
@@ -769,19 +728,6 @@ class LineageTarget:
     key: CompiledObjectKey | None
     column_name: str | None
     kind_matches: bool
-
-
-@dataclass(frozen=True)
-class ColumnLineageTrace:
-    """Selected column-level lineage trace."""
-
-    target: QualifiedLineageColumn
-    trace: tuple[ColumnLineageEdge, ...]
-    direction: str
-    mode: ColumnLineageMode = ColumnLineageMode.RICH
-    max_depth: int | None = None
-    analyzed_model_count: int = 0
-    truncated: bool = False
 
 
 @dataclass(frozen=True)

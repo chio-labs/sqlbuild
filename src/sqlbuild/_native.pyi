@@ -1,12 +1,10 @@
 """Private SQLBuild native engine bindings."""
 
-from collections.abc import Callable, Hashable, Iterable, Mapping, Sequence, Set
+from collections.abc import Callable, Iterable, Mapping, Sequence, Set
 from contextlib import AbstractContextManager
 from contextvars import Token
 from pathlib import Path, PurePath
 from typing import Any, Literal, TextIO, TypedDict, overload
-
-from _typeshed import SupportsRichComparison
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
@@ -18,7 +16,7 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord
-from sqlbuild.cli.commands.models import ScopeCommandRequest
+from sqlbuild.cli.commands.models import LineageCommandRequest, LineageTarget, ScopeCommandRequest
 from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
 from sqlbuild.cli.compile.models import CompileAnalysis
 from sqlbuild.cli.compile_reuse.models import CompileReuseAttempt
@@ -126,7 +124,6 @@ from sqlbuild.compiler.lineage.models import (
     ColumnLineageEdge,
     DirectSemanticColumnUse,
     ModelColumnLineage,
-    QualifiedLineageColumn,
 )
 from sqlbuild.compiler.lineage.types import ColumnLineageMode, InferredNullability
 from sqlbuild.compiler.pipeline.models import (
@@ -2596,42 +2593,6 @@ def build_direct_semantic_uses(
     model_names: frozenset[str],
     /,
 ) -> tuple[DirectSemanticColumnUse, ...]: ...
-def render_dependency_tree[Node: Hashable](
-    *,
-    focus: Node,
-    deps: dict[Node, list[Node]],
-    seen: set[Node],
-    format_node: Callable[[Node], str],
-    sort_key: Callable[[Node], SupportsRichComparison],
-    branch_style: Callable[[str], str],
-    already_shown: Callable[[], str],
-) -> list[str]: ...
-def render_column_trace_tree[Column, Edge](
-    *,
-    target: Column,
-    deps: dict[str, list[Edge]],
-    total: int,
-    limit: int,
-    column_id: Callable[[Column], str],
-    related_column: Callable[[Edge], Column],
-    format_related: Callable[[Edge], str],
-    branch_style: Callable[[str], str],
-    already_shown: Callable[[], str],
-    note_style: Callable[[str], str],
-) -> list[str]: ...
-def render_column_trace_limit_note(
-    *, total: int, limit: int, note_style: Callable[[str], str]
-) -> list[str]: ...
-def serialize_column(
-    *,
-    column: QualifiedLineageColumn,
-    render_resource_type: Callable[[QualifiedLineageColumn], str],
-) -> dict[str, object]: ...
-def serialize_column_edge(
-    *,
-    edge: ColumnLineageEdge,
-    render_resource_type: Callable[[QualifiedLineageColumn], str],
-) -> dict[str, object]: ...
 
 class ProjectColumnLineage:
     """Project-level column lineage graph with lazily materialized public views."""
@@ -2666,6 +2627,13 @@ class ProjectColumnLineage:
 def relation_lineage_fingerprint(
     project_dir: Path, prefix: bytes, interrupted_listing_uncacheable: bool, /
 ) -> str | None: ...
+def lineage_cache_fingerprint(
+    *, project_dir: Path, cli_vars: dict[str, object] | None
+) -> str | None: ...
+def run_lineage_command(*, request: LineageCommandRequest) -> int: ...
+def resolve_lineage_target(
+    *, all_keys: Mapping[str, CompiledObjectKey], target: str
+) -> LineageTarget: ...
 
 # Native analysis: SQL test planning glue.
 def plan_compiled_sql_tests(

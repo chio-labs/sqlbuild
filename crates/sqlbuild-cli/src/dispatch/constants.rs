@@ -365,12 +365,9 @@ const LINEAGE_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const LINEAGE_ROUTE: Route = routed(
     "run_lineage",
-    (
-        "sqlbuild.cli.commands.main.inspection._lineage",
-        "run_lineage",
-    ),
+    ("sqlbuild._native", "run_lineage_command"),
     &LINEAGE_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const CLONE_FIELDS: [Field; 12] = [
