@@ -20,6 +20,7 @@ pub mod posix_path;
 pub mod progress;
 pub mod query_command;
 pub mod redaction;
+pub mod scenario_command;
 pub mod seed_command;
 pub mod terminal_events;
 pub mod test_command;
