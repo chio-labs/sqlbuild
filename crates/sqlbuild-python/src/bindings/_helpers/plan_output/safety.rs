@@ -1,0 +1,178 @@
+//! Structured future-cursor and maximum-start safety evidence for plan and result JSON.
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::types::PyDict;
+use pyo3::{pyfunction, wrap_pyfunction};
+
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::plan_output::values::{dict, enum_value, items};
+
+const RENDER_MODULE: &str = "sqlbuild.cursor_algebra.main.render";
+
+/// `render(value=value)`.
+fn render<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    call_with(
+        &imported(value.py(), RENDER_MODULE, "render")?,
+        &[("value", value)],
+    )
+}
+
+/// `render(value=value)` when set, else `None`.
+fn optional_render<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if value.is_none() {
+        return Ok(value);
+    }
+    render(value)
+}
+
+fn bounds<'py>(
+    evidence: &Bound<'py, PyAny>,
+    (start, end): (&str, &str),
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(dict(
+        evidence.py(),
+        vec![
+            ("start", render(evidence.getattr(start)?)?),
+            ("end", render(evidence.getattr(end)?)?),
+        ],
+    )?
+    .into_any())
+}
+
+/// Cap policy, bounds and physical input evidence of future-cursor safety, or `None`.
+pub(crate) fn future_cursor_safety<'py>(
+    evidence: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = evidence.py();
+    if evidence.is_none() {
+        return Ok(evidence.clone());
+    }
+    let relation: Bound<'py, PyAny> = evidence.getattr("determining_relation")?;
+    let determining: Bound<'py, PyAny> = if relation.is_none() {
+        relation
+    } else {
+        dict(
+            py,
+            vec![
+                ("relation", relation),
+                (
+                    "cursor_column",
+                    evidence.getattr("determining_cursor_column")?,
+                ),
+            ],
+        )?
+        .into_any()
+    };
+    let mut inputs: Vec<Bound<'py, PyDict>> = Vec::new();
+    for item in items(&evidence.getattr("inputs")?)? {
+        inputs.push(dict(
+            py,
+            vec![
+                ("relation", item.getattr("relation")?),
+                ("cursor_column", item.getattr("cursor_column")?),
+                ("minimum", optional_render(item.getattr("minimum")?)?),
+                ("maximum", render(item.getattr("maximum")?)?),
+            ],
+        )?);
+    }
+    Ok(dict(
+        py,
+        vec![
+            ("action", enum_value(evidence, "action")?),
+            ("max_distance", evidence.getattr("max_distance")?),
+            (
+                "invocation_time",
+                render(evidence.getattr("invocation_time")?)?,
+            ),
+            (
+                "discovered_bounds",
+                bounds(evidence, ("discovered_start", "discovered_end"))?,
+            ),
+            (
+                "applied_bounds",
+                bounds(evidence, ("applied_start", "applied_end"))?,
+            ),
+            (
+                "maximum_allowed_bounds",
+                bounds(evidence, ("maximum_allowed_start", "maximum_allowed_end"))?,
+            ),
+            (
+                "future_start_detected",
+                evidence.getattr("future_start_detected")?,
+            ),
+            (
+                "future_end_detected",
+                evidence.getattr("future_end_detected")?,
+            ),
+            ("determining_input", determining),
+            ("inputs", pyo3::types::PyList::new(py, inputs)?.into_any()),
+        ],
+    )?
+    .into_any())
+}
+
+/// Automatic-start policy and physical eligibility evidence, or `None`.
+pub(crate) fn maximum_start_safety<'py>(
+    evidence: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = evidence.py();
+    if evidence.is_none() {
+        return Ok(evidence.clone());
+    }
+    Ok(dict(
+        py,
+        vec![
+            ("action", enum_value(evidence, "action")?),
+            ("max_ahead", evidence.getattr("max_ahead")?),
+            (
+                "invocation_time",
+                render(evidence.getattr("invocation_time")?)?,
+            ),
+            (
+                "physical_target_max",
+                render(evidence.getattr("physical_target_max")?)?,
+            ),
+            (
+                "highest_eligible_target_max",
+                optional_render(evidence.getattr("highest_eligible_target_max")?)?,
+            ),
+            (
+                "effective_start",
+                render(evidence.getattr("effective_start")?)?,
+            ),
+            (
+                "maximum_allowed_start",
+                render(evidence.getattr("maximum_allowed_start")?)?,
+            ),
+            (
+                "input",
+                dict(
+                    py,
+                    vec![
+                        ("relation", evidence.getattr("target_relation")?),
+                        ("cursor_column", evidence.getattr("cursor_column")?),
+                    ],
+                )?
+                .into_any(),
+            ),
+        ],
+    )?
+    .into_any())
+}
+
+/// Serialize future-cursor safety evidence; `None` stays `None`.
+#[pyfunction]
+fn serialize_future_cursor_safety<'py>(evidence: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    future_cursor_safety(&evidence)
+}
+
+/// Serialize maximum automatic-start safety evidence; `None` stays `None`.
+#[pyfunction]
+fn serialize_maximum_start_safety<'py>(evidence: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    maximum_start_safety(&evidence)
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(serialize_future_cursor_safety, module)?)?;
+    module.add_function(wrap_pyfunction!(serialize_maximum_start_safety, module)?)
+}

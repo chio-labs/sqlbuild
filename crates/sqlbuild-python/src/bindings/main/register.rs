@@ -7,8 +7,8 @@ use crate::bindings::_helpers::{
     analysis, analysis_session, attachments, boundary, cache, cli, compile_attachment,
     compile_command, compile_driver, compile_outputs, compiled_project, contracts, dag_artifact,
     discovery, fingerprints, frontier, graph, lineage, macro_bridge, manifest, model_config,
-    project_assembly, refactor, render, rules, scopes, semantic_checks, semantic_shapes,
-    sql_test_glue, sqltext, type_system,
+    plan_output, project_assembly, refactor, render, rules, scopes, semantic_checks,
+    semantic_shapes, sql_test_glue, sqltext, type_system,
 };
 use crate::bindings::models;
 
@@ -45,6 +45,7 @@ fn register_project_stages(module: &Bound<'_, PyModule>) -> PyResult<()> {
     cache::registration::register(module)?;
     attachments::registration::register(module)?;
     refactor::registration::register(module)?;
+    plan_output::registration::register(module)?;
     Ok(())
 }
 

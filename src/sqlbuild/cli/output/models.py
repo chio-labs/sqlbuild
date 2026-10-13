@@ -48,10 +48,7 @@ from sqlbuild.cli.output.constants import (
     MAX_INTEGRATION_RECORD_BYTES,
 )
 from sqlbuild.cli.output.types import (
-    CursorBoundsOwner,
-    CursorResolutionStatus,
     IntegrationOutputKind,
-    PlannedCursorBounds,
     WrittenTargetDiagnostic,
 )
 from sqlbuild.compiler.auditing.types import (
@@ -75,24 +72,6 @@ class TerminalEventClaim:
 
     terminal: LifecycleEvent
     event_sequence: int
-
-
-@dataclass(frozen=True)
-class CursorPlanDetails:
-    """Operator-facing cursor details shared by plan renderers."""
-
-    requested_start: str | None
-    requested_end: str | None
-    bounds_owner: CursorBoundsOwner
-    resolution_status: CursorResolutionStatus
-    resolved_bounds: PlannedCursorBounds | None
-    declared_grain: str | None
-    effective_grain: str | None
-    declared_batch_size: str | None
-    effective_batch_size: str | None
-    planned_batch_count: int | None
-    empty_inputs: tuple[str, ...] = ()
-    waiting_on_empty_inputs: bool = False
 
 
 @dataclass(frozen=True)

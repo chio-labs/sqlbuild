@@ -9,11 +9,11 @@ import pytest
 
 from sqlbuild._native import (
     compiled_model_record,
+    format_plan,
     project_with,
 )
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.cli.output.main.plan import format_plan
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.planner._helpers.changes import detect as change_detection
 from sqlbuild.compiler.planner._helpers.planning import identities as identity_planning

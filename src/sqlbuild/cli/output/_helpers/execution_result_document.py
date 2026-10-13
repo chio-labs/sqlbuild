@@ -10,11 +10,10 @@ from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import cast
 
+from sqlbuild._native import serialize_future_cursor_safety, serialize_maximum_start_safety
 from sqlbuild.adapter.contract.models import LifeCycleEvent as StatementLifeCycleEvent
 from sqlbuild.adapter.contract.types import LifeCycleEventKind
-from sqlbuild.cli.output._helpers.future_cursor_safety import serialize_future_cursor_safety
 from sqlbuild.cli.output._helpers.integration_result import _render_measurement_thresholds
-from sqlbuild.cli.output._helpers.maximum_start_safety import serialize_maximum_start_safety
 from sqlbuild.cli.output.classes.terminal_event_index import (
     TerminalEventIndex,
     current_terminal_event_index,

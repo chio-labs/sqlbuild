@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.cli.output.main.plan import format_plan
+from sqlbuild._native import format_plan
 from sqlbuild.compiler.migrations.types import (
     ColumnMigrationDecision,
     MigrationCompatibility,
