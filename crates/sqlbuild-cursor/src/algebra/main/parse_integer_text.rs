@@ -7,8 +7,8 @@ pub fn parse_integer_text(text: &str) -> Option<i128> {
     if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
-    match text.parse::<i128>() {
-        Ok(value) => Some(value),
-        Err(_) => None,
-    }
+    let Ok(value) = text.parse::<i128>() else {
+        return None;
+    };
+    Some(value)
 }
