@@ -152,7 +152,12 @@ from sqlbuild.compiler.scopes.models import (
     VisibilityResolution,
 )
 from sqlbuild.compiler.scopes.types import JsonValue, ScopeQueryTarget
-from sqlbuild.compiler.sql_analysis.models import SqlLexicalSyntax
+from sqlbuild.compiler.sql_analysis.models import (
+    SqlBindingResult,
+    SqlLexicalSyntax,
+    SqlSchemaValidationRequest,
+)
+from sqlbuild.compiler.sql_analysis.types import NativeProjectCatalog
 from sqlbuild.compiler.sql_test_glue.models import (
     NativeSqlTestAssemblyRequest,
     NativeSqlTestChainRequest,
@@ -2228,11 +2233,38 @@ def native_execution_gate_edges(
     list[tuple[str, tuple[str, str], tuple[str, str], tuple[str, str]]],
     list[tuple[str, tuple[str, str], tuple[str, str], str, str | None]],
 ]: ...
-def schema_validation_rows(
-    catalog: Any,
-    dialect: str,
-    requests: list[tuple[str, list[tuple[str, bool]], dict[str, Mapping[str, str]]]],
-) -> list[list[tuple[str, str, int | None, int | None, int | None, int | None, str]]]: ...
+
+class BindingCatalog:
+    schemas: dict[str, Mapping[str, str]]
+    dialect: str
+    quoted_ignore_case: bool
+    analysis_shapes: dict[str, tuple[Mapping[str, str], Mapping[str, str]]]
+    expression_shapes: dict[str, dict[str, str] | None]
+    native: NativeProjectCatalog
+    def __init__(
+        self,
+        *,
+        dialect: str,
+        quoted_ignore_case: bool,
+        known_functions: Sequence[str],
+        known_types: Sequence[str],
+        relations: Mapping[str, Mapping[str, str]],
+    ) -> None: ...
+    def prepare_analysis(
+        self,
+        *,
+        types: Mapping[str, Mapping[str, str]],
+        nullability: Mapping[str, Mapping[str, str]],
+    ) -> None: ...
+    def with_relations(self, relations: Mapping[str, Mapping[str, str]]) -> BindingCatalog: ...
+    def inferred_schema(
+        self, *, sql: str, columns: dict[str, str], inputs: Mapping[str, Mapping[str, str]]
+    ) -> dict[str, str]: ...
+
+def schema_validations(
+    *, requests: Sequence[SqlSchemaValidationRequest]
+) -> tuple[SqlBindingResult, ...]: ...
+def ignores_quoted_case(*, connection: Mapping[str, object], dialect: str | None) -> bool: ...
 def python_literal_sql_calls(
     source: str, start_line: int, placeholder: str
 ) -> list[tuple[str, str, int]]: ...

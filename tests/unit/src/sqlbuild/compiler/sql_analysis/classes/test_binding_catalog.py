@@ -4,7 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 
 import pytest
 
-from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
+from sqlbuild._native import BindingCatalog
 from sqlbuild.compiler.sql_analysis.types import NativeCompactAnalysisJob
 from tests.unit.src.sqlbuild.compiler.sql_analysis.classes._test_types import (
     CompactJobRerunCase,

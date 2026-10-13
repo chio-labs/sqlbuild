@@ -5,6 +5,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple}
 
 use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_dialect;
 
+use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignores_quoted_case};
 use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     call_with, imported, keywords, within,
@@ -12,8 +13,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 
 const NATIVE_MODULE: &str = "sqlbuild._native";
 const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-const IDENTIFIER_CASE_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._identifier_case";
-const BINDING_CATALOG_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._binding_catalog";
 pub(crate) const NATIVE_STAGES_MODULE: &str =
     "sqlbuild.compiler.compile._helpers.native_stages.assembly";
 const ANALYSIS_CACHE_MODULE: &str = "sqlbuild.compiler.compile._helpers.analysis.cache";
@@ -172,13 +171,12 @@ fn profile_with_catalog<'py>(
     let (known_functions, known_types): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         declared_names(inputs, column_types)?;
     let dialect: Bound<'py, PyAny> = profile.getattr("sql_analysis_dialect")?;
-    let ignore_case: Bound<'py, PyAny> = call_with(
-        &imported(py, IDENTIFIER_CASE_MODULE, "ignores_quoted_case")?,
-        &[
-            ("connection", inputs.getattr("effective_connection")?),
-            ("dialect", dialect.clone()),
-        ],
-    )?;
+    let ignore_case: Bound<'py, PyAny> = PyBool::new(
+        py,
+        ignores_quoted_case(&inputs.getattr("effective_connection")?, &dialect)?,
+    )
+    .to_owned()
+    .into_any();
     let name: Option<String> = if dialect.is_none() {
         None
     } else {
@@ -205,29 +203,27 @@ fn profile_with_catalog<'py>(
         )?),
     )?;
     let dialect: Bound<'py, PyAny> = profile.getattr("sql_analysis_dialect")?;
-    let catalog: Bound<'py, PyAny> = call_with(
-        &imported(py, BINDING_CATALOG_MODULE, "create_binding_catalog")?,
-        &[
+    let dialect: String = if dialect.is_truthy()? {
+        dialect.extract()?
+    } else {
+        GENERIC_DIALECT.to_owned()
+    };
+    let catalog: Bound<'py, PyAny> = Bound::new(
+        py,
+        BindingCatalog::create(
+            py,
             (
-                "dialect",
-                if dialect.is_truthy()? {
-                    dialect
-                } else {
-                    PyString::new(py, GENERIC_DIALECT).into_any()
-                },
+                dialect,
+                profile
+                    .getattr("quoted_identifiers_ignore_case")?
+                    .extract()?,
+                profile.getattr("semantic_known_functions")?.extract()?,
+                profile.getattr("semantic_known_types")?.extract()?,
             ),
-            (
-                "quoted_ignore_case",
-                profile.getattr("quoted_identifiers_ignore_case")?,
-            ),
-            (
-                "known_functions",
-                profile.getattr("semantic_known_functions")?,
-            ),
-            ("known_types", profile.getattr("semantic_known_types")?),
-            ("relations", PyDict::new(py).into_any()),
-        ],
-    )?;
+            PyDict::new(py).as_any(),
+        )?,
+    )?
+    .into_any();
     replace.call(
         (profile,),
         Some(&keywords(py, &[("binding_catalog", catalog)])?),

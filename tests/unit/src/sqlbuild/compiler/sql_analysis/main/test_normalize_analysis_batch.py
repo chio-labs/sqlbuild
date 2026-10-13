@@ -2,20 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from sqlbuild.compiler.sql_analysis.constants import ANALYSIS_NORMALIZATION_CHUNK_SIZE
 from sqlbuild.compiler.sql_analysis.main._normalize_analysis import normalize_analysis_sql
-from sqlbuild.compiler.sql_analysis.main._normalize_analysis_batch import (
-    normalize_analysis_sql_results,
-)
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main._test_types import (
     NormalizationBatchFailureTestCase,
     NormalizationBatchTestCase,
     NormalizationChunkTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.sql_analysis.main.helpers import (
+    normalize_analysis_sql_results,
     pool_catalog,
     without_catalog,
 )
+
+_LARGE_BATCH_SIZE: int = 256
 
 
 @pytest.mark.parametrize(
@@ -128,15 +127,15 @@ def test_given_failing_member_when_normalizing_batch_then_keeps_its_single_call_
     (
         NormalizationChunkTestCase(
             description="failure on a chunk boundary in turn",
-            valid_count=ANALYSIS_NORMALIZATION_CHUNK_SIZE * 2 + 3,
-            failing_index=ANALYSIS_NORMALIZATION_CHUNK_SIZE,
+            valid_count=_LARGE_BATCH_SIZE * 2 + 3,
+            failing_index=_LARGE_BATCH_SIZE,
             catalog=without_catalog,
             expected_error_type=ValueError,
         ),
         NormalizationChunkTestCase(
             description="failure on a chunk boundary on the catalog pool",
-            valid_count=ANALYSIS_NORMALIZATION_CHUNK_SIZE * 2 + 3,
-            failing_index=ANALYSIS_NORMALIZATION_CHUNK_SIZE,
+            valid_count=_LARGE_BATCH_SIZE * 2 + 3,
+            failing_index=_LARGE_BATCH_SIZE,
             catalog=pool_catalog,
             expected_error_type=ValueError,
         ),

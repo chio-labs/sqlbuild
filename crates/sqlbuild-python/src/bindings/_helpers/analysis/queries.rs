@@ -1,12 +1,9 @@
 //! Validate, fingerprint and analyze SQL queries for the Python compiler.
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyRef, PyResult, Python};
+use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::semantic_validation::types::{BindingRequest, DiagnosticRow};
 
-use crate::bindings::_helpers::analysis::conversions;
-use crate::bindings::_helpers::boundary::panics::{compiler_error, value_error};
-use crate::bindings::models::ProjectCatalog;
+use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::types::CompilerDetach;
 
 #[pyfunction]
@@ -58,19 +55,6 @@ fn schema_validation_json(py: Python<'_>, request_json: &str) -> PyResult<String
     .map_err(value_error)
 }
 
-/// Each request validated on its own schema, as binding diagnostic rows mapped to its SQL.
-#[pyfunction]
-fn schema_validation_rows(
-    py: Python<'_>,
-    catalog: PyRef<'_, ProjectCatalog>,
-    dialect: &str,
-    #[pyo3(from_py_with = conversions::binding_requests)] requests: Vec<BindingRequest>,
-) -> PyResult<Vec<Vec<DiagnosticRow>>> {
-    let inner: &sqlbuild_analysis::semantic_validation::models::ProjectCatalog = &catalog.inner;
-    py.compiler_detach(|| inner.schema_validation_rows(dialect, requests))
-        .map_err(compiler_error)
-}
-
 #[pyfunction]
 fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| sqlbuild_analysis::semantic_usage::main::analyze_json(request_json))
@@ -112,6 +96,7 @@ fn analyze_project_queries_compact_json(py: Python<'_>, request_json: &str) -> P
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    crate::bindings::_helpers::analysis::binding_catalog::register(module)?;
     crate::bindings::_helpers::analysis::relation_names::register(module)?;
     crate::bindings::_helpers::analysis::required_columns::register(module)?;
     crate::bindings::_helpers::analysis::explicit_references::register(module)?;
@@ -121,7 +106,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(function_definition_hash, module)?)?;
     module.add_function(wrap_pyfunction!(normalize_query_text, module)?)?;
     module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;
-    module.add_function(wrap_pyfunction!(schema_validation_rows, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_sql_uses_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_column_references_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_queries_json, module)?)?;

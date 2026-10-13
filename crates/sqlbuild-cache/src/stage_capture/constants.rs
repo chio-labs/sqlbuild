@@ -24,11 +24,22 @@ pub const INVOCATION_ID_PARTS: (usize, usize, usize) = (8, 6, 12);
 pub const SKIPPED_SLOTS: [&str; 2] = ["__dict__", "__weakref__"];
 /// Attributes whose mappings are captured without their order, by type.
 pub const UNORDERED_ATTRIBUTES: [(&str, &[&str]); 1] = [(
-    "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog",
+    "sqlbuild._native:BindingCatalog",
     &["analysis_shapes", "expression_shapes", "schemas"],
 )];
 /// The attributes captured, in order, for each native type.
-pub const PROJECTED_ATTRIBUTES: [(&str, &[&str]); 13] = [
+pub const PROJECTED_ATTRIBUTES: [(&str, &[&str]); 14] = [
+    (
+        "sqlbuild._native:BindingCatalog",
+        &[
+            "schemas",
+            "dialect",
+            "quoted_ignore_case",
+            "analysis_shapes",
+            "expression_shapes",
+            "native",
+        ],
+    ),
     (
         "sqlbuild._native:DiscoveredSqlModelFile",
         &[
@@ -295,12 +306,8 @@ pub const PROJECTED_ATTRIBUTES: [(&str, &[&str]); 13] = [
     ),
 ];
 /// Attributes left out of the capture, by type.
-pub const OMITTED_ATTRIBUTES: [(&str, &[&str]); 7] = [
+pub const OMITTED_ATTRIBUTES: [(&str, &[&str]); 6] = [
     ("sqlbuild.compiler.scopes.models:ScopeLookup", &["native"]),
-    (
-        "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog",
-        &["shared_analyses"],
-    ),
     (
         "sqlbuild.compiler.discovery.models:DiscoveredProjectInputs",
         &["native_session"],
@@ -323,7 +330,11 @@ pub const OMITTED_ATTRIBUTES: [(&str, &[&str]); 7] = [
     ),
 ];
 /// The Python model type a native type is captured as.
-pub const CANONICAL_TYPES: [(&str, &str); 9] = [
+pub const CANONICAL_TYPES: [(&str, &str); 10] = [
+    (
+        "sqlbuild._native:BindingCatalog",
+        "sqlbuild.compiler.sql_analysis.classes.binding_catalog:BindingCatalog",
+    ),
     (
         "sqlbuild._native:DiscoveredSqlModelFile",
         "sqlbuild.compiler.discovery.models:DiscoveredSqlModelFile",

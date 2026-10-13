@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import orjson
 
-from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
+from sqlbuild._native import BindingCatalog
 
 
 def orders_catalog(types: dict[str, str]) -> BindingCatalog:

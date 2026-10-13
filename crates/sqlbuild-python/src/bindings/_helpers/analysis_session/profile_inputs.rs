@@ -1,12 +1,14 @@
 //! Inference-profile settings crossing into native analysis: rule ids, shapes and the catalog.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyString};
+use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 
+use crate::bindings::_helpers::analysis::binding_catalog::{
+    BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS, NATIVE_DIALECT_ALIASES,
+};
+
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const BINDING_CATALOG_MODULE: &str = "sqlbuild.compiler.sql_analysis.main._binding_catalog";
-const SQL_ANALYSIS_CONSTANTS_MODULE: &str = "sqlbuild.compiler.sql_analysis.constants";
 const GENERIC_DIALECT: &str = "generic";
 const ADAPTER_RULE_ID: &str = "python";
 /// `(module, function, native rule id)` of the nullability rules the native analysis knows.
@@ -102,12 +104,11 @@ pub(crate) fn dialect_or_generic(dialect: &Bound<'_, PyAny>) -> PyResult<String>
 }
 
 /// Python's `NATIVE_DIALECT_ALIASES.get(dialect, dialect)`.
-pub(crate) fn aliased_dialect(py: Python<'_>, dialect: String) -> PyResult<String> {
-    let aliases: Bound<'_, PyAny> = py
-        .import(SQL_ANALYSIS_CONSTANTS_MODULE)?
-        .getattr("NATIVE_DIALECT_ALIASES")?;
-    let key: Bound<'_, PyString> = PyString::new(py, &dialect);
-    aliases.call_method1("get", (&key, &key))?.extract()
+pub(crate) fn aliased_dialect(_py: Python<'_>, dialect: String) -> PyResult<String> {
+    Ok(NATIVE_DIALECT_ALIASES
+        .iter()
+        .find(|(alias, _)| *alias == dialect)
+        .map_or(dialect.clone(), |(_, native)| (*native).to_owned()))
 }
 
 /// Python's `inferred_binding_shape` test for keeping authored identifier quoting.
@@ -121,11 +122,11 @@ pub(crate) fn case_sensitive_shapes(
     {
         return Ok(false);
     }
-    profile
-        .py()
-        .import(SQL_ANALYSIS_CONSTANTS_MODULE)?
-        .getattr("CASE_SENSITIVE_BINDING_DIALECTS")?
-        .contains(dialect)
+    if dialect.is_none() {
+        return Ok(false);
+    }
+    let dialect: String = dialect.extract()?;
+    Ok(CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.as_str()))
 }
 
 /// `profile.binding_catalog or create_binding_catalog(...)` with no functions, types or relations.
@@ -138,18 +139,19 @@ pub(crate) fn profile_catalog<'py>(
         return Ok(catalog);
     }
     let py: Python<'py> = profile.py();
-    let arguments: Bound<'py, PyDict> = PyDict::new(py);
-    arguments.set_item("dialect", dialect)?;
-    arguments.set_item(
-        "quoted_ignore_case",
-        profile.getattr("quoted_identifiers_ignore_case")?,
+    let catalog: BindingCatalog = BindingCatalog::create(
+        py,
+        (
+            dialect.to_owned(),
+            profile
+                .getattr("quoted_identifiers_ignore_case")?
+                .extract()?,
+            Vec::new(),
+            Vec::new(),
+        ),
+        PyDict::new(py).as_any(),
     )?;
-    arguments.set_item("known_functions", ())?;
-    arguments.set_item("known_types", ())?;
-    arguments.set_item("relations", PyDict::new(py))?;
-    py.import(BINDING_CATALOG_MODULE)?
-        .getattr("create_binding_catalog")?
-        .call((), Some(&arguments))
+    Ok(Bound::new(py, catalog)?.into_any())
 }
 
 /// `profile.function_return_types` items in order.

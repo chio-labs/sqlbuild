@@ -7,8 +7,8 @@ from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Any, cast
 
+from sqlbuild._native import BindingCatalog
 from sqlbuild.compiler.compile.models import CompactLineageFacts, DeclarationScopeBuild
-from sqlbuild.compiler.sql_analysis.classes.binding_catalog import BindingCatalog
 
 HELPERS_MODULE: str = "tests.unit.src.sqlbuild.compiler.frontier.helpers"
 
@@ -84,10 +84,8 @@ def orders_lineage(*, string_pool: tuple[str, ...], source_index: int) -> Compac
     )
 
 
-def orders_binding_catalog(
-    *, shared_analyses: tuple[tuple[str, str], ...], relations: tuple[str, ...]
-) -> BindingCatalog:
-    """Return a catalog whose memo and relation map were filled in the given orders."""
+def orders_binding_catalog(*, relations: tuple[str, ...]) -> BindingCatalog:
+    """Return a catalog whose relation map was filled in the given order."""
 
     catalog: BindingCatalog = BindingCatalog(
         dialect="duckdb",
@@ -96,7 +94,6 @@ def orders_binding_catalog(
         known_types=(),
         relations={name: {"order_id": "INTEGER"} for name in relations},
     )
-    catalog.shared_analyses.update(shared_analyses)
     return catalog
 
 
