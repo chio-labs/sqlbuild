@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlbuild._native import resolve_diff_outcome, write_diff_output
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.cli.commands._helpers.diff.execution import (
     execute_direct_diff,
@@ -12,10 +13,6 @@ from sqlbuild.cli.commands._helpers.diff.execution import (
 from sqlbuild.cli.commands._helpers.diff.invocation import (
     is_query_diff_request,
     resolve_diff_invocation,
-)
-from sqlbuild.cli.commands._helpers.diff.outputs import (
-    resolve_diff_exit_code,
-    write_direct_diff_output,
 )
 from sqlbuild.cli.commands.constants import (
     QUERY_DIFF_INCOMPLETE_EXECUTION_CODES,
@@ -99,23 +96,12 @@ def run_diff(request: DiffCommandRequest) -> int:
         except Exception as error:
             raise QueryDiffExecutionError(str(error), code="C255") from error
         try:
-            write_direct_diff_output(
+            write_diff_output(
                 request=request,
-                preparation=DirectDiffPreparation(
-                    from_target=query_preparation.left_label,
-                    to_target=query_preparation.right_label,
-                    adapter=query_preparation.adapter,
-                    left_project=None,
-                    right_project=None,
-                    selected_names=(
-                        f"{query_preparation.left_label} vs {query_preparation.right_label}",
-                    ),
-                    connection_config=query_preparation.connection_config,
-                    effective_max_column_examples=query_preparation.effective_max_column_examples,
-                    effective_max_row_only_examples=(
-                        query_preparation.effective_max_row_only_examples
-                    ),
-                ),
+                from_label=query_preparation.left_label,
+                to_label=query_preparation.right_label,
+                max_column_examples=query_preparation.effective_max_column_examples,
+                max_row_only_examples=query_preparation.effective_max_row_only_examples,
                 result=query_outcome.result,
                 phase_seconds=query_outcome.phase_seconds,
                 outcome=query_outcome.outcome,
@@ -134,12 +120,17 @@ def run_diff(request: DiffCommandRequest) -> int:
         request=request,
         preparation=direct_preparation,
     )
-    write_direct_diff_output(
+    write_diff_output(
         request=request,
-        preparation=direct_preparation,
+        from_label=direct_preparation.from_target,
+        to_label=direct_preparation.to_target,
+        max_column_examples=direct_preparation.effective_max_column_examples,
+        max_row_only_examples=direct_preparation.effective_max_row_only_examples,
         result=result,
     )
-    return resolve_diff_exit_code(result)
+    exit_code: int
+    _outcome, exit_code = resolve_diff_outcome(result=result)
+    return exit_code
 
 
 def _is_query_key_preflight_error(*, error: AdapterUserError) -> bool:

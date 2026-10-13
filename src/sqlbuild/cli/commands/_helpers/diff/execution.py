@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild._native import (
+    resolve_diff_outcome,
     resolve_project_connection_config,
     resolve_target_connection_config,
     run_diff_pipeline,
@@ -402,7 +403,9 @@ def execute_query_diff(
             "query diff comparison completed without a result", code="C256"
         )
     result: DiffExecutionResult = DiffExecutionResult(model_results=(model_result,))
-    outcome, exit_code = _resolve_query_diff_outcome(request=request, result=result)
+    outcome, exit_code = resolve_diff_outcome(
+        result=result, query_row_comparison=not request.schema_only
+    )
     return QueryDiffRunOutcome(
         result=result,
         phase_seconds=phase_seconds,
@@ -466,45 +469,6 @@ def _cleanup_query_diff_artifacts(
             file=sys.stderr,
         )
     return errors, elapsed
-
-
-def _resolve_query_diff_outcome(
-    *, request: DiffCommandRequest, result: DiffExecutionResult
-) -> tuple[str, int]:
-    if not request.schema_only and _query_schema_prevented_row_comparison(result=result):
-        return "incomplete", 2
-    if _query_result_has_findings(result=result):
-        return "findings", 1
-    return "pass", 0
-
-
-def _query_schema_prevented_row_comparison(*, result: DiffExecutionResult) -> bool:
-    return any(
-        model.row_result is None
-        and (
-            model.schema_result.added_columns
-            or model.schema_result.removed_columns
-            or model.schema_result.type_changed_columns
-        )
-        for model in result.model_results
-    )
-
-
-def _query_result_has_findings(*, result: DiffExecutionResult) -> bool:
-    return any(
-        model.schema_result.added_columns
-        or model.schema_result.removed_columns
-        or model.schema_result.type_changed_columns
-        or (
-            model.row_result is not None
-            and (
-                model.row_result.unequal_count
-                or model.row_result.left_only_count
-                or model.row_result.right_only_count
-            )
-        )
-        for model in result.model_results
-    )
 
 
 def _inspect_query_diff_inputs(

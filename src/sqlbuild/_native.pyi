@@ -21,6 +21,7 @@ from sqlbuild.cli.commands.classes.cli_namespace import CliNamespace
 from sqlbuild.cli.commands.models import (
     CheckCommandRequest,
     CloneCommandRequest,
+    DiffCommandRequest,
     FreshnessCommandRequest,
     JanitorCommandRequest,
     LineageCommandRequest,
@@ -222,6 +223,7 @@ from sqlbuild.cursor_algebra.types import Bound, BoundSentinel, CursorScalar
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
 from sqlbuild.executor.clone.models import CloneExecutionResult, CloneItemResult
+from sqlbuild.executor.diff.models import DiffExecutionResult
 from sqlbuild.executor.janitor.models import JanitorExecutionResult, JanitorPlan
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.models import (
@@ -1516,6 +1518,52 @@ class NativeProgressProjector:
     ) -> float | None: ...
     def close(self) -> None: ...
 
+def render_diff_output(
+    *,
+    result: DiffExecutionResult,
+    from_label: str,
+    to_label: str,
+    mode_label: str,
+    use_color: bool,
+    verbose: bool,
+    max_column_examples: int,
+    max_row_only_examples: int,
+    max_value_length: int | None = ...,
+    suppress_example_values: bool = ...,
+    outcome: str | None = ...,
+) -> str: ...
+def render_diff_json_output(
+    *,
+    result: DiffExecutionResult,
+    from_label: str,
+    to_label: str,
+    max_value_length: int | None = ...,
+    suppress_example_values: bool = ...,
+    phase_seconds: dict[str, float] | None = ...,
+    outcome: str | None = ...,
+) -> str: ...
+def render_diff_error_json(
+    *,
+    status: str,
+    code: str,
+    message: str,
+    help_text: str | None = ...,
+    size_guard: dict[str, object] | None = ...,
+) -> str: ...
+def write_diff_output(
+    *,
+    request: DiffCommandRequest,
+    from_label: str,
+    to_label: str,
+    max_column_examples: int,
+    max_row_only_examples: int,
+    result: DiffExecutionResult,
+    phase_seconds: dict[str, float] | None = ...,
+    outcome: str | None = ...,
+) -> None: ...
+def resolve_diff_outcome(
+    *, result: DiffExecutionResult, query_row_comparison: bool = ...
+) -> tuple[str, int]: ...
 def machine_output_mode(args: CliNamespace, /) -> bool: ...
 def current_native_progress_projector() -> NativeProgressProjector | None: ...
 

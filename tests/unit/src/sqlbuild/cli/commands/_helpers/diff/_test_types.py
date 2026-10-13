@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from sqlbuild.cli.commands.models import DiffExampleRenderOptions
 from sqlbuild.executor.diff.models import DiffExecutionResult, FullDiffSizeLimits
 
 
@@ -17,19 +16,6 @@ class RenderDiffOutputTestCase:
     max_column_examples: int
     max_row_only_examples: int
     expected_fragments: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class RenderDiffEvidenceTestCase:
-    description: str
-    left_value: object
-    right_value: object
-    options: DiffExampleRenderOptions
-    expected_left_fragment: str
-    expected_right_fragment: str
-    expected_first_difference: int | None
-    expected_truncated: bool
-    expected_suppressed: bool
 
 
 @dataclass(frozen=True)

@@ -454,25 +454,6 @@ class QueryDiffPreparation:
 
 
 @dataclass(frozen=True)
-class DiffExampleRenderOptions:
-    """Bounded example rendering controls independent of comparison execution."""
-
-    max_value_length: int | None
-    suppress_values: bool = False
-
-
-@dataclass(frozen=True)
-class RenderedDiffExampleValue:
-    """One safely bounded value plus explicit information-loss metadata."""
-
-    text: str | None
-    original_length: int
-    truncated: bool
-    suppressed: bool
-    first_difference: int | None
-
-
-@dataclass(frozen=True)
 class QueryDiffRunOutcome:
     """Raw-query result plus measured lifecycle phase durations."""
 

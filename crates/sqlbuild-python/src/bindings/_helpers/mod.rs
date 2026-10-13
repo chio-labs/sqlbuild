@@ -21,6 +21,7 @@ pub(crate) mod dag_artifact;
 pub(crate) mod dbt_interop;
 pub(crate) mod debug_command;
 pub(crate) mod diagnostics;
+pub(crate) mod diff_report;
 pub(crate) mod discovery;
 pub(crate) mod fingerprints;
 pub(crate) mod freshness;

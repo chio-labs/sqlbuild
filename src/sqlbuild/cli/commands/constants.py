@@ -68,7 +68,6 @@ SCOPE_DEFAULT_PAGE_SIZE: int = 100
 READ_ONLY_QUERY_ROOT_KEYS: frozenset[str] = frozenset(
     {"except", "intersect", "select", "union", "values"}
 )
-DEFAULT_DIFF_MAX_VALUE_LENGTH: int = 160
 QUERY_DIFF_INCOMPLETE_PREPARATION_CODES: frozenset[str] = frozenset(
     {"C229", "C230", "C231", "C232", "C233", "C234", "C235", "C240", "C244"}
 )
