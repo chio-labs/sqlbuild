@@ -30,6 +30,7 @@ from sqlbuild.cli.commands.models import (
     QueryDiffPreparation,
     RefactorCommandRequest,
     ScopeCommandRequest,
+    SeedCommandRequest,
     TestCommandRequest,
 )
 from sqlbuild.cli.commands.types import CompileLineageMode, ScopeIndexLoader
@@ -2875,6 +2876,7 @@ def write_check_results(
 ) -> None: ...
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
 def run_test_command(*, request: TestCommandRequest) -> int: ...
+def run_seed_command(*, request: SeedCommandRequest) -> int: ...
 def format_parameterized_test_label(
     *,
     name: str,

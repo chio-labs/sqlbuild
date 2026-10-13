@@ -332,9 +332,9 @@ const SEED_ARGUMENTS: [Field; 1] = [request(
 )];
 pub(crate) const SEED_ROUTE: Route = routed(
     "run_seed",
-    ("sqlbuild.cli.commands.main.execution._seed", "run_seed"),
+    ("sqlbuild._native", "run_seed_command"),
     &SEED_ARGUMENTS,
-    REQUEST_SHAPE,
+    REQUEST_KEYWORD_SHAPE,
 );
 
 const LINEAGE_FIELDS: [Field; 11] = [

@@ -1,5 +1,6 @@
 pub mod dbt_interop_plan_warnings;
 pub mod format_aligned_name_value;
+pub mod format_coded_error;
 pub mod format_compile_text;
 pub mod format_completion_line;
 pub mod format_count_noun;
@@ -12,6 +13,7 @@ pub mod format_plan_text;
 pub mod format_status_cell;
 pub mod format_summary_footer;
 pub mod format_surface_header;
+pub mod format_tree_connector;
 pub mod resolve_name_column_width;
 pub mod semantic_coverage_notice;
 pub mod split_count_header;

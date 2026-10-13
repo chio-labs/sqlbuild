@@ -44,6 +44,7 @@ pub(crate) mod render;
 pub(crate) mod result_output;
 pub(crate) mod rules;
 pub(crate) mod scopes;
+pub(crate) mod seed_command;
 pub(crate) mod semantic_checks;
 pub(crate) mod semantic_shapes;
 pub(crate) mod sql_test_command;

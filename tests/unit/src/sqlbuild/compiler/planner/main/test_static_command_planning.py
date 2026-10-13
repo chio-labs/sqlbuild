@@ -19,10 +19,10 @@ from sqlbuild.compiler.discovery.models import DiscoveredSeedFile
 from sqlbuild.compiler.fingerprints.models import Fingerprint
 from sqlbuild.compiler.planner.main.commands._relations import resolve_static_relation_context
 from sqlbuild.compiler.planner.main.commands._scope import resolve_static_command_scope
+from sqlbuild.compiler.planner.main.commands._seed import build_seed_command_plan
+from sqlbuild.compiler.planner.main.commands._seed_state import read_selected_seed_fingerprints
 from sqlbuild.compiler.planner.main.commands._sql_test import build_test_command_plan
 from sqlbuild.compiler.planner.main.commands.audit import build_audit_command_plan
-from sqlbuild.compiler.planner.main.commands.seed import build_seed_command_plan
-from sqlbuild.compiler.planner.main.commands.seed_state import read_selected_seed_fingerprints
 from sqlbuild.compiler.planner.models import (
     PlannerRelationsContext,
     PlannerScope,

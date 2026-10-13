@@ -1,8 +1,8 @@
 //! The test summary footer and failure details.
 
+use crate::cli_text::main::format_coded_error::format_coded_error;
 use crate::cli_text::main::format_summary_footer::format_summary_footer;
 use crate::cli_text::models::{CliStyle, SummaryCount};
-use crate::test_command::_helpers::coded_error::coded_error;
 use crate::test_command::constants::{DEFAULT_ERROR, ERROR_LABEL, ERROR_LABEL_WIDTH};
 use crate::test_command::models::TestFailure;
 use crate::text::main::python_splitlines::python_splitlines;
@@ -21,7 +21,9 @@ fn failure_lines(failure: &TestFailure, style: CliStyle) -> Vec<String> {
         .filter(|text| !text.is_empty())
         .unwrap_or(DEFAULT_ERROR);
     let rendered: String = match &failure.error_code {
-        Some(code) => coded_error((code, message, failure.error_help.as_deref()), style),
+        Some(code) => {
+            format_coded_error((code, message, failure.error_help.as_deref()), false, style)
+        }
         None => message.to_owned(),
     };
     let mut split: Vec<&str> = python_splitlines(&rendered);

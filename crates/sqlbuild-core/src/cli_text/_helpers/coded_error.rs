@@ -2,9 +2,10 @@
 
 use crate::cli_text::models::CliStyle;
 
-/// `[CODE] message`, later message lines muted, then the help line when there is one.
+/// `error[CODE]: message` or `[CODE] message`, later lines muted, then any help line.
 pub(crate) fn coded_error(
     (code, message, help): (&str, &str, Option<&str>),
+    include_error_label: bool,
     style: CliStyle,
 ) -> String {
     let mut lines = message.split('\n');
@@ -17,7 +18,11 @@ pub(crate) fn coded_error(
     };
     let mut rendered: String = format!(
         "{} {rendered_message}",
-        style.error_strong(&format!("[{code}]"))
+        style.error_strong(&if include_error_label {
+            format!("error[{code}]:")
+        } else {
+            format!("[{code}]")
+        })
     );
     if let Some(help) = help {
         rendered = format!("{rendered}\n  {} {help}", style.muted("= help:"));

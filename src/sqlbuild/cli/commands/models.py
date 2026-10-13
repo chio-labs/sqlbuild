@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     )
     from sqlbuild.compiler.planner.models import CursorOverrides, PlanOutput
     from sqlbuild.compiler.refactoring.models import RefactorProject
-    from sqlbuild.executor.build.models import BuildExecutionResult, SeedExecutionResult
+    from sqlbuild.executor.build.models import BuildExecutionResult
     from sqlbuild.executor.janitor.models import JanitorPlan
     from sqlbuild.executor.python_nodes.models import PythonNodeExecutionResult
     from sqlbuild.integrations.dbt.models import DbtInitRequest
@@ -697,22 +697,6 @@ class SeedInvocation:
     connection_config: dict[str, object]
     use_color: bool
     progress_stream: TextIO
-
-
-@dataclass(frozen=True)
-class SeedExecutionPreparation:
-    """Prepared seed execution settings and compiled pipeline."""
-
-    pipeline_result: CompilePipelineResult
-    effective_concurrency: int
-
-
-@dataclass(frozen=True)
-class SeedRunOutcome:
-    """Seed execution results and elapsed time."""
-
-    results: tuple[SeedExecutionResult, ...]
-    elapsed: float
 
 
 @dataclass(frozen=True)

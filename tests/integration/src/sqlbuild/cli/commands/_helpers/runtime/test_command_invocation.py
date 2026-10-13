@@ -11,9 +11,9 @@ import pytest
 from sqlbuild.cli.commands import models as command_models
 from sqlbuild.cli.commands._helpers.audit.invocation import resolve_audit_invocation
 from sqlbuild.cli.commands._helpers.runtime.command_invocation import (
+    resolve_command_invocation,
     resolve_reported_command_invocation,
 )
-from sqlbuild.cli.commands._helpers.seed.invocation import resolve_seed_invocation
 from tests.integration.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     CommandInvocationTestCase,
 )
@@ -62,7 +62,10 @@ _PROJECT_TOML: str = (
         ),
         CommandInvocationTestCase(
             description="seed text output omits shared progress reporters",
-            resolve=resolve_seed_invocation,
+            resolve=partial(
+                resolve_command_invocation,
+                invocation_type=command_models.SeedInvocation,
+            ),
             request_type=command_models.SeedCommandRequest,
             json_output=False,
             expected_invocation_type_name="SeedInvocation",
